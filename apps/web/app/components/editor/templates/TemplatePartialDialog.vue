@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -11,10 +11,15 @@ import {
 } from '@/components/ui/alert-dialog';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { editorShellCopy } from '@/i18n/editor-shell';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
+
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type {
   TemplateGroupCommand,
   TemplateGroupState,
+  TemplateRecovery,
 } from '../../../editor/templateGroup';
 
 type RecoveryAction = 'retry-remaining' | 'restore-pre-apply' | 'keep-partial';
@@ -26,16 +31,31 @@ const props = defineProps<{
 }>();
 
 const retryButton = ref<{ $el?: HTMLElement } | null>(null);
-const reason = ref('');
+type RecoveryReason = Extract<
+  TemplateRecovery,
+  { kind: 'unavailable' }
+>['reason'];
+const reason = ref<RecoveryReason | null>(null);
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
 
-onMounted(() => {
-  void nextTick(() => retryButton.value?.$el?.focus());
-});
+function onOpenAutoFocus(event: Event): void {
+  event.preventDefault();
+  retryButton.value?.$el?.focus();
+}
 
 function recover(action: RecoveryAction): void {
-  reason.value = '';
+  reason.value = null;
   const result = props.actions.recoverTemplate(action);
-  if (result.kind === 'unavailable') reason.value = messageFor(result.reason);
+  if (result.kind === 'unavailable') reason.value = result.reason;
+}
+
+function childStatusLabel(
+  kind: TemplateGroupCommand['children'][number]['kind'],
+): string {
+  return childStatus(kind) === 'accepted'
+    ? copy.value.warningAccepted
+    : copy.value.warningRemains;
 }
 
 function childStatus(
@@ -48,21 +68,19 @@ function childStatus(
   return child < props.state.nextChild ? 'accepted' : 'remains';
 }
 
-function messageFor(
-  unavailable: 'state-changed' | 'context-changed' | 'read-required',
-): string {
-  switch (unavailable) {
+const reasonText = computed(() => {
+  switch (reason.value) {
     case 'state-changed':
-      return 'The template changes no longer match the current resume.';
+      return copy.value.templateUndoUnavailable;
     case 'context-changed':
-      return [
-        'The resume context changed.',
-        'Review the current resume before trying again.',
-      ].join(' ');
+      return copy.value.templateCurrentChanged;
     case 'read-required':
-      return 'Refresh the complete resume before trying again.';
+      return copy.value.templateReadRequired;
+    case null:
+      return '';
   }
-}
+  return '';
+});
 
 function stateMessage(): string {
   switch (props.state.reason) {
@@ -72,7 +90,7 @@ function stateMessage(): string {
     case 'superseded-after-success':
     case 'context-change':
     case 'unknown-outcome':
-      return 'The template result needs review.';
+      return copy.value.templateResultReview;
     default:
       return assertNever(props.state.reason);
   }
@@ -85,24 +103,29 @@ function assertNever(value: never): never {
 
 <template>
   <AlertDialog :open="true">
-    <AlertDialogContent>
+    <AlertDialogContent @open-auto-focus="onOpenAutoFocus">
       <AlertDialogHeader>
-        <AlertDialogTitle>Template changes need review</AlertDialogTitle>
+        <AlertDialogTitle>{{ copy.templateChangesReview }}</AlertDialogTitle>
         <AlertDialogDescription>{{ stateMessage() }}</AlertDialogDescription>
+        <LocaleToggle
+          :label="editorShellCopy[locale].localeLabel"
+          @pointerdown.prevent
+        />
       </AlertDialogHeader>
-      <ul aria-label="Template change progress">
+      <ul :aria-label="copy.templateChangeProgress">
         <li v-if="childStatus('structure') !== ''">
-          Placement change {{ childStatus('structure') }}.
+          {{ copy.warningPlacement }} {{ childStatusLabel('structure') }}.
         </li>
         <li v-if="childStatus('customization') !== ''">
-          Customization change {{ childStatus('customization') }}.
+          {{ copy.warningCustomization }}
+          {{ childStatusLabel('customization') }}.
         </li>
       </ul>
       <StatusBanner
-        v-if="reason !== ''"
+        v-if="reasonText !== ''"
         kind="error"
       >
-        {{ reason }}
+        {{ reasonText }}
       </StatusBanner>
       <!-- The footer stacks in reverse on phones, so the primary action
            comes last here to show first there (DESIGN.md). -->
@@ -113,7 +136,7 @@ function assertNever(value: never): never {
           variant="outline"
           @click="recover('keep-partial')"
         >
-          Keep partial
+          {{ copy.keepPartial }}
         </Button>
         <Button
           type="button"
@@ -121,7 +144,7 @@ function assertNever(value: never): never {
           variant="outline"
           @click="recover('restore-pre-apply')"
         >
-          Restore pre-apply
+          {{ copy.restorePreApply }}
         </Button>
         <Button
           ref="retryButton"
@@ -129,7 +152,7 @@ function assertNever(value: never): never {
           data-action="retry-remaining"
           @click="recover('retry-remaining')"
         >
-          Retry remaining
+          {{ copy.retryRemaining }}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

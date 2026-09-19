@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { ResumeSummary } from '../../../editor/resumeApi';
+import { resumeListCopy } from '@/i18n/resume-list';
 import { formatRelativeTime } from '../../../utils/relativeTime';
 import { useNow } from '../../../composables/useNow';
 
@@ -33,11 +34,13 @@ const emit = defineEmits<{
 }>();
 const root = ref<HTMLElement | null>(null);
 const now = props.now ?? useNow();
+const locale = useRouteLocale();
+const copy = computed(() => resumeListCopy[locale.value]);
 
 function focusMenuTrigger(id: string): void {
   const selector
     = `[data-testid="resume-row-${CSS.escape(id)}"]`
-      + ' [aria-label^="More actions for "]';
+      + ' [data-resume-actions]';
   (
     root.value?.querySelector<HTMLElement>(selector)
     ?? document.querySelector<HTMLElement>(selector)
@@ -56,7 +59,7 @@ watch(
         = props.removalFocusId === null
           ? '[data-testid="create-resume"]'
           : `[data-testid="resume-row-${CSS.escape(props.removalFocusId)}"]`
-            + ' [aria-label^="More actions for "]';
+            + ' [data-resume-actions]';
       (
         root.value?.querySelector<HTMLElement>(selector)
         ?? document.querySelector<HTMLElement>(selector)
@@ -74,7 +77,7 @@ watch(
     data-testid="resume-list"
   >
     <PageHeader
-      title="Resumes"
+      :title="copy.title"
       title-id="resume-list-title"
     >
       <template #actions>
@@ -84,12 +87,12 @@ watch(
           type="button"
           @click="emit('create')"
         >
-          Create resume
+          {{ copy.create }}
         </Button>
       </template>
     </PageHeader>
     <ul
-      aria-label="Your resumes"
+      :aria-label="copy.listLabel"
       class="grid gap-6 md:grid-cols-3"
     >
       <li
@@ -109,7 +112,7 @@ watch(
             class="block text-xs tabular-nums text-[#5f6763]"
             :datetime="item.updatedAt"
           >
-            Updated {{ formatRelativeTime(item.updatedAt, now) }}
+            {{ copy.updated(formatRelativeTime(item.updatedAt, now, locale)) }}
           </time>
         </NuxtLink>
         <span
@@ -133,7 +136,8 @@ watch(
             <IconButton
               class="absolute top-3 right-3 z-10"
               :disabled="busyIds.includes(item.id)"
-              :label="`More actions for ${item.title}`"
+              :label="copy.moreActions(item.title)"
+              data-resume-actions
               size="icon-sm"
             >
               <Ellipsis aria-hidden="true" />
@@ -141,18 +145,18 @@ watch(
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              :aria-label="`Rename ${item.title}`"
+              :aria-label="copy.rename(item.title)"
               @select="emit('rename', item)"
             >
-              Rename
+              {{ copy.renameAction }}
             </DropdownMenuItem>
             <DropdownMenuItem
               class="text-destructive"
-              :aria-label="`Delete ${item.title}`"
+              :aria-label="copy.delete(item.title)"
               variant="destructive"
               @select="emit('remove', item)"
             >
-              Delete
+              {{ copy.deleteAction }}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -170,10 +174,10 @@ watch(
           <span
             class="text-foreground"
             role="status"
-          >No resumes yet.</span>
-          <span>Use Create resume to start one. You can keep up to three.</span>
+          >{{ copy.empty }}</span>
+          <span>{{ copy.emptyHelp }}</span>
         </template>
-        <span v-else>Empty slot</span>
+        <span v-else>{{ copy.emptySlot }}</span>
       </li>
     </ul>
   </section>

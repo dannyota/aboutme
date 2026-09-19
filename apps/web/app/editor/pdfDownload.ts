@@ -15,12 +15,14 @@ export type PdfDownloadState
     | { readonly kind: 'pending' }
     | {
       readonly kind: 'error';
-      readonly message:
-        | 'Save changes before downloading PDF.'
-        | 'Your session ended. Sign in again.'
-        | 'PDF download failed. Try again.'
-        | 'PDF is temporarily unavailable. Try again.';
+      readonly code: PdfDownloadError;
     };
+
+export type PdfDownloadError
+  = | 'save-required'
+    | 'session-lost'
+    | 'download-failed'
+    | 'temporarily-unavailable';
 
 export interface PdfDownloadController {
   readonly state: Readonly<Ref<PdfDownloadState>>;
@@ -66,7 +68,7 @@ export function createPdfDownloadController(
     if (beforeFlush.kind === 'session') {
       return setState({
         kind: 'error',
-        message: 'Your session ended. Sign in again.',
+        code: 'session-lost',
       });
     }
     if (beforeFlush.kind !== 'ready') return blocked();
@@ -82,7 +84,7 @@ export function createPdfDownloadController(
       if (afterFlush.kind === 'session') {
         return setState({
           kind: 'error',
-          message: 'Your session ended. Sign in again.',
+          code: 'session-lost',
         });
       }
       if (afterFlush.kind !== 'ready') return blocked();
@@ -104,7 +106,7 @@ export function createPdfDownloadController(
       if (afterRead.kind === 'session') {
         return setState({
           kind: 'error',
-          message: 'Your session ended. Sign in again.',
+          code: 'session-lost',
         });
       }
       if (afterRead.kind !== 'ready') return blocked();
@@ -121,7 +123,7 @@ export function createPdfDownloadController(
       if (!activeRun(runGeneration) || isAbort(error)) return state.value;
       return setState({
         kind: 'error',
-        message: 'PDF download failed. Try again.',
+        code: 'download-failed',
       });
     } finally {
       if (runGeneration === generation) {
@@ -135,17 +137,16 @@ export function createPdfDownloadController(
   function blocked(): PdfDownloadState {
     return setState({
       kind: 'error',
-      message: 'Save changes before downloading PDF.',
+      code: 'save-required',
     });
   }
 
   function responseError(status: number): PdfDownloadState {
     return setState({
       kind: 'error',
-      message:
-        status === 429 || status === 503
-          ? 'PDF is temporarily unavailable. Try again.'
-          : 'PDF download failed. Try again.',
+      code: status === 429 || status === 503
+        ? 'temporarily-unavailable'
+        : 'download-failed',
     });
   }
 

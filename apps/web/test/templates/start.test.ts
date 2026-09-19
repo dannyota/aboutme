@@ -1,9 +1,9 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import type { Resume } from '@aboutme/schema';
 import { loadSample } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 import { validateDocument } from '@aboutme/schema/validation';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 // eslint-disable-next-line max-len -- dialog component import.
@@ -21,7 +21,11 @@ import { setSiteLocale } from '../support/locale';
 // Starting a resume from a gallery sample or a template: the /app/new query,
 // the starting document, and the create dialog's sample choice.
 
+const mounted = new Set<{ unmount: () => void }>();
+
 afterEach(() => {
+  for (const wrapper of mounted) wrapper.unmount();
+  mounted.clear();
   document.body.innerHTML = '';
 });
 
@@ -106,27 +110,35 @@ describe('starting documents', () => {
 
 describe('create dialog samples', () => {
   function mountDialog(resumeCount: number) {
-    return mount(CreateResumeDialog, {
+    const wrapper = mount(CreateResumeDialog, {
       attachTo: document.body,
       props: { open: true, busy: false, retained: null, resumeCount },
     });
+    mounted.add(wrapper);
+    return wrapper;
   }
 
   async function settle(): Promise<void> {
-    for (let index = 0; index < 5; index += 1) {
-      await nextTick();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    await flushPromises();
+    await nextTick();
+  }
+
+  async function waitForSample(): Promise<void> {
+    await vi.waitFor(() => expect(document.body.querySelector<
+      HTMLButtonElement
+    >('[role="dialog"] button[type="submit"]')?.disabled).toBe(false));
   }
 
   it('opens on the samples for a first resume and blank otherwise',
     async () => {
       setSiteLocale('vi');
-      mountDialog(0);
+      const samples = mountDialog(0);
       await settle();
       expect(document.body.querySelector('[data-create-mode="sample"]')
         ?.getAttribute('aria-pressed')).toBe('true');
       expect(document.body.querySelectorAll('[data-sample]')).toHaveLength(5);
+      samples.unmount();
+      mounted.delete(samples);
       document.body.innerHTML = '';
       mountDialog(2);
       await settle();
@@ -147,6 +159,7 @@ describe('create dialog samples', () => {
       '[role="dialog"] input[name="title"]',
     )!;
     expect(title.value).toBe('Backend engineer resume');
+    await waitForSample();
     document.body.querySelector<HTMLFormElement>('[role="dialog"] form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await settle();
@@ -157,4 +170,49 @@ describe('create dialog samples', () => {
     expect(emitted[1]).toBe('en');
     expect(emitted[2]).toEqual(await loadSample('engineer-compact', 'en'));
   });
+
+  it('keeps a sample start unchanged while the interface locale changes',
+    async () => {
+      setSiteLocale('vi');
+      const wrapper = mountDialog(0);
+      await settle();
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-sample="engineer-compact"]',
+      )!.click();
+      await settle();
+      await waitForSample();
+
+      const selected = document.body.querySelector(
+        '[data-sample="engineer-compact"]',
+      )!;
+      const title = document.body.querySelector<HTMLInputElement>(
+        '[role="dialog"] input[name="title"]',
+      )!;
+      const language = document.body.querySelector<HTMLSelectElement>(
+        '[role="dialog"] [data-action="resume-language"]',
+      )!;
+      const before = {
+        selected: selected.getAttribute('aria-pressed'),
+        title: title.value,
+        language: language.value,
+        document: await loadSample('engineer-compact', 'vi'),
+      };
+
+      useState('aboutme-locale').value = 'en';
+      await settle();
+
+      expect(selected.getAttribute('aria-pressed')).toBe(before.selected);
+      expect(title.value).toBe(before.title);
+      expect(language.value).toBe(before.language);
+      document.body.querySelector<HTMLFormElement>('[role="dialog"] form')!
+        .dispatchEvent(new Event(
+          'submit', { bubbles: true, cancelable: true },
+        ));
+      await settle();
+      expect(wrapper.emitted('submit')).toEqual([[
+        before.title,
+        before.language,
+        before.document,
+      ]]);
+    });
 });

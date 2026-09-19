@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import { mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 
 import CustomEntryFields from
   '../../app/components/editor/forms/entries/CustomEntryFields.vue';
@@ -21,9 +23,17 @@ import {
   flushAndCheckUnsaved,
 } from '../../app/composables/useUnsavedNavigationGuard';
 
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+mockNuxtImport('useRouteLocale', () => () => locale);
+
 afterEach(() => {
   vi.useRealTimers();
   document.body.innerHTML = '';
+});
+
+beforeEach(() => {
+  locale.value = 'en';
 });
 
 const withDrafts = (drafts: FieldDrafts) => ({
@@ -138,8 +148,8 @@ describe('rich text while typing', () => {
       props: { modelValue: '' },
       ...withDrafts(drafts),
     });
-    const editor = wrapper.get('[contenteditable="true"]').element as
-      HTMLElement;
+    const editor = wrapper.get('[contenteditable="true"]')
+      .element as HTMLElement;
 
     await pasteText(editor, 'typed');
 

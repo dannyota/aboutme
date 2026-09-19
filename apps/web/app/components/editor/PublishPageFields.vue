@@ -10,12 +10,14 @@ import { Button } from '@/components/ui/button';
 import {
   faviconEmojiIssue,
   graphemeCount,
-  PUBLIC_PAGE_ISSUE_MESSAGES,
   PUBLIC_TITLE_MAX,
   publicPageIssueField,
   type PublicPageFields,
+  type FaviconEmojiIssue,
+  type PublicTitleIssue,
   publicTitleIssue,
 } from '../../editor/publicPageMeta';
+import type { PublishPageCopy } from '../../i18n/publish';
 
 const props = defineProps<{
   /** The default title the page uses when the field is empty. */
@@ -23,6 +25,7 @@ const props = defineProps<{
   readonly disabled?: boolean;
   /** The last publish issues; ones on these fields show until edited. */
   readonly serverIssues: readonly { path: string; code: string }[];
+  readonly copy: PublishPageCopy;
 }>();
 
 const title = defineModel<string>('title', { required: true });
@@ -49,19 +52,31 @@ function serverIssue(field: keyof PublicPageFields): string | undefined {
 }
 
 const count = computed(() => graphemeCount(title.value.trim()));
+function titleIssueCopy(code: string | undefined): string | undefined {
+  if (code === undefined) return undefined;
+  if (code === 'too_long' || code === 'invalid_characters') {
+    return props.copy.titleError[code as PublicTitleIssue];
+  }
+  return props.copy.titleError.generic;
+}
+
+function emojiIssueCopy(code: string | undefined): string | undefined {
+  if (code === undefined) return undefined;
+  if (code === 'invalid_emoji') {
+    return props.copy.emojiError[code as FaviconEmojiIssue];
+  }
+  return props.copy.emojiError.generic;
+}
+
 const titleError = computed(() => {
-  const code = publicTitleIssue(title.value) ?? serverIssue('publicTitle');
-  return code === undefined
-    ? undefined
-    : PUBLIC_PAGE_ISSUE_MESSAGES[code]
-      ?? 'Check the page title.';
+  const local = publicTitleIssue(title.value);
+  if (local !== null) return props.copy.titleError[local];
+  return titleIssueCopy(serverIssue('publicTitle'));
 });
 const emojiError = computed(() => {
-  const code = faviconEmojiIssue(emoji.value) ?? serverIssue('faviconEmoji');
-  return code === undefined
-    ? undefined
-    : PUBLIC_PAGE_ISSUE_MESSAGES[code]
-      ?? 'Check the tab icon.';
+  const local = faviconEmojiIssue(emoji.value);
+  if (local !== null) return props.copy.emojiError[local];
+  return emojiIssueCopy(serverIssue('faviconEmoji'));
 });
 const previewTitle = computed(() =>
   title.value.trim() === '' ? props.defaultTitle : title.value.trim());
@@ -75,15 +90,15 @@ const previewEmoji = computed(() =>
     data-testid="publish-page-fields"
   >
     <legend class="mb-1 text-sm font-medium">
-      Browser tab
+      {{ copy.legend }}
     </legend>
     <TextField
       v-model="title"
       :control-attrs="{ 'data-action': 'publish-public-title' }"
       :disabled="disabled"
       :error="titleError"
-      :hint="`Optional. ${count}/${PUBLIC_TITLE_MAX} characters.`"
-      label="Page title"
+      :hint="copy.titleHint(count, PUBLIC_TITLE_MAX)"
+      :label="copy.title"
       name="publicTitle"
       :placeholder="defaultTitle"
     />
@@ -94,19 +109,19 @@ const previewEmoji = computed(() =>
         :control-attrs="{ 'data-action': 'publish-favicon-emoji' }"
         :disabled="disabled"
         :error="emojiError"
-        hint="Optional. One emoji; leave empty for the aboutme icon."
-        label="Tab icon"
+        :hint="copy.emojiHint"
+        :label="copy.emoji"
         name="faviconEmoji"
       />
       <div
-        aria-label="Suggested tab icons"
+        :aria-label="copy.suggestedIcons"
         class="flex flex-wrap gap-1"
         role="group"
       >
         <Button
           v-for="item in QUICK_EMOJI"
           :key="item"
-          :aria-label="`Use ${item}`"
+          :aria-label="copy.useIcon(item)"
           :aria-pressed="emoji.trim() === item"
           class="text-base"
           data-action="publish-favicon-pick"
@@ -127,7 +142,7 @@ const previewEmoji = computed(() =>
           variant="ghost"
           @click="emoji = ''"
         >
-          Remove icon
+          {{ copy.removeIcon }}
         </Button>
       </div>
     </div>
@@ -156,7 +171,7 @@ const previewEmoji = computed(() =>
         >{{ previewTitle }}</span>
       </div>
       <figcaption class="text-xs text-muted-foreground">
-        How the browser tab will look
+        {{ copy.tabPreview }}
       </figcaption>
     </figure>
   </fieldset>

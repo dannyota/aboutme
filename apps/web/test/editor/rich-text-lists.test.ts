@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
+import { ref } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RichTextEditor from
   '../../app/components/editor/richtext/RichTextEditor.vue';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
 
 type Wrapper = ReturnType<typeof mount>;
 
@@ -39,6 +44,7 @@ function stubRects(prototype: object): void {
 }
 
 beforeEach(() => {
+  locale.value = 'en';
   // ProseMirror measures the caret to scroll it into view after a command.
   stubRects(Text.prototype);
   stubRects(Range.prototype);

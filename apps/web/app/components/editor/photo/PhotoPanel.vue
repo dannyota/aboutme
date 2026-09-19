@@ -13,14 +13,22 @@ import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type { AtomicConflictRecord } from '../../../editor/conflicts';
 import type { ResumeRecord } from '../../../stores/resumes';
 import CropEditor from './CropEditor.vue';
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { editorShellCopy } from '@/i18n/editor-shell';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 const pendingDeleteBinding = ref<string | null>(null);
-const deleteStatus = ref('');
+const deleteStatus = ref<'photoChanged' | null>(null);
+const deleteStatusText = computed(() =>
+  deleteStatus.value === null ? '' : copy.value[deleteStatus.value],
+);
 const opaqueReplacement = ref<File | null>(null);
 const uploadId = `photo-upload-${useId()}`;
 const photo = computed(
@@ -32,12 +40,15 @@ const opaque = computed(() => props.record.opaquePhotoOutcome);
 // the resume keeps what it has until the person saves a crop.
 const awaitingUpload = ref(false);
 const uploadedKey = ref<string | null>(null);
-watch(() => photo.value?.key, (key, previous) => {
-  if (awaitingUpload.value && key !== undefined && key !== previous) {
-    uploadedKey.value = key;
-    awaitingUpload.value = false;
-  }
-});
+watch(
+  () => photo.value?.key,
+  (key, previous) => {
+    if (awaitingUpload.value && key !== undefined && key !== previous) {
+      uploadedKey.value = key;
+      awaitingUpload.value = false;
+    }
+  },
+);
 const cropConflict = computed(() =>
   props.record.conflicts.find((value) => isChangedCropConflict(value)),
 );
@@ -66,14 +77,13 @@ function upload(event: Event): void {
 function requestDelete(): void {
   const binding = photo.value?.key;
   if (binding === undefined) return;
-  deleteStatus.value = '';
+  deleteStatus.value = null;
   pendingDeleteBinding.value = binding;
 }
 
 function confirmDelete(): void {
   if (pendingDeleteBinding.value !== photo.value?.key) {
-    deleteStatus.value = 'This photo changed. Reopen deletion and '
-      + 'confirm again.';
+    deleteStatus.value = 'photoChanged';
     closeDeleteDialog();
     return;
   }
@@ -125,54 +135,54 @@ function fileFrom(event: Event): File | undefined {
 function previewText(): string {
   switch (read.value.kind) {
     case 'ready':
-      return 'Authorized photo preview.';
+      return copy.value.photoPreview;
     case 'loading':
-      return 'Photo preview is loading.';
+      return copy.value.photoPreviewLoading;
     case 'suspended':
-      return 'Photo preview is unavailable.';
+      return copy.value.photoPreviewUnavailable;
     case 'none':
       return photo.value === undefined
-        ? 'No photo has been added.'
-        : 'Photo preview is unavailable.';
+        ? copy.value.noPhoto
+        : copy.value.photoPreviewUnavailable;
   }
 }
 
 function statusText(): string | undefined {
   const attempt = props.record.attempt;
   if (props.record.sessionLost) {
-    return 'Your session ended. Sign in to continue.';
+    return copy.value.photoSessionEnded;
   }
   if (attempt?.kind === 'retry-later') {
     const wait
       = attempt.retryAfterMs === null
-        ? 'Please try again later.'
-        : `Try again in ${Math.ceil(attempt.retryAfterMs / 1_000)} seconds.`;
+        ? copy.value.tryAgainLater()
+        : copy.value.tryAgainLater(Math.ceil(attempt.retryAfterMs / 1_000));
     return attempt.reason === 'media-busy'
-      ? `Photo processing is busy. ${wait}`
-      : `Too many photo requests. ${wait}`;
+      ? copy.value.photoStatusBusy(wait)
+      : copy.value.photoStatusRateLimited(wait);
   }
   if (
     attempt?.kind === 'dispatching'
     && attempt.command.kind === 'photoUpload'
   ) {
-    return 'Uploading photo.';
+    return copy.value.photoUploading;
   }
   if (attempt?.kind === 'unknown') {
-    return 'We could not confirm the photo request.';
+    return copy.value.photoRequestUnknown;
   }
   if (attempt?.kind !== 'failed') return undefined;
   switch (attempt.reason) {
     case 'media_type_unsupported':
-      return 'Choose a JPEG or PNG image.';
+      return copy.value.imageType;
     case 'media_too_large':
-      return 'This image exceeds the allowed size.';
+      return copy.value.imageLarge;
     case 'media_invalid':
-      return 'This image could not be used.';
+      return copy.value.imageInvalid;
     case 'precondition_required':
     case 'precondition_malformed':
-      return 'The photo changed. Refresh and try again.';
+      return copy.value.photoPrecondition;
     default:
-      return 'The photo request needs attention.';
+      return copy.value.photoRequestAttention;
   }
 }
 
@@ -183,11 +193,11 @@ function statusKind(): 'info' | 'error' {
 function observedText(): string {
   switch (opaque.value?.observed) {
     case 'unchanged':
-      return 'The observed photo is unchanged.';
+      return copy.value.observedUnchanged;
     case 'changed':
-      return 'The observed photo changed.';
+      return copy.value.observedChanged;
     default:
-      return 'The observed photo is unavailable.';
+      return copy.value.observedUnavailable;
   }
 }
 
@@ -206,15 +216,15 @@ function isChangedCropConflict(value: unknown): value is AtomicConflictRecord {
 }
 
 function isPhotoCommand(kind: string): boolean {
-  return kind === 'photoUpload'
-    || kind === 'photoDelete'
-    || kind === 'photoCrop';
+  return (
+    kind === 'photoUpload' || kind === 'photoDelete' || kind === 'photoCrop'
+  );
 }
 </script>
 
 <template>
   <InspectorPanel
-    title="Photo"
+    :title="copy.photo"
     title-id="photo-title"
   >
     <Card
@@ -248,10 +258,10 @@ function isPhotoCommand(kind: string): boolean {
       {{ statusText() }}
     </StatusBanner>
     <StatusBanner
-      v-if="deleteStatus !== ''"
+      v-if="deleteStatusText !== ''"
       kind="error"
     >
-      {{ deleteStatus }}
+      {{ deleteStatusText }}
     </StatusBanner>
     <Button
       v-if="retryCommandId !== undefined && opaque === null"
@@ -260,13 +270,13 @@ function isPhotoCommand(kind: string): boolean {
       type="button"
       @click="retryPhoto"
     >
-      Retry photo request
+      {{ copy.photoRetry }}
     </Button>
     <Card
       v-if="opaque !== null"
       data-photo-outcome
     >
-      <p>We could not confirm whether the upload changed your photo.</p>
+      <p>{{ copy.opaquePhoto }}</p>
       <p>{{ observedText() }}</p>
       <Label
         class="flex cursor-pointer flex-col items-center gap-1 rounded-lg
@@ -277,7 +287,7 @@ function isPhotoCommand(kind: string): boolean {
           aria-hidden="true"
           class="size-5 text-muted-foreground"
         />
-        <span>Select a replacement photo</span>
+        <span>{{ copy.selectPhoto }}</span>
         <Input
           :id="uploadId"
           accept="image/jpeg,image/png"
@@ -294,7 +304,7 @@ function isPhotoCommand(kind: string): boolean {
         variant="ghost"
         @click="keepObserved"
       >
-        Keep observed photo
+        {{ copy.keepObservedPhoto }}
       </Button>
       <Button
         data-action="replace"
@@ -304,7 +314,7 @@ function isPhotoCommand(kind: string): boolean {
         :disabled="opaqueReplacement === null"
         @click="replaceObserved"
       >
-        Replace photo
+        {{ copy.replaceObservedPhoto }}
       </Button>
     </Card>
     <template v-if="opaque === null">
@@ -318,10 +328,10 @@ function isPhotoCommand(kind: string): boolean {
           class="size-5 text-muted-foreground"
         />
         <span class="font-medium">
-          {{ photo === undefined ? 'Upload photo' : 'Replace photo' }}
+          {{ photo === undefined ? copy.uploadPhoto : copy.replacePhoto }}
         </span>
         <span class="text-xs text-muted-foreground">
-          JPEG or PNG, up to 2 MB.
+          {{ copy.photoUploadHint }}
         </span>
         <Input
           :id="uploadId"
@@ -341,19 +351,27 @@ function isPhotoCommand(kind: string): boolean {
           variant="ghost"
           @click="requestDelete"
         >
-          Delete photo
+          {{ copy.deletePhoto }}
         </Button>
         <ConfirmDialog
           :open="pendingDeleteBinding !== null"
-          title="Delete photo"
-          description="Delete the current photo?"
-          confirm-label="Delete photo"
+          :title="copy.deletePhotoTitle"
+          :description="copy.deletePhotoDescription"
+          :confirm-label="copy.deletePhoto"
+          :cancel-label="copy.cancel"
           destructive
           confirm-action="confirm-delete"
           cancel-action="cancel-delete"
           @confirm="confirmDelete"
           @cancel="cancelDelete"
-        />
+        >
+          <template #header-actions>
+            <LocaleToggle
+              :label="editorShellCopy[locale].localeLabel"
+              @pointerdown.prevent
+            />
+          </template>
+        </ConfirmDialog>
         <Card v-if="read.kind === 'ready' && read.binding === photo.key">
           <CropEditor
             :actions="actions"
@@ -368,13 +386,13 @@ function isPhotoCommand(kind: string): boolean {
         v-if="cropConflict !== undefined"
         kind="info"
       >
-        <p>The photo changed. Reopen crop against the current photo.</p>
+        <p>{{ copy.photoChangedCrop }}</p>
         <Button
           data-action="reopen-crop"
           type="button"
           @click="reopenCrop"
         >
-          Reopen crop
+          {{ copy.reopenCrop }}
         </Button>
       </StatusBanner>
     </template>

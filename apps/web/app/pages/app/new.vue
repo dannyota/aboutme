@@ -13,7 +13,6 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import TextField from '@/components/app/TextField.vue';
 import SheetThumbnail from '@/components/templates/SheetThumbnail.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { appTitles } from '@/i18n/meta';
 import { sampleRole } from '@/templates/catalog';
 import {
   parseNewResumeQuery,
@@ -21,29 +20,44 @@ import {
   suggestedTitle,
 } from '@/templates/startDocument';
 import {
-  createStatusMessage,
+  createNotice,
+  type CreateNotice,
   RESUME_CAP,
   useResumeList,
 } from '../../composables/useResumeList';
-
-useHead({ title: appTitles.newResume });
+import { workspaceTitles } from '@/i18n/meta';
+import { resumeCreateCopy } from '@/i18n/resume-create';
 
 const route = useRoute();
 const { locale } = useLocale();
+const openingLocale = locale.value;
+const copy = computed(() => resumeCreateCopy[locale.value]);
+useHead({ title: computed(() => workspaceTitles[locale.value].newResume) });
 // A signed-out visitor here came from a public gallery page, not the app, so
 // send them to create an account rather than sign in to one; register.vue
 // carries `next` through Google sign-in and email verification back here.
 const list = useResumeList({
   loginPath: `/register?next=${encodeURIComponent(route.fullPath)}`,
 });
-const request = computed(() => parseNewResumeQuery(route.query, locale.value));
+const request = computed(() => parseNewResumeQuery(route.query, openingLocale));
 const document = ref<Resume>();
 const title = ref('');
 const busy = ref(false);
-const message = ref<string | null>(null);
+const notice = ref<CreateNotice>(null);
+const uncertain = ref(false);
+const titleInvalid = ref(false);
 
-const LANGUAGE_NAMES = { vi: 'Vietnamese', en: 'English' } as const;
-const ORDINALS = ['first', 'second', 'third'] as const;
+const message = computed(() => {
+  if (titleInvalid.value) return copy.value.titleRequired;
+  if (uncertain.value) return copy.value.uncertain;
+  switch (notice.value) {
+    case 'resume-cap': return copy.value.cap(RESUME_CAP);
+    case 'create-failed': return copy.value.createFailed;
+    case 'retry-later': return copy.value.retryLater;
+    case 'session-lost': return copy.value.sessionLost;
+    default: return null;
+  }
+});
 
 watch(request, async (next) => {
   document.value = undefined;
@@ -57,47 +71,49 @@ const count = computed(() =>
   list.view.value.kind === 'ready' ? list.view.value.items.length : null);
 const atCap = computed(() => count.value !== null && count.value >= RESUME_CAP);
 const heading = computed(() => request.value.kind === 'template'
-  ? 'Create a blank resume with this template'
-  : 'Create a resume from this sample');
+  ? copy.value.blankHeading
+  : copy.value.sampleHeading);
 const summary = computed(() => {
   const next = request.value;
   if (next.kind === 'invalid') return '';
-  if (next.kind === 'template') return `${next.template.name} · Blank resume`;
-  const role = sampleRole(next.template, next.lng, 'en');
-  return [next.template.name, role, LANGUAGE_NAMES[next.lng]]
-    .filter(Boolean)
-    .join(' · ');
+  if (next.kind === 'template') {
+    return copy.value.blankSummary(next.template.name);
+  }
+  const role = sampleRole(next.template, next.lng, locale.value);
+  return copy.value.sampleSummary(
+    next.template.name,
+    role ?? '',
+    copy.value.languageName(next.lng),
+  );
 });
 const countLine = computed(() => {
   const n = count.value;
   if (n === null) return '';
-  const ordinal = ORDINALS[n];
-  return `You have ${n} of ${RESUME_CAP} resumes.`
-    + (ordinal === undefined ? '' : ` This creates your ${ordinal}.`);
+  return copy.value.count(n, RESUME_CAP);
 });
 const resumeLanguage = computed(() => {
   const next = request.value;
-  return next.kind === 'sample' ? next.lng : locale.value;
+  return next.kind === 'sample' ? next.lng : openingLocale;
 });
 
 async function create(): Promise<void> {
   if (document.value === undefined || busy.value || atCap.value) return;
   if (title.value.trim() === '') {
-    message.value = 'Enter a title.';
+    titleInvalid.value = true;
     return;
   }
   busy.value = true;
-  message.value = null;
+  notice.value = null;
+  uncertain.value = false;
+  titleInvalid.value = false;
   const result = await list.create(
     title.value.trim(),
     resumeLanguage.value,
     document.value,
   );
   busy.value = false;
-  message.value = result.kind === 'opaque-create'
-    ? 'We could not confirm whether the resume was created. Check your '
-    + 'resumes before trying again.'
-    : createStatusMessage(result);
+  uncertain.value = result.kind === 'opaque-create';
+  notice.value = createNotice(result);
 }
 </script>
 
@@ -112,22 +128,22 @@ async function create(): Promise<void> {
       data-new-resume="invalid"
     >
       <h1 class="text-xl font-semibold">
-        Template not found
+        {{ copy.invalidTitle }}
       </h1>
       <p class="text-muted-foreground">
-        This link does not name a template or sample we have.
+        {{ copy.invalidDescription }}
       </p>
       <NuxtLink
         :class="buttonVariants({ variant: 'outline' })"
         class="justify-self-start"
         to="/templates"
       >
-        Browse templates
+        {{ copy.browseTemplates }}
       </NuxtLink>
     </section>
     <LoadingState
       v-else-if="count === null || document === undefined"
-      label="Loading"
+      :label="copy.loading"
     />
     <form
       v-else
@@ -139,7 +155,7 @@ async function create(): Promise<void> {
       <div class="grid grid-cols-[120px_minmax(0,1fr)] items-start gap-5">
         <SheetThumbnail
           :document="document"
-          :lng="request.kind === 'sample' ? request.lng : locale"
+          :lng="request.kind === 'sample' ? request.lng : openingLocale"
           :width="120"
         />
         <div class="grid gap-2">
@@ -152,8 +168,8 @@ async function create(): Promise<void> {
           >
             {{ summary }}.
             {{ request.kind === 'sample'
-              ? 'You get a private copy to replace with your own content.'
-              : 'Your new resume starts empty and wears this template.' }}
+              ? copy.sampleDescription
+              : copy.blankDescription }}
           </p>
         </div>
       </div>
@@ -162,14 +178,14 @@ async function create(): Promise<void> {
           data-new-resume-cap
           kind="info"
         >
-          You have {{ RESUME_CAP }} resumes. Delete one to create another.
+          {{ copy.cap(RESUME_CAP) }}
         </StatusBanner>
         <NuxtLink
           :class="buttonVariants({ variant: 'outline' })"
           class="justify-self-end"
           to="/app/resumes"
         >
-          Go to your resumes
+          {{ copy.returnToResumes }}
         </NuxtLink>
       </template>
       <template v-else>
@@ -177,7 +193,7 @@ async function create(): Promise<void> {
           v-model="title"
           :control-attrs="{ 'data-action': 'new-resume-title' }"
           :disabled="busy"
-          label="Title"
+          :label="copy.title"
           name="title"
           required
         />
@@ -185,7 +201,7 @@ async function create(): Promise<void> {
           {{ countLine }}
         </StatusBanner>
         <StatusBanner
-          v-if="message"
+          v-if="message !== null"
           kind="error"
         >
           {{ message }}
@@ -197,14 +213,14 @@ async function create(): Promise<void> {
             :class="buttonVariants({ variant: 'outline' })"
             to="/templates"
           >
-            Back to templates
+            {{ copy.back }}
           </NuxtLink>
           <Button
             data-action="create-from-start"
             :disabled="busy"
             type="submit"
           >
-            {{ busy ? 'Creating…' : 'Create and open editor' }}
+            {{ busy ? copy.creating : copy.createAndOpen }}
           </Button>
         </div>
       </template>

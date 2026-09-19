@@ -188,7 +188,6 @@ describe('page titles and noindex', () => {
 
   it.each([
     ['/authorize', 'Authorize an agent · aboutme'],
-    ['/app/resumes', 'Resumes · aboutme'],
     ['/app/settings/sessions', 'Settings · aboutme'],
   ])('titles %s in English and keeps it out of search', async (
     route,
@@ -197,6 +196,21 @@ describe('page titles and noindex', () => {
     await visit(route);
     await waitForTitle(title);
     expect(meta('meta[name="robots"]')).toBe('noindex');
+  });
+
+  it('titles resumes in both locales and keeps settings English', async () => {
+    setSiteLocale('vi');
+    await visit('/app/resumes');
+    await waitForTitle('CV · aboutme');
+    expect(meta('meta[name="robots"]')).toBe('noindex');
+
+    setSiteLocale('en');
+    await visit('/app/resumes');
+    await waitForTitle('Resumes · aboutme');
+
+    setSiteLocale('vi');
+    await visit('/app/settings/sessions');
+    await waitForTitle('Settings · aboutme');
   });
 });
 

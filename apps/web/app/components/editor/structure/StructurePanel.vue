@@ -17,6 +17,9 @@ import type { AtomicConflictRecord } from '../../../editor/conflicts';
 import EntryOrderControls from './EntryOrderControls.vue';
 import SectionControls from './SectionControls.vue';
 import { defaultSectionIcons, defaultSectionNames } from '../sectionTypes';
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { editorShellCopy } from '@/i18n/editor-shell';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 type Column = 'main' | 'sidebar';
 type SectionAction = {
@@ -54,6 +57,8 @@ const props = defineProps<{
   readonly actions: ResumeEditorActions;
 }>();
 const emit = defineEmits<{ openSection: [key: string] }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 const newColumn = ref<Column>('main');
 const newSectionType = ref<Section['sectionType']>('work');
@@ -66,7 +71,15 @@ watch(newSectionType, (next, previous) => {
 });
 const pendingDelete = ref<DeleteTarget | null>(null);
 const root = ref<{ $el?: HTMLElement } | null>(null);
-const status = ref('');
+type StructureStatus
+  = | 'customSectionInvalidId'
+    | 'sectionChanged'
+    | 'sectionCreateDuplicate'
+    | 'sectionMissing';
+const status = ref<StructureStatus | null>(null);
+const statusText = computed(() =>
+  status.value === null ? '' : copy.value[status.value],
+);
 const record = computed(() => props.actions.record.value);
 const currentDocument = computed(() => record.value?.current.document);
 const placement = computed(
@@ -131,13 +144,11 @@ function createSection(): void {
   const custom = newSectionType.value === 'custom';
   const key = custom ? props.actions.createEntityId() : newSectionType.value;
   if (custom && !isRepositoryUuid(key)) {
-    status.value
-      = 'Cannot create a custom section because its generated ID '
-        + 'is invalid.';
+    status.value = 'customSectionInvalidId';
     return;
   }
   if (current.content[key] !== undefined) {
-    status.value = 'This section already exists. Choose another section type.';
+    status.value = 'sectionCreateDuplicate';
     return;
   }
   const icon = defaultSectionIcons[newSectionType.value];
@@ -233,7 +244,7 @@ function confirmDelete(): void {
   const target = pendingDelete.value;
   if (target === null) return;
   if (!deleteTargetMatches(target)) {
-    status.value = 'This section changed. Reopen deletion and confirm again.';
+    status.value = 'sectionChanged';
     closeDelete();
     return;
   }
@@ -286,10 +297,7 @@ async function reopen(conflict: ReopenConflict): Promise<void> {
     conflict.command.kind === 'entryReorder'
     && !entryOrderSectionMatches(conflict)
   ) {
-    status.value = [
-      'Entry order cannot reopen because its section is no longer available.',
-      'Create a new section or select another section.',
-    ].join(' ');
+    status.value = 'sectionMissing';
     root.value?.$el
       ?.querySelector<HTMLElement>('[data-action="section-type"]')
       ?.focus();
@@ -305,10 +313,7 @@ async function reopen(conflict: ReopenConflict): Promise<void> {
     return;
   }
   if (conflict.command.kind === 'structure') {
-    status.value = [
-      'This section is no longer available.',
-      'Create a new section or select another section.',
-    ].join(' ');
+    status.value = 'sectionMissing';
     root.value?.$el
       ?.querySelector<HTMLElement>('[data-action="section-type"]')
       ?.focus();
@@ -424,11 +429,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 <template>
   <InspectorPanel
     ref="root"
-    title="Sections"
+    :title="copy.sections"
     title-id="structure-title"
   >
     <Card>
-      <CardHeader><CardTitle>Add a section</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{{ copy.addSectionTitle }}</CardTitle></CardHeader>
       <CardContent>
         <form
           data-testid="section-create-form"
@@ -436,31 +441,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         >
           <SelectField
             v-model="newSectionType"
-            label="Section type"
+            :label="copy.sectionType"
             :options="[
-              { value: 'profile', label: 'Profile' },
-              { value: 'work', label: 'Work' },
-              { value: 'education', label: 'Education' },
-              { value: 'skill', label: 'Skill' },
-              { value: 'language', label: 'Language' },
-              { value: 'certificate', label: 'Certificate' },
-              { value: 'project', label: 'Project' },
-              { value: 'custom', label: 'Custom' },
+              { value: 'profile', label: copy.sectionTypeProfile },
+              { value: 'work', label: copy.sectionTypeWork },
+              { value: 'education', label: copy.sectionTypeEducation },
+              { value: 'skill', label: copy.sectionTypeSkill },
+              { value: 'language', label: copy.sectionTypeLanguage },
+              { value: 'certificate', label: copy.sectionTypeCertificate },
+              { value: 'project', label: copy.sectionTypeProject },
+              { value: 'custom', label: copy.sectionTypeCustom },
             ]"
             :control-attrs="{ 'data-action': 'section-type' }"
           />
           <SelectField
             v-model="newColumn"
-            label="Column"
+            :label="copy.column"
             name="column"
             :options="[
-              { value: 'main', label: 'Main' },
-              { value: 'sidebar', label: 'Sidebar' },
+              { value: 'main', label: copy.main },
+              { value: 'sidebar', label: copy.sidebar },
             ]"
           />
           <FormField
             v-slot="{ id }"
-            label="Section name"
+            :label="copy.sectionName"
             name="displayName"
           >
             <Input
@@ -472,22 +477,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
             type="submit"
             data-action="create"
           >
-            Add section
+            {{ copy.addSection }}
           </Button>
         </form>
       </CardContent>
     </Card>
     <StatusBanner
-      v-if="status !== ''"
+      v-if="statusText !== ''"
       kind="info"
     >
-      {{ status }}
+      {{ statusText }}
     </StatusBanner>
     <StatusBanner
       v-if="structureIssues.length > 0"
       kind="error"
     >
-      Review the highlighted section controls.
+      {{ copy.sectionIssue }}
     </StatusBanner>
     <Card
       v-for="item in sections"
@@ -521,23 +526,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     <ConfirmDialog
       v-if="pendingDelete !== null"
       :open="true"
-      title="Delete section"
-      :description="
-        `This permanently deletes ${pendingDelete.key} and its entries.`
-      "
-      confirm-label="Delete section"
+      :title="copy.deleteSectionTitle"
+      :description="copy.deleteSectionDescription(pendingDelete.key)"
+      :confirm-label="copy.deleteSection"
+      :cancel-label="copy.cancel"
       destructive
       confirm-action="confirm-delete"
       cancel-action="cancel-delete"
       @confirm="confirmDelete"
       @cancel="closeDelete"
-    />
+    >
+      <template #header-actions>
+        <LocaleToggle
+          :label="editorShellCopy[locale].localeLabel"
+          @pointerdown.prevent
+        />
+      </template>
+    </ConfirmDialog>
     <StatusBanner
       v-for="conflict in structureConflicts"
       :key="conflict.id"
       kind="info"
     >
-      Section placement changed. Reopen placement.
+      {{ copy.sectionPlacementChanged }}
       <Button
         type="button"
         data-action="reopen-placement"
@@ -545,7 +556,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         variant="outline"
         @click="reopen(conflict)"
       >
-        Reopen placement
+        {{ copy.reopenPlacement }}
       </Button>
     </StatusBanner>
     <StatusBanner
@@ -553,7 +564,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       :key="conflict.id"
       kind="info"
     >
-      Entry order changed. Reopen order.
+      {{ copy.entryOrderChanged }}
       <Button
         type="button"
         data-action="reopen-entry-order"
@@ -561,8 +572,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
         variant="outline"
         @click="reopen(conflict)"
       >
-        Reopen order
+        {{ copy.reopenOrder }}
       </Button>
     </StatusBanner>
   </InspectorPanel>
 </template>
+      :cancel-label="copy.cancel"

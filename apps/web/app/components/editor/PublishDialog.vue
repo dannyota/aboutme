@@ -20,6 +20,10 @@ import {
   publicTitleIssue,
 } from '../../editor/publicPageMeta';
 import type { ResumeMetadata } from '../../editor/types';
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { editorShellCopy } from '@/i18n/editor-shell';
+import { publishCopy } from '../../i18n/publish';
+import { workspaceCopy } from '../../i18n/workspace';
 import PublishPageFields from './PublishPageFields.vue';
 import type { ResumeRecord } from '../../stores/resumes';
 
@@ -28,6 +32,8 @@ const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => publishCopy[locale.value]);
 
 const emit = defineEmits<{
   'close': [];
@@ -68,10 +74,7 @@ const slugValid = computed(
 const slugError = computed(() =>
   slugValid.value
     ? undefined
-    : [
-        'Use 4–30 lowercase ASCII letters or numbers,',
-        'separated by single hyphens.',
-      ].join(' '),
+    : copy.value.slugError,
 );
 const slugDescribedBy = computed(() => [
   slugPrefixId,
@@ -113,15 +116,19 @@ const providerReauth = computed(() =>
   && state.value.method === 'provider',
 );
 const primaryAction = computed(() => {
-  if (!live.value && initialLive.value) return 'Unpublish';
-  if (live.value && initialLive.value) return 'Update publication';
-  return 'Publish';
+  if (!live.value && initialLive.value) return copy.value.unpublish;
+  if (live.value && initialLive.value) return copy.value.update;
+  return copy.value.publish;
 });
 const publicHref = computed(() => {
   const result = state.value;
   return result.kind === 'accepted' && result.resume.metadata.live
     ? canonicalPublicPath(result.resume.metadata.slug)
     : null;
+});
+const publicSealLabel = computed(() => {
+  const link = publicHref.value;
+  return link === null ? '' : workspaceCopy[locale.value].publicAt(link);
 });
 
 function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
@@ -261,62 +268,32 @@ function resetCopyState(): void {
 function issueMessage(code: string): string {
   switch (code) {
     case 'required_for_live':
-      return 'A required field is missing for publication.';
     case 'requires_live':
-      return 'This option requires Public resume.';
     case 'invalid_format':
-      return 'The slug format is invalid.';
     case 'reserved':
-      return 'That slug is reserved.';
     case 'required':
-      return 'A required field is missing.';
     case 'visible_entry_required':
-      return 'Add a visible resume entry before publishing.';
+      return copy.value.issue[code];
     default:
-      return 'The resume cannot be published.';
+      return copy.value.invalid;
   }
 }
 
 function blockedMessage(
   reason: Extract<PublishControllerState, { kind: 'blocked' }>['reason'],
 ): string {
-  switch (reason) {
-    case 'not-loaded':
-      return 'The resume is still loading. Publishing cannot start yet.';
-    case 'saving':
-      return 'Save the latest resume changes before publishing.';
-    case 'conflict':
-      return 'Resolve the resume conflict before publishing.';
-    case 'session-lost':
-      return 'Your session ended. Sign in again before publishing.';
-    case 'issue':
-      return 'Resolve the current resume issues before publishing.';
-    case 'partial-template':
-      return 'Finish recovering the template changes before publishing.';
-    case 'opaque-photo':
-      return 'Resolve the photo change before publishing.';
-    case 'read-required':
-      return 'Refresh the complete resume before publishing.';
-  }
+  return copy.value.blocked[reason];
 }
 
 function failureMessage(code: string): string {
   switch (code) {
     case 'provider_disabled':
     case 'provider_unavailable':
-      return [
-        'No supported reauthentication method is available.',
-        'Publishing is unavailable.',
-      ].join(' ');
     case 'csrf_rejected':
-      return [
-        'We could not verify this action.',
-        'Refresh your session and try again.',
-      ].join(' ');
     case 'save_failed':
-      return 'We could not save the resume before publishing. Try again.';
+      return copy.value.failed[code];
     default:
-      return 'Publishing failed. Try again.';
+      return copy.value.failed.generic;
   }
 }
 
@@ -328,10 +305,10 @@ onBeforeUnmount(resetCopyState);
     :open="open"
     class="publish-dialog max-h-[calc(100dvh-2rem)] overflow-y-auto
       sm:max-w-[38rem]"
-    title="Publish resume"
-    description="Choose how this resume is shared publicly."
+    :title="copy.title"
+    :description="copy.description"
     :submit-label="primaryAction"
-    cancel-label="Cancel"
+    :cancel-label="copy.cancel"
     :busy="busy"
     :submit-disabled="submitDisabled"
     :restore-focus="restoreFocus"
@@ -341,6 +318,12 @@ onBeforeUnmount(resetCopyState);
     @submit="submit"
     @cancel="close"
   >
+    <template #header-actions>
+      <LocaleToggle
+        :label="editorShellCopy[locale].localeLabel"
+        @pointerdown.prevent
+      />
+    </template>
     <div class="grid gap-4">
       <div
         class="relative"
@@ -349,7 +332,7 @@ onBeforeUnmount(resetCopyState);
         <TextField
           :id="slugInputId"
           v-model="slug"
-          label="Slug"
+          :label="copy.slug"
           name="slug"
           autocomplete="off"
           :disabled="busy"
@@ -377,46 +360,38 @@ onBeforeUnmount(resetCopyState);
         v-model:title="pageTitle"
         :default-title="defaultTitle"
         :disabled="busy"
+        :copy="copy.page"
         :server-issues="state.kind === 'invalid' ? state.issues : []"
       />
 
       <fieldset class="grid gap-3">
         <legend class="mb-1 text-sm font-medium">
-          Publish options
+          {{ copy.options }}
         </legend>
         <SwitchField
           :model-value="live"
-          label="Public resume"
+          :label="copy.live"
           name="live"
           data-action="publish-live"
           :disabled="busy"
-          :description="[
-            'Public resumes may be delivered through a global',
-            'content-delivery network.',
-          ].join(' ')"
+          :description="copy.liveHelp"
           @update:model-value="setLive"
         />
         <SwitchField
           v-model="downloadEnabled"
-          label="PDF download"
+          :label="copy.download"
           name="downloadEnabled"
           data-action="publish-download"
           :disabled="busy || !live"
-          :description="[
-            'Whether visitors can download the PDF.',
-            'You can always export your own.',
-          ].join(' ')"
+          :description="copy.downloadHelp"
         />
         <SwitchField
           v-model="seoGeoEnabled"
-          label="SEO and GEO"
+          :label="copy.discovery"
           name="seoGeoEnabled"
           data-action="publish-seo-geo"
           :disabled="busy || !live"
-          :description="[
-            'SEO and GEO allow search crawlers and AI answer engines',
-            'to discover and reuse public resume content.',
-          ].join(' ')"
+          :description="copy.discoveryHelp"
         />
       </fieldset>
 
@@ -426,7 +401,7 @@ onBeforeUnmount(resetCopyState);
       >
         <TextField
           v-model="password"
-          label="Current password"
+          :label="copy.currentPassword"
           type="password"
           autocomplete="current-password"
           :disabled="busy"
@@ -438,7 +413,7 @@ onBeforeUnmount(resetCopyState);
           :disabled="busy || password === ''"
           @click="submitPassword"
         >
-          Reauthenticate and publish
+          {{ copy.passwordAction }}
         </Button>
       </div>
 
@@ -450,14 +425,14 @@ onBeforeUnmount(resetCopyState);
         "
         class="grid gap-3"
       >
-        <p>Continue with your linked provider to reauthenticate.</p>
+        <p>{{ copy.providerContinue }}</p>
         <Button
           type="button"
           data-action="publish-provider-start"
           :disabled="busy"
           @click="startProvider"
         >
-          Start provider reauthentication
+          {{ copy.providerStart }}
         </Button>
       </div>
 
@@ -473,11 +448,10 @@ onBeforeUnmount(resetCopyState);
           rel="noopener noreferrer"
           @click="providerLinkActivated = true"
         >
-          Continue reauthentication in a new tab
+          {{ copy.providerLink }}
         </a>
         <p v-if="providerLinkActivated">
-          Finish reauthentication in the new tab, return to the editor, and
-          choose Retry publish.
+          {{ copy.providerReturn }}
         </p>
         <Button
           v-if="providerLinkActivated"
@@ -486,7 +460,7 @@ onBeforeUnmount(resetCopyState);
           :disabled="busy"
           @click="retryProvider"
         >
-          Retry publish
+          {{ copy.providerRetry }}
         </Button>
       </div>
 
@@ -494,7 +468,7 @@ onBeforeUnmount(resetCopyState);
         v-if="state.kind === 'reauth-wrong-password'"
         role="alert"
       >
-        That password was not accepted. Try again.
+        {{ copy.wrongPassword }}
       </p>
       <p
         v-if="
@@ -503,7 +477,7 @@ onBeforeUnmount(resetCopyState);
         "
         role="alert"
       >
-        Reauthentication is temporarily rate limited. Try again shortly.
+        {{ copy.reauthRateLimited }}
       </p>
       <p
         v-if="
@@ -512,7 +486,7 @@ onBeforeUnmount(resetCopyState);
         "
         role="alert"
       >
-        Reauthentication is unavailable. Try again later.
+        {{ copy.reauthUnavailable }}
       </p>
 
       <p
@@ -526,7 +500,7 @@ onBeforeUnmount(resetCopyState);
         role="alert"
         class="grid gap-2"
       >
-        <p>The resume cannot be published yet.</p>
+        <p>{{ copy.invalid }}</p>
         <Button
           v-for="issue in listedIssues"
           :key="`${issue.path}-${issue.code}`"
@@ -543,14 +517,13 @@ onBeforeUnmount(resetCopyState);
         v-if="state.kind === 'slug-taken'"
         role="alert"
       >
-        That public slug is already in use. Choose another slug.
+        {{ copy.slugTaken }}
       </p>
       <p
         v-if="state.kind === 'stale'"
         role="alert"
       >
-        The resume changed elsewhere. Review the latest version before
-        publishing again.
+        {{ copy.stale }}
       </p>
       <p
         v-if="
@@ -558,19 +531,19 @@ onBeforeUnmount(resetCopyState);
         "
         role="alert"
       >
-        Publishing is temporarily unavailable. Try again shortly.
+        {{ copy.rateLimited }}
       </p>
       <p
         v-if="state.kind === 'unknown'"
         role="alert"
       >
-        We could not confirm publication. Retry publish to check safely.
+        {{ copy.unknown }}
       </p>
       <p
         v-if="state.kind === 'session-lost'"
         role="alert"
       >
-        Your session ended. Sign in again before publishing.
+        {{ copy.sessionLost }}
       </p>
       <p
         v-if="state.kind === 'failed'"
@@ -588,15 +561,16 @@ onBeforeUnmount(resetCopyState);
           role="status"
         >
           <template v-if="state.resume.metadata.live">
-            Published successfully.
+            {{ copy.published }}
           </template>
           <template v-else>
-            Resume is private.
+            {{ copy.private }}
           </template>
         </p>
         <template v-if="publicHref !== null">
           <AppSeal
             :link="publicHref"
+            :label="publicSealLabel"
             size="stamp"
           />
           <a
@@ -610,14 +584,14 @@ onBeforeUnmount(resetCopyState);
             variant="secondary"
             @click="copyLink"
           >
-            {{ copyState === 'copied' ? 'Copied' : 'Copy link' }}
+            {{ copyState === 'copied' ? copy.copied : copy.copyLink }}
           </Button>
           <p
             v-if="copyState === 'failed'"
             data-testid="copy-link-error"
             role="alert"
           >
-            Copy failed. Select the link to copy it.
+            {{ copy.copyFailed }}
           </p>
         </template>
       </div>
@@ -627,7 +601,7 @@ onBeforeUnmount(resetCopyState);
         role="status"
         aria-live="polite"
       >
-        Publishing…
+        {{ copy.publishing }}
       </p>
     </div>
 
@@ -640,7 +614,7 @@ onBeforeUnmount(resetCopyState);
         :disabled="busy"
         @click="close"
       >
-        Cancel
+        {{ copy.cancel }}
       </Button>
       <Button
         v-if="
@@ -655,7 +629,7 @@ onBeforeUnmount(resetCopyState);
         :disabled="busy"
         @click="retry"
       >
-        Retry publish
+        {{ copy.retry }}
       </Button>
       <Button
         v-if="
@@ -670,7 +644,7 @@ onBeforeUnmount(resetCopyState);
         :disabled="busy"
         @click="startProvider"
       >
-        Try provider reauthentication again
+        {{ copy.providerRetryAction }}
       </Button>
       <Button
         v-if="

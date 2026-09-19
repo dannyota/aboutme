@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import { Button } from '@/components/ui/button';
 
 import type { ResumeEditorActions } from '../../composables/useResumeEditor';
 import type { ConflictRecord } from '../../editor/reconcile';
 import StatusBanner from '../app/StatusBanner.vue';
+import {
+  editorShellCopy,
+  type ConflictControlKind,
+} from '../../i18n/editor-shell';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -12,29 +18,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   openInspector: [target: InspectorTarget];
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorShellCopy[locale.value]);
 
 type InspectorTarget
   = | { readonly kind: 'section'; readonly key: string }
     | { readonly kind: 'structure' | 'templates' | 'photo' };
-type ConflictControl
-  = | { readonly kind: 'apply-field'; readonly label: 'Apply my value' }
-    | { readonly kind: 'select-entry'; readonly label: 'Select another entry' }
-    | { readonly kind: 'recreate-entry'; readonly label: 'Recreate entry' }
-    | {
-      readonly kind: 'reopen-entry-order';
-      readonly label: 'Reopen entry order';
-    }
-    | { readonly kind: 'reopen-placement'; readonly label: 'Reopen placement' }
-    | { readonly kind: 'reopen-crop'; readonly label: 'Reopen crop' }
-    | {
-      readonly kind: 'review-template';
-      readonly label: 'Review template changes';
-    }
-    | {
-      readonly kind: 'confirm-deletion';
-      readonly label: 'Confirm deletion again';
-    }
-    | { readonly kind: 'review-photo'; readonly label: 'Review photo changes' };
+type ConflictControl = {
+  readonly [Kind in ConflictControlKind]: { readonly kind: Kind };
+}[ConflictControlKind];
 
 function acceptLatest(id: string): void {
   void props.actions.acceptLatest(id);
@@ -63,7 +55,7 @@ function applyField(conflict: ConflictRecord): void {
 
 function controlFor(conflict: ConflictRecord): ConflictControl | undefined {
   if (conflict.subject === 'template') {
-    return { kind: 'review-template', label: 'Review template changes' };
+    return { kind: 'review-template' };
   }
   switch (conflict.command.kind) {
     case 'metadataField':
@@ -71,26 +63,26 @@ function controlFor(conflict: ConflictRecord): ConflictControl | undefined {
     case 'sectionMetadata':
     case 'customization':
       return canApplyField(conflict)
-        ? { kind: 'apply-field', label: 'Apply my value' }
-        : { kind: 'reopen-placement', label: 'Reopen placement' };
+        ? { kind: 'apply-field' }
+        : { kind: 'reopen-placement' };
     case 'entryField':
       return canApplyField(conflict)
-        ? { kind: 'apply-field', label: 'Apply my value' }
-        : { kind: 'select-entry', label: 'Select another entry' };
+        ? { kind: 'apply-field' }
+        : { kind: 'select-entry' };
     case 'entryUpsert':
-      return { kind: 'recreate-entry', label: 'Recreate entry' };
+      return { kind: 'recreate-entry' };
     case 'entryDelete':
     case 'resumeDelete':
-      return { kind: 'confirm-deletion', label: 'Confirm deletion again' };
+      return { kind: 'confirm-deletion' };
     case 'entryReorder':
-      return { kind: 'reopen-entry-order', label: 'Reopen entry order' };
+      return { kind: 'reopen-entry-order' };
     case 'structure':
-      return { kind: 'reopen-placement', label: 'Reopen placement' };
+      return { kind: 'reopen-placement' };
     case 'photoCrop':
-      return { kind: 'reopen-crop', label: 'Reopen crop' };
+      return { kind: 'reopen-crop' };
     case 'photoDelete':
     case 'photoUpload':
-      return { kind: 'review-photo', label: 'Review photo changes' };
+      return { kind: 'review-photo' };
     default:
       return assertNever(conflict.command);
   }
@@ -181,6 +173,11 @@ function conflictKey(conflict: ConflictRecord): string {
     : `${conflict.kind}:${conflict.command.kind}`;
 }
 
+function controlLabel(conflict: ConflictRecord): string {
+  const control = controlFor(conflict);
+  return control === undefined ? '' : copy.value.conflictControl(control.kind);
+}
+
 function assertNever(value: never): never {
   throw new Error(`Unexpected conflict control: ${String(value)}`);
 }
@@ -191,7 +188,7 @@ function assertNever(value: never): never {
     v-if="conflicts.length > 0"
     class="editor-conflicts"
     kind="info"
-    title="Review changes"
+    :title="copy.conflictTitle"
   >
     <article
       v-for="conflict in conflicts"
@@ -199,7 +196,7 @@ function assertNever(value: never): never {
       :data-conflict="conflictKey(conflict)"
     >
       <p>
-        This part changed elsewhere. Review the latest version before saving.
+        {{ copy.conflictDescription }}
       </p>
       <Button
         v-if="canAcceptLatest(conflict)"
@@ -207,7 +204,7 @@ function assertNever(value: never): never {
         type="button"
         @click="acceptLatest(conflict.id)"
       >
-        Accept latest
+        {{ copy.acceptLatest }}
       </Button>
       <Button
         v-if="controlFor(conflict) !== undefined"
@@ -220,7 +217,7 @@ function assertNever(value: never): never {
         type="button"
         @click="useControl(conflict)"
       >
-        {{ controlFor(conflict)?.label }}
+        {{ controlLabel(conflict) }}
       </Button>
     </article>
   </StatusBanner>

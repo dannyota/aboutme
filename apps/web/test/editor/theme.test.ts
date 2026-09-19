@@ -12,6 +12,7 @@ import {
   createThemeController,
   type Theme,
 } from '../../app/composables/useTheme';
+import { setSiteLocale } from '../support/locale';
 
 const themeCss = resolve(process.cwd(), 'app/assets/css/theme.css');
 const nuxtConfig = resolve(process.cwd(), 'nuxt.config.ts');
@@ -96,6 +97,7 @@ describe('theme preference boundary', () => {
   it(
     'keeps the theme control inside the signed-in account menu',
     async () => {
+      setSiteLocale('en');
       const wrapper = await mountSuspended(AppRoot, {
         route: '/app/resumes',
       });

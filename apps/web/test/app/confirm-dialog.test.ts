@@ -4,7 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import ConfirmDialog from '../../app/components/app/ConfirmDialog.vue';
 
-function open(props: Record<string, unknown> = {}) {
+function open(
+  props: Record<string, unknown> = {},
+  withHeaderActions = true,
+) {
   const trigger = document.createElement('button');
   document.body.append(trigger);
   trigger.focus();
@@ -19,12 +22,25 @@ function open(props: Record<string, unknown> = {}) {
       cancelAction: 'cancel-delete',
       ...props,
     },
+    slots: withHeaderActions
+      ? {
+          'header-actions':
+            '<button type="button" data-action="locale">Language</button>',
+        }
+      : {},
   });
   return { wrapper, trigger };
 }
 const body = () => document.body;
 
 describe('ConfirmDialog', () => {
+  it('renders without header actions for ordinary callers', async () => {
+    const { wrapper, trigger } = open({}, false);
+    await nextTick();
+    expect(wrapper.find('[data-action="locale"]').exists()).toBe(false);
+    wrapper.unmount();
+    trigger.remove();
+  });
   it('renders an alert dialog with title and description', async () => {
     const { wrapper } = open();
     await nextTick();
@@ -80,6 +96,21 @@ describe('ConfirmDialog', () => {
     ).toBe(true);
     wrapper.unmount();
   });
+  it(
+    'keeps the destructive cancel target focused with a header action',
+    async () => {
+      const { wrapper, trigger } = open({
+        destructive: true,
+      });
+      await nextTick();
+      await nextTick();
+      expect(document.activeElement).toBe(
+        body().querySelector('[data-action="cancel-delete"]'),
+      );
+      wrapper.unmount();
+      trigger.remove();
+    },
+  );
   it(
     'focuses cancel when destructive and returns focus after cancel',
     async () => {

@@ -1,4 +1,6 @@
 import type { Customization } from '@aboutme/schema';
+import type { Locale } from '../../../i18n/locale';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 import type { CustomizationDelta } from '../../../editor/commands';
 
@@ -22,13 +24,19 @@ const MM_PER_INCH = 25.4;
 
 export const MARGIN_PRESETS: readonly {
   readonly choice: Exclude<MarginChoice, 'custom'>;
-  readonly label: string;
   readonly mm: number;
 }[] = [
-  { choice: 'narrow', label: 'Narrow', mm: 10 },
-  { choice: 'normal', label: 'Normal', mm: DEFAULT_MARGIN_MM },
-  { choice: 'wide', label: 'Wide', mm: 25 },
+  { choice: 'narrow', mm: 10 },
+  { choice: 'normal', mm: DEFAULT_MARGIN_MM },
+  { choice: 'wide', mm: 25 },
 ];
+
+export function marginLabel(
+  choice: MarginChoice,
+  locale: Locale = 'en',
+): string {
+  return editorControlsCopy[locale].page.marginLabels[choice];
+}
 
 export const PAGE_SIZE_LABELS: Readonly<Record<PageFormat, string>> = {
   a4: 'A4 · 210 × 297 mm',
@@ -132,8 +140,9 @@ export function formatLength(mm: number, format: PageFormat): string {
 export function presetLabel(
   choice: MarginChoice,
   format: PageFormat,
+  locale: Locale = 'en',
 ): string {
-  if (choice === 'custom') return 'Custom';
+  if (choice === 'custom') return marginLabel(choice, locale);
   const preset = MARGIN_PRESETS.find((item) => item.choice === choice)!;
-  return `${preset.label} · ${formatLength(preset.mm, format)}`;
+  return `${marginLabel(choice, locale)} · ${formatLength(preset.mm, format)}`;
 }

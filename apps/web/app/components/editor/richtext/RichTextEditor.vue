@@ -5,7 +5,7 @@ import { keymap } from 'prosemirror-keymap';
 import { wrapInList } from 'prosemirror-schema-list';
 import { EditorState, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import { onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import {
   Bold,
   CornerDownLeft,
@@ -19,6 +19,7 @@ import {
 } from '@lucide/vue';
 import IconButton from '@/components/app/IconButton.vue';
 import { useFieldDrafts } from '../../../composables/useFieldDrafts';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 import {
   handleListMarkerInput,
@@ -30,9 +31,12 @@ import { serializeRichText } from './serialize';
 
 const props = withDefaults(
   defineProps<{ readonly label?: string; readonly modelValue: string }>(),
-  { label: 'Rich text' },
+  { label: undefined },
 );
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].richText);
+const label = computed(() => props.label ?? copy.value.editorLabel);
 
 /** Typing pauses this long before the text goes to the store. */
 const RICH_TEXT_COMMIT_DELAY_MS = 400;
@@ -64,7 +68,7 @@ function insertHardBreak(
 }
 
 function applyLink(editor: EditorView): boolean {
-  const href = window.prompt('Link URL');
+  const href = window.prompt(copy.value.linkUrl);
   if (href === null || !/^(?:https:|mailto:|tel:)/.test(href)) return false;
   return toggleMark(richTextSchema.marks.link, {
     href,
@@ -140,8 +144,10 @@ function commitPending(): void {
 }
 
 function isEditorSurface(target: EventTarget | null): target is HTMLElement {
-  return target instanceof HTMLElement
-    && target.getAttribute('contenteditable') === 'true';
+  return (
+    target instanceof HTMLElement
+    && target.getAttribute('contenteditable') === 'true'
+  );
 }
 
 function revertEscape(event: KeyboardEvent): void {
@@ -158,7 +164,7 @@ function handleBlur(event: FocusEvent): void {
     event.currentTarget instanceof HTMLElement
     && event.relatedTarget instanceof Node
     && event.currentTarget.contains(event.relatedTarget)
-  ) return;
+  ) { return; }
   commitPending();
 }
 
@@ -190,7 +196,7 @@ onMounted(() => {
   if (editorRoot.value === undefined) return;
   view = new EditorView(editorRoot.value, {
     attributes: {
-      'aria-label': props.label,
+      'aria-label': label.value,
       'aria-multiline': 'true',
       'role': 'textbox',
     },
@@ -238,7 +244,7 @@ watch(
       view === undefined
       || modelValue === lastInput
       || pendingOutput !== undefined
-    ) return;
+    ) { return; }
     lastInput = modelValue;
     view.updateState(createState(parseRichTextHTML(modelValue)));
   },
@@ -252,13 +258,13 @@ watch(
     @keydown.capture="revertEscape"
   >
     <div
-      aria-label="Rich-text controls"
+      :aria-label="copy.toolbar"
       role="toolbar"
     >
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+Alt+0"
-        label="Paragraph"
+        :label="copy.paragraph"
         type="button"
         @click="run(setBlockType(richTextSchema.nodes.paragraph))"
       >
@@ -267,7 +273,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+Enter"
-        label="Line break"
+        :label="copy.lineBreak"
         type="button"
         @click="run(insertHardBreak)"
       >
@@ -276,7 +282,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+B"
-        label="Bold"
+        :label="copy.bold"
         type="button"
         @click="run(toggleMark(richTextSchema.marks.strong))"
       >
@@ -285,7 +291,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+I"
-        label="Italic"
+        :label="copy.italic"
         type="button"
         @click="run(toggleMark(richTextSchema.marks.em))"
       >
@@ -294,7 +300,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+U"
-        label="Underline"
+        :label="copy.underline"
         type="button"
         @click="run(toggleMark(richTextSchema.marks.underline))"
       >
@@ -303,7 +309,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+Shift+8"
-        label="Ordered list"
+        :label="copy.orderedList"
         type="button"
         @click="run(wrapInList(richTextSchema.nodes.ordered_list))"
       >
@@ -312,7 +318,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+Shift+9"
-        label="Bullet list"
+        :label="copy.bulletList"
         type="button"
         @click="run(wrapInList(richTextSchema.nodes.bullet_list))"
       >
@@ -321,7 +327,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+K"
-        label="Link"
+        :label="copy.link"
         type="button"
         @click="runLink"
       >
@@ -330,7 +336,7 @@ watch(
       <IconButton
         size="icon-sm"
         aria-keyshortcuts="Control+Shift+K"
-        label="Unlink"
+        :label="copy.unlink"
         type="button"
         @click="runUnlink"
       >

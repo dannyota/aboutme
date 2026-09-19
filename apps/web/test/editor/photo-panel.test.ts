@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { isProxy, nextTick } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
+import { isProxy, nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CropEditor from '../../app/components/editor/photo/CropEditor.vue';
 import PhotoPanel from '../../app/components/editor/photo/PhotoPanel.vue';
@@ -12,6 +13,13 @@ import type { AtomicEditorCommand } from '../../app/editor/commands';
 import type { Projection } from '../../app/editor/types';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
 
 describe('private photo controls', () => {
   it('shows the frame without an image until the read is ready', () => {
@@ -168,6 +176,30 @@ describe('private photo controls', () => {
       'This photo changed. Reopen deletion and confirm again.',
     );
     expect(document.activeElement).toBe(opener.element);
+    wrapper.unmount();
+  });
+
+  it('keeps a changed-photo status while translating it', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(PhotoPanel, {
+      attachTo: document.body,
+      props: { record: photoRecord(), actions: actionsFor(edit) },
+    });
+    await wrapper.get('[data-action="delete"]').trigger('click');
+    await wrapper.setProps({ record: photoRecordForKey('photo-b') });
+    const confirm = document.body.querySelector(
+      '[data-action="confirm-delete"]',
+    ) as HTMLElement;
+    confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.text()).toContain(
+      'Ảnh đã thay đổi. Mở lại thao tác xóa và xác nhận lại.',
+    );
+    expect(edit).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -369,6 +401,31 @@ describe('private photo controls', () => {
       kind: 'photoCrop',
       crop: { x: 0.2, y: 0.06, width: 0.5, height: 0.48 },
     });
+  });
+
+  it('keeps an invalid crop while translating its error', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(CropEditor, {
+      props: {
+        photoKey: 'photo-a',
+        photoUrl: 'data:image/png;base64,accepted',
+        crop: { x: 0, y: 0, width: 1, height: 1 },
+        actions: actionsFor(edit),
+      },
+    });
+    const width = wrapper.get('[name="width"]');
+    await width.setValue('0');
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.get('[role="alert"]').text())
+      .toBe('Enter a crop within the image bounds.');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect((width.element as HTMLInputElement).value).toBe('0');
+    expect(wrapper.get('[role="alert"]').text())
+      .toBe('Nhập vùng cắt trong phạm vi ảnh.');
+    expect(edit).not.toHaveBeenCalled();
   });
 
   it('reopens a changed-photo crop conflict without offering generic override',

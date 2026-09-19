@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import StatusBanner from '../app/StatusBanner.vue';
 import type { ServerValidationIssue } from '../../editor/attempt';
+import { editorShellCopy } from '../../i18n/editor-shell';
 
 const props = defineProps<{
   readonly issues: readonly ServerValidationIssue[];
@@ -12,6 +13,8 @@ const emit = defineEmits<{
   focusIssue: [path: string];
 }>();
 const summary = ref<{ focus?: () => void } | null>(null);
+const { locale } = useLocale();
+const copy = computed(() => editorShellCopy[locale.value]);
 
 watch(
   () => props.issues.map(({ path, code }) => `${path}:${code}`).join('|'),
@@ -21,23 +24,6 @@ watch(
     summary.value?.focus?.();
   },
 );
-
-function safeText(code: string): string {
-  switch (code) {
-    case 'maxLength':
-    case 'maxItems':
-    case 'maximum':
-      return 'This value is over the allowed limit.';
-    case 'required':
-      return 'Add the required value.';
-    case 'format':
-    case 'pattern':
-    case 'date-range-order':
-      return 'Check this value and try again.';
-    default:
-      return 'This value needs attention.';
-  }
-}
 </script>
 
 <template>
@@ -47,7 +33,7 @@ function safeText(code: string): string {
     class="editor-error-summary"
     :focus-on-mount="false"
     kind="error"
-    title="Check these fields"
+    :title="copy.checkFields"
   >
     <ul>
       <li
@@ -61,7 +47,7 @@ function safeText(code: string): string {
           data-action="focus-editor-issue"
           @click="emit('focusIssue', issue.path)"
         >
-          {{ safeText(issue.code) }}
+          {{ copy.issueFor(issue.code) }}
         </Button>
       </li>
     </ul>

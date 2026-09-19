@@ -17,6 +17,7 @@ import type { PhotoReadState } from '../../stores/resumes';
 import AppSeal from '../app/AppSeal.vue';
 import ResumeDocument from '../resume/ResumeDocument.vue';
 import { previewProjection } from './previewProjection';
+import { editorShellCopy } from '../../i18n/editor-shell';
 
 const props = withDefaults(defineProps<{
   readonly document: Resume;
@@ -31,6 +32,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   pages: [count: number];
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorShellCopy[locale.value]);
 
 const previewRoot = shallowRef<HTMLElement | null>(null);
 const estimatedPages = ref<number | null>(null);
@@ -64,15 +67,14 @@ const sheetZoom = computed(() => {
 });
 const scaledWidth = computed(() => A4_WIDTH_PX * sheetZoom.value);
 const pageCountText = computed(() => {
-  if (estimatedPages.value === 1) return '1 page';
-  return `${estimatedPages.value ?? '—'} pages`;
+  return copy.value.pageCount(estimatedPages.value);
 });
 const photoStatus = computed(() => {
   if (props.photoRead?.kind === 'loading') {
-    return 'Photo is loading. The preview is shown without it.';
+    return copy.value.photoLoading;
   }
   if (props.photoRead?.kind === 'suspended') {
-    return 'Photo unavailable. The preview is shown without it.';
+    return copy.value.photoUnavailable;
   }
   return '';
 });
@@ -128,7 +130,7 @@ onBeforeUnmount(() => {
 
 <template>
   <section
-    aria-label="Resume preview"
+    :aria-label="copy.previewLabel"
     class="grid h-full min-h-0 grid-rows-[minmax(0,1fr)]"
   >
     <div
@@ -142,7 +144,7 @@ onBeforeUnmount(() => {
           text-muted-foreground"
         role="status"
       >
-        Preview is temporarily unavailable. Your edits are still safe.
+        {{ copy.previewUnavailable }}
       </p>
       <div
         v-else

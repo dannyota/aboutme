@@ -7,6 +7,8 @@ import { defineStore } from 'pinia';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { workspaceTitles } from '../../app/i18n/meta';
+
 const webRoot = resolve(import.meta.dirname, '../..');
 
 describe('editor runtime prerequisites', () => {
@@ -16,6 +18,8 @@ describe('editor runtime prerequisites', () => {
       expect(currentSchema.$id).toBe('https://aboutme.vn/schema/resume/v4');
       expect(validateDocument).toBeTypeOf('function');
       expect(defineStore).toBeTypeOf('function');
+      expect(workspaceTitles.vi.editor).toBe('CV · aboutme');
+      expect(workspaceTitles.en.editor).toBe('Resume · aboutme');
 
       const previousHarness = process.env.NUXT_HARNESS;
       process.env.NUXT_HARNESS = '1';

@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import { computed, nextTick, ref } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 
 // eslint-disable-next-line max-len -- dialog component import.
@@ -25,12 +25,17 @@ import { parseRevision } from '../../app/editor/revision';
 import type { EditorRuntime } from '../../app/editor/types';
 import { useResumeStore } from '../../app/stores/resumes';
 import {
-  createStatusMessage,
+  createNotice,
   useResumeList,
 } from '../../app/composables/useResumeList';
 import { acceptedFixture } from './fixture';
 
 mockNuxtImport('navigateTo', () => vi.fn());
+
+beforeEach(() => {
+  document.body.innerHTML = '';
+  setSiteLocale('en');
+});
 
 function summary(overrides: Partial<ResumeSummary> = {}): ResumeSummary {
   const fixture = acceptedFixture();
@@ -112,6 +117,24 @@ describe('useResumeList', () => {
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
       '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain',
     );
+  });
+
+  it('uses login after an authenticated session ends', async () => {
+    const authState = ref<'authenticated' | 'anonymous'>('authenticated');
+    vi.mocked(navigateTo).mockClear();
+    useResumeList({
+      api: ({
+        list: vi.fn().mockResolvedValue({ kind: 'ready', items: [] }),
+      } as never),
+      authState,
+      loginPath: '/register?next=%2Fapp%2Fnew%3Ftemplate%3Dengineer-compact',
+    });
+    await nextTick();
+
+    authState.value = 'anonymous';
+    await nextTick();
+
+    expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith('/login');
   });
 
   it.each([
@@ -316,13 +339,19 @@ describe('useResumeList', () => {
     );
   });
 
-  it('maps resume-cap rejection to fixed safe copy', () => {
-    expect(createStatusMessage({
+  it('maps create results to semantic notices', () => {
+    expect(createNotice({
       kind: 'rejected',
       code: 'resume_cap_exceeded',
-    })).toBe(
-      'You have reached the resume limit.',
-    );
+    })).toBe('resume-cap');
+    expect(createNotice({ kind: 'rejected', code: 'request_invalid' }))
+      .toBe('create-failed');
+    expect(createNotice({ kind: 'retry-later' })).toBe('retry-later');
+    expect(createNotice({
+      kind: 'blocked',
+      intentId: '',
+      reason: 'session-lost',
+    })).toBe('session-lost');
   });
 
   it(
@@ -518,9 +547,7 @@ describe('useResumeList', () => {
     await list.remove(accepted.metadata.id, 'Old summary title');
 
     expect(edit).not.toHaveBeenCalled();
-    expect(list.actionMessage.value).toBe(
-      'This resume changed. Reopen deletion and confirm its current title.',
-    );
+    expect(list.actionNotice.value).toBe('resume-changed');
   });
 
   it('keeps a deleting row until a definitive store deletion', async () => {
@@ -661,7 +688,7 @@ describe('useResumeList', () => {
         ? wrapper.get('[data-testid="create-resume"]').element
         : wrapper.get(
           `[data-testid="resume-row-${nextId}"]`
-          + ' [aria-label^="More actions for "]',
+          + ' [data-resume-actions]',
         ).element;
       expect(document.activeElement).toBe(target);
       wrapper.unmount();
@@ -755,6 +782,72 @@ describe('useResumeList', () => {
     wrapper.unmount();
   });
 
+  it.each([
+    ['vi', 'CV', 'Đổi tên CV', 'Tên CV', 'Xóa CV', 'Đổi tên', 'Xóa', 'Đóng'],
+    [
+      'en', 'Resumes', 'Rename resume', 'Title', 'Delete resume', 'Rename',
+      'Delete', 'Close',
+    ],
+  ] as const)('renders list and dialogs in %s', async (
+    locale,
+    listTitle,
+    renameTitle,
+    fieldLabel,
+    deleteTitle,
+    renameAction,
+    deleteAction,
+    closeLabel,
+  ) => {
+    setSiteLocale(locale);
+    const item = summary({ id: `locale-${locale}`, title: 'First' });
+    const listWrapper = mount(ResumeList, {
+      props: {
+        items: [item],
+        busyIds: [],
+        removalFocusId: null,
+        removalFocusVersion: 0,
+      },
+    });
+    expect(listWrapper.get('h1').text()).toBe(listTitle);
+    await listWrapper.get('[data-resume-actions]').trigger('click');
+    const actions = [...document.body.querySelectorAll('[role="menuitem"]')]
+      .map((item) => item.textContent);
+    expect(actions).toEqual(expect.arrayContaining([
+      renameAction,
+      deleteAction,
+    ]));
+    listWrapper.unmount();
+
+    const renameWrapper = mount(RenameResumeDialog, {
+      attachTo: document.body,
+      props: { item, busy: false },
+    });
+    await nextTick();
+    expect(document.body.textContent).toContain(renameTitle);
+    expect(document.body.querySelector('[role="dialog"] label')?.textContent)
+      .toBe(fieldLabel);
+    expect(document.body.querySelector('[data-slot="dialog-close"] .sr-only')
+      ?.textContent).toBe(closeLabel);
+    renameWrapper.unmount();
+
+    const createWrapper = mount(CreateResumeDialog, {
+      attachTo: document.body,
+      props: { open: true, busy: false, retained: null, resumeCount: 1 },
+    });
+    await nextTick();
+    expect(document.body.querySelector('[data-slot="dialog-close"] .sr-only')
+      ?.textContent).toBe(closeLabel);
+    createWrapper.unmount();
+
+    const deleteWrapper = mount(DeleteResumeDialog, {
+      attachTo: document.body,
+      props: { item, busy: false },
+    });
+    await nextTick();
+    expect(document.body.textContent).toContain(deleteTitle);
+    deleteWrapper.unmount();
+  });
+
   it('shows public and draft marks from the summary fields', () => {
     const publicItem = summary({
       id: 'public',
@@ -833,7 +926,7 @@ describe('useResumeList', () => {
       },
       global: { stubs: { NuxtLink: true } },
     });
-    const trigger = wrapper.get('[aria-label="More actions for First"]');
+    const trigger = wrapper.get('[data-resume-actions]');
     await trigger.trigger('click');
     const rename = document.body.querySelector<HTMLElement>(
       '[aria-label="Rename First"]',
@@ -858,7 +951,7 @@ describe('useResumeList', () => {
           removalFocusVersion: 0,
         },
       });
-      const trigger = wrapper.get('[aria-label="More actions for First"]');
+      const trigger = wrapper.get('[data-resume-actions]');
       await trigger.trigger('click');
       const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
       expect(menu).not.toBeNull();
@@ -1062,11 +1155,11 @@ describe('useResumeList', () => {
       const select = document.body.querySelector<HTMLSelectElement>(
         '[role="dialog"] [data-action="resume-language"]',
       )!;
-      expect([...select.options].map((option) => option.text)).toEqual([
-        'Tiếng Việt',
-        'English',
-        'Other…',
-      ]);
+      expect([...select.options].map((option) => option.text)).toEqual(
+        expected === 'vi'
+          ? ['Tiếng Việt', 'English', 'Ngôn ngữ khác…']
+          : ['Tiếng Việt', 'English', 'Other…'],
+      );
       expect(select.value).toBe(expected);
       expect(document.body.textContent).not.toMatch(
         /Leave unchanged|Clear language|Set language/u,
@@ -1077,6 +1170,33 @@ describe('useResumeList', () => {
       wrapper.unmount();
     }
     setSiteLocale(undefined);
+  });
+
+  it('keeps blank data while the interface locale changes', async () => {
+    setSiteLocale('vi');
+    const wrapper = mount(CreateResumeDialog, {
+      attachTo: document.body,
+      props: { open: true, busy: false, retained: null },
+    });
+    await nextTick();
+    const select = document.body.querySelector<HTMLSelectElement>(
+      '[role="dialog"] [data-action="resume-language"]',
+    )!;
+    const title = document.body.querySelector<HTMLInputElement>(
+      '[role="dialog"] input[name="title"]',
+    )!;
+    title.value = 'CV của tôi';
+    title.dispatchEvent(new Event('input', { bubbles: true }));
+    useState('aboutme-locale').value = 'en';
+    await nextTick();
+
+    expect(select.value).toBe('vi');
+    expect(title.value).toBe('CV của tôi');
+    expect(document.body.textContent).toContain('Create resume');
+    submitDialog();
+    await nextTick();
+    expect(wrapper.emitted('submit')).toEqual([['CV của tôi', 'vi']]);
+    wrapper.unmount();
   });
 
   it('takes a BCP 47 tag only through Other', async () => {
@@ -1108,7 +1228,7 @@ describe('useResumeList', () => {
     await nextTick();
     expect(wrapper.emitted('submit')).toBeUndefined();
     expect(document.body.textContent).toContain(
-      'Enter a language code, such as fr or zh-Hant.',
+      'Nhập mã ngôn ngữ, như fr hoặc zh-Hant.',
     );
 
     other.value = ' zh-Hant ';
@@ -1165,7 +1285,7 @@ describe('useResumeList', () => {
       new Event('submit', { bubbles: true, cancelable: true }),
     );
     await nextTick();
-    expect(wrapper.emitted('submit')).toEqual([['', 'vi']]);
+    expect(wrapper.emitted('submit')).toEqual([['', 'en']]);
     const cancel = document.body.querySelector<HTMLButtonElement>(
       '[role="dialog"] [data-slot="button"][type="button"]',
     );

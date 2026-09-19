@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { ProjectEntry } from '@aboutme/schema';
+import { computed } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
@@ -8,6 +10,8 @@ import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
 defineProps<{ readonly entry: ProjectEntry }>();
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].entry.project);
 const emit = defineEmits<{
   field: [
     change: {
@@ -19,9 +23,7 @@ const emit = defineEmits<{
 function updateDescription(value: string): void {
   emit('field', {
     path: 'description',
-    intent: value !== ''
-      ? { kind: 'set', value }
-      : { kind: 'unset' },
+    intent: value !== '' ? { kind: 'set', value } : { kind: 'unset' },
   });
 }
 </script>
@@ -29,19 +31,19 @@ function updateDescription(value: string): void {
 <template>
   <TextField
     data-entry-field="title"
-    label="Title"
+    :label="copy.title"
     :model-value="entry.title"
     @intent="emit('field', { path: 'title', intent: $event })"
   />
   <TextField
     data-entry-field="subtitle"
-    label="Subtitle"
+    :label="copy.subtitle"
     :model-value="entry.subtitle"
     @intent="emit('field', { path: 'subtitle', intent: $event })"
   />
   <EntryLinkField
     data-entry-field="link"
-    label="Project link"
+    :label="copy.link"
     :model-value="entry.link"
     @intent="emit('field', { path: 'link', intent: $event })"
   />
@@ -53,7 +55,7 @@ function updateDescription(value: string): void {
   />
   <RichTextEditor
     data-entry-field="description"
-    label="Project description"
+    :label="copy.description"
     :model-value="entry.description ?? ''"
     @update:model-value="updateDescription"
   />

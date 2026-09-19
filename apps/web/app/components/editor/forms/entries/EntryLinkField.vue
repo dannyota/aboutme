@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { FieldIntent } from '../fieldIntent';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 import TextField from '@/components/app/TextField.vue';
 
 defineProps<{
@@ -8,14 +9,16 @@ defineProps<{
   readonly modelValue?: string;
 }>();
 const emit = defineEmits<{ intent: [intent: FieldIntent<string>] }>();
-const error = ref('');
+const error = ref(false);
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].links);
 
 function commit(intent: FieldIntent<string>): void {
   if (intent.kind === 'set' && !isLink(intent.value)) {
-    error.value = 'Enter an https:// link, or a mailto: or tel: address.';
+    error.value = true;
     return;
   }
-  error.value = '';
+  error.value = false;
   emit('intent', intent);
 }
 
@@ -26,7 +29,9 @@ function isLink(value: string): boolean {
       const code = character.codePointAt(0);
       return code !== undefined && (code < 32 || code === 127);
     })
-  ) { return false; }
+  ) {
+    return false;
+  }
   if (value.startsWith('https://')) {
     try {
       const parsed = new URL(value);
@@ -44,7 +49,7 @@ function isLink(value: string): boolean {
     :label="label"
     :model-value="modelValue"
     type="url"
-    :error="error"
+    :error="error ? copy.invalid : undefined"
     @intent="commit"
   />
 </template>

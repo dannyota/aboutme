@@ -41,7 +41,8 @@ import {
   createFieldDrafts,
   FieldDraftsKey,
 } from '../../../composables/useFieldDrafts';
-import { appTitles, pageTitle } from '@/i18n/meta';
+import { pageTitle, workspaceTitles } from '@/i18n/meta';
+import { editorShellCopy } from '@/i18n/editor-shell';
 
 type LoadState = 'loading' | 'ready' | 'unavailable' | 'failed';
 
@@ -53,9 +54,13 @@ const resumeId = route.params.id;
 const id = typeof resumeId === 'string' ? resumeId : (resumeId?.[0] ?? '');
 const actions = shallowRef<ResumeEditorActions>();
 const record = computed(() => actions.value?.record.value);
+const { locale } = useLocale();
+const copy = computed(() => editorShellCopy[locale.value]);
 useHead(computed(() => {
   const title = record.value?.current.metadata.title.trim();
-  return { title: title ? pageTitle(title) : appTitles.editor };
+  return {
+    title: title ? pageTitle(title) : workspaceTitles[locale.value].editor,
+  };
 }));
 const loadState = ref<LoadState>('loading');
 const loadingStarted = ref(false);
@@ -258,27 +263,27 @@ async function bytesToDataURL(
     <LoadingState
       v-if="loadState === 'loading'"
       class="mx-auto w-full max-w-md"
-      label="Loading editor"
+      :label="copy.loadingEditor"
     />
     <template v-else-if="loadState === 'unavailable'">
       <EmptyState
-        title="Resume unavailable"
-        description="This resume is not available."
+        :title="copy.resumeUnavailable"
+        :description="copy.resumeUnavailableDescription"
       >
         <template #action>
           <NuxtLink
             :class="buttonVariants({ variant: 'outline' })"
             to="/app/resumes"
           >
-            Back to resumes
+            {{ copy.backToResumes }}
           </NuxtLink>
         </template>
       </EmptyState>
     </template>
     <template v-else>
       <EmptyState
-        title="Editor unavailable"
-        description="We could not open this resume. Try again."
+        :title="copy.editorUnavailable"
+        :description="copy.editorUnavailableDescription"
       >
         <template #action>
           <Button
@@ -289,7 +294,7 @@ async function bytesToDataURL(
               load();
             "
           >
-            Try again
+            {{ copy.tryAgain }}
           </Button>
         </template>
       </EmptyState>

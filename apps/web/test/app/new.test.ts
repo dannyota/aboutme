@@ -7,12 +7,17 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import NewResumePage from '../../app/pages/app/new.vue';
+import { setSiteLocale } from '../support/locale';
 
 // /app/new is reached from a public gallery page, so a signed-out visitor
 // must land on account creation, not sign-in, carrying the sample or
 // template query back with them (register.vue then returns them here).
 
 let meStatus = 401;
+const startDocumentSpy = vi.spyOn(
+  await import('../../app/templates/startDocument'),
+  'startDocument',
+);
 mockNuxtImport('navigateTo', () => vi.fn());
 registerEndpoint('/api/v1/me', (event) => {
   setResponseStatus(event, meStatus);
@@ -23,7 +28,9 @@ describe('/app/new', () => {
   beforeEach(() => {
     meStatus = 401;
     clearNuxtData();
+    setSiteLocale(undefined);
     vi.mocked(navigateTo).mockClear();
+    startDocumentSpy.mockClear();
   });
 
   it(
@@ -49,6 +56,27 @@ describe('/app/new', () => {
       );
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
         expect.stringContaining('/login'),
+      );
+    },
+  );
+
+  it('does not restart a blank document when the interface locale changes',
+    async () => {
+      setSiteLocale('vi');
+      await mountSuspended(NewResumePage, {
+        route: '/app/new?template=classic-serif',
+      });
+      await flushPromises();
+      const started = startDocumentSpy.mock.calls;
+      expect(started).toHaveLength(1);
+      const request = started[0]?.[0];
+
+      useState('aboutme-locale').value = 'en';
+      await flushPromises();
+
+      expect(startDocumentSpy.mock.calls).toEqual([[request]]);
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
+        expect.stringContaining('/app/resumes/'),
       );
     },
   );

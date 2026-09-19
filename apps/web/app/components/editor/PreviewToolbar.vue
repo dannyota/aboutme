@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { editorShellCopy } from '../../i18n/editor-shell';
 
 const props = defineProps<{
   readonly estimatedPages: number | null;
@@ -12,12 +15,14 @@ const emit = defineEmits<{
   'update:zoom': [zoom: 'fit' | 'full'];
   'openPhoto': [];
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorShellCopy[locale.value]);
 
 const photoText = (): string =>
   props.photoState === 'loading'
-    ? 'Photo is loading. The preview is shown without it.'
+    ? copy.value.photoLoading
     : props.photoState === 'unavailable'
-      ? 'Photo unavailable. The preview is shown without it.'
+      ? copy.value.photoUnavailable
       : '';
 
 function onZoom(value: unknown): void {
@@ -34,11 +39,11 @@ function onZoom(value: unknown): void {
       id="editor-preview-title"
       class="font-semibold"
     >
-      Preview
+      {{ copy.preview }}
     </h2>
     <p class="flex items-center gap-1.5 text-muted-foreground">
-      <span data-estimated-pages-label>Estimated pages</span>
-      <output aria-label="Estimated page count">
+      <span data-estimated-pages-label>{{ copy.estimatedPages }}</span>
+      <output :aria-label="copy.estimatedPageCount">
         {{ estimatedPages ?? "—" }}
       </output>
     </p>
@@ -55,11 +60,11 @@ function onZoom(value: unknown): void {
         variant="link"
         @click="emit('openPhoto')"
       >
-        Open photo panel
+        {{ copy.openPhotoPanel }}
       </Button>
     </template>
     <ToggleGroup
-      aria-label="Preview zoom"
+      :aria-label="copy.previewZoom"
       class="ml-auto"
       :model-value="zoom"
       size="sm"
@@ -68,7 +73,7 @@ function onZoom(value: unknown): void {
       @update:model-value="onZoom"
     >
       <ToggleGroupItem value="fit">
-        Fit
+        {{ copy.fit }}
       </ToggleGroupItem>
       <ToggleGroupItem value="full">
         100%

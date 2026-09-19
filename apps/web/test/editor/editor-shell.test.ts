@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { computed, type ComputedRef } from 'vue';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mountSuspended } from '@nuxt/test-utils/runtime';
+import { computed, defineComponent, inject, type ComputedRef } from 'vue';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createFieldDrafts,
@@ -16,13 +17,99 @@ import type {
 import type { PdfDownloadController } from '../../app/editor/pdfDownload';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+import { setSiteLocale } from '../support/locale';
 
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  setSiteLocale(undefined);
+});
+
+beforeEach(() => {
+  setSiteLocale('en');
 });
 
 describe('EditorShell', () => {
+  it(
+    'preserves a dirty focused draft while the editor locale changes',
+    async () => {
+      setSiteLocale('en');
+      const drafts = createFieldDrafts();
+      const record = editorRecord();
+      record.issues = {
+        title: [
+          { path: 'title', code: 'required', message: 'raw server text' },
+        ],
+      };
+      record.conflicts = [{
+        id: 'template-conflict',
+        subject: 'template',
+        kind: 'context-changed',
+      }] as never;
+      const actions = actionsFor(record);
+      const wrapper = await mountSuspended(EditorShell, {
+        attachTo: document.body,
+        props: { actions, record },
+        route: '/app/resumes/resume-1',
+        global: {
+          stubs: {
+            ...heavyStubs(),
+            PersonalDetailsPanel: draftFieldStub(),
+          },
+          provide: { [FieldDraftsKey as symbol]: drafts },
+        },
+      });
+      const field = wrapper.get('[data-testid="draft-field"]');
+      await field.setValue('A draft');
+      await wrapper.get('[data-action="show-preview"]').trigger('click');
+      await wrapper.get('[data-action="show-editor"]').trigger('click');
+      field.element.focus();
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-action="focus-editor-issue"]').text())
+        .toBe('Add the required value.');
+      expect(wrapper.get('.editor-conflicts').text()).toContain(
+        'Review template changes',
+      );
+      expect(wrapper.get('[data-responsive-region="editor"]')
+        .attributes('data-narrow-active')).toBe('true');
+      const revision = record.accepted.revision;
+      const pending = structuredClone(record.pending);
+      const localeButton = wrapper.get(
+        '[data-testid="workspace-locale-vi"]',
+      );
+      const pointerdown = new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      localeButton.element.dispatchEvent(pointerdown);
+
+      expect(pointerdown.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(field.element);
+
+      await localeButton.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-testid="workspace-locale-vi"]')
+        .attributes('aria-pressed')).toBe('true');
+
+      expect(wrapper.get('[data-action="focus-editor-issue"]').text())
+        .toBe('Thêm giá trị bắt buộc.');
+      expect(wrapper.get('.editor-conflicts').text()).toContain(
+        'Xem lại thay đổi mẫu',
+      );
+      expect(drafts.count.value).toBe(1);
+      expect(document.activeElement).toBe(field.element);
+      expect(record.pending).toEqual(pending);
+      expect(record.accepted.revision).toBe(revision);
+      expect(actions.edit).not.toHaveBeenCalled();
+      expect(wrapper.get('[data-region="inspector"]')
+        .attributes('data-narrow-active')).toBe('true');
+      wrapper.unmount();
+    },
+  );
+
   it('renders the four-region editor with its stamped top bar', () => {
     const wrapper = mountShell();
 
@@ -319,6 +406,34 @@ describe('EditorShell', () => {
     expect(descendantNames(title.element)).not.toContain('img');
   });
 
+  it('focuses the first outline action inside the phone Sheet', async () => {
+    const wrapper = mountShell({}, { attachTo: document.body });
+    await wrapper.get('[data-action="open-sections"]').trigger('click');
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    const sheet = document.body.querySelector('[data-slot="sheet-content"]')!;
+    expect(document.activeElement).toBe(
+      sheet.querySelector('[data-outline-key]'),
+    );
+    expect(sheet.querySelectorAll('[role="group"] button')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
+  it('focuses discard inside the session-lost dialog', async () => {
+    const wrapper = mountShell(
+      { sessionLost: true },
+      { attachTo: document.body },
+    );
+    await wrapper.vm.$nextTick();
+    await wrapper.vm.$nextTick();
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(document.activeElement).toBe(
+      dialog.querySelector('button[data-variant="ghost"]'),
+    );
+    expect(dialog.querySelectorAll('[role="group"] button')).toHaveLength(2);
+    wrapper.unmount();
+  });
+
   it('keeps the session-lost dialog open on Escape', async () => {
     const wrapper = mountShell(
       { sessionLost: true },
@@ -541,4 +656,16 @@ function heavyStubs(options: { preview?: boolean } = {}) {
     TemplatePanel: { name: 'TemplatePanel', template: '<div />' },
     PhotoPanel: { name: 'PhotoPanel', template: '<div />' },
   };
+}
+
+function draftFieldStub() {
+  return defineComponent({
+    setup() {
+      const drafts = inject(FieldDraftsKey);
+      return {
+        updateDraft: () => drafts?.set('personal-name', 'A draft'),
+      };
+    },
+    template: '<input data-testid="draft-field" @input="updateDraft">',
+  });
 }

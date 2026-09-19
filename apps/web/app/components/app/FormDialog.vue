@@ -18,6 +18,7 @@ const props = withDefaults(
     readonly description?: string;
     readonly submitLabel: string;
     readonly cancelLabel?: string;
+    readonly closeLabel?: string;
     readonly busy?: boolean;
     readonly submitDisabled?: boolean;
     readonly restoreFocus?: boolean;
@@ -26,7 +27,12 @@ const props = withDefaults(
     readonly cancelAction?: string;
     readonly class?: string;
   }>(),
-  { cancelLabel: 'Cancel', restoreFocus: true, showCloseButton: true },
+  {
+    cancelLabel: 'Cancel',
+    closeLabel: 'Close',
+    restoreFocus: true,
+    showCloseButton: true,
+  },
 );
 const emit = defineEmits<{ submit: []; cancel: [] }>();
 const form = ref<HTMLFormElement | null>(null);
@@ -54,6 +60,7 @@ function onCloseAutoFocus(event: Event): void {
   >
     <DialogContent
       :class="cn(props.class)"
+      :close-label="closeLabel"
       :show-close-button="showCloseButton && !busy"
       @close-auto-focus="onCloseAutoFocus"
       @open-auto-focus="onOpenAutoFocus"
@@ -65,6 +72,7 @@ function onCloseAutoFocus(event: Event): void {
             description
           }}
         </DialogDescription>
+        <slot name="header-actions" />
       </DialogHeader>
       <!-- Dialog rhythm (DESIGN.md): 24 px from the header, 16 px between
            fields, 24 px before the actions; controls fill the width. -->

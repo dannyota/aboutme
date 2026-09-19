@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 import AppShell from '../app/components/app/AppShell.vue';
+import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
@@ -78,6 +79,7 @@ const Harness = defineComponent({
 
 describe('logout state transition', () => {
   it('clears shared auth state before navigating after logout', async () => {
+    setSiteLocale('en');
     const wrapper = await mountSuspended(Harness, { route: '/app/resumes' });
     await flushPromises();
     const readsBeforeLogout = meReads;

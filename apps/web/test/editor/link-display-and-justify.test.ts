@@ -1,12 +1,13 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import type {
   Content,
   Customization,
   PersonalDetail,
 } from '@aboutme/schema';
 import { TEMPLATES } from '@aboutme/schema/templates';
-import { computed } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { computed, nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CustomizationPanel from
   '../../app/components/editor/customization/CustomizationPanel.vue';
@@ -16,6 +17,13 @@ import type { ResumeEditorActions } from
   '../../app/composables/useResumeEditor';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
 
 function detail(overrides: Partial<PersonalDetail>): PersonalDetail {
   return {
@@ -122,13 +130,21 @@ function mountDesign(record: ResumeRecord) {
 }
 
 describe('body text alignment (ADR 0041)', () => {
-  it('shows Left for an absent value in the Type group', () => {
+  it('shows Left for an absent value in the Type group', async () => {
     const { select, wrapper } = mountDesign(recordFor());
     expect((select.element as HTMLSelectElement).value).toBe('left');
     expect(select.findAll('option').map((option) => option.text()))
       .toEqual(['Left', 'Justify']);
     expect(wrapper.get('[data-field="font.textAlign"] label').text())
       .toBe('Text alignment');
+    expect(
+      wrapper.find('[data-customization-group="Type"] '
+        + '[data-field="font.textAlign"]').exists(),
+    ).toBe(true);
+
+    locale.value = 'vi';
+    await nextTick();
+
     expect(
       wrapper.find('[data-customization-group="Type"] '
         + '[data-field="font.textAlign"]').exists(),

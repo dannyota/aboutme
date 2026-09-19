@@ -5,11 +5,25 @@ import { describe, expect, it, vi } from 'vitest';
 import FormDialog from '../../app/components/app/FormDialog.vue';
 import { Dialog, DialogContent } from '../../app/components/ui/dialog';
 
-function open(props: Record<string, unknown> = {}) {
+function open(
+  props: Record<string, unknown> = {},
+  withHeaderActions = true,
+) {
   return mount(FormDialog, {
     attachTo: document.body,
-    props: { open: true, title: 'Edit resume', submitLabel: 'Save', ...props },
-    slots: { default: '<input id="title">' },
+    props: {
+      open: true,
+      title: 'Edit resume',
+      submitLabel: 'Save',
+      ...props,
+    },
+    slots: withHeaderActions
+      ? {
+          'default': '<input id="title">',
+          'header-actions':
+            '<button type="button" data-action="locale">Language</button>',
+        }
+      : { default: '<input id="title">' },
   });
 }
 describe('FormDialog', () => {
@@ -58,6 +72,12 @@ describe('FormDialog', () => {
     expect(wrapper.emitted('cancel')).toHaveLength(2);
     wrapper.unmount();
   });
+  it('renders without header actions for ordinary callers', async () => {
+    const wrapper = open({}, false);
+    await nextTick();
+    expect(wrapper.find('[data-action="locale"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
   it('focuses the first focusable control on open', async () => {
     const wrapper = open();
     await nextTick();
@@ -65,6 +85,16 @@ describe('FormDialog', () => {
     expect(document.activeElement?.id).toBe('title');
     wrapper.unmount();
   });
+  it(
+    'keeps the form field focused when a header action is present',
+    async () => {
+      const wrapper = open();
+      await wrapper.setProps({ open: true });
+      await nextTick();
+      expect(document.activeElement?.id).toBe('title');
+      wrapper.unmount();
+    },
+  );
   it('can leave focus for a caller-selected control after close', () => {
     const wrapper = open({ restoreFocus: false });
     const event = { preventDefault: vi.fn() };

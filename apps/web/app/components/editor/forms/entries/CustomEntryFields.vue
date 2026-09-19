@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { CustomEntry } from '@aboutme/schema';
+import { computed } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
@@ -8,11 +10,13 @@ import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
 defineProps<{ readonly entry: CustomEntry }>();
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].entry.custom);
 const emit = defineEmits<{
   field: [
     change: {
       readonly path:
-        | 'title' | 'titleLink' | 'subtitle' | 'city' | 'dates' | 'description';
+        'title' | 'titleLink' | 'subtitle' | 'city' | 'dates' | 'description';
       readonly intent: FieldIntent<unknown>;
     },
   ];
@@ -20,9 +24,7 @@ const emit = defineEmits<{
 function updateDescription(value: string): void {
   emit('field', {
     path: 'description',
-    intent: value !== ''
-      ? { kind: 'set', value }
-      : { kind: 'unset' },
+    intent: value !== '' ? { kind: 'set', value } : { kind: 'unset' },
   });
 }
 </script>
@@ -30,25 +32,25 @@ function updateDescription(value: string): void {
 <template>
   <TextField
     data-entry-field="title"
-    label="Title"
+    :label="copy.title"
     :model-value="entry.title"
     @intent="emit('field', { path: 'title', intent: $event })"
   />
   <EntryLinkField
     data-entry-field="titleLink"
-    label="Title link"
+    :label="copy.titleLink"
     :model-value="entry.titleLink"
     @intent="emit('field', { path: 'titleLink', intent: $event })"
   />
   <TextField
     data-entry-field="subtitle"
-    label="Subtitle"
+    :label="copy.subtitle"
     :model-value="entry.subtitle"
     @intent="emit('field', { path: 'subtitle', intent: $event })"
   />
   <TextField
     data-entry-field="city"
-    label="City"
+    :label="copy.city"
     :model-value="entry.city"
     @intent="emit('field', { path: 'city', intent: $event })"
   />
@@ -60,7 +62,7 @@ function updateDescription(value: string): void {
   />
   <RichTextEditor
     data-entry-field="description"
-    label="Custom description"
+    :label="copy.description"
     :model-value="entry.description ?? ''"
     @update:model-value="updateDescription"
   />

@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import {
   isLocalizedPath,
-  localeNames,
-  localeShortNames,
-  locales,
 } from '@/i18n/locale';
 import { shellCopy } from '@/i18n/shell';
 import { cn } from '@/lib/utils';
 import { validateReturnPath } from '@/utils/returnPath';
 import AccountMenu from './AccountMenu.vue';
+import LocaleToggle from './LocaleToggle.vue';
 import ThemeToggle from './ThemeToggle.vue';
 
 const { authState } = useAuth();
@@ -33,7 +31,6 @@ const signInLink = computed(() => (explicitNext.value
 const createAccountLink = computed(() => (explicitNext.value
   ? `/register?next=${encodeURIComponent(explicitNext.value)}`
   : '/register'));
-const { locale, setLocale } = useLocale();
 const shellLocale = useRouteLocale();
 const copy = computed(() => shellCopy[shellLocale.value]);
 // The gallery is public, so its link renders for signed-out and signed-in
@@ -57,13 +54,6 @@ const templatesLinkClass = computed(() =>
 // Settings is also one tap away from the account menu, so it is the other
 // link to drop on phones when signed in.
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
-// State is a mark, not a hue (DESIGN.md): the chosen language is ink with an
-// ink underline; the other stays pencil grey.
-const localeClass = cn(
-  'px-2 font-normal text-muted-foreground hover:text-foreground',
-  'aria-pressed:text-foreground aria-pressed:underline',
-  'aria-pressed:decoration-2 aria-pressed:underline-offset-[6px]',
-);
 </script>
 
 <template>
@@ -77,7 +67,7 @@ const localeClass = cn(
       to="/"
     >aboutme</NuxtLink>
     <nav
-      aria-label="Primary navigation"
+      :aria-label="copy.primaryNavigation"
       class="flex flex-1 items-center gap-1"
     >
       <NuxtLink
@@ -118,46 +108,11 @@ const localeClass = cn(
           :to="createAccountLink"
         >{{ copy.createAccount }}</NuxtLink>
       </template>
-      <div
+      <LocaleToggle
         v-if="localized"
-        class="flex items-center"
-        role="group"
-        :aria-label="copy.localeLabel"
-        data-testid="landing-locale"
-      >
-        <template
-          v-for="(option, index) in locales"
-          :key="option"
-        >
-          <span
-            v-if="index > 0"
-            aria-hidden="true"
-            class="h-4 w-px bg-border"
-          />
-          <Button
-            type="button"
-            :aria-label="localeNames[option]"
-            :class="localeClass"
-            :lang="option"
-            :aria-pressed="locale === option"
-            :data-testid="`landing-locale-${option}`"
-            size="sm"
-            variant="link"
-            @click="setLocale(option)"
-          >
-            <!-- Full names return at sm; the aria-label above keeps the same
-                 accessible name at every width. -->
-            <span
-              aria-hidden="true"
-              class="sm:hidden"
-            >{{ localeShortNames[option] }}</span>
-            <span
-              aria-hidden="true"
-              class="hidden sm:inline"
-            >{{ localeNames[option] }}</span>
-          </Button>
-        </template>
-      </div>
+        :label="copy.localeLabel"
+        test-id="landing-locale"
+      />
       <AccountMenu v-if="signedIn" />
       <ThemeToggle
         v-else

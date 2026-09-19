@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import currentSchema from '@aboutme/schema/current-schema';
-import { computed } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { computed, nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ColorField from
   '../../app/components/editor/customization/ColorField.vue';
@@ -15,6 +16,13 @@ import type { CustomizationField } from
   '../../app/components/editor/customization/fields';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
 
 const paths = [
   'font.family',
@@ -115,7 +123,7 @@ describe('CustomizationPanel', () => {
     expect(wrapper.text()).not.toContain('font.baseSizePx');
   });
 
-  it('groups customization controls and humanizes enum options', () => {
+  it('keeps group hooks stable while translating their headings', async () => {
     const wrapper = mount(CustomizationPanel, {
       props: {
         actions: actionsFor(vi.fn()),
@@ -123,9 +131,14 @@ describe('CustomizationPanel', () => {
       },
     });
     expect(wrapper.findAll('[data-customization-group]')).toHaveLength(6);
-    expect(wrapper.find('[data-customization-group]').attributes(
-      'data-customization-group',
-    )).toBe('Page & PDF');
+    const groupHooks = [
+      'Page & PDF', 'Type', 'Spacing', 'Headings', 'Layout', 'Colors',
+    ];
+    expect(wrapper.findAll('[data-customization-group]').map(
+      (group) => group.attributes('data-customization-group'),
+    )).toEqual(groupHooks);
+    expect(wrapper.find('[data-customization-group="Page & PDF"]').text())
+      .toContain('Page & PDF');
     expect(wrapper.find('[data-customization-group="Type"]').text())
       .toContain('Type');
     expect(wrapper.find('[data-customization-group="Spacing"]').text())
@@ -151,6 +164,15 @@ describe('CustomizationPanel', () => {
     ).find((option) => option.value === 'bar');
     expect(barOption?.textContent)
       .toBe('Bar');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.findAll('[data-customization-group]').map(
+      (group) => group.attributes('data-customization-group'),
+    )).toEqual(groupHooks);
+    expect(wrapper.find('[data-customization-group="Type"]').text())
+      .toContain('Chữ');
   });
 
   it('rejects an unknown enum with a linked local error', async () => {
@@ -167,6 +189,12 @@ describe('CustomizationPanel', () => {
     expect(edit).not.toHaveBeenCalled();
     expect(error.text()).toBe('Choose one of the available options.');
     expect(select.attributes('aria-describedby')).toBe(error.attributes('id'));
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(error.text()).toBe('Chọn một trong các tùy chọn có sẵn.');
+    expect(edit).not.toHaveBeenCalled();
   });
 
   it(
@@ -274,6 +302,15 @@ describe('CustomizationPanel', () => {
       kind: 'customization',
       deltas: [{ op: 'set', path: 'spacing.sectionGap', value: 0 }],
     });
+    expect(wrapper.get('[data-error-for="spacing.sectionGap"]').text())
+      .toBe('Enter a value within the allowed range.');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.get('[data-error-for="spacing.sectionGap"]').text())
+      .toBe('Nhập giá trị trong phạm vi cho phép.');
+    expect(edit).toHaveBeenCalledTimes(1);
   });
 
   it.each(['', 'not-a-number'])(
@@ -299,6 +336,12 @@ describe('CustomizationPanel', () => {
     const wrapper = mount(CustomizationPanel, {
       props: { actions: actionsFor(edit), record },
     });
+
+    const remove = wrapper.get('[data-action="unset-surface-target"]');
+    expect(remove.text()).toBe('Remove surface target');
+    locale.value = 'vi';
+    await nextTick();
+    expect(remove.text()).toBe('Xóa mục tiêu bề mặt');
 
     await wrapper
       .get('[data-field="layout.surfaceTarget"] select')
@@ -333,6 +376,25 @@ describe('CustomizationPanel', () => {
     );
     expect(wrapper.emitted('set')).toBeUndefined();
     expect(edit).not.toHaveBeenCalled();
+  });
+
+  it('keeps an invalid color draft while changing its message', async () => {
+    const wrapper = mount(ColorField, {
+      props: { label: 'Primary color', modelValue: '#112233' },
+    });
+    const input = wrapper.get('input');
+    await input.setValue('invalid');
+    await input.trigger('blur');
+    expect(wrapper.get('[role="alert"]').text())
+      .toBe('Enter a six-digit hex color.');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect((input.element as HTMLInputElement).value).toBe('invalid');
+    expect(wrapper.get('[role="alert"]').text())
+      .toBe('Nhập mã màu hex gồm sáu chữ số.');
+    expect(wrapper.emitted('set')).toBeUndefined();
   });
 
   it(

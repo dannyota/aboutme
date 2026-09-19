@@ -4,6 +4,7 @@ import { computed, ref, watch } from 'vue';
 import FormField from '../../app/FormField.vue';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 const props = withDefaults(
   defineProps<{
@@ -21,9 +22,14 @@ const emit = defineEmits<{
   set: [value: string];
   unset: [];
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 const dirty = ref(false);
-const error = ref('');
+const invalidColor = ref(false);
+const error = computed(() =>
+  invalidColor.value ? copy.value.colorInvalid : '',
+);
 const removeButton = ref<HTMLButtonElement | null>(null);
 const value = ref(props.modelValue ?? props.fallback);
 const inputId = computed(
@@ -39,7 +45,7 @@ watch(
 
 function capture(): void {
   dirty.value = true;
-  error.value = '';
+  invalidColor.value = false;
 }
 
 function commit(event: FocusEvent): void {
@@ -50,7 +56,7 @@ function commit(event: FocusEvent): void {
   }
   if (!dirty.value) return;
   if (!isHexColor(value.value)) {
-    error.value = 'Enter a six-digit hex color.';
+    invalidColor.value = true;
     return;
   }
   if (value.value !== (props.modelValue ?? props.fallback)) {
@@ -67,7 +73,7 @@ function remove(): void {
   if (props.modelValue === undefined) return;
   emit('unset');
   dirty.value = false;
-  error.value = '';
+  invalidColor.value = false;
 }
 
 function isHexColor(candidate: string): boolean {
@@ -114,6 +120,6 @@ function isHexColor(candidate: string): boolean {
     @mousedown="prepareRemove"
     @click="remove"
   >
-    Remove
+    {{ copy.colorRemove }}
   </Button>
 </template>
