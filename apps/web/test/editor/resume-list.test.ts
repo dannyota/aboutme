@@ -878,12 +878,16 @@ describe('useResumeList', () => {
     },
   );
 
-  it('gates deletion on the exact current title', async () => {
+  it('quotes the title and gates deletion on typing DELETE', async () => {
     const wrapper = mount(DeleteResumeDialog, {
       attachTo: document.body,
       props: { item: { id: 'r1', title: 'First' }, busy: false },
     });
     await nextTick();
+    const alertDialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(alertDialog.textContent).toContain(
+      'Delete "First"? This permanently deletes the resume.',
+    );
     const confirm = document.body.querySelector<HTMLButtonElement>(
       '[data-action="confirm-delete"]',
     )!;
@@ -909,8 +913,8 @@ describe('useResumeList', () => {
       wrapper.unmount();
       return;
     }
-    expect(label.textContent).toContain('Current title');
-    input.value = 'First';
+    expect(label.textContent).toContain('Type DELETE to confirm');
+    input.value = 'DELETE';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
     expect(confirm.disabled).toBe(false);
@@ -919,8 +923,9 @@ describe('useResumeList', () => {
     wrapper.unmount();
   });
 
-  it.each(['first', 'First '])(
-    'keeps deletion disabled for a non-exact title %s', async (value) => {
+  it.each(['First', 'delete', 'DELETE '])(
+    'keeps deletion disabled until DELETE is typed exactly, not %s',
+    async (value) => {
       const wrapper = mount(DeleteResumeDialog, {
         attachTo: document.body,
         props: { item: { id: 'r1', title: 'First' }, busy: false },
@@ -1258,7 +1263,7 @@ describe('useResumeList', () => {
       trigger.remove();
       return;
     }
-    input.value = item.title;
+    input.value = 'DELETE';
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
     document.body.querySelector<HTMLButtonElement>(

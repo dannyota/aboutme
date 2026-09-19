@@ -1129,7 +1129,7 @@ async function deleteThroughListKeyboard(page: Page, resumeID: string): Promise<
     .press('Enter');
   const dialog = page.getByRole('alertdialog', { name: 'Delete resume' });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel('Current title').fill(title);
+  await dialog.getByLabel('Type DELETE to confirm').fill('DELETE');
   const deletion = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return response.request().method() === 'DELETE'
