@@ -11,6 +11,10 @@ export interface PublishCommand {
   readonly live: boolean;
   readonly downloadEnabled: boolean;
   readonly seoGeoEnabled: boolean;
+  /** Sent only when changed; "" clears it to the default. */
+  readonly publicTitle?: string;
+  /** Sent only when changed; "" removes the tab icon. */
+  readonly faviconEmoji?: string;
 }
 
 export interface FrozenPublishAttempt {
@@ -242,6 +246,9 @@ const ISSUE_CODES = new Set([
   'reserved',
   'required',
   'visible_entry_required',
+  'too_long',
+  'invalid_characters',
+  'invalid_emoji',
 ]);
 
 interface ParsedError {

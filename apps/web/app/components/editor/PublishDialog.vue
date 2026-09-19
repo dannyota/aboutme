@@ -12,6 +12,15 @@ import {
   type PublishCommand,
 } from '../../editor/publishApi';
 import type { PublishControllerState } from '../../editor/publishController';
+import {
+  changedPublicPageFields,
+  defaultPublicTitle,
+  faviconEmojiIssue,
+  publicPageIssueField,
+  publicTitleIssue,
+} from '../../editor/publicPageMeta';
+import type { ResumeMetadata } from '../../editor/types';
+import PublishPageFields from './PublishPageFields.vue';
 import type { ResumeRecord } from '../../stores/resumes';
 
 const props = defineProps<{
@@ -29,6 +38,11 @@ const live = ref(false);
 const downloadEnabled = ref(false);
 const seoGeoEnabled = ref(false);
 const slug = ref('');
+const pageTitle = ref('');
+const tabIcon = ref('');
+const storedPage = ref<Pick<ResumeMetadata, 'publicTitle' | 'faviconEmoji'>>(
+  { publicTitle: null, faviconEmoji: null },
+);
 const password = ref('');
 const actionBusy = ref(false);
 const providerLinkActivated = ref(false);
@@ -63,10 +77,23 @@ const slugDescribedBy = computed(() => [
   slugPrefixId,
   ...(slugError.value === undefined ? [] : [`${slugInputId}-error`]),
 ].join(' '));
+const defaultTitle = computed(() => defaultPublicTitle(
+  props.record.current.document.personalDetails.fullName,
+));
+const pageFieldsValid = computed(() =>
+  publicTitleIssue(pageTitle.value) === null
+  && faviconEmojiIssue(tabIcon.value) === null);
+// Issues on the tab fields show at the fields; the rest keep their list.
+const listedIssues = computed(() =>
+  state.value.kind === 'invalid'
+    ? state.value.issues.filter((issue) =>
+        publicPageIssueField(issue.path) === null)
+    : []);
 const submitDisabled = computed(
   () =>
     busy.value
     || !slugValid.value
+    || !pageFieldsValid.value
     || state.value.kind === 'blocked'
     || state.value.kind === 'session-lost',
 );
@@ -103,6 +130,12 @@ function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
   downloadEnabled.value = metadata.live && metadata.downloadEnabled;
   seoGeoEnabled.value = metadata.live && metadata.seoGeoEnabled;
   slug.value = metadata.slug ?? '';
+  storedPage.value = {
+    publicTitle: metadata.publicTitle,
+    faviconEmoji: metadata.faviconEmoji,
+  };
+  pageTitle.value = metadata.publicTitle ?? '';
+  tabIcon.value = metadata.faviconEmoji ?? '';
 }
 
 watch(
@@ -160,6 +193,10 @@ function command(): PublishCommand {
     live: live.value,
     downloadEnabled: live.value && downloadEnabled.value,
     seoGeoEnabled: live.value && seoGeoEnabled.value,
+    ...changedPublicPageFields(storedPage.value, {
+      publicTitle: pageTitle.value,
+      faviconEmoji: tabIcon.value,
+    }),
   };
 }
 
@@ -335,6 +372,14 @@ onBeforeUnmount(resetCopyState);
         >aboutme.vn/</span>
       </div>
 
+      <PublishPageFields
+        v-model:emoji="tabIcon"
+        v-model:title="pageTitle"
+        :default-title="defaultTitle"
+        :disabled="busy"
+        :server-issues="state.kind === 'invalid' ? state.issues : []"
+      />
+
       <fieldset class="grid gap-3">
         <legend class="mb-1 text-sm font-medium">
           Publish options
@@ -477,13 +522,13 @@ onBeforeUnmount(resetCopyState);
         {{ blockedMessage(state.reason) }}
       </p>
       <div
-        v-if="state.kind === 'invalid'"
+        v-if="listedIssues.length > 0"
         role="alert"
         class="grid gap-2"
       >
         <p>The resume cannot be published yet.</p>
         <Button
-          v-for="issue in state.issues"
+          v-for="issue in listedIssues"
           :key="`${issue.path}-${issue.code}`"
           type="button"
           variant="outline"

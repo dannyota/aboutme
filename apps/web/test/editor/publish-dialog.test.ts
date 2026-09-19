@@ -883,6 +883,123 @@ describe('PublishDialog', () => {
     });
 });
 
+describe('PublishDialog browser tab fields', () => {
+  function withName(record: ResumeRecord, fullName: string): ResumeRecord {
+    record.current.document.personalDetails.fullName = fullName;
+    return record;
+  }
+
+  it('shows the defaults as placeholder, counter, and tab preview',
+    async () => {
+      const record = withName(editorRecord(), 'Ada Lovelace');
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+
+      const title = wrapper.get('[data-action="publish-public-title"]');
+      expect(title.attributes('placeholder')).toBe('Ada Lovelace — Resume');
+      expect(wrapper.text()).toContain('Optional. 0/70 characters.');
+      const preview = wrapper.get('[data-testid="publish-tab-preview"]');
+      expect(preview.get('[data-tab-title]').text())
+        .toBe('Ada Lovelace — Resume');
+      expect(preview.find('[data-tab-icon-default]').exists()).toBe(true);
+
+      await title.setValue('Danny from aboutme.vn');
+      await wrapper.findAll('[data-action="publish-favicon-pick"]')
+        .find((button) => button.text() === '🚀')!
+        .trigger('click');
+      expect(wrapper.text()).toContain('Optional. 21/70 characters.');
+      expect(preview.get('[data-tab-title]').text())
+        .toBe('Danny from aboutme.vn');
+      expect(preview.get('[data-tab-icon]').text()).toBe('🚀');
+    });
+
+  it('sends the tab fields only when they change', async () => {
+    const record = editorRecord();
+    const { actions } = actionsFor(record);
+    const wrapper = await mountDialog(record, actions);
+    await wrapper.get('[data-action="publish-submit"]').trigger('click');
+    expect(actions.publish.submit).toHaveBeenLastCalledWith({
+      live: false,
+      downloadEnabled: false,
+      seoGeoEnabled: false,
+    });
+
+    await wrapper.get('[data-action="publish-public-title"]')
+      .setValue(' Danny from aboutme.vn ');
+    await wrapper.get('[data-action="publish-favicon-emoji"]').setValue('🚀');
+    await wrapper.get('[data-action="publish-submit"]').trigger('click');
+    expect(actions.publish.submit).toHaveBeenLastCalledWith({
+      live: false,
+      downloadEnabled: false,
+      seoGeoEnabled: false,
+      publicTitle: 'Danny from aboutme.vn',
+      faviconEmoji: '🚀',
+    });
+  });
+
+  it('prefills stored values and clears them with empty strings',
+    async () => {
+      const record = editorRecord({
+        publicTitle: 'Danny from aboutme.vn',
+        faviconEmoji: '🚀',
+      });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      const title = wrapper.get('[data-action="publish-public-title"]');
+      expect((title.element as HTMLInputElement).value)
+        .toBe('Danny from aboutme.vn');
+
+      await title.setValue('');
+      await wrapper.get('[data-action="publish-favicon-clear"]')
+        .trigger('click');
+      await wrapper.get('[data-action="publish-submit"]').trigger('click');
+      expect(actions.publish.submit).toHaveBeenLastCalledWith({
+        live: false,
+        downloadEnabled: false,
+        seoGeoEnabled: false,
+        publicTitle: '',
+        faviconEmoji: '',
+      });
+    });
+
+  it.each([
+    ['publish-public-title', 'a'.repeat(71), 'Use 70 characters or fewer.'],
+    ['publish-favicon-emoji', 'hi', 'Enter exactly one emoji.'],
+    ['publish-favicon-emoji', '🚀🚀', 'Enter exactly one emoji.'],
+  ])('blocks %s = %j before sending', async (action, value, message) => {
+    const record = editorRecord();
+    const { actions } = actionsFor(record);
+    const wrapper = await mountDialog(record, actions);
+    await wrapper.get(`[data-action="${action}"]`).setValue(value);
+
+    expect(wrapper.text()).toContain(message);
+    const submit = wrapper.get('[data-action="publish-submit"]');
+    expect(submit.attributes('disabled')).toBeDefined();
+    await submit.trigger('click');
+    expect(actions.publish.submit).not.toHaveBeenCalled();
+  });
+
+  it('shows a server issue at its field until the field changes',
+    async () => {
+      const record = editorRecord();
+      const { actions, state } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      state.value = {
+        kind: 'invalid',
+        issues: [{ path: '/faviconEmoji', code: 'invalid_emoji' }],
+      } as PublishControllerState;
+      await nextTick();
+
+      expect(wrapper.text()).toContain('Enter exactly one emoji.');
+      expect(wrapper.find('[data-action="focus-publish-issue"]').exists())
+        .toBe(false);
+
+      await wrapper.get('[data-action="publish-favicon-emoji"]')
+        .setValue('🚀');
+      expect(wrapper.text()).not.toContain('Enter exactly one emoji.');
+    });
+});
+
 async function mountDialog(
   record: ResumeRecord,
   actions: ResumeEditorActions,

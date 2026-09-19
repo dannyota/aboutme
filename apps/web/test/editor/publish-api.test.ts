@@ -584,3 +584,57 @@ describe('publish API transport', () => {
     }
   });
 });
+
+describe('publish tab fields', () => {
+  it('sends changed tab fields in the request body', async () => {
+    const attempt = freezePublishAttempt(
+      'resume-1',
+      parseRevision('1'),
+      {
+        live: false,
+        downloadEnabled: false,
+        seoGeoEnabled: false,
+        publicTitle: 'Danny from aboutme.vn',
+        faviconEmoji: '🚀',
+      },
+      runtime,
+      'owner-1',
+    );
+    const fetcher = vi.fn().mockResolvedValue(response(500, null));
+    await createPublishApi(fetcher).dispatch(attempt, 'csrf');
+    const request = fetcher.mock.calls[0]![0] as Request;
+    expect(await request.json()).toEqual({
+      live: false,
+      downloadEnabled: false,
+      seoGeoEnabled: false,
+      publicTitle: 'Danny from aboutme.vn',
+      faviconEmoji: '🚀',
+    });
+  });
+
+  it.each([
+    ['/publicTitle', 'too_long'],
+    ['/publicTitle', 'invalid_characters'],
+    ['/faviconEmoji', 'invalid_emoji'],
+  ])('reads a 422 %s %s as a field issue', async (path, code) => {
+    const result = await createPublishApi(
+      vi.fn().mockResolvedValue(response(422, {
+        error: {
+          code: 'publish_invalid',
+          message: 'raw',
+          details: { issues: [{ path, code, message: 'secret' }] },
+        },
+      })),
+    ).dispatch(
+      freezePublishAttempt(
+        'resume-1',
+        parseRevision('1'),
+        { live: false, downloadEnabled: false, seoGeoEnabled: false },
+        runtime,
+        'owner-1',
+      ),
+      'csrf',
+    );
+    expect(result).toEqual({ kind: 'invalid', issues: [{ path, code }] });
+  });
+});
