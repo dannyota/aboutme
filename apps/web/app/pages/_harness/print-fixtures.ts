@@ -33,8 +33,13 @@ function baseDocument(): Resume {
 }
 
 function applyModernSidebar(document: Resume): Resume {
+  // The fixture owner already prints on the preset's paper; a template switch
+  // keeps the owner's page format.
   document.customization = applyTemplate(
-    document.customization,
+    {
+      ...document.customization,
+      pageFormat: modernSidebar.customization.pageFormat,
+    },
     modernSidebar,
     document.content,
   );

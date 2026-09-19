@@ -192,7 +192,7 @@ export const TEMPLATES: readonly Readonly<TemplatePreset>[] = deepFreeze([
     id: "consulting-formal",
     name: "Consulting Formal",
     description:
-      "One-column Letter document in navy and grey: left title block, title-case ruled headings, tight vertical rhythm, no fills.",
+      "One-column A4 document in navy and grey: left title block, title-case ruled headings, tight vertical rhythm, no fills.",
     customization: {
       font: {
         family: "inter",
@@ -235,7 +235,7 @@ export const TEMPLATES: readonly Readonly<TemplatePreset>[] = deepFreeze([
           style: "text",
         },
       },
-      pageFormat: "letter",
+      pageFormat: "a4",
       dateFormat: "MM/YYYY",
     },
   },
@@ -553,7 +553,7 @@ export const TEMPLATES: readonly Readonly<TemplatePreset>[] = deepFreeze([
     id: "government-formal",
     name: "Government Formal",
     description:
-      "Single-column compliance document: one ink, a stacked contact block, ruled uppercase headings, Letter page at 25 mm margins and numeric MM/YYYY dates.",
+      "Single-column compliance document: one ink, a stacked contact block, ruled uppercase headings, A4 page at 25 mm margins and numeric MM/YYYY dates.",
     customization: {
       font: {
         family: "source-sans-3",
@@ -595,7 +595,7 @@ export const TEMPLATES: readonly Readonly<TemplatePreset>[] = deepFreeze([
           style: "text",
         },
       },
-      pageFormat: "letter",
+      pageFormat: "a4",
       dateFormat: "MM/YYYY",
     },
   },
@@ -1059,7 +1059,7 @@ export const TEMPLATES: readonly Readonly<TemplatePreset>[] = deepFreeze([
           style: "dots",
         },
       },
-      pageFormat: "letter",
+      pageFormat: "a4",
       dateFormat: "YYYY",
     },
   },

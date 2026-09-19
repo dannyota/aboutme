@@ -1,5 +1,5 @@
 import type { Content, Customization } from '@aboutme/schema';
-import type { TemplatePreset } from '@aboutme/schema/templates';
+import { TEMPLATES, type TemplatePreset } from '@aboutme/schema/templates';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -363,7 +363,8 @@ describe('applyTemplate adversarial placement contract', () => {
       expect(result.sectionDisplay).toEqual(
         presetCustomization.sectionDisplay,
       );
-      expect(result.pageFormat).toBe(presetCustomization.pageFormat);
+      // Paper follows where the owner prints, not the template.
+      expect(result.pageFormat).toBe(propertyCurrent.pageFormat);
       expect(result.dateFormat).toBe(presetCustomization.dateFormat);
       if (presetCustomization.header !== undefined) {
         expect(result.header).toEqual(presetCustomization.header);
@@ -379,5 +380,33 @@ describe('applyTemplate adversarial placement contract', () => {
         ajv.errorsText(validateCustomization.errors),
       ).toBe(true);
     }
+  });
+});
+
+describe('template switches keep the page format', () => {
+  it('keeps the owner\'s paper under a preset with other paper', () => {
+    const current = propertyBaseCustomization();
+    const onLetter = applyTemplate(
+      { ...current, pageFormat: 'letter' },
+      preset('keep'),
+      {},
+    );
+    expect(onLetter.pageFormat).toBe('letter');
+    const target = preset('keep');
+    const onA4 = applyTemplate(
+      { ...current, dateFormat: 'Mon YYYY' },
+      target,
+      {},
+    );
+    expect(onA4.pageFormat).toBe('a4');
+    // The date format still comes from the preset.
+    expect(onA4.dateFormat).toBe(target.customization.dateFormat);
+  });
+
+  it('ships every preset on A4, the paper its readers print on', () => {
+    expect(
+      TEMPLATES.filter((template) =>
+        template.customization.pageFormat !== 'a4').map(({ id }) => id),
+    ).toEqual([]);
   });
 });

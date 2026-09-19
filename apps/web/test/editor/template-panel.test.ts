@@ -120,7 +120,7 @@ describe('TemplatePanel', () => {
         !== record.current.document.customization.dateFormat,
     )!;
     expect(wrapper.get(`[data-template="${preset.id}"]`).text()).toContain(
-      'Page or date format will change.',
+      'Date format will change.',
     );
 
     await wrapper.get(`[data-template="${preset.id}"] button`).trigger('click');
@@ -405,6 +405,27 @@ function partialState(latest: AcceptedResume) {
     reason: 'child-failed' as const,
   };
 }
+
+describe('page format on a template switch', () => {
+  it('warns about no page format change, since the switch keeps the paper',
+    () => {
+      const current = acceptedFixture();
+      current.document.customization.pageFormat = 'letter';
+      const wrapper = mount(TemplatePanel, {
+        props: {
+          actions: actionsFor(vi.fn()),
+          record: recordFor(current),
+        },
+      });
+      const same = TEMPLATES.find(
+        (candidate) =>
+          candidate.customization.dateFormat
+          === current.document.customization.dateFormat,
+      )!;
+      expect(wrapper.get(`[data-template="${same.id}"]`).text())
+        .not.toMatch(/format will change/u);
+    });
+});
 
 function recordFor(current = acceptedFixture()): ResumeRecord {
   const accepted = structuredClone(current);

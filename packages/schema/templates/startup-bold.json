@@ -43,7 +43,7 @@
         "style": "dots"
       }
     },
-    "pageFormat": "letter",
+    "pageFormat": "a4",
     "dateFormat": "YYYY"
   }
 }

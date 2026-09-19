@@ -100,12 +100,12 @@ function status(): string {
   }
 }
 
+// A switch keeps the owner's page format, so only the date format can change.
 function hasFormatWarning(preset: Readonly<TemplatePreset>): boolean {
   const customization = record.value?.current.document.customization;
   return (
     customization !== undefined
-    && (preset.customization.pageFormat !== customization.pageFormat
-      || preset.customization.dateFormat !== customization.dateFormat)
+    && preset.customization.dateFormat !== customization.dateFormat
   );
 }
 
@@ -169,7 +169,7 @@ function assertNever(value: never): never {
                 class="text-xs text-muted-foreground"
               >
                 <li v-if="hasFormatWarning(preset)">
-                  Page or date format will change.
+                  Date format will change.
                 </li>
                 <li v-if="hasBaseSizeWarning(preset)">
                   This template uses a 10 pt base size.

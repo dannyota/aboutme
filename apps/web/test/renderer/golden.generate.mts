@@ -200,11 +200,16 @@ export async function renderGoldenCell(cell) {
       `Preset filename ${cell.presetFilename} does not match id ${preset.id}.`,
     );
   }
+  // The fixture owner already prints on the preset's paper; a template switch
+  // keeps the owner's page format.
   /** @type {import('@aboutme/schema').Resume} */
   const document = {
     ...startingDocument,
     customization: applyTemplate(
-      startingDocument.customization,
+      {
+        ...startingDocument.customization,
+        pageFormat: preset.customization.pageFormat,
+      },
       preset,
       startingDocument.content,
     ),

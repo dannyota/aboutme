@@ -114,7 +114,10 @@ Consequences a template design must respect:
   validation error.
 - A preset must supply every one of the eight required `customization` keys,
   including `pageFormat` and `dateFormat`, because the replace is wholesale.
-  Applying a template therefore resets page size and date format. See
+  Applying a template therefore resets the date format. It keeps the owner's
+  `pageFormat`, as it keeps `font.textAlign` and `header.photoPosition`: paper
+  follows where the owner prints, so a preset's `pageFormat` only seeds a resume
+  started from it. See
   [Known contract limits](limitations.md#9-known-contract-limits).
 - The one-column ↔ two-column toggle in the customize panel is a **different
   operation** with its own preserve-and-move semantics. It is not an apply and

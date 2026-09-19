@@ -23,17 +23,13 @@ printed into an interview packet. Unsurprising is the point.
 | `sectionGap: 15`, `entryGap: 9`, `lineHeight: 1.45` | Section overhead is 21 px against 30.8 px for `classic-serif` — a third less per section, which is where the extra content on the sheet comes from.                                                                                    |
 | `dateFormat: "MM/YYYY"`, both `sectionDisplay` text | Dates become a column of numerals, compact enough for that density; and no bar, dot, or chip, because a proficiency infographic is the wrong register here.                                                                            |
 
-## Letter, and what the choice costs
+## A4, and why not Letter
 
-Letter is deliberate: this reader prints into US trays, where the driver scales
-or clips A4. Under ADR 0008 the apply is wholesale, so an A4 user who tries this
-preset ships a Letter PDF with no signal from the preset layer
-([limitations item 2](../limitations.md)) — 5.9 mm wider and 17.6 mm shorter
-here, so the page re-paginates, trading ~3.5 lines of height for one point of
-measure. `pageFormat` has no `"keep"`, so containment is the editor's job;
-picking `a4` would only hide the cost behind a template that prints wrong for
-its readers. The 25 mm side margins absorb a flip back to `a4`, which still
-gives a 160 mm measure.
+aboutme's readers print on A4 in Vietnam, where a Letter PDF prints scaled or
+clipped. A template switch keeps the owner's `pageFormat`
+([limitations item 2](../limitations.md)), so a reader who prints on Letter
+keeps Letter; this preset only sets the paper for a resume started from it. The
+25 mm side margins give a 160 mm measure on A4.
 
 ## Colour and size
 
@@ -60,12 +56,12 @@ meta falls below. No text-on-surface or non-text row exists.
 ## Nearest siblings
 
 - **`classic-serif`** — Inter against its Roboto Serif, title case against its
-  uppercase, flush left against centred, Letter against A4, `MM/YYYY` against
-  `Mon YYYY`, 15/9 spacing against 22/12; navy in every heading, not just links.
-- **`government-formal`** — the closer: it shares Letter, `MM/YYYY`, one column,
-  a left header, `text` displays, and a 25 mm side margin. What a reader sees
-  first separates them — uppercase against title case, `#000000` against navy
-  over grey, a stacked contact block against one inline line, 33.6 px of section
+  uppercase, flush left against centred, `MM/YYYY` against `Mon YYYY`, 15/9
+  spacing against 22/12; navy in every heading, not just links.
+- **`government-formal`** — the closer: it shares `MM/YYYY`, one column, a left
+  header, `text` displays, and a 25 mm side margin. What a reader sees first
+  separates them — uppercase against title case, `#000000` against navy over
+  grey, a stacked contact block against one inline line, 33.6 px of section
   overhead against 21 px. An airy black form against a dense navy one.
 
 ## What the token space would not express
