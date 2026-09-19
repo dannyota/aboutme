@@ -271,6 +271,7 @@ onMounted(async () => {
   >
     <PublicResumeApp
       v-if="publicResume !== undefined"
+      home-href="https://aboutme.vn/"
       :public-resume="publicResume"
     />
     <div

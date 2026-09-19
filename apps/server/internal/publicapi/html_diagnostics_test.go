@@ -19,8 +19,9 @@ import (
 )
 
 // A second <main> inside the page's own, as a two-column resume once
-// rendered, breaks the one-main rule and must name that rule.
-const nestedMain = `<main id="public-resume" data-revision="1"><div class="layout-two-columns"><main class="resume-main">body</main></div></main>`
+// rendered, breaks the one-main rule and must name that rule. nestedMain
+// replaces the end of the page's main.
+const nestedMain = `<div class="layout-two-columns"><main class="resume-main">body</main></div></main>`
 
 func TestPublicHTMLRejectionNamesTheBrokenRule(t *testing.T) {
 	origin := mustPublicOrigin(t)
@@ -34,7 +35,7 @@ func TestPublicHTMLRejectionNamesTheBrokenRule(t *testing.T) {
 		t.Fatalf("valid page rejected by %q", rule)
 	}
 	for _, test := range []struct{ name, from, to, want string }{
-		{"nested main", `<main id="public-resume" data-revision="1">body</main>`, nestedMain, "required_elements"},
+		{"nested main", `body</main>`, nestedMain, "required_elements"},
 		{"http anchor", `</body>`, `<a href="http://example.test">x</a></body>`, "anchor_scheme"},
 		{"anchor without href", `</body>`, `<a>x</a></body>`, "anchor_href"},
 		{"inline style url", `</body>`, `<span style="background: url(x)">x</span></body>`, "inline_style"},
@@ -62,7 +63,7 @@ func TestPublicHTMLLogsTheClosedReasonForA503(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := strings.Replace(validHTML("Ada", "https://aboutme.example/ada", "1", ""),
-		`<main id="public-resume" data-revision="1">body</main>`, nestedMain, 1)
+		`body</main>`, nestedMain, 1)
 	renderer := directrender.New(origin, &http.Client{Transport: htmlRoundTrip(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(bytes.NewBufferString(body))}, nil
 	})})

@@ -200,7 +200,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 		return "doctype"
 	}
 	var title, canonical, main *html.Node
-	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, favicons, charsetMeta, viewportMeta int
+	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, creditLinks, favicons, charsetMeta, viewportMeta int
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
 	stylesheets := map[string]bool{}
@@ -292,7 +292,14 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					reject("anchor_href")
 					return
 				}
-				if href == "#public-resume" {
+				if relHasToken(attribute(node, "class"), creditClass) {
+					// The page credit, once, exactly as the renderer writes it.
+					if creditLinks != 0 || !isPublicCredit(node, origin.Resolve("/"), creditText(resume.Lng)) {
+						reject("credit_link")
+						return
+					}
+					creditLinks++
+				} else if href == "#public-resume" {
 					if skipLinks != 0 || textNode(node) != "Skip to content" {
 						reject("skip_link")
 						return
@@ -399,6 +406,9 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	if page.FaviconHref != "" && favicons != 1 {
 		return "favicon"
 	}
+	if creditLinks != 1 {
+		return "credit_link"
+	}
 	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 || ogImageMeta != 1 || ogImageWidthMeta != 1 || ogImageHeightMeta != 1 || twitterCardMeta != 1 || twitterImageMeta != 1 {
 		return "required_elements"
 	}
@@ -469,6 +479,39 @@ func insideResumeHeader(node *html.Node) bool {
 		}
 	}
 	return false
+}
+
+// creditClass marks the page credit, which links the service's home page from
+// the page chrome (docs/design/web.md).
+const creditClass = "public-credit"
+
+// creditText is the credit's text in the resume language: Vietnamese for vi,
+// English for every other language.
+func creditText(lng string) string {
+	language, _, _ := strings.Cut(lng, "-")
+	if strings.EqualFold(language, "vi") {
+		return "Tạo bằng aboutme.vn"
+	}
+	return "Built with aboutme.vn"
+}
+
+// isPublicCredit requires exactly class and href, the canonical home URL, one
+// text child with the expected text, and a place outside the resume article.
+func isPublicCredit(node *html.Node, href, text string) bool {
+	if len(node.Attr) != 2 || attributeCount(node, "class") != 1 || attribute(node, "class") != creditClass ||
+		attributeCount(node, "href") != 1 || attribute(node, "href") != href {
+		return false
+	}
+	child := node.FirstChild
+	if child == nil || child.NextSibling != nil || child.Type != html.TextNode || child.Data != text {
+		return false
+	}
+	for ancestor := node.Parent; ancestor != nil; ancestor = ancestor.Parent {
+		if ancestor.Type == html.ElementNode && ancestor.Data == "article" {
+			return false
+		}
+	}
+	return true
 }
 
 func publicPDFPath(slug string) string {

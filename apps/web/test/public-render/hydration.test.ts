@@ -41,10 +41,16 @@ const resume = (revision: string) => ({
   })(),
 });
 
-const ssrRoot = async (revision: string): Promise<string> =>
+const ssrRoot = async (
+  revision: string,
+  homeHref = `${window.location.origin}/`,
+): Promise<string> =>
   renderToString(
     createSSRApp({
-      render: () => h(PublicResumeApp, { publicResume: resume(revision) }),
+      render: () => h(PublicResumeApp, {
+        publicResume: resume(revision),
+        homeHref,
+      }),
     }),
   );
 
@@ -116,6 +122,28 @@ describe('public resume hydration', () => {
     await hydratePublicResume(root, 'ada1', '1', async () => resume('1'));
     expect(root.firstElementChild).toBe(original);
   });
+
+  it('keeps the canonical home href in the page credit on client renders',
+    async () => {
+      const canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      canonical.href = 'https://aboutme.example/ada1';
+      document.head.append(canonical);
+      try {
+        document.body.innerHTML = [
+          '<main id="public-resume" data-revision="1">',
+          await ssrRoot('1', 'https://aboutme.example/'),
+          '</main>',
+        ].join('');
+        const root = document.querySelector<HTMLElement>('#public-resume')!;
+        await hydratePublicResume(root, 'ada1', '1', async () => resume('2'));
+        const credit = root.querySelector('a.public-credit');
+        expect(credit?.getAttribute('href')).toBe('https://aboutme.example/');
+        expect(credit?.textContent).toBe('Built with aboutme.vn');
+      } finally {
+        canonical.remove();
+      }
+    });
 
   it('restores matching SSR when hydration mounting throws', async () => {
     document.body.innerHTML = [

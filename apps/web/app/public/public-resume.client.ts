@@ -49,9 +49,26 @@ export function bindPublicRealtimeLifetime(
 
 const mountedRoots = new WeakMap<HTMLElement, ShallowRef<PublicResume>>();
 
+// The server renders the page credit from the canonical origin, and the
+// canonical link carries that origin, so hydration renders the same href.
+function canonicalHomeHref(): string {
+  const canonical = document.querySelector<HTMLLinkElement>(
+    'link[rel="canonical"]',
+  );
+  try {
+    return `${new URL(canonical?.href ?? location.href).origin}/`;
+  } catch {
+    return `${location.origin}/`;
+  }
+}
+
 function publicResumeRoot(publicResume: ShallowRef<PublicResume>) {
+  const homeHref = canonicalHomeHref();
   return {
-    render: () => h(PublicResumeApp, { publicResume: publicResume.value }),
+    render: () => h(PublicResumeApp, {
+      publicResume: publicResume.value,
+      homeHref,
+    }),
   };
 }
 

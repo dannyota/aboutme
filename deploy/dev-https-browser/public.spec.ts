@@ -229,6 +229,12 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(decodeURIComponent(iconHref!.slice('data:image/svg+xml,'.length)))
       .toContain(`>${PAGE_EMOJI}</text>`);
 
+    // Every public page credits the site once, linking the canonical home.
+    const credit = publicPage.locator('a.public-credit');
+    await expect(credit).toHaveCount(1);
+    await expect(credit).toHaveAttribute('href', `${new URL(publicPage.url()).origin}/`);
+    await expect(credit).toHaveText('Built with aboutme.vn');
+
     // Download is enabled, so the page links its own PDF, named after the slug.
     const download = publicPage.locator('a.public-download');
     await expect(download).toHaveCount(1);

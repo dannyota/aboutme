@@ -468,7 +468,9 @@ func mustPublicOrigin(t *testing.T) publicresume.PublicOrigin {
 }
 
 func validHTML(name, canonical, revision, dataScript string) string {
-	imageURL := strings.TrimSuffix(canonical, "/"+strings.Split(canonical, "/")[3]) + "/api/v1/public/resumes/" + strings.Split(canonical, "/")[3] + "/og.png"
+	root := strings.TrimSuffix(canonical, "/"+strings.Split(canonical, "/")[3])
+	imageURL := root + "/api/v1/public/resumes/" + strings.Split(canonical, "/")[3] + "/og.png"
+	credit := `<div class="public-toolbar"><a class="public-credit" href="` + root + `/">Built with aboutme.vn</a></div>`
 	social := `<meta property="og:image" content="` + imageURL + `"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="` + imageURL + `">`
-	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + social + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
+	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + social + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">" + credit + "body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
 }
