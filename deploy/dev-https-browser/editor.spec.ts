@@ -467,10 +467,11 @@ async function proveConflictAndTemplate(
   editorDiagnosticStage = 'template-partial-dialog';
   const partial = page.getByRole('alertdialog', { name: 'Template changes need review' });
   await expect(partial).toBeVisible();
+  // The primary action comes last so it stacks first on phones.
   await expect(partial.getByRole('button')).toHaveText([
-    'Retry remaining',
-    'Restore pre-apply',
     'Keep partial',
+    'Restore pre-apply',
+    'Retry remaining',
   ]);
   await partial.getByRole('button', { name: 'Keep partial' }).press('Enter');
   editorDiagnosticStage = 'template-keep-partial-saved';
@@ -498,6 +499,11 @@ async function proveKeyboardStructureAndContextActions(
     .getByRole('button', { name: 'Add section', exact: true })
     .press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  // Adding a section opens it in the inspector; reopen Sections to add
+  // the next one.
+  await page
+    .getByRole('button', { name: '+ Add section', exact: true })
+    .press('Enter');
   await page.getByLabel('Section type').selectOption('skill');
   editorDiagnosticStage = 'structure-add-skill';
   await page
@@ -505,6 +511,9 @@ async function proveKeyboardStructureAndContextActions(
     .getByRole('button', { name: 'Add section', exact: true })
     .press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
+  await page
+    .getByRole('button', { name: '+ Add section', exact: true })
+    .press('Enter');
   editorDiagnosticStage = 'structure-move';
   await page.locator('[data-section="work"]').getByRole('button', { name: 'Move to sidebar' }).press('Enter');
   await expect(page.locator('[data-state="saved"]')).toBeVisible();
@@ -767,6 +776,15 @@ async function provePhotoSessionPersistence(
       && url.origin === ORIGIN
       && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
   });
+  // A photo uploaded in this session saves its default square crop once
+  // the image loads.
+  const defaultCrop = page.waitForResponse((response) => {
+    const request = response.request();
+    const url = new URL(response.url());
+    return request.method() === 'PATCH'
+      && url.origin === ORIGIN
+      && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
+  });
   await upload.setInputFiles({
     buffer: Buffer.from(VALID_PNG_BASE64, 'base64'),
     mimeType: 'image/png',
@@ -791,6 +809,9 @@ async function provePhotoSessionPersistence(
   await expect(page.locator('[data-photo-preview] img')).toBeVisible();
   await expect.poll(async () => (await sourceReads.read()).dataURL).toBeGreaterThan(0);
   await expectURLUnchanged(page, baseline);
+  editorDiagnosticStage = 'photo-default-crop';
+  expect((await defaultCrop).status()).toBe(200);
+  await expectSavedOrDiagnose(page, 'photo-default-crop');
   editorDiagnosticStage = 'photo-crop';
   const acceptedCrop = page.waitForResponse((response) => {
     const request = response.request();
@@ -799,6 +820,7 @@ async function provePhotoSessionPersistence(
       && url.origin === ORIGIN
       && url.pathname === `/api/v1/resumes/${resumeID}/photo`;
   });
+  await page.locator('summary', { hasText: 'Exact values' }).press('Enter');
   await page.getByLabel('Width').fill('0.75');
   await page.getByRole('button', { name: 'Save crop' }).press('Enter');
   editorDiagnosticStage = 'photo-crop-response';
