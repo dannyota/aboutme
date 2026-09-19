@@ -68,7 +68,9 @@ if (isCorpus) {
   if (raw !== undefined && raw !== '1') badQuery();
   rawCorpus = raw === '1';
 } else {
-  requireAllowedKeys(new Set(['fixture', 'font', 'mode', 'template']));
+  requireAllowedKeys(
+    new Set(['align', 'fixture', 'font', 'mode', 'template']),
+  );
   const fixture = singleton('fixture', true) as FixtureId;
   const templateId = singleton('template', true);
   const requestedMode = singleton('mode', true);
@@ -105,6 +107,13 @@ if (isCorpus) {
     template,
     resolvedDocument.content,
   );
+  // Presets never set text alignment (ADR 0041), so a justify cell asks
+  // for it after the template applies.
+  const requestedAlign = singleton('align');
+  if (requestedAlign !== undefined) {
+    if (requestedAlign !== 'justify') badQuery();
+    resolvedDocument.customization.font.textAlign = 'justify';
+  }
   const requestedFont = singleton('font');
   if (requestedFont !== undefined) {
     resolveFontSelection(requestedFont);
