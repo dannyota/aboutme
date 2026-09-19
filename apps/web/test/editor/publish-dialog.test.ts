@@ -126,7 +126,7 @@ describe('PublishDialog', () => {
     expect(sealActions[0]?.text()).toBe('Publish');
     const cancel = wrapper.get('[data-action="publish-close"]');
     expect(cancel.text()).toBe('Cancel');
-    expect(cancel.attributes('data-variant')).toBe('ghost');
+    expect(cancel.attributes('data-variant')).toBe('outline');
   });
 
   it('bounds and scrolls long dialog content within the viewport', async () => {
@@ -845,8 +845,9 @@ describe('PublishDialog', () => {
       await wrapper
         .get('[role="dialog"]')
         .trigger('keydown', { key: 'Tab', shiftKey: true });
+      // The primary action is the last control (DESIGN.md dialog rhythm).
       expect(document.activeElement).toBe(
-        wrapper.get('[data-action="publish-close"]').element,
+        wrapper.get('[data-action="publish-submit"]').element,
       );
       await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Tab' });
       expect(document.activeElement).toBe(
