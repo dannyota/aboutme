@@ -224,10 +224,7 @@ async function discardAndSignIn(): Promise<void> {
         state="public"
       />
       <span class="flex-1" />
-      <PDFDownloadButton
-        :controller="actions.downloadPdf"
-        :page-format="document.customization.pageFormat"
-      />
+      <PDFDownloadButton :controller="actions.downloadPdf" />
       <Button
         class="editor-publish-action"
         data-action="publish"
