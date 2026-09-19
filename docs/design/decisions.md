@@ -1,7 +1,7 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. Records 0001–0046
+supersession record; these pages state the resulting design. Records 0001–0047
 are accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                     |
@@ -52,6 +52,7 @@ are accepted.
 | [0044](../adr/0044-header-photo-position-and-project-subtitle.md)    | Accepted | Document v4: header photo on top, left, or right; optional project entry subtitle                                      |
 | [0045](../adr/0045-pdf-download-name-and-metadata.md)                | Accepted | PDFs download as `<Full-Name>-Resume.pdf` with an RFC 5987 UTF-8 name; PDF Title and dates come from the revision      |
 | [0046](../adr/0046-github-ci-delivery-gate.md)                       | Accepted | Narrow local checks and per-commit gitleaks; one fresh review before push; exact green GitHub CI commit before release |
+| [0047](../adr/0047-bilingual-resume-workspace.md)                    | Accepted | Vietnamese and English resume workspace; interface toggles never change resume data or resume language                 |
 
 ## Remaining gates
 
@@ -80,7 +81,8 @@ asset also requires modification rights and compliance with naming conditions.
 
 ## Change process
 
-No line in an accepted ADR is edited to make history look consistent. V4 is
-approved, so a changed decision needs a new ADR or a v5 revision. Status words
-are exact: “approved” means the decision is settled; “landed” describes
-repository state and does not imply that a gate passed.
+No line in an accepted ADR is edited to make history look consistent. V4 and its
+accepted amendments through ADR 0047 are approved, so a changed decision needs a
+new ADR or a v5 revision. Status words are exact: “approved” means the decision
+is settled; “landed” describes repository state and does not imply that a gate
+passed.

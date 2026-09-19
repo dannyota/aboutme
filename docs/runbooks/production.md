@@ -1,6 +1,6 @@
 # Production
 
-Status: **serving production** at `v0.3.29` (verified 2026-09-19). This runbook
+Status: **serving production** at `v0.3.30` (verified 2026-09-20). This runbook
 covers the single-host production environment at `https://aboutme.vn`. The
 [single-host design](../design/single-host-production.md) explains why it is
 shaped this way.
@@ -171,8 +171,10 @@ steps, starts `web`, swaps `maintenance` back out, starts `app`, re-enables the
 schedules, and smoke-tests through Cloudflare. The script requires the
 maintenance page's 503 response through Cloudflare before it starts a database
 task. `app` and `maintenance` both bind host port 443, so exactly one of them is
-ever asked to run at once. Visitors see the maintenance page, not a connection
-failure, between "site down" and "site up", usually one to three minutes.
+ever asked to run at once. Task placement and image pulls determine how long the
+maintenance page remains up. After maintenance stops, Cloudflare can return 521
+until `app` accepts traffic. The v0.3.30 handoff returned 521 for about one
+minute. Do not promise a bounded downtime window.
 
 Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
 deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes

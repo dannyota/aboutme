@@ -13,9 +13,9 @@
       verifiers, and the server image verifies RDS TLS. Each has passing tests.
 - [x] The first-task checks on a real Bottlerocket host pass: host-mode task
       roles, the bridge-gateway listener, and the IMDS hop-limit block.
-- [x] The v0.3.29 release-image workflow builds and smokes all three ARM64
+- [x] The v0.3.30 release-image workflow builds and smokes all three ARM64
       images.
-- [ ] `tofu validate` and a reviewed `tofu plan` pass.
+- [x] `tofu validate` and a reviewed `tofu plan` pass.
 - [x] One fresh review, local `make ci`, and connected `make scan` pass at the
       candidate. The review confirms client-IP trust, origin lockdown, secret
       handling, IAM scope, and migration order by name.
@@ -24,9 +24,9 @@
 ## In production
 
 - [ ] The first deploy completes, including the first-deploy database steps.
-- [x] v0.3.29 runs with one healthy app task and one healthy web task, and
+- [x] v0.3.30 runs with one healthy app task and one healthy web task, and
       public `/`, `/healthz`, and `/readyz` return 200.
-- [ ] A direct request to the origin address fails.
+- [x] A direct request to the origin address fails.
 - [ ] The owner tests registration, sign-in, editing, publishing, exports,
       realtime, MCP, account export and deletion.
 - [ ] Every alarm is triggered once and its email arrives.
@@ -55,6 +55,17 @@
       it need not land before the baseline.
 
 ## Notes
+
+- 2026-09-20: v0.3.30 deployed from `925b8bbc` after CI run `35456754168` and
+  release-image run `35457085851` passed. The reviewed OpenTofu plan added four
+  maintenance resources and changed or destroyed none. App revision 37 and web
+  revision 33 are healthy; maintenance revision 2 runs zero tasks at rest. All
+  five schedules are enabled. Public `/`, `/healthz`, and `/readyz` return 200,
+  and the deploy script's direct-origin rejection check passed. A signed-out
+  browser observed the marked maintenance 503 and automatic recovery to 200. The
+  final port handoff included about one minute of 521 responses. These checks do
+  not prove owner flows, job results, alarm delivery, restore, or the
+  first-deploy database steps.
 
 - 2026-09-19: production serves v0.3.29. App revision 36 and web revision 32 use
   the v0.3.29 image digests, each service has one healthy running task, and all

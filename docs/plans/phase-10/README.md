@@ -1,6 +1,6 @@
 # Phase 10: Production deployment
 
-Status: **In progress** (2026-09-19). Production serves v0.3.29. Product and
+Status: **In progress** (2026-09-20). Production serves v0.3.30. Product and
 operational acceptance remain open.
 
 **Goal:** complete production acceptance for web v1 at `https://aboutme.vn` on

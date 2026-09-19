@@ -7,7 +7,12 @@ tasks for that phase while the phase is active.
 
 [The v0.4.x roadmap](v0.4-roadmap.md) proposes small releases for Vietnamese
 localization, optional two-factor authentication, MCP acceptance, and link
-previews. It does not mark those features implemented or approved.
+previews. The v0.4.0 design is approved; later release designs remain proposed.
+None of those features is marked implemented.
+
+[The v0.4.0 delivery plan](v0.4.0-localization.md) breaks down the first
+localization release. The owner approved its design on 2026-09-20; the plan
+records implementation work and verification still required.
 
 ## Layout
 

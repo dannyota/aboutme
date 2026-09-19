@@ -60,8 +60,8 @@ are indexable. Each carries a meta description, a canonical link to
 WebSite, Organization, and a free WebApplication, with no ratings, reviews, or
 counts. Every other Nuxt route sends `robots: noindex`, and `/app/**`, whose
 first HTML is a client-rendered shell, also sends the `X-Robots-Tag: noindex`
-header. The site language is a cookie with no per-language URL, so there is no
-hreflang and crawlers read the Vietnamese default.
+header. The interface language is a cookie with no per-language URL, so there is
+no hreflang and crawlers read the Vietnamese default.
 
 ## Application UI
 
@@ -109,6 +109,42 @@ Every stable test hook (`data-testid`, `data-action`, other `data-*` attributes,
 `aria-label` text, visible labels) survives a component change unless the same
 change names its replacement. Tests query by role, label, and those attributes,
 never by tag, class, or index.
+
+## Interface localization
+
+The interface locale is `vi` or `en`, defaults to Vietnamese, and persists in
+the script-readable `aboutme-locale` cookie for one year at path `/` with
+`SameSite=Lax`. Missing and invalid values select Vietnamese. The homepage,
+authentication and recovery pages, legal pages, template gallery, and resume
+workspace use this locale. Settings, account destination pages, connected-agent
+controls, and agent consent use English.
+
+The resume workspace comprises the list, blank and sample creation, editor,
+publish dialog, owner PDF export, browser titles, errors, accessible copy, and
+shared account menu. The application shell exposes the language control on the
+list and creation routes. The editor exposes it in its own top bar. Shared menu
+copy includes its accessible name, Settings link, theme action, and logout
+action; following Settings may open an English page.
+
+Each surface owns typed Vietnamese and English copy maps with identical keys.
+Controllers retain semantic states, error codes, field paths, and retry data;
+components choose user-facing copy for the current locale. Editor copy stays out
+of public-render and print worker bundles.
+
+Interface language and resume language are independent. Opening a blank creation
+flow captures the interface locale once as its initial resume language; an
+explicit gallery-sample language wins. Later interface toggles do not change
+resume language, authored content, materialized defaults, public settings,
+unsaved drafts, pending commands, conflicts, or revision state, and do not send
+a resume write. The pure renderer, public page, and PDF content continue to use
+resume language.
+
+The resume list, new-resume page, and generic editor loading title use localized
+page names. A loaded editor title keeps the authored resume title. The page HTML
+`lang` follows interface language, while each preview root keeps resume
+language. [ADR 0047](../adr/0047-bilingual-resume-workspace.md) records the
+choice; the [localization design](editor-localization.md) defines scope,
+compatibility, security, and acceptance.
 
 ## Agent consent and connected agents
 

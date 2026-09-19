@@ -1,6 +1,6 @@
 # aboutme implementation plan
 
-Status: **Revision 42, active** (2026-09-19).
+Status: **Revision 43, active** (2026-09-20).
 
 The goal is a tested v1 in production at `https://aboutme.vn`, hosted in AWS
 Singapore (`ap-southeast-1`). The [design](../design/README.md) owns intended
@@ -44,7 +44,7 @@ UI toolkit, and the application visual identity.
 | 7     | [Print worker, public PDF and images](../runbooks/exports.md)          | Complete and merged                                   |
 | 8     | [Privacy lifecycle](../runbooks/privacy.md)                            | Complete and merged                                   |
 | 9     | [AWS Singapore cost research](../research/aws-cost/recommendation.md)  | Complete and merged                                   |
-| 10    | [Production deployment](phase-10/README.md)                            | In progress: v0.3.29 is live; acceptance remains open |
+| 10    | [Production deployment](phase-10/README.md)                            | In progress: v0.3.30 is live; acceptance remains open |
 | 11    | Flutter app                                                            | Deferred beyond web v1                                |
 
 Active phases and tasks use numbers, such as Phase 7 and task 7.1. Completed
@@ -56,6 +56,12 @@ lettered identifiers remain historical evidence and are not reassigned.
    traceability remap for the live production service.
 2. Before the public announcement: restore drill, SES production access, privacy
    and name reviews.
+
+The maintenance-page deployment shipped in v0.3.30 with green CI and verified
+production recovery. The next product release is the
+[localization release](v0.4.0-localization.md). The owner approved the
+localization design on 2026-09-20. Its implementation and verification remain
+open, alongside production acceptance.
 
 Security controls are delivered inside every route-owning phase and verified end
 to end in production. The Go sanitizer runs on every write and on the public
@@ -70,7 +76,7 @@ read that feeds public SSR and the read that feeds internal print SSR.
 | Privacy and disclosure review     | Qualified privacy counsel and human owner | Before the public announcement |
 
 ADR 0037 is the production approval. Design v4, the template contract v2, and
-ADRs 0001–0037 are accepted, subject to recorded supersessions.
+ADRs 0001–0047 are accepted, subject to recorded supersessions.
 
 ## Dependency graph
 
@@ -87,12 +93,12 @@ graph TD
 
 ## Gates
 
-[ADR 0024](../adr/0024-single-pass-delivery-gates.md) governs. Per task: the
-author writes the failing test first, implements the smallest correct change,
-and runs the narrowest affected checks; the adversarial cases listed in the task
-file are the author's job. Per phase: one fresh reviewer reads the integrated
-diff, then the integration owner runs the phase `exit-criteria.md`, `make ci`,
-and connected `make scan` at one unchanged candidate commit before pushing.
+[ADR 0046](../adr/0046-github-ci-delivery-gate.md) governs. Per task: the author
+writes the failing test first, implements the smallest correct change, and runs
+the narrowest affected checks; the adversarial cases listed in the task file are
+the author's job. One fresh reviewer reads each plan or release before push.
+GitHub CI runs the full gate. Tagging and deployment require green CI on the
+exact release commit; local full gates run only to diagnose CI failures.
 
 Classify authentication, authorization, sessions, CSRF, concurrency, CAS,
 idempotency, migrations, schema, sanitizing, publish and cache invalidation,

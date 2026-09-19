@@ -1,7 +1,8 @@
 # aboutme design
 
 Status: **Approved v4** (2026-08-12), approved by the design owner's delegated
-review. Changed decisions from here on need a new ADR or a v5 revision.
+review, with owner-approved amendments through ADR 0047 (2026-09-20). Changed
+decisions from here on need a new ADR or a v5 revision.
 
 This directory defines the intended v1 product and architecture. Current
 behavior lives in code, deployment configuration, and
@@ -9,7 +10,7 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. ADRs
-0001–0046 are accepted, subject to recorded supersessions. If a page disagrees
+0001–0047 are accepted, subject to recorded supersessions. If a page disagrees
 with an accepted ADR, the ADR controls that decision until this text is
 corrected.
 
@@ -22,6 +23,7 @@ corrected.
 | 3       | [Data](data.md)                                     | Relational model, resume document, and versioning        |
 | 4       | [API](api.md)                                       | HTTP conventions, endpoints, and write safety            |
 | 5       | [Web and rendering](web.md)                         | Editor, renderer, templates, fonts, and sanitizing       |
+| 5a      | [Resume localization](editor-localization.md)       | Interface and resume-language separation                 |
 | 6       | [Deployment](deployment.md)                         | Environments, network trust, storage, and backups        |
 | 6a      | [Single-host production](single-host-production.md) | First-release production host, edge, database and deploy |
 | 7       | [Repository boundaries](repository.md)              | Sources of truth and dependency direction                |
@@ -66,8 +68,9 @@ The design has five cross-cutting rules:
 
 ## Approval rule
 
-V4 is approved and implementable. A changed decision needs a new ADR; a
-structural rewrite needs a v5 revision. Neither silently rewrites approved text.
+V4 and its accepted amendments through ADR 0047 are approved and implementable.
+A changed decision needs a new ADR; a structural rewrite needs a v5 revision.
+Neither silently rewrites approved text.
 
 A correction that fixes an error, ambiguity, or contradiction without changing a
 decision is an ordinary edit. Note it in [Decision status](decisions.md).
