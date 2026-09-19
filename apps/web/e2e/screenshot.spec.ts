@@ -21,6 +21,7 @@ interface ScreenshotCell {
   readonly fixture: 'full' | 'vn-full';
   readonly mode: 'continuous' | 'paged';
   readonly name: string;
+  readonly paper?: 'letter';
   readonly template: string;
 }
 
@@ -60,6 +61,13 @@ const CELLS: readonly ScreenshotCell[] = [
     fixture: 'vn-full',
     mode: 'paged',
     name: 'consulting-formal--vn-full--paged.png',
+    template: 'consulting-formal',
+  },
+  {
+    fixture: 'vn-full',
+    mode: 'paged',
+    name: 'consulting-formal--vn-full--letter--paged.png',
+    paper: 'letter',
     template: 'consulting-formal',
   },
   {
@@ -167,7 +175,8 @@ test.describe('renderer screenshot subset', () => {
     test(cell.name, async ({ page }, testInfo) => {
       const preset = TEMPLATES.find(({ id }) => id === cell.template);
       expect(preset, `unknown preset ${cell.template}`).toBeDefined();
-      const geometry = PAGE_GEOMETRY[preset!.customization.pageFormat];
+      const geometry
+        = PAGE_GEOMETRY[cell.paper ?? preset!.customization.pageFormat];
       await page.setViewportSize(geometry);
       const external = await denyExternalRequests(page);
 
@@ -175,7 +184,8 @@ test.describe('renderer screenshot subset', () => {
         '/_harness/render'
         + `?fixture=${cell.fixture}&template=${cell.template}`
         + `&mode=${cell.mode}`
-        + (cell.align === undefined ? '' : `&align=${cell.align}`),
+        + (cell.align === undefined ? '' : `&align=${cell.align}`)
+        + (cell.paper === undefined ? '' : `&paper=${cell.paper}`),
       );
       expect(response?.ok()).toBe(true);
       const harnessRoot = page.locator(
