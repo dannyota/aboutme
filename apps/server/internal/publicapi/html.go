@@ -200,7 +200,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 		return "doctype"
 	}
 	var title, canonical, main *html.Node
-	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, creditLinks, favicons, charsetMeta, viewportMeta int
+	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, creditLinks, favicons, charsetMeta, viewportMeta, formatDetectionMeta int
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
 	stylesheets := map[string]bool{}
@@ -275,6 +275,15 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 							return
 						}
 						twitterImageMeta++
+					case "format-detection":
+						// Stops Safari from auto-linking digit runs, such as date
+						// ranges, into tel: links. At most one; zero keeps HTML from
+						// a renderer without the tag valid.
+						if attribute(node, "content") != "telephone=no, date=no, address=no, email=no" {
+							reject("meta_format_detection")
+							return
+						}
+						formatDetectionMeta++
 					default:
 						reject("meta_unknown")
 						return
@@ -402,6 +411,9 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	walk(document)
 	if rule != "" {
 		return rule
+	}
+	if formatDetectionMeta > 1 {
+		return "meta_format_detection"
 	}
 	if page.FaviconHref != "" && favicons != 1 {
 		return "favicon"

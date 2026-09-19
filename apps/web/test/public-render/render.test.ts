@@ -93,6 +93,13 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '<link rel="canonical" href="https://resume.example/ada1">',
     );
+    // Stops Safari and other browsers from auto-linking digit runs such as
+    // date ranges into tel: links, without touching the explicit tel:/
+    // mailto: anchors the contact details render.
+    expect(html).toContain(
+      '<meta name="format-detection" '
+      + 'content="telephone=no, date=no, address=no, email=no">',
+    );
     expect(html).toContain(
       '<meta property="og:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
     );
