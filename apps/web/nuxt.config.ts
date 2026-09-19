@@ -232,6 +232,16 @@ export default defineNuxtConfig({
         { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
         { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
       ],
+      meta: [
+        // Safari auto-links digit runs such as date ranges into tel: links;
+        // this opts every page (including sample resumes) out of that,
+        // without touching the explicit tel:/mailto: anchors contact
+        // details render.
+        {
+          name: 'format-detection',
+          content: 'telephone=no, date=no, address=no, email=no',
+        },
+      ],
     },
   },
 

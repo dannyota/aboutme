@@ -104,6 +104,11 @@ describe('site page search metadata', () => {
         );
         expect(meta('meta[name="twitter:card"]')).toBe('summary_large_image');
         expect(document.head.querySelector('meta[name="robots"]')).toBeNull();
+        // Stops Safari and other browsers from auto-linking digit runs such
+        // as sample resume date ranges into tel: links, on every page.
+        expect(meta('meta[name="format-detection"]')).toBe(
+          'telephone=no, date=no, address=no, email=no',
+        );
       });
     }
   }

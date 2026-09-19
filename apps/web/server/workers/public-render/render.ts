@@ -122,6 +122,11 @@ export async function renderPublicResume(
     const head = [
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      // Safari auto-links digit runs such as date ranges into tel: links;
+      // this opts the page out without touching the explicit tel:/mailto:
+      // anchors the contact details render.
+      '<meta name="format-detection" '
+      + 'content="telephone=no, date=no, address=no, email=no">',
       // The server computes the title and favicon href from the owner's
       // settings, and its validator accepts exactly these (ADR 0042).
       `<title>${escapeText(request.pageTitle)}</title>`,

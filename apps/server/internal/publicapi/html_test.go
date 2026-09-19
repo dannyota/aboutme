@@ -458,6 +458,39 @@ func TestPublicHTMLRequiresExactSocialImageMetadata(t *testing.T) {
 	}
 }
 
+func TestPublicHTMLAcceptsFormatDetectionMeta(t *testing.T) {
+	// This fails if the meta that stops Safari from auto-linking date ranges
+	// as phone numbers is missing from the allowlist, wrong, or unbounded.
+	origin := mustPublicOrigin(t)
+	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
+	jsonLD, err := publicformat.JSONLD(resume, origin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := validHTML("Ada", "https://aboutme.example/ada", "1", "")
+	tag := `<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">`
+	withTag := strings.Replace(valid, "</head>", tag+"</head>", 1)
+
+	if !validPublicHTML([]byte(valid), resume, origin, jsonLD, false) {
+		t.Fatal("HTML without the format-detection meta was rejected")
+	}
+	if !validPublicHTML([]byte(withTag), resume, origin, jsonLD, false) {
+		t.Fatal("the exact format-detection meta was rejected")
+	}
+	for _, test := range []struct {
+		name, html string
+	}{
+		{"wrong content", strings.Replace(valid, "</head>", `<meta name="format-detection" content="telephone=no">`+"</head>", 1)},
+		{"two tags", strings.Replace(withTag, "</head>", tag+"</head>", 1)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if validPublicHTML([]byte(test.html), resume, origin, jsonLD, false) {
+				t.Fatal("invalid format-detection meta was accepted")
+			}
+		})
+	}
+}
+
 func mustPublicOrigin(t *testing.T) publicresume.PublicOrigin {
 	t.Helper()
 	origin, err := publicresume.ParsePublicOrigin("https://aboutme.example", "production")
