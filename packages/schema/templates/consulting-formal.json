@@ -1,7 +1,7 @@
 {
   "id": "consulting-formal",
   "name": "Consulting Formal",
-  "description": "One-column Letter document in navy and grey: left title block, title-case ruled headings, tight vertical rhythm, no fills.",
+  "description": "One-column A4 document in navy and grey: left title block, title-case ruled headings, tight vertical rhythm, no fills.",
   "customization": {
     "font": {
       "family": "inter",
@@ -44,7 +44,7 @@
         "style": "text"
       }
     },
-    "pageFormat": "letter",
+    "pageFormat": "a4",
     "dateFormat": "MM/YYYY"
   }
 }

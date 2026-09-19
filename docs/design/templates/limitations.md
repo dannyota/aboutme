@@ -19,11 +19,12 @@ in [ADR 0017](../../adr/0017-resume-document-versioning.md).
    of leaving it out:_ every preset must reuse the fixed renderer structure.
    Adding a timeline, a new region, or other structural template requires a
    later document release rather than a new JSON file.
-2. **Template apply resets `pageFormat` and `dateFormat`.** Both are regional
-   preferences, not visual design, but ADR 0008's wholesale replace covers them.
-   _Cost of leaving it out:_ a user on A4 who tries a Letter preset ships a
-   Letter PDF without noticing. The editor warns before apply when either value
-   changes. Apply remains wholesale as ADR 0008 requires.
+2. **Template apply resets `dateFormat`.** It is a regional preference, not
+   visual design, but ADR 0008's wholesale replace covers it. `pageFormat` is
+   the exception: paper follows where the owner prints, so a switch keeps it, as
+   it keeps `font.textAlign` and `header.photoPosition`, and every preset ships
+   on A4. _Cost of leaving it out:_ a switch can change how dates read. The
+   editor warns before apply when the date format changes.
 3. **No photo visibility control.** A photo lives in `personalDetails.photo`;
    nothing in `customization` can suppress it, and §3 has no `showPhoto` flag.
    An ATS-oriented or photo-free template must therefore still render a photo

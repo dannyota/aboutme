@@ -78,5 +78,5 @@ styles are `text`, so no bar, dot, or tag ever renders.
 - **Rule weight and colour, and justified text.** 1 px, 0.25 em below, and
   accent mixed 60 % toward the surface are renderer-fixed, so the rule can only
   be pale blue-grey; justification is not a token at all.
-- Applying the preset resets `pageFormat` to `a4` and `dateFormat` to `Mon YYYY`
-  ([limitations item 2](../limitations.md)); a Letter user gets A4 silently.
+- Applying the preset resets `dateFormat` to `Mon YYYY`
+  ([limitations item 2](../limitations.md)).

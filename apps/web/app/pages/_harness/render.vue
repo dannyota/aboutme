@@ -112,8 +112,13 @@ if (isCorpus) {
   }
 
   const resolvedDocument = resumeDocument ?? badQuery();
+  // The fixture owner already prints on the preset's paper; a template switch
+  // keeps the owner's page format.
   resolvedDocument.customization = applyTemplate(
-    resolvedDocument.customization,
+    {
+      ...resolvedDocument.customization,
+      pageFormat: template.customization.pageFormat,
+    },
     template,
     resolvedDocument.content,
   );

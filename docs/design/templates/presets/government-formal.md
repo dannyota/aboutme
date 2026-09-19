@@ -22,11 +22,12 @@ photocopy, and completeness beats compression.
    which qualifications are addressed, so a `byType` rule would re-home sections
    on apply and break that silently. `sidebarSectionTypes` is absent, as `keep`
    requires.
-3. **Letter, 25 mm margins, MM/YYYY.** 25 mm is one inch to the nearest
-   millimetre, the standard instruction. Numeric dates need no month table and
-   make a gap readable to the month without fabricating precision: a `{y}` with
-   no `m` still renders as a year (`contract.md` §5.4). At base 14 the 166 mm
-   measure runs to about 90 characters, offset by `lineHeight: 1.5`.
+3. **A4, 25 mm margins, MM/YYYY.** Vietnamese state agencies and state-owned
+   enterprises file on A4, the paper of the sơ yếu lý lịch form. 25 mm keeps the
+   one-inch instruction to the nearest millimetre. Numeric dates need no month
+   table and make a gap readable to the month without fabricating precision: a
+   `{y}` with no `m` still renders as a year (`contract.md` §5.4). At base 14
+   the 160 mm measure runs to about 87 characters, offset by `lineHeight: 1.5`.
 4. **One ink.** `primary` and `text` are both `#000000` on `#ffffff`, with
    `surfaceTarget: "none"` and no `colors.surface`. Black is a lever, not a
    default: `--color-meta` is `colors.text` mixed 25 % toward the surface, so
@@ -63,14 +64,14 @@ nothing. No colour carries information, so WCAG 1.4.1 holds by construction.
 ## Nearest siblings
 
 - **`mono-print`** — if it is monochrome we share the palette outright, and a
-  black-and-white page is not distinctness on its own. What separates them is
-  Letter at 25 mm, the stacked contact block, and 24/14 gaps that spend space.
+  black-and-white page is not distinctness on its own. What separates them is 25
+  mm margins, the stacked contact block, and 24/14 gaps that spend space.
 - **`ats-plain`** — shares several parser-friendly axes (one column, one ink,
   `text` widgets, a common sans), but differs in heading case and date format.
   ATS work compresses for keyword density per page; this takes inch margins and
   base 14.
-- **`classic-serif`** runs the same ruled-uppercase skeleton in serif, on A4 and
-  centred; **`consulting-formal`** keeps an accent and a tighter grid.
+- **`classic-serif`** runs the same ruled-uppercase skeleton in serif, centred;
+  **`consulting-formal`** keeps an accent and a tighter grid.
 
 ## What the token space would not express
 
@@ -81,5 +82,5 @@ nothing. No colour carries information, so WCAG 1.4.1 holds by construction.
   ([limitations item 3](../limitations.md)).
 - **Field labels.** A form labels its fields; entry slots are unlabelled.
 - **A rendered level.** `language` has no body field: its section is bare names.
-- Apply resets `pageFormat` and `dateFormat`
-  ([limitations item 2](../limitations.md)), so an A4 user gets Letter.
+- Apply resets `dateFormat` to `MM/YYYY`
+  ([limitations item 2](../limitations.md)).

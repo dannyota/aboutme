@@ -9,8 +9,8 @@ hard steps. Preset: `packages/schema/templates/startup-bold.json`.
 ## Who it is for
 
 Product, growth, and founding-team candidates writing for a ten-second skim. It
-assumes an edited document: 16 px on Letter sets ~74 characters and 43 line
-boxes a page, so a long history runs to more pages here than elsewhere.
+assumes an edited document: 16 px on A4 sets ~71 characters and 46 line boxes a
+page, so a long history runs to more pages here than elsewhere.
 
 ## The four decisions
 
@@ -80,6 +80,5 @@ are ink, not colour: hue alone would fail WCAG 1.4.1 anyway.
   separation; this wants the label _smaller_ than body at 0.12 em tracking.
 - No weight token: a preset cannot promote `subtitle` to 700, where an employer
   name wants to sit here, nor name the entry title's colour role.
-- Applying this resets `pageFormat` to `letter`
-  ([limitations item 2](../limitations.md)): an A4 user ships a Letter PDF
-  unwarned; containment is editor-side.
+- Applying this resets `dateFormat` to `YYYY`
+  ([limitations item 2](../limitations.md)).

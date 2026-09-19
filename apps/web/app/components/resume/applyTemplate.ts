@@ -80,10 +80,11 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
 }
 
 /**
- * Text alignment and the header photo position belong to the owner, not the
- * preset (ADR 0041, ADR 0044), so a template switch keeps the current values,
- * or their absence. A kept photo position under a preset with no header uses
- * the default header, which renders the same as no header.
+ * Text alignment, the header photo position, and the page format belong to the
+ * owner, not the preset (ADR 0041, ADR 0044; paper follows where the owner
+ * prints), so a template switch keeps the current values, or their absence. A
+ * kept photo position under a preset with no header uses the default header,
+ * which renders the same as no header.
  */
 function withOwnerChoices(
   current: Customization,
@@ -97,6 +98,7 @@ function withOwnerChoices(
   const { header: _presetHeader, ...rest } = next;
   return {
     ...rest,
+    pageFormat: current.pageFormat,
     font: textAlign === undefined ? font : { ...font, textAlign },
     ...(photoPosition !== undefined
       ? { header: { ...header, photoPosition } }
