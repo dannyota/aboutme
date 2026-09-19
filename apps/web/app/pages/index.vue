@@ -69,6 +69,11 @@ useHead(computed(() => ({
             to="/register"
           >{{ copy.createAccount }}</NuxtLink>
           <NuxtLink
+            :class="buttonVariants({ variant: 'outline' })"
+            data-testid="landing-browse-templates"
+            to="/templates"
+          >{{ copy.browseTemplates }}</NuxtLink>
+          <NuxtLink
             class="text-sm text-primary underline-offset-4 hover:underline"
             data-testid="landing-sign-in"
             to="/login"
@@ -76,13 +81,18 @@ useHead(computed(() => ({
         </div>
         <div
           v-else
-          class="mt-7"
+          class="mt-7 flex flex-wrap items-center gap-3"
         >
           <NuxtLink
             :class="buttonVariants({ variant: 'default' })"
             data-testid="landing-open-resumes"
             to="/app/resumes"
           >{{ copy.openResumes }}</NuxtLink>
+          <NuxtLink
+            :class="buttonVariants({ variant: 'outline' })"
+            data-testid="landing-browse-templates"
+            to="/templates"
+          >{{ copy.browseTemplates }}</NuxtLink>
         </div>
       </div>
 

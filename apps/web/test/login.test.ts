@@ -177,6 +177,29 @@ describe('login.vue password form', () => {
     expect(hrefs).toContain('/register');
   });
 
+  it.each([
+    [
+      '/app/new?sample=ats-plain&lng=vi&x=1',
+      '/app/new?sample=ats-plain&lng=vi',
+    ],
+    ['//evil.example', null],
+  ])('carries a checked next %s to the create-account link', async (
+    next,
+    want,
+  ) => {
+    const wrapper = await mountSuspended(LoginPage, {
+      route: `/login?next=${encodeURIComponent(next)}`,
+    });
+    await flushPromises();
+    expect(
+      wrapper.get('[data-testid="login-create-account"]').attributes('href'),
+    ).toBe(
+      want === null
+        ? '/register'
+        : `/register?next=${encodeURIComponent(want)}`,
+    );
+  });
+
   it('navigates to /app/resumes after a successful login', async () => {
     registerEndpoint('/api/v1/auth/password/login', {
       method: 'POST',

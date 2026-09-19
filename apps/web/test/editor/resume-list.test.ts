@@ -98,6 +98,22 @@ describe('useResumeList', () => {
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
   });
 
+  it('redirects to a caller-chosen path instead of the default', async () => {
+    const authState = ref<'loading' | 'anonymous'>('loading');
+    useResumeList({
+      api: { list: vi.fn() } as never,
+      authState: authState as never,
+      loginPath: '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain',
+    });
+
+    authState.value = 'anonymous';
+    await nextTick();
+
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+      '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain',
+    );
+  });
+
   it.each([
     { kind: 'session-lost' },
     { kind: 'rate-limited', retryAfterMs: null },

@@ -32,6 +32,28 @@ for (const width of [390, 1440]) {
   });
 }
 
+test('gallery header at 360 px fits the viewport in English', async ({
+  page,
+}) => {
+  // The narrowest supported phone width; the English header labels are the
+  // longer ones, so English is the tighter fit.
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  const response = await page.goto('/templates');
+  expect(response?.status()).toBe(200);
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+  const header = await page.locator('[data-testid="app-shell"]').boundingBox();
+  expect(header).not.toBeNull();
+  if (header !== null) expect(header.x + header.width).toBeLessThanOrEqual(360);
+});
+
 test('template page switches between the page and the ATS text', async ({
   page,
 }) => {

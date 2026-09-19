@@ -139,29 +139,24 @@ test('proves register-to-create from a gallery sample', async ({
   const email = randomEmail();
   const password = secret();
 
-  // 1. Signed out, the sample's "use this sample" link keeps the intended
-  // destination through login.
+  // 1. Signed out, the sample's "use this sample" link leads to registration
+  // and keeps the intended destination.
   stage('sample-page');
   await gotoHydrated(page, SAMPLE_PATH);
   stage('sample-click');
   await page.locator('[data-action="use-sample"]').click();
-  await page.waitForURL((url) => url.origin === ORIGIN && url.pathname === '/login');
-  await waitForHydration(page);
-  const loginNext = new URL(page.url()).searchParams.get('next');
-  expect(loginNext).toBe(NEXT_PATH);
-
-  // 2. The login page's register link keeps the same next.
-  stage('register-link');
-  // The site header has its own "Create account" link; the page's is in main.
-  const registerLink = page.getByRole('main')
-    .getByRole('link', { name: 'Create account' });
-  await expect(registerLink).toHaveAttribute(
-    'href',
-    `/register?next=${encodeURIComponent(NEXT_PATH)}`,
-  );
-  await registerLink.click();
   await page.waitForURL((url) => url.origin === ORIGIN && url.pathname === '/register');
   await waitForHydration(page);
+  const registerNext = new URL(page.url()).searchParams.get('next');
+  expect(registerNext).toBe(NEXT_PATH);
+
+  // 2. A visitor who already has an account keeps the same next on the
+  // register page's sign-in link.
+  stage('register-sign-in-link');
+  await expect(page.getByTestId('register-sign-in')).toHaveAttribute(
+    'href',
+    NEXT_LOGIN_PATH,
+  );
 
   stage('register-fill');
   await page.getByLabel('Name').fill('Sample Start Proof');

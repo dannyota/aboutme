@@ -17,6 +17,14 @@ export const localeNames: Record<Locale, string> = {
   en: 'English',
 };
 
+// The phone-width header shows these instead of localeNames, to fit the
+// header in one line; the button's aria-label keeps the full name as the
+// accessible name at every width.
+export const localeShortNames: Record<Locale, string> = {
+  vi: 'VI',
+  en: 'EN',
+};
+
 export function isLocale(value: unknown): value is Locale {
   return locales.includes(value as Locale);
 }
