@@ -264,6 +264,8 @@ function cloneIntent(intent: AtomicCommandIntent): AtomicCommandIntent {
       return { ...intent, entryIds: [...intent.entryIds] };
     case 'entryUpsert':
       return { ...intent, entry: cloneReactiveSafe(intent.entry) };
+    case 'photoCrop':
+      return { ...intent, crop: cloneReactiveSafe(intent.crop) };
     case 'personalField':
     case 'entryField':
       return {

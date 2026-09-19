@@ -106,7 +106,7 @@ function onImageLoad(event: Event): void {
   draft.value = defaultCrop(image.value);
   if (props.saveDefault && !savedDefaultFor.has(props.photoKey)) {
     savedDefaultFor.add(props.photoKey);
-    props.actions.edit({ kind: 'photoCrop', crop: draft.value });
+    props.actions.edit({ kind: 'photoCrop', crop: { ...draft.value } });
   }
 }
 
