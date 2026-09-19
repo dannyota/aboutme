@@ -37,6 +37,7 @@ dashboard, and update this table in the same change.
 | Web Analytics (RUM)        | Off; the privacy policy promises no analytics or tracking scripts                                                 |
 | Email Obfuscation          | Off; it rewrote validated public HTML and injected a script                                                       |
 | Rocket Loader, Auto Minify | Off; both would rewrite validated public HTML                                                                     |
+| Automatic HTTPS Rewrites   | Off; it rewrote links inside validated public HTML, and Always Use HTTPS already covers the site                  |
 | Cache rule                 | `not starts_with(http.request.uri.path, "/_nuxt/")` → bypass cache                                                |
 | Origin CA certificate      | ECC, `aboutme.vn` and `www.aboutme.vn`, expires 2041-09-12; stored at `/aboutme/prod/tls/origin-cert`             |
 | Authenticated Origin Pulls | On; zone-level certificate from `tls.sh pull`, active, expires 2036-09-13. Caddy requires it from its first start |
