@@ -1,4 +1,4 @@
-import type { PhotoCrop, Section } from '@aboutme/schema';
+import type { PhotoCrop, Resume, Section } from '@aboutme/schema';
 
 import { cloneReactiveSafe } from './clone';
 import { projectIntent } from './projections';
@@ -161,6 +161,8 @@ export interface CreateResumeIntent {
   readonly sequence: number;
   readonly title: string;
   readonly lng?: string | null;
+  /** A starting document, such as a gallery sample; absent means blank. */
+  readonly document?: Resume;
 }
 
 export function captureCommand(

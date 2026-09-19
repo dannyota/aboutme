@@ -1,4 +1,5 @@
 import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
+import type { Resume } from '@aboutme/schema';
 
 import type { CreateResumeIntent } from '../editor/commands';
 import {
@@ -37,6 +38,7 @@ export interface ResumeListController {
   create(
     title: string,
     lng: string | null | undefined,
+    document?: Resume,
   ): Promise<CreateResumeResult>;
   refreshCreate(intentId: string): Promise<OpaqueCreateOutcome>;
   abandonCreate(intentId: string): void;
@@ -45,6 +47,8 @@ export interface ResumeListController {
 }
 
 export interface ResumeListDeps {
+  /** Where a signed-out visitor goes; a page may add `?next=`. */
+  loginPath?: string;
   api?: ResumeApi;
   authState?: Ref<AuthState>;
   ownerId?: Ref<string | null>;
@@ -54,6 +58,9 @@ export interface ResumeListDeps {
   actionsFor?: (resumeId: string) => ResumeEditorActions;
   refreshAuth?: () => Promise<void>;
 }
+
+/** Resumes an account may hold; the fourth create is refused (409). */
+export const RESUME_CAP = 3;
 
 export function createStatusMessage(result: CreateResumeResult): string | null {
   if (result.kind === 'rejected' && result.code === 'resume_cap_exceeded') {
@@ -147,7 +154,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       return;
     }
     if (state === 'anonymous') {
-      void navigateTo('/login');
+      void navigateTo(deps.loginPath ?? '/login');
       return;
     }
     view.value = { kind: 'unavailable' };
@@ -156,6 +163,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const create = async (
     title: string,
     lng: string | null | undefined,
+    document?: Resume,
   ): Promise<CreateResumeResult> => {
     if (creating !== null) return creating;
     actionMessage.value = null;
@@ -177,6 +185,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       sequence: 0,
       title,
       ...(lng === undefined ? {} : { lng }),
+      ...(document === undefined ? {} : { document }),
     };
     creating = coordinator.createResume(intent).then(async (result) => {
       if (result.kind === 'created') {

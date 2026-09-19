@@ -9,7 +9,7 @@
 <script setup lang="ts">
 import AppShell from './components/app/AppShell.vue';
 import type { Theme } from './composables/useTheme';
-import { indexablePaths } from './i18n/meta';
+import { isIndexablePath } from './i18n/meta';
 
 const route = useRoute();
 const isAppSurface = computed(() => !route.path.startsWith('/_harness'));
@@ -29,8 +29,8 @@ const theme = computed(() => {
 
 const locale = useRouteLocale();
 
-// Only the homepage, Privacy Policy, and Terms are for search engines.
-const indexable = computed(() => indexablePaths.has(route.path));
+// Only the homepage, Privacy Policy, Terms, and gallery are for search engines.
+const indexable = computed(() => isIndexablePath(route.path));
 
 useHead(
   computed(() => ({
