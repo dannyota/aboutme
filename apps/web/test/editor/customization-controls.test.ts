@@ -81,9 +81,9 @@ describe('CustomizationPanel', () => {
     });
 
     expect(
-      wrapper.get('[data-action="page-margin"]').attributes('aria-checked'),
-    )
-      .toBe('false');
+      (wrapper.get('[data-field="spacing.pageMargin"] select').element as
+        HTMLSelectElement).value,
+    ).toBe('normal');
     expect(
       wrapper.get('[data-action="header"]').attributes('aria-checked'),
     )
@@ -106,34 +106,6 @@ describe('CustomizationPanel', () => {
     expect(edit).not.toHaveBeenCalled();
   });
 
-  it('enables and removes page margins through the switch', async () => {
-    const edit = vi.fn();
-    const record = recordFor();
-    const wrapper = mount(CustomizationPanel, {
-      props: { actions: actionsFor(edit), record },
-    });
-
-    const toggle = wrapper.get('[data-action="page-margin"]');
-    expect(toggle.attributes('role')).toBe('switch');
-    expect(toggle.attributes('aria-checked')).toBe('false');
-    await toggle.trigger('click');
-    expect(edit).toHaveBeenLastCalledWith({
-      kind: 'customization',
-      deltas: [
-        { op: 'set', path: 'spacing.pageMargin.x', value: 15 },
-        { op: 'set', path: 'spacing.pageMargin.y', value: 15 },
-      ],
-    });
-    await setCustomization(wrapper, {
-      spacing: { pageMargin: { x: 15, y: 15 } },
-    });
-    await wrapper.get('[data-action="page-margin"]').trigger('click');
-    expect(edit).toHaveBeenLastCalledWith({
-      kind: 'customization',
-      deltas: [{ op: 'unset', path: 'spacing.pageMargin' }],
-    });
-  });
-
   it('labels scalar fields for people, not paths', () => {
     const { wrapper } = mountPanel();
     expect(wrapper.get('[data-field="font.family"] label').text()).toBe(
@@ -149,7 +121,10 @@ describe('CustomizationPanel', () => {
         record: recordFor({ font: { family: 'be-vietnam-pro' } }),
       },
     });
-    expect(wrapper.findAll('[data-customization-group]')).toHaveLength(5);
+    expect(wrapper.findAll('[data-customization-group]')).toHaveLength(6);
+    expect(wrapper.find('[data-customization-group]').attributes(
+      'data-customization-group',
+    )).toBe('Page & PDF');
     expect(wrapper.find('[data-customization-group="Type"]').text())
       .toContain('Type');
     expect(wrapper.find('[data-customization-group="Spacing"]').text())
@@ -418,7 +393,7 @@ describe('CustomizationPanel', () => {
     const wrapper = mount(CustomizationPanel, {
       props: {
         actions: actionsFor(edit),
-        record: recordFor({ spacing: { pageMargin: { x: 15, y: 15 } } }),
+        record: recordFor({ spacing: { pageMargin: { x: 17, y: 13 } } }),
       },
     });
     const gap = wrapper.get('[data-field="spacing.sectionGap"] input');
@@ -429,19 +404,20 @@ describe('CustomizationPanel', () => {
     setControlValue(margin.element, 41);
     await margin.trigger('change');
 
-    for (const path of ['spacing.sectionGap', 'spacing.pageMargin.x']) {
+    for (const [path, message] of [
+      ['spacing.sectionGap', 'Enter a value within the allowed range.'],
+      ['spacing.pageMargin.x', 'Enter a value from 0 to 40 mm.'],
+    ] as const) {
       const input = wrapper.get(`[data-field="${path}"] input`);
       const error = wrapper.get(`[data-error-for="${path}"]`);
       expect(input.attributes('aria-invalid')).toBe('true');
       expect(input.attributes('aria-describedby')).toBe(error.attributes('id'));
-      expect(error.text()).toBe('Enter a value within the allowed range.');
+      expect(error.text()).toBe(message);
     }
     expect(edit).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['page-margin', false],
-    ['page-margin', true],
     ['header', false],
     ['header', true],
     ['unset-accent', true],
@@ -530,23 +506,6 @@ function mountPanel() {
     props: { actions: actionsFor(edit), record: recordFor() },
   });
   return { edit, wrapper };
-}
-
-async function setCustomization(
-  wrapper: ReturnType<typeof mount>,
-  patch: Record<string, unknown>,
-): Promise<void> {
-  const record = wrapper.props('record') as ResumeRecord;
-  const customization = record.current.document.customization;
-  record.current.document.customization = {
-    ...customization,
-    ...patch,
-    spacing: {
-      ...customization.spacing,
-      ...(patch.spacing as object | undefined),
-    },
-  };
-  await wrapper.setProps({ record });
 }
 
 function actionsFor(edit: ReturnType<typeof vi.fn>): ResumeEditorActions {
@@ -644,9 +603,10 @@ function recordWithEveryCustomizationLeaf(): ResumeRecord {
   record.current.document.customization.font.textAlign = 'left';
   record.current.document.customization.colors.accent = '#abcdef';
   record.current.document.customization.colors.surface = '#fedcba';
+  // Unequal margins match no preset, so the per-axis fields show.
   record.current.document.customization.spacing.pageMargin = {
-    x: 15,
-    y: 15,
+    x: 17,
+    y: 13,
   };
   record.current.document.customization.header = {
     align: 'left',
