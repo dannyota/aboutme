@@ -21,6 +21,8 @@ const modernSidebar = (() => {
   return preset;
 })();
 
+export const SIDEBAR_ENTRIES = 13;
+
 const uuid = (flow: 'main' | 'sidebar', index: number): string =>
   `00000000-0000-4000-${flow === 'main' ? '9' : '8'}000-`
   + String(index).padStart(12, '0');
@@ -56,7 +58,8 @@ function sidebarOverflow(): Resume {
   if (skillTemplate === undefined) {
     throw new Error('Vietnamese skill fixture must contain one entry.');
   }
-  skill.entries = Array.from({ length: 10 }, (_, offset) => {
+  // Enough sidebar entries to overflow page one under the print rhythm.
+  skill.entries = Array.from({ length: SIDEBAR_ENTRIES }, (_, offset) => {
     const number = offset + 1;
     const marker = `SIDEBAR-ENTRY-${String(number).padStart(2, '0')}`;
     return {
@@ -66,7 +69,7 @@ function sidebarOverflow(): Resume {
       name: [
         number === 1 ? 'SIDEBAR-START' : '',
         marker,
-        number === 10 ? 'SIDEBAR-END' : '',
+        number === SIDEBAR_ENTRIES ? 'SIDEBAR-END' : '',
       ]
         .filter(Boolean)
         .join(' '),
