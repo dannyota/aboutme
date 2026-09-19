@@ -1,2 +1,15 @@
-# aboutme resumes
-- https://aboutme.example/ada
+# aboutme
+
+> aboutme is a free, open-source resume builder. A resume is private until
+> you publish it; this file lists only the resumes their owners made discoverable.
+
+## Site
+
+- [Home](https://aboutme.example/)
+- [Privacy policy](https://aboutme.example/privacy)
+- [Terms of service](https://aboutme.example/terms)
+- [Source code](https://github.com/dannyota/aboutme)
+
+## Resumes
+
+- [ada](https://aboutme.example/ada.md)

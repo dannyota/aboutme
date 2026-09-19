@@ -107,3 +107,16 @@ func writeHeader(w http.ResponseWriter, header http.Header) {
 		}
 	}
 }
+
+// withDiscoveryRobots adds X-Robots-Tag: noindex, noarchive when the resume's
+// discovery is off. Handlers apply it per request from the current snapshot and
+// never store it in the cache, so toggling discovery at the same revision
+// cannot serve a stale header.
+func withDiscoveryRobots(response SelectedResponse, discoverable bool) SelectedResponse {
+	if discoverable {
+		return response
+	}
+	response.Header = response.Header.Clone()
+	response.Header.Set("X-Robots-Tag", "noindex, noarchive")
+	return response
+}
