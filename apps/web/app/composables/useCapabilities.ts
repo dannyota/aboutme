@@ -52,7 +52,8 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const resolved = computed(
     () => status.value === 'success'
       || status.value === 'error'
-      || error.value !== null,
+      // Nuxt 4 leaves `error` undefined, not null, until a request fails.
+      || (error.value ?? null) !== null,
   );
   return { providerLogin, loginProviders, agentAccess, resolved };
 }

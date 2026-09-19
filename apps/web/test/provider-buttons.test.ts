@@ -168,6 +168,36 @@ describe('provider buttons', () => {
   });
 });
 
+describe('provider space before the capabilities read', () => {
+  it('holds one button of space with no link until it resolves', async () => {
+    let release!: () => void;
+    registerEndpoint('/api/v1/capabilities', () => new Promise((resolve) => {
+      release = () => resolve({
+        data: {
+          providerLogin: true,
+          agentAccess: false,
+          providers: ['google'],
+        },
+      });
+    }));
+    for (const page of [LoginPage, RegisterPage]) {
+      clearNuxtData();
+      const wrapper = await mountSuspended(page);
+      const placeholder = wrapper.get('[data-testid="provider-placeholder"]');
+      expect(placeholder.attributes('aria-hidden')).toBe('true');
+      expect(placeholder.classes()).toContain('invisible');
+      expect(wrapper.find('a[data-provider]').exists()).toBe(false);
+
+      release();
+      await flushPromises();
+      await flushPromises();
+      expect(wrapper.find('[data-testid="provider-placeholder"]').exists())
+        .toBe(false);
+      expect(wrapper.find('a[data-provider="google"]').exists()).toBe(true);
+    }
+  });
+});
+
 describe('missing verification email', () => {
   it('offers spam advice and Google after registration', async () => {
     registerCapabilities({ providerLogin: true, agentAccess: false });

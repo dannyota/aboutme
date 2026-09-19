@@ -16,6 +16,7 @@ import type { AtomicEditorCommand } from '../../../editor/commands';
 import type { AtomicConflictRecord } from '../../../editor/conflicts';
 import EntryOrderControls from './EntryOrderControls.vue';
 import SectionControls from './SectionControls.vue';
+import { defaultSectionIcons, defaultSectionNames } from '../sectionTypes';
 
 type Column = 'main' | 'sidebar';
 type SectionAction = {
@@ -52,11 +53,17 @@ type DeleteTarget = SectionAction & {
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
 }>();
+const emit = defineEmits<{ openSection: [key: string] }>();
 
 const newColumn = ref<Column>('main');
-const newDisplayName = ref('');
-const newIconKey = ref('');
 const newSectionType = ref<Section['sectionType']>('work');
+// The name follows the type until the person types their own.
+const newDisplayName = ref(defaultSectionNames[newSectionType.value]);
+watch(newSectionType, (next, previous) => {
+  if (newDisplayName.value === defaultSectionNames[previous]) {
+    newDisplayName.value = defaultSectionNames[next];
+  }
+});
 const pendingDelete = ref<DeleteTarget | null>(null);
 const root = ref<{ $el?: HTMLElement } | null>(null);
 const status = ref('');
@@ -133,6 +140,7 @@ function createSection(): void {
     status.value = 'This section already exists. Choose another section type.';
     return;
   }
+  const icon = defaultSectionIcons[newSectionType.value];
   const result = props.actions.edit({
     kind: 'structure',
     commands: [
@@ -142,16 +150,16 @@ function createSection(): void {
         sectionType: newSectionType.value,
         column: newColumn.value,
         index: columnKeys(newColumn.value).length,
-        ...(newDisplayName.value === ''
+        ...(newDisplayName.value.trim() === ''
           ? {}
-          : { displayName: newDisplayName.value }),
-        ...(newIconKey.value === '' ? {} : { iconKey: newIconKey.value }),
+          : { displayName: newDisplayName.value.trim() }),
+        ...(icon === null ? {} : { iconKey: icon }),
       },
     ],
   });
   if (result.kind !== 'enqueued') return;
-  newDisplayName.value = '';
-  newIconKey.value = '';
+  newDisplayName.value = defaultSectionNames[newSectionType.value];
+  emit('openSection', key);
 }
 
 function move(action: PlacementAction): void {
@@ -458,16 +466,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
             <Input
               :id="id"
               v-model="newDisplayName"
-            />
-          </FormField>
-          <FormField
-            v-slot="{ id }"
-            label="Icon key"
-            name="iconKey"
-          >
-            <Input
-              :id="id"
-              v-model="newIconKey"
             />
           </FormField>
           <Button

@@ -35,7 +35,7 @@ function updateDescription(value: string): void {
   />
   <EntryLinkField
     data-entry-field="link"
-    label="Link"
+    label="Project link"
     :model-value="entry.link"
     @intent="emit('field', { path: 'link', intent: $event })"
   />

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Section } from '@aboutme/schema';
 import IconButton from '@/components/app/IconButton.vue';
+import { entryLabel } from '../sectionTypes';
 
 const props = defineProps<{
   readonly disabled: boolean;
@@ -45,7 +46,7 @@ function move(entryId: string, direction: -1 | 1): void {
         v-for="(entry, index) in entries"
         :key="entry.id"
       >
-        <span class="text-xs text-muted-foreground">{{ entry.id }}</span>
+        <span class="text-sm">{{ entryLabel(entry, index) }}</span>
         <IconButton
           label="Move entry up"
           data-action="entry-up"

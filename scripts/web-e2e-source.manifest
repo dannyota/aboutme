@@ -86,6 +86,7 @@ apps/web/app/components/editor/forms/entries/ProfileEntryFields.vue
 apps/web/app/components/editor/forms/entries/ProjectEntryFields.vue
 apps/web/app/components/editor/forms/entries/SkillEntryFields.vue
 apps/web/app/components/editor/forms/entries/WorkEntryFields.vue
+apps/web/app/components/editor/forms/entries/levels.ts
 apps/web/app/components/editor/forms/fieldIntent.ts
 apps/web/app/components/editor/list/CreateResumeDialog.vue
 apps/web/app/components/editor/list/DeleteResumeDialog.vue
@@ -95,8 +96,10 @@ apps/web/app/components/editor/photo/CropEditor.vue
 apps/web/app/components/editor/photo/PhotoPanel.vue
 apps/web/app/components/editor/previewProjection.ts
 apps/web/app/components/editor/richtext/RichTextEditor.vue
+apps/web/app/components/editor/richtext/lists.ts
 apps/web/app/components/editor/richtext/schema.ts
 apps/web/app/components/editor/richtext/serialize.ts
+apps/web/app/components/editor/sectionTypes.ts
 apps/web/app/components/editor/structure/EntryOrderControls.vue
 apps/web/app/components/editor/structure/SectionControls.vue
 apps/web/app/components/editor/structure/StructurePanel.vue
@@ -280,6 +283,7 @@ apps/web/app/composables/privacySettings.ts
 apps/web/app/composables/providerAuthorization.ts
 apps/web/app/composables/useAuth.ts
 apps/web/app/composables/useCapabilities.ts
+apps/web/app/composables/useFieldDrafts.ts
 apps/web/app/composables/useLocale.ts
 apps/web/app/composables/useNow.ts
 apps/web/app/composables/useOAuthConsent.ts

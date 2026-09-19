@@ -649,13 +649,16 @@ describe('useResumeList', () => {
     });
     expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(3);
     expect(wrapper.get('[role="status"]').text()).toBe('No resumes yet.');
-    expect(
-      wrapper.get('[data-action="create-resume-slot"]')
-        .attributes('data-slot'),
-    ).toBe('button');
     expect(wrapper.text()).toContain(
-      'Create your first resume. You can keep up to three.',
+      'Use Create resume to start one. You can keep up to three.',
     );
+    // The header button is the only create control.
+    expect(wrapper.findAll('[data-testid^="resume-slot-"] button')).toEqual(
+      [],
+    );
+    expect(
+      wrapper.findAll('button').filter((b) => b.text() === 'Create resume'),
+    ).toHaveLength(1);
     wrapper.unmount();
   });
 

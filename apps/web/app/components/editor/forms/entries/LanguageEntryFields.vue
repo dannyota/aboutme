@@ -4,10 +4,9 @@ import type { LanguageEntry } from '@aboutme/schema';
 import type { FieldIntent } from '../fieldIntent';
 import TextField from '@/components/app/TextField.vue';
 import SelectField from '@/components/app/SelectField.vue';
+import { languageLevelOptions } from './levels';
 
-const levelOptions = [{ value: '', label: 'Not set' }, ...Array.from(
-  { length: 6 }, (_, value) => ({ value, label: String(value) }),
-)] as const;
+const levelOptions = languageLevelOptions;
 
 defineProps<{ readonly entry: LanguageEntry }>();
 const emit = defineEmits<{

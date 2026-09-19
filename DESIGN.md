@@ -69,11 +69,11 @@ The theme preference is persisted in the `aboutme-theme` cookie.
 - The 20 px mark is a red circle with a white check and carries the public link
   beside it.
 
-`StateMark` exposes five states: Saved (pencil tick), Saving…, Save failed,
-Draft, and Public (the small seal with the link). Public state requires a link.
-The editor top bar shows the small public mark beside the resume title when the
-resume is public. The preview and successful publish response show the large
-stamp.
+`StateMark` exposes six states: Saved (pencil tick), Unsaved (an edit held or
+queued but not yet sent), Saving…, Save failed, Draft, and Public (the small
+seal with the link). Public state requires a link. The editor top bar shows the
+small public mark beside the resume title when the resume is public. The preview
+and successful publish response show the large stamp.
 
 ## Landing
 
