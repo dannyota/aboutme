@@ -370,6 +370,82 @@ describe('useResumeList', () => {
     ]);
   });
 
+  it('shows the new title on the card right after Save', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const id = accepted.metadata.id;
+    const store = useResumeStore();
+    let finishSave!: () => void;
+    const coordinator = {
+      flush: vi.fn(() => new Promise<void>((resolve) => {
+        finishSave = () => {
+          store.adoptCompleteRead(id, {
+            ...accepted,
+            metadata: {
+              ...accepted.metadata,
+              title: 'New title',
+              updatedAt: '2026-09-19T10:00:00Z',
+            },
+          });
+          resolve();
+        };
+      })),
+    } as unknown as ResumeMutationCoordinator;
+    const list = useResumeList({
+      api: {
+        list: vi.fn().mockResolvedValue({
+          kind: 'ready',
+          items: [summary({ id, title: 'Fixture' })],
+        }),
+        read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
+      } as never,
+      store,
+      coordinator,
+      actionsFor: () => ({
+        edit: vi.fn(() => ({ kind: 'enqueued' })),
+      }) as never,
+      authState: computed(() => 'authenticated') as never,
+    });
+    await list.settled();
+
+    const renaming = list.rename(id, 'New title');
+    await vi.waitFor(() =>
+      expect(list.items.value[0]?.title).toBe('New title'));
+
+    finishSave();
+    await renaming;
+    expect(list.items.value[0]).toMatchObject({
+      title: 'New title',
+      updatedAt: '2026-09-19T10:00:00Z',
+    });
+  });
+
+  it('shows the saved title again when the rename does not save', async () => {
+    setActivePinia(createPinia());
+    const accepted = acceptedFixture();
+    const id = accepted.metadata.id;
+    const list = useResumeList({
+      api: {
+        list: vi.fn().mockResolvedValue({
+          kind: 'ready',
+          items: [summary({ id, title: 'Fixture' })],
+        }),
+        read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
+      } as never,
+      store: useResumeStore(),
+      coordinator: { flush: vi.fn(async () => {}) } as never,
+      actionsFor: () => ({
+        edit: vi.fn(() => ({ kind: 'enqueued' })),
+      }) as never,
+      authState: computed(() => 'authenticated') as never,
+    });
+    await list.settled();
+
+    await list.rename(id, 'New title');
+
+    expect(list.items.value[0]?.title).toBe('Fixture');
+  });
+
   it('adopts a fresh read without discarding queued local work', async () => {
     setActivePinia(createPinia());
     const accepted = acceptedFixture();
