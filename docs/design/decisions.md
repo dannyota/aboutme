@@ -1,7 +1,7 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. Records 0001–0038
+supersession record; these pages state the resulting design. Records 0001–0040
 are accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                    |
@@ -45,6 +45,7 @@ are accepted.
 | [0037](../adr/0037-single-host-production-without-hosted-uat.md)     | Accepted | First release deploys straight to single-host production behind Cloudflare; no hosted UAT until about 500 users       |
 | [0038](../adr/0038-single-baseline-and-plain-migrator.md)            | Accepted | One baseline migration with explicit app grants; plain goose migrator; replica runtime removed until a second replica |
 | [0039](../adr/0039-per-provider-login-enablement.md)                 | Accepted | `PROVIDER_LOGIN_ENABLED` enables providers one at a time; production can enable only Google                           |
+| [0040](../adr/0040-contact-labels-beside-icons.md)                   | Accepted | Icons replace default contact labels; linked addresses display without scheme or trailing slash                       |
 
 ## Remaining gates
 

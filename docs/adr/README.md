@@ -9,10 +9,10 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decisions are
-[ADR 0038](0038-single-baseline-and-plain-migrator.md), which sets one baseline
-migration and a plain goose migrator, and
 [ADR 0039](0039-per-provider-login-enablement.md), which enables provider login
-one provider at a time.
+one provider at a time, and [ADR 0040](0040-contact-labels-beside-icons.md),
+which lets header icons replace default contact labels and shows linked
+addresses without their scheme.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

@@ -182,6 +182,11 @@ renders as text. The underline is renderer-fixed on every inline link
 and no `tel:` links from values the schema defines no format for (ADR 0013).
 `label`, when present and non-empty, replaces the type's default label.
 
+When `header.iconStyle` shows icons, a typed detail omits its default label; a
+non-empty user `label` and every `custom` detail's label still render. An anchor
+shows its URL without `https://` and without one trailing slash, and its `href`
+keeps the full value (ADR 0040).
+
 ### 5.2 Entry anatomy
 
 Every entry renders into at most four slots. A template varies their type,
