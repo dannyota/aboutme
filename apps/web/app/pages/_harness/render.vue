@@ -16,6 +16,7 @@ import {
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
+import { withWrappingBody } from './justify-fixture';
 import { FIXED_PHOTO_DATA_URL, FIXED_PHOTO_SHA256 } from './photo-fixture';
 import { PRINT_FIXTURES, type PrintFixtureId } from './print-fixtures';
 
@@ -108,11 +109,12 @@ if (isCorpus) {
     resolvedDocument.content,
   );
   // Presets never set text alignment (ADR 0041), so a justify cell asks
-  // for it after the template applies.
+  // for it after the template applies, with body text that wraps.
   const requestedAlign = singleton('align');
   if (requestedAlign !== undefined) {
     if (requestedAlign !== 'justify') badQuery();
     resolvedDocument.customization.font.textAlign = 'justify';
+    withWrappingBody(resolvedDocument);
   }
   const requestedFont = singleton('font');
   if (requestedFont !== undefined) {
