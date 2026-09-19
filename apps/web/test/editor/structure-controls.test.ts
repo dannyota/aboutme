@@ -44,6 +44,37 @@ describe('StructurePanel', () => {
   });
 });
 
+describe('moving a section to the other column', () => {
+  it('appends it to the end of that column', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(StructurePanel, {
+      props: { actions: actionsFor(edit) },
+    });
+
+    await wrapper
+      .get('[data-section="profile"] [data-action="move-main"]')
+      .trigger('click');
+    await wrapper
+      .get('[data-section="skill"] [data-action="move-sidebar"]')
+      .trigger('click');
+
+    expect(edit.mock.calls.map(([intent]) => intent)).toEqual([
+      {
+        kind: 'structure',
+        commands: [
+          { op: 'moveSection', key: 'profile', column: 'main', index: 2 },
+        ],
+      },
+      {
+        kind: 'structure',
+        commands: [
+          { op: 'moveSection', key: 'skill', column: 'sidebar', index: 1 },
+        ],
+      },
+    ]);
+  });
+});
+
 describe('structure intent boundaries', () => {
   it('uses structure commands for custom and built-in sections', async () => {
     const edit = vi.fn();
@@ -741,7 +772,7 @@ describe('structure intent boundaries', () => {
       {
         kind: 'structure',
         commands: [
-          { op: 'moveSection', key: 'profile', column: 'main', index: 0 },
+          { op: 'moveSection', key: 'profile', column: 'main', index: 2 },
         ],
       },
     ]);

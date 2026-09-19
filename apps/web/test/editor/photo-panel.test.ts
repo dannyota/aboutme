@@ -84,6 +84,17 @@ describe('private photo controls', () => {
     },
   );
 
+  it('keeps the hidden file input one pixel wide', () => {
+    // A full-width absolutely placed input pushed the editor sideways.
+    const wrapper = mount(PhotoPanel, {
+      props: { record: photoRecord(), actions: actionsFor(vi.fn()) },
+    });
+    const classes = wrapper.get('input[type="file"]').classes();
+    expect(classes).toEqual(expect.arrayContaining(['sr-only', 'size-px']));
+    expect(classes).not.toContain('w-full');
+    expect(classes).not.toContain('px-3');
+  });
+
   it('requires current-photo confirmation before deletion', async () => {
     const edit = vi.fn();
     const wrapper = mount(PhotoPanel, {
@@ -215,7 +226,7 @@ describe('private photo controls', () => {
     ).toBeUndefined();
   });
 
-  it('updates the optimistic rectangle from pointer and keyboard crop input',
+  it('moves the crop square by dragging, clicking, and the keyboard',
     async () => {
       const edit = vi.fn();
       const wrapper = mount(CropEditor, {
@@ -226,30 +237,136 @@ describe('private photo controls', () => {
           actions: actionsFor(edit),
         },
       });
-      const target = wrapper.get('[data-crop-stage]');
-      const rectangle = wrapper.get('[data-crop-rectangle]');
-      expect(rectangle.classes()).toEqual(
-        expect.arrayContaining(['border-primary', 'bg-primary/10']),
-      );
-      expect(rectangle.classes().join(' ')).not.toContain('positive');
-      Object.defineProperty(target.element, 'getBoundingClientRect', {
+      const stage = wrapper.get('[data-crop-stage]');
+      const square = wrapper.get('[data-crop-rectangle]');
+      Object.defineProperty(stage.element, 'getBoundingClientRect', {
         value: () => ({ left: 0, top: 0, width: 100, height: 100 }),
       });
 
-      await target.trigger('pointerdown', { clientX: 10, clientY: 20 });
-      expect(rectangle.attributes('style')).toContain('left: 10%;');
-      await target.trigger('pointermove', { clientX: 20, clientY: 20 });
-      expect(rectangle.attributes('style')).toContain('left: 20%;');
-      await target.trigger('keydown', { key: 'ArrowRight' });
-      expect(rectangle.attributes('style')).toContain('left: 25%;');
+      // Dragging from inside the square moves it by the pointer's travel.
+      await stage.trigger('pointerdown', { clientX: 10, clientY: 20 });
+      await stage.trigger('pointermove', { clientX: 20, clientY: 20 });
+      await stage.trigger('pointerup');
+      expect(square.attributes('style')).toContain('left: 10%;');
+      // The arrow keys move it by 2%.
+      await stage.trigger('keydown', { key: 'ArrowRight' });
+      expect(square.attributes('style')).toContain('left: 12%;');
       await wrapper.get('form').trigger('submit');
-
-      expect(edit).toHaveBeenCalledWith({
+      expect(edit).toHaveBeenLastCalledWith({
         kind: 'photoCrop',
-        crop: { x: 0.25, y: 0.2, width: 0.5, height: 0.5 },
+        crop: { x: 0.12, y: 0, width: 0.5, height: 0.5 },
       });
+
+      // Pressing outside the square centres it there, inside the photo.
+      await stage.trigger('pointerdown', { clientX: 90, clientY: 90 });
+      await stage.trigger('pointerup');
+      expect(square.attributes('style')).toContain('left: 50%;');
+      expect(square.attributes('style')).toContain('top: 50%;');
     },
   );
+
+  it('saves the default square once for a photo uploaded here', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(CropEditor, {
+      props: {
+        photoKey: 'photo-new',
+        photoUrl: 'data:image/png;base64,new',
+        actions: actionsFor(edit),
+        saveDefault: true,
+      },
+    });
+    const img = wrapper.get('[data-crop-stage] img');
+    Object.defineProperty(img.element, 'naturalWidth', { value: 600 });
+    Object.defineProperty(img.element, 'naturalHeight', { value: 1200 });
+    await img.trigger('load');
+    await img.trigger('load');
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    const crop = edit.mock.calls[0]![0].crop;
+    expect(crop).toMatchObject({ x: 0, width: 1, height: 0.5 });
+    expect(crop.y + crop.height / 2).toBeCloseTo(1 / 3, 5);
+    expect(wrapper.get('[data-crop-preview] img').attributes('style'))
+      .toContain('height: 200%;');
+  });
+
+  it('only proposes the default for a photo that was already there',
+    async () => {
+      const edit = vi.fn();
+      const wrapper = mount(CropEditor, {
+        props: {
+          photoKey: 'photo-old',
+          photoUrl: 'data:image/png;base64,old',
+          actions: actionsFor(edit),
+        },
+      });
+      const img = wrapper.get('[data-crop-stage] img');
+      Object.defineProperty(img.element, 'naturalWidth', { value: 800 });
+      Object.defineProperty(img.element, 'naturalHeight', { value: 800 });
+      await img.trigger('load');
+      expect(edit).not.toHaveBeenCalled();
+
+      await wrapper.get('[data-crop-stage]').trigger('keydown', { key: '+' });
+      await wrapper.get('form').trigger('submit');
+      expect(edit).toHaveBeenCalledWith({
+        kind: 'photoCrop',
+        crop: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+      });
+    });
+
+  it('asks for the default crop only on the photo uploaded here', async () => {
+    const edit = vi.fn(() => ({ kind: 'enqueued' }));
+    const ready = (key: string) => ({
+      kind: 'ready' as const,
+      binding: key,
+      dataUrl: `data:image/png;base64,${key}`,
+    });
+    const wrapper = mount(PhotoPanel, {
+      props: {
+        record: photoRecordForKey('photo-a', { photoRead: ready('photo-a') }),
+        actions: actionsFor(edit),
+      },
+    });
+    expect(wrapper.getComponent(CropEditor).props('saveDefault')).toBe(false);
+
+    await selectFile(
+      wrapper.get('input[type="file"]'),
+      new File(['x'], 'new.png', { type: 'image/png' }),
+    );
+    await wrapper.setProps({
+      record: photoRecordForKey('photo-b', { photoRead: ready('photo-b') }),
+    });
+
+    expect(wrapper.getComponent(CropEditor).props('saveDefault')).toBe(true);
+  });
+
+  it('keeps exact values as a checked fallback', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(CropEditor, {
+      props: {
+        photoKey: 'photo-a',
+        photoUrl: 'data:image/png;base64,accepted',
+        crop: { x: 0.2, y: 0.06, width: 0.6, height: 0.48 },
+        actions: actionsFor(edit),
+      },
+    });
+    await wrapper.get('form').trigger('submit');
+    expect(edit).not.toHaveBeenCalled();
+
+    await wrapper.get('input[name="width"]').setValue('0.9');
+    await wrapper.get('input[name="width"]').trigger('change');
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'Enter a crop within the image bounds.',
+    );
+    await wrapper.get('form').trigger('submit');
+    expect(edit).not.toHaveBeenCalled();
+
+    await wrapper.get('input[name="width"]').setValue('0.5');
+    await wrapper.get('form').trigger('submit');
+    expect(edit).toHaveBeenCalledWith({
+      kind: 'photoCrop',
+      crop: { x: 0.2, y: 0.06, width: 0.5, height: 0.48 },
+    });
+  });
 
   it('reopens a changed-photo crop conflict without offering generic override',
     async () => {

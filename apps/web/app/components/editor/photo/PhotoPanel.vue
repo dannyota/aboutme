@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, useId } from 'vue';
+import { computed, ref, useId, watch } from 'vue';
 import { ImageOff, Upload } from '@lucide/vue';
 import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 import InspectorPanel from '@/components/editor/InspectorPanel.vue';
@@ -28,6 +28,16 @@ const photo = computed(
 );
 const read = computed(() => props.record.photoRead);
 const opaque = computed(() => props.record.opaquePhotoOutcome);
+// A photo uploaded here starts on the default crop; one that was already on
+// the resume keeps what it has until the person saves a crop.
+const awaitingUpload = ref(false);
+const uploadedKey = ref<string | null>(null);
+watch(() => photo.value?.key, (key, previous) => {
+  if (awaitingUpload.value && key !== undefined && key !== previous) {
+    uploadedKey.value = key;
+    awaitingUpload.value = false;
+  }
+});
 const cropConflict = computed(() =>
   props.record.conflicts.find((value) => isChangedCropConflict(value)),
 );
@@ -49,7 +59,8 @@ function upload(event: Event): void {
     opaqueReplacement.value = file;
     return;
   }
-  props.actions.edit({ kind: 'photoUpload', file });
+  const result = props.actions.edit({ kind: 'photoUpload', file });
+  if (result.kind === 'enqueued') awaitingUpload.value = true;
 }
 
 function requestDelete(): void {
@@ -270,7 +281,7 @@ function isPhotoCommand(kind: string): boolean {
         <Input
           :id="uploadId"
           accept="image/jpeg,image/png"
-          class="sr-only"
+          class="sr-only size-px p-0"
           data-action="upload-photo-input"
           type="file"
           @change="upload"
@@ -315,7 +326,7 @@ function isPhotoCommand(kind: string): boolean {
         <Input
           :id="uploadId"
           accept="image/jpeg,image/png"
-          class="sr-only"
+          class="sr-only size-px p-0"
           data-action="upload-photo-input"
           type="file"
           @change="upload"
@@ -349,6 +360,7 @@ function isPhotoCommand(kind: string): boolean {
             :crop="photo.crop"
             :photo-key="photo.key"
             :photo-url="read.dataUrl"
+            :save-default="photo.key === uploadedKey"
           />
         </Card>
       </template>
