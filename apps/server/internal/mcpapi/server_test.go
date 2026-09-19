@@ -854,3 +854,51 @@ func TestServer_ToolCallRateLimitReturnsClosedHTTPError(t *testing.T) {
 		}
 	}
 }
+
+// The icon_key description lists the section icons the renderer draws, so an
+// agent picks one that renders (docs/design/templates/contract.md §5.3).
+func TestServer_UpdateSectionDescribesDrawableIconKeys(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read resumes:write")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	session := connectMCPClient(t, httpServer.URL, raw, "")
+	listed, err := session.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	for _, tool := range listed.Tools {
+		if tool.Name != "update_section" {
+			continue
+		}
+		schemaJSON, marshalErr := json.Marshal(tool.InputSchema)
+		if marshalErr != nil {
+			t.Fatal(marshalErr)
+		}
+		var schema struct {
+			Properties map[string]struct {
+				Description string `json:"description"`
+			} `json:"properties"`
+		}
+		if unmarshalErr := json.Unmarshal(schemaJSON, &schema); unmarshalErr != nil {
+			t.Fatal(unmarshalErr)
+		}
+		description := schema.Properties["icon_key"].Description
+		for _, want := range []string{"award", "bookmark", "wrench", "map-pin", "section type's icon"} {
+			if !strings.Contains(description, want) {
+				t.Errorf("icon_key description lacks %q: %s", want, description)
+			}
+		}
+		for _, contactOnly := range []string{"github", "linkedin", "twitter"} {
+			if strings.Contains(description, contactOnly) {
+				t.Errorf("icon_key description offers contact-only icon %q", contactOnly)
+			}
+		}
+		return
+	}
+	t.Fatal("update_section tool not listed")
+}
