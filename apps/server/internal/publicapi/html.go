@@ -174,7 +174,7 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 		return "doctype"
 	}
 	var title, canonical, main *html.Node
-	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, charsetMeta, viewportMeta int
+	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, charsetMeta, viewportMeta int
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
 	stylesheets := map[string]bool{}
@@ -271,6 +271,13 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 						return
 					}
 					skipLinks++
+				} else if href == publicPDFPath(resume.Slug) {
+					// The page's own PDF, once, only while download is enabled.
+					if !resume.DownloadEnabled || downloadLinks != 0 {
+						reject("download_link")
+						return
+					}
+					downloadLinks++
 				} else if !allowedPublicAnchor(href) {
 					reject("anchor_scheme")
 					return
@@ -387,6 +394,10 @@ func versionedAsset(url, path string) bool {
 		}
 	}
 	return true
+}
+
+func publicPDFPath(slug string) string {
+	return "/api/v1/public/resumes/" + slug + "/pdf"
 }
 
 func allowedPublicAnchor(href string) bool {

@@ -194,6 +194,28 @@ test('proves a published resume hydrates in a real browser', async ({
       .textContent();
     expect(JSON.parse(structured ?? '{}').mainEntity?.sameAs).toEqual([CUSTOM_LINK]);
     await expect(publicPage.locator(`a[href="${CUSTOM_LINK}"]`)).toHaveText('orcid.example/0000-0001');
+
+    // Download is enabled, so the page links its own PDF, named after the slug.
+    const download = publicPage.locator('a.public-download');
+    await expect(download).toHaveCount(1);
+    await expect(download).toHaveAttribute('href', `/api/v1/public/resumes/${publishedSlug}/pdf`);
+    await expect(download).toHaveText('Download PDF');
+    const pdf = await publicPage.evaluate(async (href) => {
+      const response = await fetch(href, { cache: 'no-store' });
+      return {
+        status: response.status,
+        type: response.headers.get('content-type'),
+        disposition: response.headers.get('content-disposition'),
+      };
+    }, `/api/v1/public/resumes/${publishedSlug}/pdf`);
+    expect(pdf).toEqual({
+      status: 200,
+      type: 'application/pdf',
+      disposition: `attachment; filename="${publishedSlug}.pdf"`,
+    });
+    await publicPage.emulateMedia({ media: 'print' });
+    await expect(download).toBeHidden();
+    await publicPage.emulateMedia({ media: 'screen' });
     expect(response?.headers()['content-security-policy']).toContain("default-src 'none'");
 
     // SSR markup is present before hydration runs.

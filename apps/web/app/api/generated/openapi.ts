@@ -2513,7 +2513,7 @@ export interface components {
                 "Cache-Control": components["headers"]["PublicCacheControl"];
                 "Content-Length": components["headers"]["RepresentationContentLength"];
                 ETag: components["headers"]["PublicBodyETag"];
-                "Content-Disposition": components["headers"]["ResumePDFAttachment"];
+                "Content-Disposition": components["headers"]["PublicPDFAttachment"];
                 [name: string]: unknown;
             };
             content: {
@@ -2523,7 +2523,7 @@ export interface components {
         /** @description The strong tag matches the selected PDF bytes. No body or Content-Length. */
         PublicPDFNotModified: {
             headers: {
-                "Content-Disposition": components["headers"]["ResumePDFAttachment"];
+                "Content-Disposition": components["headers"]["PublicPDFAttachment"];
                 "Cache-Control": components["headers"]["PublicCacheControl"];
                 /**
                  * @description Media type of the selected GET representation.
@@ -3288,6 +3288,11 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /**
+         * @description Public PDF download filename: the resume's slug, which is ASCII lowercase letters, digits, and single hyphens.
+         * @example attachment; filename="ada-lovelace.pdf"
+         */
+        PublicPDFAttachment: string;
         /**
          * @description Fixed resume PDF download filename.
          * @example attachment; filename="resume.pdf"

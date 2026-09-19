@@ -3891,7 +3891,7 @@ components:
         ETag:
           $ref: "#/components/headers/PublicBodyETag"
         Content-Disposition:
-          $ref: "#/components/headers/ResumePDFAttachment"
+          $ref: "#/components/headers/PublicPDFAttachment"
       content:
         application/pdf:
           schema:
@@ -3901,7 +3901,7 @@ components:
       description: The strong tag matches the selected PDF bytes. No body or Content-Length.
       headers:
         Content-Disposition:
-          $ref: "#/components/headers/ResumePDFAttachment"
+          $ref: "#/components/headers/PublicPDFAttachment"
         Cache-Control:
           $ref: "#/components/headers/PublicCacheControl"
         Content-Type:
@@ -4440,6 +4440,14 @@ components:
               code: authentication_unavailable
               message: authentication is temporarily unavailable
   headers:
+    PublicPDFAttachment:
+      description: >-
+        Public PDF download filename: the resume's slug, which is ASCII
+        lowercase letters, digits, and single hyphens.
+      schema:
+        type: string
+        pattern: ^attachment; filename="[a-z0-9]+(-[a-z0-9]+)*\.pdf"$
+      example: attachment; filename="ada-lovelace.pdf"
     ResumePDFAttachment:
       description: Fixed resume PDF download filename.
       schema:

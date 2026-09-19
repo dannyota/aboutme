@@ -157,6 +157,49 @@ describe('public Vue worker document', () => {
   });
 });
 
+describe('public page measure and PDF download', () => {
+  const downloadLink = (html: string) =>
+    /<a class="public-download" href="([^"]*)">([^<]*)<\/a>/u.exec(html);
+
+  it('links the public PDF only while download is enabled', async () => {
+    const hidden = await renderPublicResume(request(), VERSIONS);
+    expect(hidden).not.toContain('public-download');
+    expect(hidden).not.toContain('/pdf');
+
+    const value = request();
+    value.publicResume.downloadEnabled = true;
+    const html = await renderPublicResume(value, VERSIONS);
+    const link = downloadLink(html);
+    expect(link?.[1]).toBe('/api/v1/public/resumes/ada1/pdf');
+    expect(link?.[2]).toBe('Download PDF');
+    expect(html.match(/public-download/gu)).toHaveLength(1);
+  });
+
+  it('labels the link in the resume language', async () => {
+    for (const [lng, label] of [
+      ['vi', 'Tải PDF'],
+      ['vi-VN', 'Tải PDF'],
+      ['en-US', 'Download PDF'],
+      ['und', 'Download PDF'],
+    ] as const) {
+      const value = request();
+      value.publicResume.downloadEnabled = true;
+      value.publicResume.lng = lng;
+      const html = await renderPublicResume(value, VERSIONS);
+      expect(downloadLink(html)?.[2], lng).toBe(label);
+    }
+  });
+
+  it('marks the column count for the public measure', async () => {
+    const one = await renderPublicResume(request(), VERSIONS);
+    expect(one).toContain('<div class="public-resume-page" data-columns="1"');
+    const value = request();
+    value.publicResume.document.customization.layout.columns = 2;
+    const two = await renderPublicResume(value, VERSIONS);
+    expect(two).toContain('<div class="public-resume-page" data-columns="2"');
+  });
+});
+
 describe('JSON-LD sameAs parity with the Go validator', () => {
   // The public HTML validator requires this script to byte-equal Go's
   // publicformat.JSONLD output. Both suites read the same corpus.

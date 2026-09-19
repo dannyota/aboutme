@@ -127,3 +127,47 @@ func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
 		})
 	}
 }
+
+// The public page may link its own PDF, exactly once, only while download is
+// enabled. Every other relative href stays rejected.
+func TestPublicHTMLAllowsOnlyTheOwnPDFDownloadLink(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", DownloadEnabled: true,
+		Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
+	jsonLD, err := publicformat.JSONLD(resume, origin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valid := validHTML("Ada", "https://aboutme.example/ada", "1", "")
+	link := `<a class="public-download" href="/api/v1/public/resumes/ada/pdf">Download PDF</a>`
+	withLink := strings.Replace(valid, `data-revision="1">`, `data-revision="1">`+link, 1)
+	if withLink == valid {
+		t.Fatal("fixture replacement did not apply")
+	}
+	if rule := publicHTMLRejection([]byte(withLink), resume, origin, jsonLD, false); rule != "" {
+		t.Fatalf("own PDF link rejected by %q", rule)
+	}
+
+	disabled := resume
+	disabled.DownloadEnabled = false
+	if rule := publicHTMLRejection([]byte(withLink), disabled, origin, jsonLD, false); rule != "download_link" {
+		t.Fatalf("link with download disabled: rule = %q, want download_link", rule)
+	}
+	twice := strings.Replace(withLink, link, link+link, 1)
+	if rule := publicHTMLRejection([]byte(twice), resume, origin, jsonLD, false); rule != "download_link" {
+		t.Fatalf("two links: rule = %q, want download_link", rule)
+	}
+	for _, href := range []string{
+		"/api/v1/public/resumes/bob/pdf",
+		"/api/v1/public/resumes/ada/pdf?x=1",
+		"/api/v1/public/resumes/ada/og.png",
+		"/api/v1/resumes/ada/pdf",
+		"//aboutme.example/api/v1/public/resumes/ada/pdf",
+		"/ada",
+	} {
+		candidate := strings.Replace(withLink, `href="/api/v1/public/resumes/ada/pdf"`, `href="`+href+`"`, 1)
+		if rule := publicHTMLRejection([]byte(candidate), resume, origin, jsonLD, false); rule != "anchor_scheme" {
+			t.Fatalf("href %q: rule = %q, want anchor_scheme", href, rule)
+		}
+	}
+}

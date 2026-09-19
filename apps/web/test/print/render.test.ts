@@ -39,7 +39,12 @@ describe('private print Vue document', () => {
         },
       }),
     }));
-    await expect(renderPrintResume(envelope)).resolves.toContain(shared);
+    // The public page wraps the same article in its measure and download
+    // control; the resume itself must match print byte for byte.
+    const article = /<article class="resume-document"[\s\S]*<\/article>/u
+      .exec(shared)?.[0];
+    expect(article).toBeDefined();
+    await expect(renderPrintResume(envelope)).resolves.toContain(article);
   });
 
   it(

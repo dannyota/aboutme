@@ -6,6 +6,8 @@ import { computed, onMounted, ref } from 'vue';
 
 import fullSource from '../../../../../packages/schema/fixtures/full.json';
 import vnFullSource from '../../../../../packages/schema/fixtures/vn-full.json';
+import type { components } from '../../api/generated/openapi';
+import PublicResumeApp from '../../components/public/PublicResumeApp.vue';
 import ResumeDocument from '../../components/resume/ResumeDocument.vue';
 import { applyTemplate } from '../../components/resume/applyTemplate';
 import type { RenderContext } from '../../components/resume/resolveRenderModel';
@@ -20,7 +22,7 @@ import { withWrappingBody } from './justify-fixture';
 import { FIXED_PHOTO_DATA_URL, FIXED_PHOTO_SHA256 } from './photo-fixture';
 import { PRINT_FIXTURES, type PrintFixtureId } from './print-fixtures';
 
-type RenderMode = 'continuous' | 'paged';
+type RenderMode = 'continuous' | 'paged' | 'public';
 type FixtureId = 'full' | 'vn-full' | PrintFixtureId;
 
 const route = useRoute();
@@ -80,7 +82,9 @@ if (isCorpus) {
       ? 'continuous'
       : requestedMode === 'paged'
         ? 'paged'
-        : badQuery();
+        : requestedMode === 'public'
+          ? 'public'
+          : badQuery();
   mode = resolvedMode;
   const template = templateById.get(templateId ?? '') ?? badQuery();
 
@@ -116,6 +120,9 @@ if (isCorpus) {
     resolvedDocument.customization.font.textAlign = 'justify';
     withWrappingBody(resolvedDocument);
   }
+  // The public page measure is about line length, so its cells need body
+  // text that wraps.
+  if (resolvedMode === 'public') withWrappingBody(resolvedDocument);
   const requestedFont = singleton('font');
   if (requestedFont !== undefined) {
     resolveFontSelection(requestedFont);
@@ -129,10 +136,37 @@ if (isCorpus) {
       : await verifyFixedPhoto();
   context = {
     lng: fixture === 'full' ? 'en' : 'vi',
-    mode: resolvedMode,
+    mode: resolvedMode === 'public' ? 'continuous' : resolvedMode,
     ...(photoUrl === undefined ? {} : { photoUrl }),
   };
 }
+
+// The public page as the public render worker draws it, with its PDF link.
+const publicResume = computed(() => {
+  if (mode !== 'public' || resumeDocument === undefined) return undefined;
+  const source = resumeDocument;
+  const photo = source.personalDetails.photo;
+  return {
+    slug: 'harness-public',
+    revision: '1',
+    lng: context?.lng ?? 'en',
+    downloadEnabled: true,
+    document: {
+      ...source,
+      personalDetails: {
+        ...source.personalDetails,
+        ...(photo === undefined || context?.photoUrl === undefined
+          ? {}
+          : {
+              photo: {
+                url: context.photoUrl,
+                ...(photo.crop === undefined ? {} : { crop: photo.crop }),
+              },
+            }),
+      },
+    },
+  } as unknown as components['schemas']['PublicResume'];
+});
 
 async function verifyFixedPhoto(): Promise<string> {
   const prefix = 'data:image/png;base64,';
@@ -230,7 +264,12 @@ onMounted(async () => {
     :data-fonts-ready="fontsSettled ? 'true' : undefined"
     :data-render-mode="mode"
   >
+    <PublicResumeApp
+      v-if="publicResume !== undefined"
+      :public-resume="publicResume"
+    />
     <div
+      v-else
       class="harness-paper"
       :style="printFixture ? undefined : paperStyle"
     >
@@ -263,6 +302,11 @@ body {
 
 .harness-paper {
   background: #fff;
+}
+
+/* The public page spans the viewport, like the real public <main>. */
+.harness-render[data-render-mode="public"] {
+  width: auto;
 }
 
 .harness-corpus {

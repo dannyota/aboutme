@@ -237,3 +237,98 @@ test.describe('renderer screenshot subset', () => {
     });
   }
 });
+
+interface PublicCell {
+  readonly name: string;
+  readonly template: string;
+  readonly width: number;
+}
+
+// The public page at a wide desktop and a phone (docs/design/web.md). The
+// harness draws PublicResumeApp as the public render worker does.
+const PUBLIC_CELLS: readonly PublicCell[] = [
+  {
+    name: 'public--classic-serif--2560.png',
+    template: 'classic-serif',
+    width: 2560,
+  },
+  {
+    name: 'public--modern-sidebar--2560.png',
+    template: 'modern-sidebar',
+    width: 2560,
+  },
+  {
+    name: 'public--modern-sidebar--390.png',
+    template: 'modern-sidebar',
+    width: 390,
+  },
+];
+
+test.describe('public page measure', () => {
+  for (const cell of PUBLIC_CELLS) {
+    test(cell.name, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: cell.width, height: 900 });
+      const external = await denyExternalRequests(page);
+      const response = await page.goto(
+        `/_harness/render?fixture=vn-full&template=${cell.template}`
+        + '&mode=public',
+      );
+      expect(response?.ok()).toBe(true);
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      await waitForImages(page);
+      expect(external).toEqual([]);
+
+      const geometry = await page.evaluate(() => {
+        const box = (selector: string) => {
+          const element = document.querySelector(selector);
+          if (element === null) throw new Error(`Missing ${selector}`);
+          return element.getBoundingClientRect();
+        };
+        // Characters a full body line holds: the paragraph's width over the
+        // average width of its characters.
+        const paragraph = document.querySelector('.entry-body p');
+        if (paragraph === null) throw new Error('Missing body paragraph');
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        const rects = [...range.getClientRects()];
+        const lines = new Set(rects.map((rect) => Math.round(rect.top))).size;
+        const textWidth = rects.reduce((sum, rect) => sum + rect.width, 0);
+        const averageCharacter
+          = textWidth / (paragraph.textContent ?? '').length;
+        const link = box('.public-download');
+        const measure = box('.public-measure');
+        return {
+          page: box('.public-resume-page').width,
+          measure: { left: measure.left, right: measure.right },
+          charsPerLine: paragraph.getBoundingClientRect().width
+            / averageCharacter,
+          lines,
+          linkRight: link.right,
+          linkTop: link.top,
+          articleTop: box('.resume-document').top,
+        };
+      });
+      expect(geometry.page).toBe(cell.width);
+      expect(geometry.linkTop).toBeLessThan(geometry.articleTop);
+      if (cell.width === 390) {
+        // Phones keep the full width.
+        expect(geometry.measure.left).toBe(0);
+        expect(geometry.measure.right).toBe(390);
+        expect(geometry.linkRight).toBeLessThan(390);
+      } else {
+        // Centred, with the page background on both sides.
+        const left = geometry.measure.left;
+        const right = cell.width - geometry.measure.right;
+        expect(left).toBeGreaterThan(400);
+        expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
+        expect(geometry.lines).toBeGreaterThan(1);
+        expect(geometry.charsPerLine).toBeGreaterThanOrEqual(88);
+        expect(geometry.charsPerLine).toBeLessThanOrEqual(112);
+      }
+      await page.emulateMedia({ media: 'print' });
+      await expect(page.locator('.public-toolbar')).toBeHidden();
+      await page.emulateMedia({ media: 'screen' });
+      await verifyScreenshot(page, cell.name, testInfo);
+    });
+  }
+});

@@ -377,7 +377,7 @@ test("proves owner and public export gates through native HTTPS", async ({
     );
     expect(publicPDF.headers["content-type"]).toBe("application/pdf");
     expect(publicPDF.headers["content-disposition"]).toBe(
-      'attachment; filename="resume.pdf"',
+      `attachment; filename="${slug}.pdf"`,
     );
     const publicPDFETag = publicPDF.headers.etag;
     expect(publicPDFETag).toMatch(/^"[^\"]+"$/);

@@ -56,8 +56,9 @@ type artifactContract struct {
 	variant        publiccache.Variant
 	formatVersion  int
 	contentType    string
-	disposition    string
-	maxBytes       int
+	// namedDownload serves the body as an attachment named after the slug.
+	namedDownload bool
+	maxBytes      int
 }
 
 func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, error) {
@@ -81,7 +82,7 @@ func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, 
 		pdf: service.handler(artifactContract{
 			format: renderjob.PDF, representation: publicstate.RepresentationPDF,
 			suffix: "/pdf", variant: "default", formatVersion: publicPDFFormatVersion,
-			contentType: "application/pdf", disposition: "attachment; filename=\"resume.pdf\"",
+			contentType: "application/pdf", namedDownload: true,
 			maxBytes: renderjob.PDFMaxBytes,
 		}),
 		png: service.handler(artifactContract{
@@ -131,7 +132,8 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			if serveCanceledLease(w, request, lease) {
 				return
 			}
-			serveLeasedArtifact(w, request, lease, withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled))
+			cachedResponse := SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}
+			serveLeasedArtifact(w, request, lease, contract.served(cachedResponse, snapshot))
 			return
 		}
 		if allowed, retry := s.renders.Admit(s.dependencies.Clock(), clientIP); !allowed {
@@ -189,12 +191,8 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			servePublicJSONError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		extra := make(http.Header)
-		if contract.disposition != "" {
-			extra.Set("Content-Disposition", contract.disposition)
-		}
 		response, err := newSelectedResponseWithLimit(
-			http.StatusOK, contract.contentType, "no-cache, must-revalidate", result.Bytes, extra, contract.maxBytes,
+			http.StatusOK, contract.contentType, "no-cache, must-revalidate", result.Bytes, make(http.Header), contract.maxBytes,
 		)
 		if serveCanceledLease(w, request, lease) {
 			return
@@ -207,8 +205,30 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 		if serveCanceledLease(w, request, lease) {
 			return
 		}
-		serveLeasedArtifact(w, request, lease, withDiscoveryRobots(response, snapshot.DiscoveryEnabled))
+		serveLeasedArtifact(w, request, lease, contract.served(response, snapshot))
 	})
+}
+
+// served adds the per-request headers. The cache is keyed by resume and
+// revision, not slug, so the download name is set here, never cached.
+func (contract artifactContract) served(response SelectedResponse, snapshot publicresume.Snapshot) SelectedResponse {
+	response = withDiscoveryRobots(response, snapshot.DiscoveryEnabled)
+	if !contract.namedDownload {
+		return response
+	}
+	response.Header = response.Header.Clone()
+	response.Header.Set("Content-Disposition", `attachment; filename="`+downloadBaseName(snapshot.Public.Slug)+`.pdf"`)
+	return response
+}
+
+// downloadBaseName is the slug, whose format (lowercase ASCII letters,
+// digits, and single hyphens) needs no escaping or RFC 6266 filename*.
+// Anything else falls back to "resume".
+func downloadBaseName(slug string) string {
+	if !validPublicSlug(slug) {
+		return "resume"
+	}
+	return slug
 }
 
 func validateArtifactRequest(w http.ResponseWriter, request *http.Request) bool {
