@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,7 +36,12 @@ func TestDiscoveryHandlerRetriesOneGenerationMismatch(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/sitemap.xml", nil))
-	if w.Code != http.StatusOK || w.Body.String() != "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n  <url><loc>https://aboutme.example/</loc></url>\n  <url><loc>https://aboutme.example/privacy</loc></url>\n  <url><loc>https://aboutme.example/terms</loc></url>\n  <url><loc>https://aboutme.example/ada</loc></url>\n  <url><loc>https://aboutme.example/zeta</loc></url>\n</urlset>\n" {
+	// The second generation's slugs, never the stale first ones.
+	want, err := publicformat.Sitemap(origin, []string{"zeta", "ada"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusOK || w.Body.String() != string(want) || strings.Contains(w.Body.String(), "stale") {
 		t.Fatalf("response = %d %q", w.Code, w.Body.String())
 	}
 	if store.calls != 2 {

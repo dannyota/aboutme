@@ -18,7 +18,7 @@ type Route struct {
 	Dispatch Dispatch
 }
 
-// Routes is the immutable version-7 public-root registry.
+// Routes is the immutable version-8 public-root registry.
 var Routes = [...]Route{
 	{Root: ".well-known", Dispatch: DispatchGo},
 	{Root: "admin", Dispatch: DispatchReserved},
@@ -41,6 +41,7 @@ var Routes = [...]Route{
 	{Root: "reset-password", Dispatch: DispatchNuxt},
 	{Root: "robots.txt", Dispatch: DispatchGo},
 	{Root: "sitemap.xml", Dispatch: DispatchGo},
+	{Root: "templates", Dispatch: DispatchNuxt},
 	{Root: "terms", Dispatch: DispatchNuxt},
 	{Root: "u", Dispatch: DispatchReserved},
 	{Root: "verify-email", Dispatch: DispatchNuxt},
@@ -68,6 +69,7 @@ var reserved = map[string]struct{}{
 	"reset-password":  {},
 	"robots.txt":      {},
 	"sitemap.xml":     {},
+	"templates":       {},
 	"terms":           {},
 	"u":               {},
 	"verify-email":    {},

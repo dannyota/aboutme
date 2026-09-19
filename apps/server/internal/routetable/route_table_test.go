@@ -436,6 +436,12 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "terms_page", method: http.MethodGet, path: "/terms", want: wantWeb},
 		{name: "terms_markdown", method: http.MethodGet, path: "/terms.md", want: wantWeb},
 		{name: "privacy_prefixed_slug", method: http.MethodGet, path: "/privacy-policy", want: wantGo},
+		// The template gallery is a fixed Nuxt root whose name also satisfies
+		// the public-slug grammar.
+		{name: "templates_gallery", method: http.MethodGet, path: "/templates", want: wantWeb},
+		{name: "templates_page", method: http.MethodGet, path: "/templates/ats-plain", want: wantWeb},
+		{name: "templates_markdown", method: http.MethodGet, path: "/templates.md", want: wantWeb},
+		{name: "templates_prefixed_slug", method: http.MethodGet, path: "/templates-by-ada", want: wantGo},
 		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
 		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
 		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},
