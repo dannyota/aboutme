@@ -216,9 +216,14 @@ func TestReadinessRenderRequestPostsValidMinimalPublicResume(t *testing.T) {
 		Mode         string                    `json:"mode"`
 		Origin       string                    `json:"canonicalOrigin"`
 		Discovery    bool                      `json:"discoveryEnabled"`
+		PageTitle    string                    `json:"pageTitle"`
+		FaviconHref  *string                   `json:"faviconHref"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		t.Fatal(err)
+	}
+	if envelope.PageTitle != "Readiness Probe — Resume" || envelope.FaviconHref == nil || *envelope.FaviconHref != "" {
+		t.Fatalf("render envelope head = %q, %v; want the default title and an empty favicon", envelope.PageTitle, envelope.FaviconHref)
 	}
 	if envelope.Mode != directrender.PublicRenderMode || envelope.Origin != "https://aboutme.example" || envelope.Discovery {
 		t.Fatalf("render envelope = %#v", envelope)

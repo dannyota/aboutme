@@ -31,6 +31,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/printrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
+	"github.com/dannyota/aboutme/apps/server/internal/publicpage"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
@@ -442,6 +443,8 @@ func readinessRenderRequest(origin publicresume.PublicOrigin) directrender.Publi
 		Mode:             directrender.PublicRenderMode,
 		CanonicalOrigin:  origin.String(),
 		DiscoveryEnabled: false,
+		// The worker rejects an empty title, so the probe sends the default.
+		PageTitle: publicpage.EffectiveTitle(nil, "Readiness Probe"),
 	}
 }
 
