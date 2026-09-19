@@ -161,23 +161,19 @@ watch(
         v-for="n in Math.max(0, 3 - items.length)"
         :key="`slot-${n}`"
         :data-testid="`resume-slot-${n}`"
-        class="sheet sheet--empty min-h-40 rounded-[var(--radius-dialog)]
-          border border-dashed"
+        class="sheet sheet--empty flex min-h-40 flex-col justify-center
+          gap-1 rounded-[var(--radius-dialog)] border border-dashed p-6
+          text-sm text-muted-foreground"
       >
-        <Button
-          class="h-full min-h-40 w-full flex-col items-start justify-center
-            whitespace-normal rounded-[var(--radius-dialog)] p-6 text-left"
-          data-action="create-resume-slot"
-          type="button"
-          variant="ghost"
-          @click="emit('create')"
-        >
-          <template v-if="items.length === 0 && n === 1">
-            <span role="status">No resumes yet.</span>
-            <span>Create your first resume. You can keep up to three.</span>
-          </template>
-          <span v-else>Create resume</span>
-        </Button>
+        <!-- Create resume in the header is the one create control. -->
+        <template v-if="items.length === 0 && n === 1">
+          <span
+            class="text-foreground"
+            role="status"
+          >No resumes yet.</span>
+          <span>Use Create resume to start one. You can keep up to three.</span>
+        </template>
+        <span v-else>Empty slot</span>
       </li>
     </ul>
   </section>

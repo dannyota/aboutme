@@ -29,7 +29,7 @@ import {
 import { useCapabilities } from '../composables/useCapabilities';
 
 const route = useRoute();
-const { loginProviders } = useCapabilities();
+const { loginProviders, resolved } = useCapabilities();
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
 
@@ -185,7 +185,27 @@ async function onSubmit() {
         {{ pending ? copy.login.pending : copy.signIn }}
       </Button>
     </form>
-    <template v-if="loginProviders.length > 0">
+    <!-- The capabilities read is client-only, so hold the space one provider
+         button takes until it resolves; no link renders before then. -->
+    <div
+      v-if="!resolved"
+      aria-hidden="true"
+      class="invisible"
+      data-testid="provider-placeholder"
+    >
+      <div class="mt-8 flex items-center gap-3 text-xs">
+        <Separator class="flex-1" />
+        {{ copy.or }}
+        <Separator class="flex-1" />
+      </div>
+      <div class="mt-4 h-10" />
+      <LegalAgreement
+        class="mt-3"
+        :locale="locale"
+        testid="login-agreement-placeholder"
+      />
+    </div>
+    <template v-else-if="loginProviders.length > 0">
       <div
         class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
         data-testid="login-divider"

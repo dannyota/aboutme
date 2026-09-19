@@ -69,6 +69,7 @@ describe('structure intent boundaries', () => {
             sectionType: 'custom',
             column: 'main',
             index: 2,
+            displayName: 'Custom section',
           },
         ],
       },
@@ -81,6 +82,8 @@ describe('structure intent boundaries', () => {
             sectionType: 'education',
             column: 'main',
             index: 2,
+            displayName: 'Education',
+            iconKey: 'graduation-cap',
           },
         ],
       },
@@ -128,12 +131,16 @@ describe('structure intent boundaries', () => {
     expect(wrapper.text()).toContain('Cannot create a custom section');
   });
 
-  it('creates a section from the card form and clears the drafts', async () => {
-    const edit = vi.fn();
+  it('creates a section from the card form and opens it', async () => {
+    const edit = vi.fn(() => ({ kind: 'enqueued' as const }));
     const wrapper = mount(StructurePanel, {
       props: { actions: actionsFor(edit) },
     });
     await wrapper.get('[data-action="section-type"]').setValue('project');
+    expect(
+      (wrapper.get('[data-field="displayName"] input').element as
+        HTMLInputElement).value,
+    ).toBe('Projects');
     await wrapper
       .get('[data-field="displayName"] input')
       .setValue('Side projects');
@@ -144,11 +151,42 @@ describe('structure intent boundaries', () => {
         op: 'createSection',
         key: 'project',
         displayName: 'Side projects',
+        iconKey: 'folder',
       })],
     }));
     const displayName = wrapper.get('[data-field="displayName"] input')
       .element as HTMLInputElement;
-    expect(displayName.value).toBe('');
+    expect(displayName.value).toBe('Projects');
+    expect(wrapper.emitted('openSection')).toEqual([['project']]);
+    expect(
+      wrapper.get('[data-testid="section-create-form"]')
+        .find('[data-field="iconKey"]').exists(),
+    ).toBe(false);
+  });
+
+  it('labels sections by type and entries by name, never by ID', () => {
+    const wrapper = mount(StructurePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+    const work = wrapper.get('[data-section="work"]');
+    expect(work.text()).toContain('Work experience');
+    expect(work.find('[data-entry-order] li').text()).not.toMatch(/entry-1/);
+    expect(work.get('[data-field="iconKey"] select').element.tagName)
+      .toBe('SELECT');
+    expect(
+      work.findAll('[data-field="iconKey"] option').map((o) => o.text()),
+    ).toContain('Briefcase');
+  });
+
+  it('keeps a typed section name when the type changes', async () => {
+    const wrapper = mount(StructurePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+    const name = wrapper.get('[data-field="displayName"] input');
+    expect((name.element as HTMLInputElement).value).toBe('Experience');
+    await name.setValue('Career');
+    await wrapper.get('[data-action="section-type"]').setValue('education');
+    expect((name.element as HTMLInputElement).value).toBe('Career');
   });
 
   it('sends complete section and entry permutations through their endpoints',
@@ -460,13 +498,12 @@ describe('structure intent boundaries', () => {
       attachTo: document.body,
       props: { actions: actionsFor(edit) },
     });
-    const [name, icon] = wrapper.findAll('form input');
-    await name!.setValue('Experience');
-    await icon!.setValue('briefcase');
+    const [name] = wrapper.findAll('form input');
+    await name!.setValue('Career');
     await wrapper.get('form').trigger('submit');
 
-    expect((name!.element as HTMLInputElement).value).toBe('Experience');
-    expect((icon!.element as HTMLInputElement).value).toBe('briefcase');
+    expect((name!.element as HTMLInputElement).value).toBe('Career');
+    expect(wrapper.emitted('openSection')).toBeUndefined();
 
     await wrapper
       .get('[data-section="work"] [data-action="delete"]')

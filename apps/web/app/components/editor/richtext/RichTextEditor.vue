@@ -5,7 +5,7 @@ import { keymap } from 'prosemirror-keymap';
 import { wrapInList } from 'prosemirror-schema-list';
 import { EditorState, type Command, type Transaction } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import {
   Bold,
   CornerDownLeft,
@@ -18,7 +18,13 @@ import {
   Unlink,
 } from '@lucide/vue';
 import IconButton from '@/components/app/IconButton.vue';
+import { useFieldDrafts } from '../../../composables/useFieldDrafts';
 
+import {
+  handleListMarkerInput,
+  listKeymap,
+  startListFromMarker,
+} from './lists';
 import { parseRichTextHTML, richTextSchema } from './schema';
 import { serializeRichText } from './serialize';
 
@@ -28,10 +34,19 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 
+/** Typing pauses this long before the text goes to the store. */
+const RICH_TEXT_COMMIT_DELAY_MS = 400;
+
 const editorRoot = ref<HTMLElement>();
 let view: EditorView | undefined;
 let lastInput = props.modelValue;
 let pendingOutput: string | undefined;
+let commitTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Held text counts as unsaved in the editor's save status until it is
+// emitted; the navigation guard flushes it through the same registry.
+const drafts = useFieldDrafts();
+const draftKey = `richtext:${useId()}`;
 
 function hasFiles(files: FileList | readonly File[] | undefined): boolean {
   return files !== undefined && files.length > 0;
@@ -83,6 +98,8 @@ function createState(
         'Mod-Enter': insertHardBreak,
         'Mod-k': () => view !== undefined && applyLink(view),
         'Mod-Shift-k': () => view !== undefined && unlink(view),
+        'Space': startListFromMarker,
+        ...listKeymap,
       }),
       keymap(baseKeymap),
     ],
@@ -98,17 +115,28 @@ function dispatchTransaction(transaction: Transaction): void {
 
   const output = serializeRichText(nextState.doc);
   if (output === lastInput) {
-    pendingOutput = undefined;
+    cancelPending();
     return;
   }
   pendingOutput = output;
+  drafts?.set(draftKey, output, commitPending);
+  if (commitTimer !== undefined) clearTimeout(commitTimer);
+  commitTimer = setTimeout(commitPending, RICH_TEXT_COMMIT_DELAY_MS);
 }
 
-function commitBlur(): void {
-  if (pendingOutput === undefined || pendingOutput === lastInput) return;
-  lastInput = pendingOutput;
-  emit('update:modelValue', pendingOutput);
+function cancelPending(): void {
+  if (commitTimer !== undefined) clearTimeout(commitTimer);
+  commitTimer = undefined;
   pendingOutput = undefined;
+  drafts?.clear(draftKey);
+}
+
+function commitPending(): void {
+  const output = pendingOutput;
+  cancelPending();
+  if (output === undefined || output === lastInput) return;
+  lastInput = output;
+  emit('update:modelValue', output);
 }
 
 function isEditorSurface(target: EventTarget | null): target is HTMLElement {
@@ -120,7 +148,7 @@ function revertEscape(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || view === undefined) return;
   if (!isEditorSurface(event.target)) return;
   event.preventDefault();
-  pendingOutput = undefined;
+  cancelPending();
   lastInput = props.modelValue;
   view.updateState(createState(parseRichTextHTML(props.modelValue)));
 }
@@ -131,7 +159,7 @@ function handleBlur(event: FocusEvent): void {
     && event.relatedTarget instanceof Node
     && event.currentTarget.contains(event.relatedTarget)
   ) return;
-  commitBlur();
+  commitPending();
 }
 
 function run(command: Command): void {
@@ -167,6 +195,7 @@ onMounted(() => {
       'role': 'textbox',
     },
     dispatchTransaction,
+    handleTextInput: handleListMarkerInput,
     handleDrop: (_editor, event) => {
       if (!hasFiles(event.dataTransfer?.files)) return false;
       event.preventDefault();
@@ -197,7 +226,10 @@ onMounted(() => {
   });
 });
 
-onBeforeUnmount(() => view?.destroy());
+onBeforeUnmount(() => {
+  commitPending();
+  view?.destroy();
+});
 
 watch(
   () => props.modelValue,

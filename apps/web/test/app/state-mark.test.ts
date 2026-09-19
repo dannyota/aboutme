@@ -8,6 +8,7 @@ import type { SaveState } from '../../app/editor/types';
 describe('StateMark', () => {
   it.each([
     ['saved', 'Saved'],
+    ['unsaved', 'Unsaved'],
     ['saving', 'Saving…'],
     ['failed', 'Save failed'],
     ['draft', 'Draft'],
@@ -67,7 +68,7 @@ describe('SaveStatus adapter', () => {
     ['idle', 'saved'],
     ['saved', 'saved'],
     ['saving', 'saving'],
-    ['dirty', 'draft'],
+    ['dirty', 'unsaved'],
     ['offline', 'failed'],
     ['error', 'failed'],
     ['conflict', 'failed'],

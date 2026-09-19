@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import type { Section } from '@aboutme/schema';
+import { computed } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import FormField from '@/components/app/FormField.vue';
+import SelectField from '@/components/app/SelectField.vue';
+import { sectionIconOptions, sectionTypeLabels } from '../sectionTypes';
 
 type SectionAction = {
   readonly key: string;
@@ -42,6 +45,18 @@ const emit = defineEmits<{
   ];
 }>();
 
+// Keep an icon set elsewhere (an agent or an older editor) selectable.
+const iconOptions = computed(() => {
+  const current = props.section.iconKey;
+  if (
+    current === undefined
+    || sectionIconOptions.some((option) => option.value === current)
+  ) {
+    return sectionIconOptions;
+  }
+  return [...sectionIconOptions, { value: current, label: 'Current icon' }];
+});
+
 function action(): SectionAction {
   return { key: props.sectionKey, sectionType: props.section.sectionType };
 }
@@ -53,10 +68,8 @@ function changeDisplayName(event: Event): void {
   emit('metadata', { ...action(), field: 'displayName', value: target.value });
 }
 
-function changeIconKey(event: Event): void {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  const value = target.value === '' ? null : target.value;
+function changeIconKey(next: string): void {
+  const value = next === '' ? null : next;
   if (value === (props.section.iconKey ?? null)) return;
   emit('metadata', { ...action(), field: 'iconKey', value });
 }
@@ -66,7 +79,7 @@ function changeIconKey(event: Event): void {
   <div class="grid gap-3">
     <div class="flex items-center justify-between gap-2">
       <Badge variant="outline">
-        {{ sectionKey }}
+        {{ sectionTypeLabels[section.sectionType] }}
       </Badge>
     </div>
     <FormField
@@ -82,19 +95,15 @@ function changeIconKey(event: Event): void {
         @change="changeDisplayName"
       />
     </FormField>
-    <FormField
-      v-slot="{ id }"
-      label="Icon key"
+    <SelectField
+      :control-attrs="{ 'data-action': 'iconKey' }"
+      :disabled="disabled"
+      label="Heading icon"
+      :model-value="section.iconKey ?? ''"
       name="iconKey"
-    >
-      <Input
-        :id="id"
-        data-action="iconKey"
-        :disabled="disabled"
-        :model-value="section.iconKey ?? ''"
-        @change="changeIconKey"
-      />
-    </FormField>
+      :options="iconOptions"
+      @update:model-value="changeIconKey"
+    />
     <div
       aria-label="Section placement controls"
       class="flex flex-wrap gap-2"

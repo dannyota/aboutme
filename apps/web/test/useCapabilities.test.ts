@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, h } from 'vue';
@@ -20,6 +20,9 @@ const Probe = defineComponent({
 async function probe(): Promise<Record<string, string | undefined>> {
   const wrapper = await mountSuspended(Probe);
   await flushPromises();
+  // A failed read retries once before it settles.
+  await vi.waitFor(() =>
+    expect(wrapper.get('div').attributes('data-resolved')).toBe('true'));
   const el = wrapper.get('div');
   return {
     provider: el.attributes('data-provider'),
@@ -40,6 +43,13 @@ describe('useCapabilities', () => {
       agent: 'false',
       resolved: 'true',
     });
+  });
+
+  it('reports unresolved while the read is pending', async () => {
+    registerEndpoint('/api/v1/capabilities', () => new Promise(() => {}));
+    const wrapper = await mountSuspended(Probe);
+    await flushPromises();
+    expect(wrapper.get('div').attributes('data-resolved')).toBe('false');
   });
 
   it('treats a failed read as all false', async () => {

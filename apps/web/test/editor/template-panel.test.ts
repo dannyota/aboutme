@@ -57,6 +57,56 @@ describe('TemplatePanel', () => {
     expect(wrapper.text()).not.toContain(TEMPLATES[0]!.id);
   });
 
+  it('names the sections a template moves between columns', async () => {
+    const current = acceptedFixture();
+    current.document.content = {
+      work: { sectionType: 'work', entries: [] },
+      skill: { sectionType: 'skill', displayName: 'Tools', entries: [] },
+      language: { sectionType: 'language', entries: [] },
+    } as typeof current.document.content;
+    current.document.customization.layout.sections = {
+      main: ['work', 'skill'],
+      sidebar: ['language'],
+    };
+    const final = structuredClone(current);
+    final.document.customization.layout.sections = {
+      main: ['work', 'language'],
+      sidebar: ['skill'],
+    };
+    const group = { ...templateGroup(), intendedFinal: final };
+    const applyTemplate = vi.fn(() => ({ kind: 'enqueued' as const, group }));
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(applyTemplate), record: recordFor(current) },
+    });
+
+    await wrapper
+      .get(`[data-template="${TEMPLATES[0]!.id}"] button`)
+      .trigger('click');
+
+    expect(wrapper.get('[data-testid="template-moved-sections"]').text()).toBe(
+      'Moved to the sidebar: Tools. Moved to the main column: Languages.',
+    );
+  });
+
+  it('says nothing about moves when no section changes column', async () => {
+    const current = acceptedFixture();
+    const group = {
+      ...templateGroup(),
+      intendedFinal: structuredClone(current),
+    };
+    const applyTemplate = vi.fn(() => ({ kind: 'enqueued' as const, group }));
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(applyTemplate), record: recordFor(current) },
+    });
+
+    await wrapper
+      .get(`[data-template="${TEMPLATES[0]!.id}"] button`)
+      .trigger('click');
+
+    expect(wrapper.find('[data-testid="template-moved-sections"]').exists())
+      .toBe(false);
+  });
+
   it('reports no change and format warnings', async () => {
     const applyTemplate = vi.fn(() => ({ kind: 'no-change' as const }));
     const record = recordFor();

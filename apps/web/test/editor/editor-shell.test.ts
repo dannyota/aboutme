@@ -2,6 +2,10 @@ import { mount } from '@vue/test-utils';
 import { computed, type ComputedRef } from 'vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  createFieldDrafts,
+  FieldDraftsKey,
+} from '../../app/composables/useFieldDrafts';
 import EditorShell from '../../app/components/editor/EditorShell.vue';
 import type {
   ResumeEditorActions,
@@ -39,6 +43,26 @@ describe('EditorShell', () => {
     expect(download.attributes('aria-label')).toBe('Download PDF');
     expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+  });
+
+  it('shows Unsaved while a field holds an edit it has not saved', () => {
+    const drafts = createFieldDrafts();
+    const record = editorRecord();
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record },
+      global: {
+        stubs: heavyStubs(),
+        provide: { [FieldDraftsKey as symbol]: drafts },
+      },
+    });
+    const status = () => wrapper.get('[data-save-status]');
+    expect(status().text()).toBe('Saved');
+
+    drafts.set('dates:entry-1-dates', { startYear: '2025' });
+    return wrapper.vm.$nextTick().then(() => {
+      expect(status().attributes('data-state')).toBe('dirty');
+      expect(status().text()).toBe('Unsaved');
+    });
   });
 
   it(

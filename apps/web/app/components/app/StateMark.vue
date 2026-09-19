@@ -4,7 +4,7 @@ import { computed } from 'vue';
 import AppSeal from './AppSeal.vue';
 
 const props = defineProps<{
-  state: 'saved' | 'saving' | 'failed' | 'draft' | 'public';
+  state: 'saved' | 'unsaved' | 'saving' | 'failed' | 'draft' | 'public';
   link?: string;
 }>();
 
@@ -53,6 +53,7 @@ const publicLink = computed(() => {
       </svg>
       <span>Saved</span>
     </template>
+    <template v-else-if="state === 'unsaved'"> Unsaved </template>
     <template v-else-if="state === 'saving'"> Saving… </template>
     <template v-else-if="state === 'failed'"> Save failed </template>
     <template v-else-if="state === 'draft'"> Draft </template>

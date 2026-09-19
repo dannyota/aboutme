@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { DateRange, YearMonth } from '@aboutme/schema';
-import { ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import CheckboxField from '@/components/app/CheckboxField.vue';
 import FormField from '@/components/app/FormField.vue';
 import { Input } from '@/components/ui/input';
 
+import { useFieldDrafts } from '../../../composables/useFieldDrafts';
 import type { FieldIntent } from './fieldIntent';
 
 const props = defineProps<{
@@ -14,13 +15,58 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ intent: [intent: FieldIntent<DateRange>] }>();
 
-const dirty = ref(false);
-const endMonth = ref(toText(props.modelValue?.end?.m));
-const endYear = ref(toText(props.modelValue?.end?.y));
+interface DraftFields {
+  readonly startYear: string;
+  readonly startMonth: string;
+  readonly endYear: string;
+  readonly endMonth: string;
+  readonly present: boolean;
+}
+
+// A range that cannot be saved yet (a start with no end) is held in the
+// editor's draft registry, so a remount restores it instead of losing it.
+const drafts = useFieldDrafts();
+const draftKey = `dates:${props.fieldId}`;
+const restored = drafts?.get(draftKey) as DraftFields | undefined;
+
+const dirty = ref(restored !== undefined);
+const endMonth = ref(restored?.endMonth ?? toText(props.modelValue?.end?.m));
+const endYear = ref(restored?.endYear ?? toText(props.modelValue?.end?.y));
 const error = ref('');
-const present = ref(props.modelValue?.present ?? false);
-const startMonth = ref(toText(props.modelValue?.start.m));
-const startYear = ref(toText(props.modelValue?.start.y));
+const present = ref(restored?.present ?? props.modelValue?.present ?? false);
+const startMonth = ref(
+  restored?.startMonth ?? toText(props.modelValue?.start.m),
+);
+const startYear = ref(restored?.startYear ?? toText(props.modelValue?.start.y));
+
+watch(
+  [dirty, startYear, startMonth, endYear, endMonth, present],
+  () => {
+    if (drafts === undefined) return;
+    if (!dirty.value) {
+      drafts.clear(draftKey);
+      return;
+    }
+    drafts.set(
+      draftKey,
+      {
+        startYear: startYear.value,
+        startMonth: startMonth.value,
+        endYear: endYear.value,
+        endMonth: endMonth.value,
+        present: present.value,
+      } satisfies DraftFields,
+      commit,
+    );
+  },
+  { immediate: true },
+);
+
+// A restored draft shows what it still needs; a valid one saves at once.
+onMounted(() => {
+  if (restored !== undefined) commit();
+});
+onBeforeUnmount(commit);
 
 watch(
   () => props.modelValue,
@@ -69,7 +115,7 @@ function commit(): void {
     ? null
     : readYearMonth(endYear.value, endMonth.value);
   if (!present.value && end === null) {
-    error.value = 'Enter a valid end date or mark this as present.';
+    error.value = 'Add an end date or tick Present to save this date.';
     return;
   }
   if (end !== null && compareYearMonth(start, end) > 0) {
@@ -96,10 +142,15 @@ function sameRange(left: DateRange, right: DateRange | undefined): boolean {
 }
 
 function unset(): void {
-  if (props.modelValue === undefined) return;
+  // Also discards an unfinished range that was never saved.
   dirty.value = false;
   error.value = '';
-  emit('intent', { kind: 'unset' });
+  startYear.value = '';
+  startMonth.value = '';
+  endYear.value = '';
+  endMonth.value = '';
+  present.value = false;
+  if (props.modelValue !== undefined) emit('intent', { kind: 'unset' });
 }
 
 function allEmpty(): boolean {

@@ -46,6 +46,7 @@ import PersonalDetailsPanel from './forms/PersonalDetailsPanel.vue';
 import SectionPanel from './forms/SectionPanel.vue';
 import PhotoPanel from './photo/PhotoPanel.vue';
 import StructurePanel from './structure/StructurePanel.vue';
+import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
 import EditorPreview from './EditorPreview.vue';
@@ -53,6 +54,7 @@ import ErrorSummary from './ErrorSummary.vue';
 import SaveStatus from './SaveStatus.vue';
 import PublishDialog from './PublishDialog.vue';
 import PDFDownloadButton from './PDFDownloadButton.vue';
+import { useFieldDrafts } from '../../composables/useFieldDrafts';
 
 type InspectorPanel
   = | { readonly kind: 'personal' }
@@ -94,7 +96,9 @@ const outline = computed(() => [
       : [
           {
             key,
-            label: section.displayName ?? sectionLabel(section.sectionType),
+            label:
+              section.displayName
+              ?? defaultSectionNames[section.sectionType],
             iconKey: section.iconKey ?? '',
             icon: iconFor(section.iconKey ?? '') ?? PanelsTopLeft,
           },
@@ -114,6 +118,8 @@ const photoUrl = computed(() => {
     : undefined;
 });
 const issues = computed(() => Object.values(props.record.issues).flat());
+// Held field edits (rich text mid-debounce, an unfinished date) count too.
+const drafts = useFieldDrafts();
 const saveState = computed<SaveState>(() => {
   const record = props.record;
   if (record.sessionLost) return 'session-lost';
@@ -131,7 +137,13 @@ const saveState = computed<SaveState>(() => {
     return 'error';
   }
   if (record.attempt?.kind === 'dispatching') return 'saving';
-  if (record.pending.length > 0 || record.completeReadRequired) return 'dirty';
+  if (
+    record.pending.length > 0
+    || record.completeReadRequired
+    || (drafts?.count.value ?? 0) > 0
+  ) {
+    return 'dirty';
+  }
   return 'saved';
 });
 
@@ -166,20 +178,6 @@ function openInspector(
 async function discardAndSignIn(): Promise<void> {
   props.actions.discard();
   await navigateTo('/login');
-}
-
-function sectionLabel(type: string): string {
-  const labels: Readonly<Record<string, string>> = {
-    profile: 'Summary',
-    work: 'Experience',
-    education: 'Education',
-    skill: 'Skills',
-    language: 'Languages',
-    certificate: 'Certificates',
-    project: 'Projects',
-    custom: 'Custom section',
-  };
-  return labels[type] ?? 'Section';
 }
 </script>
 
@@ -535,6 +533,7 @@ function sectionLabel(type: string): string {
       <StructurePanel
         v-else-if="inspector.kind === 'structure'"
         :actions="actions"
+        @open-section="selectOutline"
       />
       <CustomizationPanel
         v-else-if="inspector.kind === 'customization'"

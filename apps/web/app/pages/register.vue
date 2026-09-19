@@ -26,7 +26,7 @@ import {
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
-const { loginProviders } = useCapabilities();
+const { loginProviders, resolved } = useCapabilities();
 const googleEnabled = computed(() => loginProviders.value.includes('google'));
 const name = ref('');
 const email = ref('');
@@ -208,7 +208,22 @@ async function onSubmit() {
       :locale="locale"
       testid="register-agreement"
     />
-    <template v-if="!success && loginProviders.length > 0">
+    <!-- Hold one provider button's space until the client-only read resolves;
+         no link renders before then. -->
+    <div
+      v-if="!success && !resolved"
+      aria-hidden="true"
+      class="invisible"
+      data-testid="provider-placeholder"
+    >
+      <div class="mt-8 flex items-center gap-3 text-xs">
+        <Separator class="flex-1" />
+        {{ copy.or }}
+        <Separator class="flex-1" />
+      </div>
+      <div class="mt-4 h-10" />
+    </div>
+    <template v-else-if="!success && loginProviders.length > 0">
       <div
         class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
         data-testid="register-divider"

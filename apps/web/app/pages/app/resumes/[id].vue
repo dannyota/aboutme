@@ -37,6 +37,10 @@ import {
 import type { ParentETag } from '../../../editor/types';
 import { ownerRevisionDecision } from '../../../realtime/owner';
 import { useResumeStore } from '../../../stores/resumes';
+import {
+  createFieldDrafts,
+  FieldDraftsKey,
+} from '../../../composables/useFieldDrafts';
 
 type LoadState = 'loading' | 'ready' | 'unavailable' | 'failed';
 
@@ -55,7 +59,9 @@ let realtime: ReturnType<typeof createRealtimeController> | null = null;
 const codec: PhotoDataCodec = { toDataURL: bytesToDataURL };
 const photo = createPhotoController({ api, store, codec });
 
-useUnsavedNavigationGuard(record);
+const drafts = createFieldDrafts();
+provide(FieldDraftsKey, drafts);
+useUnsavedNavigationGuard(record, drafts);
 
 function stopRealtime(): void {
   realtime?.stop();

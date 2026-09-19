@@ -4,11 +4,10 @@ import type { SkillEntry } from '@aboutme/schema';
 import type { FieldIntent } from '../fieldIntent';
 import TextField from '@/components/app/TextField.vue';
 import SelectField from '@/components/app/SelectField.vue';
+import { skillLevelOptions } from './levels';
 import RichTextEditor from '../../richtext/RichTextEditor.vue';
 
-const levelOptions = [{ value: '', label: 'Not set' }, ...Array.from(
-  { length: 6 }, (_, value) => ({ value, label: String(value) }),
-)] as const;
+const levelOptions = skillLevelOptions;
 
 defineProps<{ readonly entry: SkillEntry }>();
 const emit = defineEmits<{

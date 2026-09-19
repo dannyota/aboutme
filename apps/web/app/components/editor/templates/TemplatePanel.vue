@@ -20,6 +20,8 @@ import type {
 import { templateUndoAvailable } from '../../../editor/templateGroup';
 import type { ResumeRecord } from '../../../stores/resumes';
 import TemplatePartialDialog from './TemplatePartialDialog.vue';
+import { defaultSectionNames } from '../sectionTypes';
+import type { ResumeSnapshot } from '../../../editor/types';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -29,6 +31,7 @@ const props = defineProps<{
 }>();
 
 const notice = ref('');
+const moved = ref('');
 const record = computed(() => props.record ?? props.actions.record.value);
 const group = computed(() => props.group ?? groupFrom(record.value));
 const state = computed(() => props.state ?? record.value?.templateState);
@@ -42,9 +45,43 @@ const canUndo = computed(() => {
 });
 
 function apply(preset: Readonly<TemplatePreset>): void {
+  const before = record.value?.current;
   const result = props.actions.applyTemplate(preset);
-  if (result.kind === 'no-change') notice.value = 'No changes';
-  if (result.kind === 'enqueued') notice.value = '';
+  if (result.kind === 'no-change') {
+    notice.value = 'No changes';
+    moved.value = '';
+  }
+  if (result.kind === 'enqueued') {
+    notice.value = '';
+    moved.value = before === undefined
+      ? ''
+      : movedSections(before, result.group.intendedFinal);
+  }
+}
+
+/** Names the sections a template moved to the other column. */
+function movedSections(before: ResumeSnapshot, after: ResumeSnapshot): string {
+  const columnOf = (snapshot: ResumeSnapshot, key: string) =>
+    snapshot.document.customization.layout.sections.sidebar.includes(key)
+      ? 'sidebar'
+      : 'main';
+  const name = (key: string): string => {
+    const section = after.document.content[key];
+    if (section === undefined) return key;
+    return section.displayName?.trim()
+      || defaultSectionNames[section.sectionType];
+  };
+  const { main, sidebar } = after.document.customization.layout.sections;
+  const toSidebar = sidebar.filter((key) => columnOf(before, key) === 'main');
+  const toMain = main.filter((key) => columnOf(before, key) === 'sidebar');
+  return [
+    toSidebar.length > 0
+      ? `Moved to the sidebar: ${toSidebar.map(name).join(', ')}.`
+      : '',
+    toMain.length > 0
+      ? `Moved to the main column: ${toMain.map(name).join(', ')}.`
+      : '',
+  ].filter(Boolean).join(' ');
 }
 
 function status(): string {
@@ -106,6 +143,14 @@ function assertNever(value: never): never {
     >
       {{ status() }}
     </StatusBanner>
+    <p
+      v-if="moved !== ''"
+      class="text-sm"
+      data-testid="template-moved-sections"
+      role="status"
+    >
+      {{ moved }}
+    </p>
     <ul aria-label="Template presets">
       <li
         v-for="preset in TEMPLATES"

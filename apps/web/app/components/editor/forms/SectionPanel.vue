@@ -15,11 +15,13 @@ import ProjectEntryFields from './entries/ProjectEntryFields.vue';
 import SkillEntryFields from './entries/SkillEntryFields.vue';
 import WorkEntryFields from './entries/WorkEntryFields.vue';
 import EntryCard from '../EntryCard.vue';
+import { defaultSectionNames, entryLabel } from '../sectionTypes';
 import InspectorPanel from '../InspectorPanel.vue';
 import ConfirmDialog from '../../app/ConfirmDialog.vue';
 import StatusBanner from '../../app/StatusBanner.vue';
 import { Button } from '../../ui/button';
 import type { FieldIntent } from './fieldIntent';
+import { useFieldDrafts } from '../../../composables/useFieldDrafts';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
@@ -34,6 +36,7 @@ interface DeleteTarget {
 }
 
 const deleteTarget = ref<DeleteTarget>();
+const drafts = useFieldDrafts();
 const issues = computed(() =>
   Object.values(props.actions.record.value?.issues ?? {}).flat(),
 );
@@ -153,6 +156,8 @@ function confirmDelete(): void {
     sectionKey: props.sectionKey,
     entryId: target.entry.id,
   });
+  // A deleted entry's unfinished date can no longer be saved.
+  drafts?.clearPrefix(`dates:${target.entry.id}`);
   closeDelete();
 }
 
@@ -170,33 +175,11 @@ function deleteLabel(target: DeleteTarget): string {
   return entryLabel(target.entry, target.index);
 }
 
-function entryLabel(
-  value: Section['entries'][number],
-  index: number,
-): string {
-  const entry = value as unknown as Record<string, unknown>;
-  for (const field of ['jobTitle', 'degree', 'name', 'title'] as const) {
-    const value = entry[field];
-    if (typeof value === 'string' && value !== '') return value;
-  }
-  return `Entry ${index + 1}`;
-}
-
 function sectionHeading(section: Section): string {
   if (section.displayName !== undefined && section.displayName.trim() !== '') {
     return section.displayName;
   }
-  const labels: Readonly<Record<Section['sectionType'], string>> = {
-    profile: 'Summary',
-    work: 'Experience',
-    education: 'Education',
-    skill: 'Skills',
-    language: 'Languages',
-    certificate: 'Certifications',
-    project: 'Projects',
-    custom: 'Custom section',
-  };
-  return labels[section.sectionType];
+  return defaultSectionNames[section.sectionType];
 }
 
 function focusIssue(path: string): void {
@@ -308,9 +291,6 @@ function assertNever(value: never): never {
         Add entry
       </Button>
     </template>
-    <p data-section-id-text>
-      {{ sectionKey }}
-    </p>
     <StatusBanner
       v-if="issues.length > 0"
       ref="issueSummary"
@@ -347,12 +327,6 @@ function assertNever(value: never): never {
       @move-up="reorder(entry.id, -1)"
       @toggle-hidden="toggleHidden(entry.id, entry.isHidden)"
     >
-      <p
-        class="text-xs text-muted-foreground"
-        data-entry-id-text
-      >
-        {{ entry.id }}
-      </p>
       <component
         :is="selectedComponent"
         :entry="entry"

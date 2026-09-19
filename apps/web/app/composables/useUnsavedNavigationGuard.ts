@@ -2,6 +2,7 @@ import { onBeforeUnmount, onMounted, type Ref } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 
 import type { ResumeRecord } from '../stores/resumes';
+import type { FieldDrafts } from './useFieldDrafts';
 
 export function hasUnsafeWork(record: ResumeRecord | undefined): boolean {
   return (
@@ -24,16 +25,30 @@ export function shouldRetainEditorOnSessionLoss(
   return hasUnsafeWork(record);
 }
 
+/**
+ * Flushing hands held rich text to the store first; what cannot be flushed
+ * (an unfinished date range) keeps the page, like any other unsaved work.
+ */
+export function flushAndCheckUnsaved(
+  record: ResumeRecord | undefined,
+  drafts: FieldDrafts | undefined,
+): boolean {
+  const draftsRemain = drafts?.flushAll() ?? false;
+  return draftsRemain || hasUnsafeWork(record);
+}
+
 export function useUnsavedNavigationGuard(
   record: Readonly<Ref<ResumeRecord | undefined>>,
+  drafts?: FieldDrafts,
 ): void {
+  const unsafe = (): boolean => flushAndCheckUnsaved(record.value, drafts);
   const beforeUnload = (event: BeforeUnloadEvent): void => {
-    if (!hasUnsafeWork(record.value)) return;
+    if (!unsafe()) return;
     event.preventDefault();
     event.returnValue = '';
   };
 
-  onBeforeRouteLeave(() => !hasUnsafeWork(record.value));
+  onBeforeRouteLeave(() => !unsafe());
   onMounted(() => window.addEventListener('beforeunload', beforeUnload));
   onBeforeUnmount(() =>
     window.removeEventListener('beforeunload', beforeUnload),

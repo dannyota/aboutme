@@ -192,7 +192,37 @@ describe('SectionPanel', () => {
     });
   });
 
-  it('exposes section and entry IDs as read-only text', () => {
+  it('labels levels and keeps the project link distinct from the toolbar',
+    () => {
+      const skill = mount(SkillEntryFields, {
+        props: { entry: { id: 'entry-1', name: 'Go', level: 3 } },
+      });
+      const skillLevels = skill
+        .findAll('[data-entry-field="level"] option')
+        .map((option) => option.text());
+      expect(skillLevels).toEqual([
+        'Not set',
+        '0 · None',
+        '1 · Beginner',
+        '2 · Basic',
+        '3 · Intermediate',
+        '4 · Advanced',
+        '5 · Expert',
+      ]);
+      const language = mount(LanguageEntryFields, {
+        props: { entry: { id: 'entry-1', name: 'Vietnamese', level: 5 } },
+      });
+      expect(
+        language.findAll('[data-entry-field="level"] option').at(-1)?.text(),
+      ).toBe('5 · Native or bilingual');
+      const project = mount(ProjectEntryFields, {
+        props: { entry: { id: 'entry-1' } },
+      });
+      expect(project.get('[data-entry-field="link"] label').text())
+        .toBe('Project link');
+    });
+
+  it('keeps section and entry IDs out of the panel text', () => {
     const sectionId = '0d85ca7e-c265-49cb-a31c-cf8ac8e7d557';
     const entryId = 'dd89bd8a-ba7d-4bec-9c43-f1b296c56fac';
     const wrapper = mount(SectionPanel, {
@@ -211,8 +241,8 @@ describe('SectionPanel', () => {
     });
 
     expect(wrapper.get('h2').text()).toBe('Experience');
-    expect(wrapper.get('[data-section-id-text]').text()).toBe(sectionId);
-    expect(wrapper.get('[data-entry-id-text]').text()).toBe(entryId);
+    expect(wrapper.text()).not.toContain(sectionId);
+    expect(wrapper.text()).not.toContain(entryId);
     expect(wrapper.get('h3').text()).toBe('Principal Engineer');
     expect(
       wrapper.get('[data-entry-field="jobTitle"] [data-field-input]').element
