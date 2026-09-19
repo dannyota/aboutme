@@ -521,9 +521,16 @@ const networkHeaders = transport.indexOf('Network.requestWillBeSentExtraInfo');
 const transportNavigation = transport.indexOf('await page.goto(');
 if (networkHeaders === -1 || networkHeaders > transportNavigation) process.exit(1);
 const editor = await readFile(process.argv[4], 'utf8');
-const diagnosticsInstall = editor.indexOf('await installDiagnostics(context, page)');
-const editorNavigation = editor.indexOf('await loginAsDevelopmentUser(page)');
-if (diagnosticsInstall === -1 || editorNavigation === -1 || diagnosticsInstall > editorNavigation) {
+const editorTestTitle = "test('proves authenticated editor behavior over trusted HTTPS', async ({";
+const editorTestStart = editor.indexOf(editorTestTitle);
+const nextTest = editor.indexOf('\ntest(', editorTestStart + editorTestTitle.length);
+if (editorTestStart === -1 || nextTest === -1) process.exit(1);
+const editorTestBody = editor.slice(editorTestStart, nextTest);
+const diagnosticsInstall = editorTestBody.indexOf(
+  'await prepareEditor(() => installDiagnostics(context, page))',
+);
+const editorLogin = editorTestBody.indexOf('await loginAsDevelopmentUser(page)');
+if (diagnosticsInstall === -1 || editorLogin === -1 || diagnosticsInstall > editorLogin) {
   process.exit(1);
 }
 for (const required of [

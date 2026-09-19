@@ -12,6 +12,11 @@ and `AC-UI-014`.
 
 ## Owned paths
 
+The list author also owns an optional close-label prop in
+`apps/web/app/components/app/FormDialog.vue` and
+`apps/web/app/components/ui/dialog/DialogContent.vue`. Workspace callers pass
+localized close copy; all other callers keep the existing English default.
+
 - Create `apps/web/app/i18n/resume-list.ts`.
 - Create `apps/web/app/i18n/resume-create.ts`.
 - Modify `apps/web/app/pages/app/resumes/index.vue`.

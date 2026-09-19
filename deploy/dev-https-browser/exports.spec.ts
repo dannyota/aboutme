@@ -28,8 +28,28 @@ const FULL_NAME = "Export proof resume";
 const PDF_NAME = "Export-proof-resume-Resume.pdf";
 const PDF_MAX_BYTES = 16_777_216;
 const PNG_MAX_BYTES = 4_194_304;
+const recordedResumeIDs = new Set<string>();
 
 test.use({ acceptDownloads: true });
+
+test.afterEach(async ({ browser }) => {
+  if (recordedResumeIDs.size === 0) return;
+  const context = await browser.newContext();
+  const counters = newDiagnosticCounters();
+  try {
+    await installExternalRequestFirewall(context, counters);
+    await installExternalWebSocketFirewall(context, counters);
+    const page = await context.newPage();
+    await loginAsDevelopmentUser(page);
+    for (const id of recordedResumeIDs) await deleteRecordedResume(page, id);
+    recordedResumeIDs.clear();
+  } catch {
+    stage("cleanup-hook-failed");
+    throw new Error("exports cleanup hook failed");
+  } finally {
+    await context.close();
+  }
+});
 
 interface FetchedArtifact {
   readonly body: number[];
@@ -101,8 +121,11 @@ function expectPDF(bytes: Uint8Array): void {
 // revision's time, never the 1970 epoch (ADR 0045).
 function expectRevisionMetadata(bytes: Uint8Array): void {
   const text = Buffer.from(bytes).toString("latin1");
+  stage("owner-metadata-title");
   expect(text).toContain(`/Title (${FULL_NAME} - Resume)`);
+  stage("owner-metadata-date");
   expect(text).toMatch(/\/CreationDate \(D:20\d{12}\+00'00'\)/u);
+  stage("owner-metadata-epoch");
   expect(text).not.toContain("D:19700101000000");
 }
 
@@ -233,8 +256,20 @@ test("proves owner and public export gates through native HTTPS", async ({
     await loginAsDevelopmentUser(page);
     loginMeReadExpected = false;
     steps.auth = true;
-    const created = await createBlankResume(page, uniqueTitle());
+    const created = await createBlankResume(
+      page,
+      uniqueTitle(),
+      undefined,
+      (accepted) => {
+        createdID = accepted.metadata.id;
+        recordedResumeIDs.add(createdID);
+      },
+    );
     createdID = created.metadata.id;
+    await page.getByTestId("workspace-locale-vi").press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+    await page.setViewportSize({ width: 390, height: 844 });
+    stage("vietnamese-owner-export");
 
     const requestOrder: string[] = [];
     let acceptedSaveResponseSeen = false;
@@ -255,7 +290,7 @@ test("proves owner and public export gates through native HTTPS", async ({
       }
     });
     stage("owner-pending-save");
-    const fullName = page.getByLabel("Full name", { exact: true });
+    const fullName = page.getByLabel("Họ và tên", { exact: true });
     const savedPatch = page.waitForResponse((response) =>
       isSaveRequest(response.request(), createdID!),
     );
@@ -266,7 +301,7 @@ test("proves owner and public export gates through native HTTPS", async ({
     const ownerDownload = page.waitForEvent("download");
     await page
       // The accessible name carries the page size the PDF uses.
-      .getByRole("button", { name: /^Download PDF, (?:A4|Letter)$/ })
+      .getByRole("button", { name: /^Tải PDF, (?:A4|Letter)$/ })
       .click();
     const saveResponse = await savedPatch;
     expect(saveResponse.status()).toBe(200);
@@ -293,13 +328,44 @@ test("proves owner and public export gates through native HTTPS", async ({
     );
     stage("owner-pdf-accepted");
     const download = await ownerDownload;
+    stage("owner-download-ready");
     expect(download.suggestedFilename()).toBe(PDF_NAME);
+    stage("owner-download-name");
     const ownerBytes = await readDownload(download);
+    stage("owner-download-read");
     expectPDF(ownerBytes);
+    stage("owner-download-pdf");
     expectRevisionMetadata(ownerBytes);
     stage("owner-download-captured");
     steps.ownerSaveFirst = true;
     steps.ownerDownload = true;
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(
+      page.getByRole("button", { name: /^Tải PDF, (?:A4|Letter)$/ }),
+    ).toBeVisible();
+    stage("vietnamese-desktop-control");
+
+    await page.getByTestId("workspace-locale-en").press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const englishOwnerPDFResponse = page.waitForResponse((response) =>
+      isOwnerPDFRequest(response.request(), createdID!),
+    );
+    const englishOwnerDownload = page.waitForEvent("download");
+    await page
+      .getByRole("button", { name: /^Download PDF, (?:A4|Letter)$/ })
+      .click();
+    expect((await englishOwnerPDFResponse).status()).toBe(200);
+    const englishOwnerBytes = await readDownload(await englishOwnerDownload);
+    expectPDF(englishOwnerBytes);
+    expect(englishOwnerBytes).toEqual(ownerBytes);
+    stage("english-owner-export-same-bytes");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(
+      page.getByRole("button", { name: /^Download PDF, (?:A4|Letter)$/ }),
+    ).toBeVisible();
+    stage("english-phone-control");
 
     stage("anonymous-owner-denial");
     publicContext = await browser.newContext({ acceptDownloads: true });
@@ -329,28 +395,33 @@ test("proves owner and public export gates through native HTTPS", async ({
     expectedFailure = null;
 
     stage("complete-resume");
-    await page
-      .getByRole("button", { name: "+ Add section", exact: true })
-      .click();
-    await page.getByLabel("Section type").selectOption("work");
+    await page.setViewportSize({ width: 1440, height: 900 });
+    stage("complete-open-structure");
+    await page.locator('[data-action="open-structure"]').click();
+    stage("complete-section-type");
+    await page.locator('[data-action="section-type"]').selectOption("work");
     await page
       .getByTestId("section-create-form")
-      .getByRole("button", { name: "Add section", exact: true })
+      .locator('[data-action="create"]')
       .click();
+    stage("complete-section-created");
     await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page
-      .getByRole("navigation", { name: "Resume outline" })
-      .getByRole("button", { name: "Experience", exact: true })
-      .click();
-    await page.getByRole("button", { name: "Add entry", exact: true }).click();
+    stage("complete-section-saved");
+    await page.locator('[data-outline-key="work"]').click();
+    stage("complete-work-open");
+    await page.locator('[data-action="add-entry"]').click();
+    stage("complete-entry-added");
     const entry = page.locator("[data-entry-id]");
     await expect(entry).toHaveCount(1);
+    stage("complete-entry-visible");
     await entry.getByLabel("Job title", { exact: true }).fill("Engineer");
     await entry.getByLabel("Job title", { exact: true }).press("Tab");
     await expect(page.getByTestId("save-status")).toContainText("Saved");
+    stage("complete-title-saved");
     await entry.getByLabel("Employer", { exact: true }).fill("Example Corp");
     await entry.getByLabel("Employer", { exact: true }).press("Tab");
     await expect(page.getByTestId("save-status")).toContainText("Saved");
+    stage("complete-employer-saved");
 
     stage("publish");
     slug = `exports-${crypto.randomUUID().slice(0, 8)}`;
@@ -467,6 +538,7 @@ test("proves owner and public export gates through native HTTPS", async ({
     expectedFailure = "revoked";
     await deleteRecordedResume(page, createdID);
     createdID = undefined;
+    recordedResumeIDs.delete(created.metadata.id);
     stage("delete-accepted");
     const [revokedPDF, revokedPNG] = await Promise.all([
       fetchArtifact(publicPage, `/api/v1/public/resumes/${slug}/pdf`, {
@@ -485,6 +557,13 @@ test("proves owner and public export gates through native HTTPS", async ({
     expect(revokedPNG.status).toBe(404);
     steps.revocation = true;
     steps.cleanup = true;
+  } catch (error) {
+    const sourceLine =
+      error instanceof Error
+        ? /exports\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? "")?.[1]
+        : undefined;
+    if (sourceLine !== undefined) stage(`failure-at-line-${sourceLine}`);
+    throw error;
   } finally {
     await publicContext?.close();
     if (createdID !== undefined) await deleteRecordedResume(page, createdID);

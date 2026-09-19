@@ -43,8 +43,11 @@ the `Create account` then `Sign in` hero order, the password toggle labels,
 sign-in, both-theme axe scans for `/`, `/login`, `/app/resumes`, and
 `/app/settings/sessions`, the signed-in shell, and sign-out; it deletes nothing.
 
-The UI proof vocabulary is part of the contract. Use these names when inspecting
-a run or updating a selector:
+The workspace uses Vietnamese by default and English when the
+`aboutme-locale=en` cookie is set. Settings and account pages remain English.
+Pin the interface locale before using a translated accessible name. Test hooks
+stay the same in both languages. Use these names when inspecting a run or
+updating a selector:
 
 - Landing: Vietnamese by default, with heading
   `CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.` and
@@ -57,12 +60,15 @@ a run or updating a selector:
   or `Hide password`; there is no visible `Show` button text.
 - Resume list: rows are `[data-testid="resume-row-<id>"]`; the overflow trigger
   is `More actions for <title>`, with `Rename` and `Delete` menu items; state is
-  `Draft` or the canonical `aboutme.vn/<slug>` link.
+  `Draft` or the canonical `aboutme.vn/<slug>` link in English. Vietnamese uses
+  `Thao tác khác cho <title>`, `Đổi tên`, and `Xóa` for those actions.
 - Editor: the page-count mark is `1 page` or `{n} pages` under the sheet and is
   selected with `[data-testid="page-count"]`; at 390 px use the fixed `Edit` /
-  `Preview` switch and the `show-editor` / `show-preview` actions.
+  `Preview` switch and the `show-editor` / `show-preview` actions. Vietnamese
+  uses `{n} trang`, `Chỉnh sửa`, and `Xem trước`.
 - Publish: the success state shows the canonical stamp and `Copy link` on
   `[data-action="copy-link"]`; the only seal-colored control is `Publish`.
+  Vietnamese uses `Sao chép liên kết` and `Xuất bản`.
 - Inspector: customization labels are words such as `Font`, `Section gap`, and
   `Page size`, not schema paths or raw enum IDs.
 

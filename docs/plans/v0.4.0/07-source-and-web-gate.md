@@ -23,7 +23,8 @@ owner instead of fixing it.
 
 - Enumerate every localized Vue file, noncatalog TypeScript display helper, and
   locale catalog owned by tasks 1 through 6. Scan full Vue and noncatalog helper
-  source, not only templates.
+  source, not only templates. Include `sectionTypes.ts` and the
+  `editor-sections.ts` catalog.
 - Extract each SFC template and reject nonempty static text nodes and unbound
   user-facing attributes: `aria-label`, `label`, `title`, `placeholder`,
   `description`, and `confirm-label`.
@@ -36,6 +37,8 @@ owner instead of fixing it.
   Check those modules separately for `Record<Locale, SurfaceCopy>` typing,
   recursive key and value-shape parity, and nonempty Vietnamese and English
   values.
+- Preserve the authored-content defaults in `sectionTypes.ts` and the approved
+  English fallback in `AppSeal.vue`; allow only those exact values.
 - Keep a per-file exact allowlist only for `aboutme`, `A4`, `Letter`, `100%`,
   `DELETE`, language tags, template names, and other invariant terms approved by
   the design. The test must fail when a new literal is not allowlisted.

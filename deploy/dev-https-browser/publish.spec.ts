@@ -10,7 +10,11 @@ import {
 } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 
-import { createBlankResume, deleteRecordedResume } from "./editor-fixtures";
+import {
+  createBlankResume,
+  deleteRecordedResume,
+  readRemoteResumeRevision,
+} from "./editor-fixtures";
 import {
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
@@ -171,7 +175,7 @@ async function installPublicGuards(
 
 async function auditDialog(page: Page): Promise<void> {
   for (const viewport of [
-    { width: 1280, height: 900 },
+    { width: 1440, height: 900 },
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
@@ -199,6 +203,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   let secondEditor: Page | undefined;
   let revocationElapsed = 0;
   let publishMutationCount = 0;
+  let localeMutationCount = 0;
   let revokingPublic = false;
   let syntheticInvalidRequest = false;
   let syntheticInvalidConsoleBudget = 0;
@@ -226,6 +231,13 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   const requestListener = (request: Request): void => {
     const url = new URL(request.url());
     if (url.origin !== ORIGIN) return;
+    if (
+      resumeID !== undefined &&
+      ["POST", "PATCH", "DELETE"].includes(request.method()) &&
+      url.pathname.startsWith(`/api/v1/resumes/${resumeID}`)
+    ) {
+      localeMutationCount += 1;
+    }
     if (request.method() === "POST" && url.pathname.endsWith("/publish")) {
       if (syntheticInvalidRequest) return;
       events.push("publish-request");
@@ -322,63 +334,59 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     const created = await createBlankResume(
       page,
       `Publish proof ${crypto.randomUUID()}`,
+      undefined,
+      (accepted) => {
+        resumeID = accepted.metadata.id;
+      },
     );
     resumeID = created.metadata.id;
     stage("resume-created");
-    await page
-      .getByRole("navigation", { name: "Resume outline" })
-      .getByRole("button", { name: "Personal details", exact: true })
-      .press("Enter");
-    await page.getByLabel("Full name").fill("Publish proof resume");
-    await page.getByLabel("Full name").press("Tab");
-    await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page
-      .getByRole("button", { name: "+ Add section", exact: true })
-      .press("Enter");
-    await page.getByLabel("Section type").selectOption("work");
+    await page.getByTestId("workspace-locale-vi").press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+    stage("vietnamese-editor");
+    await page.locator('[data-action="open-document"]').press("Enter");
+    await page.getByLabel("Họ và tên").fill("Publish proof resume");
+    await page.getByLabel("Họ và tên").press("Tab");
+    await expect(page.getByTestId("save-status")).toContainText("Đã lưu");
+    await page.locator('[data-action="open-structure"]').press("Enter");
+    await page.locator('[data-action="section-type"]').selectOption("work");
     await page
       .getByTestId("section-create-form")
-      .getByRole("button", { name: "Add section", exact: true })
+      .locator('[data-action="create"]')
       .press("Enter");
-    await expect(page.getByTestId("save-status")).toContainText("Saved");
-    await page
-      .getByRole("navigation", { name: "Resume outline" })
-      .getByRole("button", { name: "Experience" })
-      .press("Enter");
-    await page.getByRole("button", { name: "Add entry" }).press("Enter");
+    await expect(page.getByTestId("save-status")).toContainText("Đã lưu");
+    await page.locator('[data-outline-key="work"]').press("Enter");
+    await page.locator('[data-action="add-entry"]').press("Enter");
     const entry = page.locator("[data-entry-id]");
     await expect(entry).toHaveCount(1);
-    await entry.getByLabel("Job title").fill("Engineer");
-    await entry.getByLabel("Job title").press("Tab");
-    await entry.getByLabel("Employer", { exact: true }).fill("Example Corp");
-    await entry.getByLabel("Employer", { exact: true }).press("Tab");
-    await expect(page.getByTestId("save-status")).toContainText("Saved");
+    await entry.getByLabel("Chức danh").fill("Engineer");
+    await entry.getByLabel("Chức danh").press("Tab");
+    await entry.getByLabel("Công ty", { exact: true }).fill("Example Corp");
+    await entry.getByLabel("Công ty", { exact: true }).press("Tab");
+    await expect(page.getByTestId("save-status")).toContainText("Đã lưu");
     steps.complete = true;
     stage("resume-complete");
 
     events.length = 0;
-    await page
-      .getByRole("navigation", { name: "Resume outline" })
-      .getByRole("button", { name: "Personal details", exact: true })
-      .press("Enter");
-    await page.getByLabel("Headline").fill("Accepted before publication");
+    await page.locator('[data-action="open-document"]').press("Enter");
+    await page.getByLabel("Tiêu đề").fill("Accepted before publication");
     await expect(page.getByTestId("public-mark")).toHaveCount(0);
     await expect(page.getByTestId("preview-stamp")).toHaveCount(0);
     await page.locator('[data-action="publish"]').press("Enter");
-    const dialog = page.getByRole("dialog", { name: "Publish resume" });
+    const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    await expect(page.getByLabel("Slug")).toBeFocused();
+    await expect(page.getByLabel("Đường dẫn")).toBeFocused();
     steps.keyboard = true;
     stage("dialog-open");
     await auditDialog(page);
     steps.accessibility = true;
     stage("dialog-audited");
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     stage("dialog-sized");
-    await page.getByLabel("Slug").fill(slug);
-    const live = page.getByLabel("Public resume");
-    const download = page.getByLabel("PDF download");
-    const seo = page.getByLabel("SEO and GEO");
+    await dialog.getByLabel("Đường dẫn", { exact: true }).fill(slug);
+    const live = dialog.getByLabel("CV công khai", { exact: true });
+    const download = dialog.getByLabel("Tải PDF", { exact: true });
+    const seo = dialog.getByLabel("SEO và GEO", { exact: true });
     await expect(live).not.toBeChecked();
     await expect(download).not.toBeChecked();
     await expect(seo).not.toBeChecked();
@@ -394,9 +402,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
         url.pathname === `/api/v1/resumes/${resumeID}/publish`
       );
     });
-    await dialog
-      .getByRole("button", { name: "Publish", exact: true })
-      .press("Enter");
+    await dialog.locator('[data-action="publish-submit"]').press("Enter");
     stage("publish-requested");
     const acceptedPublish = await publishResponse;
     statuses.publish = acceptedPublish.status();
@@ -409,7 +415,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       expect(previewStamp).toHaveAttribute("data-stamp", "landing"),
     ]);
     await expect(dialog.getByRole("status")).toHaveText(
-      "Published successfully.",
+      "Đã xuất bản thành công.",
     );
     stage("publish-status");
     const editAccepted = events.indexOf("edit-accepted");
@@ -448,17 +454,65 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       exact: true,
     });
     await expect(link).toHaveAttribute("href", `/${slug}`);
-    await dialog
-      .getByRole("button", { name: "Copy link", exact: true })
-      .press("Enter");
+    await dialog.locator('[data-action="copy-link"]').press("Enter");
     await expect(
-      dialog.getByRole("button", { name: "Copied", exact: true }),
+      dialog.getByRole("button", { name: "Đã sao chép", exact: true }),
     ).toBeVisible();
     await expect
       .poll(() => page.evaluate(() => navigator.clipboard.readText()))
       .toBe(`${ORIGIN}/${slug}`);
     steps.published = true;
     stage("published");
+    const revisionBeforeLocaleToggle = await readRemoteResumeRevision(
+      page,
+      resumeID,
+    );
+    const dialogNode = await dialog.elementHandle();
+    if (dialogNode === null) throw new Error("publish dialog is unavailable");
+    const slugField = dialog.locator('[data-action="publish-slug"]');
+    await slugField.focus();
+    await slugField.evaluate((input) => input.setSelectionRange(1, 3));
+    localeMutationCount = 0;
+    await dialog.getByRole("button", { name: "English", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    expect(
+      await dialog.evaluate((node, original) => node === original, dialogNode),
+    ).toBe(true);
+    await expect(dialog.getByLabel("Slug", { exact: true })).toHaveValue(slug);
+    await expect(slugField).toBeFocused();
+    await expect(slugField).toHaveJSProperty("selectionStart", 1);
+    await expect(slugField).toHaveJSProperty("selectionEnd", 3);
+    expect(localeMutationCount).toBe(0);
+    await expect(readRemoteResumeRevision(page, resumeID)).resolves.toBe(
+      revisionBeforeLocaleToggle,
+    );
+    const vietnamese = dialog.getByRole("button", {
+      name: "Tiếng Việt",
+      exact: true,
+    });
+    await vietnamese.focus();
+    await vietnamese.press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+    await expect(vietnamese).toBeFocused();
+    await dialog
+      .getByRole("button", { name: "English", exact: true })
+      .press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    expect(localeMutationCount).toBe(0);
+    await expect(readRemoteResumeRevision(page, resumeID)).resolves.toBe(
+      revisionBeforeLocaleToggle,
+    );
+    await expect(dialog.getByRole("status")).toHaveText(
+      "Published successfully.",
+    );
+    await expect(dialog.locator('[data-action="copy-link"]')).toHaveText(
+      "Copied",
+    );
+    await dialog.locator('[data-action="copy-link"]').press("Enter");
+    await expect(
+      dialog.getByRole("button", { name: "Copied", exact: true }),
+    ).toBeVisible();
+    stage("english-publication-state");
     publicContext = await browser.newContext();
     const publicCounters = counters;
     await installPublicGuards(publicContext, publicCounters);
@@ -574,7 +628,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
 
     await page.locator('[data-action="publish"]').press("Enter");
     stage("update-reopen");
-    let updateDialog = page.getByRole("dialog", { name: "Publish resume" });
+    let updateDialog = page.getByRole("dialog");
     await expect(updateDialog).toBeVisible();
     stage("update-visible");
 
@@ -611,6 +665,19 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       '[data-action="focus-publish-issue"]',
     );
     await expect(issueActions).toHaveCount(24);
+    await updateDialog
+      .getByRole("button", { name: "Tiếng Việt", exact: true })
+      .press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "vi");
+    await expect(updateDialog).toContainText("Không thể xuất bản CV.");
+    await expect(issueActions).toHaveCount(24);
+    await updateDialog
+      .getByRole("button", { name: "English", exact: true })
+      .press("Enter");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(updateDialog).toContainText("The resume cannot be published.");
+    await expect(issueActions).toHaveCount(24);
+    stage("locale-error-preserved");
     syntheticInvalidRequest = false;
     await updateDialog.evaluate(async (element) => {
       await Promise.all(
@@ -641,9 +708,9 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     steps.longInvalidLayout = true;
     stage("long-invalid-layout");
 
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.locator('[data-action="publish"]').press("Enter");
-    updateDialog = page.getByRole("dialog", { name: "Publish resume" });
+    updateDialog = page.getByRole("dialog");
     await expect(updateDialog).toBeVisible();
     await updateDialog.getByLabel("SEO and GEO").press("Space");
     const discoveryResponse = page.waitForResponse((response) => {
@@ -671,9 +738,7 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       .getByRole("button", { name: "Cancel", exact: true })
       .press("Enter");
     await page.locator('[data-action="publish"]').press("Enter");
-    const unpublishDialog = page.getByRole("dialog", {
-      name: "Publish resume",
-    });
+    const unpublishDialog = page.getByRole("dialog");
     await expect(unpublishDialog).toBeVisible();
     await unpublishDialog.getByLabel("Public resume").press("Space");
     await page.emulateMedia({ reducedMotion: "reduce" });
@@ -697,7 +762,9 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
       .press("Enter");
     statuses.unpublish = (await unpublishResponse).status();
     expect(statuses.unpublish).toBe(200);
-    await expect(unpublishDialog.getByLabel("Slug")).toHaveValue(slug);
+    await expect(
+      unpublishDialog.getByLabel("Slug", { exact: true }),
+    ).toHaveValue(slug);
     await expect(publicMark).toHaveCount(0);
     await expect(previewStamp).toHaveCount(0);
     const revokedResponse = await revokedNavigation;

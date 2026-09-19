@@ -8,7 +8,13 @@ import {
   loginAsDevelopmentUser,
   uniqueTitle,
 } from './editor-fixtures';
-import { pinEnglish, waitForHydration } from './harness-lib';
+import {
+  installExternalRequestFirewall,
+  installExternalWebSocketFirewall,
+  newDiagnosticCounters,
+  pinEnglish,
+  waitForHydration,
+} from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
@@ -21,6 +27,37 @@ const SCHEMA_VERSION = '4';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';
+const PDF_NAME = 'Public-proof-resume-Resume.pdf';
+let createdID: string | undefined;
+
+function stage(name: string): void {
+  console.log('public-stage:' + name);
+}
+
+test.afterEach(async ({ browser }, testInfo) => {
+  if (createdID === undefined) return;
+  testInfo.setTimeout(testInfo.timeout + 30_000);
+  const cleanupID = createdID;
+  const cleanupCounters = newDiagnosticCounters();
+  try {
+    const cleanupContext = await browser.newContext();
+    await installExternalRequestFirewall(cleanupContext, cleanupCounters);
+    await installExternalWebSocketFirewall(cleanupContext, cleanupCounters);
+    await pinEnglish(cleanupContext);
+    try {
+      const cleanupPage = await cleanupContext.newPage();
+      await loginAsDevelopmentUser(cleanupPage);
+      await deleteRecordedResume(cleanupPage, cleanupID);
+      expect(cleanupCounters.externalRequests).toBe(0);
+      createdID = undefined;
+    } finally {
+      await cleanupContext.close();
+    }
+  } catch (error) {
+    stage('cleanup-failed');
+    throw error;
+  }
+});
 
 test('proves a published resume hydrates in a real browser', async ({
   browser,
@@ -43,48 +80,59 @@ test('proves a published resume hydrates in a real browser', async ({
     openedPage.on('pageerror', (error) => pageErrors.push(error.message));
   };
 
-  let createdID: string | undefined;
   let publishedSlug: string | undefined;
 
-  try {
+  {
+    createdID = undefined;
+    stage('locale');
     await pinEnglish(page.context());
+    stage('sign-in');
     await loginAsDevelopmentUser(page);
-    const created = await createBlankResume(page, uniqueTitle());
+    stage('create-resume');
+    const created = await createBlankResume(
+      page,
+      uniqueTitle(),
+      (createStage) => {
+        stage('create-' + createStage);
+      },
+      (accepted) => {
+        createdID = accepted.metadata.id;
+      },
+    );
     createdID = created.metadata.id;
     publishedSlug = `public-${crypto.randomUUID().slice(0, 8)}`;
 
     // Publish requires at least a full name; fill it and wait for the autosave.
-    await page
-      .getByRole('navigation', { name: 'Resume outline' })
-      .getByRole('button', { name: 'Personal details', exact: true })
-      .press('Enter');
-    await page.getByLabel('Full name', { exact: true }).fill('Public proof resume');
-    await page.getByLabel('Full name', { exact: true }).press('Tab');
-    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+    stage('personal-details');
+    await page.locator('[data-action="open-document"]').press('Enter');
+    await page.locator('[data-field="fullName"] [data-field-input]')
+      .fill('Public proof resume');
+    await page.locator('[data-field="fullName"] [data-field-input]').press('Tab');
+    await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
 
     // Add one work section and entry, so the resume meets the publish
     // completeness minimum (a full name plus at least one visible entry).
-    await page
-      .getByRole('button', { name: '+ Add section', exact: true })
-      .press('Enter');
-    await page.getByLabel('Section type').selectOption('work');
+    stage('work-entry');
+    await page.locator('[data-action="open-structure"]').press('Enter');
+    await page.locator('[data-action="section-type"]').selectOption('work');
     await page
       .getByTestId('section-create-form')
-      .getByRole('button', { name: 'Add section', exact: true })
+      .locator('[data-action="create"]')
       .press('Enter');
-    await expect(page.locator('[data-state="saved"]')).toBeVisible();
-    await page
-      .getByRole('navigation', { name: 'Resume outline' })
-      .getByRole('button', { name: 'Experience' })
-      .press('Enter');
-    await page.getByRole('button', { name: 'Add entry' }).press('Enter');
-    await page.locator('[data-entry-id]').first().getByLabel('Job title').fill('Engineer');
-    await page.locator('[data-entry-id]').first().getByLabel('Job title').press('Tab');
-    await page.locator('[data-entry-id]').first().getByLabel('Employer', { exact: true }).fill('Example Corp');
-    await page.locator('[data-entry-id]').first().getByLabel('Employer', { exact: true }).press('Tab');
-    await expect(page.locator('[data-state="saved"]')).toBeVisible();
+    await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
+    await page.locator('[data-outline-key="work"]').press('Enter');
+    await page.locator('[data-action="add-entry"]').press('Enter');
+    const entry = page.locator('[data-entry-id]').first();
+    await entry.locator('[data-entry-field="jobTitle"] [data-field-input]')
+      .fill('Engineer');
+    await entry.locator('[data-entry-field="jobTitle"] [data-field-input]').press('Tab');
+    await entry.locator('[data-entry-field="employer"] [data-field-input]')
+      .fill('Example Corp');
+    await entry.locator('[data-entry-field="employer"] [data-field-input]').press('Tab');
+    await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
 
     // The autosave advanced the revision; read the current one for If-Match.
+    stage('read-revision');
     const currentRevision = await page.evaluate(async (id) => {
       const response = await fetch(`/api/v1/resumes/${id}`, {
         credentials: 'include',
@@ -100,6 +148,7 @@ test('proves a published resume hydrates in a real browser', async ({
 
     // A custom https contact with discovery on: the Go validator requires the
     // renderer's JSON-LD sameAs to match its own, custom links included.
+    stage('write-contacts');
     const detailCSRF = await freshCSRF(page);
     const detailWrite = await page.evaluate(async (input) => {
       const response = await fetch(`/api/v1/resumes/${input.id}/personal-details`, {
@@ -147,6 +196,7 @@ test('proves a published resume hydrates in a real browser', async ({
 
     // Publish: the resume must already hold a live slug before any public
     // route will serve it.
+    stage('publish');
     const csrf = await freshCSRF(page);
     const publishStatus = await page.evaluate(async (input) => {
       const response = await fetch(`/api/v1/resumes/${input.id}/publish`, {
@@ -182,6 +232,7 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(publishStatus.status, JSON.stringify(publishStatus.body)).toBe(200);
 
     // Prove the page in a fresh context with no session cookies.
+    stage('public-context');
     const publicContext = await browser.newContext();
     const publicPage = await publicContext.newPage();
     attachDiagnostics(publicPage);
@@ -209,6 +260,7 @@ test('proves a published resume hydrates in a real browser', async ({
       await route.continue();
     });
 
+    stage('public-navigation');
     const response = await publicPage.goto(`${ORIGIN}/${publishedSlug}`);
     expect(response?.status()).toBe(200);
     const structured = await publicPage
@@ -220,6 +272,7 @@ test('proves a published resume hydrates in a real browser', async ({
     await expect(publicPage.locator('a[href="mailto:proof@example.com"]')).toHaveText('proof@example.com');
     await expect(publicPage.locator('a[href="tel:+84374837720"]')).toHaveText('(+84) 374837720');
 
+    stage('public-head');
     // The owner's title and emoji favicon pass the server's exact-head check.
     await expect(publicPage).toHaveTitle(PAGE_TITLE);
     const icon = publicPage.locator('link[rel="icon"]');
@@ -235,7 +288,8 @@ test('proves a published resume hydrates in a real browser', async ({
     await expect(credit).toHaveAttribute('href', `${new URL(publicPage.url()).origin}/`);
     await expect(credit).toHaveText('Built with aboutme.vn');
 
-    // Download is enabled, so the page links its own PDF, named after the slug.
+    // Download is enabled, so the page links its own PDF.
+    stage('public-download');
     const download = publicPage.locator('a.public-download');
     await expect(download).toHaveCount(1);
     await expect(download).toHaveAttribute('href', `/api/v1/public/resumes/${publishedSlug}/pdf`);
@@ -251,7 +305,7 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(pdf).toEqual({
       status: 200,
       type: 'application/pdf',
-      disposition: `attachment; filename="${publishedSlug}.pdf"`,
+      disposition: `attachment; filename="${PDF_NAME}"; filename*=UTF-8''${PDF_NAME}`,
     });
     await publicPage.emulateMedia({ media: 'print' });
     await expect(download).toBeHidden();
@@ -259,16 +313,19 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(response?.headers()['content-security-policy']).toContain("default-src 'none'");
 
     // SSR markup is present before hydration runs.
+    stage('public-ssr');
     const main = publicPage.locator('#public-resume');
     await expect(main).toBeVisible();
     await expect(main).toHaveAttribute('data-revision', /^[1-9][0-9]*$/);
     await expect(publicPage).toHaveTitle(PAGE_TITLE);
 
     // The client hydration mounts the Vue app on the SSR root.
+    stage('public-hydration');
     await waitForHydration(publicPage, 'public-resume');
 
     // The template stylesheets load under the page CSP and style the resume;
     // DOM presence alone would pass on an unstyled page.
+    stage('public-styling');
     const styling = await publicPage.evaluate(() => {
       const sheets = [...document.styleSheets].map((sheet) => ({
         href: sheet.href === null ? '' : new URL(sheet.href).pathname,
@@ -314,6 +371,7 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(unquoted(styling.resume?.fontFamily)).toBe(unquoted(styling.resume?.fontVariable));
 
     // The skip link stays out of view until keyboard focus reaches it.
+    stage('public-skip-link');
     const skip = publicPage.getByRole('link', { name: 'Skip to content' });
     const hidden = await skip.boundingBox();
     expect(hidden === null || (hidden.width <= 1 && hidden.height <= 1)).toBe(true);
@@ -324,10 +382,6 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(shown?.height ?? 0).toBeGreaterThan(1);
 
     await publicContext.close();
-  } finally {
-    if (createdID !== undefined) {
-      await deleteRecordedResume(page, createdID);
-    }
   }
 
   expect(consoleErrors).toEqual([]);

@@ -256,7 +256,7 @@ inside_container() {
     --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    if [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
+    if [ "$mode" = public ] || [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
       [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ] ||
       [ "$mode" = sample-start ]; then
       local -a bounded_stages=()
