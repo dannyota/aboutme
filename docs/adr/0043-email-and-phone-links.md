@@ -9,10 +9,10 @@ Supersedes the clause of [ADR 0013](0013-contact-detail-rendering.md) (b) and
 ## Context
 
 Readers of a resume expect to tap an email address or a phone number. ADR 0013
-kept both as text because the schema defines no format for them and a link
-built from an unchecked string could carry anything. That reason still holds
-for the schema, so any link must come from a strict check in the renderer, the
-way the `https://` re-check guards URL details.
+kept both as text because the schema defines no format for them and a link built
+from an unchecked string could carry anything. That reason still holds for the
+schema, so any link must come from a strict check in the renderer, the way the
+`https://` re-check guards URL details.
 
 ## Decision
 
@@ -22,7 +22,7 @@ passes these checks, and otherwise renders the value as text.
 1. **Email.** The href is `mailto:` followed by the value, when the value:
    - is 1 to 254 characters, counted as code points;
    - holds no Unicode white space, control, or format character, and none of
-     `` < > " ' ` ( ) \ , ; : ? # % ``;
+     ``< > " ' ` ( ) \ , ; : ? # %``;
    - has exactly one `@`, with at least one character before it;
    - has a part after `@` that contains a `.` and neither starts nor ends with
      one.
@@ -41,8 +41,7 @@ headers such as `?bcc=` or a fragment to the `mailto:` URL.
 ## Consequences
 
 - The Go package `internal/contactlink` and the web renderer implement the same
-  rules. A shared corpus of cases, including hostile ones, keeps them
-  identical.
+  rules. A shared corpus of cases, including hostile ones, keeps them identical.
 - The public HTML validator accepts a `mailto:` or `tel:` anchor inside the
   resume header only when it equals an href derived by these rules from a
   visible detail, each once. Rich text keeps its own sanitized `mailto:` and
