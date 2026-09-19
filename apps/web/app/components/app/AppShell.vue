@@ -4,6 +4,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { isLocalizedPath, localeNames, locales } from '@/i18n/locale';
 import { shellCopy } from '@/i18n/shell';
 import { cn } from '@/lib/utils';
+import { validateReturnPath } from '@/utils/returnPath';
 import AccountMenu from './AccountMenu.vue';
 import ThemeToggle from './ThemeToggle.vue';
 
@@ -13,6 +14,20 @@ const signedIn = computed(() => authState.value === 'authenticated');
 // Only the homepage and account pages are bilingual; other routes stay
 // English (app/i18n/locale.ts).
 const localized = computed(() => isLocalizedPath(route.path));
+// On the account pages themselves, carry a validated next along so a click
+// on the header's other link does not drop it (login.vue and register.vue
+// carry it the same way on their own cross-link).
+const explicitNext = computed(() => (
+  route.path === '/login' || route.path === '/register'
+    ? validateReturnPath(route.query.next)
+    : null
+));
+const signInLink = computed(() => (explicitNext.value
+  ? `/login?next=${encodeURIComponent(explicitNext.value)}`
+  : '/login'));
+const createAccountLink = computed(() => (explicitNext.value
+  ? `/register?next=${encodeURIComponent(explicitNext.value)}`
+  : '/register'));
 const { locale, setLocale } = useLocale();
 const shellLocale = useRouteLocale();
 const copy = computed(() => shellCopy[shellLocale.value]);
@@ -65,14 +80,14 @@ const localeClass = cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
             localized && 'max-sm:hidden',
           )"
-          to="/login"
+          :to="signInLink"
         >{{ copy.signIn }}</NuxtLink>
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'secondary', size: 'sm' }),
             localized && 'max-sm:hidden',
           )"
-          to="/register"
+          :to="createAccountLink"
         >{{ copy.createAccount }}</NuxtLink>
       </template>
       <div
