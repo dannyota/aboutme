@@ -20,6 +20,7 @@ COPY apps/web/server/ ./apps/web/server/
 COPY docs/api/openapi.yaml ./docs/api/openapi.yaml
 COPY packages/schema/package.json packages/schema/resume.schema.json ./packages/schema/
 COPY packages/schema/gen/ts/ ./packages/schema/gen/ts/
+COPY packages/schema/samples/ ./packages/schema/samples/
 COPY packages/schema/fixtures/full.json packages/schema/fixtures/vn-full.json ./packages/schema/fixtures/
 COPY packages/schema/validation/store.ts ./packages/schema/validation/
 
