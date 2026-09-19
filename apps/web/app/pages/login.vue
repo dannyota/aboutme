@@ -28,6 +28,10 @@ import {
 } from '../composables/usePasswordAuth';
 import { useCapabilities } from '../composables/useCapabilities';
 import { pageTitle } from '@/i18n/meta';
+import {
+  DEFAULT_RETURN_PATH,
+  validateReturnPath,
+} from '@/utils/returnPath';
 
 const route = useRoute();
 const { loginProviders, resolved } = useCapabilities();
@@ -35,28 +39,13 @@ const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
 useHead(computed(() => ({ title: pageTitle(copy.value.signIn) })));
 
-const FALLBACK_NEXT = '/app/resumes';
-
-/** Accept only a bounded, same-origin relative return path. */
-function validateLoginNext(value: unknown): string | null {
-  if (typeof value !== 'string' || value === '' || !value.startsWith('/')) {
-    return null;
-  }
-  if (value.startsWith('//') || /[\\\r\n]/.test(value)) return null;
-  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) return null;
-  if (/%(?![0-9A-Fa-f]{2})/.test(value)) return null;
-  if (new TextEncoder().encode(value).byteLength > 2048) return null;
-  try {
-    const parsed = new URL(value, 'https://aboutme.invalid');
-    if (parsed.origin !== 'https://aboutme.invalid') return null;
-  } catch {
-    return null;
-  }
-  return value;
-}
-
-const explicitNext = computed(() => validateLoginNext(route.query.next));
-const loginDestination = computed(() => explicitNext.value ?? FALLBACK_NEXT);
+const explicitNext = computed(() => validateReturnPath(route.query.next));
+const loginDestination = computed(
+  () => explicitNext.value ?? DEFAULT_RETURN_PATH,
+);
+const registerLink = computed(() => (explicitNext.value
+  ? `/register?next=${encodeURIComponent(explicitNext.value)}`
+  : '/register'));
 
 const errorMessages: Record<string, AuthMessage> = {
   auth_failed: 'providerFailed',
@@ -238,7 +227,7 @@ async function onSubmit() {
       </NuxtLink>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
-        to="/register"
+        :to="registerLink"
       >
         {{ copy.createAccount }}
       </NuxtLink>
