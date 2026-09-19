@@ -120,6 +120,16 @@ test('proves a published resume hydrates in a real browser', async ({
             label: 'ORCID',
             value: input.customLink,
             isHidden: false,
+          }, {
+            id: crypto.randomUUID(),
+            type: 'email',
+            value: 'proof@example.com',
+            isHidden: false,
+          }, {
+            id: crypto.randomUUID(),
+            type: 'phone',
+            value: '(+84) 374837720',
+            isHidden: false,
           }],
         }),
       });
@@ -206,6 +216,9 @@ test('proves a published resume hydrates in a real browser', async ({
       .textContent();
     expect(JSON.parse(structured ?? '{}').mainEntity?.sameAs).toEqual([CUSTOM_LINK]);
     await expect(publicPage.locator(`a[href="${CUSTOM_LINK}"]`)).toHaveText('orcid.example/0000-0001');
+    // Email and phone link after the server-checked rules (ADR 0043).
+    await expect(publicPage.locator('a[href="mailto:proof@example.com"]')).toHaveText('proof@example.com');
+    await expect(publicPage.locator('a[href="tel:+84374837720"]')).toHaveText('(+84) 374837720');
 
     // The owner's title and emoji favicon pass the server's exact-head check.
     await expect(publicPage).toHaveTitle(PAGE_TITLE);

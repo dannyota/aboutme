@@ -1,0 +1,275 @@
+{
+  "$comment": "Shared by internal/contactlink (Go) and the web renderer tests (TS). href is the anchor target, or null when the value stays text. See docs/adr/0043-email-and-phone-links.md.",
+  "cases": [
+    {
+      "type": "email",
+      "value": "ada@example.com",
+      "href": "mailto:ada@example.com"
+    },
+    {
+      "type": "email",
+      "value": "ada.lovelace+cv@mail.example.co.uk",
+      "href": "mailto:ada.lovelace+cv@mail.example.co.uk"
+    },
+    {
+      "type": "email",
+      "value": "minh.chau@v\u00ed-d\u1ee5.vn",
+      "href": "mailto:minh.chau@v\u00ed-d\u1ee5.vn"
+    },
+    {
+      "type": "email",
+      "value": "a@b.c",
+      "href": "mailto:a@b.c"
+    },
+    {
+      "type": "email",
+      "value": "",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@example",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@ex@ample.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@.example",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@example.",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": " ada@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada @example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@example.com\n",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada\u00a0@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada\u200b@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada\u202e@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "<ada@example.com>",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "\"ada\"@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada'@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada`@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada(x)@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada\\@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada,bob@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada;bob@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "javascript:alert(1)@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@example.com?bcc=eve@evil.example",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada@example.com#frag",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "ada%40@example.com",
+      "href": null
+    },
+    {
+      "type": "email",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com",
+      "href": "mailto:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com"
+    },
+    {
+      "type": "email",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "(+84) 374837720",
+      "href": "tel:+84374837720"
+    },
+    {
+      "type": "phone",
+      "value": "+84 90 123 4567",
+      "href": "tel:+84901234567"
+    },
+    {
+      "type": "phone",
+      "value": "090-123-4567",
+      "href": "tel:0901234567"
+    },
+    {
+      "type": "phone",
+      "value": "090.123.4567",
+      "href": "tel:0901234567"
+    },
+    {
+      "type": "phone",
+      "value": "123",
+      "href": "tel:123"
+    },
+    {
+      "type": "phone",
+      "value": "12",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "+11111111111111111111",
+      "href": "tel:+11111111111111111111"
+    },
+    {
+      "type": "phone",
+      "value": "111111111111111111111",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "+",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "++84 123",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "84+123",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "+84 90 123 4567 ext 12",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "+84\t901234567",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "+84\u00a0901234567",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "\u0660\u0661\u0662\u0663",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "tel:+84901234567",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "+84 90;phone-context=x",
+      "href": null
+    },
+    {
+      "type": "phone",
+      "value": "javascript:alert(1)",
+      "href": null
+    },
+    {
+      "type": "location",
+      "value": "Hanoi",
+      "href": null
+    },
+    {
+      "type": "custom",
+      "value": "ada@example.com",
+      "href": null
+    }
+  ]
+}

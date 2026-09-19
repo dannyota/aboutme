@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 
 	"golang.org/x/net/html"
 
+	"github.com/dannyota/aboutme/apps/server/internal/contactlink"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
@@ -202,6 +204,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
 	stylesheets := map[string]bool{}
+	contactLinks := derivedContactLinks(resume)
 	rule := ""
 	reject := func(name string) {
 		if rule == "" {
@@ -295,6 +298,14 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 						return
 					}
 					skipLinks++
+				} else if (strings.HasPrefix(href, "mailto:") || strings.HasPrefix(href, "tel:")) && insideResumeHeader(node) {
+					// Header contact links are exactly the hrefs derived from
+					// visible email and phone details, each once.
+					if contactLinks[href] == 0 {
+						reject("contact_link")
+						return
+					}
+					contactLinks[href]--
 				} else if href == publicPDFPath(resume.Slug) {
 					// The page's own PDF, once, only while download is enabled.
 					if !resume.DownloadEnabled || downloadLinks != 0 {
@@ -432,6 +443,32 @@ func versionedAsset(url, path string) bool {
 		}
 	}
 	return true
+}
+
+// derivedContactLinks counts the mailto: and tel: hrefs the renderer may emit
+// for the resume's visible contact details (docs/adr/0043-email-and-phone-links.md).
+func derivedContactLinks(resume publicresume.PublicResume) map[string]int {
+	links := map[string]int{}
+	if !resume.Document.PersonalDetails.Details.Present() {
+		return links
+	}
+	for _, detail := range resume.Document.PersonalDetails.Details.Value() {
+		if href, ok := contactlink.Href(detail.Type, detail.Value); ok {
+			links[href]++
+		}
+	}
+	return links
+}
+
+// insideResumeHeader reports whether node sits in the resume's header block.
+func insideResumeHeader(node *html.Node) bool {
+	for ancestor := node.Parent; ancestor != nil; ancestor = ancestor.Parent {
+		if ancestor.Type == html.ElementNode && ancestor.Data == "header" &&
+			slices.Contains(strings.Fields(attribute(ancestor, "class")), "resume-header") {
+			return true
+		}
+	}
+	return false
 }
 
 func publicPDFPath(slug string) string {

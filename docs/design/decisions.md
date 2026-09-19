@@ -1,7 +1,7 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. Records 0001–0042
+supersession record; these pages state the resulting design. Records 0001–0043
 are accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                    |
@@ -48,6 +48,7 @@ are accepted.
 | [0040](../adr/0040-contact-labels-beside-icons.md)                   | Accepted | Icons replace default contact labels; linked addresses display without scheme or trailing slash                       |
 | [0041](../adr/0041-contact-link-display-and-body-justify.md)         | Accepted | Document v3: custom https links, per-detail link display, justified body text; GitHub and X brand marks               |
 | [0042](../adr/0042-public-page-title-and-favicon.md)                 | Accepted | Owner-set public page title and one-emoji favicon as publication settings; exact server-computed head values          |
+| [0043](../adr/0043-email-and-phone-links.md)                         | Accepted | Email and phone details link as `mailto:` and `tel:` only after a strict renderer check                               |
 
 ## Remaining gates
 
