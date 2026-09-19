@@ -63,7 +63,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Dẫn dắt nhóm 4 người chuyển ứng dụng mua sắm sang Next.js, giảm thời gian hiển thị nội dung chính (LCP) từ 4,1 giây xuống 1,9 giây.</li><li>Xây dựng design system 60 thành phần cho 5 nhóm sản phẩm, rút ngắn 30% thời gian phát triển tính năng mới.</li><li>Tối ưu biểu mẫu thanh toán qua 6 thử nghiệm A/B, tăng tỷ lệ chuyển đổi 9%.</li></ul>"
+          "description": "<ul><li>Dẫn dắt nhóm 4 người chuyển ứng dụng mua sắm sang Next.js, giảm thời gian hiển thị nội dung chính (LCP) từ 4,1 giây xuống 1,9 giây.</li><li>Xây dựng design system 60 thành phần cho 5 nhóm sản phẩm, rút ngắn 30% thời gian phát triển tính năng mới.</li><li>Tối ưu biểu mẫu thanh toán qua 6 thử nghiệm A/B, tăng tỷ lệ chuyển đổi 9%.</li><li>Kèm cặp 3 kỹ sư mới trong chương trình 3 tháng; cả 3 tự nhận tính năng độc lập từ tháng thứ hai.</li></ul>"
         },
         {
           "id": "12351fe2-5296-575d-9de8-4773e55b3d57",
@@ -83,7 +83,27 @@
             },
             "present": false
           },
-          "description": "<ul><li>Phát triển bảng điều khiển quản lý kho (React, TypeScript) cho 800 doanh nghiệp bán lẻ.</li><li>Thiết lập kiểm thử đầu cuối bằng Playwright, giảm 70% lỗi hồi quy lọt lên môi trường thật.</li></ul>"
+          "description": "<ul><li>Phát triển bảng điều khiển quản lý kho (React, TypeScript) cho 800 doanh nghiệp bán lẻ.</li><li>Thiết lập kiểm thử đầu cuối bằng Playwright, giảm 70% lỗi hồi quy lọt lên môi trường thật.</li><li>Ảo hóa bảng dữ liệu 10.000 dòng, rút thời gian phản hồi khi cuộn từ 3 giây xuống 0,3 giây.</li></ul>"
+        },
+        {
+          "id": "2f8825fc-6422-5423-8b33-2f3cc7a64341",
+          "isHidden": false,
+          "jobTitle": "Thực tập sinh Frontend",
+          "employer": "Công ty TNHH Giải pháp Số Hạt Mầm",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2021,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>Xây dựng 12 màn hình quản trị bằng React cho hệ thống đặt lịch khám của 3 phòng khám.</li><li>Viết kiểm thử đơn vị với Jest, nâng độ bao phủ mã từ 35% lên 70%.</li></ul>"
         }
       ]
     },
