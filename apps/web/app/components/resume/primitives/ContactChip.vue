@@ -2,6 +2,7 @@
 import type { PersonalDetail } from '@aboutme/schema';
 import { computed } from 'vue';
 
+import { contactHref } from '../contactHref';
 import Icon from './Icon.vue';
 
 const props = defineProps<{
@@ -29,20 +30,10 @@ const iconKeys: Record<PersonalDetail['type'], string> = {
   twitter: 'twitter',
   custom: 'user',
 };
-const linkTypes = new Set<PersonalDetail['type']>([
-  'website',
-  'linkedin',
-  'github',
-  'twitter',
-  'custom',
-]);
-// The renderer re-checks the exact lowercase https:// prefix itself and never
-// trusts write-time validation (ADR 0013, ADR 0041).
-const isLink = computed(
-  () =>
-    linkTypes.has(props.detail.type)
-    && props.detail.value.startsWith('https://'),
-);
+const href = computed(() => contactHref(props.detail));
+// Display modes apply to web addresses only; an email or phone link always
+// shows its value (ADR 0043).
+const isLink = computed(() => href.value?.startsWith('https://') ?? false);
 const iconKey = computed(() =>
   props.detail.type === 'custom' && isLink.value
     ? 'link'
@@ -82,8 +73,8 @@ const shownValue = computed(() => {
       class="contact-label"
     >{{ label }}:</span>
     <a
-      v-if="isLink"
-      :href="detail.value"
+      v-if="href !== null"
+      :href="href"
       rel="noopener noreferrer"
       style="color: var(--color-link); text-decoration: underline"
     >{{ shownValue }}</a>

@@ -229,3 +229,53 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 		t.Fatalf("icon without the setting: rule = %q, want favicon", rule)
 	}
 }
+
+// Header email and phone anchors must be exactly the links the contact rules
+// derive from visible details (docs/adr/0043-email-and-phone-links.md). Rich
+// text keeps its own sanitized mailto: and tel: links.
+func TestPublicHTMLAcceptsOnlyDerivedContactLinksInTheHeader(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	resume := publicresume.PublicResume{Slug: "ada", Revision: "1", Document: publicresume.PublicResumeDocument{
+		PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada", Details: publicresume.PresentPublicDetails([]publicresume.PublicPersonalDetail{
+			{ID: "e", Type: "email", Value: "ada@example.com"},
+			{ID: "p", Type: "phone", Value: "(+84) 374837720"},
+			{ID: "x", Type: "email", Value: "not an address"},
+		})},
+	}}
+	jsonLD, err := publicformat.JSONLD(resume, origin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header := `<header class="resume-header">` +
+		`<a href="mailto:ada@example.com">ada@example.com</a>` +
+		`<a href="tel:+84374837720">(+84) 374837720</a></header>`
+	page := func(content string) []byte {
+		valid := validHTML("Ada", "https://aboutme.example/ada", "1", "")
+		out := strings.Replace(valid, `data-revision="1">`, `data-revision="1">`+content, 1)
+		if out == valid {
+			t.Fatal("fixture replacement did not apply")
+		}
+		return []byte(out)
+	}
+	if rule := publicHTMLRejection(page(header), resume, origin, jsonLD, false); rule != "" {
+		t.Fatalf("derived contact links rejected by %q", rule)
+	}
+	richText := `<div class="rich-text"><p><a href="mailto:someone@else.example">x</a> <a href="tel:12345">y</a></p></div>`
+	if rule := publicHTMLRejection(page(header+richText), resume, origin, jsonLD, false); rule != "" {
+		t.Fatalf("rich-text mailto and tel links rejected by %q", rule)
+	}
+	for name, candidate := range map[string]string{
+		"underived address":    strings.Replace(header, "mailto:ada@example.com", "mailto:eve@evil.example", 1),
+		"mail headers":         strings.Replace(header, "mailto:ada@example.com", "mailto:ada@example.com?bcc=eve@evil.example", 1),
+		"unnormalized phone":   strings.Replace(header, "tel:+84374837720", "tel:(+84) 374837720", 1),
+		"text-only detail":     strings.Replace(header, "</header>", `<a href="mailto:not an address">x</a></header>`, 1),
+		"second copy":          strings.Replace(header, "</header>", `<a href="mailto:ada@example.com">again</a></header>`, 1),
+		"nested in the header": strings.Replace(header, "</header>", `<span><a href="tel:+84999999999">x</a></span></header>`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if rule := publicHTMLRejection(page(candidate), resume, origin, jsonLD, false); rule != "contact_link" {
+				t.Fatalf("rule = %q, want contact_link", rule)
+			}
+		})
+	}
+}

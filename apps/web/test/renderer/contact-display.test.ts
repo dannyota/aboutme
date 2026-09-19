@@ -135,14 +135,22 @@ describe('link display modes', () => {
     }
   });
 
-  it('ignores display on a value that renders as text', () => {
+  it('ignores display on email, phone, and text values', () => {
     for (const display of ['full', 'label'] as const) {
-      const wrapper = chip(
+      // An email links as mailto: with its value as the text (ADR 0043).
+      const email = chip(
         detail('email', 'ada@example.com', { display }),
         'none',
       );
-      expect(wrapper.find('a').exists()).toBe(false);
-      expect(wrapper.text()).toBe('Email:ada@example.com');
+      expect(email.get('a').attributes('href'))
+        .toBe('mailto:ada@example.com');
+      expect(email.text()).toBe('Email:ada@example.com');
+      const location = chip(
+        detail('location', 'Hà Nội', { display }),
+        'none',
+      );
+      expect(location.find('a').exists()).toBe(false);
+      expect(location.text()).toBe('Location:Hà Nội');
     }
   });
 });

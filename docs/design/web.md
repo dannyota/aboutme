@@ -178,12 +178,13 @@ graph TD
 `ResumeHeader` displays visible contact details in array order. A non-empty
 custom label replaces the type label. Website, LinkedIn, GitHub, Twitter, and
 custom values link only after an exact lowercase `https://` check, and a
-detail's `display` picks the anchor text. Email, phone, and location values are
-plain text. Every inline link is underlined and carries
-`rel="noopener noreferrer"`.
+detail's `display` picks the anchor text. Email and phone values link as
+`mailto:` and `tel:` only after a strict check, with the value as the anchor
+text; location values are plain text. Every inline link is underlined.
 [ADR 0013](../adr/0013-contact-detail-rendering.md),
-[ADR 0040](../adr/0040-contact-labels-beside-icons.md), and
-[ADR 0041](../adr/0041-contact-link-display-and-body-justify.md) own these
+[ADR 0040](../adr/0040-contact-labels-beside-icons.md),
+[ADR 0041](../adr/0041-contact-link-display-and-body-justify.md), and
+[ADR 0043](../adr/0043-email-and-phone-links.md) own these
 rules.
 
 `LayoutColumns` reads order only from `customization.layout.sections`. In
