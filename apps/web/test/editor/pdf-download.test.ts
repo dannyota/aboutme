@@ -8,9 +8,13 @@ import {
 import { acceptedFixture } from './fixture';
 
 const resumeId = '00000000-0000-4000-8000-000000000001';
+const vietnameseContentDisposition = [
+  'attachment; filename="Nguyen-Van-Duc-Resume.pdf"; ',
+  'filename*=UTF-8\'\'Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf',
+].join('');
 
 describe('PDF download', () => {
-  it('flushes before fetching the accepted owner PDF as resume.pdf',
+  it('flushes before fetching the accepted owner PDF with its UTF-8 filename',
     async () => {
       const order: string[] = [];
       const context = setup({
@@ -26,15 +30,79 @@ describe('PDF download', () => {
           });
           expect(init?.body).toBeUndefined();
           expect(init?.headers).toBeUndefined();
-          return pdfResponse([new Uint8Array([1, 2, 3])]);
+          return pdfResponse([new Uint8Array([1, 2, 3])], {
+            'Content-Disposition': vietnameseContentDisposition,
+          });
         },
       });
 
       await context.controller.download();
 
       expect(order).toEqual(['flush', 'fetch']);
-      expect(context.download).toHaveBeenCalledWith('blob:pdf', 'resume.pdf');
+      expect(context.download).toHaveBeenCalledWith(
+        'blob:pdf',
+        'Nguyễn-Văn-Đức-Resume.pdf',
+      );
       expect(context.revokeObjectURL).toHaveBeenCalledWith('blob:pdf');
+    });
+
+  it('uses the ASCII filename when the UTF-8 filename is absent', async () => {
+    const context = setup({
+      fetcher: async () => pdfResponse([new Uint8Array([1])], {
+        'Content-Disposition': 'attachment; filename="Ada-Lovelace-Resume.pdf"',
+      }),
+    });
+
+    await context.controller.download();
+
+    expect(context.download).toHaveBeenCalledWith(
+      'blob:pdf',
+      'Ada-Lovelace-Resume.pdf',
+    );
+  });
+
+  it('accepts the longest name the server emits', async () => {
+    const filename = `${'A'.repeat(64)}-Resume.pdf`;
+    const context = setup({
+      fetcher: async () => pdfResponse([new Uint8Array([1])], {
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      }),
+    });
+
+    await context.controller.download();
+
+    expect(context.download).toHaveBeenCalledWith('blob:pdf', filename);
+  });
+
+  it.each([
+    [
+      'a malformed UTF-8 filename with an ASCII fallback',
+      [
+        'attachment; filename="Ada-Lovelace-Resume.pdf"; ',
+        'filename*=UTF-8\'\'Ada%ZZ.pdf',
+      ].join(''),
+      'Ada-Lovelace-Resume.pdf',
+    ],
+    [
+      'a path in the filename',
+      'attachment; filename="../../Resume.pdf"',
+      'Resume.pdf',
+    ],
+    [
+      'a control character in the filename',
+      'attachment; filename="Ada\u0000Resume.pdf"',
+      'Resume.pdf',
+    ],
+  ])('uses a safe filename for %s',
+    async (_name, contentDisposition, filename) => {
+      const context = setup({
+        fetcher: async () =>
+          pdfResponseWithContentDisposition(contentDisposition),
+      });
+
+      await context.controller.download();
+
+      expect(context.download).toHaveBeenCalledWith('blob:pdf', filename);
     });
 
   it('does not fetch when a save remains unresolved after flushing',
@@ -364,7 +432,10 @@ function acceptedRecord() {
   };
 }
 
-function pdfResponse(chunks: readonly Uint8Array[]): Response {
+function pdfResponse(
+  chunks: readonly Uint8Array[],
+  headers: HeadersInit = {},
+): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
@@ -374,9 +445,25 @@ function pdfResponse(chunks: readonly Uint8Array[]): Response {
     }),
     {
       status: 200,
-      headers: noStoreHeaders(),
+      headers: noStoreHeaders(headers),
     },
   );
+}
+
+function pdfResponseWithContentDisposition(
+  contentDisposition: string,
+): Response {
+  const response = pdfResponse([new Uint8Array([1])]);
+  const headers = response.headers;
+  Object.defineProperty(response, 'headers', {
+    value: {
+      get(name: string) {
+        if (name === 'Content-Disposition') return contentDisposition;
+        return headers.get(name);
+      },
+    },
+  });
+  return response;
 }
 
 function noStoreHeaders(extra: HeadersInit = {}): Headers {

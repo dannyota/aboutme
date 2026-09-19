@@ -4,6 +4,11 @@ import type { useAuth } from '../composables/useAuth';
 import type { ResumeRecord } from '../stores/resumes';
 
 export const MAX_PDF_DOWNLOAD_BYTES = 16_777_216;
+const FALLBACK_PDF_FILENAME = 'Resume.pdf';
+const MAX_CONTENT_DISPOSITION_LENGTH = 1024;
+const MAX_PDF_FILENAME_LENGTH = 64 + '-Resume.pdf'.length;
+const PDF_FILENAME = /^(?:[\p{L}\p{M}\p{N}]+-)*Resume\.pdf$/u;
+const RFC5987_VALUE = /^(?:[A-Za-z0-9!#$&+.^_`|~-]|%[0-9A-Fa-f]{2})*$/;
 
 export type PdfDownloadState
   = | { readonly kind: 'idle' }
@@ -92,6 +97,7 @@ export function createPdfDownloadController(
         await discardResponse(response);
         return responseError(response.status);
       }
+      const filename = pdfFilename(response.headers.get('Content-Disposition'));
       const blob = await readPDF(response, active.signal);
       if (!activeRun(runGeneration)) return state.value;
       const afterRead = acceptedRecord(deps.resumeId, deps.record.value, deps);
@@ -106,7 +112,7 @@ export function createPdfDownloadController(
       const url = createObjectURL(blob);
       try {
         if (!activeRun(runGeneration)) return state.value;
-        triggerDownload(url, 'resume.pdf');
+        triggerDownload(url, filename);
       } finally {
         revokeObjectURL(url);
       }
@@ -231,6 +237,63 @@ function validResponse(response: Response): boolean {
     && (contentLength === null
       || (/^(?:0|[1-9][0-9]*)$/.test(contentLength)
         && Number(contentLength) <= MAX_PDF_DOWNLOAD_BYTES))
+  );
+}
+
+function pdfFilename(contentDisposition: string | null): string {
+  const utf8 = decodeUTF8Filename(contentDispositionParameter(
+    contentDisposition,
+    'filename*',
+  ));
+  if (safePdfFilename(utf8)) return utf8;
+
+  const ascii = contentDispositionParameter(contentDisposition, 'filename');
+  if (safePdfFilename(ascii)) return ascii;
+
+  return FALLBACK_PDF_FILENAME;
+}
+
+function contentDispositionParameter(
+  contentDisposition: string | null,
+  name: string,
+): string | null {
+  if (
+    contentDisposition === null
+    || contentDisposition.length > MAX_CONTENT_DISPOSITION_LENGTH
+  ) {
+    return null;
+  }
+
+  for (const segment of contentDisposition.split(';').slice(1)) {
+    const equals = segment.indexOf('=');
+    if (equals === -1) continue;
+    if (segment.slice(0, equals).trim().toLowerCase() !== name) continue;
+
+    const value = segment.slice(equals + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) {
+      return value.slice(1, -1);
+    }
+    return value;
+  }
+  return null;
+}
+
+function decodeUTF8Filename(value: string | null): string | null {
+  if (value === null || !value.startsWith('UTF-8\'\'')) return null;
+  const encoded = value.slice('UTF-8\'\''.length);
+  if (!RFC5987_VALUE.test(encoded)) return null;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return null;
+  }
+}
+
+function safePdfFilename(value: string | null): value is string {
+  return (
+    value !== null
+    && Array.from(value).length <= MAX_PDF_FILENAME_LENGTH
+    && PDF_FILENAME.test(value)
   );
 }
 
