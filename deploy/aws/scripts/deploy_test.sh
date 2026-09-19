@@ -22,7 +22,7 @@ run_case() { # name expected-exit|fail args...
   : >"$work/$name.calls"
   set +e
   CALLS="$work/$name.calls" STUB_DIR="$work" STUB_CASE="$name" PATH="$work/bin:$PATH" \
-    DEPLOY_SMOKE_TIMEOUT=1 bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1
+    DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1
   got=$?
   set -e
   if [[ $want == fail ]] && ((got != 0 && got != 2)); then
@@ -102,6 +102,29 @@ grep -q -F "missing secret arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db
 f=$work/ok.calls
 grep -q -F -- "rds create-db-snapshot --db-instance-identifier aboutme-prod --db-snapshot-identifier aboutme-prod-v0-1-0-202610200000 --tags Key=aboutme:created-by,Value=deploy.sh" "$f" ||
   { echo "ok: snapshot not created with the deploy.sh tag" >&2; exit 1; }
+
+# Smoke checks retry transient edge failures after the restart.
+run_case smoke_flaky 0 v0.1.0
+f=$work/smoke_flaky.calls
+[[ $(count "$f" "https://aboutme.vn/healthz") == 2 ]] || { echo "smoke_flaky: want one /healthz retry" >&2; exit 1; }
+[[ $(count "$f" "curl -fsSI https://aboutme.vn/") == 2 ]] || { echo "smoke_flaky: want one HSTS retry" >&2; exit 1; }
+grep -q "deployed v0.1.0" "$work/smoke_flaky.out" || { echo "smoke_flaky: deploy did not finish" >&2; exit 1; }
+
+# A check that never passes fails after the bounded attempts.
+run_case smoke_down fail v0.1.0
+[[ $(count "$work/smoke_down.calls" "https://aboutme.vn/healthz") == 5 ]] ||
+  { echo "smoke_down: want exactly 5 /healthz attempts" >&2; exit 1; }
+grep -q "smoke: /healthz returned 502" "$work/smoke_down.out" || { echo "smoke_down: no failure message" >&2; exit 1; }
+
+# The direct-origin check fails closed: one answer fails the deploy, and an
+# unknown origin address is a failure, never a skip.
+run_case origin_open fail v0.1.0
+[[ $(count "$work/origin_open.calls" "https://192.0.2.10/") == 1 ]] ||
+  { echo "origin_open: an answering origin must fail on the first probe" >&2; exit 1; }
+grep -q "the origin answered a direct request" "$work/origin_open.out" || { echo "origin_open: no failure message" >&2; exit 1; }
+run_case origin_unknown fail v0.1.0
+grep -q "smoke: could not resolve the origin address" "$work/origin_unknown.out" ||
+  { echo "origin_unknown: no failure message" >&2; exit 1; }
 
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
