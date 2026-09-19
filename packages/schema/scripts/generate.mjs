@@ -13,8 +13,8 @@
 //
 // This file orchestrates the generation run; the sibling generate*.mjs modules
 // hold the per-topic logic (schema transforms, per-language codegen, the raw
-// schema embed, the released-version registry, templates, and the sanitizer
-// policy).
+// schema embed, the released-version registry, templates, samples, and the
+// sanitizer policy).
 
 import {
   mkdirSync,
@@ -41,6 +41,7 @@ import {
   generateSanitizerTs,
   readSanitizerSources,
 } from "./generateSanitizer.mjs";
+import { generateSamplesTs, readSampleFiles } from "./generateSamples.mjs";
 import { generateTemplatesTs, readTemplatePresets } from "./generateTemplates.mjs";
 
 export { generateTemplatesTs } from "./generateTemplates.mjs";
@@ -74,11 +75,16 @@ async function main() {
         .enum,
       join(tsDir, "templates.ts"),
     );
+    generateSamplesTs(
+      readSampleFiles(templatePresets.map((preset) => preset.id)),
+      join(tsDir, "samples.ts"),
+    );
     written.push(
       "gen/go/sanitizer.go",
       "gen/ts/sanitizer-policy.ts",
       "gen/ts/sanitizer.ts",
       "gen/ts/templates.ts",
+      "gen/ts/samples.ts",
     );
 
     // Applications compile against these current outputs from the working

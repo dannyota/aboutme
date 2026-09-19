@@ -349,6 +349,7 @@ apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
 apps/web/app/pages/_harness/render.vue
+apps/web/app/pages/_harness/sample-fixtures.ts
 apps/web/app/pages/app/resumes/[id].vue
 apps/web/app/pages/app/resumes/index.vue
 apps/web/app/pages/app/settings/sessions.vue
@@ -394,6 +395,7 @@ apps/web/e2e/print-baselines/print-main-overflow-p2.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p1.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p2.png
 apps/web/e2e/print.spec.ts
+apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts
 apps/web/e2e/support.ts
 apps/web/nuxt.config.ts
@@ -463,6 +465,7 @@ packages/schema/fixtures/full.json
 packages/schema/fixtures/vn-full.json
 packages/schema/gen/ts/released.ts
 packages/schema/gen/ts/resume.ts
+packages/schema/gen/ts/samples.ts
 packages/schema/gen/ts/sanitizer-policy.ts
 packages/schema/gen/ts/sanitizer.ts
 packages/schema/gen/ts/templates.ts
@@ -472,4 +475,16 @@ packages/schema/gen/ts/v3/resume.ts
 packages/schema/gen/ts/v4/resume.ts
 packages/schema/package.json
 packages/schema/resume.schema.json
+packages/schema/samples/_filler.en.json
+packages/schema/samples/_filler.vi.json
+packages/schema/samples/ats-plain.en.json
+packages/schema/samples/ats-plain.vi.json
+packages/schema/samples/engineer-compact.en.json
+packages/schema/samples/engineer-compact.vi.json
+packages/schema/samples/executive-band.en.json
+packages/schema/samples/executive-band.vi.json
+packages/schema/samples/graduate-friendly.en.json
+packages/schema/samples/graduate-friendly.vi.json
+packages/schema/samples/modern-sidebar.en.json
+packages/schema/samples/modern-sidebar.vi.json
 packages/schema/validation/store.ts

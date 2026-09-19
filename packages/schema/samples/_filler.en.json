@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Alex Nguyen",
+    "headline": "Operations Analyst",
+    "details": [
+      {
+        "id": "c32d8878-e2f8-54c1-8ed1-b6d45b0b292c",
+        "type": "email",
+        "value": "alex.nguyen@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "37322c0e-0b1b-5079-9bbe-a5c31bc8da51",
+        "type": "phone",
+        "value": "+84 90 000 0101",
+        "isHidden": false
+      },
+      {
+        "id": "72af6c6f-00bd-5818-ab32-21dc60a59392",
+        "type": "location",
+        "value": "Hanoi, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "bbdffd35-092c-52f2-95c5-6921a11de922",
+        "type": "website",
+        "value": "https://alexnguyen.example.com",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Profile",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "023d04c5-7bdc-5dbd-9084-e6146bf976dc",
+          "isHidden": false,
+          "text": "<p>Six years of operations analysis for retail and logistics companies. Works across teams to turn data into specific recommendations and tracks the results after rollout.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Work experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "574cd09f-7d2a-53b0-96dc-3d986a4977ff",
+          "isHidden": false,
+          "jobTitle": "Senior Operations Analyst",
+          "employer": "Anh Duong Retail",
+          "employerLink": "https://anhduong.example.com",
+          "city": "Hanoi",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Built a weekly operations scorecard for 40 stores, cutting report preparation from two days to half a day.</li><li>Worked with the warehouse team to reduce stockouts by 18% in six months.</li><li>Coached two new analysts on data quality checks.</li></ul>"
+        },
+        {
+          "id": "6403b92d-03b7-5368-b8b1-74089e18df75",
+          "isHidden": false,
+          "jobTitle": "Operations Analyst",
+          "employer": "Song Hong Logistics",
+          "employerLink": "https://songhong.example.com",
+          "city": "Da Nang",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 6
+            },
+            "end": {
+              "y": 2022,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>Analysed delivery routes and proposed order batching that saved 12% in shipping costs.</li><li>Consolidated order data from three legacy systems into one shared warehouse.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "f64763ef-be6e-5057-9c6a-12cd46858a1e",
+          "isHidden": false,
+          "degree": "B.Sc. Management Information Systems",
+          "school": "National Economics University",
+          "schoolLink": "https://neu.example.edu",
+          "city": "Hanoi",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2018,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<p>Graduated with distinction. Thesis on consumer goods demand forecasting.</p>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "4d9e7dd4-caab-5da1-95b2-dd1a44904802",
+          "isHidden": false,
+          "name": "Data analysis",
+          "level": 5
+        },
+        {
+          "id": "1e908ce9-f6fc-54d9-8573-eaeef6da8907",
+          "isHidden": false,
+          "name": "Process improvement",
+          "level": 4
+        },
+        {
+          "id": "7be09984-9292-5472-bac4-2fd4c3b7d395",
+          "isHidden": false,
+          "name": "Data storytelling",
+          "level": 4
+        },
+        {
+          "id": "51a440cd-602b-5701-9685-8347e42ab719",
+          "isHidden": false,
+          "name": "Python",
+          "level": 3
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "3b94bedc-ea17-5044-97db-af3c8259789f",
+          "isHidden": false,
+          "name": "Vietnamese",
+          "level": 5
+        },
+        {
+          "id": "23d1b7cd-0ee6-5195-b69f-7592c86b721c",
+          "isHidden": false,
+          "name": "English",
+          "level": 4
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "29d0b2cb-6595-57e3-a993-6326e8e205a2",
+          "isHidden": false,
+          "title": "Data Analysis Certificate",
+          "issuer": "Data Training Institute",
+          "titleLink": "https://credentials.example.com/data-analysis",
+          "date": {
+            "y": 2021,
+            "m": 8
+          }
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Projects",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "62421625-2707-54b4-bac3-b0ed92543888",
+          "isHidden": false,
+          "title": "Inventory dashboard",
+          "link": "https://alexnguyen.example.com/inventory",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 4
+            },
+            "end": {
+              "y": 2020,
+              "m": 11
+            },
+            "present": false
+          },
+          "description": "<p>A real-time inventory dashboard used by 12 store managers.</p>"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education",
+          "skill",
+          "language",
+          "certificate",
+          "project"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

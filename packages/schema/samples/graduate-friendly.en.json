@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Vy Dang",
+    "headline": "Business Administration Graduate, aspiring Business Analyst",
+    "details": [
+      {
+        "id": "c051d3c3-6ecd-5618-a8da-722cedda4c7b",
+        "type": "email",
+        "value": "vy.dang@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "509db848-3be6-571a-9fda-d3ab26623a45",
+        "type": "phone",
+        "value": "+84 90 000 0505",
+        "isHidden": false
+      },
+      {
+        "id": "c128aa9d-1902-5bed-af20-ff06bc35eff8",
+        "type": "location",
+        "value": "Da Nang, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "dab881f9-f99f-5635-b622-4bb69f2325a6",
+        "type": "linkedin",
+        "value": "https://example.com/in/vy-dang",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Profile",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "63a34984-2e0d-5a52-9ea0-141c21c1c269",
+          "isHidden": false,
+          "text": "<p>Business graduate with a data-analytics internship and a national case-competition win, looking for a graduate Business Analyst role.</p>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "e24f1743-3c9d-569c-9b3d-f9dec1d850e4",
+          "isHidden": false,
+          "degree": "Bachelor of Business Administration, International Business",
+          "school": "Central Coast University of Economics",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 9
+            },
+            "end": {
+              "y": 2026,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>GPA 3.7/4.0; Dean&#39;s List in 6 of 8 semesters.</li><li>Champion, Mekong Business Case Challenge 2025 (first of 120 teams).</li></ul>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "84965c7f-7a81-5a1a-8594-bcfac59248ab",
+          "isHidden": false,
+          "jobTitle": "Data Analytics Intern",
+          "employer": "Seabright Hospitality Group",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2026,
+              "m": 1
+            },
+            "end": {
+              "y": 2026,
+              "m": 4
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built 4 Power BI dashboards for 6 hotels, saving the team 10 hours of manual reporting a week.</li><li>Analysed 12,000 guest reviews and found the top 3 complaint drivers, now tracked monthly.</li></ul>"
+        },
+        {
+          "id": "af6d3908-74cb-5550-8d1b-bb0881c13945",
+          "isHidden": false,
+          "jobTitle": "Head of Events (volunteer)",
+          "employer": "Business English Club",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 9
+            },
+            "end": {
+              "y": 2025,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>Ran 8 events with 150+ attendees each and a team of 6 volunteers.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "entries": [
+        {
+          "id": "80339d23-c803-54db-a99e-edca6a985a34",
+          "isHidden": false,
+          "name": "Excel (PivotTables, XLOOKUP), Power BI, basic SQL, Google Data Analytics Certificate"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "eec4177b-ea53-594c-8549-c3fff6bf0733",
+          "isHidden": false,
+          "name": "English (IELTS 7.5)"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#7a3b1c",
+      "text": "#2f2a26",
+      "background": "#ffffff",
+      "accent": "#a04f16",
+      "surface": "#f7e8d9"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 18,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 20,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "education",
+          "work",
+          "skill",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "tag"
+      },
+      "language": {
+        "style": "tag"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "YYYY"
+  }
+}

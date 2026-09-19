@@ -21,6 +21,7 @@ import { sanitizeRichText } from '../../utils/sanitizeRichText';
 import { withWrappingBody } from './justify-fixture';
 import { FIXED_PHOTO_DATA_URL, FIXED_PHOTO_SHA256 } from './photo-fixture';
 import { PRINT_FIXTURES, type PrintFixtureId } from './print-fixtures';
+import { loadSampleFixture } from './sample-fixtures';
 
 type RenderMode = 'continuous' | 'paged' | 'public';
 type FixtureId = 'full' | 'vn-full' | PrintFixtureId;
@@ -61,6 +62,7 @@ let resumeDocument: Resume | undefined;
 let context: RenderContext | undefined;
 let mode: RenderMode | undefined;
 let printFixture = false;
+let sampleLanguage: 'vi' | 'en' | undefined;
 let selectedFontId: string | undefined;
 
 if (isCorpus) {
@@ -103,7 +105,10 @@ if (isCorpus) {
   } else if (fixture === 'vn-full') {
     resumeDocument = structuredClone(vnFullSource) as Resume;
   } else {
-    badQuery();
+    // Gallery samples and filler: sample-<templateId>-<vi|en>, filler-<vi|en>.
+    const sample = await loadSampleFixture(fixture) ?? badQuery();
+    resumeDocument = sample.document;
+    sampleLanguage = sample.lng;
   }
 
   const resolvedDocument = resumeDocument ?? badQuery();
@@ -135,7 +140,7 @@ if (isCorpus) {
       ? undefined
       : await verifyFixedPhoto();
   context = {
-    lng: fixture === 'full' ? 'en' : 'vi',
+    lng: sampleLanguage ?? (fixture === 'full' ? 'en' : 'vi'),
     mode: resolvedMode === 'public' ? 'continuous' : resolvedMode,
     ...(photoUrl === undefined ? {} : { photoUrl }),
   };

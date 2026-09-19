@@ -27,6 +27,7 @@ const files = [
   "gen/ts/sanitizer-policy.ts",
   "gen/ts/sanitizer.ts",
   "gen/ts/templates.ts",
+  "gen/ts/samples.ts",
   ...released.flatMap((entry) => [
     `${entry.goPackage}/resume.go`,
     `${entry.goPackage}/rawschema.go`,

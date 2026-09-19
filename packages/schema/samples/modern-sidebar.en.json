@@ -1,0 +1,266 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Quynh Anh Bui",
+    "headline": "Senior Product Manager · Consumer Fintech",
+    "details": [
+      {
+        "id": "ff6063aa-d0cb-5c56-8528-0480611f09b4",
+        "type": "email",
+        "value": "quynhanh.bui@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "e879c44a-293e-56bb-8671-cd3010392b29",
+        "type": "phone",
+        "value": "+84 90 000 0909",
+        "isHidden": false
+      },
+      {
+        "id": "3a5b06b2-9f61-50cf-a8ee-abcf61fccbff",
+        "type": "location",
+        "value": "Ho Chi Minh City, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "0e7f7a49-e2fe-5964-a0d5-5884f9cdaeff",
+        "type": "linkedin",
+        "value": "https://example.com/in/quynh-anh-bui",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "6206c26f-5b54-5c43-b957-d3d6f9d01f25",
+          "isHidden": false,
+          "text": "<p>Product manager with 6 years in consumer fintech and e-commerce. Lead a squad of 9 that owns saving and payment features used by 4 million people a month. I pair user research with experiments: 40+ A/B tests shipped, with features that raised monthly active users by 23%.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "d10d246d-35bc-53ae-9b27-076d89241a1c",
+          "isHidden": false,
+          "jobTitle": "Senior Product Manager, Savings",
+          "employer": "Moneybird Wallet",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 4
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Launched round-up savings: 610,000 users and VND 900 billion in deposits in the first year.</li><li>Raised 30-day retention of new users from 34% to 46% by redesigning onboarding with 5 rounds of user tests.</li><li>Lead 6 engineers, 2 designers and 1 analyst; set the quarterly roadmap with the Head of Product.</li></ul>"
+        },
+        {
+          "id": "75999556-a86a-57ad-b4c2-819bf918829d",
+          "isHidden": false,
+          "jobTitle": "Product Manager, Checkout",
+          "employer": "Tiny Lantern Commerce",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 2
+            },
+            "end": {
+              "y": 2023,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Cut checkout drop-off from 38% to 27% with one-page checkout and saved cards.</li><li>Added buy-now-pay-later with 2 partners; it reached 12% of order value in 9 months.</li></ul>"
+        },
+        {
+          "id": "e4fa8cb5-9b6b-5132-b420-a8b340e49dfe",
+          "isHidden": false,
+          "jobTitle": "Associate Product Manager",
+          "employer": "Tiny Lantern Commerce",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2021,
+              "m": 1
+            },
+            "present": false
+          },
+          "description": "<ul><li>Ran 15 A/B tests on search and product pages; the winning variants lifted conversion by 4%.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "995ef273-434c-55c5-8600-42f3bc9cee60",
+          "isHidden": false,
+          "degree": "Bachelor of Science, Information Systems",
+          "school": "Riverside University of Technology",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 9
+            },
+            "end": {
+              "y": 2020,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "entries": [
+        {
+          "id": "657802f5-93d5-5249-ac44-0a6f503f8d9f",
+          "isHidden": false,
+          "name": "Product discovery",
+          "level": 5
+        },
+        {
+          "id": "ddff5e76-1e20-519f-a966-802d3ac952fd",
+          "isHidden": false,
+          "name": "Experiment design",
+          "level": 5
+        },
+        {
+          "id": "27e15bff-e055-532e-88f6-f1a169159d7f",
+          "isHidden": false,
+          "name": "SQL, Amplitude",
+          "level": 4
+        },
+        {
+          "id": "020500f2-24ed-59e8-a962-c3fd8e3aebe4",
+          "isHidden": false,
+          "name": "Roadmapping, OKRs",
+          "level": 4
+        },
+        {
+          "id": "7e581fd9-0c4e-55cf-b6ba-19b55610a6bf",
+          "isHidden": false,
+          "name": "Figma prototyping",
+          "level": 3
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "e6a2038f-c249-55de-b745-adbaca241280",
+          "isHidden": false,
+          "name": "Vietnamese",
+          "level": 5
+        },
+        {
+          "id": "04de9c79-a528-5971-a7aa-7bbe28b8fb4b",
+          "isHidden": false,
+          "name": "English",
+          "level": 5
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "7c2dc3bf-df96-58a7-9367-2989659a45f9",
+          "isHidden": false,
+          "title": "Professional Scrum Product Owner I",
+          "issuer": "Scrum.org",
+          "date": {
+            "y": 2022,
+            "m": 5
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "be-vietnam-pro",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#0e3f52",
+      "text": "#1c2b33",
+      "background": "#ffffff",
+      "accent": "#0f6b7d",
+      "surface": "#e3ecf0"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 14,
+        "y": 13
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "bar"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
