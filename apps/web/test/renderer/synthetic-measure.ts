@@ -48,7 +48,7 @@ export const syntheticMeasure: MeasurePagination = (request) => {
     columns: request.columns,
     headerHeightPx:
       48 + (JSON.stringify(request.document.personalDetails).length * 0.08),
-    headerBodyGapPx: request.document.customization.spacing.sectionGap,
+    headerBodyGapPx: request.document.customization.spacing.sectionGap * 1.5,
     blocks,
   } satisfies MeasuredLayout;
 };

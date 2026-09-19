@@ -36,6 +36,7 @@ describe('resume styles', () => {
     const styles = useResumeStyles(customization);
     expect(styles.root['--fs-base']).toBe('14px');
     expect(styles.root['--gap-section']).toBe('16px');
+    expect(styles.root['--gap-header']).toBe('24px');
     expect(styles.root['--page-margin-x']).toBe('15mm');
     expect(styles.root['--heading-transform']).toBe('uppercase');
     expect(styles.root['--heading-letter-spacing']).toBe('0.06em');
@@ -48,6 +49,16 @@ describe('resume styles', () => {
       marginXmm: 15,
       marginYmm: 15,
     });
+  });
+
+  it('spaces the header so gaps grow outward from each contact icon', () => {
+    const root = useResumeStyles(customization).root;
+    expect(root['--chip-icon-gap']).toBe('0.3em');
+    expect(root['--details-row-gap']).toBe('0.21em');
+    expect(root['--details-column-gap']).toBe('1em');
+    expect(root['--header-name-gap']).toBe('0.2em');
+    expect(root['--header-details-gap']).toBe('0.5em');
+    expect(root['--header-photo-gap']).toBe('0.9em');
   });
 
   it('justifies and hyphenates body text only for justify', () => {

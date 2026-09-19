@@ -10,15 +10,16 @@ a preset may change.
 Spacing derived from `customization.spacing` — pure multiples, so a user value
 of `0` really is `0`:
 
-| Property          | Value                                  | Applies to                              |
-| ----------------- | -------------------------------------- | --------------------------------------- |
-| `--gap-section`   | `spacing.sectionGap`                   | between sections; resume header to body |
-| `--gap-entry`     | `spacing.entryGap`                     | between entries in a section            |
-| `--gap-heading`   | `0.4 × sectionGap`                     | heading to first entry                  |
-| `--gap-block`     | `0.4 × entryGap`                       | between slots inside one entry          |
-| `--gap-inline`    | `0.5em` (renderer)                     | between meta items on the same line     |
-| `--page-margin-x` | `spacing.pageMargin.x` mm, else `15mm` | left and right page margin              |
-| `--page-margin-y` | `spacing.pageMargin.y` mm, else `15mm` | top and bottom page margin              |
+| Property          | Value                                  | Applies to                          |
+| ----------------- | -------------------------------------- | ----------------------------------- |
+| `--gap-section`   | `spacing.sectionGap`                   | between sections                    |
+| `--gap-header`    | `1.5 × sectionGap`                     | resume header to body               |
+| `--gap-entry`     | `spacing.entryGap`                     | between entries in a section        |
+| `--gap-heading`   | `0.4 × sectionGap`                     | heading to first entry              |
+| `--gap-block`     | `0.4 × entryGap`                       | between slots inside one entry      |
+| `--gap-inline`    | `0.5em` (renderer)                     | between meta items on the same line |
+| `--page-margin-x` | `spacing.pageMargin.x` mm, else `15mm` | left and right page margin          |
+| `--page-margin-y` | `spacing.pageMargin.y` mm, else `15mm` | top and bottom page margin          |
 
 The two page-margin properties are the one place a token reaches `@page`
 geometry: `useResumeStyles` emits
