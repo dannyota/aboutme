@@ -32,7 +32,7 @@ type updateSectionInput struct {
 	Revision       string `json:"revision" jsonschema:"current decimal revision"`
 	SectionKey     string `json:"section_key" jsonschema:"section key"`
 	DisplayName    any    `json:"display_name,omitempty" jsonschema:"section display name"`
-	IconKey        any    `json:"icon_key,omitempty" jsonschema:"section icon key or null"`
+	IconKey        any    `json:"icon_key,omitempty" jsonschema:"section icon key, or null to remove the icon. The renderer draws these keys: award, badge-check, book-open, bookmark, briefcase, building-2, camera, chart-line, code, compass, cpu, database, dumbbell, file-text, flag, flask-conical, folder, globe, graduation-cap, heart, heart-handshake, landmark, languages, leaf, library, lightbulb, link, mail, map-pin, medal, megaphone, mic, microscope, music, newspaper, palette, pen-tool, phone, plane, presentation, puzzle, rocket, scale, school, scroll-text, sparkles, star, stethoscope, target, terminal, trending-up, trophy, user, users, wrench. Any other valid key renders the section type's icon instead"`
 	EntryOrder     any    `json:"entry_order,omitempty" jsonschema:"complete entry UUID permutation"`
 }
 

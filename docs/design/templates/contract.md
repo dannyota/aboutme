@@ -267,8 +267,10 @@ never a range; `language` has no body.
 ### 5.3 Section heading
 
 The heading text is `displayName`. `iconKey` renders as an inline lucide SVG
-before it. `heading.style` maps to `text-transform: uppercase` / title case /
-none, and `heading.showRule` toggles the divider ([Color roles](colors.md)).
+before it. An iconKey the renderer does not draw falls back to the section
+type's icon (custom: bookmark). An absent or empty `iconKey` renders no icon.
+`heading.style` maps to `text-transform: uppercase` / title case / none, and
+`heading.showRule` toggles the divider ([Color roles](colors.md)).
 
 A section whose `displayName` is absent or `""` renders **no heading text** and
 no substitute: not the `sectionType`, not "Untitled". The icon and rule still
