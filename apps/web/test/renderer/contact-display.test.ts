@@ -149,20 +149,25 @@ describe('link display modes', () => {
 
 describe('brand marks', () => {
   it.each([
-    ['github', 'brand-github'],
-    ['twitter', 'brand-x'],
-  ] as const)('draws the %s mark in the icon colour', (type, name) => {
+    ['github', 'brand-github', '0 0 24 24'],
+    ['twitter', 'brand-x', '0 0 24 24'],
+    ['linkedin', 'brand-linkedin', '-14 18 476 476'],
+  ] as const)('draws the %s mark in the icon colour', (type, name, box) => {
     const svg = chip(detail(type, 'https://example.com/me')).get('svg');
     expect(svg.classes())
       .toEqual(expect.arrayContaining(['resume-icon', name]));
     expect(svg.attributes('fill')).toBe('currentColor');
-    expect(svg.attributes('viewBox')).toBe('0 0 24 24');
+    // Every mark fills a square box at the Lucide icon size.
+    expect(svg.attributes('viewBox')).toBe(box);
+    expect(svg.attributes('width')).toBe('16');
+    expect(svg.attributes('height')).toBe('16');
     expect(svg.attributes('aria-hidden')).toBe('true');
+    expect(svg.findAll('path')).toHaveLength(1);
     expect(svg.html()).not.toMatch(/<(image|use|script|a)\b|href|url\(/u);
   });
 
-  it('keeps LinkedIn on the generic link glyph', () => {
-    const svg = chip(detail('linkedin', 'https://linkedin.com/in/ada')).get('svg');
+  it('keeps a linked custom detail on the generic link glyph', () => {
+    const svg = chip(detail('custom', 'https://orcid.example/ada')).get('svg');
     expect(svg.classes()).toContain('lucide-link');
   });
 

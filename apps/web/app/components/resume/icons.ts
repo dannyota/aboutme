@@ -15,7 +15,7 @@ import {
 } from '@lucide/vue';
 import type { Component } from 'vue';
 
-import { BrandGitHub, BrandX } from './brandIcons';
+import { BrandGitHub, BrandLinkedIn, BrandX } from './brandIcons';
 
 const ICONS: Readonly<Record<string, Component>> = Object.freeze({
   'award': Award,
@@ -27,7 +27,7 @@ const ICONS: Readonly<Record<string, Component>> = Object.freeze({
   'graduation-cap': GraduationCap,
   'languages': Languages,
   'link': Link,
-  'linkedin': Link,
+  'linkedin': BrandLinkedIn,
   'mail': Mail,
   'map-pin': MapPin,
   'phone': Phone,
