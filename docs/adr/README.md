@@ -9,9 +9,9 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decision is
-[ADR 0046](0046-github-ci-delivery-gate.md), which makes GitHub CI the full
-delivery gate and requires the exact release commit to pass before tagging or
-deployment.
+[ADR 0047](0047-bilingual-resume-workspace.md), which adds Vietnamese and
+English resume-workspace chrome while keeping interface and resume language
+independent.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

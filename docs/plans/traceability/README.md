@@ -38,8 +38,8 @@ rows are never split by number range.
 | `AC-API`    | 2    | [ac-api.md](./ac-api.md)       |
 | `AC-REN`    | 9    | [ac-ren.md](./ac-ren.md)       |
 | `AC-FONT`   | 1    | [ac-font.md](./ac-font.md)     |
-| `AC-EDITOR` | 17   | [ac-editor.md](./ac-editor.md) |
+| `AC-EDITOR` | 18   | [ac-editor.md](./ac-editor.md) |
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
-| `AC-UI`     | 13   | [ac-ui.md](./ac-ui.md)         |
+| `AC-UI`     | 14   | [ac-ui.md](./ac-ui.md)         |
 
-Total: 158 rows across 17 prefixes.
+Total: 161 rows across 17 prefixes.

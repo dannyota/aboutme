@@ -282,10 +282,12 @@ forward migrations may be added, per
 OpenTofu owns infrastructure and first task definitions and ignores later
 revisions on the services.
 
-Deploys show the maintenance response for most of their one-to-three-minute
-service interruption. Brief connection or TLS gaps remain while the two
-host-port services exchange port 443. A monthly SSM maintenance window applies
-Bottlerocket updates with `apiclient update apply --reboot`.
+Deploy duration depends on ECS task placement and image pulls. Maintenance
+serves its 503 response between successful handoffs. An exclusive host-port 443
+exchange can refuse connections or TLS until ECS releases and reacquires the
+port; the final v0.3.30 handoff gap measured about one minute. A monthly SSM
+maintenance window applies Bottlerocket updates with
+`apiclient update apply --reboot`.
 
 ## Scheduled jobs
 

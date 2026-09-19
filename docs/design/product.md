@@ -33,8 +33,8 @@ without publishing an account profile.
 | Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                  |
 
 Out of v1: cover letters, a job tracker, first-party AI writing features, custom
-domains, teams, analytics, a multilingual application interface, and
-collaborative editing.
+domains, teams, analytics, interface languages beyond Vietnamese and English,
+and collaborative editing.
 
 ## Landing and entry
 
@@ -181,12 +181,17 @@ fence and its 60-second cache trade-off.
 - Deletion copy distinguishes immediate access revocation, private-media removal
   targeted within 24 hours, and expiry from the 30-day backup schedule. An
   overdue physical delete is audited and retried; it does not restore access.
-- The v1 application interface is English, except the homepage and the sign-in,
-  registration, password-reset, and email-verification pages. Those default to
-  Vietnamese with an English toggle stored in the `aboutme-locale` cookie. The
-  editor, settings, consent page, and resume display stay English. Vietnamese
-  resume content is a first-class fixture and fallback target because the
-  initial community is Vietnamese. Other scripts remain valid content; font
-  choices state measured coverage instead of claiming universal coverage.
+- The homepage, authentication and recovery pages, legal pages, template
+  gallery, and resume workspace support Vietnamese and English. The resume
+  workspace includes the list, creation, editor, publish, owner PDF export, and
+  shared account-menu chrome. Vietnamese is the default; the English toggle is
+  stored in the `aboutme-locale` cookie. Settings, account destination pages,
+  connected-agent controls, and consent stay English. Interface language is
+  independent from resume language and never changes authored or default resume
+  data. Public resume chrome follows resume language. Vietnamese resume content
+  is a first-class fixture and fallback target because the initial community is
+  Vietnamese. Other scripts remain valid content; font choices state measured
+  coverage instead of claiming universal coverage
+  ([ADR 0047](../adr/0047-bilingual-resume-workspace.md)).
 - Accessibility is a release requirement for the editor, publish flow, public
   page, and generated artifacts.
