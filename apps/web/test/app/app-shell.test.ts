@@ -192,4 +192,64 @@ describe('AppShell', () => {
       );
     }
   });
+
+  it(
+    'carries a valid next from /login onto the header register link',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const next = '/app/new?sample=ats-plain&lng=vi';
+      const wrapper = await mountShell(
+        `/login?next=${encodeURIComponent(next)}`,
+      );
+      await flushPromises();
+      const found = links(wrapper);
+      expect(found['Create account']).toBe(
+        `/register?next=${encodeURIComponent(next)}`,
+      );
+      expect(found['Sign in']).toBe(`/login?next=${encodeURIComponent(next)}`);
+    },
+  );
+
+  it(
+    'carries a valid next from /register onto the header sign-in link',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const next = '/app/resumes';
+      const wrapper = await mountShell(
+        `/register?next=${encodeURIComponent(next)}`,
+      );
+      await flushPromises();
+      const found = links(wrapper);
+      expect(found['Sign in']).toBe(`/login?next=${encodeURIComponent(next)}`);
+      expect(found['Create account']).toBe(
+        `/register?next=${encodeURIComponent(next)}`,
+      );
+    },
+  );
+
+  it('drops a hostile next from the header links', async () => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const wrapper = await mountShell(
+      `/login?next=${encodeURIComponent('//evil.example')}`,
+    );
+    await flushPromises();
+    const found = links(wrapper);
+    expect(found['Sign in']).toBe('/login');
+    expect(found['Create account']).toBe('/register');
+  });
+
+  it('ignores next outside /login and /register', async () => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const wrapper = await mountShell(
+      `/templates?next=${encodeURIComponent('/app/resumes')}`,
+    );
+    await flushPromises();
+    const found = links(wrapper);
+    expect(found['Sign in']).toBe('/login');
+    expect(found['Create account']).toBe('/register');
+  });
 });
