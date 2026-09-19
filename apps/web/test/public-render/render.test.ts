@@ -76,10 +76,13 @@ const request = () => {
   };
 };
 
+const STYLE_VERSION = '0123456789abcdef';
+
 describe('public Vue worker document', () => {
   it('uses Task 08 JSON-LD bytes and a complete titled document', async () => {
-    const html = await renderPublicResume(request());
-    await expect(renderPublicResume(request())).resolves.toBe(html);
+    const html = await renderPublicResume(request(), STYLE_VERSION);
+    await expect(renderPublicResume(request(), STYLE_VERSION))
+      .resolves.toBe(html);
     expect(html).toContain(
       '<title>Ada &lt;&amp;&gt; Lovelace — Resume</title>',
     );
@@ -108,9 +111,13 @@ describe('public Vue worker document', () => {
     expect(html).toContain('/_nuxt/assets/public-resume.mjs');
     // The template's CSS and fonts come from the same self-hosted stylesheets
     // the print document uses; without them the page renders unstyled.
+    // The stylesheets keep fixed names but are cached for a year, so each
+    // link carries the build's style version to fetch fresh CSS per release.
     expect(html).toContain(
-      '<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css">'
-      + '<link rel="stylesheet" href="/_nuxt/assets/print.css">',
+      '<link rel="stylesheet" '
+      + `href="/_nuxt/assets/print-fonts.css?v=${STYLE_VERSION}">`
+      + '<link rel="stylesheet" '
+      + `href="/_nuxt/assets/print.css?v=${STYLE_VERSION}">`,
     );
     expect(html).not.toMatch(/<style\b/iu);
     expect(html).toContain(
@@ -130,7 +137,7 @@ describe('public Vue worker document', () => {
   it('omits the JSON-LD script when discovery is disabled', async () => {
     const value = request();
     value.discoveryEnabled = false;
-    const html = await renderPublicResume(value);
+    const html = await renderPublicResume(value, STYLE_VERSION);
     expect(html).not.toContain(
       'application/ld+json',
     );
@@ -140,5 +147,13 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '<meta name="twitter:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
     );
+  });
+});
+
+describe('public style version', () => {
+  it('refuses a missing or malformed version', async () => {
+    for (const version of ['', 'ABCDEF0123456789', '0123', 'x'.repeat(16)]) {
+      await expect(renderPublicResume(request(), version)).rejects.toThrow();
+    }
   });
 });

@@ -47,6 +47,11 @@ describe('print worker build', () => {
       expect(existsSync(worker)).toBe(true);
       expect(existsSync(css)).toBe(true);
       expect(readFileSync(css, 'utf8')).toContain('.resume-document');
+      // The public page loads this stylesheet too; it hides the shell's skip
+      // link until the link is focused.
+      const skipLink
+        = /a\[href=(?:"#public-resume"|\\#public-resume)\]:not\(:focus\)/u;
+      expect(readFileSync(css, 'utf8')).toMatch(skipLink);
       const source = readFileSync(worker, 'utf8').toLowerCase();
       expect(source).not.toContain('dompurify');
       expect(source).not.toContain('nested-script-tag-stripping-bypass');

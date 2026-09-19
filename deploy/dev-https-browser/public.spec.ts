@@ -151,6 +151,7 @@ test('proves a published resume hydrates in a real browser', async ({
     const styling = await publicPage.evaluate(() => {
       const sheets = [...document.styleSheets].map((sheet) => ({
         href: sheet.href === null ? '' : new URL(sheet.href).pathname,
+        search: sheet.href === null ? '' : new URL(sheet.href).search,
         rules: sheet.cssRules.length,
       }));
       const resume = document.querySelector('.resume-document');
@@ -172,12 +173,24 @@ test('proves a published resume hydrates in a real browser', async ({
     ]) {
       const sheet = styling.sheets.find((candidate) => candidate.href === path);
       expect(sheet?.rules ?? 0, `${path} loaded with rules`).toBeGreaterThan(0);
+      // A per-release version defeats the year-long immutable cache.
+      expect(sheet?.search, `${path} version`).toMatch(/^\?v=[0-9a-f]{16}$/u);
     }
     expect(styling.resume).not.toBeNull();
     expect(styling.resume?.boxSizing).toBe('border-box');
     expect(styling.resume?.paddingLeft).not.toBe('0px');
     expect(styling.resume?.fontVariable).not.toBe('');
     expect(styling.resume?.fontFamily).toBe(styling.resume?.fontVariable);
+
+    // The skip link stays out of view until keyboard focus reaches it.
+    const skip = publicPage.getByRole('link', { name: 'Skip to content' });
+    const hidden = await skip.boundingBox();
+    expect(hidden === null || (hidden.width <= 1 && hidden.height <= 1)).toBe(true);
+    await publicPage.keyboard.press('Tab');
+    await expect(skip).toBeFocused();
+    const shown = await skip.boundingBox();
+    expect(shown?.width ?? 0).toBeGreaterThan(1);
+    expect(shown?.height ?? 0).toBeGreaterThan(1);
 
     await publicContext.close();
   } finally {

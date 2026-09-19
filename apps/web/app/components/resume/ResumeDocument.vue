@@ -48,6 +48,36 @@ const rootStyle = computed<CSSProperties>(() => ({
 </template>
 
 <style>
+/*
+ * The public page shell's skip link, rendered outside the resume by the public
+ * render worker. The public page loads this stylesheet with the resume CSS.
+ * The link stays out of view until keyboard focus reaches it.
+ */
+a[href="#public-resume"]:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+a[href="#public-resume"]:focus {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #10202a;
+  font: 600 14px/1.2 system-ui, sans-serif;
+  outline: 2px solid #10202a;
+}
+
 .resume-document {
   box-sizing: border-box;
   min-height: 100%;

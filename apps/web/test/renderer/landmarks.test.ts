@@ -6,26 +6,27 @@
 // two-column public resume unavailable.
 
 import { JSDOM } from 'jsdom';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 
 import { buildGoldenMatrix, renderGoldenCell } from './golden.generate.mts';
 
 const matrix = buildGoldenMatrix();
 
-describe('resume landmarks', () => {
-  it('covers two-column presets in both render modes', async () => {
-    const columns = await Promise.all(matrix.map(async (cell) => {
-      const { document } = new JSDOM(await renderGoldenCell(cell)).window;
-      return document.querySelector('.layout-two-columns') !== null;
-    }));
-    expect(columns.filter(Boolean).length).toBeGreaterThan(0);
-  });
+// Counted by the per-cell tests so the suite proves it saw two-column presets
+// without rendering the matrix a second time.
+let twoColumnCells = 0;
 
+afterAll(() => {
+  expect(twoColumnCells).toBeGreaterThan(0);
+});
+
+describe('resume landmarks', () => {
   it.each(matrix)('$filename renders no <main> element', async (cell) => {
     const { document } = new JSDOM(await renderGoldenCell(cell)).window;
     expect(document.querySelectorAll('main')).toHaveLength(0);
     const twoColumn = document.querySelector('.layout-two-columns');
     if (twoColumn !== null) {
+      twoColumnCells += 1;
       expect(twoColumn.querySelector(':scope > .resume-main')).not.toBeNull();
       expect(
         twoColumn.querySelector(':scope > aside.resume-sidebar'),

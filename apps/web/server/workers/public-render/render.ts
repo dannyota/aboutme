@@ -75,8 +75,12 @@ const jsonLd = (request: PublicRenderRequest): string => {
 
 export async function renderPublicResume(
   request: PublicRenderRequest,
+  styleVersion: string,
 ): Promise<string> {
   try {
+    if (!/^[0-9a-f]{16}$/u.test(styleVersion)) {
+      throw new Error();
+    }
     const body = await renderToString(
       createSSRApp({
         render: () =>
@@ -103,8 +107,12 @@ export async function renderPublicResume(
       '<meta name="twitter:card" content="summary_large_image">',
       `<meta name="twitter:image" content="${escapeAttribute(imageURL)}">`,
       // Template CSS and fonts, self-hosted and shared with the print document.
-      '<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css">',
-      '<link rel="stylesheet" href="/_nuxt/assets/print.css">',
+      // The version query fetches fresh copies of these fixed-name, immutable
+      // files after each release that changes them.
+      '<link rel="stylesheet" ',
+      `href="/_nuxt/assets/print-fonts.css?v=${styleVersion}">`,
+      '<link rel="stylesheet" ',
+      `href="/_nuxt/assets/print.css?v=${styleVersion}">`,
       discoveryScript,
     ].join('');
     const html = [
