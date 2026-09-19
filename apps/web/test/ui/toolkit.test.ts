@@ -99,8 +99,8 @@ describe('stylesheet contract (decisions U2)', () => {
 
   it('lists only the layered entry in nuxt css', () => {
     const config = readFileSync('nuxt.config.ts', 'utf8');
-    expect(config).toContain('css: [\'~/assets/css/tailwind.css\'],');
-    expect(config).not.toContain('fonts.css\'');
+    const css = config.match(/\n {2}css: \[([^\]]*)\]/u)?.[1];
+    expect(css).toBe('\'~/assets/css/tailwind.css\'');
   });
 });
 
