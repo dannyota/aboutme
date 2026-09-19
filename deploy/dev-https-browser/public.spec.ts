@@ -17,7 +17,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 
 test('proves a published resume hydrates in a real browser', async ({

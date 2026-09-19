@@ -27,7 +27,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/publish-proof.json";
-const SCHEMA_VERSION = "2";
+const SCHEMA_VERSION = "3";
 const SEED_EMAIL = "dev@aboutme.invalid";
 const SEED_PASSWORD = "aboutme-dev-password-1";
 

@@ -18,6 +18,7 @@ import {
   installExternalWebSocketFirewall,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
+  pinEnglish,
 } from "./harness-lib";
 import { ALLOWED_ORIGIN, httpFailureStatus } from "./network-policy";
 
@@ -182,6 +183,7 @@ test("proves owner and public export gates through native HTTPS", async ({
   let expectedFailure: "owner-denial" | "download-disabled" | "revoked" | null =
     null;
   let loginMeReadExpected = false;
+  await pinEnglish(context);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
   pageDiagnosticsAttacher(counters, {

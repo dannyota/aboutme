@@ -204,7 +204,7 @@ function mutation(result: MCPCallResult): {
 
 function minimalWorkDocument(): Record<string, unknown> {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     personalDetails: { fullName: 'Bob Local', details: [] },
     content: {
       work: {
