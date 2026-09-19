@@ -124,6 +124,34 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
+resource "aws_ecs_task_definition" "maintenance" {
+  family                   = "${var.name}-maintenance"
+  network_mode             = "host"
+  requires_compatibilities = ["EC2"]
+  execution_role_arn       = var.exec_role_arns["maintenance"]
+  container_definitions = jsonencode([
+    {
+      name         = "caddy"
+      image        = var.image_caddy
+      memory       = 128
+      cpu          = 128
+      essential    = true
+      portMappings = [{ containerPort = 443, hostPort = 443, protocol = "tcp" }]
+      environment = [
+        { name = "CLOUDFLARE_RANGES", value = join(" ", var.cloudflare_ipv4_cidrs) },
+        { name = "MAINTENANCE", value = "1" },
+      ]
+      secrets = [
+        { name = "ORIGIN_KEY", valueFrom = "${local.param}/tls/origin-key" },
+        { name = "ORIGIN_CERT", valueFrom = "${local.param}/tls/origin-cert" },
+        { name = "ORIGIN_PULL_CA", valueFrom = "${local.param}/tls/origin-pull-ca" },
+      ]
+      linuxParameters  = { tmpfs = [{ containerPath = "/run/caddy", size = 1 }] }
+      logConfiguration = local.logs["caddy"]
+    },
+  ])
+}
+
 resource "aws_ecs_task_definition" "web" {
   family                   = "${var.name}-web"
   network_mode             = "bridge"

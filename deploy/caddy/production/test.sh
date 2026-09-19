@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the production Caddy image and checks route rendering, origin-pull
-# mTLS, and that the origin key does not stay in the process environment.
+# mTLS, that the origin key does not stay in the process environment, and
+# maintenance mode's page, headers, and CSP hashes.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 work=$(mktemp -d)
@@ -22,6 +23,25 @@ if bash "$render" "$work/bad.caddy" >/dev/null 2>&1; then
   echo "render accepted a wrong token count" >&2
   exit 1
 fi
+
+maintenance_render=$root/deploy/caddy/production/maintenance-render.sh
+maintenance_html=$root/deploy/caddy/production/maintenance.html
+printf '<script>a</script><script>b</script><style>c</style>\n' >"$work/bad.html"
+if bash "$maintenance_render" "$work/bad.html" >/dev/null 2>&1; then
+  echo "maintenance-render accepted a page with two script blocks" >&2
+  exit 1
+fi
+printf '<script>a</script><style>c</style><style>d</style>\n' >"$work/bad.html"
+if bash "$maintenance_render" "$work/bad.html" >/dev/null 2>&1; then
+  echo "maintenance-render accepted a page with two style blocks" >&2
+  exit 1
+fi
+# Recomputed fresh from the page as it stands on disk right now (a second run
+# of the same generator, not the one baked into the image below), so a stale
+# image or a hand-edited hash fails this check even though it shares code
+# with the build.
+want_csp=$(bash "$maintenance_render" "$maintenance_html" |
+  grep '^header Content-Security-Policy' | sed -E 's/^header Content-Security-Policy "(.*)"$/\1/')
 
 podman build -q -f "$root/deploy/caddy/production/Dockerfile" -t localhost/aboutme/caddy:test "$root" >/dev/null
 
@@ -118,4 +138,91 @@ if grep -i 'enabling HTTP/3 listener' <<<"$logs" >&2; then
   echo "Caddy enabled HTTP/3" >&2
   exit 1
 fi
+
+# ---- Maintenance mode: same image, MAINTENANCE=1 selects Caddyfile.maintenance ----
+podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
+podman run -d --name "$name" -p "127.0.0.1:$port:443" --tmpfs /run/caddy \
+  -e ORIGIN_CERT="$(cat "$work/origin.pem")" -e ORIGIN_KEY="$(cat "$work/origin.key")" \
+  -e ORIGIN_PULL_CA="$(cat "$work/ca.pem")" -e CLOUDFLARE_RANGES="192.0.2.0/24 198.51.100.0/24" \
+  -e MAINTENANCE=1 \
+  localhost/aboutme/caddy:test >/dev/null
+for _ in $(seq 1 20); do
+  podman logs "$name" 2>&1 | grep -q 'serving initial configuration' && break
+  sleep 0.5
+done
+podman logs "$name" 2>&1 | grep -q 'serving initial configuration' ||
+  { echo "maintenance stack did not start" >&2; exit 1; }
+
+# The origin still rejects a direct request with no client certificate, and
+# one with a certificate the origin-pull CA did not sign.
+if request "https://aboutme.vn:$port/healthz" >/dev/null 2>&1; then
+  echo "maintenance: request without a client certificate succeeded" >&2
+  exit 1
+fi
+if request --cert "$work/other.pem" --key "$work/other.key" "https://aboutme.vn:$port/healthz" >/dev/null 2>&1; then
+  echo "maintenance: request with an untrusted client certificate succeeded" >&2
+  exit 1
+fi
+
+maint() { # url -> writes $work/maint.headers and $work/maint.body, a GET
+  curl -s -m 10 -o "$work/maint.body" -D "$work/maint.headers" \
+    --resolve "aboutme.vn:$port:127.0.0.1" --resolve "www.aboutme.vn:$port:127.0.0.1" \
+    --cacert "$work/origin.pem" "${pull[@]}" "$1"
+}
+maint_method() { # method url -> writes $work/maint.headers and $work/maint.body
+  curl -s -m 10 -X "$1" -o "$work/maint.body" -D "$work/maint.headers" \
+    --resolve "aboutme.vn:$port:127.0.0.1" --resolve "www.aboutme.vn:$port:127.0.0.1" \
+    --cacert "$work/origin.pem" "${pull[@]}" "$2"
+}
+maint_head() { # url -> writes $work/maint.headers, $work/maint.size
+  # -X HEAD only changes the request line; curl still expects a body up to
+  # Content-Length and can hang against a real file_server response. --head
+  # tells curl itself not to read one, but then curl's only output *is* the
+  # headers, so -o must discard it rather than double up with -D.
+  curl -s -m 10 -o /dev/null -D "$work/maint.headers" -w '%{size_download}' --head \
+    --resolve "aboutme.vn:$port:127.0.0.1" --resolve "www.aboutme.vn:$port:127.0.0.1" \
+    --cacert "$work/origin.pem" "${pull[@]}" "$1" >"$work/maint.size"
+}
+check_maint_response() { # label
+  grep -q '^HTTP/[0-9.]* 503' "$work/maint.headers" || { echo "$1: want 503" >&2; exit 1; }
+  grep -qi '^retry-after: 60' "$work/maint.headers" || { echo "$1: missing Retry-After" >&2; exit 1; }
+  grep -qi '^cache-control: no-store' "$work/maint.headers" || { echo "$1: missing Cache-Control" >&2; exit 1; }
+  grep -qi '^content-type: text/html; charset=utf-8' "$work/maint.headers" || { echo "$1: missing Content-Type" >&2; exit 1; }
+  grep -qi '^x-content-type-options: nosniff' "$work/maint.headers" || { echo "$1: missing X-Content-Type-Options" >&2; exit 1; }
+  grep -qi '^referrer-policy: no-referrer' "$work/maint.headers" || { echo "$1: missing Referrer-Policy" >&2; exit 1; }
+  grep -qi '^strict-transport-security: max-age=63072000; includeSubDomains' "$work/maint.headers" ||
+    { echo "$1: missing Strict-Transport-Security" >&2; exit 1; }
+  got_csp=$(grep -i '^content-security-policy:' "$work/maint.headers" |
+    sed -E 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //' | tr -d '\r')
+  [[ $got_csp == "$want_csp" ]] || { echo "$1: CSP does not match the page's recomputed hashes" >&2; exit 1; }
+}
+for path in / /readyz /api/v1/anything; do
+  maint "https://aboutme.vn:$port$path"
+  check_maint_response "maintenance $path"
+  # file_server serves the file verbatim: the body must match it byte for
+  # byte, not just contain a marker. This also proves no Caddy placeholder in
+  # the page ({path}, {env.*}, {file.*}, ...) got expanded.
+  cmp -s "$work/maint.body" "$maintenance_html" ||
+    { echo "maintenance $path: served body does not match maintenance.html byte for byte" >&2; exit 1; }
+done
+
+for method in POST PUT PATCH DELETE OPTIONS; do
+  maint_method "$method" "https://aboutme.vn:$port/api/v1/anything"
+  check_maint_response "maintenance $method"
+  cmp -s "$work/maint.body" "$maintenance_html" ||
+    { echo "maintenance $method: served body does not match maintenance.html byte for byte" >&2; exit 1; }
+done
+
+maint_head "https://aboutme.vn:$port/"
+check_maint_response "maintenance HEAD /"
+[[ $(cat "$work/maint.size") == 0 ]] ||
+  { echo "maintenance HEAD /: unexpected body ($(cat "$work/maint.size") bytes)" >&2; exit 1; }
+
+# www still redirects to the apex in maintenance mode, so a visitor's tab
+# keeps polling the same origin across the deploy.
+maint "https://www.aboutme.vn:$port/some/path"
+grep -q '^HTTP/[0-9.]* 301' "$work/maint.headers" || { echo "maintenance www: want 301" >&2; exit 1; }
+grep -qi '^location: https://aboutme.vn/some/path' "$work/maint.headers" ||
+  { echo "maintenance www: want a permanent redirect to the apex, same path" >&2; exit 1; }
+
 echo "caddy-prod-test: ok"

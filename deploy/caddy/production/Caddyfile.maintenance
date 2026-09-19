@@ -1,0 +1,68 @@
+# Maintenance-mode production route table. entrypoint.sh selects this file
+# instead of Caddyfile when MAINTENANCE=1. Every path and method on the apex
+# gets maintenance.html at 503, served verbatim by file_server so nothing in
+# the page can be read as a Caddy placeholder; see maintenance-render.sh for
+# the generated headers this imports, built the same way as routes.caddy.
+#
+# The trust and TLS blocks below are copied from Caddyfile and must stay
+# identical to it: same Cloudflare client-IP trust, same origin-pull mTLS.
+# www still redirects to the apex, as Caddyfile does: the page polls /readyz
+# on its own origin, and a visitor's tab must keep pointing at the apex
+# across the deploy, or the poll becomes a blocked cross-origin fetch once
+# maintenance mode ends and www starts redirecting again.
+{
+	admin off
+	servers {
+		trusted_proxies static {$CLOUDFLARE_RANGES}
+		trusted_proxies_strict
+		client_ip_headers CF-Connecting-IP
+		# Cloudflare reaches the origin over TCP, so no HTTP/3 listener.
+		protocols h1 h2
+	}
+	# Request logs keep the method, URI, and status but never the visitor's
+	# address or request headers (privacy policy: no IP in request logs).
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			request>client_ip delete
+			request>remote_ip delete
+			request>remote_port delete
+			request>headers delete
+		}
+	}
+}
+
+(origin_tls) {
+	tls /run/caddy/origin.pem /run/caddy/origin-key.pem {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /run/caddy/origin-pull-ca.pem
+		}
+	}
+}
+
+www.aboutme.vn {
+	import origin_tls
+	redir https://aboutme.vn{uri} permanent
+}
+
+aboutme.vn {
+	import origin_tls
+
+	request_header -X-Real-IP
+	request_header -X-Forwarded-For
+	request_header -Forwarded
+
+	import /etc/caddy/maintenance.generated.caddy
+	root * /etc/caddy/maintenance-site
+	rewrite * /maintenance.html
+	# file_server serves only GET and HEAD. Change every other request to GET so
+	# it serves the same static 503 page. Keep HEAD untouched so its body stays
+	# empty.
+	@maintenance_body not method HEAD
+	method @maintenance_body GET
+	file_server {
+		status 503
+	}
+}

@@ -68,21 +68,25 @@ group, so its Elastic IP stays attached; a CloudWatch alarm auto-recovers it on
 a failed status check. There is no inbound SSH. The owner reaches the host
 through SSM.
 
-| ECS task        | Network | Containers | Runs                                  |
-| --------------- | ------- | ---------- | ------------------------------------- |
-| `app` (service) | host    | Caddy, Go  | Always; desired and maximum count one |
-| `web` (service) | bridge  | Nuxt       | Always                                |
-| `migrate`       | bridge  | server     | Every deploy, before `app` starts     |
-| `db-admin`      | bridge  | server     | First deploy only                     |
-| `jobs`          | bridge  | server     | EventBridge Scheduler                 |
+| ECS task                | Network | Containers | Runs                                                 |
+| ----------------------- | ------- | ---------- | ---------------------------------------------------- |
+| `app` (service)         | host    | Caddy, Go  | Always; desired and maximum count one                |
+| `web` (service)         | bridge  | Nuxt       | Always                                               |
+| `maintenance` (service) | host    | Caddy      | Deploy and recovery only; desired count zero at rest |
+| `migrate`               | bridge  | server     | Normal deploy, before `app` starts                   |
+| `db-admin`              | bridge  | server     | First deploy only                                    |
+| `jobs`                  | bridge  | server     | EventBridge Scheduler                                |
 
-The trust boundaries match the Compose deployment:
+The runtime trust boundaries are:
 
 - Go's public listener binds `127.0.0.1:8080` and trusts only `127.0.0.1`. Only
   Caddy shares that loopback. Bridge containers cannot reach it.
 - Caddy trusts `CF-Connecting-IP` only from Cloudflare's published ranges and
   removes forwarding headers from every other peer before setting the header Go
   accepts.
+- `app` and `maintenance` both bind host port 443. The deploy script proves all
+  tasks for one service have stopped before starting the other. A failed proof
+  stops the handoff, so both services are never deliberately started together.
 - Nuxt has its own network namespace and is never a trusted proxy. It reaches
   only Go's private print listener on the bridge gateway, where the one-use
   capability still applies.
@@ -181,7 +185,7 @@ enter images, Git, logs or OpenTofu state.
 | `aboutme_migrator` password                   | `db-admin`, `migrate`     |
 | `aboutme_app` password                        | `db-admin`, `app`, `jobs` |
 | Auth email key and key ID, password-rate HMAC | `app`                     |
-| Origin CA private key                         | `app`                     |
+| Origin CA private key                         | `app`, `maintenance`      |
 
 `deploy/aws/scripts/secrets.sh` generates each password and key with `openssl`,
 writes it straight to SSM, and never overwrites or prints one. OpenTofu
@@ -201,6 +205,10 @@ The `app` task role may get, put, list and delete objects in the media bucket
 and send mail from the verified SES identity. The `jobs` task role has the same
 bucket access and no mail access. `migrate` and `db-admin` task roles grant
 nothing.
+
+The `maintenance` task has no task role. Its execution role can write Caddy logs
+and read only the origin certificate, origin private key, and origin-pull CA
+parameters needed to terminate production TLS.
 
 Non-secret configuration is plain task definition values: `ENV=prod`,
 `PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
@@ -222,26 +230,49 @@ starts.
 1. Resolve the tag to digests. Require the tag on `main` with green CI.
 2. Take an RDS snapshot named for the tag, tagged
    `aboutme:created-by=deploy.sh`, and wait for it.
-3. Register new task definition revisions by digest.
-4. Disable the job schedules, scale `app` to zero and wait. The site is down
-   from here.
-5. With `--first-deploy`, run the `db-admin` `db-setup` task.
-6. Run `migrate` and require exit 0.
-7. Update `web`, then `app`, wait for steady state, and re-enable the job
-   schedules.
-8. Smoke through Cloudflare: health, TLS and security headers. A direct request
+3. Register new task definition revisions by digest. A rollback keeps the
+   current maintenance Caddy image so a tag from before maintenance mode can
+   still serve the handoff page.
+4. Disable the job schedules, scale `app` to zero, and prove its tasks stopped.
+5. Start `maintenance` and require the Cloudflare path to return its marked 503
+   response before any database task starts.
+6. With `--first-deploy`, run the `db-admin` `db-setup` task. Run `migrate` for
+   a normal deploy and require exit 0.
+7. Update `web`, then stop `maintenance` and prove its tasks stopped before
+   requesting `app` to start.
+8. Wait for `app` steady state, then re-enable the job schedules at the new
+   `jobs` revision.
+9. Smoke through Cloudflare: health, TLS and security headers. A direct request
    to the Elastic IP must fail.
 
-A failure after step 4 but before migrations complete restores the previous
-`app` revision and the job schedules' earlier state. The script leaves both
-stopped instead when a database task may still be running, or when migrations
-have already been applied, because the previous release is not proven against
-the migrated schema. A failed first deploy leaves `app` stopped.
+Maintenance mode keeps the normal Cloudflare proxy trust and origin-pull mTLS.
+Every apex path, including readiness and API paths, returns the same bilingual
+HTML with status 503, `Cache-Control: no-store`, and `Retry-After: 60`. The
+`www` host still redirects to the matching apex path. The page polls `/readyz`
+without caching, backs off from 10 to 60 seconds, and reloads only after a 200.
+Visitors without JavaScript refresh after 60 seconds.
 
-`deploy.sh --rollback <tag>` redeploys earlier digests without migrating. It is
-safe only when the failed release applied no migration, because this script does
-not run the prior-digest compatibility test from the deployment design. After a
-migration, recovery is a forward fix or a point-in-time restore.
+A failure before a migration request could have been accepted stops maintenance,
+restores the previous `app` revision, and restores the earlier job schedule
+states. A migration request is treated as possibly applied before its response
+arrives. A running database task, or a failed, partial, or uncertain migration,
+leaves maintenance up and leaves `app` and the schedules stopped. The operator
+fixes forward or restores the release snapshot because the prior app is not
+proven against the changed database.
+
+If the new app may have started but never reached steady state, recovery first
+proves that every app task stopped and only then starts maintenance. If ECS
+cannot prove that either service released port 443, recovery stops and does not
+start the competing service. A healthy new app stays up when only schedule
+enablement fails; the script reports each schedule that still needs repair. A
+failed first deploy leaves maintenance up because no prior app exists.
+
+`deploy.sh --rollback <tag>` redeploys earlier server, web, and app digests
+without migrating, through the same maintenance handoff. It retains the current
+maintenance-capable Caddy image. Rollback is safe only when the failed release
+applied no migration, because this script does not run the prior-digest
+compatibility test from the deployment design. After a migration, recovery is a
+forward fix or a point-in-time restore.
 
 `apps/server/migrations/.uat-baseline` freezes the existing migrations; only new
 forward migrations may be added, per
@@ -251,8 +282,10 @@ forward migrations may be added, per
 OpenTofu owns infrastructure and first task definitions and ignores later
 revisions on the services.
 
-Deploys take about one to three minutes of downtime. A monthly SSM maintenance
-window applies Bottlerocket updates with `apiclient update apply --reboot`.
+Deploys show the maintenance response for most of their one-to-three-minute
+service interruption. Brief connection or TLS gaps remain while the two
+host-port services exchange port 443. A monthly SSM maintenance window applies
+Bottlerocket updates with `apiclient update apply --reboot`.
 
 ## Scheduled jobs
 

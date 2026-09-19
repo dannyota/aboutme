@@ -28,6 +28,12 @@ case "$cmd $args" in
       exit 0
     fi
     echo 200 ;;
+  "curl -s -m 10 -w "*)
+    if [[ $STUB_CASE == maintenance_smoke_fails || $STUB_CASE == maintenance_down_fails ]]; then
+      printf 'unavailable\n502\n'
+    else
+      printf '<!-- aboutme:maintenance -->\n503\n'
+    fi ;;
   "curl "*"https://aboutme.vn/"*) echo 200 ;;
   "curl "*"https://192.0.2.10/"*)
     # origin_open: the origin answers a direct request.
@@ -45,7 +51,25 @@ case "$cmd $args" in
       exit 254
     fi
     echo 'arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12' ;;
+  "aws "*"ecs describe-services"*"services[0].status"*)
+    if [[ $STUB_CASE == maintenance_missing ]]; then echo None; else echo ACTIVE; fi ;;
   "aws "*"ecs describe-services"*) echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3' ;;
+  "aws "*"ecs list-tasks"*)
+    if [[ $STUB_CASE == list_running_fails && $args == *"--service-name aboutme-prod-app"* && $args != *"--desired-status STOPPED"* ]]; then
+      exit 255
+    fi
+    if [[ $STUB_CASE == list_stopped_fails && $args == *"--service-name aboutme-prod-app"* && $args == *"--desired-status STOPPED"* ]]; then
+      exit 255
+    fi
+    if [[ $STUB_CASE == stopping_task ]]; then
+      if [[ $args == *"--desired-status STOPPED"* ]]; then
+        echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/stopping-task"
+      else
+        echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/running-task"
+      fi
+    else
+      echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/stub-task"
+    fi ;;
   "aws "*"ecs register-task-definition"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
     jq -e '.containerDefinitions and (has("revision") | not)' "$file" >/dev/null || exit 3
@@ -57,8 +81,28 @@ case "$cmd $args" in
       exit 255
     fi
     echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/$by" ;;
+  "aws "*"ecs update-service"*"aboutme-prod-app"*"desired-count 1"*)
+    [[ $STUB_CASE != app_start_update_fails ]] || exit 255 ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-web"*)
     if [[ $STUB_CASE == start_fails ]]; then exit 255; fi ;;
+  "aws "*"ecs wait services-stable"*"aboutme-prod-maintenance"*)
+    if [[ $STUB_CASE == maint_up_fails ]]; then exit 255; fi
+    if [[ $STUB_CASE == maintenance_down_fails ]]; then
+      n=$(($(cat "$STUB_DIR/$STUB_CASE.maint-wait-count" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$STUB_DIR/$STUB_CASE.maint-wait-count"
+      ((n != 2)) || exit 255
+    fi ;;
+  "aws "*"ecs wait services-stable"*"aboutme-prod-app"*)
+    if [[ $STUB_CASE == first_app_down_fails ]] && ! [[ -e $STUB_DIR/first-app-wait.once ]]; then
+      : >"$STUB_DIR/first-app-wait.once"
+      exit 255
+    fi
+    # app_wait_fails: the first app wait (scaling to 0 at "site down") must
+    # succeed; only the second (starting the new app, post-migration) fails.
+    if [[ $STUB_CASE == app_wait_fails ]]; then
+      if [[ -e $STUB_DIR/app-wait.once ]]; then exit 255; fi
+      : >"$STUB_DIR/app-wait.once"
+    fi ;;
   "aws "*"ecs wait tasks-stopped"*)
     if [[ $STUB_CASE == wait_timeout && $args == *deploy-migrate* ]]; then exit 255; fi ;;
   "aws "*"ecs describe-tasks"*"lastStatus"*)
@@ -78,7 +122,18 @@ case "$cmd $args" in
     printf '{"Name":"a","GroupName":"g","ScheduleExpression":"rate(1 hour)","FlexibleTimeWindow":{"Mode":"OFF"},"Target":{"Arn":"x","RoleArn":"y"},"State":"%s","Arn":"z"}\n' "$state" ;;
   "aws "*"scheduler update-schedule"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
-    cp "$file" "$STUB_DIR/last-schedule.json" ;;
+    cp "$file" "$STUB_DIR/last-schedule.json"
+    # schedule_enable_fails: the enable loop's second schedule (of a, b, c, d)
+    # fails after the app is already confirmed healthy; the first stays
+    # enabled, the rest are never attempted.
+    if [[ $STUB_CASE == schedule_enable_fails ]] && grep -q '"State": "ENABLED"' "$file"; then
+      n=$(($(cat "$STUB_DIR/enable-count" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$STUB_DIR/enable-count"
+      if ((n == 2)); then
+        echo "scheduler throttled" >&2
+        exit 254
+      fi
+    fi ;;
   "aws "*"ec2 describe-addresses"*)
     if [[ $STUB_CASE == origin_unknown ]]; then echo None; exit 0; fi
     echo 192.0.2.10 ;;

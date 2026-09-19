@@ -1,4 +1,4 @@
-# One Bottlerocket ECS host with a fixed Elastic IP, and the two services.
+# One Bottlerocket ECS host with a fixed Elastic IP and its ECS services.
 # The AMI and user data are ignored after creation: Bottlerocket updates in
 # place during the maintenance window.
 

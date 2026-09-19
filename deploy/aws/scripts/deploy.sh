@@ -6,19 +6,28 @@
 #   deploy.sh --rollback <tag>       earlier images, no snapshot, no migration
 #
 # Order: build revisions, check that every task secret exists, snapshot,
-# register revisions, stop jobs and app, migrate, start web and app, re-enable
-# jobs, smoke. The release-snapshot-sweep job deletes this script's tagged
-# snapshots once they are more than 27 days old, before they reach 30. Any
-# failure after the app stops restores the previous app and job schedules,
-# unless a database task may still be running or migrations were applied; then
-# both stay stopped for the operator.
+# register revisions, stop jobs and app, swap in the maintenance page, migrate,
+# start web, swap maintenance back out, start app, re-enable jobs, smoke. The
+# maintenance and app services bind the same host port, so exactly one of them
+# is ever asked to run at once. The release-snapshot-sweep job deletes this
+# script's tagged snapshots once they are more than 27 days old, before they
+# reach 30.
+#
+# Any failure after the app stops restores the previous app before a migration,
+# or leaves maintenance up after a database task may have run. A failed ECS
+# state check stops recovery before it starts the competing service. After a
+# migration, if the new app never confirmed healthy, it is scaled back to 0
+# before maintenance comes up; if it did confirm healthy and only the
+# schedule-enable step failed afterward, tearing down a proven-healthy app
+# would be a self-inflicted outage, so it stays up, maintenance stays down,
+# and the script names the schedules to fix by hand.
 set -euo pipefail
 
 region=ap-southeast-1
 cluster=aboutme-prod
 group=aboutme-prod-jobs
 repo=dannyota/aboutme
-families=(app web migrate jobs db-setup)
+families=(app web maintenance migrate jobs db-setup)
 # release-snapshot-sweep deletes snapshots with this tag within 30 days.
 snapshot_tag_key=aboutme:created-by
 snapshot_tag_value=deploy.sh
@@ -40,11 +49,31 @@ aws_() { aws --region "$region" "$@"; }
 say() { printf 'deploy: %s\n' "$*" >&2; }
 work=$(mktemp -d)
 
-# phase: prepare -> changing -> finished. oneshot_task is set while a database task
-# may be running.
+# Shared by the mid-deploy maintenance-page check and the final smoke checks.
+smoke_attempts=5
+smoke_delay=${DEPLOY_SMOKE_DELAY:-3}
+retry() { # command...
+  local attempt
+  for ((attempt = 1; attempt <= smoke_attempts; attempt++)); do
+    "$@" && return 0
+    ((attempt == smoke_attempts)) || sleep "$smoke_delay"
+  done
+  return 1
+}
+
+# phase: prepare -> changing -> finished. oneshot_task is set while a database
+# task may be running. migration_may_be_applied is set before requesting a
+# migration task because an accepted request can lose its response.
+# app_start_requested and app_stable track the new app
+# through section 8, so restore() can tell "asked to start, health unknown"
+# from "confirmed healthy" and never leave both app and maintenance wanting
+# host port 443. schedules_enabled tracks the enable loop the same way.
 phase=prepare
 oneshot_task=""
-migrated=0
+migration_may_be_applied=0
+app_start_requested=0
+app_stable=0
+schedules_enabled=()
 on_exit() {
   local status=$?
   if ((status != 0)) && [[ $phase == changing ]]; then
@@ -68,6 +97,46 @@ current_def() {
   aws_ ecs describe-task-definition --task-definition "aboutme-prod-$1" --query taskDefinition --output json
 }
 
+# The app and maintenance services both bind host port 443, so only one of
+# them ever runs at once. Scaling a service to zero also waits for its actual
+# tasks to stop, not just for the service to report stable, so the host port
+# is deterministically free before the other service is asked to claim it.
+scale_to_zero_and_wait() { # service
+  local task running_tasks stopping_tasks
+  local -a tasks=()
+  local -A seen=()
+  # ListTasks defaults to desired RUNNING. Capture those tasks before lowering
+  # the count, then capture desired STOPPED tasks after it. The second list
+  # includes a task that was already stopping or was placed just before the
+  # count update, so every task that could hold the host port is waited out.
+  running_tasks=$(aws_ ecs list-tasks --cluster "$cluster" --service-name "$1" --query 'taskArns[]' --output text) || return 1
+  while IFS= read -r task; do
+    if [[ -n $task && -z ${seen[$task]:-} ]]; then
+      tasks+=("$task")
+      seen[$task]=1
+    fi
+  done < <(tr '\t' '\n' <<<"$running_tasks")
+  aws_ ecs update-service --cluster "$cluster" --service "$1" --desired-count 0 >/dev/null || return 1
+  aws_ ecs wait services-stable --cluster "$cluster" --services "$1" || return 1
+  stopping_tasks=$(aws_ ecs list-tasks --cluster "$cluster" --service-name "$1" --desired-status STOPPED --query 'taskArns[]' --output text) || return 1
+  while IFS= read -r task; do
+    if [[ -n $task && -z ${seen[$task]:-} ]]; then
+      tasks+=("$task")
+      seen[$task]=1
+    fi
+  done < <(tr '\t' '\n' <<<"$stopping_tasks")
+  ((${#tasks[@]} == 0)) || aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "${tasks[@]}" || return 1
+}
+# maintenance_up starts the just-registered revision (so a release's Caddy
+# image takes effect during the window).
+maintenance_up() {
+  aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-maintenance \
+    --task-definition "${revision[maintenance]}" --desired-count 1 >/dev/null || return 1
+  aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-maintenance || return 1
+}
+maintenance_down() { scale_to_zero_and_wait aboutme-prod-maintenance; }
+app_down() { scale_to_zero_and_wait aboutme-prod-app; }
+
 # 1. Candidate checks.
 git fetch -q origin main
 commit=$(git rev-list -n1 "$tag")
@@ -87,10 +156,23 @@ deployed=$(current_def app | jq -r '.containerDefinitions[] | select(.name == "c
   | .environment[] | select(.name == "CLOUDFLARE_RANGES") | .value | split(" ") | sort | join(" ")')
 [[ -n $live && $live == "$deployed" ]] || { say "Cloudflare ranges changed; run tofu apply first"; exit 1; }
 
-# 2. Build revisions with the release images.
+# The maintenance service must already exist (tofu apply creates it); fail
+# clearly here rather than with a raw AWS error from the family loop below.
+maintenance_status=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-maintenance \
+  --query 'services[0].status' --output text)
+[[ $maintenance_status == ACTIVE ]] ||
+  { say "the aboutme-prod-maintenance service does not exist (status: $maintenance_status); run tofu apply first"; exit 1; }
+
+# 2. Build revisions with the release images. A rollback keeps the current
+# maintenance image because older Caddy images do not contain maintenance mode.
 for family in "${families[@]}"; do
+  caddy_image=${image[caddy]}
+  if ((rollback)) && [[ $family == maintenance ]]; then
+    caddy_image=$(current_def maintenance | jq -r '.containerDefinitions[] | select(.name == "caddy") | .image')
+    [[ -n $caddy_image && $caddy_image != null ]] || { say "no current maintenance Caddy image"; exit 1; }
+  fi
   current_def "$family" | jq \
-    --arg server "${image[server]}" --arg web "${image[web]}" --arg caddy "${image[caddy]}" '
+    --arg server "${image[server]}" --arg web "${image[web]}" --arg caddy "$caddy_image" '
     .containerDefinitions |= map(
       .image = (if .name == "caddy" then $caddy elif .name == "web" then $web else $server end)
       | .environment = ((.environment // []) | map(
@@ -176,19 +258,73 @@ restore() {
       --query 'tasks[0].lastStatus' --output text)
     if [[ $status != STOPPED ]]; then
       say "failed while a database task may still be running: $oneshot_task ($status)"
-      say "the app and job schedules stay stopped; check the task, then rerun deploy.sh"
+      say "the maintenance page stays up; the app and job schedules stay stopped"
+      say "check the task, then rerun deploy.sh"
       return
     fi
   fi
-  if ((migrated)); then
-    say "failed after migrations were applied; the previous app and job schedules stay stopped"
+  if ((migration_may_be_applied)); then
+    if ((app_stable)); then
+      # The new app is confirmed healthy and already holds host port 443;
+      # only the schedule-enable loop failed partway. Tearing a healthy,
+      # already-migrated app down over an unrelated Scheduler API error would
+      # be a self-inflicted outage, so it stays up and maintenance stays down
+      # (it already is, from before app started). Report the gap instead.
+      say "the app started this release and is healthy; it stays up"
+      say "some job schedules may not be enabled and pinned to this release:"
+      for name in $schedules; do
+        if ! printf '%s\n' "${schedules_enabled[@]:-}" | grep -qxF "$name"; then
+          say "  $name: fix by hand, or rerun deploy.sh to retry the whole release"
+        fi
+      done
+      return
+    fi
+    if ((app_start_requested)); then
+      say "failed while the new app was starting; its health was never confirmed"
+      say "scaling it back to 0 before bringing the maintenance page up"
+      if ! app_down; then
+        say "could not confirm that the app released host port 443"
+        say "the maintenance page was not started; check both services before retrying"
+        return
+      fi
+    fi
+    say "a migration may have been applied; app and job schedules stay stopped"
     say "the previous release is not proven against the migrated schema: fix forward, or restore the snapshot"
+    say "leaving the maintenance page up so the site answers 503 instead of nothing"
+    if ! maintenance_up; then
+      say "could not confirm that the maintenance page started; check both services before retrying"
+    fi
+    return
+  fi
+  if ((first)); then
+    say "failed on the first deploy; there is no previous release to restore"
+    if ! app_down; then
+      say "could not confirm that the app released host port 443"
+      say "the maintenance page was not started; check both services before retrying"
+      return
+    fi
+    say "leaving the maintenance page up so the site answers 503 instead of nothing"
+    if ! maintenance_up; then
+      say "could not confirm that the maintenance page started; check both services before retrying"
+    fi
     return
   fi
   say "failed; restoring the previous app and job schedules"
-  if ((!first)); then
-    aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
-      --task-definition "$previous_app" --desired-count 1 >/dev/null
+  # Turn the maintenance page off before the app comes back: both bind host
+  # port 443, so bringing the app up first would fail to place.
+  if ! maintenance_down; then
+    say "could not confirm that maintenance released host port 443"
+    say "the previous app was not started; check both services before retrying"
+    return
+  fi
+  if ! aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
+    --task-definition "$previous_app" --desired-count 1 >/dev/null; then
+    say "could not request the previous app start; check both services before retrying"
+    return
+  fi
+  if ! aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app; then
+    say "could not confirm that the previous app started; check both services before retrying"
+    return
   fi
   for name in $schedules; do
     if [[ ${schedule_state[$name]:-} == ENABLED ]]; then
@@ -203,13 +339,34 @@ for name in $schedules; do
   set_schedule "$name" DISABLED
 done
 
-aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app --desired-count 0 >/dev/null
-aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
+app_down
 say "site down"
+
+maintenance_up
+say "maintenance up"
+
+# Verify through Cloudflare before a database task starts. A slow edge gets the
+# same bounded retries as final smoke checks. If it still does not serve the
+# maintenance page, restore before migration can change the database.
+maintenance_marker='aboutme:maintenance'
+maintenance_smoke_ok() {
+  local out code body
+  out=$(curl -s -m 10 -w '\n%{http_code}' https://aboutme.vn/) || return 1
+  code=${out##*$'\n'}
+  body=${out%$'\n'*}
+  [[ $code == 503 ]] && grep -qF "$maintenance_marker" <<<"$body"
+}
+if retry maintenance_smoke_ok; then
+  say "maintenance smoke: ok"
+else
+  say "maintenance smoke: could not confirm the maintenance page through Cloudflare"
+  exit 1
+fi
 
 # 7. Database steps.
 run_once() { # family
   local code
+  [[ $1 != migrate ]] || migration_may_be_applied=1
   oneshot_task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
     --task-definition "${revision[$1]}" --started-by "deploy-$1" \
     --query 'tasks[0].taskArn' --output text)
@@ -226,18 +383,27 @@ if ((first)); then
 fi
 if ((!rollback)); then
   run_once migrate
-  migrated=1
 fi
 
 # 8. Start the release.
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-web \
   --task-definition "${revision[web]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-web
+
+# Maintenance and app both bind host port 443: take maintenance down before
+# starting app, the same way it was taken down before the previous deploy's
+# app came up.
+maintenance_down
+say "maintenance down"
+
+app_start_requested=1
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
   --task-definition "${revision[app]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
+app_stable=1
 for name in $schedules; do
   set_schedule "$name" ENABLED "${revision[jobs]}"
+  schedules_enabled+=("$name")
 done
 phase=finished
 say "site up; job schedules enabled"
@@ -246,16 +412,6 @@ say "site up; job schedules enabled"
 # Right after Caddy restarts, Cloudflare can see a TLS reset or serve a 525, so
 # each positive check gets a few attempts. The direct-origin check never
 # retries into a pass: one answer from the origin fails the deploy.
-smoke_attempts=5
-smoke_delay=${DEPLOY_SMOKE_DELAY:-3}
-retry() { # command...
-  local attempt
-  for ((attempt = 1; attempt <= smoke_attempts; attempt++)); do
-    "$@" && return 0
-    ((attempt == smoke_attempts)) || sleep "$smoke_delay"
-  done
-  return 1
-}
 status_ok() { # path
   smoke_code=$(curl -s -o /dev/null -w '%{http_code}' "https://aboutme.vn$1")
   [[ $smoke_code == 200 ]]
