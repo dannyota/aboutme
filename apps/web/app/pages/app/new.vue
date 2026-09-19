@@ -140,7 +140,7 @@ async function create(): Promise<void> {
           :width="120"
         />
         <div class="grid gap-2">
-          <h1 class="text-2xl font-semibold leading-tight">
+          <h1 class="text-xl font-semibold leading-tight">
             {{ heading }}
           </h1>
           <p

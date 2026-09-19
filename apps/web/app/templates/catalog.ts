@@ -76,7 +76,6 @@ const MEMBERS: Readonly<
     'one-page-tight',
     'nordic-muted',
     'international-lang',
-    'high-contrast',
   ],
   'management': [
     'executive-band',
@@ -110,14 +109,14 @@ interface CatalogEntry {
 const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
   'academic-dense': {
     purpose: {
-      vi: 'Một cột dài cho công bố và giảng dạy',
-      en: 'One long column for publications and teaching',
+      vi: 'CV học thuật nhiều trang: công bố, giảng dạy, đề tài',
+      en: 'Multi-page academic CV for publications, teaching and grants',
     },
   },
   'ats-plain': {
     purpose: {
-      vi: 'Một cột, không biểu tượng: máy đọc được từng chữ',
-      en: 'One column, no icons: every word machine-readable',
+      vi: 'Nộp qua cổng tuyển dụng: một cột, máy đọc đúng từng chữ',
+      en: 'For job portals: one column software reads word for word',
     },
     sampleTags: {
       vi: {
@@ -132,44 +131,44 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
   },
   'classic-serif': {
     purpose: {
-      vi: 'Chữ có chân, tiêu đề căn giữa',
-      en: 'Serif type under a centered heading',
+      vi: 'Trang trọng, truyền thống: ngân hàng, luật, hành chính',
+      en: 'Traditional and formal: banking, law, administration',
     },
   },
   'consulting-formal': {
     purpose: {
-      vi: 'Trang Letter, xanh navy, trang trọng',
-      en: 'A formal Letter page in navy',
+      vi: 'Gọn, trang trọng cho tư vấn, tài chính, quản lý',
+      en: 'Tight and formal for consulting, finance and management',
     },
   },
   'creative-accent': {
     purpose: {
-      vi: 'Một màu nhấn trên dải đầu trang',
-      en: 'One accent color on a tinted header',
+      vi: 'Một màu nhấn nổi bật cho marketing, truyền thông',
+      en: 'One bold accent color for marketing and media roles',
     },
   },
   'designer-tag': {
     purpose: {
-      vi: 'Nền giấy, kỹ năng dạng nhãn',
-      en: 'Paper tone, skills as tags',
+      vi: 'Trang kiểu portfolio cho thiết kế và sáng tạo',
+      en: 'A portfolio-style sheet for design and creative work',
     },
   },
   'editorial-wide': {
     purpose: {
-      vi: 'Lề rộng, chữ có chân như sách',
-      en: 'Wide margins and book-like serif type',
+      vi: 'Chữ có chân như sách, cho CV được đọc kỹ',
+      en: 'Book-like serif for a CV that gets read, not scanned',
     },
   },
   'elegant-serif-two': {
     purpose: {
-      vi: 'Hai cột chữ có chân, cột bên màu kem',
-      en: 'Two serif columns with a cream sidebar',
+      vi: 'Hai cột chữ có chân, chứng chỉ nổi bật ở cột bên',
+      en: 'Two serif columns, credentials first in the sidebar',
     },
   },
   'engineer-compact': {
     purpose: {
-      vi: 'Hai cột dày, kỹ năng dạng thanh ở cột bên',
-      en: 'Dense two columns, skill bars in the sidebar',
+      vi: 'Kỹ sư, dữ liệu: hai cột dày, kỹ năng ở cột bên',
+      en: 'For engineers and data roles: dense, skills in the sidebar',
     },
     sampleTags: {
       vi: {
@@ -184,8 +183,8 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
   },
   'executive-band': {
     purpose: {
-      vi: 'Tên và chức danh trên dải màu đầu trang',
-      en: 'Name and title on a colored band at the top',
+      vi: 'Quản lý cấp cao: tên và chức danh trên dải màu',
+      en: 'For senior leaders: name and title on a bold band',
     },
     sampleTags: {
       vi: {
@@ -200,14 +199,14 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
   },
   'government-formal': {
     purpose: {
-      vi: 'Một màu mực, khối liên hệ xếp dọc',
-      en: 'One ink, contacts stacked in a block',
+      vi: 'Hồ sơ trang trọng một màu mực cho khu vực công',
+      en: 'One-ink formal record for public-sector applications',
     },
   },
   'graduate-friendly': {
     purpose: {
-      vi: 'Chữ lớn, thoáng: ít kinh nghiệm vẫn đầy trang',
-      en: 'Large, airy type: a short history still fills the page',
+      vi: 'Mới tốt nghiệp: chữ lớn, thoáng, ít kinh nghiệm vẫn đầy trang',
+      en: 'For graduates: airy type, a short history still fills the page',
     },
     sampleTags: {
       vi: {
@@ -215,38 +214,38 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
         en: 'Sample: Accounting graduate',
       },
       en: {
-        vi: 'CV mẫu: Cử nhân kinh doanh',
+        vi: 'CV mẫu: Cử nhân quản trị kinh doanh',
         en: 'Sample: Business graduate',
       },
     },
   },
   'high-contrast': {
     purpose: {
-      vi: 'Tương phản tối đa, chữ lớn',
-      en: 'Maximum contrast, large type',
+      vi: 'Dễ đọc nhất: tương phản cao, chữ lớn',
+      en: 'Easiest to read: high contrast, large type',
     },
   },
   'international-lang': {
     purpose: {
-      vi: 'Ngôn ngữ dẫn đầu cột bên',
-      en: 'Languages lead the sidebar',
+      vi: 'Ứng tuyển nước ngoài: ngoại ngữ đứng đầu cột bên',
+      en: 'For cross-border roles: languages lead the sidebar',
     },
   },
   'minimal-air': {
     purpose: {
-      vi: 'Không kẻ, không nền: chỉ khoảng trắng',
-      en: 'No rules, no fills: only white space',
+      vi: 'Tối giản: không kẻ, không nền, chỉ khoảng trắng',
+      en: 'Minimal: no rules, no fills, only white space',
     },
   },
   'modern-sidebar': {
     purpose: {
-      vi: 'Cột bên có màu cho kỹ năng và ngôn ngữ',
-      en: 'A tinted sidebar for skills and languages',
+      vi: 'Hiện đại, cột bên có màu cho kỹ năng, ngoại ngữ',
+      en: 'Modern, a tinted sidebar for skills and languages',
     },
     sampleTags: {
       vi: {
-        vi: 'CV mẫu: Trưởng nhóm marketing',
-        en: 'Sample: Marketing lead',
+        vi: 'CV mẫu: Trưởng nhóm digital marketing',
+        en: 'Sample: Digital marketing lead',
       },
       en: {
         vi: 'CV mẫu: Quản lý sản phẩm',
@@ -256,26 +255,26 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
   },
   'mono-print': {
     purpose: {
-      vi: 'Đen trắng thuần, in photocopy vẫn rõ',
+      vi: 'Đen trắng, photocopy vẫn rõ',
       en: 'Pure black and white, clear even when photocopied',
     },
   },
   'nordic-muted': {
     purpose: {
-      vi: 'Xanh xám dịu, cột bên nhạt',
-      en: 'Muted blue-grey with a faint sidebar',
+      vi: 'Hai cột xanh xám dịu, gọn và nhẹ nhàng',
+      en: 'Calm blue-grey two columns, compact and quiet',
     },
   },
   'one-page-tight': {
     purpose: {
-      vi: 'Cả sự nghiệp gọn trong một trang A4',
-      en: 'A whole career on one A4 page',
+      vi: 'Nhiều kinh nghiệm, gói gọn trong một trang A4',
+      en: 'A long career on one A4 page',
     },
   },
   'startup-bold': {
     purpose: {
-      vi: 'Chữ lớn, mạnh cho vai trò sản phẩm',
-      en: 'Large, bold type for product roles',
+      vi: 'Chữ lớn, mạnh cho sản phẩm, tăng trưởng, startup',
+      en: 'Large, bold type for product, growth and startup roles',
     },
   },
 };

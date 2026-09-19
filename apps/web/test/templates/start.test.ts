@@ -73,6 +73,12 @@ describe('starting documents', () => {
       expect(suggestedTitle(request)).toBe('Backend engineer resume');
       const vi = { kind: 'sample', template, lng: 'vi' } as const;
       expect(suggestedTitle(vi)).toBe('CV kỹ sư frontend');
+      const fpa = {
+        kind: 'sample',
+        template: galleryTemplate('ats-plain')!,
+        lng: 'vi',
+      } as const;
+      expect(suggestedTitle(fpa)).toBe('CV trưởng nhóm vận hành kho');
       expect(suggestedTitle({ kind: 'template', template }))
         .toBe('Engineer Compact resume');
     });

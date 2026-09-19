@@ -42,7 +42,10 @@ export function freezeCreateAttempt(
     ...(intent.lng === undefined ? {} : { lng: intent.lng }),
     ...(intent.document === undefined
       ? {}
-      : { document: intent.document as JsonBody<'createResume'>['document'] }),
+      : {
+          document: intent.document as unknown as
+          JsonBody<'createResume'>['document'],
+        }),
   };
   return freezeWire(
     intent.id,
