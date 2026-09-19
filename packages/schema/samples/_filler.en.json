@@ -2,7 +2,7 @@
   "schemaVersion": 4,
   "personalDetails": {
     "fullName": "Alex Nguyen",
-    "headline": "Operations Analyst",
+    "headline": "Senior Operations Analyst, Retail and Logistics",
     "details": [
       {
         "id": "c32d8878-e2f8-54c1-8ed1-b6d45b0b292c",
@@ -13,7 +13,7 @@
       {
         "id": "37322c0e-0b1b-5079-9bbe-a5c31bc8da51",
         "type": "phone",
-        "value": "+84 90 000 0101",
+        "value": "+84 90 000 0111",
         "isHidden": false
       },
       {
@@ -39,7 +39,7 @@
         {
           "id": "023d04c5-7bdc-5dbd-9084-e6146bf976dc",
           "isHidden": false,
-          "text": "<p>Six years of operations analysis for retail and logistics companies. Works across teams to turn data into specific recommendations and tracks the results after rollout.</p>"
+          "text": "<p>Operations analyst with 7 years in retail and logistics. Turns store and delivery data into changes that stick: 18% fewer stockouts and 12% lower shipping costs in the last two roles.</p>"
         }
       ]
     },
@@ -63,7 +63,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Built a weekly operations scorecard for 40 stores, cutting report preparation from two days to half a day.</li><li>Worked with the warehouse team to reduce stockouts by 18% in six months.</li><li>Coached two new analysts on data quality checks.</li></ul>"
+          "description": "<ul><li>Built a weekly operations scorecard for 40 stores, cutting report preparation from 2 days to half a day.</li><li>Cut stockouts by 18% in 6 months by setting reorder points with the warehouse team.</li><li>Coached 2 new analysts on data-quality checks.</li></ul>"
         },
         {
           "id": "6403b92d-03b7-5368-b8b1-74089e18df75",
@@ -83,7 +83,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Analysed delivery routes and proposed order batching that saved 12% in shipping costs.</li><li>Consolidated order data from three legacy systems into one shared warehouse.</li></ul>"
+          "description": "<ul><li>Analyzed delivery routes and introduced order batching that saved 12% in shipping costs.</li><li>Merged order data from 3 legacy systems into one data warehouse, ending weekly manual reconciliation.</li></ul>"
         }
       ]
     },
@@ -96,16 +96,16 @@
           "id": "f64763ef-be6e-5057-9c6a-12cd46858a1e",
           "isHidden": false,
           "degree": "B.Sc. Management Information Systems",
-          "school": "National Economics University",
-          "schoolLink": "https://neu.example.edu",
+          "school": "Northern University of Economics and Management",
+          "schoolLink": "https://northern-econ.example.edu",
           "city": "Hanoi",
           "dates": {
             "start": {
-              "y": 2014,
+              "y": 2015,
               "m": 9
             },
             "end": {
-              "y": 2018,
+              "y": 2019,
               "m": 6
             },
             "present": false
@@ -117,24 +117,23 @@
     "skill": {
       "sectionType": "skill",
       "displayName": "Skills",
-      "iconKey": "code",
       "entries": [
         {
           "id": "4d9e7dd4-caab-5da1-95b2-dd1a44904802",
           "isHidden": false,
-          "name": "Data analysis",
+          "name": "Excel and SQL",
           "level": 5
         },
         {
           "id": "1e908ce9-f6fc-54d9-8573-eaeef6da8907",
           "isHidden": false,
-          "name": "Process improvement",
+          "name": "Power BI",
           "level": 4
         },
         {
           "id": "7be09984-9292-5472-bac4-2fd4c3b7d395",
           "isHidden": false,
-          "name": "Data storytelling",
+          "name": "Process improvement",
           "level": 4
         },
         {

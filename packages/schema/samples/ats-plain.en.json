@@ -83,7 +83,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Automated variance analysis with Power Query and SQL, cutting the month-end close from 9 to 5 days.</li><li>Modelled pricing for 3 product lines; the adopted price change raised gross margin by 1.8 points.</li></ul>"
+          "description": "<ul><li>Automated variance analysis with Power Query and SQL, cutting the month-end close from 9 to 5 days.</li><li>Modeled pricing for 3 product lines; the adopted price change raised gross margin by 1.8 points.</li></ul>"
         }
       ]
     },
