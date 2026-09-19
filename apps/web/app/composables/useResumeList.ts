@@ -235,9 +235,34 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     return actionsFor(id);
   };
 
+  const updateItem = (id: string, patch: Partial<ResumeSummary>): void => {
+    if (view.value.kind !== 'ready') return;
+    view.value = {
+      kind: 'ready',
+      items: view.value.items.map((item) =>
+        item.id === id ? { ...item, ...patch } : item),
+    };
+  };
+
   const rename = async (id: string, title: string): Promise<void> => {
     const actions = await initializeForAction(id);
-    actions?.edit({ kind: 'metadataField', field: 'title', value: title });
+    const result = actions?.edit({
+      kind: 'metadataField',
+      field: 'title',
+      value: title,
+    });
+    if (result?.kind !== 'enqueued') return;
+    // The card shows the new title at once, then whatever the server kept.
+    updateItem(id, { title });
+    await coordinator.flush(id);
+    const saved = store.recordFor(id)?.accepted;
+    if (saved !== undefined) {
+      updateItem(id, {
+        title: saved.metadata.title,
+        updatedAt: saved.metadata.updatedAt,
+        revision: saved.revision,
+      });
+    }
   };
 
   const remove = async (id: string, confirmedTitle: string): Promise<void> => {
