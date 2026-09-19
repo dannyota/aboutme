@@ -250,11 +250,33 @@ body:has(> #public-resume) {
   justify-items: var(--header-align);
 }
 
+/* Inline text, not flex: a labelled value then wraps after its label as one
+   run instead of both squeezing into columns and breaking letter by letter. */
 .resume-document .contact-chip {
-  display: inline-flex;
-  gap: var(--chip-icon-gap);
-  align-items: center;
+  display: inline-block;
   color: var(--color-body);
+}
+
+/* Wrapped lines hang past the icon, so they align with the text. */
+.resume-document .contact-chip:has(> .resume-icon) {
+  padding-inline-start: calc(var(--icon-size) + var(--chip-icon-gap));
+  text-indent: calc(-1 * (var(--icon-size) + var(--chip-icon-gap)));
+}
+
+.resume-document .contact-chip .resume-icon {
+  margin-inline-end: var(--chip-icon-gap);
+  vertical-align: -0.15em;
+}
+
+/* The trailing space is the line-break opportunity between a label and its
+   value; nowrap keeps the label itself on one line. */
+.resume-document .contact-label {
+  white-space: nowrap;
+}
+
+.resume-document .contact-label::after {
+  content: " ";
+  white-space: normal;
 }
 
 .resume-document .resume-icon {
@@ -278,6 +300,14 @@ body:has(> #public-resume) {
 .resume-document .resume-sidebar {
   min-width: 0;
   background: var(--color-surface);
+}
+
+/* A phone-width screen has no room for a sidebar: continuous pages stack main
+   then sidebar. Paged output and print keep the template's columns. */
+@media screen and (width < 36em) {
+  .resume-document:not(.resume-page) .layout-two-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .resume-document .resume-section {
