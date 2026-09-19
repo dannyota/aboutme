@@ -45,6 +45,18 @@ function formWith(child: () => ReturnType<typeof h>) {
 }
 
 describe('IconButton type', () => {
+  it('defaults to a top tooltip and accepts a side override', () => {
+    const top = mount(IconButton, { props: { label: 'Top' } });
+    expect(top.getComponent({ name: 'TooltipContent' }).props('side'))
+      .toBe('top');
+
+    const bottom = mount(IconButton, {
+      props: { label: 'Bottom', tooltipSide: 'bottom' },
+    });
+    expect(bottom.getComponent({ name: 'TooltipContent' }).props('side'))
+      .toBe('bottom');
+  });
+
   it('defaults to a plain button and accepts an explicit submit', async () => {
     const plain = formWith(() => h(IconButton, { label: 'Plain' }));
     const button = plain.wrapper.get('button');

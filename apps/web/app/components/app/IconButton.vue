@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ButtonVariants } from '@/components/ui/button';
+import type { TooltipContentProps } from 'reka-ui';
 import { Button } from '@/components/ui/button';
 import {
   Tooltip,
@@ -19,10 +20,11 @@ const props = withDefaults(
     readonly pressed?: boolean;
     readonly disabled?: boolean;
     readonly class?: string;
+    readonly tooltipSide?: TooltipContentProps['side'];
     /** An icon button never submits a form unless asked to. */
     readonly type?: 'button' | 'submit' | 'reset';
   }>(),
-  { variant: 'ghost', size: 'icon', type: 'button' },
+  { variant: 'ghost', size: 'icon', tooltipSide: 'top', type: 'button' },
 );
 </script>
 
@@ -42,7 +44,9 @@ const props = withDefaults(
         >
           <slot />
         </Button>
-      </TooltipTrigger><TooltipContent>{{ label }}</TooltipContent>
+      </TooltipTrigger><TooltipContent :side="tooltipSide">
+        {{ label }}
+      </TooltipContent>
     </Tooltip>
   </TooltipProvider>
 </template>

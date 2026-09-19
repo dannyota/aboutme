@@ -8,6 +8,8 @@ import {
   FieldDraftsKey,
 } from '../../app/composables/useFieldDrafts';
 import EditorShell from '../../app/components/editor/EditorShell.vue';
+import AccountMenu from '../../app/components/app/AccountMenu.vue';
+import IconButton from '../../app/components/app/IconButton.vue';
 import type {
   ResumeEditorActions,
 } from '../../app/composables/useResumeEditor';
@@ -120,6 +122,8 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-resume-title]').text()).toBe('Fixture');
 
     expect(wrapper.get('[aria-label="Account menu"]').exists()).toBe(true);
+    expect(wrapper.getComponent(AccountMenu).getComponent(IconButton)
+      .props('tooltipSide')).toBe('bottom');
     expect(wrapper.find('[aria-label^="Switch to"]').exists()).toBe(false);
     const publish = wrapper.get('[data-action="publish"]');
     expect(publish.text()).toBe('Publish');
@@ -264,6 +268,27 @@ describe('EditorShell', () => {
     expect(wrapper.get('[data-region="account-actions"]').classes())
       .not.toContain('max-[72rem]:col-span-full');
   });
+
+  it(
+    'uses two phone rows for editor actions without changing their order',
+    () => {
+      const wrapper = mountShell();
+      const topbar = wrapper.get('[data-region="topbar"]');
+
+      expect(topbar.classes()).toEqual(expect.arrayContaining([
+        'max-[42rem]:flex-col',
+        'max-[42rem]:h-24',
+      ]));
+      expect(wrapper.findAll('[data-editor-topbar-row]')).toHaveLength(2);
+      expect(wrapper.get('[data-editor-topbar-row="identity"]').classes())
+        .toContain('max-[42rem]:self-stretch');
+      expect(wrapper.get('[data-editor-topbar-row="actions"]')
+        .classes()).toEqual(expect.arrayContaining([
+        'max-[42rem]:flex',
+        'max-[42rem]:flex-1',
+      ]));
+    },
+  );
 
   it('uses one headerless preview row', () => {
     const wrapper = mountShell();

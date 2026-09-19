@@ -204,65 +204,85 @@ async function discardAndSignIn(): Promise<void> {
       'grid-rows-[4rem_minmax(0,1fr)] overflow-hidden bg-background',
       'text-foreground max-[72rem]:grid-cols-[16.5rem_minmax(0,1fr)]',
       'max-[42rem]:grid-cols-[minmax(0,1fr)]',
+      'max-[42rem]:grid-rows-[6rem_minmax(0,1fr)]',
     ]"
   >
     <header
       class="editor-topbar col-span-full flex h-16 items-center gap-4
-        border-b bg-background/95 px-4"
+        border-b bg-background/95 px-4 max-[42rem]:h-24 max-[42rem]:flex-col
+        max-[42rem]:gap-0 max-[42rem]:px-2 max-[42rem]:py-2"
       data-region="topbar"
     >
-      <NuxtLink
-        class="editor-brand font-semibold"
-        to="/app/resumes"
-      > aboutme </NuxtLink>
-      <span
-        aria-hidden="true"
-        class="h-5 border-l max-[42rem]:hidden"
-      />
-      <h1
-        class="min-w-0 truncate text-sm font-medium max-[42rem]:hidden"
-        data-resume-title
-      >
-        {{ record.current.metadata.title }}
-      </h1>
-      <SaveStatus
-        class="shrink-0"
-        data-testid="save-status"
-        :state="saveState"
-      />
-      <StateMark
-        v-if="displayLink !== null"
-        class="shrink-0 max-[42rem]:hidden"
-        :data-stamp="stampState === 'idle' ? undefined : stampState"
-        data-testid="public-mark"
-        :link="displayLink"
-        state="public"
-      />
-      <span class="flex-1" />
-      <LocaleToggle
-        :label="copy.localeLabel"
-        test-id="workspace-locale"
-        @pointerdown.prevent
-      />
-      <PDFDownloadButton
-        :controller="actions.downloadPdf"
-        :page-format="document.customization.pageFormat"
-      />
-      <Button
-        class="editor-publish-action"
-        data-action="publish"
-        size="sm"
-        type="button"
-        variant="seal"
-        @click="publishOpen = true"
-      >
-        {{ copy.publish }}
-      </Button>
       <div
-        class="editor-account-actions flex items-center"
-        data-region="account-actions"
+        class="contents max-[42rem]:flex max-[42rem]:min-w-0
+          max-[42rem]:flex-1 max-[42rem]:self-stretch max-[42rem]:items-center
+          max-[42rem]:gap-1"
+        data-editor-topbar-row="identity"
       >
-        <AccountMenu />
+        <NuxtLink
+          class="editor-brand font-semibold"
+          to="/app/resumes"
+        > aboutme </NuxtLink>
+        <span
+          aria-hidden="true"
+          class="h-5 border-l max-[42rem]:hidden"
+        />
+        <h1
+          class="min-w-0 truncate text-sm font-medium max-[42rem]:hidden"
+          data-resume-title
+        >
+          {{ record.current.metadata.title }}
+        </h1>
+        <SaveStatus
+          class="shrink-0 max-[42rem]:min-w-0"
+          data-testid="save-status"
+          :state="saveState"
+        />
+        <StateMark
+          v-if="displayLink !== null"
+          class="shrink-0 max-[42rem]:hidden"
+          :data-stamp="stampState === 'idle' ? undefined : stampState"
+          data-testid="public-mark"
+          :link="displayLink"
+          state="public"
+        />
+        <span class="flex-1" />
+        <LocaleToggle
+          :label="copy.localeLabel"
+          test-id="workspace-locale"
+          @pointerdown.prevent
+        />
+      </div>
+      <div
+        class="contents max-[42rem]:flex max-[42rem]:min-w-0
+          max-[42rem]:flex-1 max-[42rem]:self-stretch max-[42rem]:items-center
+          max-[42rem]:justify-end max-[42rem]:gap-1"
+        data-editor-topbar-row="actions"
+      >
+        <div
+          class="flex items-center"
+        >
+          <PDFDownloadButton
+            :controller="actions.downloadPdf"
+            :page-format="document.customization.pageFormat"
+          />
+        </div>
+        <Button
+          class="editor-publish-action"
+          data-action="publish"
+          size="sm"
+          type="button"
+          variant="seal"
+          @click="publishOpen = true"
+        >
+          {{ copy.publish }}
+        </Button>
+        <div
+          class="editor-account-actions flex items-center"
+          data-region="account-actions"
+        >
+          <AccountMenu tooltip-side="bottom" />
+        </div>
       </div>
     </header>
 
