@@ -98,9 +98,24 @@ distinct callback and no invented OIDC checks.
 The server stores transaction state, purpose, the opaque-handle hash, PKCE
 verifier, exact provider redirect URI, bounded login return path, expiry, and
 OIDC nonce. The return path is one same-origin relative path of at most 2,048
-bytes; invalid input becomes `/app/resumes`. The browser holds only the 256-bit
-opaque `__Host-oauth-tx` handle. The database stores its SHA-256 hash. A
-transaction is consumed atomically once and expires after ten minutes.
+bytes; invalid input becomes `/app/resumes`. The login and registration pages
+apply the same rule to `next`:
+
+- The path starts with exactly one `/` and holds no backslash or control
+  character, both as written and after percent-decoding, so `/%2F%2Fhost` and
+  `/%5Chost` are rejected. The decoded path has no `.` or `..` segment, so
+  `/.//host` and `/%2e//host` are rejected too.
+- It parses to the same origin, with no scheme or host.
+- For `/app/new`, matched as the router matches it (any case, one optional
+  trailing slash), only `sample`, `template`, and `lng` survive, each at most
+  once. `lng` must be `en` or `vi`. `sample` and `template` must be known
+  template ids on the pages and well-formed ids on the server. Every other
+  parameter and the fragment are dropped, and the path is kept. The new-resume
+  page re-checks that the ids exist.
+
+The browser holds only the 256-bit opaque `__Host-oauth-tx` handle. The database
+stores its SHA-256 hash. A transaction is consumed atomically once and expires
+after ten minutes.
 
 A privileged transaction binds the user who started it, not one concrete session
 ID. Its callback must authenticate a live session for that same user; a session

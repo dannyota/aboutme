@@ -24,8 +24,16 @@ import {
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 import { pageTitle } from '@/i18n/meta';
+import { validateReturnPath } from '@/utils/returnPath';
 
+const route = useRoute();
 const { locale } = useLocale();
+// A validated return path survives registration: provider sign-up and the
+// later password sign-in both return there.
+const explicitNext = computed(() => validateReturnPath(route.query.next));
+const signInLink = computed(() => (explicitNext.value
+  ? `/login?next=${encodeURIComponent(explicitNext.value)}`
+  : '/login'));
 const copy = computed(() => authCopy[locale.value]);
 useHead(computed(() => ({ title: pageTitle(copy.value.createAccount) })));
 const { loginProviders, passwordRegistration, resolved } = useCapabilities();
@@ -143,7 +151,7 @@ async function onSubmit() {
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
         data-testid="register-success-sign-in"
-        to="/login"
+        :to="signInLink"
       >
         {{ copy.signIn }}
       </NuxtLink>
@@ -162,6 +170,7 @@ async function onSubmit() {
         </p>
         <ProviderButtons
           :locale="locale"
+          :next="explicitNext"
           :providers="['google']"
         />
       </template>
@@ -239,6 +248,7 @@ async function onSubmit() {
         <ProviderButtons
           class="mt-6"
           :locale="locale"
+          :next="explicitNext"
           :providers="loginProviders"
         />
         <LegalAgreement
@@ -279,6 +289,7 @@ async function onSubmit() {
       <ProviderButtons
         class="mt-4"
         :locale="locale"
+        :next="explicitNext"
         :providers="loginProviders"
       />
     </template>

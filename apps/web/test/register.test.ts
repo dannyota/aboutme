@@ -297,6 +297,38 @@ describe('register.vue', () => {
       expect(JSON.parse(receivedBody ?? '{}')).toEqual(validInput);
     });
 
+  it.each([
+    [
+      '/app/new?sample=ats-plain&lng=vi&x=1',
+      '/app/new?sample=ats-plain&lng=vi',
+    ],
+    ['//evil.example', null],
+  ])('carries a checked next %s to the sign-in link', async (next, want) => {
+    registerEndpoint('/api/v1/auth/password/register', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 202);
+        return { data: { accepted: true } };
+      },
+    });
+    const wrapper = await mountSuspended(RegisterPage, {
+      route: `/register?next=${encodeURIComponent(next)}`,
+    });
+    await wrapper.get('#register-name').setValue(validInput.name);
+    await wrapper.get('#register-email').setValue(validInput.email);
+    await wrapper.get('#register-password').setValue(validInput.password);
+    await wrapper.get('#register-password-confirm')
+      .setValue(validInput.password);
+    await wrapper.get('[data-testid="register-form"]').trigger('submit');
+    await settle();
+    expect(
+      wrapper.get('[data-testid="register-success-sign-in"]')
+        .attributes('href'),
+    ).toBe(
+      want === null ? '/login' : `/login?next=${encodeURIComponent(want)}`,
+    );
+  });
+
   it('replaces the form after success so no stale field or error remains',
     async () => {
       registerEndpoint('/api/v1/auth/password/register', {

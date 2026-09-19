@@ -317,6 +317,36 @@ describe('login next preservation', () => {
       }
     });
 
+  it('keeps only the checked /app/new query on every onward link', async () => {
+    const next = '/app/new?sample=ats-plain&lng=vi&evil=%2F%2Fx';
+    const kept = '/app/new?sample=ats-plain&lng=vi';
+    const wrapper = await mountSuspended(LoginPage, {
+      route: `/login?next=${encodeURIComponent(next)}`,
+    });
+    await flushPromises();
+    const hrefs = wrapper
+      .findAll('[href]')
+      .map((link) => link.attributes('href'));
+    expect(hrefs).toContain(
+      `/api/v1/auth/google/start?next=${encodeURIComponent(kept)}`,
+    );
+    expect(hrefs).toContain(`/register?next=${encodeURIComponent(kept)}`);
+    expect(hrefs.some((href) => href?.includes('evil'))).toBe(false);
+  });
+
+  it.each(['/%2F%2Fevil.example', '/%5Cevil.example', '/\tx'])(
+    'drops an encoded or control-character next %s',
+    async (next) => {
+      const wrapper = await mountSuspended(LoginPage, {
+        route: `/login?next=${encodeURIComponent(next)}`,
+      });
+      await flushPromises();
+      expect(wrapper.get('[href="/api/v1/auth/google/start"]').exists())
+        .toBe(true);
+      expect(wrapper.get('[href="/register"]').exists()).toBe(true);
+    },
+  );
+
   it('returns a successful password login to valid next verbatim', async () => {
     registerEndpoint('/api/v1/auth/password/login', {
       method: 'POST',
