@@ -57,6 +57,39 @@ describe('command capture', () => {
     }
   });
 
+  it('copies a reactive photo crop into plain command data', () => {
+    const base = acceptedFixture();
+    const accepted = acceptedFixture({
+      document: {
+        ...base.document,
+        personalDetails: {
+          ...base.document.personalDetails,
+          photo: { key: 'photo-1' },
+        },
+      },
+    });
+    const crop = reactive({ x: 0, y: 0, width: 1, height: 0.75 });
+
+    const command = captureCommand(accepted, {
+      resumeId: accepted.metadata.id,
+      ownerId: 'owner-1',
+      sequence: 1,
+      dependencyIds: [],
+      intent: { kind: 'photoCrop', crop },
+    }, runtime);
+
+    expect(command.kind === 'photoCrop' && command.crop).toEqual({
+      x: 0, y: 0, width: 1, height: 0.75,
+    });
+    if (command.kind === 'photoCrop') {
+      expect(isProxy(command.crop)).toBe(false);
+    }
+    const replayed = replayCommand(accepted, command);
+    expect(replayed.document.personalDetails.photo?.crop).toEqual({
+      x: 0, y: 0, width: 1, height: 0.75,
+    });
+  });
+
   it('captures before replay and preserves absence distinctly', () => {
     const accepted = acceptedFixture({
       document: {

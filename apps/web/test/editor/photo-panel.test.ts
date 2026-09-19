@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { isProxy, nextTick } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
 
 import CropEditor from '../../app/components/editor/photo/CropEditor.vue';
@@ -283,6 +283,9 @@ describe('private photo controls', () => {
 
     expect(edit).toHaveBeenCalledTimes(1);
     const crop = edit.mock.calls[0]![0].crop;
+    // The store clones the crop; a reactive proxy would throw there.
+    expect(isProxy(crop)).toBe(false);
+    expect(() => structuredClone(crop)).not.toThrow();
     expect(crop).toMatchObject({ x: 0, width: 1, height: 0.5 });
     expect(crop.y + crop.height / 2).toBeCloseTo(1 / 3, 5);
     expect(wrapper.get('[data-crop-preview] img').attributes('style'))
