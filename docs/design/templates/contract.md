@@ -182,12 +182,13 @@ inline link ([Geometry](geometry.md), [Known contract limits](limitations.md)).
 whole value passes the renderer's strict check (ADR 0043). An email links as
 `mailto:` plus the value when it is at most 254 characters with exactly one `@`,
 text before it, and a dot inside the domain, and holds no white space, control,
-or format character and none of `` < > " ' ` ( ) \ , ; : ? # % ``. A phone links as
-`tel:` plus the value with spaces, dots, hyphens, and parentheses removed, when
-that result matches `^\+?[0-9]{3,20}$`. Their anchor text is always the value,
-and `display` does not apply. A value that fails renders as text. `location`
-always renders as **plain text**. `label`, when present and non-empty, replaces
-the type's default label; the `twitter` default label is "X".
+or format character and none of ``< > " ' ` ( ) \ , ; : ? # %``. A phone links
+as `tel:` plus the value with spaces, dots, hyphens, and parentheses removed,
+when that result matches `^\+?[0-9]{3,20}$`. Their anchor text is always the
+value, and `display` does not apply. A value that fails renders as text.
+`location` always renders as **plain text**. `label`, when present and
+non-empty, replaces the type's default label; the `twitter` default label is
+"X".
 
 When `header.iconStyle` shows icons, a typed detail omits its default label; a
 non-empty user `label` and every `custom` detail's label still render (ADR

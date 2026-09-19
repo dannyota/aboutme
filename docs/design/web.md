@@ -184,8 +184,7 @@ text; location values are plain text. Every inline link is underlined.
 [ADR 0013](../adr/0013-contact-detail-rendering.md),
 [ADR 0040](../adr/0040-contact-labels-beside-icons.md),
 [ADR 0041](../adr/0041-contact-link-display-and-body-justify.md), and
-[ADR 0043](../adr/0043-email-and-phone-links.md) own these
-rules.
+[ADR 0043](../adr/0043-email-and-phone-links.md) own these rules.
 
 `LayoutColumns` reads order only from `customization.layout.sections`. In
 one-column mode it renders `main` then `sidebar`, preserving all sections. No
