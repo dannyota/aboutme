@@ -112,12 +112,14 @@ body:has(> #public-resume) {
 
 .public-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  gap: 1em;
   padding: var(--page-margin-y) var(--page-margin-x) 0;
   font-family: var(--font-family);
   font-size: var(--fs-meta);
 }
 
+.public-credit,
 .public-download {
   color: var(--color-link);
   text-decoration: underline;

@@ -58,6 +58,7 @@ describe('private print Vue document', () => {
           downloadEnabled: false,
           document: envelope.document,
         },
+        homeHref: 'https://aboutme.example/',
       }),
     }));
     // The public page wraps the same article in its measure and download

@@ -9,7 +9,11 @@ import { resolveRenderModel } from '../resume/resolveRenderModel';
 
 type PublicResume = components['schemas']['PublicResume'];
 
-const props = defineProps<{ publicResume: PublicResume }>();
+const props = defineProps<{
+  publicResume: PublicResume;
+  /** The canonical home page, `<origin>/`, which the page credit links. */
+  homeHref: string;
+}>();
 
 const document = computed(() => {
   const source = props.publicResume.document;
@@ -45,11 +49,14 @@ const model = computed(() => resolveRenderModel(document.value, {
     : { photoUrl: props.publicResume.document.personalDetails.photo.url }),
 }));
 
-// The download control follows the resume's language, like the resume itself.
+// The page chrome follows the resume's language, like the resume itself.
+const vietnamese = computed(() =>
+  props.publicResume.lng.split('-')[0]?.toLowerCase() === 'vi');
 const downloadLabel = computed(() =>
-  props.publicResume.lng.split('-')[0]?.toLowerCase() === 'vi'
-    ? 'Tải PDF'
-    : 'Download PDF');
+  vietnamese.value ? 'Tải PDF' : 'Download PDF');
+// The server's public HTML validator requires exactly this credit anchor.
+const creditLabel = computed(() =>
+  vietnamese.value ? 'Tạo bằng aboutme.vn' : 'Built with aboutme.vn');
 const downloadHref = computed(() =>
   `/api/v1/public/resumes/${props.publicResume.slug}/pdf`);
 
@@ -71,11 +78,13 @@ const rootStyle = computed(() => ({
     :style="rootStyle"
   >
     <div class="public-measure">
-      <div
-        v-if="publicResume.downloadEnabled"
-        class="public-toolbar"
-      >
+      <div class="public-toolbar">
         <a
+          class="public-credit"
+          :href="homeHref"
+        >{{ creditLabel }}</a>
+        <a
+          v-if="publicResume.downloadEnabled"
           class="public-download"
           :href="downloadHref"
         >{{ downloadLabel }}</a>

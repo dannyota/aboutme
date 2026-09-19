@@ -106,7 +106,10 @@ export async function renderPublicResume(
     const body = await renderToString(
       createSSRApp({
         render: () =>
-          h(PublicResumeApp, { publicResume: request.publicResume }),
+          h(PublicResumeApp, {
+            publicResume: request.publicResume,
+            homeHref: `${request.canonicalOrigin}/`,
+          }),
       }),
     );
     const discoveryScript = jsonLd(request);

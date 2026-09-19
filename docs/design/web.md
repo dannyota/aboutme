@@ -290,6 +290,13 @@ forbidden.
   `<Full-Name>-Resume.pdf`: `filename` carries the name folded to ASCII, and an
   RFC 5987 `filename*` carries it in UTF-8
   ([ADR 0045](../adr/0045-pdf-download-name-and-metadata.md)).
+- Every public page shows a "Built with aboutme.vn" link ("Tạo bằng aboutme.vn"
+  for Vietnamese, English for any other language) at the left of the same row,
+  or alone in that row when download is off. It links the canonical origin's
+  home page (`https://aboutme.vn/`) with no query and no `rel`, matches the
+  download link's size, color, and underline, and is hidden in print. The PDF
+  never carries it. The public HTML validator requires exactly this anchor,
+  once, outside the resume article.
 - Chromium and CSS `@page` own PDF pagination.
 
 Content, order, type, color, and visibility must agree across targets; only page
