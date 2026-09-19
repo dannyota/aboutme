@@ -149,15 +149,19 @@ body:has(> #public-resume) {
 }
 
 .resume-document .resume-header {
-  margin-block-end: var(--gap-section);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  margin-block-end: var(--gap-header);
   break-inside: avoid;
 }
 
 .resume-document .resume-photo {
   position: relative;
-  display: inline-block;
+  display: block;
+  justify-self: var(--header-align);
   width: var(--photo-size);
   height: var(--photo-size);
+  margin-block-end: var(--header-photo-gap);
   overflow: hidden;
   border-radius: var(--photo-radius);
 }
@@ -178,29 +182,31 @@ body:has(> #public-resume) {
 }
 
 .resume-document .resume-headline {
-  margin: 0;
+  margin: var(--header-name-gap) 0 0;
   color: var(--color-body);
   font-size: var(--fs-headline);
 }
 
 .resume-document .resume-details {
   display: flex;
-  gap: var(--gap-inline);
+  gap: var(--details-row-gap) var(--details-column-gap);
+  margin-block-start: var(--header-details-gap);
 }
 
 .resume-document .details-inline {
   flex-flow: row wrap;
-  justify-content: inherit;
+  justify-content: var(--header-align);
 }
 
+/* A grid, because align-items has no left or right keyword. */
 .resume-document .details-stacked {
-  flex-direction: column;
-  gap: var(--gap-block);
+  display: grid;
+  justify-items: var(--header-align);
 }
 
 .resume-document .contact-chip {
   display: inline-flex;
-  gap: 0.25em;
+  gap: var(--chip-icon-gap);
   align-items: center;
   color: var(--color-body);
 }
@@ -209,6 +215,12 @@ body:has(> #public-resume) {
   width: var(--icon-size);
   height: var(--icon-size);
   flex: none;
+  color: var(--color-meta);
+}
+
+.resume-document .resume-header a {
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.18em;
 }
 
 .resume-document .layout-two-columns {

@@ -92,6 +92,7 @@ export async function measurePagination(
   const sectionGapPx = cssPixels(styles, '--gap-section');
   const headingGapPx = cssPixels(styles, '--gap-heading');
   const entryGapPx = cssPixels(styles, '--gap-entry');
+  const headerGapPx = cssPixels(styles, '--gap-header');
   const header = root.querySelector<HTMLElement>('[data-pagination-header]');
   if (header === null) {
     throw new PaginationError(
@@ -137,7 +138,7 @@ export async function measurePagination(
   return {
     columns: request.columns,
     headerHeightPx,
-    headerBodyGapPx: sectionGapPx,
+    headerBodyGapPx: headerGapPx,
     blocks,
   };
 }

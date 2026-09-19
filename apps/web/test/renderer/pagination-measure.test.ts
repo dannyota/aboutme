@@ -58,6 +58,7 @@ describe('measurePagination', () => {
     });
     const root = document.createElement('div');
     root.style.setProperty('--gap-section', '20px');
+    root.style.setProperty('--gap-header', '30px');
     root.style.setProperty('--gap-heading', '8px');
     root.style.setProperty('--gap-entry', '6px');
     Object.defineProperty(root.ownerDocument, 'fonts', {
@@ -86,7 +87,7 @@ describe('measurePagination', () => {
     expect(measured).toEqual<MeasuredLayout>({
       columns: 1,
       headerHeightPx: 40,
-      headerBodyGapPx: 20,
+      headerBodyGapPx: 30,
       blocks: [
         {
           sectionKey: 'profile',
@@ -111,6 +112,7 @@ describe('measurePagination', () => {
   it('normalizes measurements taken inside a zoomed preview', async () => {
     const root = document.createElement('div');
     root.style.setProperty('--gap-section', '20px');
+    root.style.setProperty('--gap-header', '30px');
     root.style.setProperty('--gap-heading', '8px');
     root.style.setProperty('--gap-entry', '6px');
     root.getBoundingClientRect = () => ({ ...rect(100), width: 50 });
@@ -147,6 +149,7 @@ describe('measurePagination', () => {
   it('fails closed when the measurement tree is incomplete', async () => {
     const root = document.createElement('div');
     root.style.setProperty('--gap-section', '20px');
+    root.style.setProperty('--gap-header', '30px');
     root.style.setProperty('--gap-heading', '8px');
     root.style.setProperty('--gap-entry', '6px');
     Object.defineProperty(root.ownerDocument, 'fonts', {

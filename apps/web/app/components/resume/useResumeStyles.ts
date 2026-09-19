@@ -112,6 +112,17 @@ export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
     '--gap-heading': `${tokens.spacing.sectionGap * 0.4}px`,
     '--gap-block': `${tokens.spacing.entryGap * 0.4}px`,
     '--gap-inline': '0.5em',
+    // Header gaps grow outward: icon to value, row to row, headline to
+    // details, photo to name, header to body. A details row gap of 0.15 line
+    // heights gives the rows the headline's line pitch.
+    '--gap-header': `${tokens.spacing.sectionGap * 1.5}px`,
+    '--header-photo-gap': '0.9em',
+    '--header-name-gap': '0.2em',
+    '--header-details-gap': '0.5em',
+    '--details-row-gap':
+      `${Math.round(tokens.spacing.lineHeight * 150) / 1000}em`,
+    '--details-column-gap': '1em',
+    '--chip-icon-gap': '0.3em',
     '--page-margin-x': `${page.marginXmm}mm`,
     '--page-margin-y': `${page.marginYmm}mm`,
     '--heading-transform':

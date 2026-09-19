@@ -37,8 +37,8 @@ body sets at 10.5 pt and `--fs-meta` at 9.45 pt, above the ≈ 9 pt where counte
 close; `lineHeight: 1.5` holds the 170 mm measure. Margins of 20 mm by 18 mm
 clear the default by 5 mm and 3 mm: feed drift over two generations, the ≈ 94 %
 auto-scale a Letter copier applies to A4. Details stack, since inline ones are
-parted by 7 px of `--gap-inline`, the first white gap spread closes. Icons are
-off, and `Mon YYYY` keeps a silhouette where digits and a slash fill in.
+parted by one em of `--details-column-gap`, a white gap spread narrows. Icons
+are off, and `Mon YYYY` keeps a silhouette where digits and a slash fill in.
 
 ## Why both proficiency styles are `text`
 

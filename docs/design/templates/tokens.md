@@ -164,8 +164,8 @@ reveals a detail, and `isHidden` still wins in every combination.
 | ---------------------- | --------- | ----------------------------------------------------------------- |
 | `header.align`         | `left`    | the resolved header block sits on the content measure's left edge |
 |                        | `center`  | photo, name, headline, and details all centre together            |
-| `header.detailsLayout` | `inline`  | details flow on one wrapping line, separated by `--gap-inline`    |
-|                        | `stacked` | each detail takes its own line, separated by `--gap-block`        |
+| `header.detailsLayout` | `inline`  | details flow on wrapping rows (header intervals below)            |
+|                        | `stacked` | each detail takes its own line, at the same row gap               |
 | `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone  |
 |                        | `outline` | the contact glyph at `--icon-size`; replaces default label        |
 
@@ -183,6 +183,23 @@ visible header icon. The GitHub, LinkedIn, and X contacts are the exception:
 they render their filled brand marks (Simple Icons for GitHub and X, Font
 Awesome Free for LinkedIn) in the icon colour, because those brands have no
 stroked mark (ADR 0041).
+
+Header intervals grow outward, so each icon reads with its own value and the
+details read as one group under the headline. The renderer fixes them for every
+template:
+
+| Property               | Value               | Between                                      |
+| ---------------------- | ------------------- | -------------------------------------------- |
+| `--chip-icon-gap`      | `0.3em`             | a contact icon and its value                 |
+| `--details-row-gap`    | `0.15 × lineHeight` | detail rows; row pitch equals the headline's |
+| `--details-column-gap` | `1em`               | details on one row                           |
+| `--header-name-gap`    | `0.2em`             | name and headline                            |
+| `--header-details-gap` | `0.5em`             | headline and the first detail row            |
+| `--header-photo-gap`   | `0.9em`             | photo and name                               |
+| `--gap-header`         | `1.5 × sectionGap`  | header and body (`geometry.md` §6)           |
+
+Contact icons take `--color-meta`, which holds 4.5:1 against the header surface,
+so the value leads and the icon still prints.
 
 Two boundaries this token must not cross. `header.iconStyle` covers the header's
 contact icons only — it never suppresses a section's `iconKey`, which every
