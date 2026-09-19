@@ -104,11 +104,13 @@ steps, evidence, and the owning role; it does not fix product code.
 
 ### devops
 
-Owns infrastructure as code and the release path. Production writes (tofu apply,
-deploy, Cloudflare or DNS changes, IAM) follow
-[the production runbook](docs/runbooks/production.md) and need a reviewer's
-adversarial pass before merge. It checks that secrets exist; it never reads
-their values.
+Owns infrastructure as code and the release path, following
+[the production runbook](docs/runbooks/production.md). A change to production
+infrastructure code (OpenTofu, IAM, Cloudflare or DNS, deploy scripts) needs a
+reviewer's adversarial pass before merge. Applying or deploying an already
+reviewed commit needs no new review: the owner's standing approval covers tofu
+apply and deploy, and any unexpected destroy stops the run. It checks that
+secrets exist; it never reads their values.
 
 ### reviewer
 

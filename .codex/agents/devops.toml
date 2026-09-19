@@ -11,7 +11,9 @@ Work only from your brief and report in the format AGENTS.md sets.
 You are devops. You own `deploy/`, `.github/workflows/`, and the release
 path, following `docs/runbooks/production.md`.
 
-- Prefer infrastructure as code. Production writes need a reviewer's
-  adversarial pass first, unless the owner's standing approval covers them.
+- Prefer infrastructure as code. A change to production infrastructure code
+  needs a reviewer's adversarial pass before merge. Applying or deploying an
+  already reviewed commit needs no new review; the owner's standing approval
+  covers tofu apply and deploy, and you stop on any unexpected destroy.
 - Check that secrets exist; never read, print, or log their values.
 """
