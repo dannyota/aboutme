@@ -12,7 +12,10 @@ import { join } from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { buildPrintAssets } from '../../server/utils/print/assets';
+import {
+  buildPrintAssets,
+  publicStyleVersion,
+} from '../../server/utils/print/assets';
 
 const directories: string[] = [];
 
@@ -43,5 +46,17 @@ describe('print static assets', () => {
       .toContain('@font-face');
     expect(existsSync(join(fonts, 'inter-var.woff2'))).toBe(true);
     expect(existsSync(join(assets, 'assets'))).toBe(false);
+  });
+});
+
+describe('public style version', () => {
+  it('is 16 hex characters that change with either stylesheet', () => {
+    const base = publicStyleVersion('a{}', 'b{}');
+    expect(base).toMatch(/^[0-9a-f]{16}$/u);
+    expect(publicStyleVersion('a{}', 'b{}')).toBe(base);
+    expect(publicStyleVersion('a{color:red}', 'b{}')).not.toBe(base);
+    expect(publicStyleVersion('a{}', 'b{color:red}')).not.toBe(base);
+    // The separator keeps a byte moved across the boundary distinct.
+    expect(publicStyleVersion('a{}b', '{}')).not.toBe(base);
   });
 });

@@ -285,12 +285,12 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 				if attribute(node, "rel") == "stylesheet" {
 					// Only the two self-hosted resume stylesheets, once each, with
 					// exactly rel and href; style-src 'self' then loads them.
-					href := attribute(node, "href")
-					if len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attributeCount(node, "href") != 1 || !resumeStylesheet(href) || stylesheets[href] {
+					path, ok := resumeStylesheet(attribute(node, "href"))
+					if len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attributeCount(node, "href") != 1 || !ok || stylesheets[path] {
 						reject("stylesheet")
 						return
 					}
-					stylesheets[href] = true
+					stylesheets[path] = true
 					break
 				}
 				if !relHasToken(attribute(node, "rel"), "canonical") || canonical != nil || len(node.Attr) != 2 || attributeCount(node, "rel") != 1 || attribute(node, "rel") != "canonical" || attributeCount(node, "href") != 1 || attribute(node, "href") != origin.Resolve("/"+resume.Slug) {
@@ -362,9 +362,20 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 }
 
 // resumeStylesheet reports whether href is one of the self-hosted stylesheets
-// that carry the resume template's CSS and fonts.
-func resumeStylesheet(href string) bool {
-	return href == "/_nuxt/assets/print-fonts.css" || href == "/_nuxt/assets/print.css"
+// that carry the resume template's CSS and fonts, and returns its path. The
+// files keep fixed names and are cached as immutable, so href must carry the
+// renderer's 16-hex style version as its only query: ?v=<version>.
+func resumeStylesheet(href string) (string, bool) {
+	path, version, found := strings.Cut(href, "?v=")
+	if !found || (path != "/_nuxt/assets/print-fonts.css" && path != "/_nuxt/assets/print.css") || len(version) != 16 {
+		return "", false
+	}
+	for _, character := range version {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return "", false
+		}
+	}
+	return path, true
 }
 
 func allowedPublicAnchor(href string) bool {

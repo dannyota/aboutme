@@ -100,7 +100,7 @@ func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const sheets = `<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css">`
+	const sheets = `<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css?v=0123456789abcdef"><link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef">`
 	base := validHTML("Ada", "https://aboutme.example/ada", "1", "")
 	styled := strings.Replace(base, `</head>`, sheets+`</head>`, 1)
 	if rule := publicHTMLRejection([]byte(styled), resume, origin, jsonLD, false); rule != "" {
@@ -109,9 +109,15 @@ func TestPublicHTMLAllowsOnlyTheResumeStylesheets(t *testing.T) {
 	for _, test := range []struct{ name, extra string }{
 		{"foreign stylesheet", `<link rel="stylesheet" href="https://evil.example/x.css">`},
 		{"other local stylesheet", `<link rel="stylesheet" href="/_nuxt/assets/other.css">`},
-		{"duplicate stylesheet", `<link rel="stylesheet" href="/_nuxt/assets/print.css">`},
-		{"preload", `<link rel="preload" href="/_nuxt/assets/print.css" as="style">`},
-		{"extra attribute", `<link rel="stylesheet" href="/_nuxt/assets/print.css" media="print">`},
+		{"duplicate stylesheet", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef">`},
+		{"preload", `<link rel="preload" href="/_nuxt/assets/print.css?v=0123456789abcdef" as="style">`},
+		{"extra attribute", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef" media="print">`},
+		// Unversioned or malformed versions would pin a year-old cached copy.
+		{"unversioned", `<link rel="stylesheet" href="/_nuxt/assets/print.css">`},
+		{"short version", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123">`},
+		{"uppercase version", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789ABCDEF">`},
+		{"extra query", `<link rel="stylesheet" href="/_nuxt/assets/print.css?v=0123456789abcdef&x=1">`},
+		{"other query key", `<link rel="stylesheet" href="/_nuxt/assets/print.css?w=0123456789abcdef">`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			candidate := strings.Replace(styled, `</head>`, test.extra+`</head>`, 1)

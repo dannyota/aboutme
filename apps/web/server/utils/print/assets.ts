@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -24,4 +25,18 @@ export function buildPrintAssets(
       resolve(fontsDir, font),
     );
   }
+}
+
+/**
+ * Version of the resume stylesheets the public page links. The files keep
+ * fixed names and are cached as immutable, so the public page appends this
+ * content hash as a query to fetch fresh CSS whenever either file changes.
+ */
+export function publicStyleVersion(printCSS: string, fontsCSS: string): string {
+  return createHash('sha256')
+    .update(printCSS)
+    .update('\0')
+    .update(fontsCSS)
+    .digest('hex')
+    .slice(0, 16);
 }
