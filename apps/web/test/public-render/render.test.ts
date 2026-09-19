@@ -77,11 +77,13 @@ const request = () => {
 };
 
 const STYLE_VERSION = '0123456789abcdef';
+const SCRIPT_VERSION = 'fedcba9876543210';
+const VERSIONS = { style: STYLE_VERSION, script: SCRIPT_VERSION };
 
 describe('public Vue worker document', () => {
   it('uses Task 08 JSON-LD bytes and a complete titled document', async () => {
-    const html = await renderPublicResume(request(), STYLE_VERSION);
-    await expect(renderPublicResume(request(), STYLE_VERSION))
+    const html = await renderPublicResume(request(), VERSIONS);
+    await expect(renderPublicResume(request(), VERSIONS))
       .resolves.toBe(html);
     expect(html).toContain(
       '<title>Ada &lt;&amp;&gt; Lovelace — Resume</title>',
@@ -108,7 +110,12 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '</head><body><a href="#public-resume">Skip to content</a><main ',
     );
-    expect(html).toContain('/_nuxt/assets/public-resume.mjs');
+    // The hydration script is versioned the same way, so a returning browser
+    // never runs a previous release's cached script against new HTML.
+    expect(html).toContain(
+      '<script type="module" '
+      + `src="/_nuxt/assets/public-resume.mjs?v=${SCRIPT_VERSION}"></script>`,
+    );
     // The template's CSS and fonts come from the same self-hosted stylesheets
     // the print document uses; without them the page renders unstyled.
     // The stylesheets keep fixed names but are cached for a year, so each
@@ -137,7 +144,7 @@ describe('public Vue worker document', () => {
   it('omits the JSON-LD script when discovery is disabled', async () => {
     const value = request();
     value.discoveryEnabled = false;
-    const html = await renderPublicResume(value, STYLE_VERSION);
+    const html = await renderPublicResume(value, VERSIONS);
     expect(html).not.toContain(
       'application/ld+json',
     );
@@ -153,7 +160,14 @@ describe('public Vue worker document', () => {
 describe('public style version', () => {
   it('refuses a missing or malformed version', async () => {
     for (const version of ['', 'ABCDEF0123456789', '0123', 'x'.repeat(16)]) {
-      await expect(renderPublicResume(request(), version)).rejects.toThrow();
+      await expect(renderPublicResume(request(), {
+        style: version,
+        script: SCRIPT_VERSION,
+      })).rejects.toThrow();
+      await expect(renderPublicResume(request(), {
+        style: STYLE_VERSION,
+        script: version,
+      })).rejects.toThrow();
     }
   });
 });

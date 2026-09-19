@@ -321,7 +321,7 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 			case "script":
 				scriptCount++
 				if attributeCount(node, "src") == 1 {
-					if len(node.Attr) != 2 || attribute(node, "src") != "/_nuxt/assets/public-resume.mjs" || attributeCount(node, "type") != 1 || attribute(node, "type") != "module" || textNode(node) != "" {
+					if len(node.Attr) != 2 || !versionedAsset(attribute(node, "src"), "/_nuxt/assets/public-resume.mjs") || attributeCount(node, "type") != 1 || attribute(node, "type") != "module" || textNode(node) != "" {
 						reject("script")
 						return
 					}
@@ -362,20 +362,31 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 }
 
 // resumeStylesheet reports whether href is one of the self-hosted stylesheets
-// that carry the resume template's CSS and fonts, and returns its path. The
-// files keep fixed names and are cached as immutable, so href must carry the
-// renderer's 16-hex style version as its only query: ?v=<version>.
+// that carry the resume template's CSS and fonts, and returns its path.
 func resumeStylesheet(href string) (string, bool) {
-	path, version, found := strings.Cut(href, "?v=")
-	if !found || (path != "/_nuxt/assets/print-fonts.css" && path != "/_nuxt/assets/print.css") || len(version) != 16 {
-		return "", false
+	for _, path := range []string{"/_nuxt/assets/print-fonts.css", "/_nuxt/assets/print.css"} {
+		if versionedAsset(href, path) {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+// versionedAsset reports whether url is path plus the renderer's content
+// version as its only query, ?v=<16 lowercase hex>. These assets keep fixed
+// names and are cached as immutable, so an unversioned URL could serve a
+// year-old copy after a release.
+func versionedAsset(url, path string) bool {
+	version, found := strings.CutPrefix(url, path+"?v=")
+	if !found || len(version) != 16 {
+		return false
 	}
 	for _, character := range version {
 		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
-			return "", false
+			return false
 		}
 	}
-	return path, true
+	return true
 }
 
 func allowedPublicAnchor(href string) bool {

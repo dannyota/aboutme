@@ -12,6 +12,7 @@ import {
 import { buildPrintWorker } from './server/utils/print/worker-build';
 import {
   buildPrintAssets,
+  publicScriptVersion,
   publicStyleVersion,
 } from './server/utils/print/assets';
 
@@ -55,11 +56,15 @@ const publicRenderSanitizerPlugin = () => ({
   },
 });
 
-const buildPublicRenderWorker = async (styleVersion: string): Promise<void> => {
+const buildPublicRenderWorker = async (
+  styleVersion: string,
+  scriptVersion: string,
+): Promise<void> => {
   await viteBuild({
     configFile: false,
     define: {
       __ABOUTME_PUBLIC_STYLE_VERSION__: JSON.stringify(styleVersion),
+      __ABOUTME_PUBLIC_SCRIPT_VERSION__: JSON.stringify(scriptVersion),
     },
     plugins: [publicRenderSanitizerPlugin(), vue()],
     resolve: {
@@ -306,14 +311,17 @@ export default defineNuxtConfig({
     'nitro:build:before': async () => {
       buildPublicResumeValidator(publicRenderBuildDir);
       buildPrintDocumentValidator(printBuildDir);
-      // The print worker emits print.css, whose content versions the public
-      // page's stylesheet links, so it builds before the public worker.
+      // The public worker bakes in content versions of print.css and the
+      // hydration bundle, so both are written before it builds.
       await buildPrintWorker(printBuildDir, printDocumentValidator);
-      await buildPublicRenderWorker(publicStyleVersion(
-        readFileSync(resolve(printBuildDir, 'print.css'), 'utf8'),
-        readFileSync(resolve('app/assets/css/fonts.css'), 'utf8'),
-      ));
       await buildPublicResumeHydration();
+      await buildPublicRenderWorker(
+        publicStyleVersion(
+          readFileSync(resolve(printBuildDir, 'print.css'), 'utf8'),
+          readFileSync(resolve('app/assets/css/fonts.css'), 'utf8'),
+        ),
+        publicScriptVersion(readFileSync(publicResumeHydration, 'utf8')),
+      );
       buildPrintAssets(
         publicRenderAssetsDir,
         resolve(printAssetsDir, 'fonts'),

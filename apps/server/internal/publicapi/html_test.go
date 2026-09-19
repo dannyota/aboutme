@@ -140,6 +140,12 @@ func TestPublicHTMLRejectsWrongMainAssetJSONLDAndOversize(t *testing.T) {
 	}{
 		{"wrong main", strings.Replace(valid, `id="public-resume"`, `id="not-public"`, 1)},
 		{"wrong asset", strings.Replace(valid, "/_nuxt/assets/public-resume.mjs", "/_nuxt/assets/other.mjs", 1)},
+		// An unversioned or malformed version would let a browser run a
+		// year-old cached hydration script against new HTML.
+		{"unversioned asset", strings.Replace(valid, "public-resume.mjs?v=0123456789abcdef", "public-resume.mjs", 1)},
+		{"short asset version", strings.Replace(valid, "?v=0123456789abcdef", "?v=0123", 1)},
+		{"uppercase asset version", strings.Replace(valid, "?v=0123456789abcdef", "?v=0123456789ABCDEF", 1)},
+		{"extra asset query", strings.Replace(valid, "?v=0123456789abcdef", "?v=0123456789abcdef&x=1", 1)},
 		{"wrong JSON-LD", strings.Replace(valid, `"@context":"https://schema.org"`, `"@context":"https://invalid.example"`, 1)},
 		{"oversize", strings.Repeat("x", 2_097_153)},
 	} {
@@ -464,5 +470,5 @@ func mustPublicOrigin(t *testing.T) publicresume.PublicOrigin {
 func validHTML(name, canonical, revision, dataScript string) string {
 	imageURL := strings.TrimSuffix(canonical, "/"+strings.Split(canonical, "/")[3]) + "/api/v1/public/resumes/" + strings.Split(canonical, "/")[3] + "/og.png"
 	social := `<meta property="og:image" content="` + imageURL + `"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="` + imageURL + `">`
-	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + social + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs\"></script></body></html>"
+	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + social + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
 }
