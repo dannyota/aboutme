@@ -254,7 +254,8 @@ test("proves owner and public export gates through native HTTPS", async ({
     );
     const ownerDownload = page.waitForEvent("download");
     await page
-      .getByRole("button", { name: "Download PDF", exact: true })
+      // The accessible name carries the page size the PDF uses.
+      .getByRole("button", { name: /^Download PDF, (?:A4|Letter)$/ })
       .click();
     const saveResponse = await savedPatch;
     expect(saveResponse.status()).toBe(200);
