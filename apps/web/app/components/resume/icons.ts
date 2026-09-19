@@ -9,28 +9,30 @@ import {
   Link,
   Mail,
   MapPin,
-  MessageCircle,
   Phone,
   Trophy,
   User,
 } from '@lucide/vue';
 import type { Component } from 'vue';
 
+import { BrandGitHub, BrandX } from './brandIcons';
+
 const ICONS: Readonly<Record<string, Component>> = Object.freeze({
   'award': Award,
   'briefcase': Briefcase,
   'code': Code,
   'folder': Folder,
-  'github': Code,
+  'github': BrandGitHub,
   'globe': Globe,
   'graduation-cap': GraduationCap,
   'languages': Languages,
+  'link': Link,
   'linkedin': Link,
   'mail': Mail,
   'map-pin': MapPin,
   'phone': Phone,
   'trophy': Trophy,
-  'twitter': MessageCircle,
+  'twitter': BrandX,
   'user': User,
 });
 

@@ -337,7 +337,7 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 			s.Payload = append(append([]byte{}, s.Payload[:len(s.Payload)-1]...), []byte(`,"revision":"7"}`)...)
 		}},
 		{"duplicate nested key", func(s *renderjob.Snapshot) {
-			s.Payload = bytes.Replace(s.Payload, []byte(`"schemaVersion":2`), []byte(`"schemaVersion":2,"schemaVersion":2`), 1)
+			s.Payload = bytes.Replace(s.Payload, []byte(`"schemaVersion":3`), []byte(`"schemaVersion":3,"schemaVersion":3`), 1)
 		}},
 		{"payload version mismatch", func(s *renderjob.Snapshot) {
 			s.Payload = bytes.Replace(s.Payload, []byte(`"version":1`), []byte(`"version":2`), 1)
@@ -352,7 +352,7 @@ func TestQueueFailuresReplayAndPayloadBindingAreOpaque(t *testing.T) {
 			s.Payload = bytes.Replace(s.Payload, []byte(`"revision":"7"`), []byte(`"revision":"8"`), 1)
 		}},
 		{"payload schema mismatch", func(s *renderjob.Snapshot) {
-			s.Payload = bytes.Replace(s.Payload, []byte(`"schemaVersion":2`), []byte(`"schemaVersion":3`), 1)
+			s.Payload = bytes.Replace(s.Payload, []byte(`"schemaVersion":3`), []byte(`"schemaVersion":4`), 1)
 		}},
 		{"payload owner generation mismatch", func(s *renderjob.Snapshot) {
 			s.Payload = bytes.Replace(s.Payload, []byte(`"publicGeneration":null`), []byte(`"publicGeneration":"7"`), 1)

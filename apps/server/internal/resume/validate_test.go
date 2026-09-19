@@ -263,6 +263,7 @@ func TestValidateForStore_TopLevelFixtures(t *testing.T) {
 // still holds: this table exists to make the "why" explicit per file, not
 // to override the verdict.
 var storeFixtureExpectations = map[string]bool{ // name -> wantValid
+	"invalid-duplicate-detail-id.json":                false,
 	"invalid-duplicate-entry-id.json":                 false,
 	"invalid-hostile-sectiontype-constructor.json":    false,
 	"invalid-hostile-sectiontype-hasownproperty.json": false,
@@ -395,6 +396,7 @@ func TestValidateForStore_MatchingIssue(t *testing.T) {
 		file      string
 		substring string
 	}{
+		{"invalid-duplicate-detail-id.json", "duplicate-detail-id"},
 		{"invalid-duplicate-entry-id.json", "duplicate-entry-id"},
 		{"invalid-layout-duplicate-across-arrays.json", "layout-exactly-once"},
 		{"invalid-layout-missing-content-key.json", "layout-missing-content-key"},

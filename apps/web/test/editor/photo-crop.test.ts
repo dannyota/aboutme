@@ -83,6 +83,7 @@ describe('photo crop geometry', () => {
         left: '-33.333333%',
         top: '-12.5%',
         maxWidth: 'none',
+        objectFit: 'cover',
       });
   });
 });

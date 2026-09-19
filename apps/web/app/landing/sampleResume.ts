@@ -2,7 +2,7 @@ import type { Resume } from '@aboutme/schema';
 
 /** The compiled-in document shown on the public landing page. */
 export const sampleResume: Resume = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   personalDetails: {
     fullName: 'Ada Lovelace',
     headline: 'Analytical Engineer',
@@ -36,6 +36,27 @@ export const sampleResume: Resume = {
         id: '09418968-1a86-49cb-8dd8-c746a2780249',
         type: 'website',
         value: 'https://ada.example.com',
+        isHidden: false,
+      },
+      {
+        id: '5b0f3c1e-8d2a-4f6b-9c3e-1a2b3c4d5e6f',
+        type: 'github',
+        value: 'https://github.com/ada',
+        isHidden: false,
+        display: 'label',
+      },
+      {
+        id: '7c1e4d2f-9e3b-4a7c-8d4f-2b3c4d5e6f70',
+        type: 'twitter',
+        value: 'https://x.com/ada',
+        isHidden: false,
+        display: 'full',
+      },
+      {
+        id: '8d2f5e3a-af4c-4b8d-9e5a-3c4d5e6f7081',
+        type: 'custom',
+        label: 'Google Scholar',
+        value: 'https://scholar.example.com/ada',
         isHidden: false,
       },
     ],

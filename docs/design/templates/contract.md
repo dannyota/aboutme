@@ -173,19 +173,30 @@ reference to a `detailsOrder` — ratified by ADR 0013. A detail with
 `isHidden: true` is omitted entirely. `isHidden` is required on a detail and
 optional on an entry; an entry without the key is visible.
 
-Details of type `website`, `linkedin`, `github`, `twitter` render as an
-**underlined** anchor with `rel="noopener noreferrer"`, and the renderer
-re-checks the exact lowercase `https://` prefix itself — a value that fails
-renders as text. The underline is renderer-fixed on every inline link
-([Geometry](geometry.md), [Known contract limits](limitations.md)). `email`,
-`phone`, `location`, and `custom` render as **plain text** in v1: no `mailto:`
-and no `tel:` links from values the schema defines no format for (ADR 0013).
-`label`, when present and non-empty, replaces the type's default label.
+Details of type `website`, `linkedin`, `github`, `twitter`, and `custom` render
+as an **underlined** anchor with `rel="noopener noreferrer"` when the value
+passes the renderer's own re-check of the exact lowercase `https://` prefix; a
+value that fails renders as text. The underline is renderer-fixed on every
+inline link ([Geometry](geometry.md), [Known contract limits](limitations.md)).
+`email`, `phone`, and `location` always render as **plain text**: no `mailto:`
+and no `tel:` links from values the schema defines no format for (ADR 0013, ADR
+0041). `label`, when present and non-empty, replaces the type's default label;
+the `twitter` default label is "X".
 
 When `header.iconStyle` shows icons, a typed detail omits its default label; a
-non-empty user `label` and every `custom` detail's label still render. An anchor
-shows its URL without `https://` and without one trailing slash, and its `href`
-keeps the full value (ADR 0040).
+non-empty user `label` and every `custom` detail's label still render (ADR
+0040). A detail's optional `display` sets an anchor's text, and its `href`
+always keeps the full value (ADR 0041):
+
+| `display`       | Anchor text                                                 |
+| --------------- | ----------------------------------------------------------- |
+| absent, `short` | the URL without `https://` and without one trailing slash   |
+| `full`          | the whole URL                                               |
+| `label`         | the label, else the default label; no separate label prefix |
+
+`display` has no effect on a value that renders as text. GitHub and X render
+their brand marks; LinkedIn and a linked `custom` detail render the generic link
+glyph.
 
 ### 5.2 Entry anatomy
 

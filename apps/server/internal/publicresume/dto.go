@@ -81,10 +81,11 @@ func (p PublicPersonalDetails) MarshalJSON() ([]byte, error) {
 
 // PublicPersonalDetail is one public contact detail.
 type PublicPersonalDetail struct {
-	ID    string  `json:"id"`
-	Label *string `json:"label,omitempty"`
-	Type  string  `json:"type"`
-	Value string  `json:"value"`
+	ID      string  `json:"id"`
+	Label   *string `json:"label,omitempty"`
+	Type    string  `json:"type"`
+	Value   string  `json:"value"`
+	Display *string `json:"display,omitempty"`
 }
 
 // PublicPhoto identifies a public photo endpoint and optional crop.

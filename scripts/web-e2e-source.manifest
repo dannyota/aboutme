@@ -119,6 +119,7 @@ apps/web/app/components/resume/ResumeDocument.vue
 apps/web/app/components/resume/ResumeHeader.vue
 apps/web/app/components/resume/SectionRenderer.vue
 apps/web/app/components/resume/applyTemplate.ts
+apps/web/app/components/resume/brandIcons.ts
 apps/web/app/components/resume/clampContrast.ts
 apps/web/app/components/resume/entryParts.ts
 apps/web/app/components/resume/formatDate.ts
@@ -316,6 +317,7 @@ apps/web/app/editor/documentValidation.ts
 apps/web/app/editor/pageCountObserver.ts
 apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
+apps/web/app/editor/photoCrop.ts
 apps/web/app/editor/projections.ts
 apps/web/app/editor/publishApi.ts
 apps/web/app/editor/publishController.ts
@@ -454,6 +456,7 @@ packages/schema/gen/ts/sanitizer.ts
 packages/schema/gen/ts/templates.ts
 packages/schema/gen/ts/v1/resume.ts
 packages/schema/gen/ts/v2/resume.ts
+packages/schema/gen/ts/v3/resume.ts
 packages/schema/package.json
 packages/schema/resume.schema.json
 packages/schema/validation/store.ts

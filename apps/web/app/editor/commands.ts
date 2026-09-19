@@ -60,6 +60,7 @@ export type EntryFieldPath
 export type CustomizationSetPath
   = | 'font.family'
     | 'font.baseSizePx'
+    | 'font.textAlign'
     | 'colors.primary'
     | 'colors.text'
     | 'colors.background'
@@ -83,7 +84,8 @@ export type CustomizationSetPath
     | 'dateFormat';
 
 export type CustomizationUnsetPath
-  = | 'colors.accent'
+  = | 'font.textAlign'
+    | 'colors.accent'
     | 'colors.surface'
     | 'spacing.pageMargin'
     | 'header'

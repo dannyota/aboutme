@@ -1379,6 +1379,11 @@ export interface components {
             /** @enum {string} */
             type: "email" | "phone" | "location" | "website" | "linkedin" | "github" | "twitter" | "custom";
             value: string;
+            /**
+             * @description Anchor text for a detail that renders as a link. Absent means `short`. See `docs/adr/0041-contact-link-display-and-body-justify.md`.
+             * @enum {string}
+             */
+            display?: "short" | "full" | "label";
         };
         PublicPhoto: {
             /** Format: uri */
@@ -1530,6 +1535,11 @@ export interface components {
                 /** @enum {string} */
                 family: "be-vietnam-pro" | "inter" | "noto-sans" | "noto-serif" | "roboto" | "open-sans" | "plus-jakarta-sans" | "work-sans" | "nunito-sans" | "montserrat" | "fira-sans" | "barlow" | "alegreya" | "spectral" | "literata" | "newsreader" | "space-mono" | "crimson-pro" | "eb-garamond" | "aleo" | "cormorant-garamond" | "roboto-serif" | "roboto-mono" | "dm-sans" | "atkinson-hyperlegible-next" | "source-sans-3";
                 baseSizePx: number;
+                /**
+                 * @description Body text alignment. Absent means `left`.
+                 * @enum {string}
+                 */
+                textAlign?: "left" | "justify";
             };
             colors: {
                 primary: string;
@@ -1635,7 +1645,7 @@ export interface components {
          *       "slug": "ada-lovelace",
          *       "downloadEnabled": true,
          *       "seoGeoEnabled": true,
-         *       "schemaVersion": 2,
+         *       "schemaVersion": 3,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
          *     }
@@ -1673,7 +1683,7 @@ export interface components {
         /**
          * @description The resume document. Its shape is **not** restated here: it is governed by `packages/schema/resume.schema.json` at the version named by the `X-Resume-Schema-Version` header, and the generated client types come from `packages/schema/gen/ts`. Restating a 24-section, byte-bounded schema in this file would create a second source of truth for one contract and drift silently. This document owns the envelope, headers, statuses, and error shapes.
          * @example {
-         *       "schemaVersion": 2
+         *       "schemaVersion": 3
          *     }
          */
         ResumeDocument: Record<string, never>;
@@ -1941,11 +1951,11 @@ export interface components {
                  *         "slug": "ada-lovelace",
                  *         "downloadEnabled": true,
                  *         "seoGeoEnabled": true,
-                 *         "schemaVersion": 2,
+                 *         "schemaVersion": 3,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
                  *         "document": {
-                 *           "schemaVersion": 2
+                 *           "schemaVersion": 3
                  *         }
                  *       }
                  *     }
@@ -1974,11 +1984,11 @@ export interface components {
                  *         "slug": "ada-lovelace",
                  *         "downloadEnabled": true,
                  *         "seoGeoEnabled": true,
-                 *         "schemaVersion": 2,
+                 *         "schemaVersion": 3,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
                  *         "document": {
-                 *           "schemaVersion": 2
+                 *           "schemaVersion": 3
                  *         }
                  *       }
                  *     }
@@ -2002,7 +2012,8 @@ export interface components {
                  *         "details": {
                  *           "acceptedVersions": [
                  *             1,
-                 *             2
+                 *             2,
+                 *             3
                  *           ]
                  *         }
                  *       }
@@ -2204,7 +2215,7 @@ export interface components {
                  *         "details": {
                  *           "revision": "44",
                  *           "document": {
-                 *             "schemaVersion": 2
+                 *             "schemaVersion": 3
                  *           }
                  *         }
                  *       }
@@ -3294,7 +3305,7 @@ export interface components {
         ObjectETag: string;
         /**
          * @description The resume document version this response was emitted at. Absent from whole-resume deletion and from binary photo reads.
-         * @example 2
+         * @example 3
          */
         EmittedSchemaVersion: number;
         /**
@@ -4376,7 +4387,7 @@ export interface operations {
                     "Content-Disposition"?: "attachment; filename=\"aboutme-export.json\"";
                     /**
                      * @description Current emitted resume schema version.
-                     * @example 2
+                     * @example 3
                      */
                     "X-Resume-Schema-Version"?: string;
                     [name: string]: unknown;
@@ -5062,7 +5073,7 @@ export interface operations {
                      *           "slug": "ada-lovelace",
                      *           "downloadEnabled": true,
                      *           "seoGeoEnabled": true,
-                     *           "schemaVersion": 2,
+                     *           "schemaVersion": 3,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
                      *         }
@@ -5152,11 +5163,11 @@ export interface operations {
                      *         "slug": null,
                      *         "downloadEnabled": false,
                      *         "seoGeoEnabled": false,
-                     *         "schemaVersion": 2,
+                     *         "schemaVersion": 3,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
                      *         "document": {
-                     *           "schemaVersion": 2
+                     *           "schemaVersion": 3
                      *         }
                      *       }
                      *     }

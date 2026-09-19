@@ -263,6 +263,7 @@ func clonePersonalDetails(source publicresume.PublicPersonalDetails) publicresum
 		details := source.Details.Value()
 		for index := range details {
 			details[index].Label = clonePointer(details[index].Label)
+			details[index].Display = clonePointer(details[index].Display)
 		}
 		out.Details = publicresume.PresentPublicDetails(details)
 	} else {
@@ -355,6 +356,7 @@ func cloneYearMonth(source *publicresume.PublicYearMonth) *publicresume.PublicYe
 
 func cloneCustomization(source schema.Customization) schema.Customization {
 	out := source
+	out.Font.TextAlign = clonePointer(source.Font.TextAlign)
 	out.Colors.Accent = clonePointer(source.Colors.Accent)
 	out.Colors.Surface = clonePointer(source.Colors.Surface)
 	out.Header = clonePointer(source.Header)

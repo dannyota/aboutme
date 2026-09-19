@@ -9,7 +9,12 @@ import { TEMPLATES } from '@aboutme/schema/templates';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { denyExternalRequests, waitForImages } from './support';
+import {
+  denyExternalRequests,
+  FIXTURE_PHOTO_CROP_GEOMETRY,
+  photoCropGeometry,
+  waitForImages,
+} from './support';
 
 interface ScreenshotCell {
   readonly fixture: 'full' | 'vn-full';
@@ -217,6 +222,8 @@ test.describe('renderer screenshot subset', () => {
           });
         expect(contactContrast).toBeGreaterThanOrEqual(4.5);
       }
+      expect(await photoCropGeometry(page))
+        .toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }

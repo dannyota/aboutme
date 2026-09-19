@@ -43,7 +43,7 @@ func TestHostileCorpusThroughHTTP(t *testing.T) {
 					}
 					response := resumeRequest(t, h, http.MethodPatch,
 						apiResumePath+"/"+created.ID.String()+"/entries/"+routeCase.sectionKey,
-						string(body), revision, uuid.New(), "2")
+						string(body), revision, uuid.New(), "3")
 					if response.status != http.StatusOK {
 						t.Fatalf("hostile route response = %d %s, want 200", response.status, response.body)
 					}
@@ -67,7 +67,7 @@ func TestHostileCorpusThroughHTTP(t *testing.T) {
 						t.Fatalf("persisted output = %q, mutation response = %q", storedOutput, output)
 					}
 					getResponse := resumeRequest(t, h, http.MethodGet,
-						apiResumePath+"/"+created.ID.String(), "", 0, uuid.Nil, "2")
+						apiResumePath+"/"+created.ID.String(), "", 0, uuid.Nil, "3")
 					if getResponse.status != http.StatusOK {
 						t.Fatalf("GET sanitized document = %d %s, want 200", getResponse.status, getResponse.body)
 					}
@@ -98,7 +98,7 @@ func TestPlainTextRoundTripsAsText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal plain-text create: %v", err)
 	}
-	createdResponse := resumeRequest(t, h, http.MethodPost, apiResumePath, string(createBody), 0, uuid.New(), "2")
+	createdResponse := resumeRequest(t, h, http.MethodPost, apiResumePath, string(createBody), 0, uuid.New(), "3")
 	if createdResponse.status != http.StatusCreated {
 		t.Fatalf("plain-text create = %d %s, want 201", createdResponse.status, createdResponse.body)
 	}
@@ -110,7 +110,7 @@ func TestPlainTextRoundTripsAsText(t *testing.T) {
 	const displayName = `<img src=x onerror=alert(1)>`
 	sectionBody := mustResumeTestJSON(t, map[string]any{"displayName": displayName})
 	sectionResponse := resumeRequest(t, h, http.MethodPatch,
-		apiResumePath+"/"+created.ID.String()+"/sections/work", string(sectionBody), 1, uuid.New(), "2")
+		apiResumePath+"/"+created.ID.String()+"/sections/work", string(sectionBody), 1, uuid.New(), "3")
 	if sectionResponse.status != http.StatusOK {
 		t.Fatalf("plain-text section = %d %s, want 200", sectionResponse.status, sectionResponse.body)
 	}
@@ -124,7 +124,7 @@ func TestPlainTextRoundTripsAsText(t *testing.T) {
 		"id": "40000000-0000-4000-8000-000000000001", "jobTitle": jobTitle,
 	}})
 	entryResponse := resumeRequest(t, h, http.MethodPatch,
-		apiResumePath+"/"+created.ID.String()+"/entries/work", string(entryBody), 2, uuid.New(), "2")
+		apiResumePath+"/"+created.ID.String()+"/entries/work", string(entryBody), 2, uuid.New(), "3")
 	if entryResponse.status != http.StatusOK {
 		t.Fatalf("plain-text entry = %d %s, want 200", entryResponse.status, entryResponse.body)
 	}
@@ -136,7 +136,7 @@ func TestPlainTextRoundTripsAsText(t *testing.T) {
 	const fullName = `<b>Ada & Grace</b>`
 	personalBody := mustResumeTestJSON(t, map[string]any{"fullName": fullName, "details": []any{}})
 	personalResponse := resumeRequest(t, h, http.MethodPatch,
-		apiResumePath+"/"+created.ID.String()+"/personal-details", string(personalBody), 3, uuid.New(), "2")
+		apiResumePath+"/"+created.ID.String()+"/personal-details", string(personalBody), 3, uuid.New(), "3")
 	if personalResponse.status != http.StatusOK {
 		t.Fatalf("plain-text personal details = %d %s, want 200", personalResponse.status, personalResponse.body)
 	}
@@ -149,7 +149,7 @@ func TestPlainTextRoundTripsAsText(t *testing.T) {
 		t.Fatalf("reload plain-text document: %v", getErr)
 	}
 	assertPlainTextDocument(t, stored.Title, stored.Doc, title, displayName, jobTitle, fullName)
-	getResponse := resumeRequest(t, h, http.MethodGet, apiResumePath+"/"+created.ID.String(), "", 0, uuid.Nil, "2")
+	getResponse := resumeRequest(t, h, http.MethodGet, apiResumePath+"/"+created.ID.String(), "", 0, uuid.Nil, "3")
 	if getResponse.status != http.StatusOK {
 		t.Fatalf("GET plain-text document = %d %s, want 200", getResponse.status, getResponse.body)
 	}

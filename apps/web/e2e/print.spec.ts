@@ -4,7 +4,12 @@ import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { denyExternalRequests, waitForImages } from './support';
+import {
+  denyExternalRequests,
+  FIXTURE_PHOTO_CROP_GEOMETRY,
+  photoCropGeometry,
+  waitForImages,
+} from './support';
 
 interface PrintCase {
   readonly end: string;
@@ -165,6 +170,8 @@ for (const printCase of CASES) {
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     await waitForImages(page);
     expect(external).toEqual([]);
+    await page.emulateMedia({ media: 'print' });
+    expect(await photoCropGeometry(page)).toEqual(FIXTURE_PHOTO_CROP_GEOMETRY);
 
     const pdf = await page.pdf({
       displayHeaderFooter: false,

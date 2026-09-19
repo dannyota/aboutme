@@ -109,8 +109,8 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 	if got := response.Header().Get("Content-Disposition"); got != exportAttachment {
 		t.Errorf("Content-Disposition = %q, want %q", got, exportAttachment)
 	}
-	if got := response.Header().Get(exportSchemaHeader); got != "2" {
-		t.Errorf("schema header = %q, want 2", got)
+	if got := response.Header().Get(exportSchemaHeader); got != "3" {
+		t.Errorf("schema header = %q, want 3", got)
 	}
 
 	var output struct {

@@ -81,15 +81,17 @@ func TestFromOwnerFreezesVisibleSanitizedDocumentAndInlinePhoto(t *testing.T) {
 
 func TestFromPublicFreezesAdmittedGeneration(t *testing.T) {
 	name, lng, slug, rich := "Ada", "en", "ada", "<strong>safe</strong>"
+	labelDisplay, justify := schema.Label, schema.Justify
 	owner := resume.Resume{ID: uuid.MustParse(testResumeID), Revision: 7, Lng: &lng, Slug: &slug, Doc: schema.Resume{
 		SchemaVersion: schema.CurrentVersion,
 		PersonalDetails: schema.PersonalDetails{FullName: &name, Photo: &schema.Photo{
 			Key: "private.png", Crop: &schema.PhotoCrop{X: 0, Y: 0, Width: 1, Height: 1},
-		}},
+		}, Details: []schema.PersonalDetail{{ID: "github", Type: schema.Github, Value: "https://github.com/ada", Display: &labelDisplay}}},
 		Content: map[string]schema.Section{
 			"profile": schema.NewProfileSection(nil, nil, []schema.ProfileEntry{{ID: "profile-entry", Text: &rich}}),
 		},
-		Customization: schema.Customization{Layout: schema.Layout{Sections: schema.Sections{Main: []string{"profile"}}}},
+		Customization: schema.Customization{Font: schema.Font{TextAlign: &justify},
+			Layout: schema.Layout{Sections: schema.Sections{Main: []string{"profile"}}}},
 	}}
 	origin, err := publicresume.ParsePublicOrigin("https://resume.example", "production")
 	if err != nil {
@@ -117,6 +119,8 @@ func TestFromPublicFreezesAdmittedGeneration(t *testing.T) {
 	source.Public.Document.PersonalDetails.Photo.Crop.Width = .5
 	*source.Public.Document.Content["profile"].ProfileEntries[0].Text = "changed again"
 	source.Public.Document.Customization.Layout.Sections.Main[0] = "changed"
+	*source.Public.Document.PersonalDetails.Details.Value()[0].Display = "full"
+	*source.Public.Document.Customization.Font.TextAlign = schema.TextAlignLeft
 	second, err := Marshal(envelope)
 	if err != nil {
 		t.Fatal(err)

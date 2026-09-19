@@ -113,18 +113,18 @@ function textFieldForIssue(path: string): 'fullName' | 'headline' | undefined {
   }
 }
 
-type ContactField = 'value' | 'label' | 'type' | 'is-hidden';
+type ContactField = 'value' | 'label' | 'type' | 'display' | 'is-hidden';
 
 interface ContactIssueField {
   readonly field: ContactField;
   readonly index: number;
 }
 
+const CONTACT_ISSUE_PATH
+  = /^personalDetails\.details\[(\d+)\]\.(value|label|type|display|isHidden)$/;
+
 function contactFieldForIssue(path: string): ContactIssueField | undefined {
-  const match
-    = /^personalDetails\.details\[(\d+)\]\.(value|label|type|isHidden)$/.exec(
-      path,
-    );
+  const match = CONTACT_ISSUE_PATH.exec(path);
   if (match === null) return undefined;
   const index = Number(match[1]);
   if (!Number.isSafeInteger(index)) return undefined;
@@ -140,6 +140,7 @@ function contactFieldName(field: string): ContactField | undefined {
     case 'value':
     case 'label':
     case 'type':
+    case 'display':
       return field;
     case 'isHidden':
       return 'is-hidden';

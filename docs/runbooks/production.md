@@ -214,6 +214,14 @@ when the failed release applied no migration. After a migration, fix forward
 with a new release, or restore the database from the snapshot the failed deploy
 took.
 
+A rollback cannot cross a document schema release. Every resume write persists
+the current document version, and an older release fails closed on a version it
+does not know. After a release that raises the document version, such as
+document v3 (ADR 0041), any resume saved since the deploy is unreadable and
+unwritable by the older release. Fix forward instead. A rollback past such a
+release first needs every newer row lowered to the older version, and no tool
+does that yet.
+
 A rollback builds from the current task definition, so it keeps the current
 settings. Before rolling back to a tag older than the provider list parser
 (older than `b8460d9`) while Google is on, set `provider_login_enabled = ""` and

@@ -102,6 +102,9 @@ export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
     '--fs-body': `${tokens.font.baseSizePx}px`,
     '--fs-meta': `${Math.max(tokens.font.baseSizePx * 0.9, 9)}px`,
     '--lh-body': String(tokens.spacing.lineHeight),
+    // Justify hyphenates by the resume's lang (ADR 0041).
+    '--body-align': tokens.font.textAlign ?? 'left',
+    '--body-hyphens': tokens.font.textAlign === 'justify' ? 'auto' : 'manual',
     '--lh-heading': '1.2',
     '--header-align': tokens.header?.align ?? 'left',
     '--gap-section': `${tokens.spacing.sectionGap}px`,

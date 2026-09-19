@@ -816,7 +816,7 @@ func TestSuiteB_WireRoundTripPreservesV1Fields(t *testing.T) {
 
 // TestSuiteB_DeclaredVersionSlicesAreCopies pins "Callers receive copies so
 // they cannot mutate the production declaration" for the two package-level
-// declarations. Production accepts and emits both immutable versions.
+// declarations. Production accepts and emits every immutable version.
 func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -830,7 +830,7 @@ func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 			if len(first) == 0 {
 				t.Fatalf("%s() is empty; the server must declare at least the current version", tc.name)
 			}
-			want := []int32{1, 2}
+			want := []int32{1, 2, 3}
 			if !slices.Equal(first, want) {
 				t.Errorf("%s() = %v, want %v", tc.name, first, want)
 			}

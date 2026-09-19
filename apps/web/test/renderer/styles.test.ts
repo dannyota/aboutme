@@ -50,6 +50,23 @@ describe('resume styles', () => {
     });
   });
 
+  it('justifies and hyphenates body text only for justify', () => {
+    const left = useResumeStyles(customization).root;
+    expect(left['--body-align']).toBe('left');
+    expect(left['--body-hyphens']).toBe('manual');
+    const explicitLeft = useResumeStyles({
+      ...customization,
+      font: { ...customization.font, textAlign: 'left' },
+    }).root;
+    expect(explicitLeft['--body-align']).toBe('left');
+    const justify = useResumeStyles({
+      ...customization,
+      font: { ...customization.font, textAlign: 'justify' },
+    }).root;
+    expect(justify['--body-align']).toBe('justify');
+    expect(justify['--body-hyphens']).toBe('auto');
+  });
+
   it('degrades absent and unavailable surface targets to none', () => {
     expect(
       effectiveSurfaceTarget({

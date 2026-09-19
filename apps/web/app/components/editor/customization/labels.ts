@@ -4,6 +4,7 @@ import type { CustomizationSetPath } from '../../../editor/commands';
 export const FIELD_LABELS: Readonly<Record<CustomizationSetPath, string>> = {
   'font.family': 'Font',
   'font.baseSizePx': 'Base size (px)',
+  'font.textAlign': 'Text alignment',
   'colors.primary': 'Primary',
   'colors.text': 'Text',
   'colors.background': 'Background',
@@ -28,7 +29,10 @@ export const FIELD_LABELS: Readonly<Record<CustomizationSetPath, string>> = {
 };
 
 export const FIELD_GROUPS = [
-  { title: 'Type', paths: ['font.family', 'font.baseSizePx'] },
+  {
+    title: 'Type',
+    paths: ['font.family', 'font.baseSizePx', 'font.textAlign'],
+  },
   {
     title: 'Spacing',
     paths: [
@@ -82,6 +86,7 @@ const KNOWN_ENUM_LABELS: Readonly<Record<string, string>> = {
   dots: 'Dots',
   header: 'Header',
   inline: 'Inline',
+  justify: 'Justify',
   left: 'Left',
   letter: 'Letter',
   none: 'None',

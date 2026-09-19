@@ -29,6 +29,7 @@ export interface CustomizationField {
 const paths = [
   'font.family',
   'font.baseSizePx',
+  'font.textAlign',
   'colors.primary',
   'colors.text',
   'colors.background',

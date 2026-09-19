@@ -47,6 +47,10 @@ type Font struct {
 	// Stable version-2 font catalog ID in manifest rank order. See
 	// docs/design/fonts.md#version-2-catalog.
 	Family Family `json:"family"`
+	// Alignment of entry and summary body text; absent means left. Justify applies to body
+	// paragraphs and list items only. See
+	// docs/adr/0041-contact-link-display-and-body-justify.md.
+	TextAlign *TextAlign `json:"textAlign,omitempty"`
 }
 
 // Optional presentation of the top resume header containing the photo, fullName, headline,
@@ -129,10 +133,15 @@ type PersonalDetails struct {
 
 // One contact item; array order is display order. See docs/design/data.md#resume-aggregate.
 type PersonalDetail struct {
-	ID       string  `json:"id"`
-	IsHidden bool    `json:"isHidden"`
-	Label    *string `json:"label,omitempty"`
-	Type     Type    `json:"type"`
+	// Anchor text for a detail that renders as a link: short (address without scheme or
+	// trailing slash), full (whole URL), or label (the detail's label, else the type's default
+	// label). Absent means short. No effect on a value that renders as text. See
+	// docs/adr/0041-contact-link-display-and-body-justify.md.
+	Display  *Display `json:"display,omitempty"`
+	ID       string   `json:"id"`
+	IsHidden bool     `json:"isHidden"`
+	Label    *string  `json:"label,omitempty"`
+	Type     Type     `json:"type"`
 	// Draft contact value. URL contact types accept only an exact lowercase https URI or an
 	// empty string. See docs/adr/0013-contact-detail-rendering.md.
 	Value string `json:"value"`
@@ -318,12 +327,22 @@ const (
 	WorkSans                 Family = "work-sans"
 )
 
+// Alignment of entry and summary body text; absent means left. Justify applies to body
+// paragraphs and list items only. See
+// docs/adr/0041-contact-link-display-and-body-justify.md.
+type TextAlign string
+
+const (
+	Justify       TextAlign = "justify"
+	TextAlignLeft TextAlign = "left"
+)
+
 // Horizontal alignment for the complete top block. See docs/design/templates/contract.md.
 type Align string
 
 const (
-	Center Align = "center"
-	Left   Align = "left"
+	AlignLeft Align = "left"
+	Center    Align = "center"
 )
 
 // Displays contact details inline or stacked while preserving array order. See
@@ -377,6 +396,18 @@ const (
 	Dots LanguageStyle = "dots"
 	Tag  LanguageStyle = "tag"
 	Text LanguageStyle = "text"
+)
+
+// Anchor text for a detail that renders as a link: short (address without scheme or
+// trailing slash), full (whole URL), or label (the detail's label, else the type's default
+// label). Absent means short. No effect on a value that renders as text. See
+// docs/adr/0041-contact-link-display-and-body-justify.md.
+type Display string
+
+const (
+	Full  Display = "full"
+	Label Display = "label"
+	Short Display = "short"
 )
 
 type Type string

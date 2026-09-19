@@ -50,6 +50,15 @@ func fontV2Document(t *testing.T, family string) json.RawMessage {
 	return raw
 }
 
+// fontCurrentDocument is fontV2Document at the current version, which adds no
+// field the font tests touch.
+func fontCurrentDocument(t *testing.T, family string) json.RawMessage {
+	t.Helper()
+	doc := decodeFontTestMap(t, fontV2Document(t, family))
+	doc["schemaVersion"] = float64(CurrentVersion)
+	return mustJSON(t, doc)
+}
+
 func fontFamilyOf(t *testing.T, doc json.RawMessage) string {
 	t.Helper()
 	var shape struct {
@@ -66,8 +75,8 @@ func fontFamilyOf(t *testing.T, doc json.RawMessage) string {
 }
 
 func TestProductionV1V2FontConvertersCoverCatalog(t *testing.T) {
-	if CurrentVersion != 2 || schema.CurrentVersion != 2 {
-		t.Fatalf("current versions = docmigrate %d, schema %d; want 2", CurrentVersion, schema.CurrentVersion)
+	if CurrentVersion != 3 || schema.CurrentVersion != 3 {
+		t.Fatalf("current versions = docmigrate %d, schema %d; want 3", CurrentVersion, schema.CurrentVersion)
 	}
 
 	var catalog fontCatalogFixture
@@ -81,10 +90,10 @@ func TestProductionV1V2FontConvertersCoverCatalog(t *testing.T) {
 	projector := NewIdentityProjector()
 	for _, entry := range catalog.Entries {
 		t.Run(entry.ID, func(t *testing.T) {
-			current := fontV2Document(t, entry.ID)
+			current := fontCurrentDocument(t, entry.ID)
 			emitted, err := projector.EmitWire(current, 1)
 			if err != nil {
-				t.Fatalf("EmitWire(v2->v1): %v", err)
+				t.Fatalf("EmitWire(current->v1): %v", err)
 			}
 			if got := fontFamilyOf(t, emitted); got != entry.V1Family {
 				t.Fatalf("v1 family = %q, want %q", got, entry.V1Family)
@@ -100,15 +109,15 @@ func TestProductionV1V2FontConvertersCoverCatalog(t *testing.T) {
 				t.Fatalf("emitted schemaVersion = %d, want 1", version.SchemaVersion)
 			}
 			if !bytes.Equal(withoutVersionAndFont(t, current), withoutVersionAndFont(t, emitted)) {
-				t.Fatal("v2->v1 changed a non-font JSON value")
+				t.Fatal("current->v1 changed a non-font JSON value")
 			}
 
 			accepted, acceptedVersion, err := projector.AcceptWire(emitted, 1)
 			if err != nil {
-				t.Fatalf("AcceptWire(v1->v2): %v", err)
+				t.Fatalf("AcceptWire(v1->current): %v", err)
 			}
-			if acceptedVersion != 2 {
-				t.Fatalf("accepted version = %d, want 2", acceptedVersion)
+			if acceptedVersion != 3 {
+				t.Fatalf("accepted version = %d, want 3", acceptedVersion)
 			}
 			if entry.ID == "be-vietnam-pro" || entry.ID == "inter" || entry.ID == "source-sans-3" || entry.ID == "alegreya" || entry.ID == "roboto-serif" {
 				if !bytes.Equal(normalizeJSONForFontTest(t, current), normalizeJSONForFontTest(t, accepted)) {
@@ -209,11 +218,11 @@ func normalizeJSONForFontTest(t *testing.T, raw json.RawMessage) []byte {
 func TestProductionVersionDeclarationsAreDefensiveCopies(t *testing.T) {
 	accepted := AcceptedVersions()
 	emitted := EmittedVersions()
-	if !bytes.Equal(mustJSON(t, accepted), []byte("[1,2]")) {
-		t.Fatalf("accepted versions = %v, want [1 2]", accepted)
+	if !bytes.Equal(mustJSON(t, accepted), []byte("[1,2,3]")) {
+		t.Fatalf("accepted versions = %v, want [1 2 3]", accepted)
 	}
-	if !bytes.Equal(mustJSON(t, emitted), []byte("[1,2]")) {
-		t.Fatalf("emitted versions = %v, want [1 2]", emitted)
+	if !bytes.Equal(mustJSON(t, emitted), []byte("[1,2,3]")) {
+		t.Fatalf("emitted versions = %v, want [1 2 3]", emitted)
 	}
 	accepted[0] = 99
 	emitted[0] = 99

@@ -78,10 +78,9 @@ func convertFontFamily(doc json.RawMessage, target int32, mapping map[string]str
 	return out, nil
 }
 
-func productionEmissionLossPolicy(current, emitted, restored json.RawMessage, target int32) error {
-	if target != 1 {
-		return fmt.Errorf("no declared loss for target version %d", target)
-	}
+// v1FontFallbackPolicy permits only the catalog's declared v1 font fallback
+// between a v2-shaped current document and its v1 emission.
+func v1FontFallbackPolicy(current, emitted, restored json.RawMessage) error {
 	currentValue, err := decodeDocumentValue(current)
 	if err != nil {
 		return fmt.Errorf("decoding current document: %w", err)
