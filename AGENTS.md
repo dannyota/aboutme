@@ -334,6 +334,9 @@ rules. The ones most often broken:
 - `make web-e2e-update` refuses a dirty tree; run it in a clean worktree at the
   commit whose baselines you need.
 - `make docs-lint` runs Prettier over every Markdown file, ignored ones too.
+- `deploy/web.Dockerfile` copies named paths only. When the web app starts
+  importing a new directory, add it there too; CI builds from the full checkout
+  and cannot catch the gap, only the release image build does.
 - A push to `main` cancels the CI run of any earlier commit still in progress.
   Do not push while a release candidate's CI runs; release the newer commit
   instead if you must.
