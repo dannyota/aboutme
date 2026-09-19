@@ -11,6 +11,7 @@
  */
 import type { PhotoCrop } from '@aboutme/schema';
 import { computed, reactive, ref, useId, watch } from 'vue';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 import FormField from '@/components/app/FormField.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,14 +39,16 @@ const props = defineProps<{
   /** Save the default crop once this photo's size is known. */
   readonly saveDefault?: boolean;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 type Field = 'x' | 'y' | 'width' | 'height';
-const fields: readonly { key: Field; label: string }[] = [
+const fields = computed<readonly { key: Field; label: string }[]>(() => [
   { key: 'x', label: 'X' },
   { key: 'y', label: 'Y' },
-  { key: 'width', label: 'Width' },
-  { key: 'height', label: 'Height' },
-];
+  { key: 'width', label: copy.value.width },
+  { key: 'height', label: copy.value.height },
+]);
 
 const WHOLE: PhotoCrop = { x: 0, y: 0, width: 1, height: 1 };
 const hintId = `crop-hint-${useId()}`;
@@ -59,15 +62,18 @@ const exact = reactive<Record<Field, string>>({
   width: '1',
   height: '1',
 });
-const error = ref('');
+const invalidCrop = ref(false);
+const error = computed(() => invalidCrop.value ? copy.value.cropInvalid : '');
 const savedDefaultFor = new Set<string>();
 
 const zoom = computed(() =>
-  image.value === null ? MIN_ZOOM : zoomOf(image.value, draft.value));
+  image.value === null ? MIN_ZOOM : zoomOf(image.value, draft.value),
+);
 const stageStyle = computed(() => ({
-  aspectRatio: image.value === null
-    ? '1 / 1'
-    : `${image.value.width} / ${image.value.height}`,
+  aspectRatio:
+    image.value === null
+      ? '1 / 1'
+      : `${image.value.width} / ${image.value.height}`,
 }));
 const squareStyle = computed(() => ({
   left: `${draft.value.x * 100}%`,
@@ -85,17 +91,21 @@ watch(
     resetDraft();
   },
 );
-watch(draft, (crop) => {
-  exact.x = String(crop.x);
-  exact.y = String(crop.y);
-  exact.width = String(crop.width);
-  exact.height = String(crop.height);
-}, { immediate: true });
+watch(
+  draft,
+  (crop) => {
+    exact.x = String(crop.x);
+    exact.y = String(crop.y);
+    exact.width = String(crop.width);
+    exact.height = String(crop.height);
+  },
+  { immediate: true },
+);
 
 function resetDraft(): void {
-  error.value = '';
-  draft.value = props.crop
-    ?? (image.value === null ? WHOLE : defaultCrop(image.value));
+  invalidCrop.value = false;
+  draft.value
+    = props.crop ?? (image.value === null ? WHOLE : defaultCrop(image.value));
 }
 
 function onImageLoad(event: Event): void {
@@ -135,8 +145,11 @@ function startDrag(event: PointerEvent): void {
   const point = stagePoint(event);
   if (point === null) return;
   const crop = draft.value;
-  const inside = point.x >= crop.x && point.x <= crop.x + crop.width
-    && point.y >= crop.y && point.y <= crop.y + crop.height;
+  const inside
+    = point.x >= crop.x
+      && point.x <= crop.x + crop.width
+      && point.y >= crop.y
+      && point.y <= crop.y + crop.height;
   if (!inside) {
     draft.value = movedBy(
       crop,
@@ -190,12 +203,14 @@ function applyExact(): boolean {
     width: Number(exact.width),
     height: Number(exact.height),
   };
-  const blank = fields.some(({ key }) => String(exact[key]).trim() === '');
+  const blank = fields.value.some(
+    ({ key }) => String(exact[key]).trim() === '',
+  );
   if (blank || !isValidCrop(crop)) {
-    error.value = 'Enter a crop within the image bounds.';
+    invalidCrop.value = true;
     return false;
   }
-  error.value = '';
+  invalidCrop.value = false;
   draft.value = crop;
   return true;
 }
@@ -207,14 +222,18 @@ function save(): void {
 }
 
 function clearCrop(): void {
-  error.value = '';
+  invalidCrop.value = false;
   props.actions.edit({ kind: 'photoCrop', crop: null });
 }
 
 function sameCrop(left: PhotoCrop, right: PhotoCrop | undefined): boolean {
-  return right !== undefined
-    && left.x === right.x && left.y === right.y
-    && left.width === right.width && left.height === right.height;
+  return (
+    right !== undefined
+    && left.x === right.x
+    && left.y === right.y
+    && left.width === right.width
+    && left.height === right.height
+  );
 }
 </script>
 
@@ -226,18 +245,17 @@ function sameCrop(left: PhotoCrop, right: PhotoCrop | undefined): boolean {
   >
     <fieldset class="grid min-w-0 gap-4">
       <legend class="mb-2 text-sm font-medium">
-        Crop photo
+        {{ copy.cropPhoto }}
       </legend>
       <p
         :id="hintId"
         class="text-sm text-muted-foreground"
       >
-        Drag the square to choose what your resume shows. You can also focus
-        the photo and use the arrow keys, and + or − to zoom.
+        {{ copy.cropHint }}
       </p>
       <div class="flex flex-wrap items-start gap-4">
         <div
-          aria-label="Crop position"
+          :aria-label="copy.cropPosition"
           :aria-describedby="hintId"
           class="relative w-full max-w-64 touch-none overflow-hidden rounded-md
             border bg-muted select-none focus-visible:ring-2
@@ -281,12 +299,12 @@ function sameCrop(left: PhotoCrop, right: PhotoCrop | undefined): boolean {
             >
           </div>
           <figcaption class="text-xs text-muted-foreground">
-            On your resume
+            {{ copy.onResume }}
           </figcaption>
         </figure>
       </div>
       <div class="grid max-w-64 gap-2">
-        <Label :for="zoomId">Zoom</Label>
+        <Label :for="zoomId">{{ copy.zoom }}</Label>
         <Slider
           :id="zoomId"
           :disabled="image === null"
@@ -300,7 +318,7 @@ function sameCrop(left: PhotoCrop, right: PhotoCrop | undefined): boolean {
       </div>
       <details class="text-sm">
         <summary class="cursor-pointer text-muted-foreground">
-          Exact values
+          {{ copy.exactValues }}
         </summary>
         <div class="mt-3 grid grid-cols-2 gap-2">
           <FormField
@@ -339,7 +357,7 @@ function sameCrop(left: PhotoCrop, right: PhotoCrop | undefined): boolean {
         size="sm"
         type="submit"
       >
-        Save crop
+        {{ copy.saveCrop }}
       </Button>
       <Button
         data-action="clear-crop"
@@ -348,7 +366,7 @@ function sameCrop(left: PhotoCrop, right: PhotoCrop | undefined): boolean {
         variant="ghost"
         @click="clearCrop"
       >
-        Clear crop
+        {{ copy.clearCrop }}
       </Button>
     </div>
   </form>

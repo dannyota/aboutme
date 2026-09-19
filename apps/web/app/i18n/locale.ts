@@ -1,8 +1,8 @@
 // Site languages. The homepage, the account pages (sign in, registration,
 // password recovery, email verification), the Privacy Policy and Terms, and
 // the template gallery are bilingual and default to Vietnamese for the
-// initial community (docs/design/product.md). Every other route stays
-// English.
+// initial community (docs/design/product.md). The resume workspace is also
+// bilingual. Settings and authorization stay English.
 
 export const locales = ['vi', 'en'] as const;
 
@@ -42,9 +42,12 @@ const localizedPaths: ReadonlySet<string> = new Set([
 
 /** The template gallery, /templates, and its template pages. */
 const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;
+const WORKSPACE_PATH = /^\/app\/(?:new|resumes(?:\/[^/.\\?#%][^/\\?#%]*|))$/u;
 
 /** Whether a route path renders in the chosen language. */
 export function isLocalizedPath(path: string): boolean {
   const trimmed = path.length > 1 ? path.replace(/\/+$/, '') : path;
-  return localizedPaths.has(trimmed) || GALLERY_PATH.test(trimmed);
+  return localizedPaths.has(trimmed)
+    || GALLERY_PATH.test(trimmed)
+    || WORKSPACE_PATH.test(trimmed);
 }

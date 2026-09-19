@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PersonalDetail } from '@aboutme/schema';
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 import { Ellipsis } from '@lucide/vue';
 import IconButton from '../../app/IconButton.vue';
 import SelectField from '../../app/SelectField.vue';
@@ -26,6 +27,8 @@ const emit = defineEmits<{
 }>();
 
 const details = ref<PersonalDetail[]>(copyDetails(props.details));
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].personal);
 const root = ref<HTMLElement | null>(null);
 const visibleLabels = ref<Record<string, boolean>>({});
 const openMenuId = ref<string | null>(null);
@@ -40,8 +43,11 @@ watch(
     // detail's change comes back; only removed details drop their flag.
     visibleLabels.value = Object.fromEntries(
       details.value
-        .filter((detail) => detail.label !== undefined
-          || visibleLabels.value[detail.id] === true)
+        .filter(
+          (detail) =>
+            detail.label !== undefined
+            || visibleLabels.value[detail.id] === true,
+        )
         .map((detail) => [detail.id, true]),
     );
     limitError.value = false;
@@ -119,9 +125,11 @@ function changeLabel(id: string, value: string): void {
 function changeType(id: string, type: PersonalDetail['type']): void {
   const detail = detailById(id);
   if (detail === undefined || type === detail.type) return;
-  if (isWebProfile(type)
+  if (
+    isWebProfile(type)
     && detail.value !== ''
-    && !detail.value.startsWith('https://')) {
+    && !detail.value.startsWith('https://')
+  ) {
     urlError.value = id;
     return;
   }
@@ -233,28 +241,35 @@ function isWebProfile(type: PersonalDetail['type']): boolean {
 // Only a detail that renders as a link has a display choice: the four URL
 // types, and a custom value with the renderer's exact https:// prefix.
 function rendersAsLink(detail: PersonalDetail): boolean {
-  return isWebProfile(detail.type)
-    || (detail.type === 'custom' && detail.value.startsWith('https://'));
+  return (
+    isWebProfile(detail.type)
+    || (detail.type === 'custom' && detail.value.startsWith('https://'))
+  );
 }
 
 type LinkDisplay = NonNullable<PersonalDetail['display']>;
 
-const displayOptions = [
-  { value: 'short', label: 'Short address' },
-  { value: 'full', label: 'Full address' },
-  { value: 'label', label: 'Label' },
-] as const;
-
-const typeOptions = [
-  { value: 'email', label: 'Email' },
-  { value: 'phone', label: 'Phone' },
-  { value: 'location', label: 'Location' },
-  { value: 'website', label: 'Website' },
-  { value: 'linkedin', label: 'LinkedIn' },
-  { value: 'github', label: 'GitHub' },
-  { value: 'twitter', label: 'X (Twitter)' },
-  { value: 'custom', label: 'Custom' },
-] as const;
+const displayOptions = computed(
+  () =>
+    [
+      { value: 'short', label: copy.value.shortAddress },
+      { value: 'full', label: copy.value.fullAddress },
+      { value: 'label', label: copy.value.labelDisplay },
+    ] as const,
+);
+const typeOptions = computed(
+  () =>
+    [
+      { value: 'email', label: copy.value.email },
+      { value: 'phone', label: copy.value.phone },
+      { value: 'location', label: copy.value.location },
+      { value: 'website', label: copy.value.website },
+      { value: 'linkedin', label: copy.value.linkedin },
+      { value: 'github', label: copy.value.github },
+      { value: 'twitter', label: copy.value.twitter },
+      { value: 'custom', label: copy.value.custom },
+    ] as const,
+);
 </script>
 
 <template>
@@ -272,15 +287,16 @@ const typeOptions = [
         class="sr-only"
         :data-detail-id="detail.id"
       >
-        Contact detail {{ index + 1 }}
+        {{ copy.contactDetail }} {{ index + 1 }}
       </h3>
       <div class="grid gap-4">
+        <!-- prettier-ignore -->
         <div
           class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]
             items-end gap-2"
         >
           <SelectField
-            label="Type"
+            :label="copy.type"
             :model-value="detail.type"
             :options="typeOptions"
             :control-attrs="{ 'data-detail-type': '' }"
@@ -289,23 +305,25 @@ const typeOptions = [
             "
           />
           <TextField
-            label="Value"
+            :label="copy.value"
             :model-value="detail.value"
-            :error="urlError === detail.id
-              ? 'Use a lowercase https:// URL.' : undefined"
+            :error="urlError === detail.id ? copy.urlError : undefined"
             :error-attrs="{ 'data-error': 'contact-url' }"
             :control-attrs="{ 'data-detail-value': '' }"
-            @intent="(intent) => intent.kind === 'unset'
-              ? changeValue(detail.id, '')
-              : changeValue(detail.id, intent.value)"
+            @intent="
+              (intent) =>
+                intent.kind === 'unset'
+                  ? changeValue(detail.id, '')
+                  : changeValue(detail.id, intent.value)
+            "
           />
           <DropdownMenu
             :open="openMenuId === detail.id"
-            @update:open="(open) => openMenuId = open ? detail.id : null"
+            @update:open="(open) => (openMenuId = open ? detail.id : null)"
           >
             <DropdownMenuTrigger as-child>
               <IconButton
-                :label="`More options for contact detail ${index + 1}`"
+                :label="`${copy.moreOptions} ${index + 1}`"
                 size="icon-sm"
                 data-action="contact-detail-menu"
               >
@@ -318,64 +336,66 @@ const typeOptions = [
             >
               <DropdownMenuItem
                 data-action="set-detail-label"
-                aria-label="Set label…"
+                :aria-label="copy.setLabel"
                 @select="showLabel(detail.id)"
               >
-                Set label…
+                {{ copy.setLabel }}
               </DropdownMenuItem>
               <DropdownMenuCheckboxItem
                 data-action="toggle-detail-hidden"
                 :model-value="detail.isHidden"
                 :data-detail-hide="true"
-                aria-label="Hide this detail"
+                :aria-label="copy.hideDetail"
                 @update:model-value="changeHidden(detail.id, $event)"
               >
-                Hide this detail
+                {{ copy.hideDetail }}
               </DropdownMenuCheckboxItem>
               <DropdownMenuItem
                 data-action="move-detail-up"
                 :disabled="index === 0"
-                aria-label="Move up"
+                :aria-label="copy.moveUp"
                 @select="move(detail.id, -1)"
               >
-                Move up
+                {{ copy.moveUp }}
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-action="move-detail-down"
                 :disabled="index === details.length - 1"
-                aria-label="Move down"
+                :aria-label="copy.moveDown"
                 @select="move(detail.id, 1)"
               >
-                Move down
+                {{ copy.moveDown }}
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-action="remove-detail"
-                aria-label="Remove detail"
+                :aria-label="copy.removeDetail"
                 @select="remove(detail.id)"
               >
-                Remove detail
+                {{ copy.removeDetail }}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
         <SelectField
           v-if="rendersAsLink(detail)"
-          label="Show as"
-          hint="Label shows the detail's label, or the type's name."
+          :label="copy.showAs"
+          :hint="copy.labelHint"
           :model-value="detail.display ?? 'short'"
           :options="displayOptions"
           :control-attrs="{ 'data-detail-display': '' }"
-          @update:model-value="
-            changeDisplay(detail.id, $event as LinkDisplay)
-          "
+          @update:model-value="changeDisplay(detail.id, $event as LinkDisplay)"
         />
         <TextField
           v-if="labelVisible(detail)"
-          label="Label"
+          :label="copy.label"
           :model-value="detail.label"
           :control-attrs="{ 'data-detail-label': '' }"
-          @intent="(intent) => intent.kind === 'unset'
-            ? unsetLabel(detail.id) : changeLabel(detail.id, intent.value)"
+          @intent="
+            (intent) =>
+              intent.kind === 'unset'
+                ? unsetLabel(detail.id)
+                : changeLabel(detail.id, intent.value)
+          "
         />
       </div>
     </div>
@@ -386,7 +406,7 @@ const typeOptions = [
         variant="outline"
         @click="add"
       >
-        Add detail
+        {{ copy.addDetail }}
       </Button>
       <Button
         v-if="props.details !== undefined"
@@ -395,7 +415,7 @@ const typeOptions = [
         variant="ghost"
         @click="emit('unset')"
       >
-        Remove contact list
+        {{ copy.removeContactList }}
       </Button>
     </div>
     <StatusBanner
@@ -403,7 +423,7 @@ const typeOptions = [
       kind="error"
       data-error="detail-limit"
     >
-      You can add up to 16 contact details.
+      {{ copy.contactLimit }}
     </StatusBanner>
   </div>
 </template>

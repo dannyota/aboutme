@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { EducationEntry } from '@aboutme/schema';
+import { computed } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 
 import DateRangeField from '../DateRangeField.vue';
 import type { FieldIntent } from '../fieldIntent';
@@ -8,12 +10,19 @@ import RichTextEditor from '../../richtext/RichTextEditor.vue';
 import EntryLinkField from './EntryLinkField.vue';
 
 defineProps<{ readonly entry: EducationEntry }>();
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].entry.education);
 const emit = defineEmits<{
   field: [
     change: {
       readonly path:
-        | 'degree' | 'school' | 'schoolLink' | 'city' | 'country'
-        | 'dates' | 'description';
+        | 'degree'
+        | 'school'
+        | 'schoolLink'
+        | 'city'
+        | 'country'
+        | 'dates'
+        | 'description';
       readonly intent: FieldIntent<unknown>;
     },
   ];
@@ -32,31 +41,31 @@ function textIntent(value: string): FieldIntent<string> {
 <template>
   <TextField
     data-entry-field="degree"
-    label="Degree"
+    :label="copy.degree"
     :model-value="entry.degree"
     @intent="emit('field', { path: 'degree', intent: $event })"
   />
   <TextField
     data-entry-field="school"
-    label="School"
+    :label="copy.school"
     :model-value="entry.school"
     @intent="emit('field', { path: 'school', intent: $event })"
   />
   <EntryLinkField
     data-entry-field="schoolLink"
-    label="School link"
+    :label="copy.schoolLink"
     :model-value="entry.schoolLink"
     @intent="emit('field', { path: 'schoolLink', intent: $event })"
   />
   <TextField
     data-entry-field="city"
-    label="City"
+    :label="copy.city"
     :model-value="entry.city"
     @intent="emit('field', { path: 'city', intent: $event })"
   />
   <TextField
     data-entry-field="country"
-    label="Country"
+    :label="copy.country"
     :model-value="entry.country"
     @intent="emit('field', { path: 'country', intent: $event })"
   />
@@ -68,7 +77,7 @@ function textIntent(value: string): FieldIntent<string> {
   />
   <RichTextEditor
     data-entry-field="description"
-    label="Education description"
+    :label="copy.description"
     :model-value="entry.description ?? ''"
     @update:model-value="updateDescription"
   />

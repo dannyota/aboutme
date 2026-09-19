@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import { computed, nextTick, ref } from 'vue';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import StructurePanel from
   '../../app/components/editor/structure/StructurePanel.vue';
@@ -14,6 +15,13 @@ import type {
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
+
 afterEach(() => {
   document.body
     .querySelectorAll(
@@ -23,6 +31,24 @@ afterEach(() => {
 });
 
 describe('StructurePanel', () => {
+  it.each([
+    ['en', 'Add a section', 'Add section'],
+    ['vi', 'Thêm phần', 'Thêm phần'],
+  ] as const)('uses the %s heading and action copy', async (
+    currentLocale,
+    heading,
+    action,
+  ) => {
+    locale.value = currentLocale;
+    const wrapper = mount(StructurePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+    await nextTick();
+
+    expect(wrapper.get('[data-slot="card-title"]').text()).toBe(heading);
+    expect(wrapper.get('[data-action="create"]').text()).toBe(action);
+  });
+
   it('captures a remove-then-insert move through edit', async () => {
     const edit = vi.fn();
     const wrapper = mount(StructurePanel, {
@@ -146,6 +172,25 @@ describe('structure intent boundaries', () => {
       expect(invalidKey).toHaveBeenCalledTimes(1);
     });
 
+  it('keeps a duplicate-section status while changing its copy', async () => {
+    const edit = vi.fn();
+    const wrapper = mount(StructurePanel, {
+      props: { actions: actionsFor(edit) },
+    });
+    await wrapper.get('form').trigger('submit');
+    expect(wrapper.text()).toContain(
+      'This section already exists. Choose another section type.',
+    );
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.text()).toContain(
+      'Phần này đã tồn tại. Chọn loại phần khác.',
+    );
+    expect(edit).not.toHaveBeenCalled();
+  });
+
   it('blocks a malformed generated custom key without editing', async () => {
     const edit = vi.fn();
     const createEntityId = vi.fn(() => '111111111-1111-1111-1111-11111111111');
@@ -208,6 +253,80 @@ describe('structure intent boundaries', () => {
       work.findAll('[data-field="iconKey"] option').map((o) => o.text()),
     ).toContain('Briefcase');
   });
+
+  it('translates section badges and icon options without changing their values',
+    async () => {
+      const section = {
+        ...acceptedFixture().document.content.work,
+        iconKey: 'legacy-icon',
+        sectionType: 'work' as const,
+      };
+      const wrapper = mount(SectionControls, {
+        props: {
+          column: 'main',
+          disabled: false,
+          index: 0,
+          mainCount: 1,
+          section,
+          sectionCount: 1,
+          sectionKey: 'work',
+          sidebarCount: 0,
+        },
+      });
+      const options = () => wrapper.findAll('[data-action="iconKey"] option');
+      expect(wrapper.text()).toContain('Work experience');
+      expect(options().find((option) => option.element.value === 'briefcase')
+        ?.text()).toBe('Briefcase');
+      expect(options().find((option) => option.element.value === 'legacy-icon')
+        ?.text()).toBe('Current icon');
+      const englishOptionValues = options()
+        .map((option) => option.element.value);
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect(wrapper.text()).toContain(
+        'Kinh nghiệm làm việc',
+      );
+      expect(options().find((option) => option.element.value === 'briefcase')
+        ?.text()).toBe('Cặp');
+      expect(options().find((option) => option.element.value === 'stethoscope')
+        ?.text()).toBe('Ống nghe');
+      expect(options().find((option) => option.element.value === 'legacy-icon')
+        ?.text()).toBe('Biểu tượng hiện tại');
+      expect(options().map((option) => option.element.value)).toContain(
+        'legacy-icon',
+      );
+      expect(options().map((option) => option.element.value))
+        .toEqual(englishOptionValues);
+      expect(wrapper.emitted('metadata')).toBeUndefined();
+    },
+  );
+
+  it('translates fallback entry labels without changing authored titles',
+    async () => {
+      const wrapper = mount(EntryOrderControls, {
+        props: {
+          disabled: false,
+          entries: [
+            { id: 'entry-1' },
+            { id: 'entry-2', jobTitle: 'Authored title' },
+          ],
+          sectionKey: 'work',
+          sectionType: 'work',
+        },
+      });
+      const labels = () => wrapper.findAll('li > span')
+        .map((label) => label.text());
+      expect(labels()).toEqual(['Entry 1', 'Authored title']);
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect(labels()).toEqual(['Mục 1', 'Authored title']);
+      expect(wrapper.emitted('reorder')).toBeUndefined();
+    },
+  );
 
   it('keeps a typed section name when the type changes', async () => {
     const wrapper = mount(StructurePanel, {
@@ -659,7 +778,8 @@ describe('structure intent boundaries', () => {
       await nextTick();
 
       expect(wrapper.text()).toContain(
-        'Entry order cannot reopen because its section is no longer available.',
+        'This section is no longer available. '
+        + 'Create a new section or select another section.',
       );
       expect(document.activeElement).toBe(
         wrapper.get('[data-action="section-type"]').element,

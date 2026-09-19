@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import type { Customization } from '@aboutme/schema';
-import { ref } from 'vue';
-import { describe, expect, it } from 'vitest';
+import { nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import PageSettings from
   '../../app/components/editor/customization/PageSettings.vue';
@@ -18,6 +19,13 @@ import PDFDownloadButton from
   '../../app/components/editor/PDFDownloadButton.vue';
 import type { PdfDownloadController } from '../../app/editor/pdfDownload';
 import { acceptedFixture } from './fixture';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
 
 const UNSET = [{ op: 'unset', path: 'spacing.pageMargin' }];
 
@@ -200,6 +208,27 @@ describe('Page & PDF group', () => {
       .toBe('Enter a value from 0 to 1.57 in.');
     expect(commits()).toHaveLength(1);
   });
+
+  it('keeps an invalid custom margin draft while changing its message',
+    async () => {
+      const { wrapper, margins, commits } = mountPage(customization());
+      await margins().setValue('custom');
+      const x = wrapper.get('[data-field="spacing.pageMargin.x"] input');
+      await x.setValue('41');
+      await x.trigger('change');
+      expect(wrapper.get('[data-error-for="spacing.pageMargin.x"]').text())
+        .toBe('Enter a value from 0 to 40 mm.');
+      expect(commits()).toEqual([]);
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect((x.element as HTMLInputElement).value).toBe('41');
+      expect(wrapper.get('[data-error-for="spacing.pageMargin.x"]').text())
+        .toBe('Nhập giá trị từ 0 đến 40 mm.');
+      expect(commits()).toEqual([]);
+    },
+  );
 
   it('warns when a margin is inside the unprintable edge', () => {
     const { wrapper } = mountPage(

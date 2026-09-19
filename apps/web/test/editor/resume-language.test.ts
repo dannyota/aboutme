@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { computed, defineComponent, h, nextTick } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
+import { computed, defineComponent, h, nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import EditorPreview from '../../app/components/editor/EditorPreview.vue';
 import PersonalDetailsPanel from
@@ -11,6 +12,13 @@ import type { ResumeEditorActions } from
   '../../app/composables/useResumeEditor';
 import { acceptedFixture } from './fixture';
 
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
+
 type Wrapper = ReturnType<typeof mount>;
 
 function select(wrapper: Wrapper) {
@@ -18,10 +26,55 @@ function select(wrapper: Wrapper) {
 }
 
 function optionLabels(wrapper: Wrapper): string[] {
-  return select(wrapper).findAll('option').map((option) => option.text());
+  return select(wrapper)
+    .findAll('option')
+    .map((option) => option.text());
 }
 
 describe('ResumeLanguageField', () => {
+  it('keeps resume language and emits no edit on a locale change', async () => {
+    locale.value = 'en';
+    const wrapper = mount(ResumeLanguageField, {
+      props: { lng: 'zh-Hant' },
+    });
+    const select = wrapper.get('[data-action="resume-language"]');
+    const emitted = wrapper.emitted('change');
+
+    locale.value = 'vi';
+    await wrapper.vm.$nextTick();
+
+    expect((select.element as HTMLSelectElement).value).toBe('other');
+    expect(
+      (wrapper.get('input[name="lngOther"]').element as HTMLInputElement)
+        .value,
+    ).toBe('zh-Hant');
+    expect(wrapper.emitted('change')).toEqual(emitted);
+    expect(wrapper.text()).toContain('Ngôn ngữ CV');
+  });
+
+  it('changes a visible language-code error without changing its draft',
+    async () => {
+      locale.value = 'en';
+      const wrapper = mount(ResumeLanguageField, {
+        props: { lng: 'fr' },
+        attachTo: document.body,
+      });
+      const code = wrapper.get('input[name="lngOther"]');
+      await code.setValue('not a tag');
+      await code.trigger('blur');
+      (code.element as HTMLInputElement).focus();
+
+      locale.value = 'vi';
+      await wrapper.vm.$nextTick();
+
+      expect((code.element as HTMLInputElement).value).toBe('not a tag');
+      expect(document.activeElement).toBe(code.element);
+      expect(wrapper.text()).toContain(
+        'Nhập mã ngôn ngữ, như fr hoặc zh-Hant.',
+      );
+      expect(wrapper.emitted('change')).toBeUndefined();
+    });
+
   it.each([null, 'und', ''])(
     'offers Not set for a resume with no language (%s)',
     (lng) => {

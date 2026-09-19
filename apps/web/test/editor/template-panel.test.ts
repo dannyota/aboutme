@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import { computed, nextTick, ref } from 'vue';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TEMPLATES } from '@aboutme/schema/templates';
 
@@ -20,6 +21,13 @@ import type { AcceptedResume } from '../../app/editor/types';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
+
 afterEach(() => {
   document.body
     .querySelectorAll(
@@ -33,6 +41,8 @@ const runtime: EditorRuntime = {
   uuid: () => 'generated-id',
   delay: async () => {},
 };
+const templateDialogLocaleCase
+  = 'keeps a partial dialog and template IDs while changing copy';
 
 describe('TemplatePanel', () => {
   it('delegates one preset and renders the returned group state', async () => {
@@ -55,6 +65,38 @@ describe('TemplatePanel', () => {
     expect(applyTemplate).toHaveBeenCalledWith(TEMPLATES[0]);
     expect(wrapper.get('[role="status"]').text()).toBe('Saving template');
     expect(wrapper.text()).not.toContain(TEMPLATES[0]!.id);
+  });
+
+  it(templateDialogLocaleCase, async () => {
+    const group = templateGroup();
+    const wrapper = mount(TemplatePanel, {
+      attachTo: document.body,
+      props: {
+        actions: actionsFor(vi.fn()),
+        group,
+        state: partialState(partialLatest(group)),
+      },
+    });
+    await nextTick();
+    const templateIds = wrapper.findAll('[data-template]')
+      .map((template) => template.attributes('data-template'));
+    expect(
+      document.body.querySelector('[role="alertdialog"]'),
+    ).not.toBeNull();
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(
+      document.body.querySelector('[role="alertdialog"]'),
+    ).not.toBeNull();
+    expect(wrapper.findAll('[data-template]').map(
+      (template) => template.attributes('data-template'),
+    )).toEqual(templateIds);
+    expect(document.body.textContent).toContain(
+      'Các thay đổi mẫu cần được xem lại',
+    );
+    wrapper.unmount();
   });
 
   it('names the sections a template moves between columns', async () => {
@@ -86,6 +128,14 @@ describe('TemplatePanel', () => {
     expect(wrapper.get('[data-testid="template-moved-sections"]').text()).toBe(
       'Moved to the sidebar: Tools. Moved to the main column: Languages.',
     );
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="template-moved-sections"]').text()).toBe(
+      'Đã chuyển vào cột bên: Tools. Đã chuyển vào cột chính: Languages.',
+    );
+    expect(applyTemplate).toHaveBeenCalledOnce();
   });
 
   it('says nothing about moves when no section changes column', async () => {
@@ -128,6 +178,12 @@ describe('TemplatePanel', () => {
     expect(wrapper.get('[role="status"]').text()).toBe('No changes');
     expect(wrapper.text()).not.toContain('Selected template');
     expect(wrapper.text()).not.toContain('Saved template');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.get('[role="status"]').text()).toBe('Không có thay đổi');
+    expect(applyTemplate).toHaveBeenCalledOnce();
   });
 
   it('exposes undo only for the untouched latest complete group', async () => {
@@ -304,6 +360,16 @@ describe('TemplatePartialDialog', () => {
         'The resume context changed.',
         'Review the current resume before trying again.',
       ].join(' '),
+    );
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(
+      document.body.querySelector('[role="alertdialog"]'),
+    ).not.toBeNull();
+    expect(alerts[alerts.length - 1]!.textContent).toBe(
+      'Ngữ cảnh hồ sơ đã thay đổi. Xem lại hồ sơ hiện tại trước khi thử lại.',
     );
     wrapper.unmount();
   });

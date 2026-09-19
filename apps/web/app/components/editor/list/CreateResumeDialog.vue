@@ -17,12 +17,15 @@ import { Input } from '@/components/ui/input';
 import { GALLERY, sampleRole } from '../../../templates/catalog';
 import { suggestedTitle } from '../../../templates/startDocument';
 import {
-  languageCodeError,
-  languageCodeHint,
+  languageCodeErrorForLocale,
+  languageCodeHintForLocale,
   OTHER_LANGUAGE,
   parseLanguageTag,
-  resumeLanguageOptions,
+  resumeLanguageOptionsForLocale,
 } from '../resumeLanguage';
+import { resumeCreateCopy } from '@/i18n/resume-create';
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { shellCopy } from '@/i18n/shell';
 
 const props = defineProps<{
   open: boolean;
@@ -41,19 +44,22 @@ const emit = defineEmits<{
 
 type Mode = 'blank' | 'sample';
 
-// A new resume starts in the site's current language, so it never lands as
-// undetermined (`und`); Other takes any BCP 47 tag.
-const languageOptions = resumeLanguageOptions;
 const samples = GALLERY.filter((template) =>
   template.sampleLanguages.length > 0);
 
 const { locale } = useLocale();
+const copy = computed(() => resumeCreateCopy[locale.value]);
+const languageOptions = computed(() =>
+  resumeLanguageOptionsForLocale(locale.value));
 const mode = ref<Mode>('blank');
 const title = ref('');
 const titleEdited = ref(false);
 const languageChoice = ref<string>(locale.value);
 const otherLanguage = ref('');
-const otherError = ref<string | undefined>();
+const otherInvalid = ref(false);
+const otherError = computed(() => otherInvalid.value
+  ? languageCodeErrorForLocale(locale.value)
+  : undefined);
 const selected = ref(samples[0]?.id ?? '');
 const documents = ref<Readonly<Record<string, Resume>>>({});
 const returnFocus = ref<HTMLElement | null>(null);
@@ -65,6 +71,8 @@ const sampleLanguage = computed<SampleLanguage>(() =>
 const chosenDocument = computed(() => documents.value[selected.value]);
 const chosenTemplate = computed(() =>
   samples.find((template) => template.id === selected.value));
+const submitDisabled = computed(() =>
+  mode.value === 'sample' && chosenDocument.value === undefined);
 
 watch(() => props.open, (open) => {
   if (open) {
@@ -75,7 +83,7 @@ watch(() => props.open, (open) => {
     titleEdited.value = false;
     languageChoice.value = locale.value;
     otherLanguage.value = '';
-    otherError.value = undefined;
+    otherInvalid.value = false;
     returnFocus.value = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
@@ -128,12 +136,12 @@ function submit(): void {
   if (languageChoice.value === OTHER_LANGUAGE) {
     const tag = parseLanguageTag(otherLanguage.value);
     if (tag === null) {
-      otherError.value = languageCodeError;
+      otherInvalid.value = true;
       return;
     }
     lng = tag;
   }
-  otherError.value = undefined;
+  otherInvalid.value = false;
   const document = mode.value === 'sample' ? chosenDocument.value : undefined;
   if (mode.value === 'sample') {
     if (document !== undefined) emit('submit', title.value, lng, document);
@@ -156,23 +164,32 @@ function persona(templateId: string): string {
     :class="mode === 'sample' && retained === null
       ? 'create-resume-dialog--samples sm:max-w-[760px]'
       : undefined"
-    title="Create resume"
+    :title="copy.dialogTitle"
     :description="mode === 'sample'
-      ? 'Start from a sample resume and replace its content with yours.'
-      : 'Create a new private resume.'"
-    :submit-label="mode === 'sample' ? 'Create from sample' : 'Create'"
+      ? copy.dialogSampleDescription
+      : copy.dialogBlankDescription"
+    :submit-label="mode === 'sample' ? copy.createFromSample : copy.create"
+    :cancel-label="copy.cancel"
+    :close-label="copy.close"
     :busy="busy"
+    :submit-disabled="submitDisabled"
     @cancel="emit('close')"
     @submit="submit"
   >
+    <template #header-actions>
+      <LocaleToggle
+        :label="shellCopy[locale].localeLabel"
+        @pointerdown.prevent
+      />
+    </template>
     <template v-if="retained !== null">
       <p role="alert">
-        We could not confirm whether this resume was created.
+        {{ copy.uncertain }}
       </p>
     </template>
     <template v-else>
       <div
-        aria-label="Start from"
+        :aria-label="copy.startFrom"
         class="flex w-fit rounded-md border p-0.5"
         role="group"
       >
@@ -188,12 +205,12 @@ function persona(templateId: string): string {
           :variant="mode === option ? 'default' : 'ghost'"
           @click="mode = option"
         >
-          {{ option === 'blank' ? 'Blank' : 'From a sample' }}
+          {{ option === 'blank' ? copy.blank : copy.fromSample }}
         </Button>
       </div>
       <div
         v-if="mode === 'sample'"
-        aria-label="Samples"
+        :aria-label="copy.samples"
         class="create-resume-samples"
         role="group"
       >
@@ -223,7 +240,7 @@ function persona(templateId: string): string {
         </Button>
       </div>
       <FormField
-        label="Title"
+        :label="copy.title"
         name="title"
         required
       >
@@ -245,20 +262,19 @@ function persona(templateId: string): string {
         :control-attrs="{ 'data-action': 'resume-language' }"
         :disabled="busy"
         :hint="mode === 'sample' && languageChoice === OTHER_LANGUAGE
-          ? 'Samples are in Vietnamese or English. Your resume language '
-            + 'stays the code you enter.'
+          ? copy.sampleOtherLanguageHint
           : mode === 'sample'
-            ? 'Samples come in Vietnamese and English.'
-            : 'The language your resume is written in.'"
-        label="Resume language"
+            ? copy.sampleLanguageHint
+            : copy.blankLanguageHint"
+        :label="copy.resumeLanguage"
         name="lng"
         :options="languageOptions"
       />
       <FormField
         v-if="languageChoice === OTHER_LANGUAGE"
         :error="otherError"
-        :hint="languageCodeHint"
-        label="Language code"
+        :hint="languageCodeHintForLocale(locale)"
+        :label="copy.languageCode"
         name="lngOther"
       >
         <template #default="{ id, describedBy, invalid }">
@@ -285,14 +301,14 @@ function persona(templateId: string): string {
         variant="outline"
         @click="refresh"
       >
-        Refresh list
+        {{ copy.refreshList }}
       </Button>
       <Button
         :disabled="busy"
         type="button"
         @click="abandon"
       >
-        Abandon
+        {{ copy.abandon }}
       </Button>
     </template>
     <template
@@ -305,7 +321,7 @@ function persona(templateId: string): string {
           underline-offset-4 sm:mr-auto sm:self-center"
         to="/templates"
       >
-        Browse all {{ GALLERY.length }} templates
+        {{ copy.browseAll(GALLERY.length) }}
       </NuxtLink>
       <Button
         :disabled="busy"
@@ -314,14 +330,14 @@ function persona(templateId: string): string {
         data-action="create-cancel"
         @click="emit('close')"
       >
-        Cancel
+        {{ copy.cancel }}
       </Button>
       <Button
         :disabled="busy || (mode === 'sample' && chosenDocument === undefined)"
         type="submit"
         data-action="create-submit"
       >
-        {{ mode === 'sample' ? 'Create from sample' : 'Create' }}
+        {{ mode === 'sample' ? copy.createFromSample : copy.create }}
       </Button>
     </template>
   </FormDialog>

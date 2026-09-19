@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import type { Section } from '@aboutme/schema';
-import { computed } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { computed, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SectionPanel from '../../app/components/editor/forms/SectionPanel.vue';
 import CertificateEntryFields from
@@ -25,6 +26,13 @@ import RichTextEditor from
 import EntryCard from '../../app/components/editor/EntryCard.vue';
 import type { ResumeEditorActions } from
   '../../app/composables/useResumeEditor';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
 
 const actionsSpy = () =>
   ({
@@ -87,10 +95,34 @@ const entryComponents = {
 } as const;
 
 describe('SectionPanel', () => {
+  it('localizes an untitled fallback and keeps an authored title', () => {
+    locale.value = 'vi';
+    const wrapper = mount(SectionPanel, {
+      props: {
+        sectionKey: 'work',
+        section: {
+          sectionType: 'work',
+          entries: [
+            { id: 'fallback' },
+            { id: 'authored', jobTitle: 'Kỹ sư' },
+          ],
+        } as Section,
+        actions: actionsSpy(),
+      },
+    });
+
+    expect(wrapper.text()).toContain('Mục 1');
+    expect(wrapper.text()).toContain('Kỹ sư');
+  });
+
   it('supports controlled entry-card open state', async () => {
     const wrapper = mount(EntryCard, {
       props: {
-        title: 'Entry', entryId: 'e1', hidden: false, index: 0, count: 2,
+        title: 'Entry',
+        entryId: 'e1',
+        hidden: false,
+        index: 0,
+        count: 2,
         open: false,
       },
       slots: { default: '<input data-testid="card-field">' },
@@ -111,28 +143,25 @@ describe('SectionPanel', () => {
     expect(wrapper.find('[data-testid="card-field"]').exists()).toBe(true);
   });
 
-  it(
-    'lets a section entry card collapse without a controlled open prop',
-    async () => {
-      const wrapper = mount(SectionPanel, {
-        props: {
-          sectionKey: 'work',
-          section: sectionFixture('work'),
-          actions: actionsSpy(),
-        },
-      });
-      const trigger = wrapper.get('[data-action="toggle-entry-fields"]');
-      expect(trigger.attributes('aria-label')).toBe('Collapse entry fields');
+  it('lets an uncontrolled section entry card collapse', async () => {
+    const wrapper = mount(SectionPanel, {
+      props: {
+        sectionKey: 'work',
+        section: sectionFixture('work'),
+        actions: actionsSpy(),
+      },
+    });
+    const trigger = wrapper.get('[data-action="toggle-entry-fields"]');
+    expect(trigger.attributes('aria-label')).toBe('Collapse entry fields');
 
-      await trigger.trigger('click');
+    await trigger.trigger('click');
 
-      expect(
-        wrapper
-          .get('[data-action="toggle-entry-fields"]')
-          .attributes('aria-label'),
-      ).toBe('Expand entry fields');
-    },
-  );
+    expect(
+      wrapper
+        .get('[data-action="toggle-entry-fields"]')
+        .attributes('aria-label'),
+    ).toBe('Expand entry fields');
+  });
 
   it('maps an emptied description to unset without a clear intent', () => {
     const wrapper = mount(WorkEntryFields, {
@@ -162,12 +191,12 @@ describe('SectionPanel', () => {
       .get('[data-entry-id="e1"] [data-action="delete-entry"]')
       .trigger('click');
     document.body
-      .querySelector<HTMLButtonElement>(
-        '[data-action="confirm-delete-entry"]',
-      )
+      .querySelector<HTMLButtonElement>('[data-action="confirm-delete-entry"]')
       ?.click();
     expect(actions.edit).toHaveBeenLastCalledWith({
-      kind: 'entryDelete', sectionKey: 'work', entryId: 'e1',
+      kind: 'entryDelete',
+      sectionKey: 'work',
+      entryId: 'e1',
     });
     wrapper.unmount();
   });
@@ -188,39 +217,41 @@ describe('SectionPanel', () => {
       .get('[data-entry-id="e2"] [data-action="entry-up"]')
       .trigger('click');
     expect(actions.edit).toHaveBeenLastCalledWith({
-      kind: 'entryReorder', sectionKey: 'work', entryIds: ['e2', 'e1'],
+      kind: 'entryReorder',
+      sectionKey: 'work',
+      entryIds: ['e2', 'e1'],
     });
   });
 
-  it('labels levels and keeps the project link distinct from the toolbar',
-    () => {
-      const skill = mount(SkillEntryFields, {
-        props: { entry: { id: 'entry-1', name: 'Go', level: 3 } },
-      });
-      const skillLevels = skill
-        .findAll('[data-entry-field="level"] option')
-        .map((option) => option.text());
-      expect(skillLevels).toEqual([
-        'Not set',
-        '0 · None',
-        '1 · Beginner',
-        '2 · Basic',
-        '3 · Intermediate',
-        '4 · Advanced',
-        '5 · Expert',
-      ]);
-      const language = mount(LanguageEntryFields, {
-        props: { entry: { id: 'entry-1', name: 'Vietnamese', level: 5 } },
-      });
-      expect(
-        language.findAll('[data-entry-field="level"] option').at(-1)?.text(),
-      ).toBe('5 · Native or bilingual');
-      const project = mount(ProjectEntryFields, {
-        props: { entry: { id: 'entry-1' } },
-      });
-      expect(project.get('[data-entry-field="link"] label').text())
-        .toBe('Project link');
+  it('labels levels and keeps the project link distinct', () => {
+    const skill = mount(SkillEntryFields, {
+      props: { entry: { id: 'entry-1', name: 'Go', level: 3 } },
     });
+    const skillLevels = skill
+      .findAll('[data-entry-field="level"] option')
+      .map((option) => option.text());
+    expect(skillLevels).toEqual([
+      'Not set',
+      '0 · None',
+      '1 · Beginner',
+      '2 · Basic',
+      '3 · Intermediate',
+      '4 · Advanced',
+      '5 · Expert',
+    ]);
+    const language = mount(LanguageEntryFields, {
+      props: { entry: { id: 'entry-1', name: 'Vietnamese', level: 5 } },
+    });
+    expect(
+      language.findAll('[data-entry-field="level"] option').at(-1)?.text(),
+    ).toBe('5 · Native or bilingual');
+    const project = mount(ProjectEntryFields, {
+      props: { entry: { id: 'entry-1' } },
+    });
+    expect(project.get('[data-entry-field="link"] label').text()).toBe(
+      'Project link',
+    );
+  });
 
   it('keeps section and entry IDs out of the panel text', () => {
     const sectionId = '0d85ca7e-c265-49cb-a31c-cf8ac8e7d557';
@@ -231,10 +262,12 @@ describe('SectionPanel', () => {
         section: {
           sectionType: 'work',
           displayName: 'Experience',
-          entries: [{
-            id: entryId,
-            jobTitle: 'Principal Engineer',
-          }],
+          entries: [
+            {
+              id: entryId,
+              jobTitle: 'Principal Engineer',
+            },
+          ],
         },
         actions: actionsSpy(),
       },
@@ -247,13 +280,11 @@ describe('SectionPanel', () => {
     expect(
       wrapper.get('[data-entry-field="jobTitle"] [data-field-input]').element
         .value,
-    )
-      .not.toBe(sectionId);
+    ).not.toBe(sectionId);
     expect(
       wrapper.get('[data-entry-field="jobTitle"] [data-field-input]').element
         .value,
-    )
-      .not.toBe(entryId);
+    ).not.toBe(entryId);
     expect(
       wrapper.findAll('[contenteditable="true"]').map((field) => field.text()),
     ).not.toContain(sectionId);
@@ -291,18 +322,14 @@ describe('SectionPanel', () => {
       });
 
       await wrapper.get('[data-action="add-entry"]').trigger('click');
-      wrapper
-        .findComponent(entryComponents[sectionType])
-        .vm.$emit('field', {
-          path: fields[0],
-          intent: { kind: 'set', value: 'Ada' },
-        });
-      wrapper
-        .findComponent(entryComponents[sectionType])
-        .vm.$emit('field', {
-          path: fields[0],
-          intent: { kind: 'unset' },
-        });
+      wrapper.findComponent(entryComponents[sectionType]).vm.$emit('field', {
+        path: fields[0],
+        intent: { kind: 'set', value: 'Ada' },
+      });
+      wrapper.findComponent(entryComponents[sectionType]).vm.$emit('field', {
+        path: fields[0],
+        intent: { kind: 'unset' },
+      });
       await wrapper.vm.$nextTick();
       await wrapper.get('[data-action="toggle-hidden"]').trigger('click');
       await wrapper.get('[data-action="delete-entry"]').trigger('click');
@@ -378,7 +405,13 @@ describe('SectionPanel', () => {
     });
     const link = wrapper.get('[data-entry-field="employerLink"] input');
 
-    for (const invalid of ['HTTPS://example.test', 'https:foo', 'https://', 'mailto:', 'tel:']) {
+    for (const invalid of [
+      'HTTPS://example.test',
+      'https:foo',
+      'https://',
+      'mailto:',
+      'tel:',
+    ]) {
       await link.setValue(invalid);
       await link.trigger('blur');
     }
@@ -431,47 +464,44 @@ describe('SectionPanel', () => {
     wrapper.unmount();
   });
 
-  it(
-    'confirms only the captured current entry and restores focus',
-    async () => {
-      const actions = actionsSpy();
-      const wrapper = mount(SectionPanel, {
-        props: {
-          sectionKey: 'work',
-          section: {
-            sectionType: 'work',
-            entries: [{ id: 'entry-1', jobTitle: 'Engineer' }],
-          },
-          actions,
+  it('confirms the captured entry and restores focus', async () => {
+    const actions = actionsSpy();
+    const wrapper = mount(SectionPanel, {
+      props: {
+        sectionKey: 'work',
+        section: {
+          sectionType: 'work',
+          entries: [{ id: 'entry-1', jobTitle: 'Engineer' }],
         },
-        attachTo: document.body,
-      });
-      const opener = wrapper.get('[data-action="delete-entry"]');
-      await opener.trigger('click');
-      const dialog = document.body.querySelector('[role="alertdialog"]')!;
-      expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
-      expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
-      expect(dialog.textContent).toContain('Engineer');
-      expect(document.activeElement).toBe(
-        document.body.querySelector<HTMLButtonElement>(
-          '[data-action="cancel-delete-entry"]',
-        ),
-      );
-      await wrapper.setProps({
-        section: { sectionType: 'work', entries: [] },
-      });
-      document.body
-        .querySelectorAll<HTMLButtonElement>(
-          '[data-action="confirm-delete-entry"]',
-        )
-        .item(0)
-        .click();
-      await wrapper.vm.$nextTick();
-      expect(actions.edit).not.toHaveBeenCalled();
-      expect(wrapper.text()).toContain(
-        'Entry changed. Reopen delete confirmation.',
-      );
-      wrapper.unmount();
-    },
-  );
+        actions,
+      },
+      attachTo: document.body,
+    });
+    const opener = wrapper.get('[data-action="delete-entry"]');
+    await opener.trigger('click');
+    const dialog = document.body.querySelector('[role="alertdialog"]')!;
+    expect(dialog.getAttribute('aria-labelledby')).toBeTruthy();
+    expect(dialog.getAttribute('aria-describedby')).toBeTruthy();
+    expect(dialog.textContent).toContain('Engineer');
+    expect(document.activeElement).toBe(
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-action="cancel-delete-entry"]',
+      ),
+    );
+    await wrapper.setProps({
+      section: { sectionType: 'work', entries: [] },
+    });
+    document.body
+      .querySelectorAll<HTMLButtonElement>(
+        '[data-action="confirm-delete-entry"]',
+      )
+      .item(0)
+      .click();
+    await wrapper.vm.$nextTick();
+    expect(actions.edit).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain(
+      'Entry changed. Reopen delete confirmation.',
+    );
+    wrapper.unmount();
+  });
 });

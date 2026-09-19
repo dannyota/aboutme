@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import type { Customization } from '@aboutme/schema';
-import { computed } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { computed, nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CustomizationPanel from
   '../../app/components/editor/customization/CustomizationPanel.vue';
@@ -9,6 +10,13 @@ import type { ResumeEditorActions } from
   '../../app/composables/useResumeEditor';
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
+
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
 
 // Photo position in the Design panel (ADR 0044): absent means top, and a
 // side position on a resume with no header creates the default header.
@@ -59,12 +67,18 @@ function mountPanel(header: Customization['header'], withPhoto = true) {
 }
 
 describe('Photo position control', () => {
-  it('offers Top, Left, and Right in the Headings group', () => {
+  it('offers Top, Left, and Right in the Headings group', async () => {
     const { field, select, wrapper } = mountPanel(undefined);
     expect(select.findAll('option').map((option) => option.text()))
       .toEqual(['Top', 'Left', 'Right']);
     expect((select.element as HTMLSelectElement).value).toBe('top');
     expect(field.get('label').text()).toBe('Photo position');
+    expect(wrapper.get('[data-customization-group="Headings"]')
+      .find('[data-field="header.photoPosition"]').exists()).toBe(true);
+
+    locale.value = 'vi';
+    await nextTick();
+
     expect(wrapper.get('[data-customization-group="Headings"]')
       .find('[data-field="header.photoPosition"]').exists()).toBe(true);
   });

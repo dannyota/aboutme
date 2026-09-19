@@ -2,6 +2,9 @@
 import type { Section } from '@aboutme/schema';
 import type { Component } from 'vue';
 import { computed, nextTick, ref, toRaw, watch } from 'vue';
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { editorShellCopy } from '@/i18n/editor-shell';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import type { EntryFieldPath } from '../../../editor/commands';
@@ -28,6 +31,8 @@ const props = defineProps<{
   readonly section: Section;
   readonly sectionKey: string;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].section);
 
 interface DeleteTarget {
   readonly entry: Section['entries'][number];
@@ -148,7 +153,7 @@ function confirmDelete(): void {
     || !sameEntry(current, target.entry)
   ) {
     closeDelete();
-    status.value = 'Entry changed. Reopen delete confirmation.';
+    status.value = 'entryChanged';
     return;
   }
   props.actions.edit({
@@ -161,18 +166,20 @@ function confirmDelete(): void {
   closeDelete();
 }
 
-const status = ref('');
+const status = ref<'entryChanged'>();
 
 function sameEntry(
   current: Section['entries'][number] | undefined,
   captured: Section['entries'][number],
 ): boolean {
-  return current !== undefined
-    && JSON.stringify(current) === JSON.stringify(captured);
+  return (
+    current !== undefined
+    && JSON.stringify(current) === JSON.stringify(captured)
+  );
 }
 
 function deleteLabel(target: DeleteTarget): string {
-  return entryLabel(target.entry, target.index);
+  return entryLabel(target.entry, target.index, locale.value);
 }
 
 function sectionHeading(section: Section): string {
@@ -195,8 +202,8 @@ function focusIssue(path: string): void {
           `${entrySelector} ${fieldSelector} select`,
           `${entrySelector} ${fieldSelector} [contenteditable="true"]`,
         ].join(', ');
-  const element = root.value?.$el
-    ?? (root.value as unknown as HTMLElement | undefined);
+  const element
+    = root.value?.$el ?? (root.value as unknown as HTMLElement | undefined);
   element?.querySelector<HTMLElement>(selector)?.focus();
 }
 
@@ -213,7 +220,9 @@ function issueLocation(
     !Number.isSafeInteger(index)
     || field === undefined
     || !isEntryFieldPath(field)
-  ) { return undefined; }
+  ) {
+    return undefined;
+  }
   const entry = props.section.entries[index];
   return entry === undefined ? undefined : { entryId: entry.id, path: field };
 }
@@ -252,20 +261,20 @@ function messageForCode(code: string): string {
   switch (code) {
     case 'max_length':
     case 'maxLength':
-      return 'This value is too long.';
+      return copy.value.tooLong;
     case 'max_items':
     case 'maxItems':
-      return 'There are too many entries in this section.';
+      return copy.value.tooMany;
     case 'rich-text-byte-length':
     case 'rich_text_byte_length':
-      return 'Rich text is too long.';
+      return copy.value.richTextTooLong;
     case 'date-range-order':
     case 'date_range_order':
-      return 'Start date must not be after end date.';
+      return editorFieldsCopy[locale.value].dates.order;
     case 'format':
-      return 'Enter a value in the required format.';
+      return copy.value.format;
     default:
-      return 'This value needs attention.';
+      return copy.value.generic;
   }
 }
 
@@ -288,14 +297,14 @@ function assertNever(value: never): never {
         size="sm"
         @click="add"
       >
-        Add entry
+        {{ copy.addEntry }}
       </Button>
     </template>
     <StatusBanner
       v-if="issues.length > 0"
       ref="issueSummary"
       kind="error"
-      aria-label="Section issues"
+      :aria-label="copy.issues"
       tabindex="-1"
     >
       <template
@@ -321,7 +330,7 @@ function assertNever(value: never): never {
       :entry-id="entry.id"
       :hidden="entry.isHidden ?? false"
       :index="index"
-      :title="entryLabel(entry, index)"
+      :title="entryLabel(entry, index, locale)"
       @delete="openDelete(entry, index)"
       @move-down="reorder(entry.id, 1)"
       @move-up="reorder(entry.id, -1)"
@@ -336,20 +345,28 @@ function assertNever(value: never): never {
     <ConfirmDialog
       v-if="deleteTarget !== undefined"
       :open="true"
-      title="Delete entry"
-      :description="`Delete ${deleteLabel(deleteTarget)}?`"
-      confirm-label="Delete"
+      :title="copy.deleteEntry"
+      :description="copy.deleteDescription(deleteLabel(deleteTarget))"
+      :confirm-label="copy.delete"
+      :cancel-label="copy.cancel"
       destructive
       confirm-action="confirm-delete-entry"
       cancel-action="cancel-delete-entry"
       @confirm="confirmDelete"
       @cancel="closeDelete"
-    />
+    >
+      <template #header-actions>
+        <LocaleToggle
+          :label="editorShellCopy[locale].localeLabel"
+          @pointerdown.prevent
+        />
+      </template>
+    </ConfirmDialog>
     <p
-      v-if="status !== ''"
+      v-if="status !== undefined"
       role="status"
     >
-      {{ status }}
+      {{ copy.entryChanged }}
     </p>
   </InspectorPanel>
 </template>

@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ConflictPanel from '../../app/components/editor/ConflictPanel.vue';
 import ErrorSummary from '../../app/components/editor/ErrorSummary.vue';
@@ -11,8 +11,23 @@ import type {
 import type { ConflictRecord } from '../../app/editor/reconcile';
 import type { SaveState } from '../../app/editor/types';
 import { acceptedFixture } from './fixture';
+import { editorShellCopy } from '../../app/i18n/editor-shell';
+import { setSiteLocale } from '../support/locale';
+
+beforeEach(() => {
+  setSiteLocale('en');
+});
 
 describe('editor accessibility boundaries', () => {
+  it('maps known and unknown issues to safe Vietnamese copy', () => {
+    const known = editorShellCopy.vi.issueFor('required');
+    const unknown = editorShellCopy.vi.issueFor('unexpected-code');
+
+    expect(known).toBe(editorShellCopy.vi.issueRequired);
+    expect(unknown).toBe(editorShellCopy.vi.issueGeneric);
+    expect(unknown).not.toContain('unexpected-code');
+  });
+
   it.each([
     'idle',
     'dirty',

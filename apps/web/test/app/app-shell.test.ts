@@ -55,7 +55,7 @@ function links(
 
 describe('AppShell', () => {
   beforeEach(() => {
-    setSiteLocale(undefined);
+    setSiteLocale('en');
     clearNuxtData();
     vi.mocked(navigateTo).mockClear();
   });
@@ -188,6 +188,7 @@ describe('AppShell', () => {
 
   it('speaks the homepage language in the signed-out shell on /', async () => {
     meStatus = 401;
+    setSiteLocale('vi');
     const wrapper = await mountShell('/');
     await flushPromises();
     const found = links(wrapper);
@@ -202,14 +203,17 @@ describe('AppShell', () => {
     expect(links(english)['Sign in']).toBe('/login');
     expect(english.find('[aria-label^="Switch to"]').exists()).toBe(true);
   });
-  it('keeps English and no language toggle elsewhere', async () => {
-    meStatus = 401;
-    setSiteLocale('vi');
-    const wrapper = await mountShell('/app/resumes');
-    await flushPromises();
-    expect(links(wrapper)['Sign in']).toBe('/login');
-    expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(false);
-  });
+  it('localizes the workspace shell and offers its language toggle',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('vi');
+      const wrapper = await mountShell('/app/resumes');
+      await flushPromises();
+      expect(links(wrapper)['Đăng nhập']).toBe('/login');
+      expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(
+        true,
+      );
+    });
   it('offers the language toggle on / when signed in', async () => {
     meStatus = 200;
     const wrapper = await mountShell('/');
@@ -221,7 +225,7 @@ describe('AppShell', () => {
   it('localizes the shell on the account pages', async () => {
     meStatus = 401;
     for (const route of ['/login', '/register', '/forgot-password']) {
-      setSiteLocale(undefined);
+      setSiteLocale('vi');
       const wrapper = await mountShell(route);
       await flushPromises();
       expect(links(wrapper)['Tạo tài khoản']).toBe('/register');
@@ -322,19 +326,42 @@ describe('AppShell', () => {
     },
   );
 
-  it(
-    'keeps Resumes and Settings in English on the unlocalized app pages',
-    async () => {
-      meStatus = 200;
-      setSiteLocale('vi');
-      const wrapper = await mountShell('/app/resumes');
-      await flushPromises();
-      const found = links(wrapper);
-      expect(found['Resumes']).toBe('/app/resumes');
-      expect(found['Settings']).toBe('/app/settings/sessions');
-      wrapper.unmount();
-    },
-  );
+  it('localizes Resumes and Settings on workspace routes', async () => {
+    meStatus = 200;
+    setSiteLocale('vi');
+    const wrapper = await mountShell('/app/resumes');
+    await flushPromises();
+    const found = links(wrapper);
+    expect(found['CV']).toBe('/app/resumes');
+    expect(found['Cài đặt']).toBe('/app/settings/sessions');
+    wrapper.unmount();
+  });
+
+  it('keeps Settings English-only', async () => {
+    meStatus = 200;
+    setSiteLocale('vi');
+    const wrapper = await mountShell('/app/settings/sessions');
+    await flushPromises();
+    expect(links(wrapper)['Resumes']).toBe('/app/resumes');
+    expect(links(wrapper)['Settings']).toBe('/app/settings/sessions');
+    expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('localizes the account menu on workspace routes', async () => {
+    meStatus = 200;
+    setSiteLocale('vi');
+    const wrapper = await mountShell('/app/new');
+    await flushPromises();
+    await wrapper.get('[data-testid="account-menu"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[aria-label="Tài khoản"]').exists()).toBe(true);
+    expect(document.body.querySelector('[data-testid="account-menu-settings"]')
+      ?.textContent).toContain('Cài đặt');
+    expect(document.body.querySelector('[data-testid="account-menu-logout"]')
+      ?.textContent).toContain('Đăng xuất');
+    wrapper.unmount();
+  });
 
   it(
     'shortens locale labels on phones without changing the accessible name',

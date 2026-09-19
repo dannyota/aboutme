@@ -1,6 +1,10 @@
 import { computed, nextTick, ref } from 'vue';
 import { describe, expect, it, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 
+import PDFDownloadButton from
+  '../../app/components/editor/PDFDownloadButton.vue';
 import {
   createPdfDownloadController,
   MAX_PDF_DOWNLOAD_BYTES,
@@ -8,12 +12,71 @@ import {
 import { acceptedFixture } from './fixture';
 
 const resumeId = '00000000-0000-4000-8000-000000000001';
+const locale = ref<'vi' | 'en'>('en');
 const vietnameseContentDisposition = [
   'attachment; filename="Nguyen-Van-Duc-Resume.pdf"; ',
   'filename*=UTF-8\'\'Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf',
 ].join('');
+mockNuxtImport('useLocale', () => () => ({ locale }));
 
 describe('PDF download', () => {
+  it.each([
+    ['en', 'save-required', 'Save changes before downloading PDF.'],
+    ['vi', 'save-required', 'Lưu thay đổi trước khi tải PDF.'],
+    ['en', 'session-lost', 'Your session ended. Sign in again.'],
+    ['vi', 'session-lost', 'Phiên của bạn đã kết thúc. Đăng nhập lại.'],
+    ['en', 'download-failed', 'PDF download failed. Try again.'],
+    ['vi', 'download-failed', 'Không thể tải PDF. Hãy thử lại.'],
+    ['en', 'temporarily-unavailable',
+      'PDF is temporarily unavailable. Try again.'],
+    ['vi', 'temporarily-unavailable',
+      'PDF tạm thời không khả dụng. Hãy thử lại.'],
+  ] as const)('renders %s copy for %s', async (nextLocale, code, text) => {
+    locale.value = nextLocale;
+    const state = ref({ kind: 'error', code } as const);
+    const download = vi.fn();
+    const wrapper = mount(PDFDownloadButton, {
+      props: { controller: { state, download, dispose: vi.fn() } },
+    });
+
+    expect(wrapper.get('[data-download-pdf-status]').text()).toBe(text);
+    expect(download).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('changes shown copy without repeating a PDF request or changing bytes',
+    async () => {
+      locale.value = 'en';
+      const bytes = new Uint8Array([3, 1, 4]);
+      let downloaded: Blob | undefined;
+      const context = setup({
+        fetcher: vi.fn().mockResolvedValue(pdfResponse([bytes])),
+      });
+      context.createObjectURL.mockImplementation((blob: Blob) => {
+        downloaded = blob;
+        return 'blob:pdf';
+      });
+      const wrapper = mount(PDFDownloadButton, {
+        props: { controller: context.controller },
+      });
+
+      expect(wrapper.text()).toContain('Download PDF');
+      await wrapper.get('[data-action="download-pdf"]').trigger('click');
+      await vi.waitFor(() => expect(context.download).toHaveBeenCalledOnce());
+      expect([...new Uint8Array(await downloaded!.arrayBuffer())])
+        .toEqual([...bytes]);
+      expect(context.fetcher).toHaveBeenCalledOnce();
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect(wrapper.text()).toContain('Tải PDF');
+      expect(context.fetcher).toHaveBeenCalledOnce();
+      expect(context.download).toHaveBeenCalledOnce();
+      expect([...new Uint8Array(await downloaded!.arrayBuffer())])
+        .toEqual([...bytes]);
+      wrapper.unmount();
+    });
   it('flushes before fetching the accepted owner PDF with its UTF-8 filename',
     async () => {
       const order: string[] = [];
@@ -120,7 +183,7 @@ describe('PDF download', () => {
       expect(context.fetcher).not.toHaveBeenCalled();
       expect(context.controller.state.value).toEqual({
         kind: 'error',
-        message: 'Save changes before downloading PDF.',
+        code: 'save-required',
       });
     });
 
@@ -272,7 +335,7 @@ describe('PDF download', () => {
     expect(context.createObjectURL).not.toHaveBeenCalled();
     expect(context.controller.state.value).toEqual({
       kind: 'error',
-      message: 'PDF download failed. Try again.',
+      code: 'download-failed',
     });
   });
 
@@ -314,7 +377,7 @@ describe('PDF download', () => {
     await context.controller.download();
     expect(context.controller.state.value).toEqual({
       kind: 'error',
-      message: 'PDF is temporarily unavailable. Try again.',
+      code: 'temporarily-unavailable',
     });
     await context.controller.download();
 

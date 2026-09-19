@@ -28,10 +28,19 @@ export type ResumeListView
     | { readonly kind: 'ready'; readonly items: readonly ResumeSummary[] }
     | { readonly kind: 'unavailable' };
 
+export type CreateNotice
+  = | 'resume-cap'
+    | 'create-failed'
+    | 'retry-later'
+    | 'session-lost'
+    | null;
+
+export type ResumeListNotice = 'resume-changed' | null;
+
 export interface ResumeListController {
   readonly view: Ref<ResumeListView>;
   readonly items: ComputedRef<readonly ResumeSummary[]>;
-  readonly actionMessage: Ref<string | null>;
+  readonly actionNotice: Ref<ResumeListNotice>;
   readonly removalFocusId: Ref<string | null>;
   readonly removalFocusVersion: Ref<number>;
   settled(): Promise<void>;
@@ -62,16 +71,16 @@ export interface ResumeListDeps {
 /** Resumes an account may hold; the fourth create is refused (409). */
 export const RESUME_CAP = 3;
 
-export function createStatusMessage(result: CreateResumeResult): string | null {
+export function createNotice(result: CreateResumeResult): CreateNotice {
   if (result.kind === 'rejected' && result.code === 'resume_cap_exceeded') {
-    return 'You have reached the resume limit.';
+    return 'resume-cap';
   }
   if (result.kind === 'rejected') {
-    return 'Could not create the resume. Try again.';
+    return 'create-failed';
   }
-  if (result.kind === 'retry-later') return 'Please wait, then try again.';
+  if (result.kind === 'retry-later') return 'retry-later';
   if (result.kind === 'blocked' && result.reason === 'session-lost') {
-    return 'Your session ended. Sign in again.';
+    return 'session-lost';
   }
   return null;
 }
@@ -96,13 +105,14 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   const refreshAuth = deps.refreshAuth
     ?? (deps.authState === undefined ? auth.refresh : async () => {});
   const view = ref<ResumeListView>({ kind: 'waiting-auth' });
-  const actionMessage = ref<string | null>(null);
+  const actionNotice = ref<ResumeListNotice>(null);
   const removalFocusId = ref<string | null>(null);
   const removalFocusVersion = ref(0);
   const retainedCreate = ref<OpaqueCreateOutcome | null>(null);
   const deleting = new Set<string>();
   let creating: Promise<CreateResumeResult> | null = null;
   let settling: Promise<void> = Promise.resolve();
+  let wasAuthenticated = false;
 
   const items = computed<readonly ResumeSummary[]>(() =>
     view.value.kind === 'ready' ? view.value.items : [],
@@ -149,12 +159,14 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       return;
     }
     if (state === 'authenticated') {
+      wasAuthenticated = true;
       view.value = { kind: 'loading' };
       void load();
       return;
     }
     if (state === 'anonymous') {
-      void navigateTo(deps.loginPath ?? '/login');
+      const path = wasAuthenticated ? '/login' : (deps.loginPath ?? '/login');
+      void navigateTo(path);
       return;
     }
     view.value = { kind: 'unavailable' };
@@ -166,7 +178,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     document?: Resume,
   ): Promise<CreateResumeResult> => {
     if (creating !== null) return creating;
-    actionMessage.value = null;
+    actionNotice.value = null;
     if (retainedCreate.value !== null) {
       return {
         kind: 'blocked',
@@ -224,7 +236,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     id: string,
     confirmedTitle?: string,
   ): Promise<ResumeEditorActions | null> => {
-    actionMessage.value = null;
+    actionNotice.value = null;
     await refreshAuth();
     const read = await api.read(id);
     if (read.kind !== 'complete') {
@@ -235,8 +247,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       confirmedTitle !== undefined
       && read.accepted.metadata.title !== confirmedTitle
     ) {
-      actionMessage.value = 'This resume changed. Reopen deletion and confirm '
-        + 'its current title.';
+      actionNotice.value = 'resume-changed';
       return null;
     }
     if (store.recordFor(id) === undefined) store.initialize(read.accepted);
@@ -286,7 +297,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
   return {
     view,
     items,
-    actionMessage,
+    actionNotice,
     removalFocusId,
     removalFocusVersion,
     settled: () => settling,

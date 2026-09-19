@@ -33,4 +33,14 @@ describe('formatRelativeTime', () => {
   it('returns an unparseable ISO value unchanged', () => {
     expect(formatRelativeTime('not-a-date', now)).toBe('not-a-date');
   });
+
+  it.each([
+    ['under a minute', '2026-09-04T11:59:30.000Z', 'vừa xong'],
+    ['minutes', '2026-09-04T11:42:00.000Z', '18 phút trước'],
+    ['one hour', '2026-09-04T11:00:00.000Z', '1 giờ trước'],
+    ['days', '2026-09-01T12:00:00.000Z', '3 ngày trước'],
+    ['older dates', '2026-08-28T12:00:00.000Z', '28 thg 8 2026'],
+  ])('formats Vietnamese %s', (_name, iso, expected) => {
+    expect(formatRelativeTime(iso, now, 'vi')).toBe(expected);
+  });
 });

@@ -1,9 +1,10 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import EditorPreview from '../../app/components/editor/EditorPreview.vue';
 import { acceptedFixture } from './fixture';
+import { setSiteLocale } from '../support/locale';
 
 const resize = vi.hoisted(() => ({
   callback: null as ResizeObserverCallback | null,
@@ -29,7 +30,36 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+beforeEach(() => {
+  setSiteLocale('en');
+});
+
 describe('EditorPreview', () => {
+  it(
+    'localizes the preview failure without changing its resume language',
+    async () => {
+      setSiteLocale('vi');
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: { document: accepted.document, lng: 'en' },
+        global: {
+          stubs: {
+            ResumeDocument: defineComponent({
+              setup() { throw new Error('renderer failed'); },
+              template: '<div />',
+            }),
+          },
+        },
+      });
+      await nextTick();
+
+      expect(wrapper.get('[role="status"]').text()).toContain(
+        'Bản xem trước tạm thời không khả dụng.',
+      );
+      wrapper.unmount();
+    },
+  );
+
   it('restarts page counting when a hidden phone preview becomes active',
     async () => {
       const host = document.createElement('div');

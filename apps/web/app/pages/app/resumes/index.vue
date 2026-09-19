@@ -2,16 +2,21 @@
 import type { Resume } from '@aboutme/schema';
 import type { ResumeSummary } from '../../../editor/resumeApi';
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
+import type { CreateNotice } from '../../../composables/useResumeList';
 import LoadingState from '@/components/app/LoadingState.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import {
-  createStatusMessage,
+  createNotice,
   useResumeList,
 } from '../../../composables/useResumeList';
 import { useNow } from '../../../composables/useNow';
-import { appTitles } from '@/i18n/meta';
+import { workspaceTitles } from '@/i18n/meta';
+import { resumeListCopy } from '@/i18n/resume-list';
 
-useHead({ title: appTitles.resumes });
+const { locale } = useLocale();
+const copy = computed(() => resumeListCopy[locale.value]);
+
+useHead({ title: computed(() => workspaceTitles[locale.value].resumes) });
 
 const list = useResumeList();
 const now = useNow();
@@ -21,7 +26,21 @@ const deleteItem = ref<ResumeSummary | null>(null);
 const retained = ref<OpaqueCreateOutcome | null>(null);
 const busyIds = ref(new Set<string>());
 const createBusy = ref(false);
-const createMessage = ref<string | null>(null);
+const createNoticeCode = ref<CreateNotice>(null);
+
+const createMessage = computed(() => {
+  switch (createNoticeCode.value) {
+    case 'resume-cap': return copy.value.resumeCap;
+    case 'create-failed': return copy.value.createFailed;
+    case 'retry-later': return copy.value.retryLater;
+    case 'session-lost': return copy.value.sessionLost;
+    default: return null;
+  }
+});
+const actionMessage = computed(() =>
+  list.actionNotice.value === 'resume-changed'
+    ? copy.value.resumeChanged
+    : null);
 
 function begin(id: string): void {
   busyIds.value = new Set([...busyIds.value, id]);
@@ -39,11 +58,11 @@ async function create(
   document?: Resume,
 ): Promise<void> {
   createBusy.value = true;
-  createMessage.value = null;
+  createNoticeCode.value = null;
   const result = await list.create(title, lng, document);
   createBusy.value = false;
   if (result.kind === 'opaque-create') retained.value = result.outcome;
-  createMessage.value = createStatusMessage(result);
+  createNoticeCode.value = createNotice(result);
   if (result.kind === 'created') {
     createOpen.value = false;
   }
@@ -79,17 +98,17 @@ async function remove(id: string, title: string): Promise<void> {
   <main class="app-page space-y-6">
     <LoadingState
       v-if="list.view.value.kind === 'waiting-auth'"
-      label="Checking your session."
+      :label="copy.waitingAuth"
     />
     <LoadingState
       v-else-if="list.view.value.kind === 'loading'"
-      label="Loading resumes."
+      :label="copy.loading"
     />
     <StatusBanner
       v-else-if="list.view.value.kind === 'unavailable'"
       kind="error"
     >
-      Resumes are unavailable. Try again.
+      {{ copy.unavailable }}
     </StatusBanner>
     <EditorListResumeList
       v-else
@@ -125,10 +144,10 @@ async function remove(id: string, title: string): Promise<void> {
       @submit="remove"
     />
     <StatusBanner
-      v-if="createMessage !== null || list.actionMessage.value !== null"
+      v-if="createMessage !== null || actionMessage !== null"
       kind="info"
     >
-      {{ createMessage ?? list.actionMessage.value }}
+      {{ createMessage ?? actionMessage }}
     </StatusBanner>
   </main>
 </template>

@@ -55,6 +55,8 @@ import SaveStatus from './SaveStatus.vue';
 import PublishDialog from './PublishDialog.vue';
 import PDFDownloadButton from './PDFDownloadButton.vue';
 import { useFieldDrafts } from '../../composables/useFieldDrafts';
+import { editorShellCopy } from '../../i18n/editor-shell';
+import LocaleToggle from '../app/LocaleToggle.vue';
 
 type InspectorPanel
   = | { readonly kind: 'personal' }
@@ -68,12 +70,25 @@ const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorShellCopy[locale.value]);
 
 const inspector = ref<InspectorPanel>({ kind: 'personal' });
 const narrowRegion = ref<'editor' | 'preview'>('editor');
 const outlineOpen = ref(true);
 const publishOpen = ref(false);
 const zoom = ref<'fit' | 'full'>('fit');
+const outlineNav = ref<HTMLElement | null>(null);
+const sessionLostFirstAction = ref<{ $el?: HTMLElement } | null>(null);
+function onSheetOpenAutoFocus(event: Event): void {
+  event.preventDefault();
+  outlineNav.value?.querySelector<HTMLElement>('button')?.focus();
+}
+function onSessionLostOpenAutoFocus(event: Event): void {
+  event.preventDefault();
+  sessionLostFirstAction.value?.$el?.focus();
+}
+
 const document = computed(() => props.record.current.document);
 const publicLink = computed(() =>
   props.record.accepted.metadata.live
@@ -85,7 +100,7 @@ const placement = computed(() => document.value.customization.layout.sections);
 const outline = computed(() => [
   {
     key: 'personal',
-    label: 'Personal details',
+    label: copy.value.personalDetails,
     iconKey: 'user',
     icon: iconFor('user') ?? PanelsTopLeft,
   },
@@ -224,6 +239,11 @@ async function discardAndSignIn(): Promise<void> {
         state="public"
       />
       <span class="flex-1" />
+      <LocaleToggle
+        :label="copy.localeLabel"
+        test-id="workspace-locale"
+        @pointerdown.prevent
+      />
       <PDFDownloadButton
         :controller="actions.downloadPdf"
         :page-format="document.customization.pageFormat"
@@ -236,7 +256,7 @@ async function discardAndSignIn(): Promise<void> {
         variant="seal"
         @click="publishOpen = true"
       >
-        Publish
+        {{ copy.publish }}
       </Button>
       <div
         class="editor-account-actions flex items-center"
@@ -262,7 +282,7 @@ async function discardAndSignIn(): Promise<void> {
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
         max-[72rem]:data-[narrow-active=false]:invisible
         max-[72rem]:data-[narrow-active=false]:opacity-0"
-      aria-label="Editor tools"
+      :aria-label="copy.editorTools"
       :data-narrow-active="narrowRegion === 'editor'"
       data-region="app-rail"
       role="toolbar"
@@ -271,7 +291,7 @@ async function discardAndSignIn(): Promise<void> {
         class="aria-pressed:bg-secondary aria-pressed:text-primary"
         data-action="open-document"
         :pressed="inspector.kind === 'personal' || inspector.kind === 'section'"
-        label="Document"
+        :label="copy.document"
         @click="inspector = { kind: 'personal' }"
       >
         <FileText
@@ -283,7 +303,7 @@ async function discardAndSignIn(): Promise<void> {
         class="aria-pressed:bg-secondary aria-pressed:text-primary"
         data-action="open-structure"
         :pressed="inspector.kind === 'structure'"
-        label="Structure"
+        :label="copy.structure"
         @click="inspector = { kind: 'structure' }"
       >
         <LayoutList
@@ -295,7 +315,7 @@ async function discardAndSignIn(): Promise<void> {
         class="aria-pressed:bg-secondary aria-pressed:text-primary"
         data-action="open-design"
         :pressed="inspector.kind === 'customization'"
-        label="Design"
+        :label="copy.design"
         @click="inspector = { kind: 'customization' }"
       >
         <Palette
@@ -307,7 +327,7 @@ async function discardAndSignIn(): Promise<void> {
         class="aria-pressed:bg-secondary aria-pressed:text-primary"
         data-action="open-templates"
         :pressed="inspector.kind === 'templates'"
-        label="Templates"
+        :label="copy.templates"
         @click="inspector = { kind: 'templates' }"
       >
         <Sparkles
@@ -319,7 +339,7 @@ async function discardAndSignIn(): Promise<void> {
         class="aria-pressed:bg-secondary aria-pressed:text-primary"
         data-action="open-photo"
         :pressed="inspector.kind === 'photo'"
-        label="Photo"
+        :label="copy.photo"
         @click="inspector = { kind: 'photo' }"
       >
         <Image
@@ -346,12 +366,12 @@ async function discardAndSignIn(): Promise<void> {
       >
         <div class="flex items-center justify-between p-4">
           <h2 class="text-base font-semibold">
-            Resume
+            {{ copy.resume }}
           </h2>
           <div class="flex items-center gap-1">
             <CollapsibleTrigger as-child>
               <IconButton
-                label="Toggle resume outline"
+                :label="copy.toggleOutline"
                 size="icon-sm"
               >
                 <ChevronDown
@@ -361,7 +381,7 @@ async function discardAndSignIn(): Promise<void> {
               </IconButton>
             </CollapsibleTrigger>
             <IconButton
-              label="Add section"
+              :label="copy.addSection"
               size="icon-sm"
               @click="inspector = { kind: 'structure' }"
             >
@@ -371,7 +391,7 @@ async function discardAndSignIn(): Promise<void> {
         </div>
         <CollapsibleContent class="flex min-h-0 flex-1 flex-col">
           <nav
-            aria-label="Resume outline"
+            :aria-label="copy.resumeOutline"
             class="grid gap-1 px-2"
           >
             <Button
@@ -405,7 +425,7 @@ async function discardAndSignIn(): Promise<void> {
             variant="outline"
             @click="inspector = { kind: 'structure' }"
           >
-            + Add section
+            + {{ copy.addSection }}
           </Button>
         </CollapsibleContent>
       </Collapsible>
@@ -453,19 +473,25 @@ async function discardAndSignIn(): Promise<void> {
             type="button"
             variant="outline"
           >
-            Sections
+            {{ copy.sections }}
             <ChevronDown aria-hidden="true" />
           </Button>
         </SheetTrigger>
         <SheetContent
           class="w-[calc(100%-2rem)] max-w-sm"
           side="left"
+          @open-auto-focus="onSheetOpenAutoFocus"
         >
           <SheetHeader>
-            <SheetTitle>Resume</SheetTitle>
+            <SheetTitle>{{ copy.resume }}</SheetTitle>
+            <LocaleToggle
+              :label="copy.localeLabel"
+              @pointerdown.prevent
+            />
           </SheetHeader>
           <nav
-            aria-label="Resume sections"
+            ref="outlineNav"
+            :aria-label="copy.resumeSections"
             class="grid gap-1 px-2"
           >
             <SheetClose
@@ -506,7 +532,7 @@ async function discardAndSignIn(): Promise<void> {
               variant="outline"
               @click="inspector = { kind: 'structure' }"
             >
-              + Add section
+              + {{ copy.addSection }}
             </Button>
           </SheetClose>
         </SheetContent>
@@ -557,7 +583,7 @@ async function discardAndSignIn(): Promise<void> {
     </aside>
 
     <div
-      aria-label="Editor view"
+      :aria-label="copy.editorView"
       class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t
         bg-background p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]
         min-[42rem]:hidden"
@@ -572,7 +598,7 @@ async function discardAndSignIn(): Promise<void> {
         :variant="narrowRegion === 'editor' ? 'secondary' : 'ghost'"
         @click="narrowRegion = 'editor'"
       >
-        Edit
+        {{ copy.edit }}
       </Button>
       <Button
         :aria-pressed="narrowRegion === 'preview'"
@@ -583,24 +609,32 @@ async function discardAndSignIn(): Promise<void> {
         :variant="narrowRegion === 'preview' ? 'secondary' : 'ghost'"
         @click="narrowRegion = 'preview'"
       >
-        Preview
+        {{ copy.preview }}
       </Button>
     </div>
 
     <AlertDialog :open="record.sessionLost">
-      <AlertDialogContent @escape-key-down.prevent>
+      <AlertDialogContent
+        @escape-key-down.prevent
+        @open-auto-focus="onSessionLostOpenAutoFocus"
+      >
         <AlertDialogHeader>
-          <AlertDialogTitle>Sign in to continue editing</AlertDialogTitle>
+          <AlertDialogTitle>{{ copy.sessionLostTitle }}</AlertDialogTitle>
           <AlertDialogDescription>
-            Your unsaved work is still open in this tab.
+            {{ copy.sessionLostDescription }}
           </AlertDialogDescription>
+          <LocaleToggle
+            :label="copy.localeLabel"
+            @pointerdown.prevent
+          />
         </AlertDialogHeader>
         <AlertDialogFooter>
           <Button
+            ref="sessionLostFirstAction"
             variant="ghost"
             @click="discardAndSignIn"
           >
-            Discard and sign in
+            {{ copy.discardAndSignIn }}
           </Button>
           <a
             :class="buttonVariants({ variant: 'outline' })"
@@ -608,13 +642,13 @@ async function discardAndSignIn(): Promise<void> {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Open sign-in in another tab
+            {{ copy.openSignIn }}
           </a>
           <Button
             data-action="resume-after-auth"
             @click="actions.resumeAfterAuth()"
           >
-            Resume after sign-in
+            {{ copy.resumeAfterSignIn }}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

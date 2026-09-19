@@ -1,29 +1,24 @@
-// Level pickers show what each 0–5 value means; the renderer draws the number
-// as filled dots, so the value itself stays the schema integer.
+import type { Locale } from '@/i18n/locale';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 
 type LevelOption = { readonly value: number | ''; readonly label: string };
 
-function withLabels(labels: readonly string[]): readonly LevelOption[] {
+function withLabels(
+  labels: readonly string[],
+  unset: string,
+): readonly LevelOption[] {
   return [
-    { value: '', label: 'Not set' },
+    { value: '', label: unset },
     ...labels.map((label, value) => ({ value, label: `${value} · ${label}` })),
   ];
 }
 
-export const skillLevelOptions = withLabels([
-  'None',
-  'Beginner',
-  'Basic',
-  'Intermediate',
-  'Advanced',
-  'Expert',
-]);
+export function skillLevelOptions(locale: Locale): readonly LevelOption[] {
+  const copy = editorFieldsCopy[locale].levels;
+  return withLabels(copy.skill, copy.unset);
+}
 
-export const languageLevelOptions = withLabels([
-  'None',
-  'Elementary',
-  'Limited working',
-  'Professional working',
-  'Full professional',
-  'Native or bilingual',
-]);
+export function languageLevelOptions(locale: Locale): readonly LevelOption[] {
+  const copy = editorFieldsCopy[locale].levels;
+  return withLabels(copy.language, copy.unset);
+}

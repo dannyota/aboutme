@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { PersonalDetail, PersonalDetails } from '@aboutme/schema';
 import { computed, ref } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 import { Button } from '@/components/ui/button';
 
 import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
@@ -16,6 +17,8 @@ const props = defineProps<{
   /** The resume's content language (`metadata.lng`). */
   readonly lng: string | null;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value]);
 
 function editLanguage(value: string): void {
   props.actions.edit({ kind: 'metadataField', field: 'lng', value });
@@ -23,10 +26,7 @@ function editLanguage(value: string): void {
 
 const panel = ref<{ $el?: HTMLElement } | null>(null);
 const contactList = ref<{
-  focusField?: (
-    index: number,
-    field: ContactField,
-  ) => Promise<void>;
+  focusField?: (index: number, field: ContactField) => Promise<void>;
 } | null>(null);
 const issues = computed(() =>
   Object.values(props.actions.record.value?.issues ?? {}).flat(),
@@ -80,24 +80,25 @@ function issueFor(field: 'fullName' | 'headline'): string | undefined {
 async function focusField(path: string): Promise<void> {
   const textField = textFieldForIssue(path);
   if (textField !== undefined) {
-    panel.value?.$el?.querySelector<HTMLElement>(
-      `[data-field="${textField}"] [data-field-input]`,
-    )?.focus();
+    panel.value?.$el
+      ?.querySelector<HTMLElement>(
+        `[data-field="${textField}"] [data-field-input]`,
+      )
+      ?.focus();
     return;
   }
   const contactField = contactFieldForIssue(path);
   if (contactField === undefined) return;
   if (contactList.value?.focusField !== undefined) {
-    await contactList.value.focusField(
-      contactField.index,
-      contactField.field,
-    );
+    await contactList.value.focusField(contactField.index, contactField.field);
     return;
   }
-  panel.value?.$el?.querySelector<HTMLElement>(
-    `[data-detail-index="${contactField.index}"] `
-    + `[data-detail-${contactField.field}]`,
-  )?.focus();
+  panel.value?.$el
+    ?.querySelector<HTMLElement>(
+      `[data-detail-index="${contactField.index}"] `
+      + `[data-detail-${contactField.field}]`,
+    )
+    ?.focus();
 }
 
 function textFieldForIssue(path: string): 'fullName' | 'headline' | undefined {
@@ -150,18 +151,20 @@ function contactFieldName(field: string): ContactField | undefined {
 }
 
 function isKnownIssue(path: string): boolean {
-  return textFieldForIssue(path) !== undefined
-    || contactFieldForIssue(path) !== undefined;
+  return (
+    textFieldForIssue(path) !== undefined
+    || contactFieldForIssue(path) !== undefined
+  );
 }
 
 function messageForCode(code: string): string {
   switch (code) {
     case 'max_length':
-      return 'This value is too long.';
+      return copy.value.section.tooLong;
     case 'format':
-      return 'Enter a value in the required format.';
+      return copy.value.section.format;
     default:
-      return 'This value needs attention.';
+      return copy.value.section.generic;
   }
 }
 </script>
@@ -169,7 +172,7 @@ function messageForCode(code: string): string {
 <template>
   <InspectorPanel
     ref="panel"
-    title="Personal details"
+    :title="copy.personal.title"
     title-id="personal-details-title"
   >
     <ResumeLanguageField
@@ -178,20 +181,20 @@ function messageForCode(code: string): string {
     />
     <TextField
       :error="issueFor('fullName')"
-      label="Full name"
+      :label="copy.personal.fullName"
       :model-value="personal.fullName"
       name="fullName"
       @intent="editText('fullName', $event)"
     />
     <TextField
       :error="issueFor('headline')"
-      label="Headline"
+      :label="copy.personal.headline"
       :model-value="personal.headline"
       name="headline"
       @intent="editText('headline', $event)"
     />
     <h3 class="sr-only">
-      Contact details
+      {{ copy.personal.contactDetails }}
     </h3>
     <ContactList
       ref="contactList"

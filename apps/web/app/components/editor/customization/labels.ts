@@ -1,53 +1,35 @@
 import catalog from '../../../assets/fonts/catalog.json';
 import type { CustomizationSetPath } from '../../../editor/commands';
+import {
+  editorControlsCopy,
+  type CustomizationGroupId,
+  type EditorControlEnum,
+} from '../../../i18n/editor-controls';
+import type { Locale } from '../../../i18n/locale';
 
-export const FIELD_LABELS: Readonly<Record<CustomizationSetPath, string>> = {
-  'font.family': 'Font',
-  'font.baseSizePx': 'Base size (px)',
-  'font.textAlign': 'Text alignment',
-  'colors.primary': 'Primary',
-  'colors.text': 'Text',
-  'colors.background': 'Background',
-  'colors.accent': 'Accent',
-  'colors.surface': 'Surface',
-  'spacing.sectionGap': 'Section gap',
-  'spacing.entryGap': 'Entry gap',
-  'spacing.lineHeight': 'Line height',
-  'spacing.pageMargin.x': 'Horizontal margin',
-  'spacing.pageMargin.y': 'Vertical margin',
-  'heading.style': 'Heading style',
-  'heading.showRule': 'Heading rule',
-  'header.align': 'Header alignment',
-  'header.detailsLayout': 'Contact layout',
-  'header.iconStyle': 'Icon style',
-  'header.photoPosition': 'Photo position',
-  'layout.columns': 'Columns',
-  'layout.surfaceTarget': 'Surface target',
-  'sectionDisplay.skill.style': 'Skill display',
-  'sectionDisplay.language.style': 'Language display',
-  'pageFormat': 'Page size',
-  'dateFormat': 'Date format',
-};
+export function fieldLabel(locale: Locale, path: CustomizationSetPath): string {
+  return editorControlsCopy[locale].customization[path] ?? path;
+}
 
 export const FIELD_GROUPS = [
   {
-    title: 'Page & PDF',
+    id: 'page',
+    hook: 'Page & PDF',
     paths: ['pageFormat', 'spacing.pageMargin.x', 'spacing.pageMargin.y'],
   },
   {
-    title: 'Type',
+    id: 'type',
+    hook: 'Type',
     paths: ['font.family', 'font.baseSizePx', 'font.textAlign'],
   },
   {
-    title: 'Spacing',
-    paths: [
-      'spacing.sectionGap',
-      'spacing.entryGap',
-      'spacing.lineHeight',
-    ],
+    id: 'spacing',
+    hook: 'Spacing',
+    paths: ['spacing.sectionGap', 'spacing.entryGap', 'spacing.lineHeight'],
   },
   {
-    title: 'Headings',
+    id: 'headings',
+    hook: 'Headings',
     paths: [
       'heading.style',
       'heading.showRule',
@@ -58,7 +40,8 @@ export const FIELD_GROUPS = [
     ],
   },
   {
-    title: 'Layout',
+    id: 'layout',
+    hook: 'Layout',
     paths: [
       'layout.columns',
       'layout.surfaceTarget',
@@ -68,7 +51,8 @@ export const FIELD_GROUPS = [
     ],
   },
   {
-    title: 'Colors',
+    id: 'colors',
+    hook: 'Colors',
     paths: [
       'colors.primary',
       'colors.text',
@@ -78,41 +62,21 @@ export const FIELD_GROUPS = [
     ],
   },
 ] as const satisfies ReadonlyArray<{
-  title: string;
+  id: CustomizationGroupId;
+  hook: string;
   paths: readonly CustomizationSetPath[];
 }>;
 
-const KNOWN_ENUM_LABELS: Readonly<Record<string, string>> = {
-  a4: 'A4',
-  bar: 'Bar',
-  center: 'Center',
-  dots: 'Dots',
-  header: 'Header',
-  inline: 'Inline',
-  justify: 'Justify',
-  left: 'Left',
-  letter: 'Letter',
-  none: 'None',
-  normal: 'Normal',
-  outline: 'Outline',
-  right: 'Right',
-  sidebar: 'Sidebar',
-  stacked: 'Stacked',
-  tag: 'Tag',
-  text: 'Text',
-  titlecase: 'Titlecase',
-  top: 'Top',
-  uppercase: 'Uppercase',
-};
-
 export function enumLabel(
+  locale: Locale,
   path: string,
   value: string | number | boolean,
 ): string {
   if (typeof value !== 'string') return String(value);
   if (path === 'font.family') {
-    return catalog.entries.find((entry) => entry.id === value)?.displayName
-      ?? value;
+    return (
+      catalog.entries.find((entry) => entry.id === value)?.displayName ?? value
+    );
   }
-  return KNOWN_ENUM_LABELS[value] ?? value;
+  return editorControlsCopy[locale].enums[value as EditorControlEnum] ?? value;
 }

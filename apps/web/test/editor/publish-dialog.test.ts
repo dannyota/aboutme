@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import { DOMWrapper, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, nextTick, ref, type Ref } from 'vue';
 
@@ -13,6 +14,9 @@ import type {
 import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
 const mounted: VueWrapper[] = [];
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(
   navigator,
@@ -20,6 +24,7 @@ const clipboardDescriptor = Object.getOwnPropertyDescriptor(
 );
 
 afterEach(() => {
+  locale.value = 'en';
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
   if (clipboardDescriptor === undefined) {
     Reflect.deleteProperty(navigator, 'clipboard');
@@ -84,6 +89,136 @@ function dialog(): DOMWrapper<Element> {
 }
 
 describe('PublishDialog', () => {
+  it.each([
+    ['en', { kind: 'unknown', reason: 'transport' },
+      'We could not confirm publication.'],
+    ['vi', { kind: 'unknown', reason: 'transport' },
+      'Không thể xác nhận việc xuất bản.'],
+    ['en', { kind: 'session-lost' },
+      'Your session ended. Sign in again before publishing.'],
+    ['vi', { kind: 'session-lost' },
+      'Phiên của bạn đã kết thúc. Đăng nhập lại trước khi xuất bản.'],
+    ['en', { kind: 'rate-limited', retryAfterMs: null },
+      'Publishing is temporarily unavailable.'],
+    ['vi', { kind: 'rate-limited', retryAfterMs: null },
+      'Tạm thời không thể xuất bản.'],
+  ] as const)('renders %s copy for a publish outcome', async (
+    nextLocale,
+    state,
+    text,
+  ) => {
+    locale.value = nextLocale;
+    const record = editorRecord();
+    const context = actionsFor(record, state as PublishControllerState);
+    const wrapper = await mountDialog(record, context.actions);
+
+    expect(wrapper.get('[role="alert"]').text()).toContain(text);
+    expect(context.actions.publish.submit).not.toHaveBeenCalled();
+    expect(context.actions.publish.retryUncertain).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['en', 'saving', 'Save the latest resume changes before publishing.'],
+    ['vi', 'saving', 'Lưu các thay đổi CV mới nhất trước khi xuất bản.'],
+    ['en', 'conflict', 'Resolve the resume conflict before publishing.'],
+    ['vi', 'conflict', 'Giải quyết xung đột CV trước khi xuất bản.'],
+    ['en', 'issue', 'Resolve the current resume issues before publishing.'],
+    ['vi', 'issue', 'Giải quyết các vấn đề CV hiện tại trước khi xuất bản.'],
+  ] as const)('renders %s copy for blocked %s', async (
+    nextLocale,
+    reason,
+    text,
+  ) => {
+    locale.value = nextLocale;
+    const record = editorRecord();
+    const context = actionsFor(record, {
+      kind: 'blocked', reason,
+    } as PublishControllerState);
+    const wrapper = await mountDialog(record, context.actions);
+
+    expect(wrapper.get('[role="alert"]').text()).toBe(text);
+    expect(context.actions.publish.submit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['en', { kind: 'saving' }, 'Publishing…'],
+    ['vi', { kind: 'saving' }, 'Đang xuất bản…'],
+    ['en', {
+      kind: 'reauth-wrong-password', method: 'password', attempt: {},
+    }, 'That password was not accepted.'],
+    ['vi', {
+      kind: 'reauth-wrong-password', method: 'password', attempt: {},
+    }, 'Mật khẩu không được chấp nhận.'],
+    ['en', { kind: 'failed', code: '__proto__' },
+      'Publishing failed. Try again.'],
+    ['vi', { kind: 'failed', code: 'constructor' },
+      'Xuất bản không thành công. Hãy thử lại.'],
+  ] as const)('renders safe %s state copy', async (nextLocale, state, text) => {
+    locale.value = nextLocale;
+    const record = editorRecord();
+    const context = actionsFor(record, state as PublishControllerState);
+    const wrapper = await mountDialog(record, context.actions);
+    expect(wrapper.text()).toContain(text);
+    expect(context.actions.publish.submit).not.toHaveBeenCalled();
+  });
+
+  it('changes an open outcome without replaying a command or copying again',
+    async () => {
+      locale.value = 'en';
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      });
+      const record = editorRecord();
+      const accepted = acceptedFixture({
+        metadata: {
+          ...acceptedFixture().metadata,
+          live: true,
+          slug: 'canonical-slug',
+        },
+      });
+      const context = actionsFor(record, {
+        kind: 'accepted', resume: accepted,
+      });
+      const wrapper = await mountDialog(record, context.actions);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      await nextTick();
+      const copiedUrl = `${location.origin}/canonical-slug`;
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect(wrapper.get('[role="status"]').text())
+        .toBe('Đã xuất bản thành công.');
+      expect(wrapper.get('[data-action="copy-link"]').text())
+        .toBe('Đã sao chép');
+      expect(writeText).toHaveBeenCalledOnce();
+      expect(writeText).toHaveBeenCalledWith(copiedUrl);
+      expect(context.actions.publish.submit).not.toHaveBeenCalled();
+      expect(context.actions.publish.retryUncertain).not.toHaveBeenCalled();
+    });
+
+  it(
+    'uses generic localized text for an unknown issue without server HTML',
+    async () => {
+      locale.value = 'vi';
+      const record = editorRecord();
+      const context = actionsFor(record, {
+        kind: 'invalid',
+        issues: [{
+          path: 'personalDetails.fullName',
+          code: 'unrecognized',
+          message: '<img src=x onerror=alert(1)>secret',
+        }],
+      } as PublishControllerState);
+      const wrapper = await mountDialog(record, context.actions);
+
+      expect(wrapper.text()).toContain('Không thể xuất bản CV.');
+      expect(wrapper.text()).not.toContain('secret');
+      expect(wrapper.find('img[src="x"]').exists()).toBe(false);
+    });
+
   it('renders exactly the three product choices and both disclosures',
     async () => {
       const record = editorRecord();
@@ -842,17 +977,15 @@ describe('PublishDialog', () => {
         wrapper.get('[data-action="publish-slug"]').element,
       );
 
-      await wrapper
-        .get('[role="dialog"]')
-        .trigger('keydown', { key: 'Tab', shiftKey: true });
+      const vietnamese = wrapper.get('button[aria-label="Tiếng Việt"]');
+      (vietnamese.element as HTMLButtonElement).focus();
+      await vietnamese.trigger('keydown', { key: 'Tab', shiftKey: true });
       // The primary action is the last control (DESIGN.md dialog rhythm).
       expect(document.activeElement).toBe(
         wrapper.get('[data-action="publish-submit"]').element,
       );
       await wrapper.get('[role="dialog"]').trigger('keydown', { key: 'Tab' });
-      expect(document.activeElement).toBe(
-        wrapper.get('[data-action="publish-slug"]').element,
-      );
+      expect(document.activeElement).toBe(vietnamese.element);
       await wrapper.get('[data-action="publish-close"]').trigger('click');
       expect(wrapper.emitted('close')).toHaveLength(1);
       await wrapper.setProps({ open: false });

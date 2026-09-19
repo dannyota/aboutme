@@ -2,7 +2,9 @@
 
 import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
 import { mount } from '@vue/test-utils';
-import { describe, expect, it, vi } from 'vitest';
+import { mockNuxtImport } from '@nuxt/test-utils/runtime';
+import { nextTick, ref } from 'vue';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RichTextEditor from
   '../../app/components/editor/richtext/RichTextEditor.vue';
@@ -13,10 +15,19 @@ import {
 import { serializeRichText } from
   '../../app/components/editor/richtext/serialize';
 
+const locale = ref<'vi' | 'en'>('en');
+mockNuxtImport('useLocale', () => () => ({ locale }));
+
+beforeEach(() => {
+  locale.value = 'en';
+});
+
 const unsupportedWrapperCase
   = 'keeps only sanitizer-v1 elements and normalizes unsupported wrappers';
 const hostileCorpusCase
   = 'canonicalizes every hostile corpus value through the closed model';
+const toolbarLocaleCase
+  = 'keeps the document and selection while changing toolbar copy';
 
 async function selectEditorText(editor: HTMLElement): Promise<void> {
   const text = editor.querySelector('p')?.firstChild;
@@ -122,6 +133,27 @@ describe('closed rich-text schema', () => {
 });
 
 describe('RichTextEditor', () => {
+  it(toolbarLocaleCase, async () => {
+    const wrapper = mount(RichTextEditor, {
+      attachTo: document.body,
+      props: { modelValue: '<p>selected text</p>' },
+    });
+    const editor = wrapper.get('[contenteditable="true"]');
+    await selectEditorText(editor.element);
+    const documentBefore = editor.html();
+    expect(window.getSelection()?.toString()).toBe('selected text');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(editor.html()).toBe(documentBefore);
+    expect(window.getSelection()?.toString()).toBe('selected text');
+    expect(wrapper.get('[role="toolbar"]').attributes('aria-label'))
+      .toBe('Điều khiển văn bản có định dạng');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('keeps a dirty draft when the external model changes', async () => {
     const wrapper = mount(RichTextEditor, { props: { modelValue: '' } });
     const editor = wrapper.get('[contenteditable="true"]');
@@ -527,6 +559,36 @@ describe('RichTextEditor', () => {
       }
     }
 
+    for (const [currentLocale, button, promptLabel] of [
+      ['en', 'Link', 'Link URL'],
+      ['vi', 'Liên kết', 'URL liên kết'],
+    ] as const) {
+      locale.value = currentLocale;
+      for (const trigger of ['button', 'keyboard'] as const) {
+        const wrapper = mount(RichTextEditor, {
+          attachTo: document.body,
+          props: { modelValue: '<p>text</p>' },
+        });
+        const editor = wrapper.get('[contenteditable="true"]');
+        await selectEditorText(editor.element);
+        if (trigger === 'button') {
+          await wrapper
+            .get(`button[aria-label="${button}"]`)
+            .trigger('click');
+        } else {
+          await editor.trigger('keydown', { key: 'k', ctrlKey: true });
+        }
+        await editor.trigger('blur');
+        expect(latestEmission(wrapper)).toBe(
+          '<p><a href="https://example.com" '
+          + 'rel="noopener noreferrer">text</a></p>',
+        );
+        wrapper.unmount();
+      }
+      expect(prompt).toHaveBeenLastCalledWith(promptLabel);
+    }
+    locale.value = 'en';
+
     const paragraph = mount(RichTextEditor, {
       attachTo: document.body,
       props: { modelValue: '<p>text</p>' },
@@ -543,7 +605,7 @@ describe('RichTextEditor', () => {
     expect(latestEmission(paragraph)).toBeUndefined();
     paragraph.unmount();
 
-    expect(prompt).toHaveBeenCalledTimes(2);
+    expect(prompt).toHaveBeenCalledTimes(6);
     prompt.mockRestore();
     scrollBy.mockRestore();
     rects.mockRestore();

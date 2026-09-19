@@ -2,6 +2,7 @@
 import { LogOut, Moon, Settings2, Sun, UserRound } from '@lucide/vue';
 import { computed } from 'vue';
 import IconButton from '@/components/app/IconButton.vue';
+import { shellCopy } from '@/i18n/shell';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,8 +14,10 @@ import {
 defineOptions({ inheritAttrs: false });
 const { logout } = useAuth();
 const { theme, toggleTheme } = useTheme();
+const locale = useRouteLocale();
+const copy = computed(() => shellCopy[locale.value]);
 const themeLabel = computed(() =>
-  theme.value === 'dark' ? 'Light theme' : 'Dark theme',
+  theme.value === 'dark' ? copy.value.lightTheme : copy.value.darkTheme,
 );
 function signOut(): void {
   void logout();
@@ -26,7 +29,7 @@ function signOut(): void {
     <DropdownMenuTrigger as-child>
       <IconButton
         v-bind="$attrs"
-        label="Account menu"
+        :label="copy.accountMenu"
         data-testid="account-menu"
       >
         <UserRound aria-hidden="true" />
@@ -37,7 +40,7 @@ function signOut(): void {
         data-testid="account-menu-settings"
         @select="navigateTo('/app/settings/sessions')"
       >
-        <Settings2 aria-hidden="true" />Settings
+        <Settings2 aria-hidden="true" />{{ copy.settings }}
       </DropdownMenuItem>
       <DropdownMenuItem
         data-testid="theme-toggle"
@@ -58,7 +61,7 @@ function signOut(): void {
         data-testid="account-menu-logout"
         @select="signOut"
       >
-        <LogOut aria-hidden="true" />Log out
+        <LogOut aria-hidden="true" />{{ copy.logout }}
       </DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu>

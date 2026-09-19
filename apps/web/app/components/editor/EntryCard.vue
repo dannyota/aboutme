@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronUp, Trash2 } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import IconButton from '@/components/app/IconButton.vue';
 import SwitchField from '@/components/app/SwitchField.vue';
@@ -23,6 +24,8 @@ const props = withDefaults(
   { open: undefined },
 );
 const internalOpen = ref(props.open ?? true);
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].entryCard);
 const resolvedOpen = computed(() => props.open ?? internalOpen.value);
 const emit = defineEmits<{
   'toggleHidden': [];
@@ -64,7 +67,7 @@ function updateOpen(open: boolean): void {
         <div class="flex items-center gap-1">
           <CollapsibleTrigger as-child>
             <IconButton
-              :label="isOpen ? 'Collapse entry fields' : 'Expand entry fields'"
+              :label="isOpen ? copy.collapse : copy.expand"
               size="icon-sm"
               data-action="toggle-entry-fields"
             >
@@ -72,13 +75,13 @@ function updateOpen(open: boolean): void {
             </IconButton>
           </CollapsibleTrigger>
           <SwitchField
-            label="Hidden"
+            :label="copy.hidden"
             :model-value="props.hidden"
             data-action="toggle-hidden"
             @update:model-value="emit('toggleHidden')"
           />
           <IconButton
-            label="Move entry up"
+            :label="copy.moveUp"
             size="icon-sm"
             :disabled="index === 0"
             data-action="entry-up"
@@ -87,7 +90,7 @@ function updateOpen(open: boolean): void {
             <ChevronUp />
           </IconButton>
           <IconButton
-            label="Move entry down"
+            :label="copy.moveDown"
             size="icon-sm"
             :disabled="index === count - 1"
             data-action="entry-down"
@@ -96,7 +99,7 @@ function updateOpen(open: boolean): void {
             <ChevronDown />
           </IconButton>
           <IconButton
-            label="Delete entry"
+            :label="copy.delete"
             size="icon-sm"
             data-action="delete-entry"
             @click="emit('delete')"

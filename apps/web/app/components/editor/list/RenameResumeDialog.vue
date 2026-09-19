@@ -3,6 +3,9 @@ import type { ResumeSummary } from '../../../editor/resumeApi';
 import FormDialog from '@/components/app/FormDialog.vue';
 import FormField from '@/components/app/FormField.vue';
 import { Input } from '@/components/ui/input';
+import { resumeListCopy } from '@/i18n/resume-list';
+import LocaleToggle from '@/components/app/LocaleToggle.vue';
+import { shellCopy } from '@/i18n/shell';
 
 const props = defineProps<{
   item: ResumeSummary | null;
@@ -12,6 +15,8 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; submit: [id: string, title: string] }>();
 const title = ref('');
 const returnFocus = ref<HTMLElement | null>(null);
+const locale = useRouteLocale();
+const copy = computed(() => resumeListCopy[locale.value]);
 
 watch(() => props.item, (item) => {
   title.value = item?.title ?? '';
@@ -36,16 +41,24 @@ function submit(): void {
 <template>
   <FormDialog
     :open="item !== null"
-    title="Rename resume"
-    description="Enter the new resume title."
-    submit-label="Save"
+    :title="copy.renameTitle"
+    :description="copy.renameDescription"
+    :submit-label="copy.save"
+    :cancel-label="copy.cancel"
+    :close-label="copy.close"
     :submit-disabled="item === null || title === item.title"
     :busy="busy"
     @cancel="emit('close')"
     @submit="submit"
   >
+    <template #header-actions>
+      <LocaleToggle
+        :label="shellCopy[locale].localeLabel"
+        @pointerdown.prevent
+      />
+    </template>
     <FormField
-      label="Title"
+      :label="copy.renameFieldLabel"
       name="title"
       required
     >

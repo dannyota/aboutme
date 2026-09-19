@@ -3,8 +3,9 @@ import { computed, onBeforeUnmount } from 'vue';
 
 import { Button } from '@/components/ui/button';
 import type { PdfDownloadController } from '../../editor/pdfDownload';
+import { pageSizeHelp } from '../../i18n/editor-controls';
+import { pdfCopy } from '../../i18n/pdf';
 import {
-  PAGE_SIZE_LABELS,
   PAGE_SIZE_SHORT,
   type PageFormat,
 } from './customization/pageSettings';
@@ -16,12 +17,17 @@ const props = defineProps<{
 }>();
 
 const pending = computed(() => props.controller.state.value.kind === 'pending');
+const { locale } = useLocale();
+const copy = computed(() => pdfCopy[locale.value]);
+const pageSizeShort = computed(() => props.pageFormat === undefined
+  ? undefined
+  : PAGE_SIZE_SHORT[props.pageFormat]);
 const message = computed(() => {
   const state = props.controller.state.value;
   return state.kind === 'pending'
-    ? 'Downloading PDF…'
+    ? copy.value.downloading
     : state.kind === 'error'
-      ? state.message
+      ? copy.value.error[state.code] ?? copy.value.error.generic
       : '';
 });
 
@@ -34,9 +40,9 @@ onBeforeUnmount(() => props.controller.dispose());
 
 <template>
   <Button
-    :aria-label="pageFormat === undefined
-      ? 'Download PDF'
-      : `Download PDF, ${PAGE_SIZE_SHORT[pageFormat]}`"
+    :aria-label="pageSizeShort === undefined
+      ? copy.download
+      : copy.ariaDownload(pageSizeShort)"
     class="editor-download-pdf-action"
     data-action="download-pdf"
     :disabled="pending"
@@ -44,17 +50,17 @@ onBeforeUnmount(() => props.controller.dispose());
     type="button"
     :title="pageFormat === undefined
       ? undefined
-      : `PDF page size: ${PAGE_SIZE_LABELS[pageFormat]}`"
+      : pageSizeHelp(locale, pageFormat)"
     variant="outline"
     @click="download"
   >
-    {{ pending ? "Downloading PDF…" : "Download PDF" }}
+    {{ pending ? copy.downloading : copy.download }}
     <span
       v-if="pageFormat !== undefined"
       aria-hidden="true"
       class="font-normal text-muted-foreground"
       data-download-pdf-size
-    >{{ PAGE_SIZE_SHORT[pageFormat] }}</span>
+    >{{ pageSizeShort }}</span>
   </Button>
   <p
     aria-live="polite"

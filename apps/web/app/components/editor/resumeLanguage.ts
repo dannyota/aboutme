@@ -1,24 +1,32 @@
-// The resume's content language: a BCP 47 tag the renderer puts on the
-// document root. Creating and editing a resume offer the same choices.
+import type { Locale } from '@/i18n/locale';
+import { resumeCreateCopy } from '@/i18n/resume-create';
 
 export const OTHER_LANGUAGE = 'other';
 export const UNSET_LANGUAGE = 'unset';
 
-export const resumeLanguageOptions = [
-  { value: 'vi', label: 'Tiếng Việt' },
-  { value: 'en', label: 'English' },
-  { value: OTHER_LANGUAGE, label: 'Other…' },
-] as const;
+export function resumeLanguageOptionsForLocale(locale: Locale) {
+  return [
+    { value: 'vi', label: 'Tiếng Việt' },
+    { value: 'en', label: 'English' },
+    { value: OTHER_LANGUAGE, label: resumeCreateCopy[locale].language.other },
+  ] as const;
+}
 
 /** The option shown for a resume that has no language yet. */
-export const unsetLanguageOption = {
-  value: UNSET_LANGUAGE,
-  label: 'Not set',
-} as const;
+export function unsetLanguageOptionForLocale(locale: Locale) {
+  return {
+    value: UNSET_LANGUAGE,
+    label: resumeCreateCopy[locale].language.unset,
+  } as const;
+}
 
-export const languageCodeHint = 'A BCP 47 tag, such as fr or zh-Hant.';
-export const languageCodeError
-  = 'Enter a language code, such as fr or zh-Hant.';
+export function languageCodeHintForLocale(locale: Locale): string {
+  return resumeCreateCopy[locale].language.hint;
+}
+
+export function languageCodeErrorForLocale(locale: Locale): string {
+  return resumeCreateCopy[locale].language.error;
+}
 
 const BCP47 = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
 

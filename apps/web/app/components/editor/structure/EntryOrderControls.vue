@@ -2,6 +2,8 @@
 import type { Section } from '@aboutme/schema';
 import IconButton from '@/components/app/IconButton.vue';
 import { entryLabel } from '../sectionTypes';
+import { computed } from 'vue';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 const props = defineProps<{
   readonly disabled: boolean;
@@ -9,6 +11,8 @@ const props = defineProps<{
   readonly sectionKey: string;
   readonly sectionType: Section['sectionType'];
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 const emit = defineEmits<{
   reorder: [
@@ -39,22 +43,22 @@ function move(entryId: string, direction: -1 | 1): void {
 <template>
   <div
     :data-entry-order="sectionKey"
-    aria-label="Entry order"
+    :aria-label="copy.entryOrder"
   >
     <ol>
       <li
         v-for="(entry, index) in entries"
         :key="entry.id"
       >
-        <span class="text-sm">{{ entryLabel(entry, index) }}</span>
+        <span class="text-sm">{{ entryLabel(entry, index, locale) }}</span>
         <IconButton
-          label="Move entry up"
+          :label="copy.moveEntryUp"
           data-action="entry-up"
           :disabled="disabled || index === 0"
           @click="move(entry.id, -1)"
         />
         <IconButton
-          label="Move entry down"
+          :label="copy.moveEntryDown"
           data-action="entry-down"
           :disabled="disabled || index === entries.length - 1"
           @click="move(entry.id, 1)"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { YearMonth } from '@aboutme/schema';
 import { computed, ref, watch } from 'vue';
+import { editorFieldsCopy } from '@/i18n/editor-fields';
 import { Button } from '@/components/ui/button';
 import FormField from '@/components/app/FormField.vue';
 import { Input } from '@/components/ui/input';
@@ -18,7 +19,9 @@ const emit = defineEmits<{ intent: [intent: FieldIntent<YearMonth>] }>();
 const dirty = ref(false);
 const month = ref(toText(props.modelValue?.m));
 const year = ref(toText(props.modelValue?.y));
-const error = ref('');
+const error = ref<'invalidYearMonth'>();
+const { locale } = useLocale();
+const copy = computed(() => editorFieldsCopy[locale.value].dates);
 
 watch(
   () => props.modelValue,
@@ -31,12 +34,12 @@ watch(
 );
 
 const describedBy = computed(() =>
-  error.value === '' ? undefined : `${props.fieldId}-error`,
+  error.value === undefined ? undefined : `${props.fieldId}-error`,
 );
 
 function capture(): void {
   dirty.value = true;
-  error.value = '';
+  error.value = undefined;
 }
 
 function commit(): void {
@@ -48,7 +51,7 @@ function commit(): void {
       dirty.value = false;
       return;
     }
-    error.value = 'Enter a valid year and month.';
+    error.value = 'invalidYearMonth';
     return;
   }
   if (sameYearMonth(next, props.modelValue)) {
@@ -68,7 +71,7 @@ function unset(): void {
   dirty.value = false;
   year.value = '';
   month.value = '';
-  error.value = '';
+  error.value = undefined;
   emit('intent', { kind: 'unset' });
 }
 
@@ -108,7 +111,7 @@ function toText(value: number | undefined): string {
     >
       {{ label }}
     </div>
-    <FormField label="Year">
+    <FormField :label="copy.year">
       <template #default="{ id, describedBy: partDescribedBy, invalid }">
         <Input
           :id="id"
@@ -122,7 +125,7 @@ function toText(value: number | undefined): string {
         />
       </template>
     </FormField>
-    <FormField label="Month">
+    <FormField :label="copy.month">
       <template #default="{ id, describedBy: partDescribedBy, invalid }">
         <Input
           :id="id"
@@ -143,14 +146,14 @@ function toText(value: number | undefined): string {
       variant="ghost"
       @click="unset"
     >
-      Remove date
+      {{ copy.remove }}
     </Button>
     <p
-      v-if="error !== ''"
+      v-if="error !== undefined"
       :id="`${fieldId}-error`"
       role="alert"
     >
-      {{ error }}
+      {{ copy.invalidYearMonth }}
     </p>
   </div>
 </template>

@@ -48,6 +48,19 @@ describe('AppSeal', () => {
     expect(wrapper.get('[data-seal-check]').exists()).toBe(true);
   });
 
+  it('uses a caller-supplied accessible label', () => {
+    const wrapper = mount(AppSeal, {
+      props: {
+        link: '/ada-lovelace',
+        label: 'Công khai tại aboutme.vn/ada-lovelace',
+      },
+    });
+
+    expect(wrapper.get('[role="img"]').attributes('aria-label')).toBe(
+      'Công khai tại aboutme.vn/ada-lovelace',
+    );
+  });
+
   it('defaults stamp rotation to minus eight degrees', () => {
     const wrapper = mount(AppSeal, { props: { link: '/ada-lovelace' } });
 

@@ -115,6 +115,7 @@ function onEscape(event: Event): void {
       <AlertDialogHeader>
         <AlertDialogTitle>{{ title }}</AlertDialogTitle>
         <AlertDialogDescription>{{ description }}</AlertDialogDescription>
+        <slot name="header-actions" />
       </AlertDialogHeader>
       <div
         v-if="confirmText !== undefined"

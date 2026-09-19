@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 
 import AppSeal from './AppSeal.vue';
+import { workspaceCopy } from '@/i18n/workspace';
 
 const props = defineProps<{
   state: 'saved' | 'unsaved' | 'saving' | 'failed' | 'draft' | 'public';
@@ -14,6 +15,8 @@ const publicLink = computed(() => {
   }
   return props.link ?? '';
 });
+const locale = useRouteLocale();
+const copy = computed(() => workspaceCopy[locale.value]);
 </script>
 
 <template>
@@ -51,15 +54,16 @@ const publicLink = computed(() => {
           stroke-width="1.25"
         />
       </svg>
-      <span>Saved</span>
+      <span>{{ copy.saved }}</span>
     </template>
-    <template v-else-if="state === 'unsaved'"> Unsaved </template>
-    <template v-else-if="state === 'saving'"> Saving… </template>
-    <template v-else-if="state === 'failed'"> Save failed </template>
-    <template v-else-if="state === 'draft'"> Draft </template>
+    <template v-else-if="state === 'unsaved'"> {{ copy.unsaved }} </template>
+    <template v-else-if="state === 'saving'"> {{ copy.saving }} </template>
+    <template v-else-if="state === 'failed'"> {{ copy.failed }} </template>
+    <template v-else-if="state === 'draft'"> {{ copy.draft }} </template>
     <template v-else>
       <AppSeal
         :link="publicLink"
+        :label="copy.publicAt(publicLink)"
         size="mark"
       />
       <a

@@ -2,6 +2,7 @@
 // Privacy Policy, the Terms, and the template gallery are indexable; every
 // other route is noindex.
 import type { Locale } from './locale';
+import type { WorkspaceCopy } from './workspace';
 
 export const siteName = 'aboutme';
 export const siteOrigin = 'https://aboutme.vn';
@@ -27,13 +28,28 @@ export function pageTitle(name: string): string {
 
 /** Titles for the English-only application pages. */
 export const appTitles = {
-  resumes: pageTitle('Resumes'),
   settings: pageTitle('Settings'),
   authorize: pageTitle('Authorize an agent'),
-  newResume: pageTitle('New resume'),
-  /** The editor before its resume has loaded. */
-  editor: pageTitle('Resume'),
 } as const;
+
+type WorkspaceTitles = {
+  readonly resumes: string;
+  readonly newResume: string;
+  readonly editor: string;
+};
+
+export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
+  vi: {
+    resumes: pageTitle('CV'),
+    newResume: pageTitle('Tạo CV'),
+    editor: pageTitle('CV'),
+  },
+  en: {
+    resumes: pageTitle('Resumes'),
+    newResume: pageTitle('New resume'),
+    editor: pageTitle('Resume'),
+  },
+};
 
 export const homeTitle: Record<Locale, string> = {
   vi: 'aboutme — CV miễn phí, riêng tư đến khi bạn muốn',

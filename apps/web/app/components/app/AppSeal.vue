@@ -4,6 +4,7 @@ import { computed, useId } from 'vue';
 const props = withDefaults(
   defineProps<{
     link: string;
+    label?: string;
     size?: 'mark' | 'stamp';
     rotate?: number;
   }>(),
@@ -21,7 +22,7 @@ const ringText = computed(
 
 <template>
   <svg
-    :aria-label="`Public at aboutme.vn${link}`"
+    :aria-label="label ?? `Public at aboutme.vn${link}`"
     :data-app-seal="size"
     :height="size === 'stamp' ? 96 : 20"
     :viewBox="size === 'stamp' ? '0 0 96 96' : '0 0 20 20'"

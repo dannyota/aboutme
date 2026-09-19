@@ -6,7 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import FormField from '@/components/app/FormField.vue';
 import SelectField from '@/components/app/SelectField.vue';
-import { sectionIconOptions, sectionTypeLabels } from '../sectionTypes';
+import {
+  sectionIconOptionsForLocale,
+  sectionTypeLabelsForLocale,
+} from '../sectionTypes';
+import { editorSectionsCopy } from '../../../i18n/editor-sections';
+import { editorControlsCopy } from '../../../i18n/editor-controls';
 
 type SectionAction = {
   readonly key: string;
@@ -24,6 +29,9 @@ const props = defineProps<{
   /** Sections in the main column; a moved section goes after them. */
   readonly mainCount: number;
 }>();
+const { locale } = useLocale();
+const copy = computed(() => editorControlsCopy[locale.value].controls);
+const sectionCopy = computed(() => editorSectionsCopy[locale.value]);
 
 const emit = defineEmits<{
   delete: [action: SectionAction];
@@ -52,11 +60,16 @@ const iconOptions = computed(() => {
   const current = props.section.iconKey;
   if (
     current === undefined
-    || sectionIconOptions.some((option) => option.value === current)
+    || sectionIconOptionsForLocale(locale.value).some(
+      (option) => option.value === current,
+    )
   ) {
-    return sectionIconOptions;
+    return sectionIconOptionsForLocale(locale.value);
   }
-  return [...sectionIconOptions, { value: current, label: 'Current icon' }];
+  return [...sectionIconOptionsForLocale(locale.value), {
+    value: current,
+    label: sectionCopy.value.currentIcon,
+  }];
 });
 
 function action(): SectionAction {
@@ -81,12 +94,12 @@ function changeIconKey(next: string): void {
   <div class="grid gap-3">
     <div class="flex items-center justify-between gap-2">
       <Badge variant="outline">
-        {{ sectionTypeLabels[section.sectionType] }}
+        {{ sectionTypeLabelsForLocale(locale)[section.sectionType] }}
       </Badge>
     </div>
     <FormField
       v-slot="{ id }"
-      label="Section name"
+      :label="copy.sectionName"
       name="displayName"
     >
       <Input
@@ -100,14 +113,14 @@ function changeIconKey(next: string): void {
     <SelectField
       :control-attrs="{ 'data-action': 'iconKey' }"
       :disabled="disabled"
-      label="Heading icon"
+      :label="copy.headingIcon"
       :model-value="section.iconKey ?? ''"
       name="iconKey"
       :options="iconOptions"
       @update:model-value="changeIconKey"
     />
     <div
-      aria-label="Section placement controls"
+      :aria-label="copy.placement"
       class="flex flex-wrap gap-2"
     >
       <Button
@@ -118,7 +131,7 @@ function changeIconKey(next: string): void {
         variant="outline"
         @click="emit('move', { ...action(), column, index: index - 1 })"
       >
-        Move up
+        {{ copy.moveUp }}
       </Button>
       <Button
         type="button"
@@ -128,7 +141,7 @@ function changeIconKey(next: string): void {
         variant="outline"
         @click="emit('move', { ...action(), column, index: index + 1 })"
       >
-        Move down
+        {{ copy.moveDown }}
       </Button>
       <Button
         v-if="column === 'sidebar'"
@@ -137,11 +150,9 @@ function changeIconKey(next: string): void {
         :disabled="disabled"
         size="sm"
         variant="outline"
-        @click="
-          emit('move', { ...action(), column: 'main', index: mainCount })
-        "
+        @click="emit('move', { ...action(), column: 'main', index: mainCount })"
       >
-        Move to main
+        {{ copy.moveMain }}
       </Button>
       <Button
         v-else
@@ -158,7 +169,7 @@ function changeIconKey(next: string): void {
           })
         "
       >
-        Move to sidebar
+        {{ copy.moveSidebar }}
       </Button>
       <Button
         type="button"
@@ -168,7 +179,7 @@ function changeIconKey(next: string): void {
         variant="outline"
         @click="emit('reorder', { ...action(), column, index: 0 })"
       >
-        Move to start
+        {{ copy.moveStart }}
       </Button>
       <Button
         type="button"
@@ -179,7 +190,7 @@ function changeIconKey(next: string): void {
         class="text-destructive"
         @click="emit('delete', action())"
       >
-        Delete section
+        {{ copy.deleteSection }}
       </Button>
     </div>
   </div>
