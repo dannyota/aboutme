@@ -75,7 +75,7 @@ Nuxt page manifest, or generated dispatch fails the build.
 
 The registry keys one row per literal top-level segment. Finer paths dispatch
 inside the owning router, so `/api/v1/resumes` and `/oauth/token` need no rows
-of their own. The v7 registry holds these exact roots:
+of their own. The v8 registry holds these exact roots:
 
 | Root              | Source and dispatch                                                              |
 | ----------------- | -------------------------------------------------------------------------------- |
@@ -100,6 +100,7 @@ of their own. The v7 registry holds these exact roots:
 | `reset-password`  | Nuxt `/reset-password` page; Nuxt                                                |
 | `robots.txt`      | Caddy `/robots.txt`; Go                                                          |
 | `sitemap.xml`     | Caddy `/sitemap.xml`; Go                                                         |
+| `templates`       | Nuxt `/templates` gallery and `/templates/{id}` pages; Nuxt                      |
 | `terms`           | Nuxt `/terms` page; Nuxt                                                         |
 | `u`               | Protected future namespace from ADR 0004; reserved-only, with no current handler |
 | `verify-email`    | Nuxt `/verify-email` page; Nuxt                                                  |
@@ -144,13 +145,14 @@ Both are public, like the slug
 | Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                   |
 | Share image              | One 1200 by 630 PNG top-viewport capture is available when live, independent of download and discovery flags; ADR 0032                         |
 
-The sitemap lists `/`, `/privacy`, and `/terms`, then every discoverable resume.
-`llms.txt` follows the llms.txt convention: a title, a one-line summary, the
-site pages and source code, then each discoverable resume's markdown.
-`robots.txt` allows everything except `/app/`, `/api/`, and the sign-in pages.
-Under `/api/` it allows only the share image, which social cards fetch. Each
-sign-in page is disallowed by exact path, with or without a query, so a slug
-that starts with the same letters stays crawlable.
+The sitemap lists `/`, `/privacy`, `/terms`, `/templates`, and each
+`/templates/{id}` page, then every discoverable resume. `llms.txt` follows the
+llms.txt convention: a title, a one-line summary, the site pages and source
+code, then each discoverable resume's markdown. `robots.txt` allows everything
+except `/app/`, `/api/`, and the sign-in pages. Under `/api/` it allows only the
+share image, which social cards fetch. Each sign-in page is disallowed by exact
+path, with or without a query, so a slug that starts with the same letters stays
+crawlable.
 
 Deleted, renamed, tombstoned, and never-published slugs all return the same
 public `404`. The service does not expose which internal state caused absence.

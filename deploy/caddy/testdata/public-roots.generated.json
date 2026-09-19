@@ -1,5 +1,5 @@
 {
-  "version": 7,
+  "version": 8,
   "roots": [
     {
       "root": ".well-known",
@@ -84,6 +84,10 @@
     {
       "root": "sitemap.xml",
       "dispatch": "go"
+    },
+    {
+      "root": "templates",
+      "dispatch": "nuxt"
     },
     {
       "root": "terms",

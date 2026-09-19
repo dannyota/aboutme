@@ -10,7 +10,7 @@ import (
 
 const (
 	// SitemapFormatVersion identifies the sitemap byte format.
-	SitemapFormatVersion = 2
+	SitemapFormatVersion = 3
 	// RobotsFormatVersion identifies the robots.txt byte format.
 	RobotsFormatVersion = 2
 	// LLMSFormatVersion identifies the llms.txt byte format.
@@ -24,6 +24,15 @@ var sitePages = []struct{ path, title string }{
 	{"/terms", "Terms of service"},
 }
 
+// templateIDs are the template presets, each with a gallery page at
+// /templates/{id}. A test keeps the list equal to packages/schema/templates.
+var templateIDs = []string{
+	"academic-dense", "ats-plain", "classic-serif", "consulting-formal", "creative-accent",
+	"designer-tag", "editorial-wide", "elegant-serif-two", "engineer-compact", "executive-band",
+	"government-formal", "graduate-friendly", "high-contrast", "international-lang", "minimal-air",
+	"modern-sidebar", "mono-print", "nordic-muted", "one-page-tight", "startup-bold",
+}
+
 // repositoryURL is the project's public source code.
 const repositoryURL = "https://github.com/dannyota/aboutme"
 
@@ -32,15 +41,20 @@ const repositoryURL = "https://github.com/dannyota/aboutme"
 // starts with the same letters stays crawlable.
 var crawlerHiddenPages = []string{"authorize", "forgot-password", "login", "register", "reset-password", "verify-email"}
 
-// Sitemap encodes the static site pages, then the sorted discoverable slugs,
-// as XML. Resumes with discovery off never appear.
+// Sitemap encodes the static site pages, the template gallery and its pages,
+// then the sorted discoverable slugs, as XML. Resumes with discovery off never
+// appear.
 func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	if origin.String() == "" {
 		return nil, errors.New("public origin is required")
 	}
-	paths := make([]string, 0, len(sitePages)+len(slugs))
+	paths := make([]string, 0, len(sitePages)+1+len(templateIDs)+len(slugs))
 	for _, page := range sitePages {
 		paths = append(paths, page.path)
+	}
+	paths = append(paths, "/templates")
+	for _, id := range templateIDs {
+		paths = append(paths, "/templates/"+id)
 	}
 	for _, slug := range sortedSlugs(slugs) {
 		paths = append(paths, "/"+slug)

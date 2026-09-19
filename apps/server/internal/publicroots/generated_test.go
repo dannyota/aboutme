@@ -10,7 +10,7 @@ func TestReservedAPI(t *testing.T) {
 	}
 }
 
-// wantRoutes is the v7 registry in authority order. It is written by hand so a
+// wantRoutes is the v8 registry in authority order. It is written by hand so a
 // regenerated generated.go that silently drops, reorders, or reclassifies a
 // root fails here instead of shipping.
 var wantRoutes = []Route{
@@ -35,12 +35,13 @@ var wantRoutes = []Route{
 	{Root: "reset-password", Dispatch: DispatchNuxt},
 	{Root: "robots.txt", Dispatch: DispatchGo},
 	{Root: "sitemap.xml", Dispatch: DispatchGo},
+	{Root: "templates", Dispatch: DispatchNuxt},
 	{Root: "terms", Dispatch: DispatchNuxt},
 	{Root: "u", Dispatch: DispatchReserved},
 	{Root: "verify-email", Dispatch: DispatchNuxt},
 }
 
-func TestRoutesMatchTheV7Authority(t *testing.T) {
+func TestRoutesMatchTheV8Authority(t *testing.T) {
 	t.Parallel()
 
 	if len(Routes) != len(wantRoutes) {
@@ -114,6 +115,33 @@ func TestLegalPageRootsAreNuxtAndUnclaimable(t *testing.T) {
 		}
 	}
 	for _, slug := range []string{"privacy-policy", "my-terms"} {
+		if !ValidSlug(slug) {
+			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
+		}
+	}
+}
+
+// TestTemplatesRootIsNuxtAndUnclaimable proves the Nuxt template gallery owns
+// its root, so "templates" cannot be claimed as a resume slug.
+func TestTemplatesRootIsNuxtAndUnclaimable(t *testing.T) {
+	t.Parallel()
+
+	found := false
+	for _, route := range Routes {
+		if route.Root == "templates" {
+			found = true
+			if route.Dispatch != DispatchNuxt {
+				t.Errorf("templates dispatches to %q, want %q", route.Dispatch, DispatchNuxt)
+			}
+		}
+	}
+	if !found {
+		t.Error("templates is missing from the registry")
+	}
+	if ValidSlug("templates") {
+		t.Error(`ValidSlug("templates") = true, want false for a reserved root`)
+	}
+	for _, slug := range []string{"templates-by-ada", "my-templates"} {
 		if !ValidSlug(slug) {
 			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
 		}

@@ -3,4 +3,25 @@
   <url><loc>https://aboutme.example/</loc></url>
   <url><loc>https://aboutme.example/privacy</loc></url>
   <url><loc>https://aboutme.example/terms</loc></url>
+  <url><loc>https://aboutme.example/templates</loc></url>
+  <url><loc>https://aboutme.example/templates/academic-dense</loc></url>
+  <url><loc>https://aboutme.example/templates/ats-plain</loc></url>
+  <url><loc>https://aboutme.example/templates/classic-serif</loc></url>
+  <url><loc>https://aboutme.example/templates/consulting-formal</loc></url>
+  <url><loc>https://aboutme.example/templates/creative-accent</loc></url>
+  <url><loc>https://aboutme.example/templates/designer-tag</loc></url>
+  <url><loc>https://aboutme.example/templates/editorial-wide</loc></url>
+  <url><loc>https://aboutme.example/templates/elegant-serif-two</loc></url>
+  <url><loc>https://aboutme.example/templates/engineer-compact</loc></url>
+  <url><loc>https://aboutme.example/templates/executive-band</loc></url>
+  <url><loc>https://aboutme.example/templates/government-formal</loc></url>
+  <url><loc>https://aboutme.example/templates/graduate-friendly</loc></url>
+  <url><loc>https://aboutme.example/templates/high-contrast</loc></url>
+  <url><loc>https://aboutme.example/templates/international-lang</loc></url>
+  <url><loc>https://aboutme.example/templates/minimal-air</loc></url>
+  <url><loc>https://aboutme.example/templates/modern-sidebar</loc></url>
+  <url><loc>https://aboutme.example/templates/mono-print</loc></url>
+  <url><loc>https://aboutme.example/templates/nordic-muted</loc></url>
+  <url><loc>https://aboutme.example/templates/one-page-tight</loc></url>
+  <url><loc>https://aboutme.example/templates/startup-bold</loc></url>
 </urlset>

@@ -9,7 +9,7 @@
     { "path": "apps/server/go.mod", "kind": "file" },
     { "path": "apps/server/go.sum", "kind": "file" },
     { "path": "apps/server/internal", "kind": "recursive" },
-    { "path": "packages/publicroots/public-roots.v7.json", "kind": "file" },
+    { "path": "packages/publicroots/public-roots.v8.json", "kind": "file" },
     { "path": "packages/schema/gen/go", "kind": "recursive" }
   ]
 }
