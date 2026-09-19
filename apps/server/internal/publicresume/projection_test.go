@@ -187,7 +187,7 @@ func TestProjectionCarriesV3DisplayAndTextAlign(t *testing.T) {
 		ID: uuid.New(), UserID: uuid.New(), Slug: &slug, Live: true, Revision: 7, Lng: &lng,
 		Doc: schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{
 			Details: []schema.PersonalDetail{
-				{ID: "labelled", Type: schema.Github, Value: "https://github.com/ada", Display: &label},
+				{ID: "labeled", Type: schema.Github, Value: "https://github.com/ada", Display: &label},
 				{ID: "plain", Type: schema.Website, Value: "https://ada.example"},
 			},
 		}, Customization: schema.Customization{Font: schema.Font{Family: schema.Inter, BaseSizePx: 14, TextAlign: &justify}}},
