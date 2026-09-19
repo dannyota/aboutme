@@ -332,6 +332,27 @@ describe('register.vue', () => {
     );
   });
 
+  it.each([
+    [
+      '/app/new?sample=ats-plain&lng=vi&x=1',
+      '/app/new?sample=ats-plain&lng=vi',
+    ],
+    ['//evil.example', null],
+  ])('carries a checked next %s to the have-an-account link', async (
+    next,
+    want,
+  ) => {
+    const wrapper = await mountSuspended(RegisterPage, {
+      route: `/register?next=${encodeURIComponent(next)}`,
+    });
+    await settle();
+    expect(
+      wrapper.get('[data-testid="register-sign-in"]').attributes('href'),
+    ).toBe(
+      want === null ? '/login' : `/login?next=${encodeURIComponent(want)}`,
+    );
+  });
+
   it('remembers a checked next in storage for verify-email to pick up',
     async () => {
       registerEndpoint('/api/v1/auth/password/register', {

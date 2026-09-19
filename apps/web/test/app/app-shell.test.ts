@@ -67,6 +67,7 @@ describe('AppShell', () => {
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
     expect(found['Create account']).toBe('/register');
+    expect(found['Templates']).toBe('/templates');
     expect(found['Resumes']).toBeUndefined();
     expect(found['Settings']).toBeUndefined();
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
@@ -91,6 +92,7 @@ describe('AppShell', () => {
     const found = links(wrapper);
     expect(found['Resumes']).toBe('/app/resumes');
     expect(found['Settings']).toBe('/app/settings/sessions');
+    expect(found['Templates']).toBe('/templates');
     expect(found['Sign in']).toBeUndefined();
     expect(found['Create account']).toBeUndefined();
     expect(wrapper.get('[aria-label="Account menu"]').exists()).toBe(true);
@@ -100,6 +102,42 @@ describe('AppShell', () => {
     me.data.user.name = originalName;
     wrapper.unmount();
   });
+  it('hides Settings but keeps Resumes on phones when signed in', async () => {
+    meStatus = 200;
+    const wrapper = await mountShell();
+    await flushPromises();
+    const resumes = wrapper.findAll('a')
+      .find((a) => a.attributes('href') === '/app/resumes');
+    const settings = wrapper.findAll('a')
+      .find((a) => a.attributes('href') === '/app/settings/sessions');
+    expect(resumes?.classes()).not.toContain('max-sm:hidden');
+    expect(settings?.classes()).toContain('max-sm:hidden');
+    // The account menu (tested below) keeps Settings one tap away on phones.
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it(
+    'hides Templates on phones when signed in, keeps it when signed out',
+    async () => {
+      meStatus = 200;
+      const signedInWrapper = await mountShell();
+      await flushPromises();
+      const signedInTemplates = signedInWrapper.findAll('a')
+        .find((a) => a.attributes('href') === '/templates');
+      expect(signedInTemplates?.classes()).toContain('max-sm:hidden');
+      signedInWrapper.unmount();
+
+      meStatus = 401;
+      clearNuxtData();
+      const signedOutWrapper = await mountShell();
+      await flushPromises();
+      const signedOutTemplates = signedOutWrapper.findAll('a')
+        .find((a) => a.attributes('href') === '/templates');
+      expect(signedOutTemplates?.classes()).not.toContain('max-sm:hidden');
+    },
+  );
+
   it('navigates from account menu and logs out', async () => {
     meStatus = 200;
     const wrapper = await mountShell();
@@ -240,6 +278,80 @@ describe('AppShell', () => {
     expect(found['Sign in']).toBe('/login');
     expect(found['Create account']).toBe('/register');
   });
+
+  it(
+    'marks the Templates link current on the gallery and its pages',
+    async () => {
+      meStatus = 401;
+      for (const route of ['/templates', '/templates/engineer-compact']) {
+        const wrapper = await mountShell(route);
+        await flushPromises();
+        const templatesLink = wrapper.findAll('a')
+          .find((a) => a.attributes('href') === '/templates');
+        expect(templatesLink?.attributes('aria-current')).toBe('page');
+      }
+      const elsewhere = await mountShell('/app/resumes');
+      await flushPromises();
+      const templatesLink = elsewhere.findAll('a')
+        .find((a) => a.attributes('href') === '/templates');
+      expect(templatesLink?.attributes('aria-current')).toBeUndefined();
+    },
+  );
+
+  it('speaks Vietnamese for Templates on the localized gallery', async () => {
+    meStatus = 401;
+    setSiteLocale('vi');
+    const wrapper = await mountShell('/templates');
+    await flushPromises();
+    expect(links(wrapper)['Mẫu']).toBe('/templates');
+  });
+
+  it(
+    'speaks Vietnamese for Resumes and Settings on a localized page',
+    async () => {
+      meStatus = 200;
+      setSiteLocale('vi');
+      const wrapper = await mountShell('/templates');
+      await flushPromises();
+      const found = links(wrapper);
+      expect(found['CV']).toBe('/app/resumes');
+      expect(found['Cài đặt']).toBe('/app/settings/sessions');
+      expect(found['Resumes']).toBeUndefined();
+      expect(found['Settings']).toBeUndefined();
+      wrapper.unmount();
+    },
+  );
+
+  it(
+    'keeps Resumes and Settings in English on the unlocalized app pages',
+    async () => {
+      meStatus = 200;
+      setSiteLocale('vi');
+      const wrapper = await mountShell('/app/resumes');
+      await flushPromises();
+      const found = links(wrapper);
+      expect(found['Resumes']).toBe('/app/resumes');
+      expect(found['Settings']).toBe('/app/settings/sessions');
+      wrapper.unmount();
+    },
+  );
+
+  it(
+    'shortens locale labels on phones without changing the accessible name',
+    async () => {
+      meStatus = 401;
+      const wrapper = await mountShell('/');
+      await flushPromises();
+      const vi = wrapper.get('[data-testid="landing-locale-vi"]');
+      const en = wrapper.get('[data-testid="landing-locale-en"]');
+      expect(vi.attributes('aria-label')).toBe('Tiếng Việt');
+      expect(en.attributes('aria-label')).toBe('English');
+      expect(vi.text()).toContain('VI');
+      expect(vi.text()).toContain('Tiếng Việt');
+      expect(en.text()).toContain('EN');
+      expect(en.text()).toContain('English');
+    },
+  );
 
   it('ignores next outside /login and /register', async () => {
     meStatus = 401;

@@ -120,6 +120,10 @@ describe('index.vue', () => {
       expect(
         wrapper.find('[data-testid="landing-open-resumes"]').exists(),
       ).toBe(false);
+      expect(
+        wrapper.get('[data-testid="landing-browse-templates"]')
+          .attributes('href'),
+      ).toBe('/templates');
       const hero = wrapper.get('[aria-labelledby="landing-title"]');
       expect(hero.text().indexOf('Create account')).toBeLessThan(
         hero.text().indexOf('Sign in'),
@@ -134,6 +138,10 @@ describe('index.vue', () => {
     expect(wrapper.get('[data-testid="landing-open-resumes"]').text()).toBe(
       'Open your resumes',
     );
+    expect(
+      wrapper.get('[data-testid="landing-browse-templates"]')
+        .attributes('href'),
+    ).toBe('/templates');
     expect(wrapper.find('[data-testid="landing-sign-in"]').exists()).toBe(
       false,
     );
@@ -230,6 +238,13 @@ describe('index.vue language', () => {
     expect(
       wrapper.get('[data-testid="landing-sign-in"]').attributes('href'),
     ).toBe('/login');
+    expect(
+      wrapper.get('[data-testid="landing-browse-templates"]')
+        .attributes('href'),
+    ).toBe('/templates');
+    expect(
+      wrapper.get('[data-testid="landing-browse-templates"]').text(),
+    ).toBe('Xem các mẫu');
   });
 
   it('marks the page language for the rendered copy', async () => {

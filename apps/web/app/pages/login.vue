@@ -227,6 +227,7 @@ async function onSubmit() {
       </NuxtLink>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
+        data-testid="login-create-account"
         :to="registerLink"
       >
         {{ copy.createAccount }}

@@ -30,8 +30,11 @@ useHead({ title: appTitles.newResume });
 
 const route = useRoute();
 const { locale } = useLocale();
+// A signed-out visitor here came from a public gallery page, not the app, so
+// send them to create an account rather than sign in to one; register.vue
+// carries `next` through Google sign-in and email verification back here.
 const list = useResumeList({
-  loginPath: `/login?next=${encodeURIComponent(route.fullPath)}`,
+  loginPath: `/register?next=${encodeURIComponent(route.fullPath)}`,
 });
 const request = computed(() => parseNewResumeQuery(route.query, locale.value));
 const document = ref<Resume>();

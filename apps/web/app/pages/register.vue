@@ -305,7 +305,8 @@ async function onSubmit() {
       <span>{{ copy.register.haveAccount }}</span>
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
-        to="/login"
+        data-testid="register-sign-in"
+        :to="signInLink"
       >
         {{ copy.signIn }}
       </NuxtLink>

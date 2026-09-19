@@ -11,6 +11,7 @@ export type LandingCopy = {
   readonly createAccount: string;
   readonly signIn: string;
   readonly openResumes: string;
+  readonly browseTemplates: string;
   readonly sampleLabel: string;
   readonly points: readonly [Point, Point, Point];
   readonly publishTitle: string;
@@ -31,6 +32,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     createAccount: 'Tạo tài khoản',
     signIn: 'Đăng nhập',
     openResumes: 'Mở CV của bạn',
+    browseTemplates: 'Xem các mẫu',
     sampleLabel: 'CV mẫu đăng tại aboutme.vn/ada-lovelace',
     points: [
       {
@@ -79,6 +81,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     createAccount: 'Create account',
     signIn: 'Sign in',
     openResumes: 'Open your resumes',
+    browseTemplates: 'Browse templates',
     sampleLabel: 'Sample resume published at aboutme.vn/ada-lovelace',
     points: [
       {
