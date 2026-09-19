@@ -116,11 +116,11 @@ The development browser harness runs on a separate trusted stack at
 `https://localhost:20443` with a deterministic local Google account and a pinned
 headless Chromium: `make dev-https-auth-check`, `dev-https-transport-check`,
 `dev-https-editor-check`, `dev-https-public-check`, `dev-https-password-check`,
-and `dev-https-exports-check`. The native public HTTP capture is
-`make native-http-check`. These are proof targets, not daily drivers; run them
-only when their surface changes. The password proof additionally seeds and
-cleans three deterministic accounts and reads authentication mail from the
-loopback capture server.
+`dev-https-exports-check`, and `dev-https-sample-start-check`. The native public
+HTTP capture is `make native-http-check`. These are proof targets, not daily
+drivers; run them only when their surface changes. The password proof
+additionally seeds and cleans three deterministic accounts and reads
+authentication mail from the loopback capture server.
 
 ## Inspect logs
 

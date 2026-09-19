@@ -12,6 +12,7 @@ const browserModes = [
   'publish',
   'exports',
   'privacy',
+  'sample-start',
 ] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
@@ -22,7 +23,8 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 
 const mode = requestedMode as BrowserMode;
 const timeout = mode === 'editor' || mode === 'public' || mode === 'password-auth'
-  || mode === 'mcp' || mode === 'publish' || mode === 'exports' || mode === 'privacy' ? 120_000 : 30_000;
+  || mode === 'mcp' || mode === 'publish' || mode === 'exports' || mode === 'privacy'
+  || mode === 'sample-start' ? 120_000 : 30_000;
 
 for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   if (Object.hasOwn(process.env, name)) {

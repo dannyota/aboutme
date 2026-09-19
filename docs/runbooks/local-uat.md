@@ -32,6 +32,7 @@ make dev-https-public-check
 make dev-https-publish-check
 make dev-https-password-check
 make dev-https-exports-check
+make dev-https-sample-start-check
 make dev-https-privacy-check
 make dev-https-down
 make dev-native
