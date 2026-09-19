@@ -104,6 +104,8 @@ export function parseSummary(value: unknown): ResumeSummary {
     || typeof value.downloadEnabled !== 'boolean'
     || typeof value.seoGeoEnabled !== 'boolean'
     || (value.slug !== null && typeof value.slug !== 'string')
+    || !optionalText(value.publicTitle)
+    || !optionalText(value.faviconEmoji)
     || typeof value.createdAt !== 'string'
     || typeof value.updatedAt !== 'string'
     || value.schemaVersion !== CURRENT_VERSION
@@ -118,11 +120,19 @@ export function parseSummary(value: unknown): ResumeSummary {
     downloadEnabled: value.downloadEnabled,
     seoGeoEnabled: value.seoGeoEnabled,
     slug: value.slug,
+    publicTitle: (value.publicTitle as string | null | undefined) ?? null,
+    faviconEmoji: (value.faviconEmoji as string | null | undefined) ?? null,
     schemaVersion: CURRENT_VERSION,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
     revision: parseRevision(value.revision),
   });
+}
+
+// An owner resource from before the public page fields has neither key;
+// absence reads as the default, like null.
+function optionalText(value: unknown): boolean {
+  return value === undefined || value === null || typeof value === 'string';
 }
 
 export function dataOf(value: unknown): unknown {

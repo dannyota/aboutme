@@ -106,6 +106,10 @@ export interface ResumeMetadata {
   readonly downloadEnabled: boolean;
   readonly seoGeoEnabled: boolean;
   readonly slug: string | null;
+  /** The public page's tab title; null means "<Full name> — Resume". */
+  readonly publicTitle: string | null;
+  /** The public page's tab icon emoji; null means the site icon. */
+  readonly faviconEmoji: string | null;
   readonly schemaVersion: typeof CURRENT_VERSION;
   readonly createdAt: string;
   readonly updatedAt: string;

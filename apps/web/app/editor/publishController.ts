@@ -17,6 +17,7 @@ import {
   mapReauthError,
   mapReauthStartError,
 } from '../composables/passwordSettings';
+import { faviconEmojiIssue, publicTitleIssue } from './publicPageMeta';
 import type { EditorRuntime } from './types';
 
 export type PublishControllerState
@@ -537,7 +538,7 @@ function blockedReason(record: {
 
 function validateCommand(
   command: PublishCommand,
-): { readonly path: string; readonly code: 'invalid_format' } | null {
+): { readonly path: string; readonly code: string } | null {
   if (
     command.slug !== undefined
     && (command.slug.length < 4
@@ -546,6 +547,14 @@ function validateCommand(
   ) {
     return { path: 'slug', code: 'invalid_format' };
   }
+  const titleIssue = command.publicTitle === undefined
+    ? null
+    : publicTitleIssue(command.publicTitle);
+  if (titleIssue !== null) return { path: 'publicTitle', code: titleIssue };
+  const emojiIssue = command.faviconEmoji === undefined
+    ? null
+    : faviconEmojiIssue(command.faviconEmoji);
+  if (emojiIssue !== null) return { path: 'faviconEmoji', code: emojiIssue };
   return null;
 }
 

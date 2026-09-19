@@ -18,6 +18,8 @@ const fixedMetadata: ResumeMetadata = {
   downloadEnabled: false,
   seoGeoEnabled: false,
   slug: null,
+  publicTitle: null,
+  faviconEmoji: null,
   schemaVersion: CURRENT_VERSION,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
