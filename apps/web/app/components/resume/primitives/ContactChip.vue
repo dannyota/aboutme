@@ -41,6 +41,22 @@ const isLink = computed(
     && props.detail.value.startsWith('https://'),
 );
 const label = computed(() => props.detail.label || labels[props.detail.type]);
+// An icon already names a typed contact, so its default label would repeat
+// it. A user-set label, a custom detail's label, or an icon-free header keep
+// the label.
+const showLabel = computed(
+  () =>
+    props.iconStyle === 'none'
+    || props.detail.type === 'custom'
+    || Boolean(props.detail.label),
+);
+// A link shows its address without the scheme or a trailing slash; the href
+// keeps the full URL.
+const shownValue = computed(() => {
+  if (!isLink.value) return props.detail.value;
+  const shown = props.detail.value.slice('https://'.length).replace(/\/$/u, '');
+  return shown === '' ? props.detail.value : shown;
+});
 </script>
 
 <template>
@@ -49,13 +65,16 @@ const label = computed(() => props.detail.label || labels[props.detail.type]);
       v-if="iconStyle === 'outline'"
       :icon-key="iconKeys[detail.type]"
     />
-    <span class="contact-label">{{ label }}:</span>
+    <span
+      v-if="showLabel"
+      class="contact-label"
+    >{{ label }}:</span>
     <a
       v-if="isLink"
       :href="detail.value"
       rel="noopener noreferrer"
       style="color: var(--color-link); text-decoration: underline"
-    >{{ detail.value }}</a>
+    >{{ shownValue }}</a>
     <span v-else>{{ detail.value }}</span>
   </span>
 </template>

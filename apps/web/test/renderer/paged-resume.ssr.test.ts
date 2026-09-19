@@ -142,6 +142,28 @@ describe('paged resume SSR', () => {
     expect(html).toMatch(/min-height:1056px;height:2\d{3}(?:\.\d+)?px/);
   });
 
+  it('breaks a long entry between blocks instead of moving it', async () => {
+    const document = fixture('full');
+    const filler = 'Built and ran distributed systems. ';
+    const paragraphs = Array.from({ length: 14 }, (_, index) =>
+      `<p>Paragraph ${index + 1}: ${filler.repeat(12)}</p>`);
+    const work = document.content.work;
+    if (work?.sectionType !== 'work') throw new Error('fixture has no work');
+    work.entries[0]!.description = paragraphs.join('');
+    const html = await renderPaged(document);
+    const pages = html.split('data-page-index=').slice(1);
+    expect(pages.length).toBeGreaterThan(1);
+    // Page one keeps the entry header with its first blocks, then fills up.
+    expect(pages[0]).toContain(work.entries[0]!.jobTitle!);
+    expect(pages[0]).toContain('Paragraph 1:');
+    expect(pages[0]).toContain('Paragraph 2:');
+    // The rest continues on the next page without repeating the header.
+    const continued = pages.findIndex((page) => page.includes('Paragraph 14:'));
+    expect(continued).toBeGreaterThan(0);
+    expect(pages[continued]).not.toContain(work.entries[0]!.jobTitle!);
+    expect(html).not.toContain('data-page-overflow="true"');
+  });
+
   it('uses the typed pagination error class', () => {
     expect(new PaginationError('invalid_measurement', 'bad')).toBeInstanceOf(
       PaginationError,

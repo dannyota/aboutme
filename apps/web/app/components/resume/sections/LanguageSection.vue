@@ -8,7 +8,7 @@ import SectionHeading from '../primitives/SectionHeading.vue';
 withDefaults(defineProps<{
   section: Extract<Section, { sectionType: 'language' }>;
   displayStyle: Customization['sectionDisplay']['language']['style'];
-  renderPart?: 'all' | 'heading' | 'entry';
+  renderPart?: 'all' | 'heading' | 'entry' | 'continuation';
 }>(), { renderPart: 'all' });
 </script>
 
@@ -18,7 +18,7 @@ withDefaults(defineProps<{
     class="resume-section"
   >
     <SectionHeading
-      v-if="renderPart !== 'entry'"
+      v-if="renderPart === 'all' || renderPart === 'heading'"
       :display-name="section.displayName"
       :icon-key="section.iconKey"
     />

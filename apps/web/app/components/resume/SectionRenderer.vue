@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<{
   section: Section;
   dateFormat: Customization['dateFormat'];
   sectionDisplay: Customization['sectionDisplay'];
-  renderPart?: 'all' | 'heading' | 'entry';
+  renderPart?: 'all' | 'heading' | 'entry' | 'continuation';
 }>(), { renderPart: 'all' });
 
 const assertNever = (section: never): never => {

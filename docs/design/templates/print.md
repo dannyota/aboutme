@@ -8,24 +8,24 @@ renderer-owned (`tokens.md` §1).
 
 ## 1. Render targets
 
-| Target          | Route         | Pagination model                                                                               | Authority               |
-| --------------- | ------------- | ---------------------------------------------------------------------------------------------- | ----------------------- |
-| Editor preview  | `/app/**`     | JS measure-and-break at entry boundaries, selected A4/Letter page, `transform: scale()` to fit | approximate             |
-| Public SSR page | `/[slug]`     | continuous flow, no pagination                                                                 | not paginated at all    |
-| PDF             | `/print/[id]` | CSS `@page` plus fragmentation properties                                                      | **authoritative**       |
-| Share image     | `/print/[id]` | Fixed 1200 by 630 pixel viewport; top crop, no page fragmentation                              | One fixed image variant |
+| Target          | Route         | Pagination model                                                                                           | Authority               |
+| --------------- | ------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Editor preview  | `/app/**`     | JS measure-and-break between entries and body blocks, selected A4/Letter page, `transform: scale()` to fit | approximate             |
+| Public SSR page | `/[slug]`     | continuous flow, no pagination                                                                             | not paginated at all    |
+| PDF             | `/print/[id]` | CSS `@page` plus fragmentation properties                                                                  | **authoritative**       |
+| Share image     | `/print/[id]` | Fixed 1200 by 630 pixel viewport; top crop, no page fragmentation                                          | One fixed image variant |
 
 The [renderer boundary](../system.md#renderer-boundary) makes editor pagination
 an approximation and Chromium print pagination authoritative. JavaScript
 measurement and the print engine are different algorithms by design.
 
 They are allowed to disagree because they must. The editor measures laid-out DOM
-boxes in a scaled viewport and cuts between entries; Chromium fragments the flow
-honoring `orphans`, `widows`, `break-inside`, and `break-after`, and will split
-inside an entry where the editor would not. Font metric rounding at print
-resolution, hyphenation, and `@page` margin geometry differ as well. A one-line
-overflow therefore lands on page 2 in the PDF while the preview shows it on
-page 1.
+boxes in a scaled viewport and cuts between entries and between an entry's body
+blocks; Chromium fragments the flow honoring `orphans`, `widows`,
+`break-inside`, and `break-after`, and can also split inside a paragraph. Font
+metric rounding at print resolution, hyphenation, and `@page` margin geometry
+differ as well. A one-line overflow therefore lands on page 2 in the PDF while
+the preview shows it on page 1.
 
 Two obligations follow:
 
@@ -102,9 +102,12 @@ blank-page failure mode.
 The section heading and first entry stay sibling blocks. Chained
 `break-after: avoid` on `.section-heading` and `.entry-header` keeps the
 heading, entry header, and the start of the body together without an overlapping
-wrapper. The print path may split a long `.entry` body; the editor paginator
-instead treats each whole entry as one measured block and pulls an orphan
-heading to the same page as that block.
+wrapper. Both paths may split a long `.entry` body. The editor paginator
+measures an entry as its header with the first body block, then one block per
+remaining paragraph or unordered-list item, and pulls an orphan section heading
+onto the page with that first part. An ordered list stays one block, because the
+sanitizer drops `start` and a split list would renumber; skills and languages
+never split.
 
 ## 4. Widows and orphans
 
