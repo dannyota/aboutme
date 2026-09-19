@@ -17,6 +17,7 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import { useCapabilities } from '@/composables/useCapabilities';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
+import { pageTitle } from '@/i18n/meta';
 
 useHead({
   meta: [{ name: 'referrer', content: 'no-referrer' }],
@@ -24,6 +25,7 @@ useHead({
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+useHead(computed(() => ({ title: pageTitle(copy.value.verify.title) })));
 const { loginProviders } = useCapabilities();
 const status = ref<'verifying' | 'success' | 'error'>('verifying');
 const errorMessage = ref<AuthMessage | null>(null);

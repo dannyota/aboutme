@@ -291,6 +291,7 @@ apps/web/app/composables/useOAuthConsent.ts
 apps/web/app/composables/usePasswordAuth.ts
 apps/web/app/composables/useResumeEditor.ts
 apps/web/app/composables/useResumeList.ts
+apps/web/app/composables/useSiteSeo.ts
 apps/web/app/composables/useStamp.ts
 apps/web/app/composables/useTheme.ts
 apps/web/app/composables/useUnsavedNavigationGuard.ts
@@ -327,10 +328,12 @@ apps/web/app/editor/types.ts
 apps/web/app/i18n/auth.ts
 apps/web/app/i18n/legal.ts
 apps/web/app/i18n/locale.ts
+apps/web/app/i18n/meta.ts
 apps/web/app/i18n/shell.ts
 apps/web/app/landing/copy.ts
 apps/web/app/landing/sampleContext.ts
 apps/web/app/landing/sampleResume.ts
+apps/web/app/landing/structuredData.ts
 apps/web/app/lib/utils.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
@@ -410,6 +413,7 @@ apps/web/public/font-licenses/source-sans-3/LICENSE.md
 apps/web/public/font-licenses/space-mono/OFL.txt
 apps/web/public/font-licenses/spectral/ofl.txt
 apps/web/public/font-licenses/work-sans/OFL.txt
+apps/web/public/og-image.png
 apps/web/public/theme-bootstrap.js
 apps/web/server/plugins/csp-externalize.ts
 apps/web/server/plugins/public-render-worker.ts

@@ -258,6 +258,9 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
+    // The account pages are client-rendered, so their first HTML is a shell
+    // without head tags; this header keeps them out of search engines.
+    '/app/**': { headers: { 'X-Robots-Tag': 'noindex' } },
     '/app/resumes/**': { ssr: false },
     ...(harnessEnabled
       ? {

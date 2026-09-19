@@ -52,6 +52,17 @@ editor route keeps its own top bar.
 Nuxt reads `GET /api/v1/capabilities` only in the browser after hydration. A
 failed read is treated as every capability false.
 
+Every page title follows `<page> · aboutme`; the homepage uses its own headline
+title, and the editor uses the resume title. Only `/`, `/privacy`, and `/terms`
+are indexable. Each carries a meta description, a canonical link to
+`https://aboutme.vn/<path>`, Open Graph and Twitter card tags, and the shared
+1200 × 630 `/og-image.png`; the homepage also carries a JSON-LD graph of
+WebSite, Organization, and a free WebApplication, with no ratings, reviews, or
+counts. Every other Nuxt route sends `robots: noindex`, and `/app/**`, whose
+first HTML is a client-rendered shell, also sends the `X-Robots-Tag: noindex`
+header. The site language is a cookie with no per-language URL, so there is no
+hreflang and crawlers read the Vietnamese default.
+
 ## Application UI
 
 The application chrome is every page and editor panel outside the pure renderer.

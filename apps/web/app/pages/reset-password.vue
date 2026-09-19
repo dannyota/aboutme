@@ -17,6 +17,7 @@ import {
   type PasswordIssue,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
+import { pageTitle } from '@/i18n/meta';
 
 useHead({
   meta: [{ name: 'referrer', content: 'no-referrer' }],
@@ -24,6 +25,7 @@ useHead({
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+useHead(computed(() => ({ title: pageTitle(copy.value.reset.title) })));
 const password = ref('');
 const passwordField = ref<InstanceType<typeof PasswordField> | null>(null);
 const pending = ref(false);

@@ -8,6 +8,9 @@ import {
 } from '../composables/useOAuthConsent';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
+import { appTitles } from '@/i18n/meta';
+
+useHead({ title: appTitles.authorize });
 
 const route = useRoute();
 const consent = useOAuthConsent();

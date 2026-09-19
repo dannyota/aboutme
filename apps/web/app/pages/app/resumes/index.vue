@@ -8,6 +8,9 @@ import {
   useResumeList,
 } from '../../../composables/useResumeList';
 import { useNow } from '../../../composables/useNow';
+import { appTitles } from '@/i18n/meta';
+
+useHead({ title: appTitles.resumes });
 
 const list = useResumeList();
 const now = useNow();
