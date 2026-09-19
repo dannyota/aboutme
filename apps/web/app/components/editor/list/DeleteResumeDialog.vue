@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { ResumeSummary } from '../../../editor/resumeApi';
 import ConfirmDialog from '@/components/app/ConfirmDialog.vue';
 
@@ -8,6 +9,11 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{ close: []; submit: [id: string, title: string] }>();
+
+const description = computed(() =>
+  props.item === null
+    ? 'This permanently deletes the resume.'
+    : `Delete "${props.item.title}"? This permanently deletes the resume.`);
 
 function submit(): void {
   if (props.item !== null) {
@@ -20,12 +26,9 @@ function submit(): void {
   <ConfirmDialog
     :open="item !== null"
     title="Delete resume"
-    :description="item === null
-      ? 'This permanently deletes the resume. Type its title to confirm.'
-      : `Delete ${item.title}? This permanently deletes the resume.`"
+    :description="description"
     confirm-label="Delete"
-    confirm-input-label="Current title"
-    :confirm-text="item?.title"
+    confirm-text="DELETE"
     confirm-action="confirm-delete"
     cancel-action="cancel-delete"
     destructive
