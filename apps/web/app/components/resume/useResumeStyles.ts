@@ -117,6 +117,7 @@ export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
     // heights gives the rows the headline's line pitch.
     '--gap-header': `${tokens.spacing.sectionGap * 1.5}px`,
     '--header-photo-gap': '0.9em',
+    '--header-photo-gap-side': '1.25em',
     '--header-name-gap': '0.2em',
     '--header-details-gap': '0.5em',
     '--details-row-gap':

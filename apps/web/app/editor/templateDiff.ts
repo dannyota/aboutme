@@ -105,6 +105,7 @@ function isUnsetPath(
       || path === 'colors.surface'
       || path === 'spacing.pageMargin'
       || path === 'header'
+      || path === 'header.photoPosition'
       || path === 'layout.surfaceTarget')
   );
 }

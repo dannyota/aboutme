@@ -76,6 +76,7 @@ export type CustomizationSetPath
     | 'header.align'
     | 'header.detailsLayout'
     | 'header.iconStyle'
+    | 'header.photoPosition'
     | 'layout.columns'
     | 'layout.surfaceTarget'
     | 'sectionDisplay.skill.style'
@@ -89,6 +90,7 @@ export type CustomizationUnsetPath
     | 'colors.surface'
     | 'spacing.pageMargin'
     | 'header'
+    | 'header.photoPosition'
     | 'layout.surfaceTarget';
 
 export type CustomizationDelta

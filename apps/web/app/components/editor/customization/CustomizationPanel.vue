@@ -105,6 +105,33 @@ function commitTextAlign(value: string | number): void {
   }
 }
 
+const PHOTO_POSITION_HINT = 'Takes effect when you add a photo.';
+const photoPosition = computed(() =>
+  customization.value?.header?.photoPosition ?? 'top');
+const hasPhoto = computed(() =>
+  record.value?.current.document.personalDetails.photo !== undefined);
+
+// Absent means top (ADR 0044). Left or right on a resume with no header
+// creates it with the Header switch's defaults; Top clears the stored value.
+function commitPhotoPosition(value: string): void {
+  if (value !== 'top' && value !== 'left' && value !== 'right') return;
+  const header = customization.value?.header;
+  const current = header?.photoPosition ?? 'top';
+  if (value === current) return;
+  if (value === 'top') {
+    commit([{ op: 'unset', path: 'header.photoPosition' }]);
+  } else if (header === undefined) {
+    commit([
+      { op: 'set', path: 'header.align', value: 'left' },
+      { op: 'set', path: 'header.detailsLayout', value: 'inline' },
+      { op: 'set', path: 'header.iconStyle', value: 'outline' },
+      { op: 'set', path: 'header.photoPosition', value },
+    ]);
+  } else {
+    commit([{ op: 'set', path: 'header.photoPosition', value }]);
+  }
+}
+
 function unsetSurfaceTarget(): void {
   if (customization.value?.layout.surfaceTarget === undefined) return;
   commit([{ op: 'unset', path: 'layout.surfaceTarget' }]);
@@ -190,7 +217,8 @@ function labelFor(path: CustomizationSetPath): string {
 function isDeferredPath(path: string): boolean {
   return path === 'header.align'
     || path === 'header.detailsLayout'
-    || path === 'header.iconStyle';
+    || path === 'header.iconStyle'
+    || path === 'header.photoPosition';
 }
 
 function colorValue(path: string): string | undefined {
@@ -412,6 +440,17 @@ function customizationValue(): Customization | undefined {
                 />
               </template>
             </div>
+            <SelectField
+              v-if="group.title === 'Headings'"
+              :id="fieldId('header.photoPosition')"
+              :hint="hasPhoto ? undefined : PHOTO_POSITION_HINT"
+              :label="labelFor('header.photoPosition')"
+              :model-value="photoPosition"
+              name="header.photoPosition"
+              :options="valuesFor(fieldFor('header.photoPosition')!).map(
+                (value) => ({ value, label: enumLabel('', value) }))"
+              @update:model-value="commitPhotoPosition"
+            />
             <Button
               v-if="group.title === 'Layout'
                 && customizationValue()?.layout.surfaceTarget !== undefined"

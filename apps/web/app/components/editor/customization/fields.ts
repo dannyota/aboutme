@@ -45,6 +45,7 @@ const paths = [
   'header.align',
   'header.detailsLayout',
   'header.iconStyle',
+  'header.photoPosition',
   'layout.columns',
   'layout.surfaceTarget',
   'sectionDisplay.skill.style',

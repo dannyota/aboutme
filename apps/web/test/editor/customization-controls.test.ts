@@ -35,6 +35,7 @@ const paths = [
   'header.align',
   'header.detailsLayout',
   'header.iconStyle',
+  'header.photoPosition',
   'layout.columns',
   'layout.surfaceTarget',
   'sectionDisplay.skill.style',
@@ -612,6 +613,7 @@ function recordWithEveryCustomizationLeaf(): ResumeRecord {
     align: 'left',
     detailsLayout: 'inline',
     iconStyle: 'outline',
+    photoPosition: 'top',
   };
   record.current.document.customization.layout.surfaceTarget = 'header';
   return record;

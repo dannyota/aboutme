@@ -166,6 +166,52 @@ body:has(> #public-resume) {
   border-radius: var(--photo-radius);
 }
 
+/*
+ * A side photo sits beside the name, headline, and details, vertically
+ * centered, with header.align applying inside the text column (ADR 0044).
+ * Only a continuous page on a screen narrower than 36em stacks the photo on
+ * top again; pages and print always keep the side layout. A media query, not
+ * a container query: size containment would change how a shrink-to-fit
+ * document measures its width.
+ */
+.resume-document .resume-header-text {
+  min-width: 0;
+}
+
+.resume-document .resume-header[data-photo-position] {
+  grid-template-columns: var(--photo-size) minmax(0, 1fr);
+  column-gap: var(--header-photo-gap-side);
+  align-items: center;
+}
+
+.resume-document .resume-header[data-photo-position="right"] {
+  grid-template-columns: minmax(0, 1fr) var(--photo-size);
+}
+
+.resume-document .resume-header[data-photo-position] .resume-photo {
+  justify-self: auto;
+  margin: 0;
+}
+
+.resume-document .resume-header[data-photo-position="right"] .resume-photo {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+@media screen and (width < 36em) {
+  .resume-document:not(.resume-page) .resume-header[data-photo-position] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resume-document:not(.resume-page)
+    .resume-header[data-photo-position] .resume-photo {
+    grid-row: auto;
+    grid-column: auto;
+    justify-self: var(--header-align);
+    margin-block-end: var(--header-photo-gap);
+  }
+}
+
 .resume-document .resume-photo-image {
   position: absolute;
   display: block;

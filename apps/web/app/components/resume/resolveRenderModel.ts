@@ -55,6 +55,8 @@ export interface ResolvedRenderModel {
     readonly align: 'left' | 'center';
     readonly detailsLayout: 'inline' | 'stacked';
     readonly iconStyle: 'none' | 'outline';
+    /** Where a photo sits; absent means top (ADR 0044). */
+    readonly photoPosition: 'top' | 'left' | 'right';
   };
   readonly heading: Customization['heading'];
   readonly sectionDisplay: Customization['sectionDisplay'];
@@ -131,6 +133,7 @@ export function resolveRenderModel(
       align: customization.header?.align ?? 'left',
       detailsLayout: customization.header?.detailsLayout ?? 'inline',
       iconStyle: customization.header?.iconStyle ?? 'outline',
+      photoPosition: customization.header?.photoPosition ?? 'top',
     },
     heading: { ...customization.heading },
     sectionDisplay: {
