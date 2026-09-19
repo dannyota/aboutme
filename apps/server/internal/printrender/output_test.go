@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakePDFStream struct {
@@ -63,17 +64,44 @@ func TestReadPDFStreamIsBoundedAndAlwaysClosed(t *testing.T) {
 	}
 }
 
-func TestCanonicalizePDFMetadataResolvesInfoAndPreservesEveryOtherByte(t *testing.T) {
+func TestSetPDFMetadataDatesWritesTheRevisionTimeAndPreservesEveryOtherByte(t *testing.T) {
 	dynamic := "D:20260905174051+00'00'"
-	canonical := "D:19700101000000+00'00'"
-	input := classicPDF(t, dynamic, dynamic, dynamic)
-	want := classicPDF(t, dynamic, canonical, canonical)
-
-	if err := canonicalizePDFMetadata(input); err != nil {
-		t.Fatal(err)
+	for _, test := range []struct {
+		name         string
+		revisionTime time.Time
+		want         string
+	}{
+		{"revision time in UTC", time.Date(2026, 9, 19, 15, 30, 5, 999, time.FixedZone("ICT", 7*60*60)), "D:20260919083005+00'00'"},
+		{"zero time writes the epoch", time.Time{}, "D:19700101000000+00'00'"},
+		{"last representable year", time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC), "D:99991231235959+00'00'"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := classicPDF(t, dynamic, dynamic, dynamic)
+			want := classicPDF(t, dynamic, test.want, test.want)
+			if err := setPDFMetadataDates(input, test.revisionTime); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(input, want) {
+				t.Fatalf("PDF differs outside Info dates: %s", describeByteDifferences(input, want))
+			}
+		})
 	}
-	if !bytes.Equal(input, want) {
-		t.Fatalf("canonical PDF differs outside Info dates: %s", describeByteDifferences(input, want))
+}
+
+func TestSetPDFMetadataDatesRejectsAnUnrepresentableTime(t *testing.T) {
+	dynamic := "D:20260905174051+00'00'"
+	for _, revisionTime := range []time.Time{
+		time.Date(1969, 12, 31, 23, 59, 59, 0, time.UTC),
+		time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC),
+	} {
+		input := classicPDF(t, dynamic, dynamic, dynamic)
+		before := append([]byte(nil), input...)
+		if err := setPDFMetadataDates(input, revisionTime); err == nil {
+			t.Fatalf("setPDFMetadataDates(%v) accepted an unrepresentable time", revisionTime)
+		}
+		if !bytes.Equal(input, before) {
+			t.Fatalf("setPDFMetadataDates(%v) changed a rejected PDF", revisionTime)
+		}
 	}
 }
 
@@ -104,8 +132,8 @@ func TestCanonicalizePDFMetadataRejectsMalformedOrAmbiguousStructure(t *testing.
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			before := append([]byte(nil), test.pdf...)
-			if err := canonicalizePDFMetadata(test.pdf); err == nil {
-				t.Fatal("canonicalizePDFMetadata() accepted malformed PDF")
+			if err := setPDFMetadataDates(test.pdf, time.Time{}); err == nil {
+				t.Fatal("setPDFMetadataDates() accepted malformed PDF")
 			}
 			if !bytes.Equal(test.pdf, before) {
 				t.Fatal("rejected PDF was partially mutated")

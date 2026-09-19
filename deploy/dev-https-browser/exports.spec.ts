@@ -24,6 +24,8 @@ import { ALLOWED_ORIGIN, httpFailureStatus } from "./network-policy";
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/exports-proof.json";
+const FULL_NAME = "Export proof resume";
+const PDF_NAME = "Export-proof-resume-Resume.pdf";
 const PDF_MAX_BYTES = 16_777_216;
 const PNG_MAX_BYTES = 4_194_304;
 
@@ -93,6 +95,15 @@ function expectPDF(bytes: Uint8Array): void {
   expect(bytes.byteLength).toBeGreaterThan(5);
   expect(bytes.byteLength).toBeLessThanOrEqual(PDF_MAX_BYTES);
   expect(Buffer.from(bytes.subarray(0, 5)).toString("ascii")).toBe("%PDF-");
+}
+
+// The PDF Title is the print page title, and its dates are the saved
+// revision's time, never the 1970 epoch (ADR 0045).
+function expectRevisionMetadata(bytes: Uint8Array): void {
+  const text = Buffer.from(bytes).toString("latin1");
+  expect(text).toContain(`/Title (${FULL_NAME} - Resume)`);
+  expect(text).toMatch(/\/CreationDate \(D:20\d{12}\+00'00'\)/u);
+  expect(text).not.toContain("D:19700101000000");
 }
 
 function expectPNG(bytes: Uint8Array): void {
@@ -248,7 +259,7 @@ test("proves owner and public export gates through native HTTPS", async ({
     const savedPatch = page.waitForResponse((response) =>
       isSaveRequest(response.request(), createdID!),
     );
-    await fullName.fill("Export proof resume");
+    await fullName.fill(FULL_NAME);
     const ownerPDFResponse = page.waitForResponse((response) =>
       isOwnerPDFRequest(response.request(), createdID!),
     );
@@ -278,13 +289,14 @@ test("proves owner and public export gates through native HTTPS", async ({
       "no-store, no-transform",
     );
     expect(ownerResponse.headers()["content-disposition"]).toBe(
-      'attachment; filename="resume.pdf"',
+      `attachment; filename="${PDF_NAME}"; filename*=UTF-8''${PDF_NAME}`,
     );
     stage("owner-pdf-accepted");
     const download = await ownerDownload;
-    expect(download.suggestedFilename()).toBe("resume.pdf");
+    expect(download.suggestedFilename()).toBe(PDF_NAME);
     const ownerBytes = await readDownload(download);
     expectPDF(ownerBytes);
+    expectRevisionMetadata(ownerBytes);
     stage("owner-download-captured");
     steps.ownerSaveFirst = true;
     steps.ownerDownload = true;
@@ -378,7 +390,7 @@ test("proves owner and public export gates through native HTTPS", async ({
     );
     expect(publicPDF.headers["content-type"]).toBe("application/pdf");
     expect(publicPDF.headers["content-disposition"]).toBe(
-      `attachment; filename="${slug}.pdf"`,
+      `attachment; filename="${PDF_NAME}"; filename*=UTF-8''${PDF_NAME}`,
     );
     const publicPDFETag = publicPDF.headers.etag;
     expect(publicPDFETag).toMatch(/^"[^\"]+"$/);

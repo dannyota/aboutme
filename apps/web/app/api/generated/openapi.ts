@@ -1078,6 +1078,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description `attachment` with an ASCII `filename` and, when the name has usable words, an RFC 5987 UTF-8 `filename*`. */
+        PDFAttachment: string;
         /** @description Success response wrapper. `data` carries the operation-specific payload; individual operations refine its shape via `allOf`. */
         Envelope: {
             data: unknown;
@@ -3310,15 +3312,15 @@ export interface components {
     requestBodies: never;
     headers: {
         /**
-         * @description Public PDF download filename: the resume's slug, which is ASCII lowercase letters, digits, and single hyphens.
-         * @example attachment; filename="ada-lovelace.pdf"
+         * @description Public PDF download filename, `<Full-Name>-Resume.pdf`. `filename` carries the full name folded to ASCII letters and digits, words joined by hyphens; `filename*` (RFC 5987) carries the same words in UTF-8. A name with no usable words downloads as `Resume.pdf` without `filename*`. See `docs/adr/0045-pdf-download-name-and-metadata.md`.
+         * @example attachment; filename="Nguyen-Van-Duc-Resume.pdf"; filename*=UTF-8''Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf
          */
-        PublicPDFAttachment: string;
+        PublicPDFAttachment: components["schemas"]["PDFAttachment"];
         /**
-         * @description Fixed resume PDF download filename.
-         * @example attachment; filename="resume.pdf"
+         * @description Owner PDF download filename, named from the rendered revision's full name by the same rule as the public PDF.
+         * @example attachment; filename="Ada-Lovelace-Resume.pdf"; filename*=UTF-8''Ada-Lovelace-Resume.pdf
          */
-        ResumePDFAttachment: "attachment; filename=\"resume.pdf\"";
+        ResumePDFAttachment: components["schemas"]["PDFAttachment"];
         /**
          * @description The owning resume's revision as a strong entity tag, `"r<revision>"`. Send it back as `If-Match` on the next mutation.
          * @example "r43"

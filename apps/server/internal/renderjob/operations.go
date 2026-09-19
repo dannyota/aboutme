@@ -66,6 +66,7 @@ func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
 	// attempt.ctx is the context.WithCancel(ctx) child created by q.admit.
 	output, renderErr := callRenderer(attempt.ctx, q.renderer, Navigation{ //nolint:contextcheck
 		ResumeID: snapshot.ResumeID, JobID: jobID, Capability: capability, Format: request.Format,
+		RevisionTime: snapshot.RevisionTime,
 	})
 	if renderErr != nil {
 		if attemptErr := q.attemptError(attempt); attemptErr != nil {

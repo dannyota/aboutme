@@ -14,6 +14,7 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
+	"github.com/dannyota/aboutme/apps/server/internal/pdfname"
 	"github.com/dannyota/aboutme/apps/server/internal/printsnapshot"
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
@@ -94,6 +95,7 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 
 	var preparation atomic.Uint32
 	var preparedRevision atomic.Int64
+	var preparedName atomic.Pointer[string]
 	result, renderErr := s.printQueue.Render(r.Context(), renderjob.Request{
 		Format: renderjob.PDF,
 		Prepare: func(ctx context.Context) (renderjob.Snapshot, error) {
@@ -122,10 +124,11 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 				return renderjob.Snapshot{}, errOwnerPDFPreparation
 			}
 			preparedRevision.Store(row.Revision)
+			preparedName.Store(&envelope.Document.PersonalDetails.FullName)
 			preparation.Store(uint32(ownerPDFPreparationOK))
 			return renderjob.Snapshot{
 				ResumeID: row.ID, Revision: row.Revision, SchemaVersion: int(row.Doc.SchemaVersion),
-				Payload: payload,
+				Payload: payload, RevisionTime: row.UpdatedAt,
 			}, nil
 		},
 	})
@@ -137,13 +140,15 @@ func (s *Service) handleDownloadResumePDF(w http.ResponseWriter, r *http.Request
 		writeResumeError(w, ownerPDFUnavailableError())
 		return
 	}
-	if len(result.Bytes) == 0 || len(result.Bytes) > maxOwnerPDFBytes || result.Revision <= 0 || result.Revision != preparedRevision.Load() {
+	fullName := preparedName.Load()
+	if len(result.Bytes) == 0 || len(result.Bytes) > maxOwnerPDFBytes || result.Revision <= 0 ||
+		result.Revision != preparedRevision.Load() || fullName == nil {
 		writeResumeError(w, ownerPDFUnavailableError())
 		return
 	}
 
 	w.Header().Set("Cache-Control", api.CacheControlNoStore)
-	w.Header().Set("Content-Disposition", `attachment; filename="resume.pdf"`)
+	w.Header().Set("Content-Disposition", pdfname.Disposition(*fullName))
 	w.Header().Set("Content-Length", strconv.Itoa(len(result.Bytes)))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.WriteHeader(http.StatusOK)

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import PublicResumeApp from '../../app/components/public/PublicResumeApp.vue';
 import { PRINT_FAILURE } from '../../server/utils/print/envelope';
 import {
+  printTitle,
   renderPrintResume,
 } from '../../server/workers/print/render';
 import {
@@ -24,6 +25,26 @@ const deepFreeze = <T>(value: T): T => {
   }
   return value;
 };
+
+describe('print page title', () => {
+  it('names the resume after its owner', () => {
+    expect(printTitle('Ada Lovelace')).toBe('Ada Lovelace - Resume');
+    expect(printTitle('  Nguyễn \t Văn\nĐức ')).toBe('Nguyễn Văn Đức - Resume');
+  });
+
+  it('falls back to Resume for a blank name', () => {
+    expect(printTitle('')).toBe('Resume');
+    expect(printTitle(' \t\n')).toBe('Resume');
+    expect(printTitle('\u200b\u202e')).toBe('Resume');
+  });
+
+  it('removes control and format characters and escapes markup', () => {
+    expect(printTitle('Ada\u202eL\u0000ove')).toBe('Ada L ove - Resume');
+    expect(printTitle('</title><script>"&')).toBe(
+      '&lt;/title&gt;&lt;script&gt;&quot;&amp; - Resume',
+    );
+  });
+});
 
 describe('private print Vue document', () => {
   it('keeps exact shared-renderer parity with public SSR', async () => {
@@ -44,7 +65,9 @@ describe('private print Vue document', () => {
     const article = /<article class="resume-document"[\s\S]*<\/article>/u
       .exec(shared)?.[0];
     expect(article).toBeDefined();
-    await expect(renderPrintResume(envelope)).resolves.toContain(article);
+    const html = await renderPrintResume(envelope);
+    expect(html).toContain(article);
+    expect(html).toContain('<title>Ada Lovelace - Resume</title>');
   });
 
   it(

@@ -28,7 +28,7 @@ func TestPinnedBrowserOutputIsByteDeterministic(t *testing.T) {
 		case "/print/00000000-0000-0000-0000-000000000001":
 			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 			writer.Header().Set("Content-Security-Policy", printContentSecurityPolicy)
-			writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"></head><body><main data-print-document="true"><h1>Resume</h1></main></body></html>`)
+			writeTestResponse(t, writer, `<!doctype html><html><head><link rel="stylesheet" href="/_nuxt/assets/print-fonts.css"><link rel="stylesheet" href="/_nuxt/assets/print.css"><title>Ada Lovelace - Resume</title></head><body><main data-print-document="true"><h1>Resume</h1></main></body></html>`)
 		case "/_nuxt/assets/print-fonts.css", "/_nuxt/assets/print.css":
 			writer.Header().Set("Content-Type", "text/css")
 		default:
@@ -52,8 +52,11 @@ func TestPinnedBrowserOutputIsByteDeterministic(t *testing.T) {
 			if !bytes.Equal(first, second) {
 				t.Fatalf("identical renders differ: first %d bytes, second %d bytes; differences: %s", len(first), len(second), describeByteDifferences(first, second))
 			}
-			if format == renderjob.PDF && bytes.Count(first, []byte("("+canonicalPDFDate+")")) != 2 {
-				t.Fatal("PDF does not contain the two canonical UTC metadata dates")
+			if format == renderjob.PDF && bytes.Count(first, []byte("(D:20260919083005+00'00')")) != 2 {
+				t.Fatal("PDF does not carry the revision time as its two UTC metadata dates")
+			}
+			if format == renderjob.PDF && !bytes.Contains(first, []byte("/Title (Ada Lovelace - Resume)")) {
+				t.Fatal("PDF does not carry the page title as its Title")
 			}
 		})
 	}
@@ -333,10 +336,11 @@ func TestPinnedBrowserCancellationJoinsProxyAndBrowser(t *testing.T) {
 
 func validTestNavigation(format renderjob.Format) renderjob.Navigation {
 	return renderjob.Navigation{
-		ResumeID:   uuid.MustParse("00000000-0000-0000-0000-000000000001"),
-		JobID:      uuid.MustParse("00000000-0000-0000-0000-000000000002"),
-		Capability: "abcdefghijklmnopqrstuvwxyzABCDEFGH012345678",
-		Format:     format,
+		ResumeID:     uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		JobID:        uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		Capability:   "abcdefghijklmnopqrstuvwxyzABCDEFGH012345678",
+		Format:       format,
+		RevisionTime: time.Date(2026, 9, 19, 15, 30, 5, 0, time.FixedZone("ICT", 7*60*60)),
 	}
 }
 

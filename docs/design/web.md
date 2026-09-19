@@ -286,9 +286,10 @@ forbidden.
   the measure. It works without JavaScript and is hidden in print. Its label
   follows the resume language: "Tải PDF" for Vietnamese, "Download PDF"
   otherwise. The public HTML validator allows exactly that link, once, only
-  while download is enabled. The public PDF downloads as `{slug}.pdf`; a slug is
-  ASCII letters, digits, and hyphens, so the filename needs no RFC 6266
-  `filename*`.
+  while download is enabled. The public PDF and the owner's PDF download as
+  `<Full-Name>-Resume.pdf`: `filename` carries the name folded to ASCII, and an
+  RFC 5987 `filename*` carries it in UTF-8
+  ([ADR 0045](../adr/0045-pdf-download-name-and-metadata.md)).
 - Chromium and CSS `@page` own PDF pagination.
 
 Content, order, type, color, and visibility must agree across targets; only page

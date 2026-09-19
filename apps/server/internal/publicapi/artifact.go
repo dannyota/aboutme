@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/pdfname"
 	"github.com/dannyota/aboutme/apps/server/internal/printsnapshot"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
@@ -169,7 +170,7 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 				return renderjob.Snapshot{
 					ResumeID: snapshot.ResumeID, Revision: snapshot.Revision,
 					SchemaVersion:    int(snapshot.Public.Document.SchemaVersion),
-					PublicGeneration: snapshot.Revision, Payload: payload,
+					PublicGeneration: snapshot.Revision, Payload: payload, RevisionTime: snapshot.RevisionTime,
 				}, nil
 			},
 			ValidateGeneration: func(ctx context.Context, frozen renderjob.Snapshot) error {
@@ -209,26 +210,16 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 	})
 }
 
-// served adds the per-request headers. The cache is keyed by resume and
-// revision, not slug, so the download name is set here, never cached.
+// served adds the per-request headers. The download name comes from the
+// served revision's full name and is set here, never cached.
 func (contract artifactContract) served(response SelectedResponse, snapshot publicresume.Snapshot) SelectedResponse {
 	response = withDiscoveryRobots(response, snapshot.DiscoveryEnabled)
 	if !contract.namedDownload {
 		return response
 	}
 	response.Header = response.Header.Clone()
-	response.Header.Set("Content-Disposition", `attachment; filename="`+downloadBaseName(snapshot.Public.Slug)+`.pdf"`)
+	response.Header.Set("Content-Disposition", pdfname.Disposition(snapshot.Public.Document.PersonalDetails.FullName))
 	return response
-}
-
-// downloadBaseName is the slug, whose format (lowercase ASCII letters,
-// digits, and single hyphens) needs no escaping or RFC 6266 filename*.
-// Anything else falls back to "resume".
-func downloadBaseName(slug string) string {
-	if !validPublicSlug(slug) {
-		return "resume"
-	}
-	return slug
 }
 
 func validateArtifactRequest(w http.ResponseWriter, request *http.Request) bool {

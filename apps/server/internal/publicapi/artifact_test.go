@@ -72,7 +72,8 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 		if err != nil {
 			return renderjob.Result{}, err
 		}
-		if snapshot.PublicGeneration != snapshot.Revision || snapshot.SchemaVersion <= 0 || len(snapshot.Payload) == 0 || request.ValidateGeneration == nil {
+		if snapshot.PublicGeneration != snapshot.Revision || snapshot.SchemaVersion <= 0 || len(snapshot.Payload) == 0 || request.ValidateGeneration == nil ||
+			!snapshot.RevisionTime.Equal(time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)) {
 			t.Fatalf("prepared public snapshot = %+v", snapshot)
 		}
 		if err := request.ValidateGeneration(ctx, snapshot); err != nil {
@@ -85,6 +86,7 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 		return renderjob.Result{Bytes: body, Digest: sha256.Sum256(body), Revision: snapshot.Revision}, nil
 	})
 	handlers, backing, _ := newArtifactHarness(t, queue, 4, now)
+	backing.row.UpdatedAt = time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 
 	tests := []struct {
 		name        string
@@ -93,7 +95,7 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 		contentType string
 		disposition string
 	}{
-		{name: "pdf", handler: handlers.pdf, path: "/api/v1/public/resumes/ada-lovelace/pdf", contentType: "application/pdf", disposition: "attachment; filename=\"ada-lovelace.pdf\""},
+		{name: "pdf", handler: handlers.pdf, path: "/api/v1/public/resumes/ada-lovelace/pdf", contentType: "application/pdf", disposition: `attachment; filename="Ada-Resume.pdf"; filename*=UTF-8''Ada-Resume.pdf`},
 		{name: "png", handler: handlers.png, path: "/api/v1/public/resumes/ada-lovelace/og.png", contentType: "image/png"},
 	}
 	for _, test := range tests {
@@ -1059,9 +1061,9 @@ func TestPublicArtifactRealHTTPSlowAndAbortedViewersReleaseLease(t *testing.T) {
 	}
 }
 
-// A cached PDF is keyed by resume and revision, not slug, so the download name
-// comes from the slug being served, never from the cached headers.
-func TestPublicPDFCacheHitNamesTheFileAfterTheServedSlug(t *testing.T) {
+// A cached PDF is keyed by resume and revision, so the download name comes
+// from the served revision's full name, never from the cached headers.
+func TestPublicPDFCacheHitNamesTheFileAfterTheServedName(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
 	queue := artifactQueueFunc(func(context.Context, renderjob.Request) (renderjob.Result, error) {
 		return renderjob.Result{}, errors.New("cache hit must not render")
@@ -1088,7 +1090,7 @@ func TestPublicPDFCacheHitNamesTheFileAfterTheServedSlug(t *testing.T) {
 	if response.Code != http.StatusOK || response.Body.String() != "cached-pdf" {
 		t.Fatalf("cache hit = %d %q", response.Code, response.Body.String())
 	}
-	if got := response.Header().Get("Content-Disposition"); got != `attachment; filename="ada-lovelace.pdf"` {
+	if got := response.Header().Get("Content-Disposition"); got != `attachment; filename="Ada-Resume.pdf"; filename*=UTF-8''Ada-Resume.pdf` {
 		t.Fatalf("Content-Disposition = %q", got)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -29,6 +30,9 @@ type Snapshot struct {
 	Revision         int64
 	DiscoveryEnabled bool
 	Public           PublicResume
+	// RevisionTime is when the served revision was saved. The PDF carries it
+	// as its creation date.
+	RevisionTime time.Time
 	// PublicTitle and FaviconEmoji are the owner's page settings. They shape
 	// only the HTML head, so they stay out of the public JSON.
 	PublicTitle  *string
@@ -124,7 +128,7 @@ func (r *Reader) snapshot(row store.Resume) (Snapshot, error) {
 		photoKey = doc.PersonalDetails.Photo.Key
 	}
 	return Snapshot{
-		ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled, Public: public,
+		ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled, Public: public, RevisionTime: row.UpdatedAt,
 		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji, photoKey: photoKey,
 	}, nil
 }

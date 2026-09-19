@@ -119,8 +119,10 @@ func TestRenderRedeemsOneUseCapabilityAndReturnsDetachedResult(t *testing.T) {
 	resumeID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
 	original := []byte(`{"title":"frozen"}`)
 	var queue *Queue
+	revisionTime := time.Date(2026, 9, 19, 8, 30, 5, 0, time.UTC)
 	renderer := rendererFunc(func(ctx context.Context, navigation Navigation) ([]byte, error) {
-		if navigation.ResumeID != resumeID || navigation.JobID == uuid.Nil || navigation.Format != PDF {
+		if navigation.ResumeID != resumeID || navigation.JobID == uuid.Nil || navigation.Format != PDF ||
+			!navigation.RevisionTime.Equal(revisionTime) {
 			t.Fatalf("navigation = %+v", navigation)
 		}
 		snapshot, err := queue.Redeem(ctx, Redemption{
@@ -146,7 +148,9 @@ func TestRenderRedeemsOneUseCapabilityAndReturnsDetachedResult(t *testing.T) {
 	result, err := queue.Render(context.Background(), Request{
 		Format: PDF,
 		Prepare: func(context.Context) (Snapshot, error) {
-			return testSnapshot(resumeID, original), nil
+			snapshot := testSnapshot(resumeID, original)
+			snapshot.RevisionTime = revisionTime
+			return snapshot, nil
 		},
 	})
 	if err != nil {
