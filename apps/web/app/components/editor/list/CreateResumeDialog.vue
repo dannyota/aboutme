@@ -5,6 +5,13 @@ import FormField from '@/components/app/FormField.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import SelectField from '@/components/app/SelectField.vue';
+import {
+  languageCodeError,
+  languageCodeHint,
+  OTHER_LANGUAGE,
+  parseLanguageTag,
+  resumeLanguageOptions,
+} from '../resumeLanguage';
 
 const props = defineProps<{
   open: boolean;
@@ -21,12 +28,7 @@ const emit = defineEmits<{
 
 // A new resume starts in the site's current language, so it never lands as
 // undetermined (`und`); Other takes any BCP 47 tag.
-const languageOptions = [
-  { value: 'vi', label: 'Tiếng Việt' },
-  { value: 'en', label: 'English' },
-  { value: 'other', label: 'Other…' },
-] as const;
-const BCP47 = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
+const languageOptions = resumeLanguageOptions;
 
 const { locale } = useLocale();
 const title = ref('');
@@ -59,13 +61,13 @@ function abandon(): void {
 }
 
 function submit(): void {
-  if (languageChoice.value !== 'other') {
+  if (languageChoice.value !== OTHER_LANGUAGE) {
     emit('submit', title.value, languageChoice.value);
     return;
   }
-  const tag = otherLanguage.value.trim();
-  if (tag.length > 35 || !BCP47.test(tag)) {
-    otherError.value = 'Enter a language code, such as fr or zh-Hant.';
+  const tag = parseLanguageTag(otherLanguage.value);
+  if (tag === null) {
+    otherError.value = languageCodeError;
     return;
   }
   otherError.value = undefined;
@@ -116,9 +118,9 @@ function submit(): void {
         :options="languageOptions"
       />
       <FormField
-        v-if="languageChoice === 'other'"
+        v-if="languageChoice === OTHER_LANGUAGE"
         :error="otherError"
-        hint="A BCP 47 tag, such as fr or zh-Hant."
+        :hint="languageCodeHint"
         label="Language code"
         name="lngOther"
       >

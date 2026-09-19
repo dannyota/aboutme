@@ -520,6 +520,7 @@ async function discardAndSignIn(): Promise<void> {
       <PersonalDetailsPanel
         v-if="inspector.kind === 'personal'"
         :actions="actions"
+        :lng="record.current.metadata.lng"
         :personal="document.personalDetails"
       />
       <SectionPanel

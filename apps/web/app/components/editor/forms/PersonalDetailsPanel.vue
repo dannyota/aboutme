@@ -7,12 +7,19 @@ import type { ResumeEditorActions } from '../../../composables/useResumeEditor';
 import InspectorPanel from '../InspectorPanel.vue';
 import TextField from '../../app/TextField.vue';
 import ContactList from './ContactList.vue';
+import ResumeLanguageField from './ResumeLanguageField.vue';
 import type { FieldIntent } from './fieldIntent';
 
 const props = defineProps<{
   readonly actions: ResumeEditorActions;
   readonly personal: PersonalDetails;
+  /** The resume's content language (`metadata.lng`). */
+  readonly lng: string | null;
 }>();
+
+function editLanguage(value: string): void {
+  props.actions.edit({ kind: 'metadataField', field: 'lng', value });
+}
 
 const panel = ref<{ $el?: HTMLElement } | null>(null);
 const contactList = ref<{
@@ -164,6 +171,10 @@ function messageForCode(code: string): string {
     title="Personal details"
     title-id="personal-details-title"
   >
+    <ResumeLanguageField
+      :lng="lng"
+      @change="editLanguage"
+    />
     <TextField
       :error="issueFor('fullName')"
       label="Full name"
