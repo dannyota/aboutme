@@ -74,7 +74,7 @@ if (isCorpus) {
   rawCorpus = raw === '1';
 } else {
   requireAllowedKeys(
-    new Set(['align', 'fixture', 'font', 'mode', 'template']),
+    new Set(['align', 'fixture', 'font', 'mode', 'paper', 'template']),
   );
   const fixture = singleton('fixture', true) as FixtureId;
   const templateId = singleton('template', true);
@@ -122,6 +122,14 @@ if (isCorpus) {
     template,
     resolvedDocument.content,
   );
+  // Every preset prints on A4 (colors.md §4), so a screenshot cell that
+  // needs Letter coverage asks for it explicitly, after the template applies.
+  const requestedPaper = singleton('paper');
+  if (requestedPaper !== undefined) {
+    if (requestedPaper !== 'a4' && requestedPaper !== 'letter') badQuery();
+    resolvedDocument.customization.pageFormat
+      = requestedPaper as Resume['customization']['pageFormat'];
+  }
   // Presets never set text alignment (ADR 0041), so a justify cell asks
   // for it after the template applies, with body text that wraps.
   const requestedAlign = singleton('align');

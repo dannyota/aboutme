@@ -153,9 +153,12 @@ because their execution costs differ:
   `contract.md` §8 so that it covers at minimum one one-column preset, one
   two-column preset, one tinted sidebar (`fixtures/full.json`,
   `surfaceTarget: "sidebar"`), one tinted header (`surfaceTarget: "header"`),
-  one `pageFormat: "letter"`, and one dense/small-type preset. A preset outside
-  the subset is still covered by string goldens; what it loses is pixel-level
-  regression detection.
+  one Letter page, and one dense/small-type preset. Every preset prints on A4,
+  so the Letter cell comes from a harness-only override:
+  `consulting-formal--vn-full--letter--paged` requests `paper=letter` on
+  `/_harness/render`, which forces `customization.pageFormat` after the preset
+  applies. A preset outside the subset is still covered by string goldens; what
+  it loses is pixel-level regression detection.
 - Browser acceptance tests exercise **the same named subset**, not all twenty
   presets, so the three coverage surfaces cannot drift apart.
 
