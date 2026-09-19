@@ -104,7 +104,25 @@ function assertNever(value: never): never {
       >
         {{ reason }}
       </StatusBanner>
+      <!-- The footer stacks in reverse on phones, so the primary action
+           comes last here to show first there (DESIGN.md). -->
       <AlertDialogFooter>
+        <Button
+          type="button"
+          data-action="keep-partial"
+          variant="outline"
+          @click="recover('keep-partial')"
+        >
+          Keep partial
+        </Button>
+        <Button
+          type="button"
+          data-action="restore-pre-apply"
+          variant="outline"
+          @click="recover('restore-pre-apply')"
+        >
+          Restore pre-apply
+        </Button>
         <Button
           ref="retryButton"
           type="button"
@@ -112,20 +130,6 @@ function assertNever(value: never): never {
           @click="recover('retry-remaining')"
         >
           Retry remaining
-        </Button>
-        <Button
-          type="button"
-          data-action="restore-pre-apply"
-          @click="recover('restore-pre-apply')"
-        >
-          Restore pre-apply
-        </Button>
-        <Button
-          type="button"
-          data-action="keep-partial"
-          @click="recover('keep-partial')"
-        >
-          Keep partial
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

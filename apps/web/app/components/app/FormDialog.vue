@@ -66,15 +66,16 @@ function onCloseAutoFocus(event: Event): void {
           }}
         </DialogDescription>
       </DialogHeader>
-      <!-- One rhythm with the dialog's own gap: header, fields, actions. -->
+      <!-- Dialog rhythm (DESIGN.md): 24 px from the header, 16 px between
+           fields, 24 px before the actions; controls fill the width. -->
       <form
         ref="form"
-        class="grid gap-4"
+        class="grid gap-4 [&_[data-slot=native-select-wrapper]]:w-full"
         novalidate
         @submit.prevent="onSubmit"
       >
         <slot />
-        <DialogFooter>
+        <DialogFooter class="mt-2">
           <slot name="footer">
             <Button
               :data-action="cancelAction"
