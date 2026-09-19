@@ -1,5 +1,6 @@
 // Page titles and search metadata for the site pages. Only the homepage, the
-// Privacy Policy, and the Terms are indexable; every other route is noindex.
+// Privacy Policy, the Terms, and the template gallery are indexable; every
+// other route is noindex.
 import type { Locale } from './locale';
 
 export const siteName = 'aboutme';
@@ -12,6 +13,13 @@ export const indexablePaths: ReadonlySet<string> = new Set([
   '/terms',
 ]);
 
+const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;
+
+/** Whether search engines may index a route path. */
+export function isIndexablePath(path: string): boolean {
+  return indexablePaths.has(path) || GALLERY_PATH.test(path);
+}
+
 /** "<page> · aboutme", the title pattern for every page but the homepage. */
 export function pageTitle(name: string): string {
   return `${name} · ${siteName}`;
@@ -22,6 +30,7 @@ export const appTitles = {
   resumes: pageTitle('Resumes'),
   settings: pageTitle('Settings'),
   authorize: pageTitle('Authorize an agent'),
+  newResume: pageTitle('New resume'),
   /** The editor before its resume has loaded. */
   editor: pageTitle('Resume'),
 } as const;

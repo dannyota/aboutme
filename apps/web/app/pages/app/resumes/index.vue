@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Resume } from '@aboutme/schema';
 import type { ResumeSummary } from '../../../editor/resumeApi';
 import type { OpaqueCreateOutcome } from '../../../editor/coordinator';
 import LoadingState from '@/components/app/LoadingState.vue';
@@ -35,10 +36,11 @@ function end(id: string): void {
 async function create(
   title: string,
   lng: string | null | undefined,
+  document?: Resume,
 ): Promise<void> {
   createBusy.value = true;
   createMessage.value = null;
-  const result = await list.create(title, lng);
+  const result = await list.create(title, lng, document);
   createBusy.value = false;
   if (result.kind === 'opaque-create') retained.value = result.outcome;
   createMessage.value = createStatusMessage(result);
@@ -104,6 +106,7 @@ async function remove(id: string, title: string): Promise<void> {
       :open="createOpen"
       :busy="createBusy"
       :retained="retained"
+      :resume-count="list.items.value.length"
       @close="createOpen = false"
       @submit="create"
       @refresh="refreshCreate"

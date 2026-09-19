@@ -1,0 +1,149 @@
+// The template gallery (/templates) and template pages (/templates/<id>) in
+// both site languages. Purpose lines and sample tags per template live in
+// app/templates/catalog.ts.
+import type { GalleryFilter } from '../templates/catalog';
+import type { Locale } from './locale';
+
+export interface GalleryCopy {
+  readonly title: string;
+  readonly seoTitle: string;
+  readonly lead: string;
+  readonly filtersLabel: string;
+  readonly all: (count: number) => string;
+  readonly filters: Readonly<Record<GalleryFilter, string>>;
+  readonly illustrative: string;
+  readonly noMatch: string;
+  readonly detail: {
+    readonly breadcrumb: string;
+    readonly seoTitle: (name: string) => string;
+    readonly sampleToggle: string;
+    readonly sampleLanguages: Readonly<Record<Locale, string>>;
+    readonly tabsLabel: string;
+    readonly pageTab: string;
+    readonly atsTab: string;
+    readonly atsHint: string;
+    readonly sample: string;
+    readonly fictional: string;
+    readonly pages: string;
+    readonly pageCount: (count: number) => string;
+    readonly layout: string;
+    readonly oneColumn: string;
+    readonly twoColumns: string;
+    readonly photo: string;
+    readonly suitsPhoto: string;
+    readonly photoNotRecommended: string;
+    readonly twoColumnNote: readonly [string, string];
+    readonly fillerNote: string;
+    readonly useSample: string;
+    readonly useBlank: string;
+    readonly privateCopy: string;
+    readonly preview: string;
+  };
+}
+
+export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
+  vi: {
+    title: 'Mẫu CV',
+    seoTitle: 'Mẫu CV miễn phí',
+    lead: '20 mẫu miễn phí. Mỗi mẫu hiển thị bằng chính trình hiển thị của '
+      + 'aboutme, nên trang bạn thấy ở đây giống trang nhà tuyển dụng mở và '
+      + 'bản PDF.',
+    filtersLabel: 'Lọc mẫu CV',
+    all: (count) => `Tất cả ${count}`,
+    filters: {
+      'sample': 'Có CV mẫu',
+      'ats': 'Qua ATS',
+      'one-page': 'Một trang',
+      'photo': 'Hợp với ảnh',
+      'first-job': 'Mới tốt nghiệp',
+      'technical': 'Kỹ thuật',
+      'management': 'Quản lý',
+    },
+    illustrative: 'Nội dung minh họa',
+    noMatch: 'Không có mẫu nào khớp với bộ lọc này.',
+    detail: {
+      breadcrumb: 'Mẫu CV',
+      seoTitle: (name) => `Mẫu CV ${name}`,
+      sampleToggle: 'Ngôn ngữ của CV mẫu',
+      sampleLanguages: { vi: 'CV mẫu tiếng Việt', en: 'English' },
+      tabsLabel: 'Cách xem CV mẫu',
+      pageTab: 'Trang CV',
+      atsTab: 'Máy ATS đọc được gì',
+      atsHint: 'Chữ trong CV, theo thứ tự một hệ thống lọc hồ sơ đọc.',
+      sample: 'CV mẫu',
+      fictional: '(nhân vật hư cấu)',
+      pages: 'Số trang',
+      pageCount: (count) => `${count} trang`,
+      layout: 'Bố cục',
+      oneColumn: 'Một cột',
+      twoColumns: 'Hai cột',
+      photo: 'Ảnh',
+      suitsPhoto: 'Hợp với ảnh: trên đầu, trái hoặc phải tên',
+      photoNotRecommended: 'Không khuyến nghị ảnh',
+      twoColumnNote: [
+        'Cổng tuyển dụng có thể đọc cột bên sau cột chính. Khi nộp qua cổng '
+        + 'trực tuyến, hãy dùng ',
+        '.',
+      ],
+      fillerNote: 'Mẫu này chưa có CV mẫu riêng. Nội dung bên dưới chỉ để '
+        + 'minh họa.',
+      useSample: 'Dùng CV mẫu này',
+      useBlank: 'Dùng mẫu này với CV trống',
+      privateCopy: 'CV mẫu tạo một bản sao riêng tư trong tài khoản của bạn. '
+        + 'Bạn thay nội dung, rồi tự quyết định có công khai hay không.',
+      preview: 'Bản xem trước CV',
+    },
+  },
+  en: {
+    title: 'Resume templates',
+    seoTitle: 'Free resume templates',
+    lead: '20 free templates. Each one is drawn by aboutme’s own renderer, so '
+      + 'what you see here is what a recruiter opens and what the PDF prints.',
+    filtersLabel: 'Filter templates',
+    all: (count) => `All ${count}`,
+    filters: {
+      'sample': 'With sample',
+      'ats': 'ATS-safe',
+      'one-page': 'One page',
+      'photo': 'Suits a photo',
+      'first-job': 'First job',
+      'technical': 'Technical',
+      'management': 'Management',
+    },
+    illustrative: 'Illustrative content',
+    noMatch: 'No template matches this filter.',
+    detail: {
+      breadcrumb: 'Resume templates',
+      seoTitle: (name) => `${name} resume template`,
+      sampleToggle: 'Sample language',
+      sampleLanguages: { vi: 'Vietnamese sample', en: 'English sample' },
+      tabsLabel: 'How to view the sample',
+      pageTab: 'Page',
+      atsTab: 'What an ATS reads',
+      atsHint: 'The resume’s text, in the order an applicant tracking system '
+        + 'reads it.',
+      sample: 'Sample',
+      fictional: '(fictional person)',
+      pages: 'Pages',
+      pageCount: (count) => `${count} ${count === 1 ? 'page' : 'pages'}`,
+      layout: 'Layout',
+      oneColumn: 'One column',
+      twoColumns: 'Two columns',
+      photo: 'Photo',
+      suitsPhoto: 'Suits a photo: above, left, or right of the name',
+      photoNotRecommended: 'Photo not recommended',
+      twoColumnNote: [
+        'Job portals may read the sidebar after the main column. For online '
+        + 'portals, use ',
+        '.',
+      ],
+      fillerNote: 'This template has no sample of its own yet. The content '
+        + 'below is illustrative.',
+      useSample: 'Use this sample',
+      useBlank: 'Use this template with a blank resume',
+      privateCopy: 'A sample creates a private copy in your account. You '
+        + 'replace the content, then decide whether to publish it.',
+      preview: 'Resume preview',
+    },
+  },
+};

@@ -2,19 +2,12 @@ import { expect, test, type Page } from '@playwright/test';
 import { FILLER_LANGUAGES, SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import { denyExternalRequests } from './support';
 
 // Gallery samples keep their page count in the pinned browser, so a spacing
 // or header change that pushes a one-page sample onto a second page fails
 // here. The generic filler stays within two pages under every template.
-
-const SAMPLE_PAGES: Readonly<Record<string, number>> = {
-  'ats-plain': 1,
-  'engineer-compact': 1,
-  'executive-band': 2,
-  'graduate-friendly': 1,
-  'modern-sidebar': 1,
-};
 
 async function pageCount(page: Page, url: string): Promise<number> {
   const response = await page.goto(url);

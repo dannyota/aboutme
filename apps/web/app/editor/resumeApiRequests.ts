@@ -37,10 +37,13 @@ export function freezeCreateAttempt(
   intent: CreateResumeIntent,
   runtime: EditorRuntime,
 ): FrozenAttempt {
-  const body: JsonBody<'createResume'>
-    = intent.lng === undefined
-      ? { title: intent.title }
-      : { title: intent.title, lng: intent.lng };
+  const body: JsonBody<'createResume'> = {
+    title: intent.title,
+    ...(intent.lng === undefined ? {} : { lng: intent.lng }),
+    ...(intent.document === undefined
+      ? {}
+      : { document: intent.document as JsonBody<'createResume'>['document'] }),
+  };
   return freezeWire(
     intent.id,
     {

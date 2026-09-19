@@ -97,6 +97,27 @@ Bring your own agent. A second ruled section explains Public resume, PDF
 download, and SEO and GEO. The page ends with the AGPL-3.0 repository link. The
 page performs no data fetch.
 
+## Template gallery
+
+`/templates` lists all 20 templates in the site language: the five with a sample
+first, then the rest by name. Each card shows page one of the template's own
+sample, or of the generic filler tagged "Illustrative content", with its name, a
+one-line purpose, and a tag naming the sample. One filter chip is active at a
+time and is kept in the URL (`?filter=ats`); on phones the chip row scrolls
+sideways. The grid runs five columns on wide screens down to two on phones.
+
+`/templates/{id}` shows the full sample beside a sticky info column: the sample
+language toggle, the persona marked as fictional, page count, layout, photo fit,
+a reading-order note on two-column templates, and "Use this sample" with "Use
+this template with a blank resume". A "What an ATS reads" tab shows the sample's
+text in reading order. On phones the info comes first and the primary action
+sits in a bar at the bottom.
+
+"Use this sample" opens `/app/new`, a confirm step that never creates on its
+own: thumbnail, summary, editable title, and the resume count, or the limit
+message at three resumes. The Create resume dialog offers Blank or From a
+sample; a first resume opens on the samples.
+
 ## Authenticated chrome and editor
 
 The shared application shell has the lowercase `aboutme` brand. Signed-out
