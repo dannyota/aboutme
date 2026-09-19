@@ -36,13 +36,14 @@ var fixedCustomizationAllowlist = customizationAllowlist{
 		"spacing.pageMargin.x": {}, "spacing.pageMargin.y": {},
 		"heading.style": {}, "heading.showRule": {},
 		"header.align": {}, "header.detailsLayout": {}, "header.iconStyle": {},
-		"layout.columns": {}, "layout.surfaceTarget": {},
+		"header.photoPosition": {}, "layout.columns": {}, "layout.surfaceTarget": {},
 		"sectionDisplay.skill.style": {}, "sectionDisplay.language.style": {},
 		"pageFormat": {}, "dateFormat": {},
 	},
 	Unset: customizationPathSet{
 		"font.textAlign": {}, "colors.accent": {}, "colors.surface": {},
-		"spacing.pageMargin": {}, "header": {}, "layout.surfaceTarget": {},
+		"spacing.pageMargin": {}, "header": {}, "header.photoPosition": {},
+		"layout.surfaceTarget": {},
 	},
 }
 
@@ -57,8 +58,8 @@ var customizationSetValueKinds = map[string]customizationValueKind{
 	"spacing.pageMargin.y": customizationNumber,
 	"heading.style":        customizationString, "heading.showRule": customizationBoolean,
 	"header.align": customizationString, "header.detailsLayout": customizationString,
-	"header.iconStyle": customizationString,
-	"layout.columns":   customizationInteger, "layout.surfaceTarget": customizationString,
+	"header.iconStyle": customizationString, "header.photoPosition": customizationString,
+	"layout.columns": customizationInteger, "layout.surfaceTarget": customizationString,
 	"sectionDisplay.skill.style":    customizationString,
 	"sectionDisplay.language.style": customizationString,
 	"pageFormat":                    customizationString, "dateFormat": customizationString,

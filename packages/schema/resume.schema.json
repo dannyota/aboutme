@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aboutme.vn/schema/resume/v3",
-  "title": "Resume document v3",
+  "$id": "https://aboutme.vn/schema/resume/v4",
+  "title": "Resume document v4",
   "description": "Current resume document shape. See docs/design/data.md for the aggregate and versioning contract.",
   "type": "object",
   "properties": {
@@ -15,9 +15,9 @@
 
   "$defs": {
     "schemaVersion": {
-      "description": "Document-shape version. This schema validates version 3 only; see docs/design/data.md#document-versions.",
+      "description": "Document-shape version. This schema validates version 4 only; see docs/design/data.md#document-versions.",
       "type": "integer",
-      "const": 3
+      "const": 4
     },
 
     "sanitizerAllowlistVersion": {
@@ -236,6 +236,7 @@
           "type": "object",
           "properties": {
             "title": { "type": "string", "maxLength": 160 },
+            "subtitle": { "type": "string", "maxLength": 160 },
             "link": { "$ref": "#/$defs/link" },
             "dates": { "$ref": "#/$defs/dateRange" },
             "description": { "$ref": "#/$defs/richText" }
@@ -615,7 +616,7 @@
           "type": "object",
           "properties": {
             "align": {
-              "description": "Horizontal alignment for the complete top block. See docs/design/templates/contract.md.",
+              "description": "Horizontal alignment for the complete top block. With photoPosition left or right, it aligns only the text beside the photo. See docs/design/templates/contract.md.",
               "type": "string",
               "enum": ["left", "center"]
             },
@@ -628,6 +629,11 @@
               "description": "Contact-detail icon style for the top header: none or the Lucide outline glyph. See docs/design/templates/tokens.md.",
               "type": "string",
               "enum": ["none", "outline"]
+            },
+            "photoPosition": {
+              "description": "Places the photo above the name and contacts, or beside them on the left or right. Absent means top. See docs/design/templates/contract.md.",
+              "type": "string",
+              "enum": ["top", "left", "right"]
             }
           },
           "required": ["align", "detailsLayout", "iconStyle"],

@@ -1273,7 +1273,7 @@ paths:
                 type: string
                 pattern: ^[0-9]+$
               description: Current emitted resume schema version.
-              example: "3"
+              example: "4"
           content:
             application/json:
               schema:
@@ -1914,7 +1914,7 @@ paths:
                     seoGeoEnabled: true
                     publicTitle: Danny from aboutme.vn
                     faviconEmoji: "\U0001F680"
-                    schemaVersion: 3
+                    schemaVersion: 4
                     createdAt: 2026-08-01T09:00:00Z
                     updatedAt: 2026-08-11T18:20:00Z
         "400":
@@ -2022,11 +2022,11 @@ paths:
                   seoGeoEnabled: false
                   publicTitle: null
                   faviconEmoji: null
-                  schemaVersion: 3
+                  schemaVersion: 4
                   createdAt: 2026-08-12T09:00:00Z
                   updatedAt: 2026-08-12T09:00:00Z
                   document:
-                    schemaVersion: 3
+                    schemaVersion: 4
         "400":
           $ref: "#/components/responses/ResumeCreateBadRequest"
         "401":
@@ -3457,11 +3457,11 @@ components:
               seoGeoEnabled: true
               publicTitle: Danny from aboutme.vn
               faviconEmoji: "\U0001F680"
-              schemaVersion: 3
+              schemaVersion: 4
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-11T18:20:00Z
               document:
-                schemaVersion: 3
+                schemaVersion: 4
     ResumeWritten:
       description: The whole resume after the write, at its new revision.
       headers:
@@ -3490,11 +3490,11 @@ components:
               seoGeoEnabled: true
               publicTitle: Danny from aboutme.vn
               faviconEmoji: "\U0001F680"
-              schemaVersion: 3
+              schemaVersion: 4
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-12T09:05:00Z
               document:
-                schemaVersion: 3
+                schemaVersion: 4
     ResumeListBadRequest:
       description: >-
         `invalid_client_ip` when the trusted-proxy boundary cannot derive one
@@ -3510,7 +3510,7 @@ components:
               code: unsupported_schema_version
               message: requested resume schema version is not accepted
               details:
-                acceptedVersions: [1, 2, 3]
+                acceptedVersions: [1, 2, 3, 4]
     ResumeReadBadRequest:
       description: >-
         `invalid_client_ip`, `request_invalid` for a malformed path
@@ -3668,7 +3668,7 @@ components:
               details:
                 revision: "44"
                 document:
-                  schemaVersion: 3
+                  schemaVersion: 4
     ResumePreconditionRequired:
       description: >-
         `precondition_required`: this mutation needs an `If-Match` header and
@@ -4481,7 +4481,7 @@ components:
       schema:
         type: integer
         minimum: 1
-      example: 3
+      example: 4
     PublicCacheControl:
       description: >-
         Public representations must revalidate at the origin before reuse.
@@ -5357,6 +5357,9 @@ components:
           format: uuid
         link:
           $ref: "#/components/schemas/PublicLink"
+        subtitle:
+          type: string
+          maxLength: 160
         title:
           type: string
           maxLength: 160
@@ -5681,6 +5684,12 @@ components:
             iconStyle:
               type: string
               enum: [none, outline]
+            photoPosition:
+              type: string
+              enum: [top, left, right]
+              description: >-
+                Photo above the name and contacts, or beside them on the left
+                or right. Absent means `top`.
         layout:
           type: object
           additionalProperties: false
@@ -5937,7 +5946,7 @@ components:
         seoGeoEnabled: true
         publicTitle: Danny from aboutme.vn
         faviconEmoji: "\U0001F680"
-        schemaVersion: 3
+        schemaVersion: 4
         createdAt: 2026-08-01T09:00:00Z
         updatedAt: 2026-08-11T18:20:00Z
     Resume:
@@ -5960,7 +5969,7 @@ components:
         truth for one contract and drift silently. This document owns the
         envelope, headers, statuses, and error shapes.
       example:
-        schemaVersion: 3
+        schemaVersion: 4
     EntryUpsert:
       type: object
       description: >-

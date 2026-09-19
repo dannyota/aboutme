@@ -1,9 +1,9 @@
 // Code generated from resume.schema.json. DO NOT EDIT.
 
 /**
- * Document-shape version. This schema validates version 3 only; see docs/design/data.md#document-versions.
+ * Document-shape version. This schema validates version 4 only; see docs/design/data.md#document-versions.
  */
-export type SchemaVersion = 3;
+export type SchemaVersion = 4;
 export type Uuid = string;
 /**
  * Draft section selected by sectionType. Only sectionType and entries are required. See docs/design/data.md#resume-aggregate.
@@ -157,6 +157,7 @@ export type CertificateEntry = EntryBase & {
  */
 export type ProjectEntry = EntryBase & {
   title?: string;
+  subtitle?: string;
   link?: Link;
   dates?: DateRange;
   description?: RichText;
@@ -329,7 +330,7 @@ export interface Customization {
    */
   header?: {
     /**
-     * Horizontal alignment for the complete top block. See docs/design/templates/contract.md.
+     * Horizontal alignment for the complete top block. With photoPosition left or right, it aligns only the text beside the photo. See docs/design/templates/contract.md.
      */
     align: "left" | "center";
     /**
@@ -340,6 +341,10 @@ export interface Customization {
      * Contact-detail icon style for the top header: none or the Lucide outline glyph. See docs/design/templates/tokens.md.
      */
     iconStyle: "none" | "outline";
+    /**
+     * Places the photo above the name and contacts, or beside them on the left or right. Absent means top. See docs/design/templates/contract.md.
+     */
+    photoPosition?: "top" | "left" | "right";
   };
   layout: {
     columns: 1 | 2;

@@ -81,17 +81,19 @@ func TestFromOwnerFreezesVisibleSanitizedDocumentAndInlinePhoto(t *testing.T) {
 
 func TestFromPublicFreezesAdmittedGeneration(t *testing.T) {
 	name, lng, slug, rich := "Ada", "en", "ada", "<strong>safe</strong>"
-	labelDisplay, justify := schema.Label, schema.Justify
+	labelDisplay, justify, left, stack := schema.Label, schema.Justify, schema.PhotoPositionLeft, "Go"
 	owner := resume.Resume{ID: uuid.MustParse(testResumeID), Revision: 7, Lng: &lng, Slug: &slug, Doc: schema.Resume{
 		SchemaVersion: schema.CurrentVersion,
 		PersonalDetails: schema.PersonalDetails{FullName: &name, Photo: &schema.Photo{
 			Key: "private.png", Crop: &schema.PhotoCrop{X: 0, Y: 0, Width: 1, Height: 1},
 		}, Details: []schema.PersonalDetail{{ID: "github", Type: schema.Github, Value: "https://github.com/ada", Display: &labelDisplay}}},
 		Content: map[string]schema.Section{
-			"profile": schema.NewProfileSection(nil, nil, []schema.ProfileEntry{{ID: "profile-entry", Text: &rich}}),
+			"profile":  schema.NewProfileSection(nil, nil, []schema.ProfileEntry{{ID: "profile-entry", Text: &rich}}),
+			"projects": schema.NewProjectSection(nil, nil, []schema.ProjectEntry{{ID: "project-entry", Title: &name, Subtitle: &stack}}),
 		},
 		Customization: schema.Customization{Font: schema.Font{TextAlign: &justify},
-			Layout: schema.Layout{Sections: schema.Sections{Main: []string{"profile"}}}},
+			Header: &schema.HeaderClass{Align: schema.Center, DetailsLayout: schema.Inline, IconStyle: schema.Outline, PhotoPosition: &left},
+			Layout: schema.Layout{Sections: schema.Sections{Main: []string{"profile", "projects"}}}},
 	}}
 	origin, err := publicresume.ParsePublicOrigin("https://resume.example", "production")
 	if err != nil {
@@ -110,6 +112,9 @@ func TestFromPublicFreezesAdmittedGeneration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !bytes.Contains(first, []byte(`"photoPosition":"left"`)) || !bytes.Contains(first, []byte(`"subtitle":"Go"`)) {
+		t.Fatalf("frozen envelope lost photoPosition or subtitle: %s", first)
+	}
 	if !bytes.Contains(first, []byte(`"publicGeneration":"7"`)) || bytes.Contains(first, []byte("https://resume.example")) {
 		t.Fatalf("public snapshot metadata/photo = %s", first)
 	}
@@ -121,6 +126,9 @@ func TestFromPublicFreezesAdmittedGeneration(t *testing.T) {
 	source.Public.Document.Customization.Layout.Sections.Main[0] = "changed"
 	*source.Public.Document.PersonalDetails.Details.Value()[0].Display = "full"
 	*source.Public.Document.Customization.Font.TextAlign = schema.TextAlignLeft
+	*source.Public.Document.Customization.Header.PhotoPosition = schema.Right
+	*source.Public.Document.Content["projects"].ProjectEntries[0].Subtitle = "changed"
+	source.Public.Document.Customization.Header.Align = schema.AlignLeft
 	second, err := Marshal(envelope)
 	if err != nil {
 		t.Fatal(err)

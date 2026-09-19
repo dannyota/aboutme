@@ -50,7 +50,7 @@ describe('command projections', () => {
       expect(projection.target).toEqual({ present: true, value: 'Engineer' });
       expect(projection.context).toMatchObject({
         resumeId: { present: true, value: 'resume-1' },
-        schemaVersion: { present: true, value: 3 },
+        schemaVersion: { present: true, value: 4 },
         sectionKey: { present: true, value: 'work' },
         sectionType: { present: true, value: 'work' },
         entryId: {

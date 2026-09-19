@@ -176,6 +176,7 @@ type PublicProjectEntry struct {
 	Description *string          `json:"description,omitempty"`
 	ID          string           `json:"id"`
 	Link        *string          `json:"link,omitempty"`
+	Subtitle    *string          `json:"subtitle,omitempty"`
 	Title       *string          `json:"title,omitempty"`
 }
 

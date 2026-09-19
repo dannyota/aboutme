@@ -309,6 +309,9 @@ func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 	if version < 3 {
 		keepV3Fields(&doc, current)
 	}
+	if version < 4 {
+		keepV4Fields(&doc, current)
+	}
 	return s.prepareDocumentForPersistence(doc)
 }
 
@@ -324,5 +327,34 @@ func keepV3Fields(doc *schema.Resume, current schema.Resume) {
 	}
 	for index := range doc.PersonalDetails.Details {
 		doc.PersonalDetails.Details[index].Display = displays[doc.PersonalDetails.Details[index].ID]
+	}
+}
+
+// keepV4Fields restores what a v1 to v3 client cannot express: the stored
+// header photo position, and the subtitle of every project entry that
+// survives the write, matched by entry id. The position applies only while
+// both documents have a header, so a client that removes the header removes
+// the position with it. A project entry the client added gets no subtitle.
+// See docs/adr/0044-header-photo-position-and-project-subtitle.md.
+func keepV4Fields(doc *schema.Resume, current schema.Resume) {
+	if doc.Customization.Header != nil && current.Customization.Header != nil {
+		doc.Customization.Header.PhotoPosition = current.Customization.Header.PhotoPosition
+	}
+	subtitles := make(map[string]*string)
+	for _, section := range current.Content {
+		if section.SectionType != schema.Project {
+			continue
+		}
+		for _, entry := range section.ProjectEntries {
+			subtitles[entry.ID] = entry.Subtitle
+		}
+	}
+	for _, section := range doc.Content {
+		if section.SectionType != schema.Project {
+			continue
+		}
+		for index := range section.ProjectEntries {
+			section.ProjectEntries[index].Subtitle = subtitles[section.ProjectEntries[index].ID]
+		}
 	}
 }

@@ -9,10 +9,10 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decisions are
-[ADR 0042](0042-public-page-title-and-favicon.md), which lets owners set the
-public page title and an emoji favicon, and
 [ADR 0043](0043-email-and-phone-links.md), which links email and phone details
-after a strict check.
+after a strict check, and
+[ADR 0044](0044-header-photo-position-and-project-subtitle.md), which releases
+document v4 with a header photo position and a project entry subtitle.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-// v3Document returns the current minimal fixture with every v3-only field set:
+// v3Document returns the v3 minimal fixture with every v3-only field set:
 // a detail per display mode and justified body text.
 func v3Document(t *testing.T) map[string]any {
 	t.Helper()
-	doc := decodeFontTestMap(t, readFontV2Fixture(t, "packages", "schema", "fixtures", "minimal.json"))
+	doc := decodeFontTestMap(t, readFontV2Fixture(t, "packages", "schema", "fixtures", "v3", "minimal.json"))
 	if doc["schemaVersion"] != float64(3) {
-		t.Fatalf("current minimal fixture version = %v, want 3", doc["schemaVersion"])
+		t.Fatalf("v3 minimal fixture version = %v, want 3", doc["schemaVersion"])
 	}
 	personalDetails := fontTestObject(t, doc, "personalDetails")
 	personalDetails["details"] = []any{
@@ -123,27 +123,27 @@ func TestV2V3ConvertersRejectMalformedShapes(t *testing.T) {
 	}
 }
 
-func TestProductionEmitsV2WithDeclaredV3Loss(t *testing.T) {
-	doc := v3Document(t)
+func TestProductionEmitsV2WithDeclaredV3AndV4Loss(t *testing.T) {
+	doc := v4Document(t)
 	emitted, err := NewIdentityProjector().EmitWire(mustJSON(t, doc), 2)
 	if err != nil {
 		t.Fatalf("emit v2: %v", err)
 	}
-	want := withoutV3Fields(t, doc)
+	want := withoutV3Fields(t, withoutV4Fields(t, doc))
 	want["schemaVersion"] = float64(2)
 	if !bytes.Equal(normalizeJSONForFontTest(t, emitted), mustJSON(t, want)) {
 		t.Fatalf("emitted v2 = %s", normalizeJSONForFontTest(t, emitted))
 	}
 }
 
-func TestProductionEmitsV1WithV3LossAndFontFallback(t *testing.T) {
-	doc := v3Document(t)
+func TestProductionEmitsV1WithV3AndV4LossAndFontFallback(t *testing.T) {
+	doc := v4Document(t)
 	fontTestObject(t, fontTestObject(t, doc, "customization"), "font")["family"] = "noto-serif"
 	emitted, err := NewIdentityProjector().EmitWire(mustJSON(t, doc), 1)
 	if err != nil {
 		t.Fatalf("emit v1: %v", err)
 	}
-	want := withoutV3Fields(t, doc)
+	want := withoutV3Fields(t, withoutV4Fields(t, doc))
 	want["schemaVersion"] = float64(1)
 	fontTestObject(t, fontTestObject(t, want, "customization"), "font")["family"] = "Alegreya"
 	if !bytes.Equal(normalizeJSONForFontTest(t, emitted), mustJSON(t, want)) {
@@ -151,28 +151,28 @@ func TestProductionEmitsV1WithV3LossAndFontFallback(t *testing.T) {
 	}
 }
 
-func TestProductionAcceptsV2AsV3WithoutNewFields(t *testing.T) {
+func TestProductionAcceptsV2AsCurrentWithoutNewFields(t *testing.T) {
 	v2 := readFontV2Fixture(t, "packages", "schema", "fixtures", "v2", "full.json")
 	accepted, version, err := NewIdentityProjector().AcceptWire(v2, 2)
 	if err != nil {
 		t.Fatalf("accept v2: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("accepted version = %d, want 3", version)
+	if version != 4 {
+		t.Fatalf("accepted version = %d, want 4", version)
 	}
 	want := decodeFontTestMap(t, v2)
-	want["schemaVersion"] = float64(3)
+	want["schemaVersion"] = float64(4)
 	if !bytes.Equal(normalizeJSONForFontTest(t, accepted), mustJSON(t, want)) {
 		t.Fatal("accepting v2 changed anything but schemaVersion")
 	}
 }
 
 func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV3Loss(t *testing.T) {
-	doc := v3Document(t)
+	doc := v4Document(t)
 	current := mustJSON(t, doc)
-	emittedMap := withoutV3Fields(t, doc)
+	emittedMap := withoutV3Fields(t, withoutV4Fields(t, doc))
 	emittedMap["schemaVersion"] = float64(2)
-	restored := mustJSON(t, withoutV3Fields(t, doc))
+	restored := mustJSON(t, withoutV3Fields(t, withoutV4Fields(t, doc)))
 
 	if err := productionEmissionLossPolicy(current, mustJSON(t, emittedMap), restored, 2); err != nil {
 		t.Fatalf("declared v3 loss rejected: %v", err)
@@ -183,13 +183,13 @@ func TestProductionEmissionLossPolicyAllowsOnlyDeclaredV3Loss(t *testing.T) {
 		t.Fatal("emitted non-v3 change passed the production emission policy")
 	}
 
-	fontFallback := withoutV3Fields(t, doc)
+	fontFallback := withoutV3Fields(t, withoutV4Fields(t, doc))
 	fontFallback["schemaVersion"] = float64(2)
 	fontTestObject(t, fontTestObject(t, fontFallback, "customization"), "font")["family"] = "alegreya"
 	if err := productionEmissionLossPolicy(current, mustJSON(t, fontFallback), restored, 2); err == nil {
 		t.Fatal("a v2 emission passed with a changed font family")
 	}
-	if err := productionEmissionLossPolicy(current, mustJSON(t, emittedMap), restored, 3); err == nil {
+	if err := productionEmissionLossPolicy(current, mustJSON(t, emittedMap), restored, 4); err == nil {
 		t.Fatal("a loss passed for the current version")
 	}
 }

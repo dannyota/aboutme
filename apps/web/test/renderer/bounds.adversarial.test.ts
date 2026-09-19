@@ -34,7 +34,7 @@ const customization: Resume['customization'] = {
 describe('renderer bounds', () => {
   it('renders maximum section and entry counts in order', async () => {
     const document: Resume = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       personalDetails: {},
       content: Object.fromEntries(
         Array.from({ length: 24 }, (_, sectionIndex) => [
@@ -67,7 +67,7 @@ describe('renderer bounds', () => {
   it('renders a 16 KiB already-sanitized rich-text field', async () => {
     const text = 'x'.repeat(16 * 1024);
     const document: Resume = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       personalDetails: {},
       content: {
         profile: {
@@ -101,7 +101,7 @@ describe('renderer bounds', () => {
       const text = 'x'.repeat(16 * 1024);
       const filler = 'y'.repeat(4_050);
       const document: Resume = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         personalDetails: { fullName: 'Ada Lovelace' },
         content: {
           profile: {

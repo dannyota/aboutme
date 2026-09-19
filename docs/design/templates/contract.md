@@ -173,6 +173,31 @@ reference to a `detailsOrder` — ratified by ADR 0013. A detail with
 `isHidden: true` is omitted entirely. `isHidden` is required on a detail and
 optional on an entry; an entry without the key is visible.
 
+`header.photoPosition` places the photo (ADR 0044). Absent or `top` keeps the
+order above: the photo sits above the text, and `header.align` positions both.
+With `left` or `right`, the photo and the text block (`fullName`, `headline`,
+and details) sit side by side:
+
+- The photo is on the chosen side, vertically centered against the text block,
+  at `--photo-size` with a 1.25em gap, and never shrinks.
+- The text block takes the remaining width. `header.align` applies inside it
+  only: `center` centers the name, headline, and details in the text column, and
+  the photo stays at its edge.
+- `detailsLayout` and `iconStyle` apply inside the text block unchanged.
+- With no photo, the setting has no effect.
+- On a continuous page shown on a screen narrower than 36em (576 px), a side
+  photo stacks above the text, as with `top`. The rule is a screen media query.
+  Printed and paged output, the PDF and the paged preview, always keeps the side
+  layout.
+- A template switch keeps the owner's `photoPosition`, or its absence, as it
+  keeps `font.textAlign`. A preset with no header gets the default header
+  (`left`, `inline`, `outline`) plus the kept position, which renders the same
+  as no header.
+
+`header.resume-header` carries `data-photo-position="left"` or `"right"` only
+when a photo renders beside the text. The name, headline, and details sit in
+`div.resume-header-text` in every header.
+
 Details of type `website`, `linkedin`, `github`, `twitter`, and `custom` render
 as an **underlined** anchor with `rel="noopener noreferrer"` when the value
 passes the renderer's own re-check of the exact lowercase `https://` prefix; a
@@ -227,7 +252,7 @@ Mapping — restates §3's entry-field table, adds nothing to it:
 | `skill`       | `name`     | —          | `level` widget             | `infoHtml`    | widget style from `sectionDisplay.skill`    |
 | `language`    | `name`     | —          | `level` widget             | —             | no rich-text field exists                   |
 | `certificate` | `title`    | `issuer`   | `date` (single `{y,m?}`)   | `description` | `titleLink` wraps `title`                   |
-| `project`     | `title`    | —          | `dates`                    | `description` | `link` wraps `title`; no place fields       |
+| `project`     | `title`    | `subtitle` | `dates`                    | `description` | `link` wraps `title`; no place fields       |
 | `custom`      | `title`    | `subtitle` | `dates`, `city`            | `description` | `titleLink` wraps `title`; **no `country`** |
 
 Every rich-text fragment is contained by one `.rich-text` element. Sanitized

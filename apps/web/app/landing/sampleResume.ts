@@ -2,7 +2,7 @@ import type { Resume } from '@aboutme/schema';
 
 /** The compiled-in document shown on the public landing page. */
 export const sampleResume: Resume = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   personalDetails: {
     fullName: 'Ada Lovelace',
     headline: 'Analytical Engineer',

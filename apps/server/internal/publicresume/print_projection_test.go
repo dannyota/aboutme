@@ -40,7 +40,7 @@ func TestProjectDocumentUsesExplicitPhotoAndDetachesSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"schemaVersion":3,"personalDetails":{"details":[{"id":"shown","label":"Email","type":"email","value":"ada@example.test"}],"fullName":"Ada","headline":"Engineer","photo":{"url":"data:image/jpeg;base64,/9j/2Q==","crop":{"height":0.4,"width":0.3,"x":0.1,"y":0.2}}},"content":{"shown":{"sectionType":"work","entries":[{"dates":{"end":null,"present":false,"start":{"m":6,"y":2020}},"description":"\u003cstrong\u003esafe\u003c/strong\u003e","id":"work"}]}},"customization":{"colors":{"background":"","primary":"","text":""},"dateFormat":"","font":{"baseSizePx":0,"family":""},"heading":{"showRule":false,"style":""},"layout":{"columns":0,"sections":{"main":["shown"],"sidebar":null}},"pageFormat":"","sectionDisplay":{"language":{"style":""},"skill":{"style":""}},"spacing":{"entryGap":0,"lineHeight":0,"sectionGap":0}}}`
+	want := `{"schemaVersion":4,"personalDetails":{"details":[{"id":"shown","label":"Email","type":"email","value":"ada@example.test"}],"fullName":"Ada","headline":"Engineer","photo":{"url":"data:image/jpeg;base64,/9j/2Q==","crop":{"height":0.4,"width":0.3,"x":0.1,"y":0.2}}},"content":{"shown":{"sectionType":"work","entries":[{"dates":{"end":null,"present":false,"start":{"m":6,"y":2020}},"description":"\u003cstrong\u003esafe\u003c/strong\u003e","id":"work"}]}},"customization":{"colors":{"background":"","primary":"","text":""},"dateFormat":"","font":{"baseSizePx":0,"family":""},"heading":{"showRule":false,"style":""},"layout":{"columns":0,"sections":{"main":["shown"],"sidebar":null}},"pageFormat":"","sectionDisplay":{"language":{"style":""},"skill":{"style":""}},"spacing":{"entryGap":0,"lineHeight":0,"sectionGap":0}}}`
 	if string(encoded) != want {
 		t.Fatalf("ProjectDocument JSON = %s\nwant = %s", encoded, want)
 	}
@@ -103,7 +103,7 @@ func TestProjectPublicJSONBytesRemainStable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"slug":"ada","revision":"7","lng":"en-US","downloadEnabled":true,"document":{"schemaVersion":3,"personalDetails":{"fullName":"Ada"},"content":{},"customization":{"colors":{"background":"","primary":"","text":""},"dateFormat":"","font":{"baseSizePx":0,"family":""},"heading":{"showRule":false,"style":""},"layout":{"columns":0,"sections":{"main":null,"sidebar":null}},"pageFormat":"","sectionDisplay":{"language":{"style":""},"skill":{"style":""}},"spacing":{"entryGap":0,"lineHeight":0,"sectionGap":0}}}}`
+	want := `{"slug":"ada","revision":"7","lng":"en-US","downloadEnabled":true,"document":{"schemaVersion":4,"personalDetails":{"fullName":"Ada"},"content":{},"customization":{"colors":{"background":"","primary":"","text":""},"dateFormat":"","font":{"baseSizePx":0,"family":""},"heading":{"showRule":false,"style":""},"layout":{"columns":0,"sections":{"main":null,"sidebar":null}},"pageFormat":"","sectionDisplay":{"language":{"style":""},"skill":{"style":""}},"spacing":{"entryGap":0,"lineHeight":0,"sectionGap":0}}}}`
 	if string(encoded) != want {
 		t.Fatalf("Project JSON = %s\nwant = %s", encoded, want)
 	}

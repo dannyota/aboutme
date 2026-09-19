@@ -17,7 +17,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';

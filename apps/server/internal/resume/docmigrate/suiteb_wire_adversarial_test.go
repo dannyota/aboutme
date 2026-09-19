@@ -830,7 +830,7 @@ func TestSuiteB_DeclaredVersionSlicesAreCopies(t *testing.T) {
 			if len(first) == 0 {
 				t.Fatalf("%s() is empty; the server must declare at least the current version", tc.name)
 			}
-			want := []int32{1, 2, 3}
+			want := []int32{1, 2, 3, 4}
 			if !slices.Equal(first, want) {
 				t.Errorf("%s() = %v, want %v", tc.name, first, want)
 			}

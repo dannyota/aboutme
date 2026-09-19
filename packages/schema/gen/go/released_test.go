@@ -24,11 +24,12 @@ import (
 	schemav1 "github.com/dannyota/aboutme/packages/schema/gen/go/v1"
 	schemav2 "github.com/dannyota/aboutme/packages/schema/gen/go/v2"
 	schemav3 "github.com/dannyota/aboutme/packages/schema/gen/go/v3"
+	schemav4 "github.com/dannyota/aboutme/packages/schema/gen/go/v4"
 )
 
-func TestReleasedVersions_ContainsExactlyVersionsOneToThree(t *testing.T) {
+func TestReleasedVersions_ContainsExactlyVersionsOneToFour(t *testing.T) {
 	got := ReleasedVersions()
-	want := []int{1, 2, 3}
+	want := []int{1, 2, 3, 4}
 	if len(got) != len(want) {
 		t.Fatalf("ReleasedVersions() = %v, want %v", got, want)
 	}
@@ -37,8 +38,8 @@ func TestReleasedVersions_ContainsExactlyVersionsOneToThree(t *testing.T) {
 			t.Fatalf("ReleasedVersions() = %v, want %v", got, want)
 		}
 	}
-	if CurrentVersion != 3 {
-		t.Fatalf("CurrentVersion = %d, want 3", CurrentVersion)
+	if CurrentVersion != 4 {
+		t.Fatalf("CurrentVersion = %d, want 4", CurrentVersion)
 	}
 }
 
@@ -48,11 +49,11 @@ func TestWireVersionDeclarations_ReturnFreshSlices(t *testing.T) {
 		"emitted":  EmittedVersions,
 	} {
 		first := get()
-		if !slices.Equal(first, []int{1, 2, 3}) {
-			t.Fatalf("%s versions = %v, want [1 2 3]", name, first)
+		if !slices.Equal(first, []int{1, 2, 3, 4}) {
+			t.Fatalf("%s versions = %v, want [1 2 3 4]", name, first)
 		}
 		first[0] = 99
-		if got := get(); !slices.Equal(got, []int{1, 2, 3}) {
+		if got := get(); !slices.Equal(got, []int{1, 2, 3, 4}) {
 			t.Fatalf("%s versions escaped by reference: %v", name, got)
 		}
 	}
@@ -96,6 +97,21 @@ func TestReleasedSchemaFor_V3ByteEqualsItsImmutableFile(t *testing.T) {
 	}
 }
 
+func TestReleasedSchemaFor_V4ByteEqualsItsImmutableFile(t *testing.T) {
+	got, err := ReleasedSchemaFor(4)
+	if err != nil {
+		t.Fatalf("ReleasedSchemaFor(4): %v", err)
+	}
+	path := filepath.Join("..", "..", got.Schema)
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	if !bytes.Equal(got.RawSchema, want) || !bytes.Equal(schemav4.RawSchema, want) {
+		t.Fatal("released v4 bytes differ from its immutable file")
+	}
+}
+
 func TestReleasedSchemaFor_V1ByteEqualsItsImmutableFile(t *testing.T) {
 	got, err := ReleasedSchemaFor(1)
 	if err != nil {
@@ -136,7 +152,7 @@ func TestRawSchema_DerivesFromTheCurrentReleasedVersion(t *testing.T) {
 }
 
 func TestReleasedSchemaFor_UnknownVersionFailsClosed(t *testing.T) {
-	for _, version := range []int{0, 4, -1, math.MinInt, math.MaxInt} {
+	for _, version := range []int{0, 5, -1, math.MinInt, math.MaxInt} {
 		got, err := ReleasedSchemaFor(version)
 		if err == nil {
 			t.Fatalf("ReleasedSchemaFor(%d) returned %+v and no error; unknown versions must fail closed", version, got)

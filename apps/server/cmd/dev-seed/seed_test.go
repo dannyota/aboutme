@@ -273,7 +273,7 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&originalHash); err != nil {
 		t.Fatalf("read original credential hash: %v", err)
 	}
-	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 3`, seedResumeID, seedUser.ID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 4`, seedResumeID, seedUser.ID); n != 1 {
 		t.Fatalf("seed resume rows = %d, want 1 private v2 resume at revision 1", n)
 	}
 
@@ -367,7 +367,7 @@ func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
 		INSERT INTO resumes
 			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
 			 schema_version, revision, personal_details, content, customization)
-		VALUES ($1, $2, 'Other resume', NULL, false, true, false, 3, 7, $3, $4, $5)`,
+		VALUES ($1, $2, 'Other resume', NULL, false, true, false, 4, 7, $3, $4, $5)`,
 		seedResumeID, otherUserID, personalDetails, content, customization)
 	if err != nil {
 		t.Fatalf("insert colliding resume: %v", err)
