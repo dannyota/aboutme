@@ -102,8 +102,9 @@ contains Settings, theme switching, and Log out.
 The resume list is a desk of up to three white paper cards in a three-column
 grid at medium widths. Each card shows its title, relative updated time, and a
 public seal/link or Draft mark. An overflow menu provides Rename and Delete.
-Remaining slots are dashed empty sheets that create a resume; the empty-list
-message says how to create the first resume and that three are allowed.
+Create resume in the page header is the one create control. Remaining slots are
+quiet dashed placeholders; for an empty list, the first says how to start and
+that three are allowed.
 
 The editor is a four-region workspace:
 
@@ -119,6 +120,10 @@ The editor top bar keeps the brand, resume title, save state, public mark,
 Publish, and account menu. Publish is the seal button. The preview reports
 loading or unavailable photos without rendering a placeholder image, and a
 render failure says that edits are still safe.
+
+Each template card in the inspector shows the sample resume rendered with that
+template at 0.18 scale. A thumbnail renders only while its card is near the
+viewport, and applying a template names any sections it moved between columns.
 
 The publish dialog is a scrollable modal with the `aboutme.vn/` slug prefix. It
 presents the three switches with explanations. PDF download and SEO and GEO are
@@ -146,9 +151,12 @@ full zoom is requested. The A4 sheet remains intact and scrollable.
 
 ## Interaction and motion
 
-Text fields commit on blur or Enter. Empty values remove a field, unchanged
-values send nothing, and Escape restores the last committed value. Selects,
-checkboxes, switches, colors, and numbers commit on change.
+Text fields commit on blur or Enter; rich text also commits after a 400 ms pause
+in typing, so the preview follows as the person writes. Empty values remove a
+field, unchanged values send nothing, and Escape restores the last committed
+value. Selects, checkboxes, switches, colors, and numbers commit on change. An
+edit that cannot save yet, such as a date range with a start and no end, is held
+in memory, shows Unsaved, and survives the field remounting.
 
 Publishing stamps the preview in a single 180 ms press from scale 1.12 to 1 with
 the ink fading in. Unpublishing lifts the stamp in 120 ms. Primitive controls

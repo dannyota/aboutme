@@ -105,6 +105,7 @@ apps/web/app/components/editor/structure/SectionControls.vue
 apps/web/app/components/editor/structure/StructurePanel.vue
 apps/web/app/components/editor/templates/TemplatePanel.vue
 apps/web/app/components/editor/templates/TemplatePartialDialog.vue
+apps/web/app/components/editor/templates/TemplateThumbnail.vue
 apps/web/app/components/legal/LegalAgreement.vue
 apps/web/app/components/legal/LegalDocument.vue
 apps/web/app/components/print/PrintResumeApp.vue

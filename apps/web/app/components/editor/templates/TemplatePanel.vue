@@ -20,6 +20,7 @@ import type {
 import { templateUndoAvailable } from '../../../editor/templateGroup';
 import type { ResumeRecord } from '../../../stores/resumes';
 import TemplatePartialDialog from './TemplatePartialDialog.vue';
+import TemplateThumbnail from './TemplateThumbnail.vue';
 import { defaultSectionNames } from '../sectionTypes';
 import type { ResumeSnapshot } from '../../../editor/types';
 
@@ -159,22 +160,25 @@ function assertNever(value: never): never {
       >
         <Card>
           <CardHeader><CardTitle>{{ preset.name }}</CardTitle></CardHeader>
-          <CardContent>
-            <p>{{ preset.description }}</p>
-            <ul
-              aria-label="Template warnings"
-              class="text-xs text-muted-foreground"
-            >
-              <li v-if="hasFormatWarning(preset)">
-                Page or date format will change.
-              </li>
-              <li v-if="hasBaseSizeWarning(preset)">
-                This template uses a 10 pt base size.
-              </li>
-              <li v-if="hasMarginWarning(preset)">
-                This template sets margins below 5 mm.
-              </li>
-            </ul>
+          <CardContent class="flex items-start gap-4">
+            <TemplateThumbnail :preset="preset" />
+            <div class="grid gap-2">
+              <p>{{ preset.description }}</p>
+              <ul
+                aria-label="Template warnings"
+                class="text-xs text-muted-foreground"
+              >
+                <li v-if="hasFormatWarning(preset)">
+                  Page or date format will change.
+                </li>
+                <li v-if="hasBaseSizeWarning(preset)">
+                  This template uses a 10 pt base size.
+                </li>
+                <li v-if="hasMarginWarning(preset)">
+                  This template sets margins below 5 mm.
+                </li>
+              </ul>
+            </div>
           </CardContent>
           <CardFooter>
             <Button
