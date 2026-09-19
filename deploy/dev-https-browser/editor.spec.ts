@@ -497,7 +497,8 @@ async function expectAccountTooltipDoesNotCoverLocaleButton(
   const tooltipContent = page.locator('[data-slot="tooltip-content"]');
   await expect(tooltipContent).toBeVisible();
   await expect(tooltipContent).toHaveAttribute('data-side', 'bottom');
-  await expect(page.getByRole('tooltip')).toHaveText(accountLabel);
+  await expect(page.getByRole('tooltip', { includeHidden: true })).toHaveText(accountLabel);
+  await expect(account).toHaveAccessibleDescription(accountLabel);
   const localeTarget = page.getByTestId('workspace-locale-en');
   expect(await localeTarget.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
