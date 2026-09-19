@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Customization, Section } from '@aboutme/schema';
 
-import { formatDateRange } from '../formatDate';
+import { formatDateRange, useResumeLng } from '../formatDate';
 import EntryHeader from '../primitives/EntryHeader.vue';
 import RichText from '../primitives/RichText.vue';
 import SectionHeading from '../primitives/SectionHeading.vue';
@@ -11,6 +11,7 @@ withDefaults(defineProps<{
   dateFormat: Customization['dateFormat'];
   renderPart?: 'all' | 'heading' | 'entry' | 'continuation';
 }>(), { renderPart: 'all' });
+const lng = useResumeLng();
 </script>
 
 <template>
@@ -34,7 +35,9 @@ withDefaults(defineProps<{
           :title="entry.title"
           :title-link="entry.link || undefined"
           :subtitle="entry.subtitle || undefined"
-          :meta="entry.dates ? [formatDateRange(entry.dates, dateFormat)] : []"
+          :meta="entry.dates
+            ? [formatDateRange(entry.dates, dateFormat, lng)]
+            : []"
         />
         <RichText
           v-if="entry.description"

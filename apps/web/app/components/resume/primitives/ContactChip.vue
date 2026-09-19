@@ -3,6 +3,7 @@ import type { PersonalDetail } from '@aboutme/schema';
 import { computed } from 'vue';
 
 import { contactHref } from '../contactHref';
+import { useResumeLng } from '../formatDate';
 import Icon from './Icon.vue';
 
 const props = defineProps<{
@@ -10,7 +11,8 @@ const props = defineProps<{
   iconStyle: 'none' | 'outline';
 }>();
 
-const labels: Record<PersonalDetail['type'], string> = {
+type Labels = Record<PersonalDetail['type'], string>;
+const EN_LABELS: Labels = {
   email: 'Email',
   phone: 'Phone',
   location: 'Location',
@@ -20,6 +22,16 @@ const labels: Record<PersonalDetail['type'], string> = {
   twitter: 'X',
   custom: 'Detail',
 };
+// Default labels follow the resume language; a user label is kept as typed.
+const VI_LABELS: Labels = {
+  ...EN_LABELS,
+  phone: 'Điện thoại',
+  location: 'Địa chỉ',
+  custom: 'Thông tin',
+};
+const lng = useResumeLng();
+const labels = computed(() =>
+  lng.value.toLowerCase().split('-')[0] === 'vi' ? VI_LABELS : EN_LABELS);
 const iconKeys: Record<PersonalDetail['type'], string> = {
   email: 'mail',
   phone: 'phone',
@@ -38,7 +50,8 @@ const iconKey = computed(() =>
   props.detail.type === 'custom' && isLink.value
     ? 'link'
     : iconKeys[props.detail.type]);
-const label = computed(() => props.detail.label || labels[props.detail.type]);
+const label = computed(() =>
+  props.detail.label || labels.value[props.detail.type]);
 const display = computed(() =>
   isLink.value ? props.detail.display ?? 'short' : 'short');
 // An icon already names a typed contact, so its default label would repeat

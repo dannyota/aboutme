@@ -199,6 +199,7 @@ that can vary is pinned.
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | Chromium           | image digest, per the [engineering standard](../../standards/engineering.md); a browser upgrade is a reviewed snapshot change  |
 | Fonts              | self-hosted catalog; 400/700 requested with synthesis disabled and a bundled fallback for missing faces (`tokens.md` §3.2)     |
+| Text layer         | common ligatures off, so `ff` and `fi` extract as two letters and a keyword search matches                                     |
 | Font loading       | `await document.fonts.ready` before print                                                                                      |
 | Timezone           | `TZ=UTC` in the render container                                                                                               |
 | Locale             | explicit `LANG`/`LC_ALL`; root `lang` is canonical `resumes.lng` or `und` for null, empty, or invalid legacy data              |

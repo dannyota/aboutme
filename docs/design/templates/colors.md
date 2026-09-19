@@ -101,6 +101,9 @@ A tinted header band spans the full content measure, inside `--page-margin-x`. A
 tinted sidebar fills its own column, `--sidebar-ratio` wide, and continues
 across page breaks with the sidebar flow (`print.md` §5).
 
+The band pads its contents by `--header-padding` (`1em 1.25em`; `0` without a
+header band), so the name, headline, and details never touch its edge.
+
 ### 4.2 Text over `colors.surface`
 
 `colors.surface` introduces a second text-on-surface pair, and the guarantee for
@@ -125,6 +128,10 @@ Three consequences worth stating outright:
   non-text marks that carry meaning. For one surface, either black or white is
   always at least √21 ≈ 4.58:1. A neutral endpoint is therefore the
   deterministic last resort when no hue-preserving step passes.
+- On a dark surface, where white out-contrasts black, a heading or body color
+  that fails 4.5:1 does not clamp: it goes to white (heading) or white mixed 12%
+  toward the surface (body). A clamped mid-tone passes the ratio but reads faint
+  on a dark band.
 - It is non-destructive. `customization.colors` keeps the user's hexes; only the
   derived roles differ between the tinted region and the rest of the page.
 - The same text color can therefore resolve to two different values on one page,

@@ -31,7 +31,8 @@ apps/web/app/assets/fonts/plus-jakarta-sans-var.woff2
 apps/web/app/assets/fonts/roboto-mono-var.woff2
 apps/web/app/assets/fonts/roboto-serif-var.woff2
 apps/web/app/assets/fonts/roboto-var.woff2
-apps/web/app/assets/fonts/source-sans-3-var.woff2
+apps/web/app/assets/fonts/source-sans-3-400.woff2
+apps/web/app/assets/fonts/source-sans-3-700.woff2
 apps/web/app/assets/fonts/space-mono-400.woff2
 apps/web/app/assets/fonts/space-mono-700.woff2
 apps/web/app/assets/fonts/spectral-400.woff2

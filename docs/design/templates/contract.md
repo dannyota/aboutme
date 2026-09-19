@@ -282,12 +282,18 @@ render if the section itself renders.
 
 - A range renders `start – end`. `present: true` renders `start – Present`. The
   word is a label derived from the boolean, not a sentinel.
+- A range whose two ends print the same text (`2025` to `2025` under `YYYY`)
+  renders that text once.
+- The open-end word and `Mon` month names follow the resume language: a `vi`
+  resume renders `Hiện tại` and CLDR's abbreviated month (`thg 3 2024`); every
+  other language renders English. Default contact labels (§5.1) follow the same
+  rule, while a user `label` renders as typed.
 - A `{y}` without `m` renders as the year alone regardless of `dateFormat`;
   never invent a month.
 - An absent `dates`/`date` object renders no date line and no separator.
-- `Mon` is a fixed English three-letter table in the renderer, not
-  `Intl.DateTimeFormat` — §5 forbids locale calls in the renderer, and the print
-  container's locale must not be able to change the output.
+- Both month tables are fixed in the renderer, not `Intl.DateTimeFormat`: §5
+  forbids locale calls in the renderer, and the print container's locale must
+  not be able to change the output.
 
 ### 5.5 Rich text
 
@@ -299,6 +305,12 @@ through because Go is the sole sanitization authority for anything SSR renders
 must re-sanitize the current document immediately before that handoff. Either
 way the renderer styles only the permitted tags. It never rewrites, truncates,
 or reflows the markup. Anchors inside rich text get `rel="noopener noreferrer"`.
+
+Rich text sets its own rhythm, never browser defaults. The entry header to body
+gap is `--gap-block`. Paragraphs part by `0.5em`. A list sits `0.35em` from its
+neighbours with a `1.25em` indent, and its items part by `0.25em`; a paragraph
+inside an item adds no margin. The body's first and last children carry no outer
+margin, so `--gap-entry` alone separates entries.
 
 ### 5.6 Level widgets
 
