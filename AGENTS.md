@@ -64,6 +64,15 @@ pushes, tags, and deploys. A manager may spawn a sub-manager as a subagent
 (Claude Code allows three layers below the main conversation) or run it as a
 separate named session.
 
+**Lane managers.** Long-running named sessions (`aboutme-backend`,
+`aboutme-frontend`, `aboutme-designer`, `aboutme-devops`) run on Opus as
+sub-managers for their lane. A lane manager takes briefs from the top manager,
+plans its lane, dispatches its role's worker subagents (backend, frontend, qa,
+and so on) at the model tier in [Models](#models), verifies their output, and
+reports exact file sets upward. It writes code itself only when a change takes
+one or two tool calls. Lanes coordinate with each other directly for contract
+details and tell the top manager about every cross-lane file.
+
 ### architect
 
 The architect writes design notes, ADRs, and contract proposals (schema
