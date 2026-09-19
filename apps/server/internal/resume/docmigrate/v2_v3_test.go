@@ -36,7 +36,9 @@ func withoutV3Fields(t *testing.T, doc map[string]any) map[string]any {
 	delete(fontTestObject(t, fontTestObject(t, out, "customization"), "font"), "textAlign")
 	if details, ok := fontTestObject(t, out, "personalDetails")["details"].([]any); ok {
 		for _, detail := range details {
-			delete(detail.(map[string]any), "display")
+			if object, isObject := detail.(map[string]any); isObject {
+				delete(object, "display")
+			}
 		}
 	}
 	return out
@@ -53,8 +55,8 @@ func TestV2V3RoundTripIsExact(t *testing.T) {
 			if err != nil {
 				t.Fatalf("convert v2 to v3: %v", err)
 			}
-			if err := releasedValidators[3](v3); err != nil {
-				t.Fatalf("converted document invalid at v3: %v", err)
+			if validateErr := releasedValidators[3](v3); validateErr != nil {
+				t.Fatalf("converted document invalid at v3: %v", validateErr)
 			}
 			back, err := convertV3ToV2(v3)
 			if err != nil {

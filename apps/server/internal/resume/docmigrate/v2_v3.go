@@ -80,8 +80,8 @@ func productionEmissionLossPolicy(current, emitted, restored json.RawMessage, ta
 	if err != nil {
 		return fmt.Errorf("decoding current document: %w", err)
 	}
-	if err := removeV3Fields(currentValue); err != nil {
-		return fmt.Errorf("current document: %w", err)
+	if removeErr := removeV3Fields(currentValue); removeErr != nil {
+		return fmt.Errorf("current document: %w", removeErr)
 	}
 	withoutV3, err := json.Marshal(currentValue)
 	if err != nil {
