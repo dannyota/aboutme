@@ -368,6 +368,59 @@ describe('PersonalDetailsPanel', () => {
   });
 
   it(
+    'keeps a label being typed when another detail updates first',
+    async () => {
+      const email = {
+        id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: false,
+      } as const;
+      const phone = {
+        id: 'detail-2', type: 'phone', value: '0901', isHidden: false,
+      } as const;
+      const wrapper = mount(ContactList, {
+        props: { createEntityId: () => 'detail-3', details: [email, phone] },
+      });
+
+      (wrapper.vm as unknown as { revealLabel(index: number): void })
+        .revealLabel(0);
+      await wrapper.vm.$nextTick();
+      await wrapper.get('[data-detail-label]').setValue('Work');
+      await wrapper.setProps({
+        details: [email, { ...phone, display: 'label' }],
+      });
+
+      const label = wrapper.get('[data-detail-label]');
+      expect((label.element as HTMLInputElement).value).toBe('Work');
+      await label.trigger('blur');
+      expect(wrapper.emitted('change')?.at(-1)?.[0]).toEqual([
+        { ...email, label: 'Work' },
+        { ...phone, display: 'label' },
+      ]);
+    },
+  );
+
+  it(
+    'hides a cleared label once the change comes back',
+    async () => {
+      const email = {
+        id: 'detail-1', type: 'email', value: 'a@b.c', isHidden: false,
+      } as const;
+      const wrapper = mount(ContactList, {
+        props: {
+          createEntityId: () => 'detail-2',
+          details: [{ ...email, label: 'Work' }],
+        },
+      });
+
+      const label = wrapper.get('[data-detail-label]');
+      await label.setValue('');
+      await label.trigger('blur');
+      await wrapper.setProps({ details: [email] });
+
+      expect(wrapper.find('[data-detail-label]').exists()).toBe(false);
+    },
+  );
+
+  it(
     'rejects a web-profile type change that carries an invalid value',
     async () => {
       const wrapper = mount(ContactList, {
