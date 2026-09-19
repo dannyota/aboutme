@@ -59,6 +59,11 @@ The chrome radius is 6 px, the sheet radius is 2 px, and the dialog radius is 8
 px. `--shadow-paper` supplies the soft paper shadow in light and dark themes.
 The theme preference is persisted in the `aboutme-theme` cookie.
 
+Dialogs share one rhythm: 24 px between the header, the body, and the actions; 6
+px from title to description; and 16 px between fields, with hints 6 px under
+their control. Inputs and selects fill the dialog width. Actions sit
+right-aligned from 640 px up and stack full-width below it, primary first.
+
 ## Seal and state marks
 
 `AppSeal` has two implemented forms:

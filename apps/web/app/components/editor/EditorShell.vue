@@ -593,6 +593,12 @@ async function discardAndSignIn(): Promise<void> {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
+          <Button
+            variant="ghost"
+            @click="discardAndSignIn"
+          >
+            Discard and sign in
+          </Button>
           <a
             :class="buttonVariants({ variant: 'outline' })"
             href="/login"
@@ -606,12 +612,6 @@ async function discardAndSignIn(): Promise<void> {
             @click="actions.resumeAfterAuth()"
           >
             Resume after sign-in
-          </Button>
-          <Button
-            variant="ghost"
-            @click="discardAndSignIn"
-          >
-            Discard and sign in
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
