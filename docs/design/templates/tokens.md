@@ -160,10 +160,14 @@ reveals a detail, and `isHidden` still wins in every combination.
 | `header.detailsLayout` | `inline`  | details flow on one wrapping line, separated by `--gap-inline`    |
 |                        | `stacked` | each detail takes its own line, separated by `--gap-block`        |
 | `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone  |
-|                        | `outline` | the stroked lucide glyph at `--icon-size`                         |
+|                        | `outline` | the stroked lucide glyph at `--icon-size`; replaces default label |
 
 Absent `header` renders `left` / `inline` / `outline`, which is what every
 document rendered before the token existed.
+
+With `outline`, a typed detail's icon stands in for its default label, which is
+omitted. A non-empty user `label` and a `custom` detail's label still render,
+and no value is ever hidden (ADR 0040).
 
 The enum is `none` | `outline`. Lucide is stroke-only, so a `solid` value would
 require a second icon family or a `fill: currentColor` hack that turns many
