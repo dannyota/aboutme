@@ -6,6 +6,7 @@ import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 
 // eslint-disable-next-line max-len -- dialog component import.
 import CreateResumeDialog from '../../app/components/editor/list/CreateResumeDialog.vue';
+import { setSiteLocale } from '../support/locale';
 // eslint-disable-next-line max-len -- dialog component import.
 import DeleteResumeDialog from '../../app/components/editor/list/DeleteResumeDialog.vue';
 // eslint-disable-next-line max-len -- dialog component import.
@@ -952,6 +953,88 @@ describe('useResumeList', () => {
     deleteWrapper.unmount();
   });
 
+  it('creates a resume in the site language by default', async () => {
+    const cases = [[undefined, 'vi'], ['en', 'en']] as const;
+    for (const [cookie, expected] of cases) {
+      setSiteLocale(cookie);
+      const wrapper = mount(CreateResumeDialog, {
+        attachTo: document.body,
+        props: { open: true, busy: false, retained: null },
+      });
+      await nextTick();
+      const select = document.body.querySelector<HTMLSelectElement>(
+        '[role="dialog"] [data-action="resume-language"]',
+      )!;
+      expect([...select.options].map((option) => option.text)).toEqual([
+        'Tiếng Việt',
+        'English',
+        'Other…',
+      ]);
+      expect(select.value).toBe(expected);
+      expect(document.body.textContent).not.toMatch(
+        /Leave unchanged|Clear language|Set language/u,
+      );
+      submitDialog();
+      await nextTick();
+      expect(wrapper.emitted('submit')).toEqual([['', expected]]);
+      wrapper.unmount();
+    }
+    setSiteLocale(undefined);
+  });
+
+  it('takes a BCP 47 tag only through Other', async () => {
+    setSiteLocale(undefined);
+    const wrapper = mount(CreateResumeDialog, {
+      attachTo: document.body,
+      props: { open: true, busy: false, retained: null },
+    });
+    await nextTick();
+    const select = document.body.querySelector<HTMLSelectElement>(
+      '[role="dialog"] [data-action="resume-language"]',
+    )!;
+    expect(document.body.querySelector('[name="lngOther"]')).toBeNull();
+    select.value = 'other';
+    select.dispatchEvent(new Event('change'));
+    await nextTick();
+    const other = document.body.querySelector<HTMLInputElement>(
+      '[name="lngOther"]',
+    )!;
+    const form = document.body.querySelector<HTMLFormElement>(
+      '[role="dialog"] form',
+    )!;
+
+    other.value = 'not a tag';
+    other.dispatchEvent(new Event('input'));
+    // The input's v-model reaches the dialog on the next tick.
+    await nextTick();
+    submitDialog(form);
+    await nextTick();
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(document.body.textContent).toContain(
+      'Enter a language code, such as fr or zh-Hant.',
+    );
+
+    other.value = ' zh-Hant ';
+    other.dispatchEvent(new Event('input'));
+    await nextTick();
+    submitDialog(form);
+    await nextTick();
+    expect(wrapper.emitted('submit')).toEqual([['', 'zh-Hant']]);
+    wrapper.unmount();
+  });
+
+  it('spaces dialog fields and actions on one rhythm', async () => {
+    const wrapper = mount(CreateResumeDialog, {
+      attachTo: document.body,
+      props: { open: true, busy: false, retained: null },
+    });
+    await nextTick();
+    const form = document.body.querySelector('[role="dialog"] form')!;
+    expect(form.classList.contains('grid')).toBe(true);
+    expect(form.classList.contains('gap-4')).toBe(true);
+    wrapper.unmount();
+  });
+
   it('returns focus after create cancel with dialog semantics', async () => {
     const trigger = document.createElement('button');
     document.body.append(trigger);
@@ -985,7 +1068,7 @@ describe('useResumeList', () => {
       new Event('submit', { bubbles: true, cancelable: true }),
     );
     await nextTick();
-    expect(wrapper.emitted('submit')).toEqual([['', undefined]]);
+    expect(wrapper.emitted('submit')).toEqual([['', 'vi']]);
     const cancel = document.body.querySelector<HTMLButtonElement>(
       '[role="dialog"] [data-slot="button"][type="button"]',
     );
@@ -1109,4 +1192,10 @@ function descendantNames(root: Element): string[] {
     pending.push(...element.children);
   }
   return names;
+}
+
+function submitDialog(
+  form = document.body.querySelector<HTMLFormElement>('[role="dialog"] form')!,
+): void {
+  form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 }

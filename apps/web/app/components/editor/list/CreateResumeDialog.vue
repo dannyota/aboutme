@@ -4,8 +4,7 @@ import FormDialog from '@/components/app/FormDialog.vue';
 import FormField from '@/components/app/FormField.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import SelectField from '@/components/app/SelectField.vue';
 
 const props = defineProps<{
   open: boolean;
@@ -20,13 +19,27 @@ const emit = defineEmits<{
   abandon: [intentId: string];
 }>();
 
+// A new resume starts in the site's current language, so it never lands as
+// undetermined (`und`); Other takes any BCP 47 tag.
+const languageOptions = [
+  { value: 'vi', label: 'Tiếng Việt' },
+  { value: 'en', label: 'English' },
+  { value: 'other', label: 'Other…' },
+] as const;
+const BCP47 = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
+
+const { locale } = useLocale();
 const title = ref('');
-const languageMode = ref<'absent' | 'clear' | 'value'>('absent');
-const language = ref('');
+const languageChoice = ref<string>(locale.value);
+const otherLanguage = ref('');
+const otherError = ref<string | undefined>();
 const returnFocus = ref<HTMLElement | null>(null);
 
 watch(() => props.open, (open) => {
   if (open) {
+    languageChoice.value = locale.value;
+    otherLanguage.value = '';
+    otherError.value = undefined;
     returnFocus.value = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
@@ -46,10 +59,17 @@ function abandon(): void {
 }
 
 function submit(): void {
-  const lng = languageMode.value === 'absent'
-    ? undefined
-    : languageMode.value === 'clear' ? null : language.value;
-  emit('submit', title.value, lng);
+  if (languageChoice.value !== 'other') {
+    emit('submit', title.value, languageChoice.value);
+    return;
+  }
+  const tag = otherLanguage.value.trim();
+  if (tag.length > 35 || !BCP47.test(tag)) {
+    otherError.value = 'Enter a language code, such as fr or zh-Hant.';
+    return;
+  }
+  otherError.value = undefined;
+  emit('submit', title.value, tag);
 }
 </script>
 
@@ -86,50 +106,31 @@ function submit(): void {
           />
         </template>
       </FormField>
-      <FormField label="Language">
-        <template #default="{ id, describedBy }">
-          <RadioGroup
-            :id="id"
-            v-model="languageMode"
-            :aria-describedby="describedBy"
-            :disabled="busy"
-          >
-            <div class="flex items-center gap-2">
-              <RadioGroupItem
-                id="language-absent"
-                value="absent"
-              />
-              <Label for="language-absent">Leave unchanged</Label>
-            </div>
-            <div class="flex items-center gap-2">
-              <RadioGroupItem
-                id="language-clear"
-                value="clear"
-              />
-              <Label for="language-clear">Clear language</Label>
-            </div>
-            <div class="flex items-center gap-2">
-              <RadioGroupItem
-                id="language-value"
-                value="value"
-              />
-              <Label for="language-value">Set language</Label>
-            </div>
-          </RadioGroup>
-        </template>
-      </FormField>
-      <FormField
-        v-if="languageMode === 'value'"
-        label="Language value"
+      <SelectField
+        v-model="languageChoice"
+        :control-attrs="{ 'data-action': 'resume-language' }"
+        :disabled="busy"
+        hint="The language your resume is written in."
+        label="Resume language"
         name="lng"
+        :options="languageOptions"
+      />
+      <FormField
+        v-if="languageChoice === 'other'"
+        :error="otherError"
+        hint="A BCP 47 tag, such as fr or zh-Hant."
+        label="Language code"
+        name="lngOther"
       >
         <template #default="{ id, describedBy, invalid }">
           <Input
             :id="id"
-            v-model="language"
+            v-model="otherLanguage"
             :aria-describedby="describedBy"
             :aria-invalid="invalid"
-            name="lng"
+            autocomplete="off"
+            maxlength="35"
+            name="lngOther"
             :disabled="busy"
           />
         </template>

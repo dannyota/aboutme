@@ -19,6 +19,8 @@ export type LegalSection = {
 
 export type LegalDocument = {
   readonly title: string;
+  /** The search result summary; restates the intro, no new claims. */
+  readonly description: string;
   readonly intro: string;
   /** Who runs the service, followed by the contact address. */
   readonly operator?: { readonly text: string; readonly contactLabel: string };
@@ -44,6 +46,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     agreement: ['Khi tạo tài khoản, bạn đồng ý với ', ' và ', '.'],
     privacy: {
       title: 'Chính sách quyền riêng tư',
+      description:
+        'Chính sách quyền riêng tư của aboutme: chúng tôi thu thập gì, dùng '
+        + 'để làm gì, và bạn có những lựa chọn nào.',
       intro:
         'aboutme (https://aboutme.vn) là công cụ tạo CV mã nguồn mở. Trang '
         + 'này giải thích chúng tôi thu thập gì, dùng để làm gì, và bạn có '
@@ -178,6 +183,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     },
     terms: {
       title: 'Điều khoản sử dụng',
+      description:
+        'Điều khoản sử dụng aboutme, công cụ tạo CV miễn phí và mã nguồn mở.',
       intro:
         'Các điều khoản này áp dụng khi bạn sử dụng aboutme '
         + '(https://aboutme.vn).',
@@ -266,6 +273,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     agreement: ['By creating an account you agree to the ', ' and the ', '.'],
     privacy: {
       title: 'Privacy Policy',
+      description:
+        'The aboutme privacy policy: what we collect, what we use it for, and '
+        + 'the choices you have.',
       intro:
         'aboutme (https://aboutme.vn) is an open-source resume builder. This '
         + 'page explains what we collect, what we use it for, and the '
@@ -397,6 +407,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     },
     terms: {
       title: 'Terms of Service',
+      description:
+        'The terms for using aboutme, a free and open-source resume builder.',
       intro: 'These terms apply when you use aboutme (https://aboutme.vn).',
       sections: [
         {

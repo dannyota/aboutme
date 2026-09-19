@@ -33,6 +33,9 @@ import {
 } from '../../../composables/providerAuthorization';
 import { formatRelativeTime } from '../../../utils/relativeTime';
 import { describeUserAgent } from '../../../utils/userAgent';
+import { appTitles } from '@/i18n/meta';
+
+useHead({ title: appTitles.settings });
 
 interface SessionInfo {
   id: string;

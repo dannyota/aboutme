@@ -41,6 +41,7 @@ import {
   createFieldDrafts,
   FieldDraftsKey,
 } from '../../../composables/useFieldDrafts';
+import { appTitles, pageTitle } from '@/i18n/meta';
 
 type LoadState = 'loading' | 'ready' | 'unavailable' | 'failed';
 
@@ -52,6 +53,10 @@ const resumeId = route.params.id;
 const id = typeof resumeId === 'string' ? resumeId : (resumeId?.[0] ?? '');
 const actions = shallowRef<ResumeEditorActions>();
 const record = computed(() => actions.value?.record.value);
+useHead(computed(() => {
+  const title = record.value?.current.metadata.title.trim();
+  return { title: title ? pageTitle(title) : appTitles.editor };
+}));
 const loadState = ref<LoadState>('loading');
 const loadingStarted = ref(false);
 const parentRevisionETag = ref<ParentETag>();

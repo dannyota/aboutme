@@ -5,9 +5,11 @@ import AppSeal from '@/components/app/AppSeal.vue';
 import ResumeDocument from '@/components/resume/ResumeDocument.vue';
 import { buttonVariants } from '@/components/ui/button';
 import { legalCopy } from '@/i18n/legal';
+import { homeTitle } from '@/i18n/meta';
 import { landingCopy } from '@/landing/copy';
 import { sampleContext } from '@/landing/sampleContext';
 import { sampleLink, sampleResume } from '@/landing/sampleResume';
+import { homeStructuredData } from '@/landing/structuredData';
 
 const { authState } = useAuth();
 const signedIn = computed(() => authState.value === 'authenticated');
@@ -15,9 +17,18 @@ const { locale } = useLocale();
 const copy = computed(() => landingCopy[locale.value]);
 const legal = computed(() => legalCopy[locale.value]);
 
+useSiteSeo(() => ({
+  path: '/',
+  title: homeTitle[locale.value],
+  description: copy.value.description,
+  locale: locale.value,
+}));
 useHead(computed(() => ({
-  title: 'aboutme',
-  meta: [{ name: 'description', content: copy.value.description }],
+  script: [{
+    key: 'aboutme-structured-data',
+    type: 'application/ld+json',
+    innerHTML: homeStructuredData(copy.value.description),
+  }],
 })));
 </script>
 

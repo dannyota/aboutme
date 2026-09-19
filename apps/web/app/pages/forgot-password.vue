@@ -13,9 +13,11 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
+import { pageTitle } from '@/i18n/meta';
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+useHead(computed(() => ({ title: pageTitle(copy.value.forgot.title) })));
 
 const email = ref('');
 const pending = ref(false);

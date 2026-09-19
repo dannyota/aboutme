@@ -22,6 +22,9 @@ describe('editor runtime prerequisites', () => {
       try {
         const config = await loadNuxtConfig({ cwd: webRoot });
         expect(config.routeRules?.['/app/resumes/**']).toEqual({ ssr: false });
+        expect(config.routeRules?.['/app/**']?.headers).toEqual({
+          'X-Robots-Tag': 'noindex',
+        });
         expect(config.modules).toContain('@pinia/nuxt');
         expect(config.routeRules?.['/_harness/**']?.headers).toHaveProperty(
           'Content-Security-Policy',

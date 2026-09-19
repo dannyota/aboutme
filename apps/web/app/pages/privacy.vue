@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import LegalDocument from '@/components/legal/LegalDocument.vue';
 import { legalCopy } from '@/i18n/legal';
+import { pageTitle } from '@/i18n/meta';
 
 const { locale } = useLocale();
 const copy = computed(() => legalCopy[locale.value]);
 
-useHead(computed(() => ({
-  title: `${copy.value.privacy.title} · aboutme`,
-})));
+useSiteSeo(() => ({
+  path: '/privacy',
+  title: pageTitle(copy.value.privacy.title),
+  description: copy.value.privacy.description,
+  locale: locale.value,
+}));
 </script>
 
 <template>

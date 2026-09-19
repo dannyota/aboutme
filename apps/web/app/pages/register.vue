@@ -23,9 +23,11 @@ import {
   type PasswordIssue,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
+import { pageTitle } from '@/i18n/meta';
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+useHead(computed(() => ({ title: pageTitle(copy.value.createAccount) })));
 const { loginProviders, passwordRegistration, resolved } = useCapabilities();
 // While the client-only read is pending the form keeps its space but stays
 // hidden and inert, so it never flashes and then disappears.

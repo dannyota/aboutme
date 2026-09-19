@@ -27,11 +27,13 @@ import {
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 import { useCapabilities } from '../composables/useCapabilities';
+import { pageTitle } from '@/i18n/meta';
 
 const route = useRoute();
 const { loginProviders, resolved } = useCapabilities();
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
+useHead(computed(() => ({ title: pageTitle(copy.value.signIn) })));
 
 const FALLBACK_NEXT = '/app/resumes';
 

@@ -66,8 +66,10 @@ function onCloseAutoFocus(event: Event): void {
           }}
         </DialogDescription>
       </DialogHeader>
+      <!-- One rhythm with the dialog's own gap: header, fields, actions. -->
       <form
         ref="form"
+        class="grid gap-4"
         novalidate
         @submit.prevent="onSubmit"
       >
