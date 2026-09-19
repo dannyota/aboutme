@@ -28,6 +28,12 @@ variable "ses_configuration_set" {
   default = "aboutme-auth"
 }
 
+variable "password_registration_enabled" {
+  type        = bool
+  default     = true
+  description = "false turns off email-and-password sign-up, for example while SES is in the sandbox"
+}
+
 variable "provider_login_enabled" {
   type        = string
   default     = ""

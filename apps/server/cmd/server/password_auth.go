@@ -81,18 +81,19 @@ func newPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 	}
 
 	service, err := auth.NewPasswordService(auth.PasswordServiceOptions{
-		Pool:           pool,
-		Queries:        queries,
-		Sessions:       auth.NewSessionManagerWithPool(pool),
-		Policy:         policy,
-		Hasher:         hasher,
-		Outbox:         outbox,
-		Limits:         limits,
-		PublicOrigin:   cfg.PublicOrigin,
-		Clock:          time.Now,
-		Entropy:        rand.Reader,
-		Logger:         logger,
-		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		Pool:                 pool,
+		Queries:              queries,
+		Sessions:             auth.NewSessionManagerWithPool(pool),
+		Policy:               policy,
+		Hasher:               hasher,
+		Outbox:               outbox,
+		Limits:               limits,
+		PublicOrigin:         cfg.PublicOrigin,
+		Clock:                time.Now,
+		Entropy:              rand.Reader,
+		Logger:               logger,
+		TrustedProxies:       api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		RegistrationDisabled: cfg.PasswordRegistrationDisabled,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create password service: %w", err)

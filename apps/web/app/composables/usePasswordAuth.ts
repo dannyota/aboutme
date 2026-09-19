@@ -22,6 +22,7 @@ export type PasswordAuthError
     | 'authentication-failed'
     | 'password-invalid'
     | 'rate-limited'
+    | 'not-found'
     | 'unavailable';
 
 /** Rejection value for every password operation. */
@@ -114,6 +115,9 @@ export function mapPasswordAuthError(error: unknown): PasswordAuthFailure {
   if (exact(429, 'rate_limited', 'rate-limited')) {
     return new PasswordAuthFailure('rate-limited');
   }
+  // A switched-off route (password sign-up while it is closed) answers the
+  // uniform not-found response.
+  if (status === 404) return new PasswordAuthFailure('not-found');
   if (exact(503, 'authentication_unavailable', 'unavailable')) {
     return new PasswordAuthFailure('unavailable');
   }

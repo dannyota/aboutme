@@ -38,23 +38,28 @@ type PasswordServiceOptions struct {
 	Entropy        io.Reader
 	Logger         *slog.Logger
 	TrustedProxies api.TrustedProxies
+	// RegistrationDisabled leaves POST /auth/password/register unregistered,
+	// so it returns the uniform not-found response. Pending registrations
+	// still verify, and every other password route is unchanged.
+	RegistrationDisabled bool
 }
 
 // PasswordService is the password-based HTTP service. See the package
 // comment for the operation/lock-order contract.
 type PasswordService struct {
-	pool           *store.Pool
-	q              *store.Queries
-	sessions       *SessionManager
-	policy         *password.Policy
-	hasher         *password.Hasher
-	outbox         *authmail.Outbox
-	limits         *PasswordRatePolicies
-	publicOrigin   string
-	clock          func() time.Time
-	entropy        io.Reader
-	logger         *slog.Logger
-	trustedProxies api.TrustedProxies
+	pool            *store.Pool
+	q               *store.Queries
+	sessions        *SessionManager
+	policy          *password.Policy
+	hasher          *password.Hasher
+	outbox          *authmail.Outbox
+	limits          *PasswordRatePolicies
+	publicOrigin    string
+	clock           func() time.Time
+	entropy         io.Reader
+	logger          *slog.Logger
+	trustedProxies  api.TrustedProxies
+	registrationOff bool
 
 	// Test-only probes, nil in production. See export_test.go.
 	userLockProbe               func()
@@ -90,25 +95,29 @@ func NewPasswordService(opts PasswordServiceOptions) (*PasswordService, error) {
 		return nil, errors.New("auth: password service: nil entropy")
 	}
 	return &PasswordService{
-		pool:           opts.Pool,
-		q:              opts.Queries,
-		sessions:       opts.Sessions,
-		policy:         opts.Policy,
-		hasher:         opts.Hasher,
-		outbox:         opts.Outbox,
-		limits:         opts.Limits,
-		publicOrigin:   opts.PublicOrigin,
-		clock:          opts.Clock,
-		entropy:        opts.Entropy,
-		logger:         opts.Logger,
-		trustedProxies: opts.TrustedProxies,
+		pool:            opts.Pool,
+		q:               opts.Queries,
+		sessions:        opts.Sessions,
+		policy:          opts.Policy,
+		hasher:          opts.Hasher,
+		outbox:          opts.Outbox,
+		limits:          opts.Limits,
+		publicOrigin:    opts.PublicOrigin,
+		clock:           opts.Clock,
+		entropy:         opts.Entropy,
+		logger:          opts.Logger,
+		trustedProxies:  opts.TrustedProxies,
+		registrationOff: opts.RegistrationDisabled,
 	}, nil
 }
 
-// RegisterRoutes attaches the seven password operations to mux. The independent
-// PasswordService owns these routes; OAuth Service.RegisterRoutes is untouched.
+// RegisterRoutes attaches the seven password operations to mux, or six when
+// registration is disabled. The independent PasswordService owns these routes;
+// OAuth Service.RegisterRoutes is untouched.
 func (s *PasswordService) RegisterRoutes(mux *http.ServeMux) {
-	mux.Handle(PasswordRegisterPath, route(http.MethodPost, s.handleRegister))
+	if !s.registrationOff {
+		mux.Handle(PasswordRegisterPath, route(http.MethodPost, s.handleRegister))
+	}
 	mux.Handle(PasswordVerifyPath, route(http.MethodPost, s.handleVerify))
 	mux.Handle(PasswordLoginPath, route(http.MethodPost, s.handleLogin))
 	mux.Handle(PasswordForgotPath, route(http.MethodPost, s.handleForgot))

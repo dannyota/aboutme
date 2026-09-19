@@ -29,6 +29,10 @@ self-hosted configurations leave it unset for a password-only surface.
 Production can enable only Google; it stays off until
 `provider_login_enabled = "google"`.
 
+`PASSWORD_REGISTRATION_ENABLED` accepts blank or `true` (sign-up on) and `false`
+(sign-up off). Production sets it from the `password_registration_enabled`
+variable.
+
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI
 and API work. Auth feature checks run at the native HTTPS origin. Complete

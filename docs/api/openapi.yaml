@@ -1343,7 +1343,8 @@ paths:
       description: >-
         Unauthenticated read of the configuration the web needs before it
         renders a sign-in or settings page: `providerLogin` and `providers`
-        (`PROVIDER_LOGIN_ENABLED`) and `agentAccess` (`MCP_ENABLED`). The response
+        (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), and
+        `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`). The response
         is `Cache-Control: no-store` so a configuration change is visible on the
         next request. It reveals no other configuration.
       responses:
@@ -1363,6 +1364,7 @@ paths:
                   providerLogin: true
                   providers: [google]
                   agentAccess: false
+                  passwordRegistration: true
   /auth/logout:
     post:
       operationId: postAuthLogout
@@ -3118,7 +3120,10 @@ paths:
         Validates name, email, and password, then queues a verification email
         for an unowned email. Owned and unowned emails return the same `202`
         and reveal no account state; a provider-only user must sign in through
-        the provider and add a password in settings.
+        the provider and add a password in settings. Registered only when
+        `PASSWORD_REGISTRATION_ENABLED` is not `false`; otherwise this path
+        returns the uniform not-found response, while verification of pending
+        registrations and every other password route stay available.
       requestBody:
         required: true
         content:
@@ -3132,6 +3137,18 @@ paths:
           $ref: "#/components/responses/PasswordRequestInvalid"
         "403":
           $ref: "#/components/responses/PasswordCsrfRejected"
+        "404":
+          description: Email-and-password sign-up is turned off
+            (`PASSWORD_REGISTRATION_ENABLED=false`); the path is not
+            registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: not_found
+                  message: not found
         "413":
           $ref: "#/components/responses/PasswordBodyTooLarge"
         "415":
@@ -4754,7 +4771,7 @@ components:
     Capabilities:
       type: object
       additionalProperties: false
-      required: [providerLogin, providers, agentAccess]
+      required: [providerLogin, providers, agentAccess, passwordRegistration]
       properties:
         providerLogin:
           type: boolean
@@ -4774,6 +4791,11 @@ components:
           type: boolean
           description: The OAuth authorization server, `/mcp`, and
             connected-agent settings are registered.
+        passwordRegistration:
+          type: boolean
+          description: Email-and-password sign-up is open
+            (`PASSWORD_REGISTRATION_ENABLED` is not `false`). Sign-in, reset,
+            and verification of pending registrations do not depend on it.
     Identity:
       type: object
       description: One linked OAuth provider identity. `GET /me` exposes the

@@ -185,6 +185,44 @@ func TestLoad_ProviderLoginFlag(t *testing.T) {
 	}
 }
 
+func TestLoad_PasswordRegistrationFlag(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		raw      string
+		disabled bool
+	}{
+		{"", false},
+		{"true", false},
+		{" true ", false},
+		{"false", true},
+	} {
+		vars := validDevEnv()
+		vars["PASSWORD_REGISTRATION_ENABLED"] = tc.raw
+		got, err := config.Load(env(vars))
+		if err != nil {
+			t.Fatalf("Load(%q) error = %v", tc.raw, err)
+		}
+		if got.PasswordRegistrationDisabled != tc.disabled {
+			t.Errorf("Load(%q) PasswordRegistrationDisabled = %t, want %t", tc.raw, got.PasswordRegistrationDisabled, tc.disabled)
+		}
+	}
+}
+
+func TestLoad_PasswordRegistrationFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
+	t.Parallel()
+	for _, raw := range []string{"yes-secret-sentinel", "TRUE", "0", "off"} {
+		vars := validDevEnv()
+		vars["PASSWORD_REGISTRATION_ENABLED"] = raw
+		_, err := config.Load(env(vars))
+		if err == nil {
+			t.Fatalf("Load(%q) error = nil, want PASSWORD_REGISTRATION_ENABLED rejection", raw)
+		}
+		if !strings.Contains(err.Error(), "PASSWORD_REGISTRATION_ENABLED") || strings.Contains(err.Error(), raw) {
+			t.Fatalf("Load(%q) error = %q, want the variable name without the raw value", raw, err)
+		}
+	}
+}
+
 func TestProviderLogin_AnyAndNames(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

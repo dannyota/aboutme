@@ -26,7 +26,17 @@ import {
 
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
-const { loginProviders, resolved } = useCapabilities();
+const { loginProviders, passwordRegistration, resolved } = useCapabilities();
+// While the client-only read is pending the form keeps its space but stays
+// hidden and inert, so it never flashes and then disappears.
+// The server may close sign-up after this page loaded; its 404 then shows
+// the same closed note.
+const closedByServer = ref(false);
+const formState = computed<'pending' | 'open' | 'closed'>(() => {
+  if (closedByServer.value) return 'closed';
+  if (!resolved.value) return 'pending';
+  return passwordRegistration.value ? 'open' : 'closed';
+});
 const googleEnabled = computed(() => loginProviders.value.includes('google'));
 const name = ref('');
 const email = ref('');
@@ -78,6 +88,10 @@ async function onSubmit() {
     success.value = true;
     password.value = '';
   } catch (failure) {
+    if ((failure as PasswordAuthFailure).kind === 'not-found') {
+      closedByServer.value = true;
+      return;
+    }
     errorMessage.value = messageFor(failure as PasswordAuthFailure);
     await nextTick();
     errorSummary.value?.focus();
@@ -151,9 +165,11 @@ async function onSubmit() {
       </template>
     </div>
     <form
-      v-if="!success"
-      class="mt-8 grid gap-6"
+      v-if="!success && formState !== 'closed'"
+      :aria-hidden="formState === 'pending' || undefined"
+      :class="['mt-8 grid gap-6', formState === 'pending' && 'invisible']"
       data-testid="register-form"
+      :inert="formState === 'pending' || undefined"
       novalidate
       @submit.prevent="onSubmit"
     >
@@ -203,11 +219,33 @@ async function onSubmit() {
       </Button>
     </form>
     <LegalAgreement
-      v-if="!success"
-      class="mt-3"
+      v-if="!success && formState !== 'closed'"
+      :aria-hidden="formState === 'pending' || undefined"
+      :class="['mt-3', formState === 'pending' && 'invisible']"
       :locale="locale"
       testid="register-agreement"
     />
+    <template v-if="formState === 'closed'">
+      <StatusBanner
+        class="mt-6"
+        kind="info"
+        testid="register-closed"
+      >
+        {{ copy.register.closed }}
+      </StatusBanner>
+      <template v-if="loginProviders.length > 0">
+        <ProviderButtons
+          class="mt-6"
+          :locale="locale"
+          :providers="loginProviders"
+        />
+        <LegalAgreement
+          class="mt-3"
+          :locale="locale"
+          testid="register-agreement"
+        />
+      </template>
+    </template>
     <!-- Hold one provider button's space until the client-only read resolves;
          no link renders before then. -->
     <div
@@ -223,7 +261,11 @@ async function onSubmit() {
       </div>
       <div class="mt-4 h-10" />
     </div>
-    <template v-else-if="!success && loginProviders.length > 0">
+    <template
+      v-else-if="
+        !success && formState === 'open' && loginProviders.length > 0
+      "
+    >
       <div
         class="mt-8 flex items-center gap-3 text-xs text-muted-foreground"
         data-testid="register-divider"
