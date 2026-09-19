@@ -249,6 +249,17 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           ],
         },
         {
+          heading: 'Ghi nhận',
+          paragraphs: [
+            'Biểu tượng LinkedIn lấy từ Font Awesome Free của Fonticons, Inc., '
+            + 'theo giấy phép CC BY 4.0 '
+            + '(creativecommons.org/licenses/by/4.0). Biểu tượng GitHub và X '
+            + 'lấy từ Simple Icons (CC0). Phông chữ dùng giấy phép SIL Open '
+            + 'Font License; toàn văn các giấy phép có trong mã nguồn. Các '
+            + 'nhãn hiệu thuộc về chủ sở hữu tương ứng.',
+          ],
+        },
+        {
           heading: 'Luật áp dụng',
           paragraphs: [
             'Các điều khoản này tuân theo pháp luật Việt Nam.',
@@ -466,6 +477,16 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Limitation of liability',
           paragraphs: [
             'Our liability is limited to the extent the law allows.',
+          ],
+        },
+        {
+          heading: 'Credits',
+          paragraphs: [
+            'The LinkedIn icon is from Font Awesome Free by Fonticons, Inc., '
+            + 'licensed under CC BY 4.0 (creativecommons.org/licenses/by/4.0). '
+            + 'The GitHub and X icons are from Simple Icons (CC0). Fonts are '
+            + 'licensed under the SIL Open Font License; the full notices are '
+            + 'in the source code. Trademarks belong to their owners.',
           ],
         },
         {
