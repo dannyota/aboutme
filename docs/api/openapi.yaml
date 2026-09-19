@@ -4450,18 +4450,21 @@ components:
   headers:
     PublicPDFAttachment:
       description: >-
-        Public PDF download filename: the resume's slug, which is ASCII
-        lowercase letters, digits, and single hyphens.
+        Public PDF download filename, `<Full-Name>-Resume.pdf`. `filename`
+        carries the full name folded to ASCII letters and digits, words joined
+        by hyphens; `filename*` (RFC 5987) carries the same words in UTF-8. A
+        name with no usable words downloads as `Resume.pdf` without
+        `filename*`. See `docs/adr/0045-pdf-download-name-and-metadata.md`.
       schema:
-        type: string
-        pattern: ^attachment; filename="[a-z0-9]+(-[a-z0-9]+)*\.pdf"$
-      example: attachment; filename="ada-lovelace.pdf"
+        $ref: "#/components/schemas/PDFAttachment"
+      example: attachment; filename="Nguyen-Van-Duc-Resume.pdf"; filename*=UTF-8''Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf
     ResumePDFAttachment:
-      description: Fixed resume PDF download filename.
+      description: >-
+        Owner PDF download filename, named from the rendered revision's full
+        name by the same rule as the public PDF.
       schema:
-        type: string
-        const: attachment; filename="resume.pdf"
-      example: attachment; filename="resume.pdf"
+        $ref: "#/components/schemas/PDFAttachment"
+      example: attachment; filename="Ada-Lovelace-Resume.pdf"; filename*=UTF-8''Ada-Lovelace-Resume.pdf
     ParentETag:
       description: The owning resume's revision as a strong entity tag,
         `"r<revision>"`. Send it back as `If-Match` on the next mutation.
@@ -4510,6 +4513,13 @@ components:
       example: 512
 
   schemas:
+    PDFAttachment:
+      type: string
+      description: >-
+        `attachment` with an ASCII `filename` and, when the name has usable
+        words, an RFC 5987 UTF-8 `filename*`.
+      pattern: >-
+        ^attachment; filename="(Resume|[A-Za-z0-9]+(-[A-Za-z0-9]+)*-Resume)\.pdf"(; filename\*=UTF-8''[A-Za-z0-9!#$&+.^_`|~%-]+-Resume\.pdf)?$
     Envelope:
       type: object
       description: Success response wrapper. `data` carries the

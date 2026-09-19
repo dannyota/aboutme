@@ -210,11 +210,15 @@ that can vary is pinned.
 | Print parameters   | `preferCSSPageSize: true`, `printBackground: true`, `displayHeaderFooter: false`, `scale: 1`, zero job margins so `@page` wins |
 | Contrast clamp     | pure function, fixed step size (`colors.md` §5); its outputs are pinned by the snapshots                                       |
 
-PDF metadata dates are fixed to `D:19700101000000+00'00'`. After bounded
-capture, the controller resolves the pinned PDF 1.4 classic xref table and its
-trailer Info object, then replaces the two UTC date values without changing byte
-lengths or offsets. Unsupported or ambiguous PDF structures fail the job.
-Repeated real PDF and PNG captures must match byte for byte.
+PDF metadata dates are the time the rendered revision was saved, in UTC, so a
+revision always carries the same dates. A render with no revision time writes
+`D:19700101000000+00'00'`. After bounded capture, the controller resolves the
+pinned PDF 1.4 classic xref table and its trailer Info object, then replaces the
+two UTC date values without changing byte lengths or offsets. Unsupported or
+ambiguous PDF structures fail the job. The PDF Title is the print page title,
+`<full name> - Resume`
+([ADR 0045](../../adr/0045-pdf-download-name-and-metadata.md)). Repeated real
+PDF and PNG captures of the same revision must match byte for byte.
 
 The og-image render uses the same pipeline and the same pinned environment, at
 its own viewport rather than `@page`; it inherits every determinism rule here.

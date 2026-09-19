@@ -417,7 +417,7 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 	}
 	var output []byte
 	if navigation.Format == renderjob.PDF {
-		output, err = capturePDF(targetCtx)
+		output, err = capturePDF(targetCtx, navigation.RevisionTime)
 	} else {
 		output, err = capturePNG(targetCtx)
 	}
@@ -517,7 +517,7 @@ func awaitPageReadiness(ctx context.Context) error {
 	return nil
 }
 
-func capturePDF(ctx context.Context) ([]byte, error) {
+func capturePDF(ctx context.Context, revisionTime time.Time) ([]byte, error) {
 	data, handle, err := page.PrintToPDF().
 		WithLandscape(false).
 		WithDisplayHeaderFooter(false).
@@ -537,7 +537,7 @@ func capturePDF(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := canonicalizePDFMetadata(output); err != nil {
+	if err := setPDFMetadataDates(output, revisionTime); err != nil {
 		return nil, ErrRenderFailed
 	}
 	return output, nil

@@ -87,15 +87,16 @@ func pdfService(row resume.Resume, queue PrintQueue, backend media.Backend) *Ser
 	}
 }
 
-func TestPDFGetAndHeadEmitFixedDownloadResponse(t *testing.T) {
+func TestPDFGetAndHeadEmitNamedDownloadResponse(t *testing.T) {
 	t.Parallel()
 
 	userID := uuid.MustParse("10000000-0000-4000-8000-000000000001")
 	resumeID := uuid.MustParse("20000000-0000-4000-8000-000000000001")
 	document := loadMinimalDocument(t)
-	frozenName := "Frozen name"
+	frozenName := "Nguyễn Văn Đức"
 	document.PersonalDetails.FullName = &frozenName
-	row := resume.Resume{ID: resumeID, UserID: userID, Revision: 7, Doc: document}
+	savedAt := time.Date(2026, 9, 19, 8, 30, 5, 0, time.UTC)
+	row := resume.Resume{ID: resumeID, UserID: userID, Revision: 7, Doc: document, UpdatedAt: savedAt}
 	backend := &pdfBackend{}
 	pdfBytes := []byte("%PDF-1.7\nfrozen")
 	queue := pdfQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
@@ -106,7 +107,8 @@ func TestPDFGetAndHeadEmitFixedDownloadResponse(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Prepare() error = %v", err)
 		}
-		if snapshot.ResumeID != resumeID || snapshot.Revision != 7 || snapshot.SchemaVersion != int(schema.CurrentVersion) || snapshot.PublicGeneration != 0 {
+		if snapshot.ResumeID != resumeID || snapshot.Revision != 7 || snapshot.SchemaVersion != int(schema.CurrentVersion) || snapshot.PublicGeneration != 0 ||
+			!snapshot.RevisionTime.Equal(savedAt) {
 			t.Fatalf("snapshot bindings = %+v", snapshot)
 		}
 		var envelope struct {
@@ -143,7 +145,8 @@ func TestPDFGetAndHeadEmitFixedDownloadResponse(t *testing.T) {
 			if response.StatusCode != http.StatusOK {
 				t.Fatalf("status = %d body=%s", response.StatusCode, body)
 			}
-			if response.Header.Get("Content-Type") != "application/pdf" || response.Header.Get("Content-Disposition") != `attachment; filename="resume.pdf"` || response.Header.Get("Cache-Control") != api.CacheControlNoStore {
+			if response.Header.Get("Content-Type") != "application/pdf" || response.Header.Get("Content-Disposition") != `attachment; filename="Nguyen-Van-Duc-Resume.pdf"; filename*=UTF-8''Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf` ||
+				response.Header.Get("Cache-Control") != api.CacheControlNoStore {
 				t.Fatalf("headers = %v", response.Header)
 			}
 			if response.Header.Get("Content-Length") != strconv.Itoa(len(pdfBytes)) {

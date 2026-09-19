@@ -13,6 +13,27 @@ import {
   type PrintEnvelope,
 } from '../../utils/print/envelope';
 
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+};
+
+/**
+ * The print page title, which Chromium copies into the PDF Title. Control and
+ * format characters become spaces, white space collapses, and a blank name
+ * leaves "Resume" (docs/adr/0045-pdf-download-name-and-metadata.md).
+ */
+export function printTitle(fullName: string): string {
+  const name = fullName
+    .replace(/[\p{Cc}\p{Cf}]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  const title = name === '' ? 'Resume' : `${name} - Resume`;
+  return title.replace(/[&<>"]/gu, (character) => HTML_ESCAPES[character]!);
+}
+
 export async function renderPrintResume(
   envelope: PrintEnvelope,
 ): Promise<string> {
@@ -26,12 +47,13 @@ export async function renderPrintResume(
     const styles = useResumeStyles(
       envelope.document.customization as unknown as Resume['customization'],
     );
+    const title = printTitle(envelope.document.personalDetails.fullName);
     const html = [
       '<!doctype html>',
       `<html lang="${envelope.lng}"><head>`,
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      '<title>Resume</title>',
+      `<title>${title}</title>`,
       '<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css">',
       '<link rel="stylesheet" href="/_nuxt/assets/print.css">',
       `<style>${renderPageRule(styles.page)}</style>`,

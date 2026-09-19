@@ -373,7 +373,7 @@ func TestGetSafeMethodsBypassCSRFButNotAuth(t *testing.T) {
 					t.Fatalf("authenticated PDF body = %q, want fixed test PDF", withAuth.body)
 				}
 				if withAuth.header.Get("Content-Type") != "application/pdf" ||
-					withAuth.header.Get("Content-Disposition") != `attachment; filename="resume.pdf"` {
+					withAuth.header.Get("Content-Disposition") != `attachment; filename="Ada-Lovelace-Resume.pdf"; filename*=UTF-8''Ada-Lovelace-Resume.pdf` {
 					t.Fatalf("authenticated PDF headers = %v", withAuth.header)
 				}
 			}
@@ -387,7 +387,7 @@ func TestGetSafeMethodsBypassCSRFButNotAuth(t *testing.T) {
 			}
 			if operation.OperationID == "downloadResumePDF" &&
 				(head.header.Get("Content-Type") != "application/pdf" ||
-					head.header.Get("Content-Disposition") != `attachment; filename="resume.pdf"`) {
+					head.header.Get("Content-Disposition") != `attachment; filename="Ada-Lovelace-Resume.pdf"; filename*=UTF-8''Ada-Lovelace-Resume.pdf`) {
 				t.Fatalf("authenticated PDF HEAD headers = %v", head.header)
 			}
 		})

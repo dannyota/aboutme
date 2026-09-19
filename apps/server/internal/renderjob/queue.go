@@ -70,6 +70,10 @@ type Snapshot struct {
 	SchemaVersion    int
 	PublicGeneration int64
 	Payload          []byte
+	// RevisionTime is when the rendered revision was saved. A PDF carries it
+	// as its creation and modification date, so the same revision always
+	// renders the same bytes. The zero time writes the Unix epoch.
+	RevisionTime time.Time
 }
 
 // Request supplies a frozen snapshot and optional public generation validator.
@@ -81,10 +85,11 @@ type Request struct {
 
 // Navigation is the renderer's complete authority for one controlled navigation.
 type Navigation struct {
-	ResumeID   uuid.UUID
-	JobID      uuid.UUID
-	Capability string
-	Format     Format
+	ResumeID     uuid.UUID
+	JobID        uuid.UUID
+	Capability   string
+	Format       Format
+	RevisionTime time.Time
 }
 
 // Renderer performs one controlled browser navigation and capture.

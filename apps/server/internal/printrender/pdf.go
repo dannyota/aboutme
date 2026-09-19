@@ -3,9 +3,26 @@ package printrender
 import (
 	"bytes"
 	"strconv"
+	"time"
 )
 
-const canonicalPDFDate = "D:19700101000000+00'00'"
+// epochPDFDate is written when a render has no revision time.
+const epochPDFDate = "D:19700101000000+00'00'"
+
+const pdfDateLayout = "D:20060102150405+00'00'"
+
+// pdfDate formats a revision time as a UTC PDF date the same length as
+// Chromium's own, so replacing it moves no byte offset.
+func pdfDate(revisionTime time.Time) (string, bool) {
+	if revisionTime.IsZero() {
+		return epochPDFDate, true
+	}
+	utc := revisionTime.UTC()
+	if utc.Year() < 1970 || utc.Year() > 9999 {
+		return "", false
+	}
+	return utc.Format(pdfDateLayout), true
+}
 
 type pdfObjectRef struct {
 	number     int
@@ -17,7 +34,13 @@ type pdfToken struct {
 	end   int
 }
 
-func canonicalizePDFMetadata(data []byte) error {
+// setPDFMetadataDates replaces the Info dictionary's CreationDate and ModDate
+// with the revision time. The same revision therefore renders the same bytes.
+func setPDFMetadataDates(data []byte, revisionTime time.Time) error {
+	date, ok := pdfDate(revisionTime)
+	if !ok {
+		return ErrRenderFailed
+	}
 	if !bytes.HasPrefix(data, []byte("%PDF-1.4\n")) || bytes.Count(data, []byte("\n%%EOF")) != 1 {
 		return ErrRenderFailed
 	}
@@ -74,8 +97,8 @@ func canonicalizePDFMetadata(data []byte) error {
 	if !ok {
 		return ErrRenderFailed
 	}
-	copy(data[creation.start:creation.end], canonicalPDFDate)
-	copy(data[modified.start:modified.end], canonicalPDFDate)
+	copy(data[creation.start:creation.end], date)
+	copy(data[modified.start:modified.end], date)
 	return nil
 }
 
@@ -234,7 +257,7 @@ func onePDFDate(tokens []pdfToken, data []byte, name string) (pdfToken, bool) {
 			return pdfToken{}, false
 		}
 		value := tokens[index+1]
-		if value.end-value.start != len(canonicalPDFDate)+2 || data[value.start] != '(' || data[value.end-1] != ')' {
+		if value.end-value.start != len(epochPDFDate)+2 || data[value.start] != '(' || data[value.end-1] != ')' {
 			return pdfToken{}, false
 		}
 		content := data[value.start+1 : value.end-1]
@@ -248,7 +271,7 @@ func onePDFDate(tokens []pdfToken, data []byte, name string) (pdfToken, bool) {
 }
 
 func validUTCChromePDFDate(value []byte) bool {
-	if len(value) != len(canonicalPDFDate) || !bytes.Equal(value[:2], []byte("D:")) || !bytes.Equal(value[16:], []byte("+00'00'")) {
+	if len(value) != len(epochPDFDate) || !bytes.Equal(value[:2], []byte("D:")) || !bytes.Equal(value[16:], []byte("+00'00'")) {
 		return false
 	}
 	for _, index := range []int{2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15} {
