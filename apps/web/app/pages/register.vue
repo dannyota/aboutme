@@ -24,12 +24,14 @@ import {
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 import { pageTitle } from '@/i18n/meta';
+import { remember } from '@/utils/pendingReturnPath';
 import { validateReturnPath } from '@/utils/returnPath';
 
 const route = useRoute();
 const { locale } = useLocale();
 // A validated return path survives registration: provider sign-up and the
-// later password sign-in both return there.
+// later password sign-in both return there. It is also remembered for
+// verify-email.vue, which opens in a new tab with no query of its own.
 const explicitNext = computed(() => validateReturnPath(route.query.next));
 const signInLink = computed(() => (explicitNext.value
   ? `/login?next=${encodeURIComponent(explicitNext.value)}`
@@ -97,6 +99,9 @@ async function onSubmit() {
     });
     success.value = true;
     password.value = '';
+    // Carried forward so the verification email link can return there too;
+    // a null next clears an older one so it never reaches a later signup.
+    remember(explicitNext.value);
   } catch (failure) {
     if ((failure as PasswordAuthFailure).kind === 'not-found') {
       closedByServer.value = true;

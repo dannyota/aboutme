@@ -8,6 +8,11 @@
  * so a refresh or replay of the address never re-sends the token, and the
  * token never appears in route query, history, state, or the DOM. A malformed
  * or missing fragment fails locally with no request at all.
+ *
+ * This page opens in a new tab with no query of its own, so the sign-in link
+ * below can only recover register.vue's validated `?next=` from storage. That
+ * read happens on the client in onMounted, so the server render and first
+ * client render agree on plain `/login` and the link updates after.
  */
 import {
   type PasswordAuthFailure,
@@ -18,6 +23,7 @@ import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import { useCapabilities } from '@/composables/useCapabilities';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
 import { pageTitle } from '@/i18n/meta';
+import { take } from '@/utils/pendingReturnPath';
 
 useHead({
   meta: [{ name: 'referrer', content: 'no-referrer' }],
@@ -29,6 +35,14 @@ useHead(computed(() => ({ title: pageTitle(copy.value.verify.title) })));
 const { loginProviders } = useCapabilities();
 const status = ref<'verifying' | 'success' | 'error'>('verifying');
 const errorMessage = ref<AuthMessage | null>(null);
+const pendingNext = ref<string | null>(null);
+const signInLink = computed(() => (pendingNext.value
+  ? `/login?next=${encodeURIComponent(pendingNext.value)}`
+  : '/login'));
+
+onMounted(() => {
+  pendingNext.value = take();
+});
 
 let token = '';
 
@@ -136,7 +150,8 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         class="text-primary underline-offset-4 hover:underline"
-        to="/login"
+        data-testid="verify-sign-in"
+        :to="signInLink"
       >
         {{ copy.signIn }}
       </NuxtLink>
