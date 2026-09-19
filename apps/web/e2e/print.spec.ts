@@ -35,7 +35,7 @@ const CASES: readonly PrintCase[] = [
     opposite: 'SIDEBAR-SHORT',
     prefix: 'MAIN-ENTRY-',
     start: 'MAIN-START',
-    total: 7,
+    total: 9,
   },
 ];
 

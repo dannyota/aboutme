@@ -21,6 +21,7 @@ const modernSidebar = (() => {
   return preset;
 })();
 
+export const MAIN_ENTRIES = 9;
 export const SIDEBAR_ENTRIES = 13;
 
 const uuid = (flow: 'main' | 'sidebar', index: number): string =>
@@ -95,7 +96,8 @@ function mainOverflow(): Resume {
   if (workTemplate === undefined) {
     throw new Error('Vietnamese work fixture must contain one entry.');
   }
-  work.entries = Array.from({ length: 7 }, (_, offset) => {
+  // Enough main entries to overflow page one with room to spare.
+  work.entries = Array.from({ length: MAIN_ENTRIES }, (_, offset) => {
     const number = offset + 1;
     const marker = `MAIN-ENTRY-${String(number).padStart(2, '0')}`;
     return {
@@ -105,7 +107,7 @@ function mainOverflow(): Resume {
       jobTitle: [
         number === 1 ? 'MAIN-START' : '',
         marker,
-        number === 7 ? 'MAIN-END' : '',
+        number === MAIN_ENTRIES ? 'MAIN-END' : '',
       ]
         .filter(Boolean)
         .join(' '),
