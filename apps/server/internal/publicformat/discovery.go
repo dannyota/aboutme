@@ -14,7 +14,7 @@ const (
 	// RobotsFormatVersion identifies the robots.txt byte format.
 	RobotsFormatVersion = 2
 	// LLMSFormatVersion identifies the llms.txt byte format.
-	LLMSFormatVersion = 2
+	LLMSFormatVersion = 3
 )
 
 // sitePages are the static site pages every sitemap and llms.txt lists.
@@ -22,6 +22,7 @@ var sitePages = []struct{ path, title string }{
 	{"/", "Home"},
 	{"/privacy", "Privacy policy"},
 	{"/terms", "Terms of service"},
+	{"/templates", "Resume templates"},
 }
 
 // templateIDs are the template presets, each with a gallery page at
@@ -41,18 +42,17 @@ const repositoryURL = "https://github.com/dannyota/aboutme"
 // starts with the same letters stays crawlable.
 var crawlerHiddenPages = []string{"authorize", "forgot-password", "login", "register", "reset-password", "verify-email"}
 
-// Sitemap encodes the static site pages, the template gallery and its pages,
-// then the sorted discoverable slugs, as XML. Resumes with discovery off never
-// appear.
+// Sitemap encodes the static site pages, which include the template gallery,
+// then each template page, then the sorted discoverable slugs, as XML. Resumes
+// with discovery off never appear.
 func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 	if origin.String() == "" {
 		return nil, errors.New("public origin is required")
 	}
-	paths := make([]string, 0, len(sitePages)+1+len(templateIDs)+len(slugs))
+	paths := make([]string, 0, len(sitePages)+len(templateIDs)+len(slugs))
 	for _, page := range sitePages {
 		paths = append(paths, page.path)
 	}
-	paths = append(paths, "/templates")
 	for _, id := range templateIDs {
 		paths = append(paths, "/templates/"+id)
 	}

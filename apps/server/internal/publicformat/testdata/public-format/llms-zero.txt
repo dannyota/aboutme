@@ -8,4 +8,5 @@
 - [Home](https://aboutme.example/)
 - [Privacy policy](https://aboutme.example/privacy)
 - [Terms of service](https://aboutme.example/terms)
+- [Resume templates](https://aboutme.example/templates)
 - [Source code](https://github.com/dannyota/aboutme)
