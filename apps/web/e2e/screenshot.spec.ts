@@ -17,6 +17,7 @@ import {
 } from './support';
 
 interface ScreenshotCell {
+  readonly align?: 'justify';
   readonly fixture: 'full' | 'vn-full';
   readonly mode: 'continuous' | 'paged';
   readonly name: string;
@@ -28,6 +29,13 @@ const CELLS: readonly ScreenshotCell[] = [
     fixture: 'vn-full',
     mode: 'paged',
     name: 'classic-serif--vn-full--paged.png',
+    template: 'classic-serif',
+  },
+  {
+    align: 'justify',
+    fixture: 'vn-full',
+    mode: 'paged',
+    name: 'classic-serif--vn-full--justify--paged.png',
     template: 'classic-serif',
   },
   {
@@ -166,7 +174,8 @@ test.describe('renderer screenshot subset', () => {
       const response = await page.goto(
         '/_harness/render'
         + `?fixture=${cell.fixture}&template=${cell.template}`
-        + `&mode=${cell.mode}`,
+        + `&mode=${cell.mode}`
+        + (cell.align === undefined ? '' : `&align=${cell.align}`),
       );
       expect(response?.ok()).toBe(true);
       const harnessRoot = page.locator(
