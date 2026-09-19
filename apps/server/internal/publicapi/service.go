@@ -120,7 +120,7 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 		defer lease.Release()
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationJSON, Variant: "default", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: jsonFormatVersion, AppDigest: appDigest}
 		if cached, ok := cache.Get(key); ok {
-			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
+			withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
 			return
 		}
 		response, err := NewPublicJSON(snapshot.Public)
@@ -129,7 +129,7 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			return
 		}
 		cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		response.ServeHTTP(w, request)
+		withDiscoveryRobots(response, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
 	})
 }
 
@@ -153,7 +153,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 		defer lease.Release()
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationPhoto, Variant: "default", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: photoFormatVersion, AppDigest: appDigest}
 		if cached, ok := cache.Get(key); ok {
-			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
+			withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
 			return
 		}
 		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
@@ -168,7 +168,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 			return
 		}
 		cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		response.ServeHTTP(w, request)
+		withDiscoveryRobots(response, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
 	})
 }
 

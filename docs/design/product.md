@@ -131,13 +131,21 @@ The publish dialog exposes three independent choices:
 2. **PDF download** controls the public PDF. The owner can always export a PDF.
 3. **SEO and GEO** controls indexing and discovery surfaces. It defaults off.
 
-| State                    | Public behavior                                                                                                        |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes              |
-| Live, discovery disabled | Shareable HTML with `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown returns `404`     |
-| Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                              |
-| Download enabled         | The public PDF route is available; otherwise it returns `404`                                                          |
-| Share image              | One 1200 by 630 PNG top-viewport capture is available when live, independent of download and discovery flags; ADR 0032 |
+| State                    | Public behavior                                                                                                                                |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes                                      |
+| Live, discovery disabled | Shareable; HTML, JSON, photo, PDF, and share image send `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown `404` |
+| Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                      |
+| Download enabled         | The public PDF route is available; otherwise it returns `404`                                                                                  |
+| Share image              | One 1200 by 630 PNG top-viewport capture is available when live, independent of download and discovery flags; ADR 0032                         |
+
+The sitemap lists `/`, `/privacy`, and `/terms`, then every discoverable resume.
+`llms.txt` follows the llms.txt convention: a title, a one-line summary, the
+site pages and source code, then each discoverable resume's markdown.
+`robots.txt` allows everything except `/app/`, `/api/`, and the sign-in pages.
+Under `/api/` it allows only the share image, which social cards fetch. Each
+sign-in page is disallowed by exact path, with or without a query, so a slug
+that starts with the same letters stays crawlable.
 
 Deleted, renamed, tombstoned, and never-published slugs all return the same
 public `404`. The service does not expose which internal state caused absence.

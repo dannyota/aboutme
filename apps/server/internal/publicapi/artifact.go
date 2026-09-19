@@ -131,7 +131,7 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			if serveCanceledLease(w, request, lease) {
 				return
 			}
-			serveLeasedArtifact(w, request, lease, SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body})
+			serveLeasedArtifact(w, request, lease, withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled))
 			return
 		}
 		if allowed, retry := s.renders.Admit(s.dependencies.Clock(), clientIP); !allowed {
@@ -207,7 +207,7 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 		if serveCanceledLease(w, request, lease) {
 			return
 		}
-		serveLeasedArtifact(w, request, lease, response)
+		serveLeasedArtifact(w, request, lease, withDiscoveryRobots(response, snapshot.DiscoveryEnabled))
 	})
 }
 
