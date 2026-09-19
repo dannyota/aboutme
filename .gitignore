@@ -19,6 +19,15 @@ coverage/
 
 !AGENTS.md
 !CLAUDE.md
+
+# Shared agent roles. Everything else under .claude/ and .codex/ stays local.
+!.claude/
+.claude/*
+!.claude/agents/
+!.claude/settings.json
+!.codex/
+.codex/*
+!.codex/agents/
 deploy/aws/**/.terraform/
 deploy/aws/**/*.tfstate
 deploy/aws/**/*.tfstate.*
