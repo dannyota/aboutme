@@ -276,6 +276,11 @@ forbidden.
   every template, and a two-column main column keeps about 45em. Screens
   narrower than the measure, such as phones, keep the full width. The editor
   preview and print keep their page geometry.
+- The public page `<title>` is the owner's page title or `<full name> — Resume`.
+  When the owner sets an emoji, the page links it as an SVG `data:` icon. The
+  server computes both exact values; the renderer writes them and the public
+  HTML validator accepts nothing else
+  ([ADR 0042](../adr/0042-public-page-title-and-favicon.md)).
 - When download is enabled, the public page shows a plain link to its own PDF
   (`/api/v1/public/resumes/{slug}/pdf`) above the resume, at the top right of
   the measure. It works without JavaScript and is hidden in print. Its label

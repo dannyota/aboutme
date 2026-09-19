@@ -682,7 +682,14 @@ describe("Phase 5A publish and public wire contract", () => {
       "live",
       "downloadEnabled",
       "seoGeoEnabled",
+      "publicTitle",
+      "faviconEmoji",
     ]);
+    // The page settings are optional strings: omitted keeps them, and a null
+    // is malformed rather than a clear.
+    for (const field of ["publicTitle", "faviconEmoji"]) {
+      expect(request.properties[field].type).toBe("string");
+    }
     expect(request.properties.slug).toMatchObject({
       type: "string",
       minLength: 1,
@@ -701,6 +708,9 @@ describe("Phase 5A publish and public wire contract", () => {
       "reserved",
       "required",
       "visible_entry_required",
+      "too_long",
+      "invalid_characters",
+      "invalid_emoji",
     ]);
   });
 

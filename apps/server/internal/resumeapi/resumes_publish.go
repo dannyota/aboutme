@@ -40,7 +40,7 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 	if err != nil {
 		return mutationRunResult{}, err
 	}
-	state := currentPublish{Slug: current.Slug, Live: current.Live, DownloadEnabled: current.DownloadEnabled, SEOGeoEnabled: current.SEOGeoEnabled, Revision: current.Revision}
+	state := currentPublishOf(current)
 	validated := validatePublish(current.Doc, state, input.Input)
 	if len(validated.Issues) != 0 {
 		return mutationRunResult{}, publishInvalidError(validated.Issues)
@@ -78,7 +78,7 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 			return mutationRunResult{}, tombstoneErr
 		}
 	}
-	updated, err := qtx.PublishResumeCAS(ctx, store.PublishResumeCASParams{ID: current.ID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision, Slug: validated.Effective.Slug, Live: validated.Effective.Live, DownloadEnabled: validated.Effective.DownloadEnabled, SEOGeoEnabled: validated.Effective.SEOGeoEnabled, UpdatedAt: op.service.clock()})
+	updated, err := qtx.PublishResumeCAS(ctx, store.PublishResumeCASParams{ID: current.ID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision, Slug: validated.Effective.Slug, Live: validated.Effective.Live, DownloadEnabled: validated.Effective.DownloadEnabled, SEOGeoEnabled: validated.Effective.SEOGeoEnabled, PublicTitle: validated.Effective.PublicTitle, FaviconEmoji: validated.Effective.FaviconEmoji, UpdatedAt: op.service.clock()})
 	if err != nil {
 		return mutationRunResult{}, err
 	}
@@ -133,7 +133,7 @@ func (s *Service) publishTransition(ctx context.Context, current resume.Resume, 
 	if !ok || input.ResumeID != current.ID {
 		return mutationTransition{}, errors.New("resumeapi: publish mutation has no resume target")
 	}
-	before := currentPublish{Slug: current.Slug, Live: current.Live, DownloadEnabled: current.DownloadEnabled, SEOGeoEnabled: current.SEOGeoEnabled, Revision: current.Revision}
+	before := currentPublishOf(current)
 	next := validatePublish(current.Doc, before, input.Input)
 	if len(next.Issues) != 0 {
 		return mutationTransition{}, publishInvalidError(next.Issues)
@@ -157,7 +157,7 @@ func (s *Service) publishTransition(ctx context.Context, current resume.Resume, 
 	if revoking {
 		class = publicstate.Revoking
 	}
-	descriptor := mutationTransition{ResumeID: input.ResumeID, Class: class, Global: discovery, Slugs: sortedPublishSlugs(before.Slug, next.Effective.Slug), Publish: &publishRecoveryProof{ResumeID: input.ResumeID, Effective: currentPublish{Slug: next.Effective.Slug, Live: next.Effective.Live, DownloadEnabled: next.Effective.DownloadEnabled, SEOGeoEnabled: next.Effective.SEOGeoEnabled, Revision: current.Revision + 1}}}
+	descriptor := mutationTransition{ResumeID: input.ResumeID, Class: class, Global: discovery, Slugs: sortedPublishSlugs(before.Slug, next.Effective.Slug), Publish: &publishRecoveryProof{ResumeID: input.ResumeID, Effective: currentPublish{Slug: next.Effective.Slug, Live: next.Effective.Live, DownloadEnabled: next.Effective.DownloadEnabled, SEOGeoEnabled: next.Effective.SEOGeoEnabled, PublicTitle: next.Effective.PublicTitle, FaviconEmoji: next.Effective.FaviconEmoji, Revision: current.Revision + 1}}}
 	if next.ChangedSlug && before.Slug != nil {
 		releasedAt := normalizePostgresTimestamp(s.clock())
 		oldSlug := *before.Slug
@@ -193,6 +193,14 @@ func (s *Service) preflightPublishSlugAvailability(ctx context.Context, resumeID
 		return fmt.Errorf("resumeapi: publish slug preflight tombstone: %w", tombstoneErr)
 	}
 	return nil
+}
+
+func currentPublishOf(current resume.Resume) currentPublish {
+	return currentPublish{
+		Slug: current.Slug, Live: current.Live, DownloadEnabled: current.DownloadEnabled,
+		SEOGeoEnabled: current.SEOGeoEnabled, PublicTitle: current.PublicTitle,
+		FaviconEmoji: current.FaviconEmoji, Revision: current.Revision,
+	}
 }
 
 func publishInvalidError(issues []publishIssue) *clientError {

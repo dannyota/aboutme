@@ -14,6 +14,7 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 		Mode:             PublicRenderMode,
 		CanonicalOrigin:  "https://aboutme.example",
 		DiscoveryEnabled: true,
+		PageTitle:        "Ada — Resume",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +23,8 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 	if err := json.Unmarshal(body, &fields); err != nil {
 		t.Fatal(err)
 	}
-	if len(fields) != 4 || string(fields["mode"]) != `"continuous"` || string(fields["canonicalOrigin"]) != `"https://aboutme.example"` || string(fields["discoveryEnabled"]) != "true" || fields["publicResume"] == nil {
+	if len(fields) != 6 || string(fields["mode"]) != `"continuous"` || string(fields["canonicalOrigin"]) != `"https://aboutme.example"` || string(fields["discoveryEnabled"]) != "true" || fields["publicResume"] == nil ||
+		string(fields["pageTitle"]) != `"Ada — Resume"` || string(fields["faviconHref"]) != `""` {
 		t.Fatalf("closed request = %s", body)
 	}
 }

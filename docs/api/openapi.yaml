@@ -1912,6 +1912,8 @@ paths:
                     slug: ada-lovelace
                     downloadEnabled: true
                     seoGeoEnabled: true
+                    publicTitle: Danny from aboutme.vn
+                    faviconEmoji: "\U0001F680"
                     schemaVersion: 3
                     createdAt: 2026-08-01T09:00:00Z
                     updatedAt: 2026-08-11T18:20:00Z
@@ -2018,6 +2020,8 @@ paths:
                   slug: null
                   downloadEnabled: false
                   seoGeoEnabled: false
+                  publicTitle: null
+                  faviconEmoji: null
                   schemaVersion: 3
                   createdAt: 2026-08-12T09:00:00Z
                   updatedAt: 2026-08-12T09:00:00Z
@@ -3451,6 +3455,8 @@ components:
               slug: ada-lovelace
               downloadEnabled: true
               seoGeoEnabled: true
+              publicTitle: Danny from aboutme.vn
+              faviconEmoji: "\U0001F680"
               schemaVersion: 3
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-11T18:20:00Z
@@ -3482,6 +3488,8 @@ components:
               slug: ada-lovelace
               downloadEnabled: true
               seoGeoEnabled: true
+              publicTitle: Danny from aboutme.vn
+              faviconEmoji: "\U0001F680"
               schemaVersion: 3
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-12T09:05:00Z
@@ -4943,9 +4951,10 @@ components:
     PublishResumeRequest:
       type: object
       description: >-
-        Complete publish-state command. Omitted slug preserves stored state;
-        the three booleans are always explicit. A present empty or null slug
-        is a malformed request, not a publish-policy issue.
+        Complete publish-state command. Omitted slug, publicTitle, and
+        faviconEmoji preserve stored state; the three booleans are always
+        explicit. A present empty or null slug, and a null publicTitle or
+        faviconEmoji, is a malformed request, not a publish-policy issue.
       additionalProperties: false
       required:
         - live
@@ -4964,6 +4973,23 @@ components:
           type: boolean
         seoGeoEnabled:
           type: boolean
+        publicTitle:
+          type: string
+          description: >-
+            Public page title. Omitted keeps the stored value; empty or
+            white-space-only clears it to the default "<full name> — Resume".
+            Otherwise the trimmed value must be at most 70 grapheme clusters
+            (`too_long`) and hold no control or format characters other than
+            U+200D ZERO WIDTH JOINER (`invalid_characters`). It is text; the
+            page escapes it.
+        faviconEmoji:
+          type: string
+          description: >-
+            Public page icon. Omitted keeps the stored value; empty clears it.
+            Otherwise the trimmed value must be exactly one emoji grapheme: an
+            Extended_Pictographic base with only modifiers, variation selectors,
+            ZWJ, and tags after it, or one Regional Indicator flag
+            (`invalid_emoji`).
     PublishValidationIssue:
       type: object
       description: One deterministic semantic publish-policy issue.
@@ -4981,6 +5007,9 @@ components:
             - reserved
             - required
             - visible_entry_required
+            - too_long
+            - invalid_characters
+            - invalid_emoji
         message:
           type: string
     PublishError:
@@ -5840,6 +5869,8 @@ components:
         - slug
         - downloadEnabled
         - seoGeoEnabled
+        - publicTitle
+        - faviconEmoji
         - schemaVersion
         - createdAt
         - updatedAt
@@ -5874,6 +5905,16 @@ components:
         seoGeoEnabled:
           type: boolean
           description: Whether this live resume participates in discovery.
+        publicTitle:
+          type: [string, "null"]
+          description: >-
+            The public page's browser-tab title, or null for the default
+            "<full name> — Resume". Public, like the slug.
+        faviconEmoji:
+          type: [string, "null"]
+          description: >-
+            One emoji shown as the public page's icon, or null for none.
+            Public, like the slug.
         schemaVersion:
           type: integer
           minimum: 1
@@ -5894,6 +5935,8 @@ components:
         slug: ada-lovelace
         downloadEnabled: true
         seoGeoEnabled: true
+        publicTitle: Danny from aboutme.vn
+        faviconEmoji: "\U0001F680"
         schemaVersion: 3
         createdAt: 2026-08-01T09:00:00Z
         updatedAt: 2026-08-11T18:20:00Z

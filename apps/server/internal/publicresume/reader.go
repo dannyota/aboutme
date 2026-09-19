@@ -29,7 +29,11 @@ type Snapshot struct {
 	Revision         int64
 	DiscoveryEnabled bool
 	Public           PublicResume
-	photoKey         string
+	// PublicTitle and FaviconEmoji are the owner's page settings. They shape
+	// only the HTML head, so they stay out of the public JSON.
+	PublicTitle  *string
+	FaviconEmoji *string
+	photoKey     string
 }
 
 // ReaderDependencies contains the stores and services needed to read a resume.
@@ -119,7 +123,10 @@ func (r *Reader) snapshot(row store.Resume) (Snapshot, error) {
 	if doc.PersonalDetails.Photo != nil {
 		photoKey = doc.PersonalDetails.Photo.Key
 	}
-	return Snapshot{ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled, Public: public, photoKey: photoKey}, nil
+	return Snapshot{
+		ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled, Public: public,
+		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji, photoKey: photoKey,
+	}, nil
 }
 
 // ReadPhoto keeps the storage key private to Reader and uses the lease-owned

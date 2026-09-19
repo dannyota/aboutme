@@ -73,6 +73,8 @@ const request = () => {
     mode: 'continuous' as const,
     canonicalOrigin: 'https://resume.example',
     discoveryEnabled: true,
+    pageTitle: 'Ada <&> Lovelace — Resume',
+    faviconHref: '',
   };
 };
 
@@ -154,6 +156,33 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '<meta name="twitter:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
     );
+  });
+});
+
+describe('owner page title and emoji favicon', () => {
+  const ROCKET_HREF = 'data:image/svg+xml,'
+    + '%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20'
+    + 'viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20'
+    + 'font-size%3D%2790%27%3E%F0%9F%9A%80%3C%2Ftext%3E%3C%2Fsvg%3E';
+
+  it('writes the given title as escaped text', async () => {
+    const value = request();
+    value.pageTitle = 'Danny <b>&</b> "friends" \'x\'';
+    const html = await renderPublicResume(value, VERSIONS);
+    expect(html).toContain(
+      '<title>Danny &lt;b&gt;&amp;&lt;/b&gt; &quot;friends&quot; \'x\'</title>',
+    );
+    expect(html.match(/<title>/gu)).toHaveLength(1);
+  });
+
+  it('links the favicon only when one is given', async () => {
+    const none = await renderPublicResume(request(), VERSIONS);
+    expect(none).not.toContain('rel="icon"');
+    const value = request();
+    value.faviconHref = ROCKET_HREF;
+    const html = await renderPublicResume(value, VERSIONS);
+    expect(html).toContain(`<link rel="icon" href="${ROCKET_HREF}">`);
+    expect(html.match(/rel="icon"/gu)).toHaveLength(1);
   });
 });
 

@@ -19,6 +19,8 @@ const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
 const SCHEMA_VERSION = '3';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
+const PAGE_TITLE = 'Danny from aboutme.vn';
+const PAGE_EMOJI = '\u{1F680}';
 
 test('proves a published resume hydrates in a real browser', async ({
   browser,
@@ -152,11 +154,21 @@ test('proves a published resume hydrates in a real browser', async ({
           live: true,
           downloadEnabled: true,
           seoGeoEnabled: true,
+          publicTitle: input.publicTitle,
+          faviconEmoji: input.faviconEmoji,
         }),
       });
       const body = await response.json().catch(() => null);
       return { status: response.status, body };
-    }, { id: createdID, revision: detailWrite.revision as string, csrf, slug: publishedSlug, schemaVersion: SCHEMA_VERSION });
+    }, {
+      id: createdID,
+      revision: detailWrite.revision as string,
+      csrf,
+      slug: publishedSlug,
+      schemaVersion: SCHEMA_VERSION,
+      publicTitle: PAGE_TITLE,
+      faviconEmoji: PAGE_EMOJI,
+    });
     expect(publishStatus.status, JSON.stringify(publishStatus.body)).toBe(200);
 
     // Prove the page in a fresh context with no session cookies.
@@ -195,6 +207,15 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(JSON.parse(structured ?? '{}').mainEntity?.sameAs).toEqual([CUSTOM_LINK]);
     await expect(publicPage.locator(`a[href="${CUSTOM_LINK}"]`)).toHaveText('orcid.example/0000-0001');
 
+    // The owner's title and emoji favicon pass the server's exact-head check.
+    await expect(publicPage).toHaveTitle(PAGE_TITLE);
+    const icon = publicPage.locator('link[rel="icon"]');
+    await expect(icon).toHaveCount(1);
+    const iconHref = await icon.getAttribute('href');
+    expect(iconHref?.startsWith('data:image/svg+xml,')).toBe(true);
+    expect(decodeURIComponent(iconHref!.slice('data:image/svg+xml,'.length)))
+      .toContain(`>${PAGE_EMOJI}</text>`);
+
     // Download is enabled, so the page links its own PDF, named after the slug.
     const download = publicPage.locator('a.public-download');
     await expect(download).toHaveCount(1);
@@ -222,7 +243,7 @@ test('proves a published resume hydrates in a real browser', async ({
     const main = publicPage.locator('#public-resume');
     await expect(main).toBeVisible();
     await expect(main).toHaveAttribute('data-revision', /^[1-9][0-9]*$/);
-    await expect(publicPage).toHaveTitle(/Resume$/);
+    await expect(publicPage).toHaveTitle(PAGE_TITLE);
 
     // The client hydration mounts the Vue app on the SSR root.
     await waitForHydration(publicPage, 'public-resume');

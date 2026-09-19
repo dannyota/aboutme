@@ -797,7 +797,7 @@ func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswo
 const createResume = `-- name: CreateResume :one
 INSERT INTO resumes (user_id, title, schema_version, lng,
                      personal_details, content, customization)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji
 `
 
 type CreateResumeParams struct {
@@ -837,6 +837,8 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
@@ -1231,7 +1233,7 @@ func (q *Queries) DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUs
 const deleteResumeForUserCAS = `-- name: DeleteResumeForUserCAS :one
 DELETE FROM resumes
 WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji
 `
 
 type DeleteResumeForUserCASParams struct {
@@ -1264,6 +1266,8 @@ func (q *Queries) DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeFo
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
@@ -1273,7 +1277,7 @@ DELETE FROM resumes
 WHERE id = $1::uuid
   AND user_id = $2::uuid
   AND revision = $3::bigint
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji
 `
 
 type DeleteResumePublicCASParams struct {
@@ -1301,6 +1305,8 @@ func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePub
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
@@ -1952,7 +1958,7 @@ func (q *Queries) GetPublicRealtimeResume(ctx context.Context, slug string) (Get
 }
 
 const getPublicResumeByOwner = `-- name: GetPublicResumeByOwner :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes
 WHERE user_id = $1::uuid
   AND id = $2::uuid
 `
@@ -1981,12 +1987,14 @@ func (q *Queries) GetPublicResumeByOwner(ctx context.Context, arg GetPublicResum
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
 
 const getPublicResumeBySlug = `-- name: GetPublicResumeBySlug :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes
 WHERE slug = $1::text AND live = true
 `
 
@@ -2012,6 +2020,8 @@ func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (Resum
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
@@ -2030,7 +2040,7 @@ func (q *Queries) GetPublicState(ctx context.Context) (PublicState, error) {
 }
 
 const getResumeByID = `-- name: GetResumeByID :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE id = $1
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes WHERE id = $1
 `
 
 // System-job read for the document-version backfill. It is intentionally
@@ -2054,12 +2064,14 @@ func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, erro
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
 
 const getResumeForUser = `-- name: GetResumeForUser :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE id = $1 AND user_id = $2
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes WHERE id = $1 AND user_id = $2
 `
 
 type GetResumeForUserParams struct {
@@ -2086,6 +2098,8 @@ func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserPara
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }
@@ -2689,7 +2703,7 @@ func (q *Queries) ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListR
 }
 
 const listResumesForUser = `-- name: ListResumesForUser :many
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at FROM resumes WHERE user_id = $1 ORDER BY created_at, id
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes WHERE user_id = $1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
@@ -2717,6 +2731,8 @@ func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]R
 			&i.Customization,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PublicTitle,
+			&i.FaviconEmoji,
 		); err != nil {
 			return nil, err
 		}
@@ -2849,20 +2865,24 @@ WITH input AS (
     $5::boolean AS live,
     $6::boolean AS download_enabled,
     $7::boolean AS seo_geo_enabled,
-    $8::timestamptz AS updated_at
+    $8::text AS public_title,
+    $9::text AS favicon_emoji,
+    $10::timestamptz AS updated_at
 )
 UPDATE resumes AS resume
 SET slug = input.slug,
     live = input.live,
     download_enabled = input.download_enabled,
     seo_geo_enabled = input.seo_geo_enabled,
+    public_title = input.public_title,
+    favicon_emoji = input.favicon_emoji,
     revision = resume.revision + 1,
     updated_at = input.updated_at
 FROM input
 WHERE resume.id = input.id
   AND resume.user_id = input.user_id
   AND resume.revision = input.expected_revision
-RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at
+RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at, resume.public_title, resume.favicon_emoji
 `
 
 type PublishResumeCASParams struct {
@@ -2873,6 +2893,8 @@ type PublishResumeCASParams struct {
 	Live             bool
 	DownloadEnabled  bool
 	SEOGeoEnabled    bool
+	PublicTitle      *string
+	FaviconEmoji     *string
 	UpdatedAt        time.Time
 }
 
@@ -2885,6 +2907,8 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 		arg.Live,
 		arg.DownloadEnabled,
 		arg.SEOGeoEnabled,
+		arg.PublicTitle,
+		arg.FaviconEmoji,
 		arg.UpdatedAt,
 	)
 	var i Resume
@@ -2904,6 +2928,8 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 		&i.Customization,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.PublicTitle,
+		&i.FaviconEmoji,
 	)
 	return i, err
 }

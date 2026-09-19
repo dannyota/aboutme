@@ -13,7 +13,21 @@ export interface PublicRenderRequest {
   mode: 'continuous';
   canonicalOrigin: string;
   discoveryEnabled: boolean;
+  /** The exact <title> text, computed by the server (ADR 0042). */
+  pageTitle: string;
+  /** The exact favicon data: URL, or '' when the owner set no icon. */
+  faviconHref: string;
 }
+
+// The server percent-encodes every byte outside the URL-unreserved set, so a
+// favicon href holds only these characters and cannot leave its attribute.
+const FAVICON_HREF = /^data:image\/svg\+xml,[A-Za-z0-9._~%-]{1,2048}$/u;
+
+const validPageTitle = (value: unknown): value is string =>
+  typeof value === 'string' && value.length > 0 && value.length <= 4096;
+
+const validFaviconHref = (value: unknown): value is string =>
+  value === '' || (typeof value === 'string' && FAVICON_HREF.test(value));
 
 const fail = (): never => {
   throw new Error(PUBLIC_RENDER_FAILURE);
@@ -159,7 +173,14 @@ export function decodePublicRenderEnvelope(
     }
     const envelope = value as Record<string, unknown>;
     const keys = Object.keys(envelope).sort();
-    const expectedKeys = 'canonicalOrigin,discoveryEnabled,mode,publicResume';
+    const expectedKeys = [
+      'canonicalOrigin',
+      'discoveryEnabled',
+      'faviconHref',
+      'mode',
+      'pageTitle',
+      'publicResume',
+    ].join(',');
     if (keys.join(',') !== expectedKeys) {
       fail();
     }
@@ -167,6 +188,8 @@ export function decodePublicRenderEnvelope(
       envelope.mode !== 'continuous'
       || !normalizedOrigin(envelope.canonicalOrigin)
       || typeof envelope.discoveryEnabled !== 'boolean'
+      || !validPageTitle(envelope.pageTitle)
+      || !validFaviconHref(envelope.faviconHref)
       || !isPublicResume(envelope.publicResume)
     ) {
       fail();

@@ -260,6 +260,8 @@ func toDomain(row store.Resume, doc schema.Resume) Resume {
 		Live:                row.Live,
 		DownloadEnabled:     row.DownloadEnabled,
 		SEOGeoEnabled:       row.SEOGeoEnabled,
+		PublicTitle:         row.PublicTitle,
+		FaviconEmoji:        row.FaviconEmoji,
 		StoredSchemaVersion: row.SchemaVersion,
 		Revision:            row.Revision,
 		Lng:                 row.Lng,

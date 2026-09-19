@@ -10,11 +10,20 @@ type optionalSlug struct {
 	Value   string
 }
 
+// optionalText is a publication text setting: absent keeps the stored value,
+// and a present value (possibly empty, which clears it) replaces it.
+type optionalText struct {
+	Present bool
+	Value   string
+}
+
 type publishInput struct {
 	Slug            optionalSlug
 	Live            bool
 	DownloadEnabled bool
 	SEOGeoEnabled   bool
+	PublicTitle     optionalText
+	FaviconEmoji    optionalText
 }
 
 type currentPublish struct {
@@ -22,6 +31,8 @@ type currentPublish struct {
 	Live            bool
 	DownloadEnabled bool
 	SEOGeoEnabled   bool
+	PublicTitle     *string
+	FaviconEmoji    *string
 	Revision        int64
 }
 
@@ -60,7 +71,7 @@ func decodePublish(body io.Reader) (publishInput, error) {
 	}
 	for name := range fields {
 		switch name {
-		case "slug", "live", "downloadEnabled", "seoGeoEnabled":
+		case "slug", "live", "downloadEnabled", "seoGeoEnabled", "publicTitle", "faviconEmoji":
 		default:
 			return publishInput{}, &publishShapeError{Field: "body"}
 		}
@@ -87,7 +98,30 @@ func decodePublish(body io.Reader) (publishInput, error) {
 		}
 		input.Slug = optionalSlug{Present: true, Value: *slug}
 	}
+	publicTitle, titleErr := decodePublishOptionalText(fields, "publicTitle")
+	if titleErr != nil {
+		return publishInput{}, titleErr
+	}
+	faviconEmoji, emojiErr := decodePublishOptionalText(fields, "faviconEmoji")
+	if emojiErr != nil {
+		return publishInput{}, emojiErr
+	}
+	input.PublicTitle, input.FaviconEmoji = publicTitle, faviconEmoji
 	return input, nil
+}
+
+// decodePublishOptionalText accepts an absent field or a JSON string; null
+// and every other type are malformed.
+func decodePublishOptionalText(fields map[string]json.RawMessage, field string) (optionalText, error) {
+	raw, ok := fields[field]
+	if !ok {
+		return optionalText{}, nil
+	}
+	var value *string
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return optionalText{}, &publishShapeError{Field: field}
+	}
+	return optionalText{Present: true, Value: *value}, nil
 }
 
 func decodePublishRequiredBool(fields map[string]json.RawMessage, field string) (bool, error) {

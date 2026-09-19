@@ -131,6 +131,11 @@ The publish dialog exposes three independent choices:
 2. **PDF download** controls the public PDF. The owner can always export a PDF.
 3. **SEO and GEO** controls indexing and discovery surfaces. It defaults off.
 
+It also sets two optional page details: the browser-tab title (default
+`<full name> — Resume`) and one emoji shown as the page icon (default none).
+Both are public, like the slug
+([ADR 0042](../adr/0042-public-page-title-and-favicon.md)).
+
 | State                    | Public behavior                                                                                                                                |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes                                      |

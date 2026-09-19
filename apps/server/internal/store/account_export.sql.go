@@ -73,7 +73,7 @@ func (q *Queries) ListAccountExportProviders(ctx context.Context, userID uuid.UU
 const listAccountExportResumes = `-- name: ListAccountExportResumes :many
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
     schema_version, revision, lng, personal_details, content, customization,
-    created_at, updated_at
+    created_at, updated_at, public_title, favicon_emoji
 FROM resumes
 WHERE user_id = $1
 ORDER BY created_at, id
@@ -105,6 +105,8 @@ func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID
 			&i.Customization,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.PublicTitle,
+			&i.FaviconEmoji,
 		); err != nil {
 			return nil, err
 		}
