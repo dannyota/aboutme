@@ -45,6 +45,8 @@ Other roles take work only from a manager brief and report back to it.
 | qa        | E2E and dev-https proofs, pixel baselines, exploratory and production checks                | Fixes the product code it tests                          |
 | devops    | `deploy/`, `.github/workflows/`, Caddy, OpenTofu, Cloudflare, AWS, release scripts          | Reads secret values or applies infrastructure unreviewed |
 | reviewer  | Read-only review of a diff, plan, or release candidate                                      | Edits files, or reviews work it authored                 |
+| user      | Dogfooding as a job seeker: sign-up, editing, publishing, sharing, export                   | Edits files, or uses the owner's production account      |
+| recruiter | Reading as a recruiter: public pages, PDFs, gallery samples, ATS text                       | Edits files, or signs in                                 |
 
 A path outside every row belongs to the manager, which assigns it in a brief.
 
@@ -119,6 +121,17 @@ for auth, sessions, CSRF, sanitizing, concurrency, idempotency, media privacy,
 publish revocation, credentials, and production writes. It names each invariant
 it confirmed, ranks findings by severity with a failure scenario, and confirms
 the fix. It never reviews its own work.
+
+### user and recruiter
+
+Personas who judge the product from outside the code. The user is a job seeker
+who signs up, starts from a template or sample, edits, publishes, shares, and
+exports. The recruiter holds no account and reads shared links, gallery samples,
+and PDFs. Both work in a real browser at phone and desktop widths, save evidence
+under `.dev/personas/`, and report friction with steps, a screenshot, a
+severity, and the owning role. They never edit files. The user creates accounts
+and resumes only on the local stack; in production it stays signed out unless a
+brief names a test account.
 
 ## Models
 
