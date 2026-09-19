@@ -46,12 +46,23 @@ const isHTTPSURL = (value: string): boolean => {
   }
 };
 
+const SAME_AS_TYPES = new Set([
+  'website',
+  'linkedin',
+  'github',
+  'twitter',
+  'custom',
+]);
+
 const jsonLd = (request: PublicRenderRequest): string => {
   if (!request.discoveryEnabled) return '';
   const person = request.publicResume.document.personalDetails;
   const details = person.details ?? [];
+  // Must pick exactly what Go's publicformat.JSONLD picks: the public HTML
+  // validator requires this script to byte-equal Go's (ADR 0041).
   const sameAs = [...new Set(details.flatMap((detail) => (
-    ['website', 'linkedin', 'github', 'twitter'].includes(detail.type)
+    SAME_AS_TYPES.has(detail.type)
+    && detail.value.startsWith('https://')
     && isHTTPSURL(detail.value)
       ? [detail.value]
       : []

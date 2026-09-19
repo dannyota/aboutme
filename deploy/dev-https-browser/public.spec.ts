@@ -8,7 +8,7 @@ import {
   loginAsDevelopmentUser,
   uniqueTitle,
 } from './editor-fixtures';
-import { waitForHydration } from './harness-lib';
+import { pinEnglish, waitForHydration } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
@@ -18,6 +18,7 @@ import {
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
 const SCHEMA_VERSION = '2';
+const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 
 test('proves a published resume hydrates in a real browser', async ({
   browser,
@@ -44,6 +45,7 @@ test('proves a published resume hydrates in a real browser', async ({
   let publishedSlug: string | undefined;
 
   try {
+    await pinEnglish(page.context());
     await loginAsDevelopmentUser(page);
     const created = await createBlankResume(page, uniqueTitle());
     createdID = created.metadata.id;
@@ -94,6 +96,43 @@ test('proves a published resume hydrates in a real browser', async ({
       return revision;
     }, createdID);
 
+    // A custom https contact with discovery on: the Go validator requires the
+    // renderer's JSON-LD sameAs to match its own, custom links included.
+    const detailCSRF = await freshCSRF(page);
+    const detailWrite = await page.evaluate(async (input) => {
+      const response = await fetch(`/api/v1/resumes/${input.id}/personal-details`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+          'If-Match': `"r${input.revision}"`,
+          'X-CSRF-Token': input.csrf,
+          'X-Resume-Schema-Version': input.schemaVersion,
+        },
+        body: JSON.stringify({
+          fullName: 'Public proof resume',
+          details: [{
+            id: crypto.randomUUID(),
+            type: 'custom',
+            label: 'ORCID',
+            value: input.customLink,
+            isHidden: false,
+          }],
+        }),
+      });
+      const body = await response.json() as { data?: { revision?: unknown } };
+      return { status: response.status, revision: body.data?.revision };
+    }, {
+      id: createdID,
+      revision: currentRevision,
+      csrf: detailCSRF,
+      schemaVersion: SCHEMA_VERSION,
+      customLink: CUSTOM_LINK,
+    });
+    expect(detailWrite.status).toBe(200);
+    expect(typeof detailWrite.revision).toBe('string');
+
     // Publish: the resume must already hold a live slug before any public
     // route will serve it.
     const csrf = await freshCSRF(page);
@@ -117,7 +156,7 @@ test('proves a published resume hydrates in a real browser', async ({
       });
       const body = await response.json().catch(() => null);
       return { status: response.status, body };
-    }, { id: createdID, revision: currentRevision, csrf, slug: publishedSlug, schemaVersion: SCHEMA_VERSION });
+    }, { id: createdID, revision: detailWrite.revision as string, csrf, slug: publishedSlug, schemaVersion: SCHEMA_VERSION });
     expect(publishStatus.status, JSON.stringify(publishStatus.body)).toBe(200);
 
     // Prove the page in a fresh context with no session cookies.
@@ -150,6 +189,11 @@ test('proves a published resume hydrates in a real browser', async ({
 
     const response = await publicPage.goto(`${ORIGIN}/${publishedSlug}`);
     expect(response?.status()).toBe(200);
+    const structured = await publicPage
+      .locator('script[type="application/ld+json"]')
+      .textContent();
+    expect(JSON.parse(structured ?? '{}').mainEntity?.sameAs).toEqual([CUSTOM_LINK]);
+    await expect(publicPage.locator(`a[href="${CUSTOM_LINK}"]`)).toHaveText('orcid.example/0000-0001');
     expect(response?.headers()['content-security-policy']).toContain("default-src 'none'");
 
     // SSR markup is present before hydration runs.
@@ -203,7 +247,9 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(styling.resume?.boxSizing).toBe('border-box');
     expect(styling.resume?.paddingLeft).not.toBe('0px');
     expect(styling.resume?.fontVariable).not.toBe('');
-    expect(styling.resume?.fontFamily).toBe(styling.resume?.fontVariable);
+    // Computed font-family drops quotes around single-word family names.
+    const unquoted = (value?: string): string => (value ?? '').replaceAll('"', '');
+    expect(unquoted(styling.resume?.fontFamily)).toBe(unquoted(styling.resume?.fontVariable));
 
     // The skip link stays out of view until keyboard focus reaches it.
     const skip = publicPage.getByRole('link', { name: 'Skip to content' });

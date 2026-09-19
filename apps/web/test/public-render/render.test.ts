@@ -157,6 +157,32 @@ describe('public Vue worker document', () => {
   });
 });
 
+describe('JSON-LD sameAs parity with the Go validator', () => {
+  // The public HTML validator requires this script to byte-equal Go's
+  // publicformat.JSONLD output. Both suites read the same corpus.
+  it('picks exactly the sameAs values Go picks', async () => {
+    const corpusPath = resolve(
+      process.cwd(),
+      '../server/internal/publicformat/testdata/public-format',
+      'sameas-parity.json',
+    );
+    const corpus = JSON.parse(readFileSync(corpusPath, 'utf8')) as {
+      details: { type: string; value: string }[];
+      sameAs: string[];
+    };
+    const value = request();
+    value.publicResume.document.personalDetails.details = corpus.details
+      .map((detail, index) => ({
+        id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        ...detail,
+      })) as typeof value.publicResume.document.personalDetails.details;
+    const html = await renderPublicResume(value, VERSIONS);
+    const script = /<script type="application\/ld\+json">(.*?)<\/script>/u
+      .exec(html)?.[1];
+    expect(JSON.parse(script!).mainEntity.sameAs).toEqual(corpus.sameAs);
+  });
+});
+
 describe('public style version', () => {
   it('refuses a missing or malformed version', async () => {
     for (const version of ['', 'ABCDEF0123456789', '0123', 'x'.repeat(16)]) {
