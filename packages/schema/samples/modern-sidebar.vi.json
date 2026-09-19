@@ -1,0 +1,276 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Trịnh Bảo Ngọc",
+    "headline": "Trưởng nhóm Digital Marketing · Mỹ phẩm và bán lẻ",
+    "details": [
+      {
+        "id": "1e3b9146-30ff-5aa4-9e8b-a7f76823dace",
+        "type": "email",
+        "value": "trinhbaongoc@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "043ac3e6-e852-57b2-8acc-94dc35c3c28c",
+        "type": "phone",
+        "value": "+84 90 000 1010",
+        "isHidden": false
+      },
+      {
+        "id": "f900e91b-8c0d-53a8-aade-ade670768d10",
+        "type": "location",
+        "value": "Quận 3, TP. Hồ Chí Minh",
+        "isHidden": false
+      },
+      {
+        "id": "4054e4f5-2cc9-5bfb-af2d-76735fe7d094",
+        "type": "linkedin",
+        "value": "https://example.com/in/trinh-bao-ngoc",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "891f214b-4161-5b81-9a97-ea6636086ba8",
+          "isHidden": false,
+          "text": "<p>6 năm làm digital marketing cho thương hiệu mỹ phẩm và bán lẻ, quản lý ngân sách quảng cáo 12 tỷ đồng/năm. Mạnh về tăng trưởng hiệu suất (performance), nội dung mạng xã hội và hợp tác với KOL. Chiến dịch gần nhất tăng doanh thu kênh online 65% trong 12 tháng.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "2cf79a25-ccc4-5bd7-a301-646a3aa7c132",
+          "isHidden": false,
+          "jobTitle": "Trưởng nhóm Digital Marketing",
+          "employer": "Công ty CP Mỹ phẩm Hoa Sen Trắng",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 5
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Quản lý nhóm 5 người và ngân sách 12 tỷ đồng/năm trên Facebook, TikTok, Google và sàn thương mại điện tử.</li><li>Tăng doanh thu kênh online 65% trong 12 tháng, giữ chỉ số ROAS trung bình 4,2.</li><li>Xây dựng mạng lưới 120 KOC; chiến dịch “Da khỏe mùa hè” đạt 18 triệu lượt xem, chi phí mỗi đơn giảm 30%.</li></ul>"
+        },
+        {
+          "id": "9bfb979d-7982-57c2-9b56-8d2f0b1b4ee7",
+          "isHidden": false,
+          "jobTitle": "Chuyên viên Performance Marketing",
+          "employer": "Công ty TNHH Thời trang Gió Nồm",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 3
+            },
+            "end": {
+              "y": 2023,
+              "m": 4
+            },
+            "present": false
+          },
+          "description": "<ul><li>Quản lý quảng cáo Facebook và Google 3 tỷ đồng/năm; giảm chi phí mỗi khách hàng mới 28%.</li><li>Thiết lập báo cáo tự động bằng Looker Studio, tiết kiệm 8 giờ làm báo cáo mỗi tuần.</li></ul>"
+        },
+        {
+          "id": "d7b729f0-463a-58db-8c07-9cb9eb4514ab",
+          "isHidden": false,
+          "jobTitle": "Nhân viên Nội dung Mạng xã hội",
+          "employer": "Công ty CP Truyền thông Mắt Bão Hồng",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2021,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>Sản xuất 30 bài đăng mỗi tháng cho 4 thương hiệu; tăng lượt tương tác trung bình 45%.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "2c40da81-482f-5b67-9e43-777efdba34b7",
+          "isHidden": false,
+          "degree": "Cử nhân Marketing",
+          "school": "Trường Đại học Kinh tế Phương Nam",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 9
+            },
+            "end": {
+              "y": 2020,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "entries": [
+        {
+          "id": "b6622e32-df7a-5c34-be03-469a3c97a2a8",
+          "isHidden": false,
+          "name": "Quảng cáo Meta, TikTok, Google",
+          "level": 5
+        },
+        {
+          "id": "9fec17e7-7340-56aa-874b-82cb63f8373d",
+          "isHidden": false,
+          "name": "Phân tích dữ liệu (GA4, Looker Studio)",
+          "level": 4
+        },
+        {
+          "id": "d5d948e7-4235-5fc8-91e9-bd715d1e702c",
+          "isHidden": false,
+          "name": "Sáng tạo nội dung ngắn",
+          "level": 4
+        },
+        {
+          "id": "d424a5ef-77cb-580e-9625-91566e64c6cb",
+          "isHidden": false,
+          "name": "Quản lý KOL/KOC",
+          "level": 4
+        },
+        {
+          "id": "a15d7542-1059-57dc-bf62-3870a92f4441",
+          "isHidden": false,
+          "name": "Canva, CapCut",
+          "level": 4
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "a844c4a3-f9b3-53d2-bc30-e8446d578ff6",
+          "isHidden": false,
+          "name": "Tiếng Anh",
+          "level": 4
+        },
+        {
+          "id": "809aef45-dbf7-5cc2-b193-c0cb865e6421",
+          "isHidden": false,
+          "name": "Tiếng Hàn (TOPIK 3)",
+          "level": 2
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "5000dd26-9d74-5ec6-b151-73248069b6c9",
+          "isHidden": false,
+          "title": "Google Ads Search Certification",
+          "issuer": "Google",
+          "date": {
+            "y": 2025,
+            "m": 8
+          }
+        },
+        {
+          "id": "7dafe3fd-7d36-5545-b59a-5d6c2ae7f7a6",
+          "isHidden": false,
+          "title": "Meta Certified Media Buying Professional",
+          "issuer": "Meta",
+          "date": {
+            "y": 2024,
+            "m": 3
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "be-vietnam-pro",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#0e3f52",
+      "text": "#1c2b33",
+      "background": "#ffffff",
+      "accent": "#0f6b7d",
+      "surface": "#e3ecf0"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 14,
+        "y": 13
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "bar"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

@@ -1,0 +1,331 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Khoa Vu",
+    "headline": "Senior Backend Engineer · Go, Distributed Systems, Payments",
+    "details": [
+      {
+        "id": "073df7b2-6368-5c70-93bb-9daee8894ca8",
+        "type": "email",
+        "value": "khoa.vu@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "07470325-8924-5fe8-a536-734e10a57a7a",
+        "type": "phone",
+        "value": "+84 90 000 0303",
+        "isHidden": false
+      },
+      {
+        "id": "35e2d3d5-830b-5b6d-b2c7-579b96f5ac52",
+        "type": "location",
+        "value": "Ho Chi Minh City, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "97d44d52-276a-5d8f-8f6f-ab32260ebc0c",
+        "type": "github",
+        "value": "https://example.com/khoa-vu",
+        "isHidden": false
+      },
+      {
+        "id": "cd01a50a-9461-544c-9e6a-5ac66af2793a",
+        "type": "website",
+        "value": "https://khoavu.example.com",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "1cf09015-52e6-588a-a874-3ab6d3f763e2",
+          "isHidden": false,
+          "text": "<p>Backend engineer with 7 years building payment and logistics systems in Go. Designed services that settle 1.2 million merchant payouts a month at 99.99% availability. Lead a team of 5 and coach engineers on testing, design reviews and on-call practice.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "6392a955-cdfc-54e1-b90b-71e1cae513f8",
+          "isHidden": false,
+          "jobTitle": "Senior Backend Engineer",
+          "employer": "Paylane Asia",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 2
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Designed the payout service (Go, PostgreSQL) that settles 1.2M merchant transfers a month at 99.99% availability.</li><li>Cut p99 payment API latency from 480 ms to 120 ms by moving fraud checks to an asynchronous Kafka pipeline.</li><li>Lead a team of 5; introduced design reviews and on-call runbooks that cut mean time to recovery from 41 to 18 minutes.</li></ul>"
+        },
+        {
+          "id": "cf190963-218c-5e09-beb5-eb0ce81ecd40",
+          "isHidden": false,
+          "jobTitle": "Backend Engineer",
+          "employer": "Blue Kite Logistics",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 6
+            },
+            "end": {
+              "y": 2023,
+              "m": 1
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built the shipment-tracking API (Go, gRPC, Redis) serving 40M requests a day for 3,000 merchants.</li><li>Moved 14 services from virtual machines to Kubernetes with Terraform, cutting infrastructure cost by 35%.</li><li>Added contract tests between 6 teams&#39; services, dropping integration incidents from 9 to 2 per quarter.</li></ul>"
+        },
+        {
+          "id": "07ee6cab-39d0-5cd3-9c05-ec3b7d87019d",
+          "isHidden": false,
+          "jobTitle": "Software Engineer",
+          "employer": "Otter Byte Studio",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 7
+            },
+            "end": {
+              "y": 2020,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Shipped REST APIs in Node.js for 4 client apps and raised test coverage from 20% to 75%.</li></ul>"
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Open Source",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "4b43a754-275a-51a2-8d96-2559a5699be5",
+          "isHidden": false,
+          "title": "pgqueue",
+          "link": "https://example.com/khoa-vu/pgqueue",
+          "description": "<p>Go job queue built on PostgreSQL SKIP LOCKED. 1,100 GitHub stars; runs in production at 3 companies.</p>",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          }
+        },
+        {
+          "id": "1d1f8ab7-ac53-5f9c-be85-fea2d345b4da",
+          "isHidden": false,
+          "title": "sqlc-lint",
+          "link": "https://example.com/khoa-vu/sqlc-lint",
+          "description": "<p>Linter that flags unindexed queries in sqlc projects before merge; 40 contributors.</p>",
+          "dates": {
+            "start": {
+              "y": 2024,
+              "m": 8
+            },
+            "end": {
+              "y": 2024,
+              "m": 12
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "9506f2c1-93a5-51a3-8163-ea58545982b7",
+          "isHidden": false,
+          "name": "Go",
+          "level": 5,
+          "infoHtml": "<p>7 years, production</p>"
+        },
+        {
+          "id": "a33ead54-4ff8-5cbd-8455-ee83d817ad14",
+          "isHidden": false,
+          "name": "PostgreSQL",
+          "level": 4,
+          "infoHtml": "<p>Schema design, query tuning</p>"
+        },
+        {
+          "id": "51b671bf-e119-5b7a-893b-dc1cf996e80f",
+          "isHidden": false,
+          "name": "Kafka",
+          "level": 4
+        },
+        {
+          "id": "6689cebc-fcea-5f0e-a99b-173b8dff177a",
+          "isHidden": false,
+          "name": "Kubernetes",
+          "level": 4
+        },
+        {
+          "id": "8d517a30-f91d-52a7-81d7-623e5b2bab62",
+          "isHidden": false,
+          "name": "Terraform",
+          "level": 3
+        },
+        {
+          "id": "30514f47-5b6f-555b-9c22-6d31e1ddbe30",
+          "isHidden": false,
+          "name": "TypeScript",
+          "level": 3
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "c586a921-bb94-5b91-8ce4-812b60c1f9e2",
+          "isHidden": false,
+          "title": "AWS Certified Solutions Architect – Associate",
+          "issuer": "Amazon Web Services",
+          "date": {
+            "y": 2024,
+            "m": 3
+          }
+        },
+        {
+          "id": "6436d6a6-bf57-5fee-9145-ababba6ee06f",
+          "isHidden": false,
+          "title": "Certified Kubernetes Application Developer (CKAD)",
+          "issuer": "The Linux Foundation",
+          "date": {
+            "y": 2022,
+            "m": 10
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "9943a659-eafb-5839-bc09-3308b4637e6b",
+          "isHidden": false,
+          "name": "Vietnamese",
+          "level": 5
+        },
+        {
+          "id": "10ec07b2-64c8-51b2-ae6e-4274c83f34b2",
+          "isHidden": false,
+          "name": "English",
+          "level": 4
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "31307f2c-6b85-537d-8f89-3c756a487bbf",
+          "isHidden": false,
+          "degree": "B.Eng. Computer Engineering",
+          "school": "Riverside University of Technology",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2015,
+              "m": 9
+            },
+            "end": {
+              "y": 2019,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#10394d",
+      "text": "#1a1f24",
+      "background": "#ffffff",
+      "accent": "#0d5a73"
+    },
+    "spacing": {
+      "sectionGap": 12,
+      "entryGap": 6,
+      "lineHeight": 1.3,
+      "pageMargin": {
+        "x": 11,
+        "y": 12
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "project"
+        ],
+        "sidebar": [
+          "skill",
+          "certificate",
+          "language",
+          "education"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "bar"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

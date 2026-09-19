@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Thao Le",
+    "headline": "Senior FP&A Analyst, Retail and Consumer Goods",
+    "details": [
+      {
+        "id": "a0de1469-cd89-594a-aceb-ded6aa88541f",
+        "type": "email",
+        "value": "thao.le@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "3fdb7f3f-aeed-5c0c-b494-dd5365f4b359",
+        "type": "phone",
+        "value": "+84 90 000 0101",
+        "isHidden": false
+      },
+      {
+        "id": "4b8c3152-fed4-55a0-9d24-ff2bc5eeabee",
+        "type": "location",
+        "value": "Ho Chi Minh City, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "adbc40c9-a3a9-536b-a7fd-054e05be8f6b",
+        "type": "linkedin",
+        "value": "https://example.com/in/thao-le",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "59bdb2f6-422d-5a8c-9d05-c2386ccd2985",
+          "isHidden": false,
+          "text": "<p>FP&amp;A analyst with 6 years in retail and consumer-goods finance. Cut the month-end close from 9 to 5 days and found VND 18 billion in yearly savings. ACCA affiliate; professional English (IELTS 7.5).</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "f92e32a2-2b4d-5662-be00-dfc3d92ca6f1",
+          "isHidden": false,
+          "jobTitle": "Senior FP&A Analyst",
+          "employer": "Lotus Crest Retail JSC",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Own the annual budget and 12-month rolling forecast for 230 stores and VND 4,200 billion in revenue.</li><li>Improved forecast accuracy from ±8% to ±3% with driver-based models in Power BI.</li><li>Led a logistics and utilities cost review that saves VND 18 billion a year (2.1% of operating cost).</li></ul>"
+        },
+        {
+          "id": "1d126ead-68ad-5af5-a1e2-093cbb9f0b23",
+          "isHidden": false,
+          "jobTitle": "Financial Analyst",
+          "employer": "Harbor & Pine Consumer Goods Co., Ltd.",
+          "city": "Binh Duong",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2023,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>Automated variance analysis with Power Query and SQL, cutting the month-end close from 9 to 5 days.</li><li>Modelled pricing for 3 product lines; the adopted price change raised gross margin by 1.8 points.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "5027646a-9aa2-5359-8ca0-ac8701489e83",
+          "isHidden": false,
+          "degree": "Bachelor of Business Administration, Finance",
+          "school": "Southern Institute of Business",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 9
+            },
+            "end": {
+              "y": 2020,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "32734b76-8a4a-533f-a846-eba6283598c6",
+          "isHidden": false,
+          "title": "ACCA Affiliate (all 13 exams passed)",
+          "issuer": "ACCA",
+          "date": {
+            "y": 2024,
+            "m": 6
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "entries": [
+        {
+          "id": "9eaa1835-6ca4-5ea7-bddf-db973b6daf2d",
+          "isHidden": false,
+          "name": "Finance",
+          "infoHtml": "<p>Budgeting, rolling forecasts, variance analysis, business cases, VAS, IFRS</p>"
+        },
+        {
+          "id": "cc6a5b0a-8043-53e4-8188-44ac51d9d5a7",
+          "isHidden": false,
+          "name": "Tools",
+          "infoHtml": "<p>Excel (Power Query, Power Pivot), Power BI, SAP S/4HANA FI/CO, SQL</p>"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education",
+          "certificate",
+          "skill"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

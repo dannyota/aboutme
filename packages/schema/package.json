@@ -28,6 +28,10 @@
       "types": "./gen/ts/templates.ts",
       "default": "./gen/ts/templates.ts"
     },
+    "./samples": {
+      "types": "./gen/ts/samples.ts",
+      "default": "./gen/ts/samples.ts"
+    },
     "./validation": {
       "types": "./validation/store.ts",
       "default": "./validation/store.ts"

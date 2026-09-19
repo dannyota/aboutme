@@ -1,0 +1,317 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Lan Hoang",
+    "headline": "Chief Operating Officer · Retail and Consumer Brands, Southeast Asia",
+    "details": [
+      {
+        "id": "190ab861-6f77-55f7-9c13-af2715ec1120",
+        "type": "email",
+        "value": "lan.hoang@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "eec20cab-d736-5953-af6e-3c2d682920e9",
+        "type": "phone",
+        "value": "+84 90 000 0707",
+        "isHidden": false
+      },
+      {
+        "id": "2f21e6b4-0e2f-521c-be5f-ffe0e70dac1e",
+        "type": "location",
+        "value": "Ho Chi Minh City, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "caaed625-86ad-5e44-b3a1-33e117e0b052",
+        "type": "linkedin",
+        "value": "https://example.com/in/lan-hoang",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Executive Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "f75fc5b1-1a4e-5110-9ef6-1f8d33f7b30e",
+          "isHidden": false,
+          "text": "<p>Operations executive with 18 years in retail and consumer brands across Vietnam, Thailand and the Philippines. As COO, grew a 420-store chain to profitability in two years while lifting customer satisfaction. Known for building leadership teams, turning around under-performing regions, and running disciplined capital programmes. Board member of two industry bodies.</p>"
+        }
+      ]
+    },
+    "980f7478-3cf6-5248-a5a2-35149a25dfa6": {
+      "sectionType": "custom",
+      "displayName": "Selected Achievements",
+      "iconKey": "trophy",
+      "entries": [
+        {
+          "id": "0bdefc01-9120-53e3-bb85-5b727f193bb5",
+          "isHidden": false,
+          "title": "Returned a 420-store chain to profit",
+          "description": "<p>Moved EBITDA from −2% to +7% in 24 months through store-portfolio pruning, supply renegotiation and a new operating model.</p>"
+        },
+        {
+          "id": "87b40818-5b60-53fe-87dd-488179637359",
+          "isHidden": false,
+          "title": "Scaled into two new markets",
+          "description": "<p>Opened 85 stores in Thailand and the Philippines in 3 years, each market profitable within 18 months.</p>"
+        },
+        {
+          "id": "ca721de5-59e4-54f5-9b64-978de2edda89",
+          "isHidden": false,
+          "title": "Built the next leadership bench",
+          "description": "<p>Designed a regional-manager academy; 70% of senior operations roles are now filled internally.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "86ada6c2-03ea-5dba-a31f-1d2b44a05693",
+          "isHidden": false,
+          "jobTitle": "Chief Operating Officer",
+          "employer": "Saffron Lane Retail Group",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 1
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Lead operations, supply chain, store development and customer service: 9,600 staff, USD 610M revenue.</li><li>Report to the CEO and the board; own a USD 45M annual capital budget.</li><li>Cut logistics cost per case by 18% by consolidating 5 distribution centres into 2 automated hubs.</li><li>Raised Net Promoter Score from 21 to 48 with a store-level service programme tied to manager pay.</li></ul>"
+        },
+        {
+          "id": "881aece9-1a43-57a1-8f44-c45091a5dd79",
+          "isHidden": false,
+          "jobTitle": "Regional Operations Director, Mekong",
+          "employer": "Blue Harbour Consumer Brands",
+          "city": "Bangkok",
+          "country": "Thailand",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 3
+            },
+            "end": {
+              "y": 2020,
+              "m": 12
+            },
+            "present": false
+          },
+          "description": "<ul><li>Ran operations for 3 countries and 260 stores, USD 280M revenue; 11 direct reports.</li><li>Led market entry into the Philippines: 45 stores in 30 months, break-even in month 16.</li><li>Introduced sales and operations planning, cutting stock-outs from 7.5% to 2.1%.</li></ul>"
+        },
+        {
+          "id": "ab63986f-c3d6-5fe4-9331-8960f96ec738",
+          "isHidden": false,
+          "jobTitle": "Head of Store Operations",
+          "employer": "Blue Harbour Consumer Brands",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2012,
+              "m": 6
+            },
+            "end": {
+              "y": 2016,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>Managed 120 stores and 2,300 staff; lifted like-for-like sales 6% a year for 3 years.</li><li>Rolled out a mobile workforce-scheduling tool that saved 4% of store labour cost.</li></ul>"
+        },
+        {
+          "id": "b3c2ea2d-428f-545a-b316-21ca442481a7",
+          "isHidden": false,
+          "jobTitle": "Operations Manager, then Area Manager",
+          "employer": "Gold Pagoda Supermarkets",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2008,
+              "m": 7
+            },
+            "end": {
+              "y": 2012,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Promoted twice in 4 years; ran 28 supermarkets across southern Vietnam.</li></ul>"
+        }
+      ]
+    },
+    "b3653d6e-8c6c-5440-8710-d4425e887a6e": {
+      "sectionType": "custom",
+      "displayName": "Board and Advisory Roles",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "98943b3f-6b49-5a11-9b6b-81a8004706c2",
+          "isHidden": false,
+          "title": "Board Member",
+          "subtitle": "Vietnam Retail Operators Forum",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 1
+            },
+            "end": null,
+            "present": true
+          }
+        },
+        {
+          "id": "9dc7b802-923a-51b9-b5ba-e2746a3e7695",
+          "isHidden": false,
+          "title": "Advisory Board Member",
+          "subtitle": "Southern Institute of Business, School of Management",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 9
+            },
+            "end": null,
+            "present": true
+          }
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "fce47ec9-633b-5cda-bc4e-63c3f8ab318c",
+          "isHidden": false,
+          "degree": "Executive MBA",
+          "school": "Pacific Rim Business School",
+          "city": "Singapore",
+          "country": "Singapore",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 8
+            },
+            "end": {
+              "y": 2016,
+              "m": 7
+            },
+            "present": false
+          }
+        },
+        {
+          "id": "cc67b47b-c064-51be-b83a-50f9c999adb4",
+          "isHidden": false,
+          "degree": "Bachelor of Economics",
+          "school": "Southern Institute of Business",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2004,
+              "m": 9
+            },
+            "end": {
+              "y": 2008,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "06c66677-170c-58ba-ab3c-2355904a9c28",
+          "isHidden": false,
+          "name": "Vietnamese",
+          "level": 5
+        },
+        {
+          "id": "45eb4b9c-8e6d-5586-a97f-c0e70dc40fc4",
+          "isHidden": false,
+          "name": "English",
+          "level": 5
+        },
+        {
+          "id": "7dc9719c-fbe3-52b3-ac79-3257670134a3",
+          "isHidden": false,
+          "name": "Thai",
+          "level": 2
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "be-vietnam-pro",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#16273d",
+      "text": "#1f2937",
+      "background": "#ffffff",
+      "accent": "#8a5a1e",
+      "surface": "#16273d"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 12,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 14
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "980f7478-3cf6-5248-a5a2-35149a25dfa6",
+          "work",
+          "b3653d6e-8c6c-5440-8710-d4425e887a6e",
+          "education",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

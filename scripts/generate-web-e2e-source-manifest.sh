@@ -46,6 +46,7 @@ source_roots=(
   packages/schema/gen/ts
   packages/schema/package.json
   packages/schema/resume.schema.json
+  packages/schema/samples
   packages/schema/validation/store.ts
 )
 

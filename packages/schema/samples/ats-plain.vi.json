@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Trần Quốc Bảo",
+    "headline": "Trưởng nhóm Vận hành Kho, 6 năm kinh nghiệm logistics bán lẻ",
+    "details": [
+      {
+        "id": "35b4ea85-9f71-584c-90fe-c5b3752dc8fd",
+        "type": "email",
+        "value": "tranquocbao@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "420161cd-4efa-511a-b51b-1f08d50297da",
+        "type": "phone",
+        "value": "+84 90 000 0202",
+        "isHidden": false
+      },
+      {
+        "id": "d9e2ab5e-45c4-5feb-b3c8-6224ce4466d1",
+        "type": "location",
+        "value": "Thủ Dầu Một, Bình Dương",
+        "isHidden": false
+      },
+      {
+        "id": "2556e129-a334-5214-9b69-2b382e680e54",
+        "type": "linkedin",
+        "value": "https://example.com/in/tran-quoc-bao",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Tóm tắt",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "16ff69de-c478-5180-8b5d-e7661f3b6327",
+          "isHidden": false,
+          "text": "<p>6 năm vận hành kho cho chuỗi bán lẻ, hiện quản lý kho 12.000 m² với 45 nhân sự. Giảm tỷ lệ giao sai đơn từ 1,8% xuống 0,4% nhờ triển khai hệ thống quản lý kho (WMS). Tiếng Anh giao tiếp công việc (TOEIC 750).</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "1c489361-9c6f-58e7-8926-3990b3c5ba03",
+          "isHidden": false,
+          "jobTitle": "Trưởng nhóm Vận hành Kho",
+          "employer": "Công ty CP Chuỗi cung ứng Sao Phương Nam",
+          "city": "Bình Dương",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 4
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Quản lý kho trung tâm 12.000 m² và 45 nhân sự, xử lý trung bình 18.000 đơn/ngày cho 160 cửa hàng.</li><li>Triển khai WMS và quét mã vạch, giảm tỷ lệ giao sai đơn từ 1,8% xuống 0,4% sau 9 tháng.</li><li>Sắp xếp lại vị trí hàng theo tần suất xuất (phân loại ABC), tăng năng suất lấy hàng 32%.</li></ul>"
+        },
+        {
+          "id": "3e1d42f3-49e1-5da0-a315-3e4ef1276a88",
+          "isHidden": false,
+          "jobTitle": "Giám sát Kho",
+          "employer": "Công ty TNHH Phân phối Hàng tiêu dùng Mây Ngàn",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2023,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Điều phối 3 ca với 25 nhân sự; giữ chênh lệch tồn kho dưới 0,2% qua 10 đợt kiểm kê.</li><li>Chuẩn hóa quy trình nhận hàng, rút thời gian dỡ và nhập kho mỗi xe từ 90 xuống 50 phút.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "57537137-a8e1-5e15-bc9b-cb70c0191231",
+          "isHidden": false,
+          "degree": "Cử nhân Logistics và Quản lý chuỗi cung ứng",
+          "school": "Trường Đại học Kinh tế Phương Nam",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 9
+            },
+            "end": {
+              "y": 2020,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "7aa4c1c0-28e6-5fd4-9469-b98814b0d26a",
+          "isHidden": false,
+          "title": "Certified Supply Chain Professional (CSCP)",
+          "issuer": "ASCM",
+          "date": {
+            "y": 2024,
+            "m": 11
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "entries": [
+        {
+          "id": "0ddd6f7d-d4db-59ac-b617-e044c806e621",
+          "isHidden": false,
+          "name": "Vận hành kho",
+          "infoHtml": "<p>Nhận hàng, lưu kho, lấy hàng, kiểm kê, quản lý tồn kho FIFO/FEFO</p>"
+        },
+        {
+          "id": "d167ce93-ef4c-549e-87e4-1ca5285fa294",
+          "isHidden": false,
+          "name": "Công cụ",
+          "infoHtml": "<p>WMS, SAP MM, Excel (Pivot, Power Query), Power BI</p>"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education",
+          "certificate",
+          "skill"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

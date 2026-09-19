@@ -79,6 +79,7 @@ export default defineConfig({
         'fonts-offline.spec.ts',
         'corpus.spec.ts',
         'print.spec.ts',
+        'samples.spec.ts',
       ]
     : ['normal-csp.spec.ts'],
   timeout: 20_000,

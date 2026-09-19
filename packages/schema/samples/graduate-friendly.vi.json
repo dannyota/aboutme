@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Ngô Thảo Nguyên",
+    "headline": "Cử nhân Kế toán, ứng tuyển Trợ lý Kiểm toán",
+    "details": [
+      {
+        "id": "ff3b7376-c098-518a-b5ae-6e78986f8a53",
+        "type": "email",
+        "value": "ngothaonguyen@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "218bf9fc-f59e-5962-a356-5eb213252999",
+        "type": "phone",
+        "value": "+84 90 000 0606",
+        "isHidden": false
+      },
+      {
+        "id": "b557663f-7794-57a1-82f8-71c41f5cdead",
+        "type": "location",
+        "value": "Đống Đa, Hà Nội",
+        "isHidden": false
+      },
+      {
+        "id": "cb0d582f-d062-5ff3-92f9-9ba0a8caf3ab",
+        "type": "linkedin",
+        "value": "https://example.com/in/ngo-thao-nguyen",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Mục tiêu nghề nghiệp",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "5226765c-41a4-5453-83ff-58d70f1f8325",
+          "isHidden": false,
+          "text": "<p>Cử nhân Kế toán loại Giỏi, đã thực tập 4 tháng tại công ty kiểm toán. Mong muốn trở thành Trợ lý Kiểm toán và hướng tới vị trí Trưởng nhóm kiểm toán trong 3 năm.</p>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "6e12320f-42af-58ee-87d1-7f22907f0cae",
+          "isHidden": false,
+          "degree": "Cử nhân Kế toán – Kiểm toán",
+          "school": "Học viện Tài chính Thăng Long",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 9
+            },
+            "end": {
+              "y": 2026,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>Tốt nghiệp loại Giỏi, GPA 3,52/4; học bổng khuyến khích 5/8 học kỳ.</li><li>Giải Nhì Olympic Kế toán sinh viên cấp trường 2025 (300 thí sinh).</li></ul>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "7e6d9b7e-dfa5-5f21-8f8b-79c2c4891bfa",
+          "isHidden": false,
+          "jobTitle": "Thực tập sinh Kiểm toán",
+          "employer": "Công ty TNHH Kiểm toán Hồng Lĩnh",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2026,
+              "m": 1
+            },
+            "end": {
+              "y": 2026,
+              "m": 4
+            },
+            "present": false
+          },
+          "description": "<ul><li>Tham gia kiểm toán báo cáo tài chính năm 2025 cho 3 khách hàng sản xuất và thương mại.</li><li>Đối chiếu 400+ chứng từ công nợ và lập giấy tờ làm việc; được trưởng nhóm đánh giá hoàn thành tốt.</li></ul>"
+        },
+        {
+          "id": "2d6893a2-5cb2-5533-aef9-3e465d7cab02",
+          "isHidden": false,
+          "jobTitle": "Cộng tác viên Kế toán (bán thời gian)",
+          "employer": "Hộ kinh doanh Bánh Mì Gia Bảo",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2024,
+              "m": 6
+            },
+            "end": {
+              "y": 2025,
+              "m": 12
+            },
+            "present": false
+          },
+          "description": "<ul><li>Ghi sổ và kê khai thuế theo quý cho cửa hàng doanh thu 3 tỷ đồng/năm.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "entries": [
+        {
+          "id": "817b4f18-b41c-5476-a0a4-6209417f695e",
+          "isHidden": false,
+          "name": "VAS, lập báo cáo tài chính, kê khai thuế GTGT và TNDN, Excel, phần mềm MISA"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "4a9bb8fd-bdea-501c-a132-412217944897",
+          "isHidden": false,
+          "name": "Tiếng Anh (IELTS 6.5)"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#7a3b1c",
+      "text": "#2f2a26",
+      "background": "#ffffff",
+      "accent": "#a04f16",
+      "surface": "#f7e8d9"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 18,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 20,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "education",
+          "work",
+          "skill",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "tag"
+      },
+      "language": {
+        "style": "tag"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "YYYY"
+  }
+}

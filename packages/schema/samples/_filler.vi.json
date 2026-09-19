@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Nguyễn Minh An",
+    "headline": "Chuyên viên phân tích vận hành",
+    "details": [
+      {
+        "id": "03ad9f7a-386c-5b10-98c4-3fa1fb2f1cd9",
+        "type": "email",
+        "value": "minhan@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "e31c9735-5122-56d0-b0d1-912836a94327",
+        "type": "phone",
+        "value": "+84 90 000 0100",
+        "isHidden": false
+      },
+      {
+        "id": "b1dabe17-5ae9-50e0-b18c-bbbdf123992d",
+        "type": "location",
+        "value": "Hà Nội, Việt Nam",
+        "isHidden": false
+      },
+      {
+        "id": "9d81855d-bfc9-597d-8923-bb6f9a9716d4",
+        "type": "website",
+        "value": "https://minhan.example.com",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "af77c3cb-2853-5abf-9c15-e2895480e9ec",
+          "isHidden": false,
+          "text": "<p>Sáu năm phân tích dữ liệu vận hành cho doanh nghiệp bán lẻ và logistics. Quen làm việc với nhiều phòng ban, biến số liệu thành đề xuất cụ thể và theo dõi kết quả sau khi triển khai.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "8d825ff3-94ff-5532-a62c-52ac91ed1ea8",
+          "isHidden": false,
+          "jobTitle": "Chuyên viên phân tích vận hành cấp cao",
+          "employer": "Công ty Bán lẻ Ánh Dương",
+          "employerLink": "https://anhduong.example.com",
+          "city": "Hà Nội",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Xây dựng bộ chỉ số vận hành hằng tuần cho 40 cửa hàng, rút thời gian lập báo cáo từ hai ngày xuống nửa ngày.</li><li>Phối hợp với bộ phận kho giảm tỷ lệ hết hàng 18% trong sáu tháng.</li><li>Hướng dẫn hai chuyên viên mới về quy trình kiểm tra dữ liệu.</li></ul>"
+        },
+        {
+          "id": "2aef871f-ab4c-5267-a3af-9cfa4484ee73",
+          "isHidden": false,
+          "jobTitle": "Chuyên viên phân tích",
+          "employer": "Công ty Giao nhận Sông Hồng",
+          "employerLink": "https://songhong.example.com",
+          "city": "Đà Nẵng",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 6
+            },
+            "end": {
+              "y": 2022,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>Phân tích tuyến giao hàng và đề xuất gom đơn, tiết kiệm 12% chi phí vận chuyển.</li><li>Chuẩn hóa dữ liệu đơn hàng từ ba hệ thống cũ vào một kho dữ liệu chung.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "71f75864-60e0-5d99-8d3c-79a05fbfa729",
+          "isHidden": false,
+          "degree": "Cử nhân Hệ thống thông tin quản lý",
+          "school": "Trường Đại học Kinh tế Quốc dân",
+          "schoolLink": "https://neu.example.edu",
+          "city": "Hà Nội",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2018,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<p>Tốt nghiệp loại Giỏi. Khóa luận về dự báo nhu cầu hàng tiêu dùng.</p>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "470c059a-e5dc-5e11-b748-fc4c0274d492",
+          "isHidden": false,
+          "name": "Phân tích dữ liệu",
+          "level": 5
+        },
+        {
+          "id": "2950b7a8-f79c-543e-83c4-50111db5d89c",
+          "isHidden": false,
+          "name": "Tối ưu quy trình",
+          "level": 4
+        },
+        {
+          "id": "225ff162-b9f1-5d69-9e5e-a61362173a08",
+          "isHidden": false,
+          "name": "Trình bày số liệu",
+          "level": 4
+        },
+        {
+          "id": "4a6fcf63-9579-55eb-8824-0ff0fc84a15e",
+          "isHidden": false,
+          "name": "Python",
+          "level": 3
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngôn ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "2390f2a8-050c-5335-b14a-b9c2289798b0",
+          "isHidden": false,
+          "name": "Tiếng Việt",
+          "level": 5
+        },
+        {
+          "id": "9a98df9f-7458-59c9-a43b-842e4233cdf9",
+          "isHidden": false,
+          "name": "Tiếng Anh",
+          "level": 4
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "137a3e29-0158-51d2-94cb-4bc5c69e223e",
+          "isHidden": false,
+          "title": "Chứng chỉ Phân tích dữ liệu",
+          "issuer": "Viện Đào tạo Dữ liệu",
+          "titleLink": "https://credentials.example.com/phan-tich-du-lieu",
+          "date": {
+            "y": 2021,
+            "m": 8
+          }
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Dự án",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "9ba6f7e3-efcc-5a81-8439-702fa531f0a4",
+          "isHidden": false,
+          "title": "Bảng điều khiển tồn kho",
+          "link": "https://minhan.example.com/ton-kho",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 4
+            },
+            "end": {
+              "y": 2020,
+              "m": 11
+            },
+            "present": false
+          },
+          "description": "<p>Bảng điều khiển theo dõi tồn kho theo thời gian thực, dùng cho 12 quản lý cửa hàng.</p>"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education",
+          "skill",
+          "language",
+          "certificate",
+          "project"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
