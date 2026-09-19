@@ -22,6 +22,7 @@ readonly -a SPEC_SOURCES=(
   publish.spec.ts
   exports.spec.ts
   privacy.spec.ts
+  sample-start.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -73,8 +74,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, or privacy' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, or sample-start' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -123,7 +124,7 @@ inside_container() {
   [ -w /evidence ] || fail 'evidence output is not writable'
 
   input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  if [ "$mode" = password-auth ]; then
+  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
     [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
       fail 'CA input must contain the Caddy root and the capture token'
   elif [ "$mode" = mcp ] || [ "$mode" = privacy ]; then
@@ -138,7 +139,7 @@ inside_container() {
     fail 'Caddy root owner mismatch'
   [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
     fail 'Caddy root mode must be 0600'
-  if [ "$mode" = password-auth ]; then
+  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
     [ -f /uat-input/mail-capture-token ] && [ ! -L /uat-input/mail-capture-token ] ||
       fail 'capture token is not a regular file'
     [ "$(stat -c %u /uat-input/mail-capture-token)" = "$uid" ] ||
@@ -227,6 +228,12 @@ inside_container() {
     proof_name='account privacy'
     spec=privacy.spec.ts
     ;;
+  sample-start)
+    evidence_name=sample-start-proof.json
+    evidence_limit=4096
+    proof_name='register and start a resume from a sample'
+    spec=sample-start.spec.ts
+    ;;
   esac
   # Stage the mounted specs beside a node_modules symlink so module
   # resolution finds the image's pinned dependencies. The image package.json
@@ -250,7 +257,8 @@ inside_container() {
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
     if [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
-      [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ]; then
+      [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ] ||
+      [ "$mode" = sample-start ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
@@ -428,6 +436,21 @@ const expected = mode === 'auth' ? {
     signOut: true,
     signedInShell: true,
   },
+} : mode === 'sample-start' ? {
+  ...common,
+  scenario: 'sample-start',
+  schemaVersion: 1,
+  steps: {
+    capHidesCreate: true,
+    created: true,
+    editorOpen: true,
+    nextAfterVerify: true,
+    nextKept: true,
+    registered: true,
+    reloadCreatedNothing: true,
+    signedIn: true,
+    verified: true,
+  },
 } : {
   schemaVersion: 1,
   scenario: 'authenticated-editor',
@@ -459,11 +482,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, or privacy' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, or sample-start' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
@@ -492,7 +515,7 @@ host_run() {
   [ -w "$evidence" ] || fail 'evidence output is not writable'
 
   input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  if [ "$mode" = password-auth ]; then
+  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
     [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
       fail 'CA input must contain the Caddy root and the capture token'
   elif [ "$mode" = mcp ] || [ "$mode" = privacy ]; then
@@ -507,7 +530,7 @@ host_run() {
     fail 'Caddy root owner mismatch'
   [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
     fail 'Caddy root mode must be 0600'
-  if [ "$mode" = password-auth ]; then
+  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
     [ -f "$input/mail-capture-token" ] && [ ! -L "$input/mail-capture-token" ] ||
       fail 'capture token is not a regular file'
     [ "$(stat -c %u "$input/mail-capture-token")" = "$uid" ] ||

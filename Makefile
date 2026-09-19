@@ -365,6 +365,10 @@ dev-https-publish-check: dev-https-status ## Prove publish UX, discovery, and re
 dev-https-exports-check: dev-https-status ## Prove owner PDF and public export gates over trusted HTTPS
 	@bash scripts/dev-https-check.sh exports
 
+.PHONY: dev-https-sample-start-check
+dev-https-sample-start-check: dev-https-status ## Prove register-to-create from a gallery sample over native HTTPS
+	@bash scripts/dev-https-check.sh sample-start
+
 .PHONY: dev-https-privacy-check
 dev-https-privacy-check: dev-https-status ## Prove account export, reauthentication, and deletion over trusted HTTPS
 	@bash scripts/dev-https-check.sh privacy

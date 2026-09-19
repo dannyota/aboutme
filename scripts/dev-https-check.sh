@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth, MCP, entry, publish, exports, and privacy). Stages an immutable
-# per-run copy of the spec sources and mounts it into the pinned browser image,
-# so editing a spec
+# public, password-auth, MCP, entry, publish, exports, privacy, and
+# sample-start). Stages an immutable per-run copy of the spec sources and
+# mounts it into the pinned browser image, so editing a spec
 # never requires an image rebuild; the image manifest gates only the
 # image-side sources (Dockerfile, run.sh, package manifests).
 set -Eeuo pipefail
@@ -40,6 +40,7 @@ readonly -a SPEC_SOURCES=(
   publish.spec.ts
   exports.spec.ts
   privacy.spec.ts
+  sample-start.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -69,9 +70,10 @@ entry) evidence_prefix=entry ;;
 publish) evidence_prefix=publish ;;
 exports) evidence_prefix=exports ;;
 privacy) evidence_prefix=privacy ;;
+sample-start) evidence_prefix=sample-start ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start'
   ;;
 esac
 
@@ -174,7 +176,7 @@ spec_sha=$(spec_source_hash "$staging") ||
   fail 'cannot hash staged spec sources'
 
 run_input=$INPUT
-if [ "$MODE" = password-auth ]; then
+if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
   capture_secret=$STATE/secrets/auth-email-capture-bearer
   [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
     [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
@@ -244,7 +246,7 @@ status=0
 "$CONTEXT/run.sh" "$image_id" "$run_input" "$staging" "$evidence" "$MODE" ||
   status=$?
 
-if [ "$MODE" = password-auth ]; then
+if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
   "$REPO/.dev/bin/password-auth-fixture" cleanup --database-url "$NATIVE_DSN"
 elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
