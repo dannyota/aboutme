@@ -502,6 +502,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
           :section="item.section"
           :section-count="columnKeys(item.column).length"
           :section-key="item.key"
+          :main-count="columnKeys('main').length"
           :sidebar-count="columnKeys('sidebar').length"
           @delete="requestDelete"
           @metadata="updateMetadata"

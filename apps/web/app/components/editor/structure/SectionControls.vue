@@ -21,6 +21,8 @@ const props = defineProps<{
   readonly sectionKey: string;
   readonly sectionCount: number;
   readonly sidebarCount: number;
+  /** Sections in the main column; a moved section goes after them. */
+  readonly mainCount: number;
 }>();
 
 const emit = defineEmits<{
@@ -135,7 +137,9 @@ function changeIconKey(next: string): void {
         :disabled="disabled"
         size="sm"
         variant="outline"
-        @click="emit('move', { ...action(), column: 'main', index: 0 })"
+        @click="
+          emit('move', { ...action(), column: 'main', index: mainCount })
+        "
       >
         Move to main
       </Button>
