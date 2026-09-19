@@ -332,6 +332,9 @@ rules. The ones most often broken:
 - `make web-e2e-update` refuses a dirty tree; run it in a clean worktree at the
   commit whose baselines you need.
 - `make docs-lint` runs Prettier over every Markdown file, ignored ones too.
+- A push to `main` cancels the CI run of any earlier commit still in progress.
+  Do not push while a release candidate's CI runs; release the newer commit
+  instead if you must.
 - Avoid `podman ps | grep -q` under `pipefail`; capture output first.
 - If host DB TCP fails while in-container `pg_isready` passes, recreate the
   container; rootless pasta can lose its forward.
