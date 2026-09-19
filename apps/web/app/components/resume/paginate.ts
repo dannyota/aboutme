@@ -7,6 +7,8 @@ export interface BlockRef {
   sectionKey: string;
   kind: 'heading' | 'entry';
   entryIndex?: number;
+  // Present when an entry splits between body blocks; 0 carries the header.
+  part?: number;
   column: 'main' | 'sidebar';
 }
 
@@ -164,6 +166,7 @@ const appendUnit = (
       ...(block.entryIndex === undefined
         ? {}
         : { entryIndex: block.entryIndex }),
+      ...(block.part === undefined ? {} : { part: block.part }),
       column: block.column,
       heightPx: block.heightPx,
       appliedGapBeforePx,

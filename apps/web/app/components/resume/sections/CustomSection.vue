@@ -9,7 +9,7 @@ import SectionHeading from '../primitives/SectionHeading.vue';
 withDefaults(defineProps<{
   section: Extract<Section, { sectionType: 'custom' }>;
   dateFormat: Customization['dateFormat'];
-  renderPart?: 'all' | 'heading' | 'entry';
+  renderPart?: 'all' | 'heading' | 'entry' | 'continuation';
 }>(), { renderPart: 'all' });
 </script>
 
@@ -19,7 +19,7 @@ withDefaults(defineProps<{
     class="resume-section"
   >
     <SectionHeading
-      v-if="renderPart !== 'entry'"
+      v-if="renderPart === 'all' || renderPart === 'heading'"
       :display-name="section.displayName"
       :icon-key="section.iconKey"
     />
@@ -30,6 +30,7 @@ withDefaults(defineProps<{
         class="entry"
       >
         <EntryHeader
+          v-if="renderPart !== 'continuation'"
           :title="entry.title"
           :title-link="entry.titleLink || undefined"
           :subtitle="entry.subtitle"

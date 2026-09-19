@@ -70,6 +70,8 @@ const gapFor = (
   entryGapPx: number,
 ): number => {
   if (block.kind === 'heading') return sectionGapPx;
+  // A later part continues the same entry, so no entry gap separates it.
+  if ((block.part ?? 0) > 0) return 0;
   return previous?.kind === 'heading'
     && previous.sectionKey === block.sectionKey
     ? headingGapPx

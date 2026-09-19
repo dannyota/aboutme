@@ -1,5 +1,6 @@
 import type { Section } from '@aboutme/schema';
 
+import { entryPartSection } from '../../app/components/resume/entryParts';
 import type {
   MeasuredLayout,
   MeasurePagination,
@@ -19,14 +20,22 @@ export const syntheticMeasure: MeasurePagination = (request) => {
       ? section?.displayName ?? block.sectionKey
       : section === undefined || block.entryIndex === undefined
         ? ''
-        : JSON.stringify(sectionEntry(section, block.entryIndex));
+        : block.part === undefined
+          ? JSON.stringify(sectionEntry(section, block.entryIndex))
+          // A split entry's part measures only its own body block.
+          : JSON.stringify(
+              entryPartSection(section, block.entryIndex, block.part)
+                .entries[0],
+            );
     const previous = previousByColumn.get(block.column);
     const gapBeforePx = block.kind === 'heading'
       ? request.document.customization.spacing.sectionGap
-      : previous?.kind === 'heading'
-        && previous.sectionKey === block.sectionKey
-        ? request.document.customization.spacing.sectionGap * 0.4
-        : request.document.customization.spacing.entryGap;
+      : (block.part ?? 0) > 0
+          ? 0
+          : previous?.kind === 'heading'
+            && previous.sectionKey === block.sectionKey
+            ? request.document.customization.spacing.sectionGap * 0.4
+            : request.document.customization.spacing.entryGap;
     previousByColumn.set(block.column, block);
     return {
       ...block,

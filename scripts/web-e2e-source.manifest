@@ -120,6 +120,7 @@ apps/web/app/components/resume/ResumeHeader.vue
 apps/web/app/components/resume/SectionRenderer.vue
 apps/web/app/components/resume/applyTemplate.ts
 apps/web/app/components/resume/clampContrast.ts
+apps/web/app/components/resume/entryParts.ts
 apps/web/app/components/resume/formatDate.ts
 apps/web/app/components/resume/icons.ts
 apps/web/app/components/resume/measure.ts

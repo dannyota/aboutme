@@ -17,6 +17,7 @@ import {
 } from 'vue';
 
 import SectionRenderer from './SectionRenderer.vue';
+import { entryBlocks, entryPartSection } from './entryParts';
 import ResumeHeader from './ResumeHeader.vue';
 import {
   measurePagination,
@@ -66,12 +67,8 @@ const buildRequest = (
       if (indices.length === 0) return [];
       return [
         { sectionKey: key, kind: 'heading', column },
-        ...indices.map((entryIndex): BlockRef => ({
-          sectionKey: key,
-          kind: 'entry',
-          entryIndex,
-          column,
-        })),
+        ...indices.flatMap((entryIndex) =>
+          entryBlocks(key, section, entryIndex, column)),
       ];
     }),
   );
@@ -103,6 +100,7 @@ const assertLayout = (
       actual?.sectionKey !== expected.sectionKey
       || actual.kind !== expected.kind
       || actual.entryIndex !== expected.entryIndex
+      || actual.part !== expected.part
       || actual.column !== expected.column
     ) {
       throw new PaginationError(
@@ -154,13 +152,17 @@ const sectionSlice = (
       `Pagination references missing entry ${block.sectionKey}.`,
     );
   }
+  if (block.part !== undefined) {
+    return entryPartSection(toRaw(section), block.entryIndex, block.part);
+  }
   const clone = structuredClone(toRaw(section));
   clone.entries.splice(block.entryIndex + 1);
   clone.entries.splice(0, block.entryIndex);
   return clone;
 };
 
-// Paged preview slices measured entry blocks; the PDF remains authoritative.
+// Paged preview slices measured blocks and breaks a long entry between its
+// body blocks, as print does; the PDF remains authoritative.
 export default defineComponent({
   name: 'PagedResume',
   props: {
@@ -210,7 +212,10 @@ export default defineComponent({
         section: sectionSlice(targetSections, block),
         dateFormat: targetModel.dateFormat,
         sectionDisplay: targetModel.sectionDisplay,
-        renderPart: block.kind,
+        // Later parts of a split entry carry no entry header.
+        renderPart: block.kind === 'entry' && (block.part ?? 0) > 0
+          ? 'continuation'
+          : block.kind,
       })]);
       const renderHeader = (
         targetModel: ResolvedRenderModel,

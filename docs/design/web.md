@@ -263,7 +263,8 @@ forbidden.
 
 ## Pagination and print
 
-- Editor preview measures rendered entries and breaks at entry boundaries. It is
+- Editor preview measures rendered entries and breaks between entries or between
+  an entry's body blocks, keeping each entry header with its first block. It is
   approximate and visually marks pages.
 - Public HTML is continuous.
 - Chromium and CSS `@page` own PDF pagination.
