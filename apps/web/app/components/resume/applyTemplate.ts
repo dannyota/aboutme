@@ -80,18 +80,27 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
 }
 
 /**
- * Text alignment belongs to the owner, not the preset (ADR 0041), so a
- * template switch keeps the current `font.textAlign`, or its absence.
+ * Text alignment and the header photo position belong to the owner, not the
+ * preset (ADR 0041, ADR 0044), so a template switch keeps the current values,
+ * or their absence. A kept photo position under a preset with no header uses
+ * the default header, which renders the same as no header.
  */
-function withCurrentTextAlign(
+function withOwnerChoices(
   current: Customization,
   next: Customization,
 ): Customization {
   const { textAlign: _presetAlign, ...font } = next.font;
   const textAlign = current.font.textAlign;
+  const photoPosition = current.header?.photoPosition;
+  const { photoPosition: _presetPosition, ...header } = next.header
+    ?? { align: 'left', detailsLayout: 'inline', iconStyle: 'outline' };
+  const { header: _presetHeader, ...rest } = next;
   return {
-    ...next,
+    ...rest,
     font: textAlign === undefined ? font : { ...font, textAlign },
+    ...(photoPosition !== undefined
+      ? { header: { ...header, photoPosition } }
+      : next.header === undefined ? {} : { header }),
   };
 }
 
@@ -100,7 +109,7 @@ export function applyTemplate(
   preset: TemplatePreset,
   content: Content,
 ): Customization {
-  return withCurrentTextAlign(
+  return withOwnerChoices(
     current,
     presetCustomization(current, preset, content),
   );

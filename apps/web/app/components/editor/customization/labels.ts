@@ -20,6 +20,7 @@ export const FIELD_LABELS: Readonly<Record<CustomizationSetPath, string>> = {
   'header.align': 'Header alignment',
   'header.detailsLayout': 'Contact layout',
   'header.iconStyle': 'Icon style',
+  'header.photoPosition': 'Photo position',
   'layout.columns': 'Columns',
   'layout.surfaceTarget': 'Surface target',
   'sectionDisplay.skill.style': 'Skill display',
@@ -53,6 +54,7 @@ export const FIELD_GROUPS = [
       'header.align',
       'header.detailsLayout',
       'header.iconStyle',
+      'header.photoPosition',
     ],
   },
   {
@@ -93,11 +95,13 @@ const KNOWN_ENUM_LABELS: Readonly<Record<string, string>> = {
   none: 'None',
   normal: 'Normal',
   outline: 'Outline',
+  right: 'Right',
   sidebar: 'Sidebar',
   stacked: 'Stacked',
   tag: 'Tag',
   text: 'Text',
   titlecase: 'Titlecase',
+  top: 'Top',
   uppercase: 'Uppercase',
 };
 

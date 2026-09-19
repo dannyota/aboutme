@@ -68,7 +68,7 @@ const cases = [
   ['skill', ['name', 'level', 'infoHtml']],
   ['language', ['name', 'level']],
   ['certificate', ['title', 'titleLink', 'issuer', 'date', 'description']],
-  ['project', ['title', 'link', 'dates', 'description']],
+  ['project', ['title', 'subtitle', 'link', 'dates', 'description']],
   [
     'custom',
     ['title', 'titleLink', 'subtitle', 'city', 'dates', 'description'],

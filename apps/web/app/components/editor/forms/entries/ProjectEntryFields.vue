@@ -11,7 +11,7 @@ defineProps<{ readonly entry: ProjectEntry }>();
 const emit = defineEmits<{
   field: [
     change: {
-      readonly path: 'title' | 'link' | 'dates' | 'description';
+      readonly path: 'title' | 'subtitle' | 'link' | 'dates' | 'description';
       readonly intent: FieldIntent<unknown>;
     },
   ];
@@ -32,6 +32,12 @@ function updateDescription(value: string): void {
     label="Title"
     :model-value="entry.title"
     @intent="emit('field', { path: 'title', intent: $event })"
+  />
+  <TextField
+    data-entry-field="subtitle"
+    label="Subtitle"
+    :model-value="entry.subtitle"
+    @intent="emit('field', { path: 'subtitle', intent: $event })"
   />
   <EntryLinkField
     data-entry-field="link"

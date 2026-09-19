@@ -33,6 +33,7 @@ describe('resolved render boundary', () => {
       align: 'center',
       detailsLayout: 'inline',
       iconStyle: 'outline',
+      photoPosition: 'top',
     });
     expect(model.photo).toEqual({
       url: 'data:image/png;base64,AA==',

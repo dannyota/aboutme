@@ -33,6 +33,7 @@ withDefaults(defineProps<{
           v-if="renderPart !== 'continuation'"
           :title="entry.title"
           :title-link="entry.link || undefined"
+          :subtitle="entry.subtitle || undefined"
           :meta="entry.dates ? [formatDateRange(entry.dates, dateFormat)] : []"
         />
         <RichText
