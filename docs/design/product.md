@@ -136,7 +136,7 @@ The publish dialog exposes three independent choices:
 | `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes                                      |
 | Live, discovery disabled | Shareable; HTML, JSON, photo, PDF, and share image send `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown `404` |
 | Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                      |
-| Download enabled         | The public PDF route is available; otherwise it returns `404`                                                                                  |
+| Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                   |
 | Share image              | One 1200 by 630 PNG top-viewport capture is available when live, independent of download and discovery flags; ADR 0032                         |
 
 The sitemap lists `/`, `/privacy`, and `/terms`, then every discoverable resume.

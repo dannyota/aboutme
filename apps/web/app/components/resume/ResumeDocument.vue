@@ -78,6 +78,55 @@ a[href="#public-resume"]:focus {
   outline: 2px solid #10202a;
 }
 
+/*
+ * The public page only (PublicResumeApp): the resume sits at a readable
+ * measure, centred on its page background. The measure is in em of the body
+ * size, so body lines hold about 90-110 characters in every template: 52em
+ * of text for one column, 70em for two, where the main column keeps about
+ * 45em.
+ * Narrow screens are narrower than the measure, so phones are unchanged. The
+ * editor preview and print never render this wrapper.
+ */
+body:has(> #public-resume) {
+  margin: 0;
+}
+
+.public-resume-page {
+  box-sizing: border-box;
+  min-height: 100vh;
+  background: var(--color-surface);
+}
+
+.public-measure {
+  box-sizing: border-box;
+  max-width: calc(52em + 2 * var(--page-margin-x));
+  margin-inline: auto;
+  font-size: var(--fs-body);
+}
+
+.public-resume-page[data-columns="2"] .public-measure {
+  max-width: calc(70em + 2 * var(--page-margin-x));
+}
+
+.public-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--page-margin-y) var(--page-margin-x) 0;
+  font-family: var(--font-family);
+  font-size: var(--fs-meta);
+}
+
+.public-download {
+  color: var(--color-link);
+  text-decoration: underline;
+}
+
+@media print {
+  .public-toolbar {
+    display: none;
+  }
+}
+
 .resume-document {
   box-sizing: border-box;
   min-height: 100%;

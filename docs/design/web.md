@@ -270,7 +270,20 @@ forbidden.
 - Editor preview measures rendered entries and breaks between entries or between
   an entry's body blocks, keeping each entry header with its first block. It is
   approximate and visually marks pages.
-- Public HTML is continuous.
+- Public HTML is continuous and centred at a readable measure on the page
+  background: 52em of text for one column and 70em for two, in em of the body
+  size, plus the page margins. Body lines then hold about 90-110 characters in
+  every template, and a two-column main column keeps about 45em. Screens
+  narrower than the measure, such as phones, keep the full width. The editor
+  preview and print keep their page geometry.
+- When download is enabled, the public page shows a plain link to its own PDF
+  (`/api/v1/public/resumes/{slug}/pdf`) above the resume, at the top right of
+  the measure. It works without JavaScript and is hidden in print. Its label
+  follows the resume language: "Tải PDF" for Vietnamese, "Download PDF"
+  otherwise. The public HTML validator allows exactly that link, once, only
+  while download is enabled. The public PDF downloads as `{slug}.pdf`; a slug is
+  ASCII letters, digits, and hyphens, so the filename needs no RFC 6266
+  `filename*`.
 - Chromium and CSS `@page` own PDF pagination.
 
 Content, order, type, color, and visibility must agree across targets; only page

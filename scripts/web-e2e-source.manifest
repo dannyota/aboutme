@@ -375,6 +375,9 @@ apps/web/e2e/baselines/engineer-compact--vn-full--paged.png
 apps/web/e2e/baselines/executive-band--vn-full--paged.png
 apps/web/e2e/baselines/modern-sidebar--full--continuous.png
 apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
+apps/web/e2e/baselines/public--classic-serif--2560.png
+apps/web/e2e/baselines/public--modern-sidebar--2560.png
+apps/web/e2e/baselines/public--modern-sidebar--390.png
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/normal-csp.spec.ts

@@ -93,7 +93,7 @@ func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) 
 		contentType string
 		disposition string
 	}{
-		{name: "pdf", handler: handlers.pdf, path: "/api/v1/public/resumes/ada-lovelace/pdf", contentType: "application/pdf", disposition: "attachment; filename=\"resume.pdf\""},
+		{name: "pdf", handler: handlers.pdf, path: "/api/v1/public/resumes/ada-lovelace/pdf", contentType: "application/pdf", disposition: "attachment; filename=\"ada-lovelace.pdf\""},
 		{name: "png", handler: handlers.png, path: "/api/v1/public/resumes/ada-lovelace/og.png", contentType: "image/png"},
 	}
 	for _, test := range tests {
@@ -1056,5 +1056,39 @@ func TestPublicArtifactRealHTTPSlowAndAbortedViewersReleaseLease(t *testing.T) {
 		if err := transition.Rollback(); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// A cached PDF is keyed by resume and revision, not slug, so the download name
+// comes from the slug being served, never from the cached headers.
+func TestPublicPDFCacheHitNamesTheFileAfterTheServedSlug(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
+	queue := artifactQueueFunc(func(context.Context, renderjob.Request) (renderjob.Result, error) {
+		return renderjob.Result{}, errors.New("cache hit must not render")
+	})
+	handlers, backing, _, cache := newArtifactHarnessWithCache(t, queue, 2, now)
+	cached, err := newSelectedResponseWithLimit(
+		http.StatusOK, "application/pdf", "no-cache, must-revalidate", []byte("cached-pdf"),
+		http.Header{"Content-Disposition": {"attachment; filename=\"old-slug.pdf\""}},
+		renderjob.PDFMaxBytes,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.Put(publiccache.Key{
+		RouteClass: "resume", Representation: publicstate.RepresentationPDF, Variant: "default",
+		ResumeID: backing.row.ID, Generation: backing.row.Revision, FormatVersion: publicPDFFormatVersion,
+		AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
+	}, publiccache.Value{Status: cached.Status, Header: cached.Header, Body: cached.Body})
+
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/pdf", nil)
+	request.RemoteAddr = "192.0.2.16:1234"
+	response := httptest.NewRecorder()
+	handlers.pdf.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != "cached-pdf" {
+		t.Fatalf("cache hit = %d %q", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Disposition"); got != `attachment; filename="ada-lovelace.pdf"` {
+		t.Fatalf("Content-Disposition = %q", got)
 	}
 }
