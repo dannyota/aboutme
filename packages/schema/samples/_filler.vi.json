@@ -2,7 +2,7 @@
   "schemaVersion": 4,
   "personalDetails": {
     "fullName": "Nguyễn Minh An",
-    "headline": "Chuyên viên phân tích vận hành",
+    "headline": "Chuyên viên phân tích vận hành cấp cao",
     "details": [
       {
         "id": "03ad9f7a-386c-5b10-98c4-3fa1fb2f1cd9",
@@ -13,7 +13,7 @@
       {
         "id": "e31c9735-5122-56d0-b0d1-912836a94327",
         "type": "phone",
-        "value": "+84 90 000 0100",
+        "value": "+84 90 000 0110",
         "isHidden": false
       },
       {
@@ -39,7 +39,7 @@
         {
           "id": "af77c3cb-2853-5abf-9c15-e2895480e9ec",
           "isHidden": false,
-          "text": "<p>Sáu năm phân tích dữ liệu vận hành cho doanh nghiệp bán lẻ và logistics. Quen làm việc với nhiều phòng ban, biến số liệu thành đề xuất cụ thể và theo dõi kết quả sau khi triển khai.</p>"
+          "text": "<p>7 năm phân tích vận hành cho doanh nghiệp bán lẻ và logistics. Biến số liệu thành cải tiến cụ thể: giảm 18% tình trạng hết hàng và 12% chi phí vận chuyển.</p>"
         }
       ]
     },
@@ -52,7 +52,7 @@
           "id": "8d825ff3-94ff-5532-a62c-52ac91ed1ea8",
           "isHidden": false,
           "jobTitle": "Chuyên viên phân tích vận hành cấp cao",
-          "employer": "Công ty Bán lẻ Ánh Dương",
+          "employer": "Công ty CP Bán lẻ Ánh Dương",
           "employerLink": "https://anhduong.example.com",
           "city": "Hà Nội",
           "dates": {
@@ -63,13 +63,13 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Xây dựng bộ chỉ số vận hành hằng tuần cho 40 cửa hàng, rút thời gian lập báo cáo từ hai ngày xuống nửa ngày.</li><li>Phối hợp với bộ phận kho giảm tỷ lệ hết hàng 18% trong sáu tháng.</li><li>Hướng dẫn hai chuyên viên mới về quy trình kiểm tra dữ liệu.</li></ul>"
+          "description": "<ul><li>Xây dựng bộ chỉ số vận hành hằng tuần cho 40 cửa hàng, rút thời gian lập báo cáo từ 2 ngày xuống nửa ngày.</li><li>Giảm 18% tình trạng hết hàng trong 6 tháng nhờ cùng bộ phận kho thiết lập lại điểm đặt hàng.</li><li>Hướng dẫn 2 chuyên viên mới về quy trình kiểm tra chất lượng dữ liệu.</li></ul>"
         },
         {
           "id": "2aef871f-ab4c-5267-a3af-9cfa4484ee73",
           "isHidden": false,
           "jobTitle": "Chuyên viên phân tích",
-          "employer": "Công ty Giao nhận Sông Hồng",
+          "employer": "Công ty TNHH Giao nhận Sông Hồng",
           "employerLink": "https://songhong.example.com",
           "city": "Đà Nẵng",
           "dates": {
@@ -83,7 +83,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Phân tích tuyến giao hàng và đề xuất gom đơn, tiết kiệm 12% chi phí vận chuyển.</li><li>Chuẩn hóa dữ liệu đơn hàng từ ba hệ thống cũ vào một kho dữ liệu chung.</li></ul>"
+          "description": "<ul><li>Phân tích tuyến giao hàng và đề xuất gom đơn, tiết kiệm 12% chi phí vận chuyển.</li><li>Hợp nhất dữ liệu đơn hàng từ 3 hệ thống cũ vào một kho dữ liệu chung, bỏ khâu đối chiếu thủ công hằng tuần.</li></ul>"
         }
       ]
     },
@@ -96,16 +96,16 @@
           "id": "71f75864-60e0-5d99-8d3c-79a05fbfa729",
           "isHidden": false,
           "degree": "Cử nhân Hệ thống thông tin quản lý",
-          "school": "Trường Đại học Kinh tế Quốc dân",
-          "schoolLink": "https://neu.example.edu",
+          "school": "Trường Đại học Kinh tế và Quản lý Miền Bắc",
+          "schoolLink": "https://northern-econ.example.edu",
           "city": "Hà Nội",
           "dates": {
             "start": {
-              "y": 2014,
+              "y": 2015,
               "m": 9
             },
             "end": {
-              "y": 2018,
+              "y": 2019,
               "m": 6
             },
             "present": false
@@ -117,24 +117,23 @@
     "skill": {
       "sectionType": "skill",
       "displayName": "Kỹ năng",
-      "iconKey": "code",
       "entries": [
         {
           "id": "470c059a-e5dc-5e11-b748-fc4c0274d492",
           "isHidden": false,
-          "name": "Phân tích dữ liệu",
+          "name": "Excel và SQL",
           "level": 5
         },
         {
           "id": "2950b7a8-f79c-543e-83c4-50111db5d89c",
           "isHidden": false,
-          "name": "Tối ưu quy trình",
+          "name": "Power BI",
           "level": 4
         },
         {
           "id": "225ff162-b9f1-5d69-9e5e-a61362173a08",
           "isHidden": false,
-          "name": "Trình bày số liệu",
+          "name": "Cải tiến quy trình",
           "level": 4
         },
         {
@@ -147,20 +146,20 @@
     },
     "language": {
       "sectionType": "language",
-      "displayName": "Ngôn ngữ",
+      "displayName": "Ngoại ngữ",
       "iconKey": "languages",
       "entries": [
         {
           "id": "2390f2a8-050c-5335-b14a-b9c2289798b0",
           "isHidden": false,
-          "name": "Tiếng Việt",
-          "level": 5
+          "name": "Tiếng Anh",
+          "level": 4
         },
         {
           "id": "9a98df9f-7458-59c9-a43b-842e4233cdf9",
           "isHidden": false,
-          "name": "Tiếng Anh",
-          "level": 4
+          "name": "Tiếng Nhật (JLPT N3)",
+          "level": 2
         }
       ]
     },
