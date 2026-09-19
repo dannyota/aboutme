@@ -47,6 +47,7 @@ locals {
     { name = "SES_FROM_NAME", value = var.ses_from_name },
     { name = "SES_CONFIGURATION_SET", value = var.ses_configuration_set },
     { name = "PROVIDER_LOGIN_ENABLED", value = local.google_login ? "google" : "false" },
+    { name = "PASSWORD_REGISTRATION_ENABLED", value = var.password_registration_enabled ? "true" : "false" },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
   ])

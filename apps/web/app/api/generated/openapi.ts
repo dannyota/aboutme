@@ -397,7 +397,7 @@ export interface paths {
         };
         /**
          * Which optional sign-in and agent surfaces this deployment enables
-         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`) and `agentAccess` (`MCP_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
+         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), and `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
          */
         get: operations["getCapabilities"];
         put?: never;
@@ -945,7 +945,7 @@ export interface paths {
         put?: never;
         /**
          * Queue email verification for a new password account
-         * @description Validates name, email, and password, then queues a verification email for an unowned email. Owned and unowned emails return the same `202` and reveal no account state; a provider-only user must sign in through the provider and add a password in settings.
+         * @description Validates name, email, and password, then queues a verification email for an unowned email. Owned and unowned emails return the same `202` and reveal no account state; a provider-only user must sign in through the provider and add a password in settings. Registered only when `PASSWORD_REGISTRATION_ENABLED` is not `false`; otherwise this path returns the uniform not-found response, while verification of pending registrations and every other password route stay available.
          */
         post: operations["postAuthPasswordRegister"];
         delete?: never;
@@ -1221,6 +1221,8 @@ export interface components {
             providers: ("google" | "github" | "linkedin")[];
             /** @description The OAuth authorization server, `/mcp`, and connected-agent settings are registered. */
             agentAccess: boolean;
+            /** @description Email-and-password sign-up is open (`PASSWORD_REGISTRATION_ENABLED` is not `false`). Sign-in, reset, and verification of pending registrations do not depend on it. */
+            passwordRegistration: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes the link's own id, its provider, and when it was linked — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client. `id` is the value `DELETE /me/identities/{identityId}` takes.
@@ -4479,7 +4481,8 @@ export interface operations {
                      *         "providers": [
                      *           "google"
                      *         ],
-                     *         "agentAccess": false
+                     *         "agentAccess": false,
+                     *         "passwordRegistration": true
                      *       }
                      *     }
                      */
@@ -6416,6 +6419,23 @@ export interface operations {
             202: components["responses"]["PasswordAccepted"];
             400: components["responses"]["PasswordRequestInvalid"];
             403: components["responses"]["PasswordCsrfRejected"];
+            /** @description Email-and-password sign-up is turned off (`PASSWORD_REGISTRATION_ENABLED=false`); the path is not registered. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "not found"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["PasswordBodyTooLarge"];
             415: components["responses"]["PasswordMediaTypeUnsupported"];
             422: components["responses"]["PasswordPolicyInvalid"];

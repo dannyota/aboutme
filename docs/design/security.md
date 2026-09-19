@@ -82,6 +82,13 @@ recent reauthentication and atomically creates one fresh non-lineage current
 session while revoking every old session. Reset revokes every session and never
 logs in. Password removal and account-email change are out of scope.
 
+`PASSWORD_REGISTRATION_ENABLED=false` turns off email-and-password sign-up: the
+register route is not registered and returns the uniform not-found response.
+Blank or `true` keeps it on, and any other value stops startup. Verification of
+pending registrations, login, reset, and password add or change still work, and
+provider sign-up is unaffected. The capabilities read reports
+`passwordRegistration` so the web hides the sign-up form.
+
 ## OAuth transaction
 
 All providers use authorization code with PKCE S256. OIDC providers also use a

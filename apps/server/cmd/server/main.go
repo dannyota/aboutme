@@ -279,9 +279,10 @@ type agentRouteHandlers struct {
 // providers to the web without a second source of truth (ADR 0027, ADR 0039).
 func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
 	handler := api.CapabilitiesHandler(api.Capabilities{
-		ProviderLogin: cfg.ProviderLogin.Any(),
-		Providers:     cfg.ProviderLogin.Names(),
-		AgentAccess:   cfg.AgentAccess.Enabled,
+		ProviderLogin:        cfg.ProviderLogin.Any(),
+		Providers:            cfg.ProviderLogin.Names(),
+		PasswordRegistration: !cfg.PasswordRegistrationDisabled,
+		AgentAccess:          cfg.AgentAccess.Enabled,
 	})
 	return func(mux *http.ServeMux) {
 		mux.Handle("/api/v1/capabilities", handler)

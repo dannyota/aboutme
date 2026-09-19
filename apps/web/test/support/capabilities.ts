@@ -5,6 +5,8 @@ export interface CapabilityFlags {
   providerLogin: boolean;
   agentAccess: boolean;
   providers?: readonly string[];
+  /** Defaults to true, the server's value while sign-up is open. */
+  passwordRegistration?: boolean;
 }
 
 /** Registers GET /api/v1/capabilities; null makes it fail with 500. */
@@ -20,6 +22,12 @@ export function registerCapabilities(
     // non-empty; tests that omit the list get all three or none.
     const providers = flags.providers
       ?? (flags.providerLogin ? ['google', 'github', 'linkedin'] : []);
-    return { data: { ...flags, providers } };
+    return {
+      data: {
+        ...flags,
+        providers,
+        passwordRegistration: flags.passwordRegistration ?? true,
+      },
+    };
   });
 }

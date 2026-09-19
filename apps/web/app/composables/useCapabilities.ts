@@ -20,6 +20,8 @@ interface CapabilitiesEnvelope {
 
 export interface UseCapabilitiesReturn {
   providerLogin: ComputedRef<boolean>;
+  /** Email/password sign-up is open; a missing field keeps it open. */
+  passwordRegistration: ComputedRef<boolean>;
   /** Providers whose sign-in button renders, in display order. */
   loginProviders: ComputedRef<readonly LoginProvider[]>;
   agentAccess: ComputedRef<boolean>;
@@ -49,11 +51,22 @@ export function useCapabilities(): UseCapabilitiesReturn {
       : [];
   });
   const agentAccess = computed(() => data.value?.data?.agentAccess === true);
+  // Only an explicit false closes sign-up, so an older server that lacks the
+  // field keeps the form.
+  const passwordRegistration = computed(
+    () => data.value?.data?.passwordRegistration !== false,
+  );
   const resolved = computed(
     () => status.value === 'success'
       || status.value === 'error'
       // Nuxt 4 leaves `error` undefined, not null, until a request fails.
       || (error.value ?? null) !== null,
   );
-  return { providerLogin, loginProviders, agentAccess, resolved };
+  return {
+    providerLogin,
+    passwordRegistration,
+    loginProviders,
+    agentAccess,
+    resolved,
+  };
 }

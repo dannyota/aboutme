@@ -107,6 +107,10 @@ type Config struct {
 	// reauthentication routes are registered (ADR 0027, ADR 0039). The zero
 	// value is password-only; each provider turns on without a code change.
 	ProviderLogin ProviderLogin
+	// PasswordRegistrationDisabled unregisters POST /auth/password/register
+	// (PASSWORD_REGISTRATION_ENABLED=false). Pending registrations still verify,
+	// and every other password route is unchanged.
+	PasswordRegistrationDisabled bool
 }
 
 const (
@@ -196,6 +200,11 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	passwordRegistrationDisabled, err := loadPasswordRegistrationFlag(getenv("PASSWORD_REGISTRATION_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	googleClientID, googleClientSecret, err := loadProviderCredentials("GOOGLE", "Google", getenv, env, providerLogin.Google)
 	if err != nil {
 		return Config{}, err
@@ -226,40 +235,41 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 
 	cfg := Config{
-		PrintListenAddr:           printListenAddr,
-		ChromiumPath:              chromiumPath,
-		Port:                      port,
-		ListenHost:                listenHost,
-		DatabaseURL:               databaseURL,
-		LogLevel:                  logLevel,
-		Env:                       env,
-		PublicOrigin:              publicOrigin,
-		PublicRenderOrigin:        publicRenderOrigin,
-		AppBuildDigest:            appBuildDigest,
-		PublicRendererBuildDigest: publicRendererBuildDigest,
-		TrustedProxyCIDRs:         trustedProxyCIDRs,
-		GoogleClientID:            googleClientID,
-		GoogleClientSecret:        googleClientSecret,
-		GitHubClientID:            githubClientID,
-		GitHubClientSecret:        githubClientSecret,
-		LinkedInClientID:          linkedInClientID,
-		LinkedInClientSecret:      linkedInClientSecret,
-		GoogleOIDCIssuerURL:       providerCfg.googleIssuer,
-		LinkedInOIDCIssuerURL:     providerCfg.linkedinIssuer,
-		GitHubOAuthAuthorizeURL:   providerCfg.githubAuthorize,
-		GitHubOAuthTokenURL:       providerCfg.githubToken,
-		GitHubAPIBaseURL:          providerCfg.githubAPI,
-		MediaBackend:              mediaCfg.backend,
-		MediaFSDir:                mediaCfg.fsDir,
-		MediaBucket:               mediaCfg.bucket,
-		MediaRegion:               mediaCfg.region,
-		MediaEndpoint:             mediaCfg.endpoint,
-		MediaAccessKeyID:          mediaCfg.accessKeyID,
-		MediaSecretAccessKey:      mediaCfg.secretAccessKey,
-		MediaForcePathStyle:       mediaCfg.forcePathStyle,
-		AuthEmail:                 authEmail,
-		AgentAccess:               agentAccess,
-		ProviderLogin:             providerLogin,
+		PrintListenAddr:              printListenAddr,
+		ChromiumPath:                 chromiumPath,
+		Port:                         port,
+		ListenHost:                   listenHost,
+		DatabaseURL:                  databaseURL,
+		LogLevel:                     logLevel,
+		Env:                          env,
+		PublicOrigin:                 publicOrigin,
+		PublicRenderOrigin:           publicRenderOrigin,
+		AppBuildDigest:               appBuildDigest,
+		PublicRendererBuildDigest:    publicRendererBuildDigest,
+		TrustedProxyCIDRs:            trustedProxyCIDRs,
+		GoogleClientID:               googleClientID,
+		GoogleClientSecret:           googleClientSecret,
+		GitHubClientID:               githubClientID,
+		GitHubClientSecret:           githubClientSecret,
+		LinkedInClientID:             linkedInClientID,
+		LinkedInClientSecret:         linkedInClientSecret,
+		GoogleOIDCIssuerURL:          providerCfg.googleIssuer,
+		LinkedInOIDCIssuerURL:        providerCfg.linkedinIssuer,
+		GitHubOAuthAuthorizeURL:      providerCfg.githubAuthorize,
+		GitHubOAuthTokenURL:          providerCfg.githubToken,
+		GitHubAPIBaseURL:             providerCfg.githubAPI,
+		MediaBackend:                 mediaCfg.backend,
+		MediaFSDir:                   mediaCfg.fsDir,
+		MediaBucket:                  mediaCfg.bucket,
+		MediaRegion:                  mediaCfg.region,
+		MediaEndpoint:                mediaCfg.endpoint,
+		MediaAccessKeyID:             mediaCfg.accessKeyID,
+		MediaSecretAccessKey:         mediaCfg.secretAccessKey,
+		MediaForcePathStyle:          mediaCfg.forcePathStyle,
+		AuthEmail:                    authEmail,
+		AgentAccess:                  agentAccess,
+		ProviderLogin:                providerLogin,
+		PasswordRegistrationDisabled: passwordRegistrationDisabled,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err

@@ -19,9 +19,11 @@ describe("GET /capabilities", () => {
     expect(schema.additionalProperties).toBe(false);
     expect(schema.required.sort()).toEqual([
       "agentAccess",
+      "passwordRegistration",
       "providerLogin",
       "providers",
     ]);
+    expect(schema.properties.passwordRegistration.type).toBe("boolean");
     expect(schema.properties.providerLogin.type).toBe("boolean");
     expect(schema.properties.agentAccess.type).toBe("boolean");
     expect(schema.properties.providers.type).toBe("array");

@@ -56,6 +56,7 @@ export type AuthCopy = {
     readonly haveAccount: string;
     readonly noEmail: string;
     readonly noEmailGoogle: string;
+    readonly closed: string;
   };
   readonly forgot: {
     readonly title: string;
@@ -146,6 +147,7 @@ export const authCopy: Record<Locale, AuthCopy> = {
       noEmail:
         'Nếu sau vài phút vẫn chưa thấy email, hãy kiểm tra thư mục thư rác.',
       noEmailGoogle: 'Hoặc đăng nhập bằng tài khoản Google của bạn:',
+      closed: 'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục với Google.',
     },
     forgot: {
       title: 'Quên mật khẩu',
@@ -235,6 +237,8 @@ export const authCopy: Record<Locale, AuthCopy> = {
         'If the email has not arrived within a few minutes, check your spam '
         + 'folder.',
       noEmailGoogle: 'Or sign in with your Google account instead:',
+      closed:
+        'Email sign-up is temporarily closed. Continue with Google instead.',
     },
     forgot: {
       title: 'Forgot password',

@@ -15,7 +15,7 @@ const PASSWORD_OPS = {
 } as const;
 
 const statusMatrix = {
-  "/auth/password/register": ["202", "400", "403", "413", "415", "422", "429", "503"],
+  "/auth/password/register": ["202", "400", "403", "404", "413", "415", "422", "429", "503"],
   "/auth/password/verify": ["204", "400", "403", "413", "415", "429", "503"],
   "/auth/password/login": ["204", "400", "401", "403", "413", "415", "429", "503"],
   "/auth/password/forgot": ["202", "400", "403", "413", "415", "429", "503"],
@@ -124,5 +124,13 @@ describe("password auth contract", () => {
         expect(forbidden.test(key), `${name}.${key}`).toBe(false);
       }
     }
+  });
+});
+
+describe("password registration switch", () => {
+  it("documents that PASSWORD_REGISTRATION_ENABLED=false unregisters sign-up", () => {
+    const op = doc.paths["/auth/password/register"].post;
+    expect(op.description).toMatch(/PASSWORD_REGISTRATION_ENABLED/);
+    expect(op.responses["404"]).toBeDefined();
   });
 });

@@ -39,24 +39,25 @@ module "identity" {
 }
 
 module "tasks" {
-  source                 = "../modules/tasks"
-  name                   = local.name
-  account_id             = var.account_id
-  db_endpoint            = module.data.db_endpoint
-  db_master_secret_arn   = module.data.db_master_secret_arn
-  media_bucket_name      = module.data.media_bucket_name
-  ses_from_address       = var.ses_from_address
-  ses_from_name          = var.ses_from_name
-  ses_configuration_set  = var.ses_configuration_set
-  provider_login_enabled = var.provider_login_enabled
-  exec_role_arns         = module.identity.exec_role_arns
-  app_task_role_arn      = module.identity.app_task_role_arn
-  jobs_task_role_arn     = module.identity.jobs_task_role_arn
-  log_group_name         = module.identity.log_group_name
-  cloudflare_ipv4_cidrs  = local.cloudflare_ipv4
-  image_server           = var.image_server
-  image_web              = var.image_web
-  image_caddy            = var.image_caddy
+  source                        = "../modules/tasks"
+  name                          = local.name
+  account_id                    = var.account_id
+  db_endpoint                   = module.data.db_endpoint
+  db_master_secret_arn          = module.data.db_master_secret_arn
+  media_bucket_name             = module.data.media_bucket_name
+  ses_from_address              = var.ses_from_address
+  ses_from_name                 = var.ses_from_name
+  ses_configuration_set         = var.ses_configuration_set
+  provider_login_enabled        = var.provider_login_enabled
+  password_registration_enabled = var.password_registration_enabled
+  exec_role_arns                = module.identity.exec_role_arns
+  app_task_role_arn             = module.identity.app_task_role_arn
+  jobs_task_role_arn            = module.identity.jobs_task_role_arn
+  log_group_name                = module.identity.log_group_name
+  cloudflare_ipv4_cidrs         = local.cloudflare_ipv4
+  image_server                  = var.image_server
+  image_web                     = var.image_web
+  image_caddy                   = var.image_caddy
 }
 
 module "host" {

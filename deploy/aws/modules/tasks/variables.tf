@@ -30,6 +30,13 @@ variable "ses_configuration_set" {
   type = string
 }
 
+# Email-and-password sign-up. Off keeps pending registrations verifiable and
+# every other password route working.
+variable "password_registration_enabled" {
+  type        = bool
+  description = "PASSWORD_REGISTRATION_ENABLED for the server"
+}
+
 # Only Google's credentials are wired, so only Google may be enabled here.
 variable "provider_login_enabled" {
   type        = string

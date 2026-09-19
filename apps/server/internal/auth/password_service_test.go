@@ -55,6 +55,13 @@ type passwordEnv struct {
 
 func newPasswordEnv(t *testing.T) *passwordEnv {
 	t.Helper()
+	return newPasswordEnvWith(t, nil)
+}
+
+// newPasswordEnvWith builds the password service after mutate adjusts its
+// options; nil keeps the defaults.
+func newPasswordEnvWith(t *testing.T, mutate func(*auth.PasswordServiceOptions)) *passwordEnv {
+	t.Helper()
 
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -76,7 +83,7 @@ func newPasswordEnv(t *testing.T) *passwordEnv {
 		t.Fatalf("NewPasswordRatePolicies error = %v", err)
 	}
 
-	svc, err := auth.NewPasswordService(auth.PasswordServiceOptions{
+	opts := auth.PasswordServiceOptions{
 		Pool:         pool,
 		Queries:      q,
 		Sessions:     sm,
@@ -87,7 +94,11 @@ func newPasswordEnv(t *testing.T) *passwordEnv {
 		PublicOrigin: testPublicOrigin,
 		Clock:        clk.Now,
 		Entropy:      rand.Reader,
-	})
+	}
+	if mutate != nil {
+		mutate(&opts)
+	}
+	svc, err := auth.NewPasswordService(opts)
 	if err != nil {
 		t.Fatalf("NewPasswordService error = %v", err)
 	}

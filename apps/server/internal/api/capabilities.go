@@ -14,6 +14,8 @@ type Capabilities struct {
 	ProviderLogin bool     `json:"providerLogin"`
 	Providers     []string `json:"providers"`
 	AgentAccess   bool     `json:"agentAccess"`
+	// PasswordRegistration reports whether email-and-password sign-up is open.
+	PasswordRegistration bool `json:"passwordRegistration"`
 }
 
 // CapabilitiesHandler serves GET /api/v1/capabilities. The router's default

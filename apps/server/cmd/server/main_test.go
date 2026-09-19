@@ -24,18 +24,20 @@ import (
 func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name  string
-		login config.ProviderLogin
-		want  string
+		name        string
+		login       config.ProviderLogin
+		registerOff bool
+		want        string
 	}{
-		{"password only", config.ProviderLogin{}, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false}}` + "\n"},
-		{"google only", config.ProviderLogin{Google: true}, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false}}` + "\n"},
-		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true},
-			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false}}` + "\n"},
+		{"password only", config.ProviderLogin{}, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true}}` + "\n"},
+		{"google only", config.ProviderLogin{Google: true}, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":true}}` + "\n"},
+		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}, false,
+			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false,"passwordRegistration":true}}` + "\n"},
+		{"google sign-up only", config.ProviderLogin{Google: true}, true, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":false}}` + "\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := config.Config{ProviderLogin: tc.login}
+			cfg := config.Config{ProviderLogin: tc.login, PasswordRegistrationDisabled: tc.registerOff}
 			cfg.AgentAccess.Enabled = false
 			mux := http.NewServeMux()
 			capabilitiesRegistrar(cfg)(mux)
