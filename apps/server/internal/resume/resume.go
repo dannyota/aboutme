@@ -27,6 +27,11 @@ type Resume struct {
 	DownloadEnabled bool
 	SEOGeoEnabled   bool
 
+	// PublicTitle and FaviconEmoji are the owner's public page settings;
+	// nil keeps the default title and no custom icon.
+	PublicTitle  *string
+	FaviconEmoji *string
+
 	// StoredSchemaVersion is the row's own schema_version column, BEFORE
 	// projection: observable so a caller can tell backfill progress
 	// apart from Doc.SchemaVersion, which is always CurrentVersion.

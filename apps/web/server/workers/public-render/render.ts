@@ -109,7 +109,6 @@ export async function renderPublicResume(
           h(PublicResumeApp, { publicResume: request.publicResume }),
       }),
     );
-    const person = request.publicResume.document.personalDetails;
     const discoveryScript = jsonLd(request);
     const imageURL = [
       request.canonicalOrigin,
@@ -120,7 +119,12 @@ export async function renderPublicResume(
     const head = [
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      `<title>${escapeText(`${person.fullName} — Resume`)}</title>`,
+      // The server computes the title and favicon href from the owner's
+      // settings, and its validator accepts exactly these (ADR 0042).
+      `<title>${escapeText(request.pageTitle)}</title>`,
+      request.faviconHref === ''
+        ? ''
+        : `<link rel="icon" href="${escapeAttribute(request.faviconHref)}">`,
       `<link rel="canonical" href="${request.canonicalOrigin}/`,
       `${request.publicResume.slug}">`,
       `<meta property="og:image" content="${escapeAttribute(imageURL)}">`,

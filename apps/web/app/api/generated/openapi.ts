@@ -1323,19 +1323,23 @@ export interface components {
          * @enum {string}
          */
         OAuthCallbackErrorCode: "auth_failed" | "email_not_verified" | "cancelled" | "email_already_registered" | "identity_already_linked" | "reauth_required";
-        /** @description Complete publish-state command. Omitted slug preserves stored state; the three booleans are always explicit. A present empty or null slug is a malformed request, not a publish-policy issue. */
+        /** @description Complete publish-state command. Omitted slug, publicTitle, and faviconEmoji preserve stored state; the three booleans are always explicit. A present empty or null slug, and a null publicTitle or faviconEmoji, is a malformed request, not a publish-policy issue. */
         PublishResumeRequest: {
             /** @description Requested public slug. Grammar, length, reserved-root, claim, and tombstone checks are semantic publish policy after JSON decoding. */
             slug?: string;
             live: boolean;
             downloadEnabled: boolean;
             seoGeoEnabled: boolean;
+            /** @description Public page title. Omitted keeps the stored value; empty or white-space-only clears it to the default "<full name> — Resume". Otherwise the trimmed value must be at most 70 grapheme clusters (`too_long`) and hold no control or format characters other than U+200D ZERO WIDTH JOINER (`invalid_characters`). It is text; the page escapes it. */
+            publicTitle?: string;
+            /** @description Public page icon. Omitted keeps the stored value; empty clears it. Otherwise the trimmed value must be exactly one emoji grapheme: an Extended_Pictographic base with only modifiers, variation selectors, ZWJ, and tags after it, or one Regional Indicator flag (`invalid_emoji`). */
+            faviconEmoji?: string;
         };
         /** @description One deterministic semantic publish-policy issue. */
         PublishValidationIssue: {
             path: string;
             /** @enum {string} */
-            code: "required_for_live" | "requires_live" | "invalid_format" | "reserved" | "required" | "visible_entry_required";
+            code: "required_for_live" | "requires_live" | "invalid_format" | "reserved" | "required" | "visible_entry_required" | "too_long" | "invalid_characters" | "invalid_emoji";
             message: string;
         };
         /** @description The standard Error envelope narrowed to `publish_invalid` issue details. Its outer shape and required code/message fields are the same API-wide error family. */
@@ -1645,6 +1649,8 @@ export interface components {
          *       "slug": "ada-lovelace",
          *       "downloadEnabled": true,
          *       "seoGeoEnabled": true,
+         *       "publicTitle": "Danny from aboutme.vn",
+         *       "faviconEmoji": "🚀",
          *       "schemaVersion": 3,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
@@ -1669,6 +1675,10 @@ export interface components {
             downloadEnabled: boolean;
             /** @description Whether this live resume participates in discovery. */
             seoGeoEnabled: boolean;
+            /** @description The public page's browser-tab title, or null for the default "<full name> — Resume". Public, like the slug. */
+            publicTitle: string | null;
+            /** @description One emoji shown as the public page's icon, or null for none. Public, like the slug. */
+            faviconEmoji: string | null;
             /** @description Document version this response was emitted at. Equal to the `X-Resume-Schema-Version` response header. */
             schemaVersion: number;
             /** Format: date-time */
@@ -1951,6 +1961,8 @@ export interface components {
                  *         "slug": "ada-lovelace",
                  *         "downloadEnabled": true,
                  *         "seoGeoEnabled": true,
+                 *         "publicTitle": "Danny from aboutme.vn",
+                 *         "faviconEmoji": "🚀",
                  *         "schemaVersion": 3,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
@@ -1984,6 +1996,8 @@ export interface components {
                  *         "slug": "ada-lovelace",
                  *         "downloadEnabled": true,
                  *         "seoGeoEnabled": true,
+                 *         "publicTitle": "Danny from aboutme.vn",
+                 *         "faviconEmoji": "🚀",
                  *         "schemaVersion": 3,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
@@ -5078,6 +5092,8 @@ export interface operations {
                      *           "slug": "ada-lovelace",
                      *           "downloadEnabled": true,
                      *           "seoGeoEnabled": true,
+                     *           "publicTitle": "Danny from aboutme.vn",
+                     *           "faviconEmoji": "🚀",
                      *           "schemaVersion": 3,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
@@ -5168,6 +5184,8 @@ export interface operations {
                      *         "slug": null,
                      *         "downloadEnabled": false,
                      *         "seoGeoEnabled": false,
+                     *         "publicTitle": null,
+                     *         "faviconEmoji": null,
                      *         "schemaVersion": 3,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",

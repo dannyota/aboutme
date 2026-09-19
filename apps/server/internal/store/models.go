@@ -197,6 +197,8 @@ type Resume struct {
 	Customization   json.RawMessage
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
+	PublicTitle     *string
+	FaviconEmoji    *string
 }
 
 type Session struct {

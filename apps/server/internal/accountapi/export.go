@@ -156,6 +156,8 @@ type exportResume struct {
 	Live            bool            `json:"live"`
 	DownloadEnabled bool            `json:"downloadEnabled"`
 	SEOGeoEnabled   bool            `json:"seoGeoEnabled"`
+	PublicTitle     *string         `json:"publicTitle"`
+	FaviconEmoji    *string         `json:"faviconEmoji"`
 	Revision        string          `json:"revision"`
 	SchemaVersion   int32           `json:"schemaVersion"`
 	Lng             string          `json:"lng"`
@@ -221,6 +223,8 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 			Live:            row.Live,
 			DownloadEnabled: row.DownloadEnabled,
 			SEOGeoEnabled:   row.SEOGeoEnabled,
+			PublicTitle:     row.PublicTitle,
+			FaviconEmoji:    row.FaviconEmoji,
 			Revision:        strconv.FormatInt(row.Revision, 10),
 			SchemaVersion:   s.projector.CurrentVersion(),
 			Lng:             projectExportLanguage(row.Lng),

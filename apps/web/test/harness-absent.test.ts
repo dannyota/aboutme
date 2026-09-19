@@ -54,6 +54,8 @@ const renderRequest = {
   mode: 'continuous',
   canonicalOrigin: 'https://resume.example',
   discoveryEnabled: false,
+  pageTitle: 'Ada Lovelace — Resume',
+  faviconHref: '',
 };
 
 const render = async (): Promise<{ html: string; exit: number }> =>

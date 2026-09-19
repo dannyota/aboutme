@@ -12,6 +12,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
+	"github.com/dannyota/aboutme/apps/server/internal/publicpage"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 )
@@ -80,19 +81,22 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
+		page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
 		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
 		result, err := dependencies.Renderer.Render(lease.Context(), directrender.PublicRenderRequest{
 			PublicResume:     snapshot.Public,
 			Mode:             directrender.PublicRenderMode,
 			CanonicalOrigin:  dependencies.PublicOrigin.String(),
 			DiscoveryEnabled: snapshot.DiscoveryEnabled,
+			PageTitle:        page.Title,
+			FaviconHref:      page.FaviconHref,
 		})
 		if err != nil {
 			logHTMLUnavailable(dependencies.Logger, request, "render_failed", "")
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
 		}
-		if rule := publicHTMLRejection(result.HTML, snapshot.Public, dependencies.PublicOrigin, jsonLD, snapshot.DiscoveryEnabled); rule != "" {
+		if rule := publicHTMLRejectionForPage(result.HTML, snapshot.Public, page, dependencies.PublicOrigin, jsonLD, snapshot.DiscoveryEnabled); rule != "" {
 			logHTMLUnavailable(dependencies.Logger, request, "html_rejected", rule)
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
 			return
@@ -162,10 +166,30 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 	return publicHTMLRejection(source, resume, origin, jsonLD, discoverable) == ""
 }
 
+// publicPage is the head the renderer must emit for the owner's stored page
+// settings: the exact <title> text, and the exact favicon href or "" for none.
+type publicPage struct {
+	Title       string
+	FaviconHref string
+}
+
+func expectedPublicPage(resume publicresume.PublicResume, publicTitle, faviconEmoji *string) publicPage {
+	page := publicPage{Title: publicpage.EffectiveTitle(publicTitle, resume.Document.PersonalDetails.FullName)}
+	if faviconEmoji != nil && *faviconEmoji != "" {
+		page.FaviconHref = publicpage.FaviconHref(*faviconEmoji)
+	}
+	return page
+}
+
 // publicHTMLRejection returns "" for renderer output that passes every public
 // HTML rule, or the closed name of the first rule it breaks. The name never
 // carries resume content, so it is safe to log.
+// publicHTMLRejection validates a page with no owner page settings.
 func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
+	return publicHTMLRejectionForPage(source, resume, expectedPublicPage(resume, nil, nil), origin, jsonLD, discoverable)
+}
+
+func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume, page publicPage, origin publicresume.PublicOrigin, jsonLD publicformat.JSONLDResult, discoverable bool) string {
 	if len(source) == 0 || len(source) > 2_097_152 {
 		return "size"
 	}
@@ -174,7 +198,7 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 		return "doctype"
 	}
 	var title, canonical, main *html.Node
-	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, charsetMeta, viewportMeta int
+	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, favicons, charsetMeta, viewportMeta int
 	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
 	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
 	stylesheets := map[string]bool{}
@@ -283,12 +307,23 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 					return
 				}
 			case "title":
-				if title != nil || len(node.Attr) != 0 || textNode(node) != resume.Document.PersonalDetails.FullName+" — Resume" {
+				if title != nil || len(node.Attr) != 0 || textNode(node) != page.Title {
 					reject("title")
 					return
 				}
 				title = node
 			case "link":
+				if relHasToken(attribute(node, "rel"), "icon") {
+					// Only the owner's emoji favicon: exactly rel and href, once,
+					// with the href derived from the stored emoji.
+					if page.FaviconHref == "" || favicons != 0 || len(node.Attr) != 2 || attributeCount(node, "rel") != 1 ||
+						attribute(node, "rel") != "icon" || attributeCount(node, "href") != 1 || attribute(node, "href") != page.FaviconHref {
+						reject("favicon")
+						return
+					}
+					favicons++
+					break
+				}
 				if attribute(node, "rel") == "stylesheet" {
 					// Only the two self-hosted resume stylesheets, once each, with
 					// exactly rel and href; style-src 'self' then loads them.
@@ -349,6 +384,9 @@ func publicHTMLRejection(source []byte, resume publicresume.PublicResume, origin
 	walk(document)
 	if rule != "" {
 		return rule
+	}
+	if page.FaviconHref != "" && favicons != 1 {
+		return "favicon"
 	}
 	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 || ogImageMeta != 1 || ogImageWidthMeta != 1 || ogImageHeightMeta != 1 || twitterCardMeta != 1 || twitterImageMeta != 1 {
 		return "required_elements"

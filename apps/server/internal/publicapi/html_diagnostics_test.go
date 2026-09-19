@@ -14,6 +14,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
+	"github.com/dannyota/aboutme/apps/server/internal/publicpage"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 )
 
@@ -169,5 +170,62 @@ func TestPublicHTMLAllowsOnlyTheOwnPDFDownloadLink(t *testing.T) {
 		if rule := publicHTMLRejection([]byte(candidate), resume, origin, jsonLD, false); rule != "anchor_scheme" {
 			t.Fatalf("href %q: rule = %q, want anchor_scheme", href, rule)
 		}
+	}
+}
+
+// The owner's title and emoji favicon are the only head values that vary per
+// resume: the validator derives both from the stored settings and accepts
+// nothing else (docs/adr/0042-public-page-title-and-favicon.md).
+func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	resume := publicresume.PublicResume{Slug: "ada", Revision: "1",
+		Document: publicresume.PublicResumeDocument{PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Ada"}}}
+	jsonLD, err := publicformat.JSONLD(resume, origin, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := "Ada & <friends>"
+	emoji := "\U0001F680"
+	page := expectedPublicPage(resume, &title, &emoji)
+	icon := `<link rel="icon" href="` + publicpage.FaviconHref(emoji) + `">`
+	valid := strings.Replace(
+		validHTML("Ada", "https://aboutme.example/ada", "1", ""),
+		`<title>Ada — Resume</title>`, `<title>Ada &amp; &lt;friends&gt;</title>`+icon, 1)
+	if rule := publicHTMLRejectionForPage([]byte(valid), resume, page, origin, jsonLD, false); rule != "" {
+		t.Fatalf("stored title and icon rejected by %q", rule)
+	}
+	if rule := publicHTMLRejection([]byte(valid), resume, origin, jsonLD, false); rule != "title" {
+		t.Fatalf("custom title without the setting: rule = %q, want title", rule)
+	}
+
+	for _, test := range []struct{ name, from, to, want string }{
+		{"default title while custom is set", `<title>Ada &amp; &lt;friends&gt;</title>`, `<title>Ada — Resume</title>`, "title"},
+		{"no icon while one is set", icon, ``, "favicon"},
+		{"second icon", icon, icon + icon, "favicon"},
+		{"other data url", publicpage.FaviconHref(emoji), publicpage.FaviconHref("\U0001F600"), "favicon"},
+		{"raw svg data url", publicpage.FaviconHref(emoji), `data:image/svg+xml,<svg></svg>`, "favicon"},
+		{"remote icon", publicpage.FaviconHref(emoji), `https://evil.example/icon.png`, "favicon"},
+		{"extra attribute", `<link rel="icon" href=`, `<link rel="icon" type="image/svg+xml" href=`, "favicon"},
+		{"shortcut icon", `<link rel="icon"`, `<link rel="shortcut icon"`, "favicon"},
+		{"apple touch icon", icon, icon + `<link rel="apple-touch-icon" href="/x.png">`, "stylesheet"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := strings.Replace(valid, test.from, test.to, 1)
+			if candidate == valid {
+				t.Fatalf("fixture replacement %q did not apply", test.from)
+			}
+			if got := publicHTMLRejectionForPage([]byte(candidate), resume, page, origin, jsonLD, false); got != test.want {
+				t.Fatalf("rule = %q, want %q", got, test.want)
+			}
+		})
+	}
+
+	noIcon := expectedPublicPage(resume, nil, nil)
+	if rule := publicHTMLRejectionForPage([]byte(valid), resume, noIcon, origin, jsonLD, false); rule != "title" {
+		t.Fatalf("page without settings: rule = %q, want title", rule)
+	}
+	withDefaultTitle := strings.Replace(valid, `<title>Ada &amp; &lt;friends&gt;</title>`, `<title>Ada — Resume</title>`, 1)
+	if rule := publicHTMLRejectionForPage([]byte(withDefaultTitle), resume, noIcon, origin, jsonLD, false); rule != "favicon" {
+		t.Fatalf("icon without the setting: rule = %q, want favicon", rule)
 	}
 }

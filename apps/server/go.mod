@@ -20,6 +20,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/pressly/goose/v3 v3.27.3
+	github.com/rivo/uniseg v0.4.7
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	golang.org/x/crypto v0.55.0
 	golang.org/x/image v0.45.0

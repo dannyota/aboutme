@@ -13,6 +13,7 @@ import (
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
+	"github.com/dannyota/aboutme/apps/server/internal/publicpage"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 	"github.com/dannyota/aboutme/apps/server/internal/sanitize"
 )
@@ -37,6 +38,16 @@ func validatePublish(source schema.Resume, current currentPublish, input publish
 	}
 
 	issues := make([]publishIssue, 0)
+	if input.PublicTitle.Present {
+		result := publicpage.NormalizeTitle(input.PublicTitle.Value)
+		effective.PublicTitle = result.Value
+		issues = append(issues, publicPageIssues("publicTitle", result.Codes)...)
+	}
+	if input.FaviconEmoji.Present {
+		result := publicpage.NormalizeFaviconEmoji(input.FaviconEmoji.Value)
+		effective.FaviconEmoji = result.Value
+		issues = append(issues, publicPageIssues("faviconEmoji", result.Codes)...)
+	}
 	if effective.Live && effective.Slug == nil {
 		issues = append(issues, publishIssue{Path: "slug", Code: "required_for_live", Message: "slug is required when live is enabled"})
 	}
@@ -60,6 +71,22 @@ func validatePublish(source schema.Resume, current currentPublish, input publish
 		ChangedSlug: changedSlug,
 		Issues:      sortedUniquePublishIssues(issues),
 	}
+}
+
+// publicPageMessages never echo the submitted value, which may hold bidi or
+// control characters.
+var publicPageMessages = map[string]string{
+	publicpage.CodeTooLong:           "public title must be at most 70 characters",
+	publicpage.CodeInvalidCharacters: "public title must not contain control or invisible formatting characters",
+	publicpage.CodeInvalidEmoji:      "favicon must be exactly one emoji",
+}
+
+func publicPageIssues(path string, codes []string) []publishIssue {
+	issues := make([]publishIssue, 0, len(codes))
+	for _, code := range codes {
+		issues = append(issues, publishIssue{Path: path, Code: code, Message: publicPageMessages[code]})
+	}
+	return issues
 }
 
 // publishRequiresRecentReauth reports whether this fresh command releases an

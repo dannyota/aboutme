@@ -45,6 +45,8 @@ type resumeSummaryJSON struct {
 	Slug            *string   `json:"slug"`
 	DownloadEnabled bool      `json:"downloadEnabled"`
 	SEOGeoEnabled   bool      `json:"seoGeoEnabled"`
+	PublicTitle     *string   `json:"publicTitle"`
+	FaviconEmoji    *string   `json:"faviconEmoji"`
 	SchemaVersion   int32     `json:"schemaVersion"`
 	CreatedAt       time.Time `json:"createdAt"`
 	UpdatedAt       time.Time `json:"updatedAt"`
@@ -138,6 +140,7 @@ func makeResumeSummary(row resume.Resume, version int32) resumeSummaryJSON {
 		ID: row.ID, Title: row.Title, Lng: projectResumeLanguage(row.Lng),
 		Revision: strconv.FormatInt(row.Revision, 10), Live: row.Live, Slug: row.Slug,
 		DownloadEnabled: row.DownloadEnabled, SEOGeoEnabled: row.SEOGeoEnabled,
+		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji,
 		SchemaVersion: version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }

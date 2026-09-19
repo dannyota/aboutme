@@ -18,6 +18,10 @@ type PublicRenderRequest struct {
 	Mode             string                    `json:"mode"`
 	CanonicalOrigin  string                    `json:"canonicalOrigin"`
 	DiscoveryEnabled bool                      `json:"discoveryEnabled"`
+	// PageTitle and FaviconHref are the exact head values the public HTML
+	// validator expects; FaviconHref is "" when the owner set no icon.
+	PageTitle   string `json:"pageTitle"`
+	FaviconHref string `json:"faviconHref"`
 }
 
 // Result is a validated renderer response.

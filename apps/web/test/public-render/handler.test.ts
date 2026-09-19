@@ -57,6 +57,8 @@ const request = {
   mode: 'continuous' as const,
   canonicalOrigin: 'https://resume.example',
   discoveryEnabled: false,
+  pageTitle: 'Ada — Resume',
+  faviconHref: '',
 };
 
 type Runner = typeof runPublicRenderWorker;
@@ -131,6 +133,20 @@ describe('internal public render handler', () => {
           document: { ...document, nope: true },
         },
       }),
+      // The page head values are closed too (ADR 0042).
+      JSON.stringify({ ...request, pageTitle: undefined }),
+      JSON.stringify({ ...request, pageTitle: '' }),
+      JSON.stringify({ ...request, pageTitle: 7 }),
+      JSON.stringify({ ...request, pageTitle: 'x'.repeat(4097) }),
+      JSON.stringify({ ...request, faviconHref: undefined }),
+      JSON.stringify({ ...request, faviconHref: 'javascript:alert(1)' }),
+      JSON.stringify({ ...request, faviconHref: 'https://evil.example/i.png' }),
+      JSON.stringify({ ...request, faviconHref: 'data:image/png;base64,AA==' }),
+      JSON.stringify({
+        ...request,
+        faviconHref: 'data:image/svg+xml,<svg onload=alert(1)>',
+      }),
+      JSON.stringify({ ...request, faviconHref: 'data:image/svg+xml,%3C"' }),
     ];
     for (const body of bodies) {
       const response = await fetch(url, {

@@ -567,6 +567,8 @@ WITH input AS (
     sqlc.arg(live)::boolean AS live,
     sqlc.arg(download_enabled)::boolean AS download_enabled,
     sqlc.arg(seo_geo_enabled)::boolean AS seo_geo_enabled,
+    sqlc.narg(public_title)::text AS public_title,
+    sqlc.narg(favicon_emoji)::text AS favicon_emoji,
     sqlc.arg(updated_at)::timestamptz AS updated_at
 )
 UPDATE resumes AS resume
@@ -574,6 +576,8 @@ SET slug = input.slug,
     live = input.live,
     download_enabled = input.download_enabled,
     seo_geo_enabled = input.seo_geo_enabled,
+    public_title = input.public_title,
+    favicon_emoji = input.favicon_emoji,
     revision = resume.revision + 1,
     updated_at = input.updated_at
 FROM input
