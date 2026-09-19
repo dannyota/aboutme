@@ -37,6 +37,7 @@ accepted localization design and ADR, `docs/design/web.md`, `AC-EDITOR-018`, and
 - Modify `apps/web/test/editor/date-fields.test.ts`.
 - Modify `apps/web/test/editor/entry-forms.test.ts`.
 - Modify `apps/web/test/editor/resume-language.test.ts`.
+- Modify `apps/web/test/editor/field-drafts.test.ts` for locale-aware fixtures.
 
 Do not edit `resumeLanguage.ts`, editor shell, control panels, renderer,
 commands, stores, API code, or source manifest.

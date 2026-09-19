@@ -26,6 +26,8 @@ controls, and the editor language control without remounting editor state. Read
 - Modify `apps/web/test/editor/editor-preview.test.ts`.
 - Modify `apps/web/test/editor/navigation-guard.test.ts`.
 - Modify `apps/web/test/nuxt/editor-config.test.ts`.
+- Update locale fixtures in `apps/web/test/logout-state.test.ts`,
+  `apps/web/test/seo.test.ts`, and `apps/web/test/editor/theme.test.ts`.
 
 Do not edit field, customization, structure, template, photo, rich-text,
 publish, PDF, controller, or shared-shell files.

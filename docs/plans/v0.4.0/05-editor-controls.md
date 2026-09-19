@@ -12,7 +12,14 @@ rich-text controls without changing resume values or renderer behavior. Read
 
 ## Owned paths
 
+The controls test author also owns locale fixture updates in
+`apps/web/test/editor/link-display-and-justify.test.ts` and
+`apps/web/test/editor/rich-text-lists.test.ts`.
+
 - Create `apps/web/app/i18n/editor-controls.ts`.
+- Create `apps/web/app/i18n/editor-sections.ts`.
+- Modify `apps/web/app/components/editor/sectionTypes.ts` for display labels.
+  Preserve default section names and icons used as resume content.
 - Modify `apps/web/app/components/editor/customization/ColorField.vue`.
 - Modify `apps/web/app/components/editor/customization/CustomizationPanel.vue`.
 - Modify `apps/web/app/components/editor/customization/PageSettings.vue`.

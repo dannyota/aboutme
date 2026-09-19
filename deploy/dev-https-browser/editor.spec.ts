@@ -18,6 +18,7 @@ import {
   mutateRemoteHeadline,
   mutateRemoteMetadata,
   ownerPhotoHasNoCrop,
+  readRemoteResumeRevision,
   replaceRemotePhoto,
   settledVisiblePageCount,
   uniqueTitle,
@@ -29,11 +30,14 @@ import {
   pageDiagnosticsAttacher,
   waitForHydration,
   pinEnglish,
+  installExternalRequestFirewall,
+  installExternalWebSocketFirewall,
 } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
+  isExpectedAnonymousMeConsole,
   isExpectedNegativeHTTPConsole,
   httpFailureStatus,
 } from './network-policy';
@@ -46,6 +50,46 @@ const VALID_PNG_BASE64
     + 'MAwDQRWGrJn9pwjZweruEWpvknuS3uZfMwAAAAAAAAAAALDVCwAA///3/wKTiM0y'
     + 'DAAAAABJRU5ErkJggg==';
 let editorDiagnosticStage = 'setup';
+let localeDiagnosticStage = 'setup';
+const recordedResumeIDs = new Set<string>();
+
+async function prepareEditor<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    process.stderr.write(`editor-stage:${editorDiagnosticStage}\n`);
+    throw error;
+  }
+}
+
+test.afterEach(async ({ context }, testInfo) => {
+  testInfo.setTimeout(testInfo.timeout + 30_000);
+  const stage = testInfo.title === 'keeps a date draft focused when the interface locale changes'
+    ? localeDiagnosticStage
+    : editorDiagnosticStage;
+  try {
+    if (recordedResumeIDs.size > 0) {
+      const cleanup = await context.newPage();
+      try {
+        await ensureAuthenticated(cleanup);
+        for (const id of recordedResumeIDs) {
+          await deleteRecordedResume(cleanup, id);
+          recordedResumeIDs.delete(id);
+        }
+      } finally {
+        await cleanup.close();
+      }
+    }
+  } catch (error) {
+    process.stderr.write('editor-stage:cleanup\n');
+    throw error;
+  }
+  if (testInfo.status !== testInfo.expectedStatus) {
+    process.stderr.write(`editor-stage:${stage}\n`);
+  }
+});
 
 interface EditorSteps {
   accessibility: boolean;
@@ -96,8 +140,8 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
   context,
   page,
 }) => {
-  await pinEnglish(context);
-  const createdIDs = new Set<string>();
+  editorDiagnosticStage = 'setup';
+  await prepareEditor(() => pinEnglish(context));
   const steps: EditorSteps = {
     auth: false,
     cache: false,
@@ -112,8 +156,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
     accessibility: false,
     teardown: false,
   };
-  const diagnostics = await installDiagnostics(context, page);
-  let cleanupPage: Page | undefined;
+  const diagnostics = await prepareEditor(() => installDiagnostics(context, page));
   let reauthPage: Page | undefined;
   let scenarioSucceeded = false;
 
@@ -123,7 +166,7 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
     const scenario = await proveListLoadAutosave(
       page,
       context,
-      createdIDs,
+      recordedResumeIDs,
       steps,
     );
     await proveKeyboardStructureAndContextActions(
@@ -160,22 +203,27 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
     steps.accessibility = true;
     editorDiagnosticStage = 'teardown';
     await deleteThroughListKeyboard(page, scenario.accepted.metadata.id);
-    createdIDs.delete(scenario.accepted.metadata.id);
+    recordedResumeIDs.delete(scenario.accepted.metadata.id);
     steps.teardown = true;
     scenarioSucceeded = true;
-  } finally {
-    if (!scenarioSucceeded) {
-      process.stderr.write(`editor-stage:${editorDiagnosticStage}\n`);
+  } catch (error) {
+    const sourceLine = error instanceof Error
+      ? /editor\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]
+      : undefined;
+    if (sourceLine !== undefined) {
+      editorDiagnosticStage = `${editorDiagnosticStage}-line-${sourceLine}`;
     }
-    if (reauthPage !== undefined && !reauthPage.isClosed()) await reauthPage.close();
-    if (createdIDs.size > 0) {
-      cleanupPage = await context.newPage();
-      try {
-        await ensureAuthenticated(cleanupPage);
-        for (const id of createdIDs) await deleteRecordedResume(cleanupPage, id);
-      } finally {
-        await cleanupPage.close();
+    throw error;
+  } finally {
+    try {
+      if (!scenarioSucceeded) {
+        process.stderr.write(`editor-stage:${editorDiagnosticStage}\n`);
       }
+      if (reauthPage !== undefined && !reauthPage.isClosed()) await reauthPage.close();
+    } catch (error) {
+      editorDiagnosticStage = 'cleanup';
+      process.stderr.write(`editor-stage:${editorDiagnosticStage}\n`);
+      throw error;
     }
   }
 
@@ -207,6 +255,130 @@ test('proves authenticated editor behavior over trusted HTTPS', async ({
   }
 });
 
+test('keeps a date draft focused when the interface locale changes', async ({
+  context,
+  page,
+}) => {
+  localeDiagnosticStage = 'setup';
+  const localeSetup = async <T>(operation: () => Promise<T>): Promise<T> => {
+    try {
+      return await operation();
+    } catch (error) {
+      process.stderr.write(`editor-stage:${localeDiagnosticStage}\n`);
+      throw error;
+    }
+  };
+  await localeSetup(() => pinEnglish(context));
+  const counters = newDiagnosticCounters();
+  await localeSetup(() => installExternalRequestFirewall(context, counters));
+  await localeSetup(() => installExternalWebSocketFirewall(context, counters));
+  const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
+    countConsoleError: (message) =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+  });
+  attachPageDiagnostics(page);
+  context.on('page', attachPageDiagnostics);
+  let resumeID: string | undefined;
+  let writes = 0;
+  context.on('request', (request) => {
+    if (
+      resumeID !== undefined
+      && request.method() === 'PATCH'
+      && isResumeMutation(request, resumeID)
+    ) {
+      writes += 1;
+    }
+  });
+  try {
+    localeDiagnosticStage = 'locale-sign-in';
+    await loginAsDevelopmentUser(page);
+    localeDiagnosticStage = 'locale-create';
+    const created = await createBlankResume(
+      page,
+      uniqueTitle(),
+      undefined,
+      (accepted) => recordedResumeIDs.add(accepted.metadata.id),
+    );
+    resumeID = created.metadata.id;
+    localeDiagnosticStage = 'locale-structure';
+    await page.locator('[data-action="open-structure"]').click();
+    await page.locator('[data-action="section-type"]').selectOption('work');
+    await page.getByTestId('section-create-form').locator('[data-action="create"]').click();
+    const section = page.locator('[data-section-key="work"]');
+    await expect(section).toBeVisible();
+    await section.locator('[data-action="add-entry"]').click();
+    await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
+    const revision = await readRemoteResumeRevision(page, created.metadata.id);
+    writes = 0;
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      if (viewport.width === 390) {
+        await page.locator('[data-action="show-editor"]').click();
+      }
+      localeDiagnosticStage = 'locale-draft';
+      const startYear = page.locator(
+        '[data-entry-id] [data-entry-field="dates"] [data-part="start-year"]',
+      );
+      await startYear.fill('2026');
+      await startYear.press('Tab');
+      const error = page.locator('[data-error="date-order"]');
+      await expect(error).toHaveText('Add an end date or tick Present to save this date.');
+      await startYear.click();
+      await startYear.press('Control+A');
+      const selection = await startYear.evaluate((element) => ({
+        end: (element as HTMLInputElement).selectionEnd,
+        start: (element as HTMLInputElement).selectionStart,
+      }));
+      const node = await startYear.elementHandle();
+      if (node === null) throw new Error('date input is missing');
+      localeDiagnosticStage = 'locale-toggle';
+      await page.getByTestId('workspace-locale-vi').click();
+      localeDiagnosticStage = 'locale-assert';
+      await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+      const preview = page
+        .getByTestId('preview-sheet')
+        .locator('.resume-document.resume-page')
+        .first();
+      await expect(preview).toHaveAttribute('lang', 'en');
+      await expect(preview.locator('.section-heading h2')).toHaveText('Experience');
+      await expect(startYear).toHaveValue('2026');
+      await expect(error).toHaveText('Thêm ngày kết thúc hoặc chọn Hiện tại để lưu ngày này.');
+      expect(await startYear.evaluate((element, previous) => element === previous, node)).toBe(true);
+      expect(await startYear.evaluate((element) => globalThis.document.activeElement === element)).toBe(true);
+      expect(await startYear.evaluate((element) => ({
+        end: (element as HTMLInputElement).selectionEnd,
+        start: (element as HTMLInputElement).selectionStart,
+      }))).toEqual(selection);
+      await page.getByTestId('workspace-locale-en').click();
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+      await expect(error).toHaveText('Add an end date or tick Present to save this date.');
+    }
+    await page.waitForTimeout(500);
+    expect(writes).toBe(0);
+    expect(await readRemoteResumeRevision(page, created.metadata.id)).toBe(revision);
+  } catch (error) {
+    const sourceLine = error instanceof Error
+      ? /editor\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]
+      : undefined;
+    if (sourceLine !== undefined) {
+      localeDiagnosticStage = `${localeDiagnosticStage}-line-${sourceLine}`;
+    }
+    process.stderr.write(`editor-stage:${localeDiagnosticStage}\n`);
+    throw error;
+  }
+  try {
+    expect(counters).toEqual({
+      certificateErrors: 0,
+      consoleErrors: 0,
+      externalRequests: 0,
+      pageErrors: 0,
+    });
+  } catch (error) {
+    process.stderr.write(`editor-stage:${localeDiagnosticStage}\n`);
+    throw error;
+  }
+});
+
 async function proveListLoadAutosave(
   page: Page,
   context: BrowserContext,
@@ -215,8 +387,11 @@ async function proveListLoadAutosave(
 ): Promise<EditorScenario> {
   editorDiagnosticStage = 'list-create-resume';
   const initialTitle = uniqueTitle();
-  const created = await createBlankResume(page, initialTitle);
-  createdIDs.add(created.metadata.id);
+  const created = await createBlankResume(page, initialTitle, (stage) => {
+    editorDiagnosticStage = `list-${stage}`;
+  }, (accepted) => {
+    createdIDs.add(accepted.metadata.id);
+  });
 
   editorDiagnosticStage = 'list-open';
   await page.goto('/app/resumes');
@@ -467,8 +642,15 @@ async function proveConflictAndTemplate(
   editorDiagnosticStage = 'template-partial-dialog';
   const partial = page.getByRole('alertdialog', { name: 'Template changes need review' });
   await expect(partial).toBeVisible();
+  await expect(partial.getByRole('button', { name: 'English', exact: true }))
+    .toBeVisible();
+  await expect(partial.getByRole('button', { name: 'Tiếng Việt', exact: true }))
+    .toBeVisible();
   // The primary action comes last so it stacks first on phones.
-  await expect(partial.getByRole('button')).toHaveText([
+  const partialActions = partial.locator(
+    '[data-action="keep-partial"], [data-action="restore-pre-apply"], [data-action="retry-remaining"]',
+  );
+  await expect(partialActions).toHaveText([
     'Keep partial',
     'Restore pre-apply',
     'Retry remaining',

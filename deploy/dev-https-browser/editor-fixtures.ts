@@ -35,6 +35,16 @@ export interface AcceptedResume {
   readonly revision: string;
 }
 
+export type CreateResumeStage
+  = | 'ready'
+    | 'open-dialog'
+    | 'blank-selected'
+    | 'title-filled'
+    | 'submitted'
+    | 'response-created'
+    | 'response-cap-exceeded'
+    | 'response-other';
+
 interface OwnerRequestResult {
   readonly body: unknown;
   readonly etag: string;
@@ -55,9 +65,12 @@ export async function loginAsDevelopmentUser(page: Page): Promise<void> {
 export async function createBlankResume(
   page: Page,
   title: string,
+  stage?: (stage: CreateResumeStage) => void,
+  onCreated?: (accepted: AcceptedResume) => void,
 ): Promise<AcceptedResume> {
   await page.goto('/app/resumes');
   await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
+  stage?.('ready');
   const created = page.waitForResponse((response) => {
     const request = response.request();
     const url = new URL(response.url());
@@ -67,18 +80,56 @@ export async function createBlankResume(
   });
   await page.getByTestId('create-resume').press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Create resume' });
+  await expect(dialog).toBeVisible();
+  stage?.('open-dialog');
+  const blank = dialog.locator('[data-create-mode="blank"]');
+  await blank.click();
+  await expect(blank).toHaveAttribute('aria-pressed', 'true');
+  stage?.('blank-selected');
   await dialog.getByLabel('Title').fill(title);
+  stage?.('title-filled');
+  stage?.('submitted');
   await dialog.getByRole('button', { name: 'Create' }).press('Enter');
   const response = await created;
+  stage?.(createResumeResponseStage(response.status()));
   if (response.status() === 409 && await responseErrorCode(response) === 'resume_cap_exceeded') {
     throw new Error('resume_cap_exceeded');
   }
   const accepted = await acceptedResume(response, 201);
+  onCreated?.(accepted);
   await page.waitForURL((url) =>
     url.origin === ORIGIN
     && url.pathname === `/app/resumes/${accepted.metadata.id}`
   );
   return accepted;
+}
+
+function createResumeResponseStage(status: number): CreateResumeStage {
+  if (status === 201) return 'response-created';
+  if (status === 409) return 'response-cap-exceeded';
+  return 'response-other';
+}
+
+export async function readRemoteResumeRevision(
+  page: Page,
+  id: string,
+): Promise<string> {
+  const result = await page.evaluate(
+    async ({ id, schemaVersion }): Promise<{ revision: unknown; status: number }> => {
+      const response = await fetch(`/api/v1/resumes/${encodeURIComponent(id)}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers: { 'X-Resume-Schema-Version': schemaVersion },
+      });
+      const body = await response.json() as { data?: { revision?: unknown } };
+      return { revision: body.data?.revision, status: response.status };
+    },
+    { id, schemaVersion: SCHEMA_VERSION },
+  );
+  expect(result.status).toBe(200);
+  expect(typeof result.revision).toBe('string');
+  expect(result.revision).toMatch(/^[1-9][0-9]*$/);
+  return result.revision as string;
 }
 
 export async function acceptedResume(

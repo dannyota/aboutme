@@ -240,3 +240,132 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   expect(counters.externalRequests).toBe(0);
   expect(counters.pageErrors).toBe(0);
 });
+
+for (const viewport of [
+  { height: 844, name: 'phone', width: 390 },
+  { height: 900, name: 'desktop', width: 1440 },
+]) {
+  test(`workspace locale defaults, keyboard selection, and persists on ${viewport.name}`, async ({
+  browser,
+}) => {
+  const counters = newDiagnosticCounters();
+  const context = await browser.newContext();
+  await installExternalRequestFirewall(context, counters);
+  await installExternalWebSocketFirewall(context, counters);
+  const page = await context.newPage();
+  pageDiagnosticsAttacher(counters, {
+    countConsoleError: (message) =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+  })(page);
+
+  try {
+    await page.setViewportSize(viewport);
+    await context.clearCookies();
+    stage(`workspace-locale-${viewport.name}-signin`);
+    await context.addCookies([
+      { name: 'aboutme-locale', value: 'en', url: ORIGIN },
+    ]);
+    await page.goto(`${ORIGIN}/login`);
+    await waitForHydration(page);
+    await page.getByLabel('Email', { exact: true }).fill(SEED_EMAIL);
+    await page.getByLabel('Password', { exact: true }).fill(SEED_PASSWORD);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(`${ORIGIN}/app/resumes`);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+    stage(`workspace-locale-${viewport.name}-default`);
+    await context.clearCookies({ name: 'aboutme-locale' });
+    await page.goto(`${ORIGIN}/app/resumes`);
+    await waitForHydration(page);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+    await expect(page).toHaveTitle('CV · aboutme');
+
+    stage(`workspace-locale-${viewport.name}-invalid`);
+    await context.addCookies([
+      { name: 'aboutme-locale', value: 'invalid', url: ORIGIN },
+    ]);
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+
+    stage(`workspace-locale-${viewport.name}-english-keyboard`);
+    const toggle = page.getByTestId('landing-locale');
+    await expect(
+      toggle.getByRole('button', { name: 'English' }),
+    ).toBeVisible();
+    const english = page.getByTestId('landing-locale-en');
+    await english.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page).toHaveTitle('Resumes · aboutme');
+    await expect.poll(async () => (await context.cookies(ORIGIN)).find(
+      (cookie) => cookie.name === 'aboutme-locale',
+    )?.value).toBe('en');
+
+    stage(`workspace-locale-${viewport.name}-vietnamese-keyboard`);
+    const vietnamese = page.getByTestId('landing-locale-vi');
+    await vietnamese.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+    await expect(page).toHaveTitle('CV · aboutme');
+
+    stage(`workspace-locale-${viewport.name}-create-reload`);
+    await page.goto(`${ORIGIN}/app/new?template=engineer-compact`);
+    await waitForHydration(page);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+    await expect(page).toHaveTitle('Tạo CV · aboutme');
+    await page.reload();
+    await waitForHydration(page);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+
+    stage(`workspace-locale-${viewport.name}-create-toggle`);
+    await page.getByTestId('landing-locale-en').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page).toHaveTitle('New resume · aboutme');
+    await page.getByTestId('landing-locale-vi').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+
+    stage(`workspace-locale-${viewport.name}-account-menu-open`);
+    await page.getByTestId('account-menu').click();
+    stage(`workspace-locale-${viewport.name}-account-menu-visible`);
+    await expect(page.getByTestId('account-menu-logout')).toBeVisible();
+    stage(`workspace-locale-${viewport.name}-account-menu-logout`);
+    await page.getByTestId('account-menu-logout').click();
+    stage(`workspace-locale-${viewport.name}-account-menu-redirect`);
+    try {
+      await expect(page).toHaveURL(`${ORIGIN}/login`);
+    } catch (error) {
+      const pathname = new URL(page.url()).pathname;
+      stage(
+        `workspace-locale-${viewport.name}-redirect-${pathname === '/login'
+          ? 'login'
+          : pathname === '/register'
+            ? 'register'
+            : pathname === '/app/new'
+              ? 'app-new'
+              : 'other'}`,
+      );
+      throw error;
+    }
+    stage(`workspace-locale-${viewport.name}-account-menu-redirect-done`);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Test timeout')) {
+      stage(`workspace-locale-${viewport.name}-timeout`);
+    }
+    throw error;
+  } finally {
+    await context.close();
+  }
+
+  if (counters.certificateErrors !== 0) stage(`workspace-locale-${viewport.name}-certificate-errors`);
+  expect(counters.certificateErrors).toBe(0);
+  if (counters.consoleErrors !== 0) stage(`workspace-locale-${viewport.name}-console-errors`);
+  expect(counters.consoleErrors).toBe(0);
+  if (counters.externalRequests !== 0) stage(`workspace-locale-${viewport.name}-external-requests`);
+  expect(counters.externalRequests).toBe(0);
+  if (counters.pageErrors !== 0) stage(`workspace-locale-${viewport.name}-page-errors`);
+  expect(counters.pageErrors).toBe(0);
+  });
+}

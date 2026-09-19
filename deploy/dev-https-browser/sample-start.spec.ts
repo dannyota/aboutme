@@ -11,7 +11,7 @@ import {
   pinEnglish,
   waitForHydration,
 } from './harness-lib';
-import { ALLOWED_ORIGIN } from './network-policy';
+import { ALLOWED_ORIGIN, httpFailureStatus } from './network-policy';
 
 // Node-only capture endpoint, reached only by Playwright control code over
 // loopback HTTP; the browser's page/context firewall never sees it.
@@ -123,8 +123,25 @@ test('proves register-to-create from a gallery sample', async ({
 }) => {
   await pinEnglish(context);
   const counters = newDiagnosticCounters();
+  let injectedMediaBusyRequests = 0;
+  let injectedMediaBusyConsoleErrors = 0;
   const attachPageDiagnostics = pageDiagnosticsAttacher(counters, {
-    countConsoleError: isUnexpectedConsoleError,
+    countConsoleError: (message) => {
+      try {
+        const location = new URL(message.location().url);
+        if (
+          injectedMediaBusyConsoleErrors < injectedMediaBusyRequests
+          && httpFailureStatus(message.text()) === 503
+          && location.origin === ORIGIN
+          && location.pathname === '/api/v1/resumes'
+          && location.search === ''
+        ) {
+          injectedMediaBusyConsoleErrors += 1;
+          return false;
+        }
+      } catch { /* Count unparseable locations through the normal policy. */ }
+      return isUnexpectedConsoleError(message);
+    },
   });
   attachPageDiagnostics(page);
   context.on('page', attachPageDiagnostics);
@@ -202,6 +219,19 @@ test('proves register-to-create from a gallery sample', async ({
   await waitForHydration(verifyPage);
   await expect(verifyPage.locator('[data-new-resume="confirm"]')).toBeVisible();
 
+  stage('sample-locale-state');
+  const suggestedTitle = await verifyPage.getByLabel('Title').inputValue();
+  const samplePath = new URL(verifyPage.url()).search;
+  await verifyPage.getByTestId('landing-locale-vi').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.locator('html')).toHaveAttribute('lang', 'vi');
+  expect(new URL(verifyPage.url()).search).toBe(samplePath);
+  await expect(verifyPage.getByLabel('Tên CV')).toHaveValue(suggestedTitle);
+  await verifyPage.getByTestId('landing-locale-en').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(verifyPage.getByLabel('Title')).toHaveValue(suggestedTitle);
+
   // 5. A reload of the confirm page creates nothing.
   stage('reload');
   await verifyPage.reload();
@@ -213,6 +243,33 @@ test('proves register-to-create from a gallery sample', async ({
   // content.
   stage('create-title');
   await verifyPage.getByLabel('Title').fill('Sample Start Resume');
+  let englishBeforeTogglePayload: string | null = null;
+  await verifyPage.route('**/api/v1/resumes', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    englishBeforeTogglePayload = route.request().postData();
+    injectedMediaBusyRequests += 1;
+    await route.fulfill({
+      body: JSON.stringify({
+        error: { code: 'media_busy', message: 'retryable fixture response' },
+      }),
+      headers: {
+        'Cache-Control': 'no-store, no-transform',
+        'Content-Type': 'application/json',
+        'Retry-After': '1',
+      },
+      status: 503,
+    });
+  });
+  stage('create-payload-before-toggle');
+  await verifyPage.getByRole('button', { name: 'Create and open editor' }).click();
+  await expect(verifyPage.getByText('Please wait, then try again.')).toBeVisible();
+  await verifyPage.unroute('**/api/v1/resumes');
+  await verifyPage.getByTestId('landing-locale-vi').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.getByLabel('Tên CV')).toHaveValue('Sample Start Resume');
+  await verifyPage.getByTestId('landing-locale-en').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.getByLabel('Title')).toHaveValue('Sample Start Resume');
   stage('create-submit');
   const createResponse = verifyPage.waitForResponse((response) =>
     response.request().method() === 'POST'
@@ -221,6 +278,18 @@ test('proves register-to-create from a gallery sample', async ({
   await verifyPage.getByRole('button', { name: 'Create and open editor' }).click();
   const created = await createResponse;
   expect(created.status()).toBe(201);
+  expect(englishBeforeTogglePayload).not.toBeNull();
+  expect(created.request().postData()).toBe(englishBeforeTogglePayload);
+  const submitted = created.request().postDataJSON() as {
+    document?: { personalDetails?: { headline?: unknown } };
+    lng?: unknown;
+    title?: unknown;
+  };
+  expect(submitted.title).toBe('Sample Start Resume');
+  expect(submitted.lng).toBe('en');
+  expect(submitted.document?.personalDetails?.headline).toBe(
+    'Senior Backend Engineer · Go, Distributed Systems, Payments',
+  );
   const createdBody = (await created.json()) as { data?: { id?: unknown } };
   const resumeId = createdBody.data?.id;
   if (typeof resumeId !== 'string' || resumeId === '') {
@@ -242,10 +311,118 @@ test('proves register-to-create from a gallery sample', async ({
     'Senior Backend Engineer · Go, Distributed Systems, Payments',
   );
 
+  // An authenticated user can begin the Vietnamese sample without changing
+  // the English sample already created above. The confirm screen must keep
+  // that sample choice while the interface language changes.
+  stage('vietnamese-sample-open');
+  await verifyPage
+    .context()
+    .addCookies([{ name: 'aboutme-locale', value: 'vi', url: ORIGIN }]);
+  await gotoHydrated(verifyPage, SAMPLE_PATH);
+  await verifyPage.locator('[data-action="use-sample"]').click();
+  await verifyPage.waitForURL(
+    (url) =>
+      url.origin === ORIGIN &&
+      url.pathname === '/app/new' &&
+      url.search === '?sample=engineer-compact&lng=vi',
+  );
+  await waitForHydration(verifyPage);
+  const vietnameseSuggestedTitle = await verifyPage
+    .getByLabel('Tên CV')
+    .inputValue();
+  await verifyPage.getByTestId('landing-locale-en').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(verifyPage.getByLabel('Title')).toHaveValue(
+    vietnameseSuggestedTitle,
+  );
+  await verifyPage.getByTestId('landing-locale-vi').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.locator('html')).toHaveAttribute('lang', 'vi');
+  await expect(verifyPage.getByLabel('Tên CV')).toHaveValue(
+    vietnameseSuggestedTitle,
+  );
+
+  stage('vietnamese-sample-create');
+  await verifyPage.getByLabel('Tên CV').fill('Vietnamese Sample Start Resume');
+  let vietnameseBeforeTogglePayload: string | null = null;
+  await verifyPage.route('**/api/v1/resumes', async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    vietnameseBeforeTogglePayload = route.request().postData();
+    injectedMediaBusyRequests += 1;
+    await route.fulfill({
+      body: JSON.stringify({
+        error: { code: 'media_busy', message: 'retryable fixture response' },
+      }),
+      headers: {
+        'Cache-Control': 'no-store, no-transform',
+        'Content-Type': 'application/json',
+        'Retry-After': '1',
+      },
+      status: 503,
+    });
+  });
+  await verifyPage.getByRole('button', { name: 'Tạo và mở trình chỉnh sửa' }).click();
+  await expect(verifyPage.getByText('Hãy chờ rồi thử lại.')).toBeVisible();
+  await verifyPage.unroute('**/api/v1/resumes');
+  await verifyPage.getByTestId('landing-locale-en').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.getByLabel('Title')).toHaveValue(
+    'Vietnamese Sample Start Resume',
+  );
+  await verifyPage.getByTestId('landing-locale-vi').focus();
+  await verifyPage.keyboard.press('Enter');
+  await expect(verifyPage.getByLabel('Tên CV')).toHaveValue(
+    'Vietnamese Sample Start Resume',
+  );
+  const vietnameseCreateResponse = verifyPage.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      new URL(response.url()).origin === ORIGIN &&
+      new URL(response.url()).pathname === '/api/v1/resumes',
+  );
+  await verifyPage
+    .getByRole('button', { name: 'Tạo và mở trình chỉnh sửa' })
+    .click();
+  const vietnameseCreated = await vietnameseCreateResponse;
+  expect(vietnameseCreated.status()).toBe(201);
+  expect(vietnameseBeforeTogglePayload).not.toBeNull();
+  expect(vietnameseCreated.request().postData()).toBe(vietnameseBeforeTogglePayload);
+  const vietnameseSubmitted = vietnameseCreated.request().postDataJSON() as {
+    document?: { personalDetails?: { headline?: unknown } };
+    lng?: unknown;
+    title?: unknown;
+  };
+  expect(vietnameseSubmitted).toMatchObject({
+    lng: 'vi',
+    title: 'Vietnamese Sample Start Resume',
+  });
+  expect(vietnameseSubmitted.document?.personalDetails?.headline).toBe(
+    'Kỹ sư Frontend cấp cao · React, TypeScript, hiệu năng web',
+  );
+  const vietnameseCreatedBody = (await vietnameseCreated.json()) as {
+    data?: { id?: unknown };
+  };
+  const vietnameseResumeId = vietnameseCreatedBody.data?.id;
+  if (typeof vietnameseResumeId !== 'string' || vietnameseResumeId === '') {
+    throw new Error('Vietnamese resume create response did not return an id');
+  }
+  await verifyPage.waitForURL(
+    (url) =>
+      url.origin === ORIGIN &&
+      url.pathname === `/app/resumes/${vietnameseResumeId}`,
+  );
+  await waitForHydration(verifyPage);
+  await verifyPage
+    .context()
+    .addCookies([{ name: 'aboutme-locale', value: 'en', url: ORIGIN }]);
+  await verifyPage.reload();
+  await waitForHydration(verifyPage);
+
   // 7. Fill the account to the resume cap, then the confirm page hides the
   // create button.
   stage('fill-cap');
-  for (let count = 1; count < RESUME_CAP; count += 1) {
+  for (let count = 2; count < RESUME_CAP; count += 1) {
     await createBlankResume(verifyPage, uniqueTitle());
   }
   stage('cap-check');
@@ -267,6 +444,8 @@ test('proves register-to-create from a gallery sample', async ({
     externalRequests: 0,
     pageErrors: 0,
   });
+  expect(injectedMediaBusyRequests).toBe(2);
+  expect(injectedMediaBusyConsoleErrors).toBe(2);
 
   await writeFile(
     EVIDENCE_PATH,

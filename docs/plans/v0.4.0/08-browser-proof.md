@@ -16,12 +16,18 @@ the accepted localization design and ADR, the local UAT runbook,
 - Modify `deploy/dev-https-browser/publish.spec.ts`.
 - Modify `deploy/dev-https-browser/exports.spec.ts`.
 - Modify `deploy/dev-https-browser/sample-start.spec.ts`.
-- Modify `deploy/dev-https-browser/editor-fixtures.ts` only if the five specs
-  require a shared fictional fixture.
+- Modify `deploy/dev-https-browser/public.spec.ts` for current editor hooks and
+  bounded failure stages.
+- Modify `deploy/dev-https-browser/editor-fixtures.ts` only if the specs require
+  a shared fictional fixture.
 - Save bounded ignored evidence under `.dev/native-https/evidence/`.
 
 Do not edit product source, scripts, package files, images, design, manifests,
 or baselines. Do not fix defects. Report steps and the owning frontend path.
+
+The devops role separately owns the `public` addition to the bounded-stage
+allowlist in `deploy/dev-https-browser/run.sh`. The manager rebuilds the browser
+image and verifies that raw output remains withheld.
 
 ## Required proof
 

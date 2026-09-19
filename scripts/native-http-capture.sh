@@ -159,6 +159,13 @@ fetch "$PUBLIC_ORIGIN/p5a-live-photo" html-live
 expect_status html-live 200
 no_set_cookie html-live
 
+# The fixed-name hydration asset carries a raw content fingerprint in its query.
+# Vue includes checkout-root __file metadata in development builds, so the
+# golden comparison replaces only that checkout-root prefix below.
+hydration_path=$(node scripts/native-http-hashes.mjs --script-path "$run_id/html-live.body")
+fetch "$PUBLIC_ORIGIN$hydration_path" public-hydration
+expect_status public-hydration 200
+
 # HTML, nondiscoverable -> 200 with noindex
 fetch "$PUBLIC_ORIGIN/p5a-live-noindex" html-noindex
 expect_status html-noindex 200
@@ -202,7 +209,15 @@ if grep -rqiE '<script' "$run_id/json-live.body" "$run_id/md-live.body"; then
 fi
 
 # Every captured representation must match its frozen SHA-256, so any drift in
-# the projection, renderer, sanitizer, or formats fails the capture.
+# the projection, renderer, sanitizer, or formats fails the capture. The public
+# HTML links a fixed-name hydration asset whose checkout-root __file metadata is
+# canonicalized only after its raw fingerprint matches the query string.
+node scripts/native-http-hashes.mjs \
+  "$run_id/public-hydration.body" "$run_id/html-live.body" "$ROOT" \
+  >"$run_id/html-live.canonical.json"
+node scripts/native-http-hashes.mjs \
+  "$run_id/public-hydration.body" "$run_id/html-noindex.body" "$ROOT" \
+  >"$run_id/html-noindex.canonical.json"
 node --input-type=module - "$run_id" "$ROOT/apps/server/cmd/native-http-fixture/testdata/hashes.json" <<'NODE'
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -217,9 +232,17 @@ assert.equal(
   'photo route body drifted from the frozen normalized PNG',
 );
 for (const [route, want] of Object.entries(frozen.responses)) {
-  const got = readFileSync(join(runId, `${route}.body.sha256`), 'utf8').trim();
+  const got = route === 'html-live' || route === 'html-noindex'
+    ? JSON.parse(readFileSync(join(runId, `${route}.canonical.json`), 'utf8')).htmlSHA256
+    : readFileSync(join(runId, `${route}.body.sha256`), 'utf8').trim();
   assert.equal(got, want, `${route}: response body hash drifted`);
 }
+const hydration = JSON.parse(readFileSync(join(runId, 'html-live.canonical.json'), 'utf8'));
+assert.equal(
+  hydration.assetSHA256,
+  frozen.assets?.['public-hydration'],
+  'public hydration asset drifted from the frozen canonical fingerprint',
+);
 process.stdout.write('native-http-capture: hashes PASS\n');
 NODE
 

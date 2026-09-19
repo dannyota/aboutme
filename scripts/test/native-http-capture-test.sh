@@ -9,6 +9,7 @@ set -Eeuo pipefail
 #   scripts/test/native-http-capture-test.sh              # fixture + lifecycle
 #   scripts/test/native-http-capture-test.sh -k fixture    # fixture only
 #   scripts/test/native-http-capture-test.sh -k lifecycle  # lifecycle only
+#   scripts/test/native-http-capture-test.sh -k canonical  # canonicalization only
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)
 cd "$ROOT"
@@ -29,8 +30,8 @@ if [ $# -gt 0 ]; then
   esac
 fi
 case "$selector" in
-all | fixture | lifecycle) ;;
-*) fail "unknown -k value '$selector' (want fixture or lifecycle)" ;;
+all | fixture | lifecycle | canonical) ;;
+*) fail "unknown -k value '$selector' (want fixture, lifecycle, or canonical)" ;;
 esac
 
 FROZEN_DSN='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_p5a_fixture?sslmode=disable'
@@ -145,9 +146,22 @@ test_lifecycle() {
   printf '%s\n' 'native-http-capture-test: lifecycle PASS'
 }
 
+# ---------------------------------------------------------------------------
+# canonical: only checkout-root __file paths may vary between worktrees
+# ---------------------------------------------------------------------------
+
+test_canonical() {
+  node "$ROOT/scripts/test/native-http-hashes.test.mjs" ||
+    fail 'native public hydration canonicalization failed'
+  printf '%s\n' 'native-http-capture-test: canonical PASS'
+}
+
 if [ "$selector" = all ] || [ "$selector" = fixture ]; then
   test_fixture
 fi
 if [ "$selector" = all ] || [ "$selector" = lifecycle ]; then
   test_lifecycle
+fi
+if [ "$selector" = all ] || [ "$selector" = canonical ]; then
+  test_canonical
 fi

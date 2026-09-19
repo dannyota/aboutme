@@ -27,6 +27,11 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
     });
   });
   const external = await denyExternalRequests(page);
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
   await page.route('/api/v1/me', async (route) => {
     expect(route.request().method()).toBe('GET');
     await route.fulfill({
