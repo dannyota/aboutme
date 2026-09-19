@@ -33,10 +33,22 @@ export function buildPrintAssets(
  * content hash as a query to fetch fresh CSS whenever either file changes.
  */
 export function publicStyleVersion(printCSS: string, fontsCSS: string): string {
+  return contentVersion(printCSS, fontsCSS);
+}
+
+/**
+ * Version of the public hydration bundle, which also keeps a fixed, immutable
+ * name; the public page loads it as public-resume.mjs?v=<version>.
+ */
+export function publicScriptVersion(source: string): string {
+  return contentVersion(source);
+}
+
+// contentVersion is the first 16 hex characters of the SHA-256 of the parts
+// joined by NUL, so a byte moved across a boundary changes the version.
+function contentVersion(...parts: string[]): string {
   return createHash('sha256')
-    .update(printCSS)
-    .update('\0')
-    .update(fontsCSS)
+    .update(parts.join('\0'))
     .digest('hex')
     .slice(0, 16);
 }

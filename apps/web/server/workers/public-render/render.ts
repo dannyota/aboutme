@@ -73,12 +73,23 @@ const jsonLd = (request: PublicRenderRequest): string => {
   return `<script type="application/ld+json">${json}</script>`;
 };
 
+/**
+ * Content versions of the fixed-name, immutable assets the public page loads;
+ * each is 16 lowercase hex characters.
+ */
+export interface PublicAssetVersions {
+  readonly style: string;
+  readonly script: string;
+}
+
 export async function renderPublicResume(
   request: PublicRenderRequest,
-  styleVersion: string,
+  versions: PublicAssetVersions,
 ): Promise<string> {
   try {
-    if (!/^[0-9a-f]{16}$/u.test(styleVersion)) {
+    const { style: styleVersion, script: scriptVersion } = versions;
+    if (![styleVersion, scriptVersion].every((version) =>
+      /^[0-9a-f]{16}$/u.test(version))) {
       throw new Error();
     }
     const body = await renderToString(
@@ -121,7 +132,8 @@ export async function renderPublicResume(
       '<body><a href="#public-resume">Skip to content</a>',
       '<main id="public-resume" ',
       `data-revision="${request.publicResume.revision}">${body}</main>`,
-      '<script type="module" src="/_nuxt/assets/public-resume.mjs"></script>',
+      '<script type="module" ',
+      `src="/_nuxt/assets/public-resume.mjs?v=${scriptVersion}"></script>`,
       '</body></html>',
     ].join('');
     if (Buffer.byteLength(html, 'utf8') > PUBLIC_RENDER_HTML_MAX_BYTES) {

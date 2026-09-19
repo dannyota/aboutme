@@ -176,6 +176,14 @@ test('proves a published resume hydrates in a real browser', async ({
       // A per-release version defeats the year-long immutable cache.
       expect(sheet?.search, `${path} version`).toMatch(/^\?v=[0-9a-f]{16}$/u);
     }
+    // The hydration script is versioned too, so a returning browser never
+    // runs a previous release's cached script against new HTML.
+    const scriptURL = await publicPage
+      .locator('script[type="module"]')
+      .getAttribute('src');
+    expect(scriptURL).toMatch(
+      /^\/_nuxt\/assets\/public-resume\.mjs\?v=[0-9a-f]{16}$/u,
+    );
     expect(styling.resume).not.toBeNull();
     expect(styling.resume?.boxSizing).toBe('border-box');
     expect(styling.resume?.paddingLeft).not.toBe('0px');

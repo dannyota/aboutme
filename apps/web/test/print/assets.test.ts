@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   buildPrintAssets,
+  publicScriptVersion,
   publicStyleVersion,
 } from '../../server/utils/print/assets';
 
@@ -58,5 +59,14 @@ describe('public style version', () => {
     expect(publicStyleVersion('a{}', 'b{color:red}')).not.toBe(base);
     // The separator keeps a byte moved across the boundary distinct.
     expect(publicStyleVersion('a{}b', '{}')).not.toBe(base);
+  });
+});
+
+describe('public script version', () => {
+  it('is 16 hex characters that change with the bundle', () => {
+    const base = publicScriptVersion('export default 1;');
+    expect(base).toMatch(/^[0-9a-f]{16}$/u);
+    expect(publicScriptVersion('export default 1;')).toBe(base);
+    expect(publicScriptVersion('export default 2;')).not.toBe(base);
   });
 });
