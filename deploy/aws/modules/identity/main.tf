@@ -11,13 +11,17 @@ locals {
       Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } }
     }]
   })
-  # Parameters each execution role may read, and nothing else.
+  # Parameters each execution role may read, and nothing else. maintenance
+  # runs only the caddy container, so its role needs exactly the origin TLS
+  # parameters: it cannot reuse the app role, which also needs the server
+  # container's secrets.
   exec_params = {
-    app      = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "oauth/google-client-id", "oauth/google-client-secret"]
-    web      = []
-    migrate  = ["db/migrator-password"]
-    jobs     = ["db/app-password"]
-    db-admin = ["db/migrator-password", "db/app-password"]
+    app         = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "oauth/google-client-id", "oauth/google-client-secret"]
+    web         = []
+    maintenance = ["tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca"]
+    migrate     = ["db/migrator-password"]
+    jobs        = ["db/app-password"]
+    db-admin    = ["db/migrator-password", "db/app-password"]
   }
   media_statements = [
     # HeadObject reports a missing key as 404 only with ListBucket. The

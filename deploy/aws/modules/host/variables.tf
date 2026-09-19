@@ -16,5 +16,5 @@ variable "instance_profile_name" {
 
 variable "task_definition_arns" {
   type        = map(string)
-  description = "Initial task definition per service name suffix: app and web"
+  description = "Initial task definition per service name suffix"
 }

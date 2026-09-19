@@ -57,6 +57,8 @@ jobs:
               # adapt parses the full config without the runtime TLS files.
               docker run --rm --entrypoint caddy -e CLOUDFLARE_RANGES=192.0.2.0/24 "$IMAGE" \
                 adapt --config /etc/caddy/Caddyfile >/dev/null
+              docker run --rm --entrypoint caddy -e CLOUDFLARE_RANGES=192.0.2.0/24 "$IMAGE" \
+                adapt --config /etc/caddy/Caddyfile.maintenance >/dev/null
               ;;
           esac
       - name: Push

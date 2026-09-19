@@ -67,8 +67,9 @@ module "host" {
   host_security_group_id = module.network.host_security_group_id
   instance_profile_name  = module.identity.instance_profile_name
   task_definition_arns = {
-    app = module.tasks.app_task_definition_arn
-    web = module.tasks.web_task_definition_arn
+    app         = module.tasks.app_task_definition_arn
+    web         = module.tasks.web_task_definition_arn
+    maintenance = module.tasks.maintenance_task_definition_arn
   }
 }
 

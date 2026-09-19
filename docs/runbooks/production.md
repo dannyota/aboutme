@@ -150,6 +150,11 @@ A release is a `v*` tag on `main` with green CI. The `release-images` workflow
 publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag; the
 packages must be public so the host can pull them.
 
+Before the first deploy after adding maintenance mode, apply the reviewed
+OpenTofu change. It creates `aboutme-prod-maintenance` at desired count zero.
+The deploy script registers the release's Caddy image before it starts that
+service, so the initial task definition image never serves traffic.
+
 ```sh
 bash deploy/aws/scripts/deploy.sh <tag>                 # normal release
 bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
@@ -158,9 +163,16 @@ bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 The script checks the tag and CI, resolves image digests, compares Cloudflare
 ranges, checks that every secret the new revisions reference exists (by name,
 never reading a value), snapshots RDS, registers task definition revisions,
-disables the job schedules, stops `app`, runs the database steps, starts `web`
-then `app`, re-enables the schedules and smoke-tests through Cloudflare. The
-site is down between "site down" and "site up", usually one to three minutes.
+disables the job schedules, and stops `app`. It then swaps in the `maintenance`
+service: the same Caddy image, in a mode that serves
+`deploy/caddy/production/maintenance.html` at 503 for every path, including
+`/readyz` and `/api/*`. With the maintenance page up, it runs the database
+steps, starts `web`, swaps `maintenance` back out, starts `app`, re-enables the
+schedules, and smoke-tests through Cloudflare. The script requires the
+maintenance page's 503 response through Cloudflare before it starts a database
+task. `app` and `maintenance` both bind host port 443, so exactly one of them is
+ever asked to run at once. Visitors see the maintenance page, not a connection
+failure, between "site down" and "site up", usually one to three minutes.
 
 Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
 deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes
@@ -186,23 +198,22 @@ aws rds copy-db-snapshot --region ap-southeast-1 \
 
 `copy-db-snapshot` copies no tags unless given `--copy-tags`.
 
-A failure after "site down" but before migrations complete restores the previous
-`app` revision and the job schedules' earlier state, then exits non-zero. If
-migrations were already applied, the script leaves the app and schedules stopped
-and says so: fix forward with a new release, or restore the snapshot the deploy
-took.
+A failure before the migration task starts turns the maintenance page back off
+and restores the previous `app` revision and the job schedules' earlier state,
+then exits non-zero. Once the script requests `migrate`, it leaves the
+maintenance page up and keeps `app` and the job schedules stopped. The request
+can succeed even when the client loses its response, and Goose can commit an
+earlier migration before a later migration fails. Fix forward with a new
+release, or restore the snapshot the deploy took. On `--first-deploy`, a failure
+retries the app stop and starts maintenance only after ECS confirms the port is
+free. It leaves every job schedule disabled, because `db-setup` may not have
+created usable application state.
 
-Goose applies each migration in its own transaction. When a release carries
-several migrations and `migrate` fails partway, the earlier ones stay applied
-while the script still restores the previous app. After any migrate failure,
-check the applied head in the migrate task's log before trusting the restored
-app; if it moved, treat the deploy as migrated. On `--first-deploy` it leaves
-`app` stopped, because there is no earlier release. If it reports that a
-database task may still be running, it leaves the app and schedules stopped:
-check that task with
-`aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it has
-stopped, rerun the deploy. Enabled schedules always point at the released `jobs`
-revision.
+If the script reports that a database task may still be running, it leaves the
+maintenance page, the app, and the schedules exactly as they are: check that
+task with `aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and
+when it has stopped, rerun the deploy. Enabled schedules always point at the
+released `jobs` revision.
 
 ## Rollback
 
@@ -210,7 +221,10 @@ revision.
 bash deploy/aws/scripts/deploy.sh --rollback <previous-tag>
 ```
 
-It redeploys earlier images without a snapshot or migration. It is safe only
+It redeploys earlier server, web, and app Caddy images without a snapshot or
+migration, through the same maintenance-page window as a normal deploy. The
+maintenance service keeps its currently registered Caddy image so rollbacks to
+tags from before maintenance mode still serve the page. A rollback is safe only
 when the failed release applied no migration. After a migration, fix forward
 with a new release, or restore the database from the snapshot the failed deploy
 took.
@@ -238,7 +252,9 @@ by hand.
 
 ## Healthy state
 
-- ECS services `aboutme-prod-app` and `aboutme-prod-web` each run one task.
+- ECS services `aboutme-prod-app` and `aboutme-prod-web` each run one task;
+  `aboutme-prod-maintenance` runs zero. `deploy.sh` is the only thing that
+  changes any of their desired counts; OpenTofu ignores that drift.
 - `https://aboutme.vn/healthz` and `/readyz` return 200 through Cloudflare, and
   `https://www.aboutme.vn/` redirects to the apex.
 - A request straight to the Elastic IP gets no response.
