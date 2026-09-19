@@ -19,8 +19,10 @@ const props = withDefaults(
     readonly pressed?: boolean;
     readonly disabled?: boolean;
     readonly class?: string;
+    /** An icon button never submits a form unless asked to. */
+    readonly type?: 'button' | 'submit' | 'reset';
   }>(),
-  { variant: 'ghost', size: 'icon' },
+  { variant: 'ghost', size: 'icon', type: 'button' },
 );
 </script>
 
@@ -35,6 +37,7 @@ const props = withDefaults(
           :class="cn(props.class)"
           :disabled="disabled"
           :size="size"
+          :type="type"
           :variant="variant"
         >
           <slot />
