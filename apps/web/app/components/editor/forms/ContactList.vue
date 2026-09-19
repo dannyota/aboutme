@@ -36,9 +36,12 @@ watch(
   () => props.details,
   (next) => {
     details.value = copyDetails(next);
+    // A label revealed but not yet committed stays open while another
+    // detail's change comes back; only removed details drop their flag.
     visibleLabels.value = Object.fromEntries(
       details.value
-        .filter((detail) => detail.label !== undefined)
+        .filter((detail) => detail.label !== undefined
+          || visibleLabels.value[detail.id] === true)
         .map((detail) => [detail.id, true]),
     );
     limitError.value = false;
@@ -177,6 +180,8 @@ function changeDisplay(id: string, display: LinkDisplay): void {
 function unsetLabel(id: string): void {
   const detail = detailById(id);
   if (detail?.label === undefined) return;
+  const { [id]: _cleared, ...stillVisible } = visibleLabels.value;
+  visibleLabels.value = stillVisible;
   replace(
     details.value.map((candidate) => {
       if (candidate.id !== id) return candidate;
