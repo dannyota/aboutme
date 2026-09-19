@@ -243,14 +243,35 @@ phase=finished
 say "site up; job schedules enabled"
 
 # 9. Smoke through Cloudflare, and prove the origin rejects direct requests.
+# Right after Caddy restarts, Cloudflare can see a TLS reset or serve a 525, so
+# each positive check gets a few attempts. The direct-origin check never
+# retries into a pass: one answer from the origin fails the deploy.
+smoke_attempts=5
+smoke_delay=${DEPLOY_SMOKE_DELAY:-3}
+retry() { # command...
+  local attempt
+  for ((attempt = 1; attempt <= smoke_attempts; attempt++)); do
+    "$@" && return 0
+    ((attempt == smoke_attempts)) || sleep "$smoke_delay"
+  done
+  return 1
+}
+status_ok() { # path
+  smoke_code=$(curl -s -o /dev/null -w '%{http_code}' "https://aboutme.vn$1")
+  [[ $smoke_code == 200 ]]
+}
+hsts_ok() { curl -fsSI https://aboutme.vn/ | grep -qi '^strict-transport-security:'; }
+origin_ip() {
+  smoke_ip=$(aws_ ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
+    --query 'Addresses[0].PublicIp' --output text) &&
+    [[ $smoke_ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]
+}
 for path in /healthz /readyz; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' "https://aboutme.vn$path")
-  [[ $code == 200 ]] || { say "smoke: $path returned $code"; exit 1; }
+  retry status_ok "$path" || { say "smoke: $path returned $smoke_code"; exit 1; }
 done
-curl -fsSI https://aboutme.vn/ | grep -qi '^strict-transport-security:' || { say "smoke: HSTS header missing"; exit 1; }
-ip=$(aws_ ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
-  --query 'Addresses[0].PublicIp' --output text)
-if curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$ip/"; then
+retry hsts_ok || { say "smoke: HSTS header missing"; exit 1; }
+retry origin_ip || { say "smoke: could not resolve the origin address"; exit 1; }
+if curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$smoke_ip/"; then
   say "smoke: the origin answered a direct request"
   exit 1
 fi

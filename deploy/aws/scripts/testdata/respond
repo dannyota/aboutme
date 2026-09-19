@@ -11,8 +11,28 @@ case "$cmd $args" in
   "curl "*"ghcr.io/token"*) echo '{"token":"stub"}' ;;
   "curl "*"/manifests/"*) printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
   "curl "*"api.cloudflare.com/client/v4/ips"*) echo '{"success":true,"result":{"ipv4_cidrs":["198.51.100.0/24","192.0.2.0/24"]}}' ;;
-  "curl -fsSI https://aboutme.vn/") printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\n' ;;
+  "curl -fsSI https://aboutme.vn/")
+    # smoke_flaky: the first HSTS probe hits a TLS reset, as right after a
+    # Caddy restart.
+    if [[ $STUB_CASE == smoke_flaky ]] && ! [[ -e $STUB_DIR/hsts.once ]]; then
+      : >"$STUB_DIR/hsts.once"
+      exit 35
+    fi
+    printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\n' ;;
+  "curl "*"https://aboutme.vn/healthz"*)
+    if [[ $STUB_CASE == smoke_down ]]; then echo 502; exit 0; fi
+    # smoke_flaky: Cloudflare serves one 525 first.
+    if [[ $STUB_CASE == smoke_flaky ]] && ! [[ -e $STUB_DIR/healthz.once ]]; then
+      : >"$STUB_DIR/healthz.once"
+      echo 525
+      exit 0
+    fi
+    echo 200 ;;
   "curl "*"https://aboutme.vn/"*) echo 200 ;;
+  "curl "*"https://192.0.2.10/"*)
+    # origin_open: the origin answers a direct request.
+    if [[ $STUB_CASE == origin_open ]]; then exit 0; fi
+    exit 28 ;;
   "curl "*) exit 28 ;;
   "aws "*"ecs describe-task-definition"*)
     # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
@@ -59,7 +79,9 @@ case "$cmd $args" in
   "aws "*"scheduler update-schedule"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
     cp "$file" "$STUB_DIR/last-schedule.json" ;;
-  "aws "*"ec2 describe-addresses"*) echo 192.0.2.10 ;;
+  "aws "*"ec2 describe-addresses"*)
+    if [[ $STUB_CASE == origin_unknown ]]; then echo None; exit 0; fi
+    echo 192.0.2.10 ;;
   # The snapshot name's time is fixed at 2026-10-20T00:00Z.
   "date -u +%Y%m%d%H%M") echo 202610200000 ;;
   *) exit 0 ;;
