@@ -62,7 +62,7 @@ runtime_recover_rollback_public_transition(
 The function is SECURITY DEFINER owned by aboutme_runtime_owner. It uses
 search_path=pg_catalog, qualified fixed SQL and no dynamic SQL. PUBLIC and every
 non-app login role have no EXECUTE. aboutme_app receives EXECUTE only. The
-private R8 adapter supplies its fixed replica, instance and release tuple;
+private server adapter supplies its fixed replica, instance and release tuple;
 shared app login is not incarnation authentication. No HTTP body, reason,
 boolean, expected result or error text is an argument.
 
@@ -106,10 +106,11 @@ graph: shared runtime barrier, then transition parent, with no business-row
 lock. The function takes no public_state, resume, membership, capacity, replica,
 slug, user, session, idempotency, tombstone, audit or media-job lock.
 
-This proof depends on complete R2/R3 caller migration: no supported public
-generation writer may bypass transition overlap and parent fencing. Such a
-bypass is an implementation defect and must fail the writer-inventory test; it
-is not repaired by adding a reverse recovery lock edge.
+This proof depends on complete coordinator and mutation-caller migration: no
+supported public generation writer may bypass transition overlap and parent
+fencing. Such a bypass is an implementation defect and must fail the
+writer-inventory test; it is not repaired by adding a reverse recovery lock
+edge.
 
 The function need not wait until deadline_at. It is an exact same-incarnation
 abandon operation after an ambiguous business transaction. Once it owns the
@@ -172,17 +173,18 @@ For account deletion, the public HTTP success is the existing fixed response.
 The committed transition results prove every retirement and discovery result. No
 retained account-owned idempotency row is required.
 
-Immutable terminal results establish this transition's historical outcome. R2
-uses the fixed [reconciliation snapshot](transition-reconciliation.md) before
-changing a local fence. That contract preserves later generations and proved
-retirements across delayed events and process restarts.
+Immutable terminal results establish this transition's historical outcome. The
+coordinator uses the fixed
+[reconciliation snapshot](transition-reconciliation.md) before changing a local
+fence. That contract preserves later generations and proved retirements across
+delayed events and process restarts.
 
 ## Closing-to-unresolved boundary
 
-Install no runtime_mark_public_transition_unresolved function in R1/R3. The
-four-table constraints make parent, ordered targets, digest, results, required
-replicas and acks internally coherent. The remaining observations do not prove a
-contradiction attributable to this transition:
+Install no runtime_mark_public_transition_unresolved function in the store or
+mutation callers. The four-table constraints make parent, ordered targets,
+digest, results, required replicas and acks internally coherent. The remaining
+observations do not prove a contradiction attributable to this transition:
 
 - target generation mismatch or resume absence proves only that rollback cannot
   safely reopen the expected generation;
@@ -232,10 +234,11 @@ generation recovery.
 
 ## Required proof
 
-The R1 author proves the real-role grant matrix, every tuple/digest mismatch,
-immutable terminal replay, closing-generation validation, parent-lock races,
-response loss and terminal notification only after commit. R2/R3 prove complete
-writer coverage, response-retention behavior and the
+The store implementation proves the real-role grant matrix, every tuple and
+digest mismatch, immutable terminal replay, closing-generation validation,
+parent-lock races, response loss and terminal notification only after commit.
+Coordinator and mutation callers prove complete writer coverage,
+response-retention behavior and the
 [reconciliation matrix](transition-reconciliation.md).
 
 Run focused migration/store tests with independent pinned connections. Root runs

@@ -6,15 +6,30 @@ visible through a desk, a sheet of paper, and a seal applied by the person.
 
 ## Product principle
 
-The landing page leads with “Your resume. Free. No one sees it unless you want
-them to.” (in Vietnamese by default: “CV của bạn. Miễn phí. Không ai thấy nếu
-bạn không muốn.”). It shows a compiled-in resume rendered by the shared
+The landing page leads with “CV của bạn. Miễn phí. Không ai thấy nếu bạn không
+muốn.” by default and “Your resume. Free. No one sees it unless you want them
+to.” in English. It shows a compiled-in resume rendered by the shared
 `ResumeDocument`, rather than a profile card or template carousel. Publishing is
 a deliberate action with three named choices: Public resume, PDF download, and
-SEO and GEO.
+SEO and GEO. The publish dialog also controls the optional browser-tab title and
+emoji icon.
 
 The editor, public page, and PDF use the same document renderer. Application
 chrome may frame the renderer but does not change its output.
+
+## Language coverage
+
+Vietnamese is the default site language. The language choice persists in the
+`aboutme-locale` cookie. The home page, template gallery and detail pages,
+sign-in and account-creation flows, password recovery, email verification,
+Terms, and Privacy are available in Vietnamese and English. The shell shows the
+language toggle only on these localized routes.
+
+The resume list, new-resume confirmation, editor, settings, and agent consent
+stay in English. Public resume chrome follows the resume language: Vietnamese
+resumes show “Tạo bằng aboutme.vn” and “Tải PDF”; other languages show “Built
+with aboutme.vn” and “Download PDF”. Resume content and renderer labels follow
+the resume's own language, independent of the site language.
 
 ## Visual direction
 
@@ -28,8 +43,8 @@ chrome may frame the renderer but does not change its output.
   for saving and draft, destructive text for failure, and a seal plus link for
   public.
 - Chrome alignment follows an 8 px module. The sheet is never cropped.
-- Copy is sentence case. Controls name the action they perform. The product uses
-  “resume”, not “CV”.
+- Copy is sentence case. Controls name the action they perform. English copy
+  uses “resume”; Vietnamese localized copy uses “CV”.
 
 ## Typography and tokens
 
@@ -83,35 +98,39 @@ and successful publish response show the large stamp.
 ## Landing
 
 The landing page is a responsive two-column layout from 42 rem upward. Its left
-column contains the headline, a short explanation, and Create account with Sign
-in secondary for signed-out visitors. Signed-in visitors see Open your resumes
-instead.
+column spans five of twelve columns and the sample spans seven. Signed-out
+visitors see Create account, Browse templates, and Sign in, in that order.
+Signed-in visitors see Open your resumes and Browse templates.
 
-The right column contains the compiled-in sample as an A4 white sheet with a
-soft shadow and a red seal naming `aboutme.vn/ada-lovelace`. The sheet uses
-`zoom: 0.6` on wide screens, `0.5` below 42 rem, and `0.44` at widths up to 390
-px.
+The right column contains a compiled-in two-column Ada Lovelace sample inside a
+210 mm by at least 297 mm white sheet with a soft shadow. The sample uses its
+own Letter page metadata and does not use a gallery preset. A 96 px red seal
+names `aboutme.vn/ada-lovelace`. The sheet uses `zoom: 0.6` on wide screens,
+`0.5` below 42 rem, and `0.44` at widths up to 390 px.
 
 Below the sample are three ruled facts: Yours to keep, One link per resume, and
 Bring your own agent. A second ruled section explains Public resume, PDF
-download, and SEO and GEO. The page ends with the AGPL-3.0 repository link. The
-page performs no data fetch.
+download, and SEO and GEO. The footer links the AGPL-3.0 repository, Terms, and
+Privacy. The page performs no data fetch.
 
 ## Template gallery
 
-`/templates` lists all 20 templates in the site language: the five with a sample
-first, then the rest by name. Each card shows page one of the template's own
-sample, or of the generic filler tagged "Illustrative content", with its name, a
-one-line purpose, and a tag naming the sample. One filter chip is active at a
-time and is kept in the URL (`?filter=ats`); on phones the chip row scrolls
-sideways. The grid runs five columns on wide screens down to two on phones.
+`/templates` lists all 20 templates: the five with a sample first, then the rest
+by English preset name. The surrounding copy, purpose, and sample tag follow the
+site language. Each card shows page one of the template's own sample, or of the
+generic filler tagged “Nội dung minh họa” or “Illustrative content”. One filter
+chip is active at a time and is kept in the URL (`?filter=ats`); the chip row
+scrolls sideways when needed. The grid has two columns below 641 px, three from
+641 px, four from 900 px, and five from 1180 px.
 
-`/templates/{id}` shows the full sample beside a sticky info column: the sample
-language toggle, the persona marked as fictional, page count, layout, photo fit,
-a reading-order note on two-column templates, and "Use this sample" with "Use
-this template with a blank resume". A "What an ATS reads" tab shows the sample's
-text in reading order. On phones the info comes first and the primary action
-sits in a bar at the bottom.
+At 900 px and wider, `/templates/{id}` shows the full document beside a 360 px
+sticky info column with a 24 px top offset. Below 900 px, the info comes first
+and the primary action sits in a bar at the bottom. Templates with a sample show
+the sample language toggle when both languages exist, the fictional persona,
+page count, “Use this sample”, a blank-resume link, and an “ATS reads” tab with
+text in reading order. Templates without a sample show localized illustrative
+filler and the blank-resume action. Every detail page shows the layout, paper
+size, photo fit, and a reading-order note for two-column templates.
 
 "Use this sample" opens `/app/new`, a confirm step that never creates on its
 own: thumbnail, summary, editable title, and the resume count, or the limit
@@ -120,10 +139,14 @@ sample; a first resume opens on the samples.
 
 ## Authenticated chrome and editor
 
-The shared application shell has the lowercase `aboutme` brand. Signed-out
-navigation shows Sign in, Create account, and a theme toggle. Signed-in
-navigation shows Resumes, Settings, and an account menu. The account menu
-contains Settings, theme switching, and Log out.
+The shared application shell has the lowercase `aboutme` brand and a Templates
+link for every visitor. Signed-out navigation also shows Sign in, Create
+account, and a theme toggle. Signed-in navigation also shows Resumes, Settings,
+and an account menu. The account menu contains Settings, theme switching, and
+Log out. On signed-in screens below 640 px, the direct Templates and Settings
+links are hidden; Settings remains in the account menu. On localized routes, the
+shell adds the Vietnamese and English toggle. Below 640 px its visible labels
+shorten to VI and EN while their accessible names remain complete.
 
 The resume list is a desk of up to three white paper cards in a three-column
 grid at medium widths. Each card shows its title, relative updated time, and a
@@ -158,16 +181,17 @@ template at 0.18 scale. A thumbnail renders only while its card is near the
 viewport, and applying a template names any sections it moved between columns.
 
 The publish dialog is a scrollable modal with the `aboutme.vn/` slug prefix. It
-presents the three switches with explanations. PDF download and SEO and GEO are
-disabled until Public resume is enabled. The primary action is Publish,
-Unpublish, or Update publication according to the current state. Success shows
-the seal, public link, and Copy link.
+presents optional fields for the browser-tab title and emoji icon, followed by
+the three switches with explanations. PDF download and SEO and GEO are disabled
+until Public resume is enabled. The primary action is Publish, Unpublish, or
+Update publication according to the current state. Success shows the seal,
+public link, and Copy link.
 
 Settings is a narrow, left-aligned page divided by top rules. Signed-in devices
 show the device description, relative last-seen time, This device, and Log out
 or Revoke actions, with Log out everywhere below. Password settings are always
-present. Connected agents and sign-in providers appear only when their
-capabilities are enabled.
+present. Account export and deletion appear in the Privacy section. Connected
+agents and sign-in providers appear only when their capabilities are enabled.
 
 ## Responsive behavior
 
@@ -179,7 +203,8 @@ bottom Edit/Preview tab bar switches between the inspector and preview.
 The editor top bar hides the divider, title, and public mark at phone widths.
 The preview uses a fit zoom calculated from the available width minus 32 px on
 phone screens; larger narrow layouts use 0.72 and wide layouts use 0.84 unless
-full zoom is requested. The A4 sheet remains intact and scrollable.
+full zoom is requested. The active A4 or Letter sheet remains intact and
+scrollable.
 
 ## Interaction and motion
 

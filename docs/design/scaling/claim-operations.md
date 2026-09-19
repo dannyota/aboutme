@@ -141,8 +141,8 @@ the in-function role, policy and replica-kind checks below.
   operate on maintenance claims; maintenance operates only on maintenance C03.
   Maintenance receives no promotion privilege because C03 has no waiting state.
 - Expected replica and digest remain separate request-consistency checks. Shared
-  app credentials do not authenticate an individual process. R5/R8 bind that
-  private identity.
+  app credentials do not authenticate an individual process. The shared claim
+  package and server composition bind that private identity.
 - PUBLIC, lifecycle-command and fencing-proof receive no execution on the five
   claim functions. Maintenance alone executes GC. No login executes the fenced
   helper or directly mutates these tables.
@@ -220,25 +220,26 @@ the materialized CTE and projects `(result.gc).deleted_claim_count::integer`,
 the same field-access pattern as the composite result. A live store test proves
 each generated query against PostgreSQL; unit stubs cannot catch this class.
 
-R1's internal/store owns generated scalar rows and a narrow
-RuntimeClaimTransport API with scalar inputs and decoded RuntimeClaimRow values.
-It exposes no ClaimOperation, encoder, key/version, retry state, callback or raw
-connection. It runs each fixed operation through WriteTxRunner, calls one
-generated function, validates the entire presence/value matrix and copies data
-before the callback ends. Copy every 32-byte digest into an array; return owned
-timestamps and fixed ordered scope slots. No driver buffer, row handle, Queries
-or transaction escapes.
+Internal/store owns generated scalar rows and a narrow RuntimeClaimTransport API
+with scalar inputs and decoded RuntimeClaimRow values. It exposes no
+ClaimOperation, encoder, key/version, retry state, callback or raw connection.
+It runs each fixed operation through WriteTxRunner, calls one generated
+function, validates the entire presence/value matrix and copies data before the
+callback ends. Copy every 32-byte digest into an array; return owned timestamps
+and fixed ordered scope slots. No driver buffer, row handle, Queries or
+transaction escapes.
 
 Only successful runner completion exposes a decoded row. Every runner error,
 including finish failure or commit ambiguity after decoding, returns the zero
 RuntimeClaimRow plus error. Running, waiting, denied, absent and released are
 never returned alongside an error. No retry occurs in this transport.
 
-R5 imports internal/store, owns ClaimOperation and its private claimStore
-interface, converts operation identity to scalar inputs, and translates a
-committed row into domain types. It checks every expected field and owns the
-monotonic retry lifetime. Internal/store never imports R5. GC stays on the
-separate maintenance scheduler store; the fenced helper has no Go entry point.
+The shared claim package imports internal/store, owns ClaimOperation and its
+private claimStore interface, converts operation identity to scalar inputs, and
+translates a committed row into domain types. It checks every expected field and
+owns the monotonic retry lifetime. Internal/store never imports the shared claim
+package. GC stays on the separate maintenance scheduler store; the fenced helper
+has no Go entry point.
 
 An isolated PostgreSQL 18.4/generated-pgx probe verified eight scalar families:
 UUID, text, int2, int4, int8, boolean, timestamptz and bytea. Presence
@@ -267,5 +268,6 @@ evidence only.
   prerequisite; lifecycle historical replay after later mutations and fixed
   argument/result vectors. AM002 remains scoped; public transitions keep AM001.
 
-These real operation checks have not run. R1 owns migration/store proof, R5 owns
-caller operation state, and R8 owns trusted composition and local join.
+Before release, the store must prove migrations and transport, the shared claim
+package must prove caller operation state, and server composition must prove the
+trusted composition and local join.

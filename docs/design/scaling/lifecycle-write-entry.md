@@ -125,9 +125,10 @@ the row finished directly.
 
 ## Assertion-trigger branch
 
-The R1 migration replaces the bounded B1 assertion checks; it does not edit
-historical migration 00013. `runtime_assert_write_entry()` remains a trigger and
-is never called as an ordinary SQL function.
+The lifecycle write-entry migration replaces the bounded write-foundation
+assertion checks; it does not edit historical migration 00013.
+`runtime_assert_write_entry()` remains a trigger and is never called as an
+ordinary SQL function.
 
 For ordinary entry, the statement trigger composes the existing owner-only
 `runtime_require_write_entry()` behavior unchanged. For exclusive wake entry,
@@ -276,12 +277,12 @@ restore receive none. Lifecycle-command has no marker, table DML, helper,
 ordinary entry, ordinary finish, or final-stop grant through this contract.
 
 The controller calls begin wake, performs
-[protected wake migration](wake-migrations.md) and read-only
-reconciliation/planning, then calls complete wake. R8 proves the external
-prerequisites before that fixed call. Serving or maintenance registration and
-activation happen later through their existing fixed methods. A clean closed
-wake needs no bypass. Corrupt shutdown or wake remains unavailable. Final stop
-requires all transitions terminal before gate closure.
+[protected wake migration](wake-migrations.md) and read-only reconciliation and
+planning, then calls complete wake. The serialized controller proves the
+external prerequisites before that fixed call. Serving or maintenance
+registration and activation happen later through their existing fixed methods. A
+clean closed wake needs no bypass. Corrupt shutdown or wake remains unavailable.
+Final stop requires all transitions terminal before gate closure.
 
 ## Acceptance
 

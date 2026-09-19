@@ -126,8 +126,11 @@ notification path do not satisfy the gate.
   drift.
 - Hostile-corpus and browser tests cover rich-text and content security policy.
 - Golden and visual tests cover renderer determinism.
-- Phase acceptance uses one fresh review and a correctable exit checklist under
-  ADR 0024; missing required evidence fails the gate.
+- One author pass per change follows
+  [ADR 0024](../adr/0024-single-pass-delivery-gates.md). Delivery acceptance
+  uses one fresh review per plan or release before push, and GitHub CI is the
+  full gate under [ADR 0046](../adr/0046-github-ci-delivery-gate.md). Local-only
+  and test-only changes skip review.
 - Native HTTPS browser checks prove features locally.
 - Production at `https://aboutme.vn` is where the owner tests the complete
   product, restore, migration, alarms, real email, and edge behavior before the

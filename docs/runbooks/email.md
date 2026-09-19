@@ -73,9 +73,9 @@ AWS credentials use the runtime credential chain. Never put credentials in
 ## Account limits and launch gate
 
 The SES account remains in sandbox: at setup it allowed 200 messages per day and
-1 message per second. Request production access only after the public HTTPS site
-and signup/contact details are live. Until then, use the mailbox simulator or
-approved test addresses.
+1 message per second. The public HTTPS site is live, but SES production access
+remains a public-announcement gate. Until access is granted, use the mailbox
+simulator or approved test addresses.
 
 The app task role grants only `ses:SendEmail`, which the SES v2 sender uses,
 limited to the configured from address. Add another sending action only with a

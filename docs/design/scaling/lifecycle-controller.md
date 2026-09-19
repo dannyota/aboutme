@@ -6,7 +6,7 @@ This contract fixes SQL and store behavior for six ordinary lifecycle actions:
 prepare-scale-out, activate-replica-capacity, prepare-scale-in, finish-scale-in,
 prepare-maintenance-drain and begin-replica-termination. It does not implement
 begin/complete wake, registration, ready, graceful leave, EC2 proof, final stop,
-claims, rates, R8 composition or AWS checks.
+claims, rates, server composition or AWS checks.
 
 Authorities are [lifecycle operations](lifecycle-operations.md),
 [replay](lifecycle-replay.md), [vectors](lifecycle-vectors.md),
@@ -246,9 +246,10 @@ startup_failed accepts joining, readiness_failed accepts active, and
 drain_failed accepts draining plus the exact prepare-scale-in or
 prepare-maintenance-drain action that selected it. Insert request-bound intent,
 change target to terminating and set the shared effective time. Do not change
-desired or partitions. SQL proves only the reason/source-state relation. R8 must
-prove that readiness_failed is node-specific after suppressing fleet-wide RDS
-failure; SQL has no cloud health or per-process signal.
+desired or partitions. SQL proves only the reason and source-state relation.
+Server composition must prove that readiness_failed is node-specific after
+suppressing fleet-wide RDS failure; SQL has no cloud health or per-process
+signal.
 
 finish_scale_in requires the same scale_in parent's prepare action and exact
 selected target, desired two, and all other serving incarnations terminal except
@@ -286,7 +287,8 @@ func NewRuntimeLifecycleTransport(*pgxpool.Pool) RuntimeLifecycleTransport
 
 All methods are context-first scalar methods in SQL order. They expose no
 identity/config object, callback, Queries, transaction, connection, digest,
-timestamp or retry. R8 owns trusted identity selection and controller inputs.
+timestamp or retry. Server composition owns trusted identity selection and
+controller inputs.
 
 Reuse RuntimeReplicaResult from registration: three optional counts use
 `*int16`, two optional partition flags use `*bool`, and all other fields are

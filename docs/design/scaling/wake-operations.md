@@ -86,13 +86,13 @@ capacity evidence fields to operation_id, and stores the post-action result with
 gate open and phase online. runtime_write_state is the last durable update.
 
 The database predicates prove only state represented in these tables. Before a
-fresh complete call, R8 must separately prove that required migrations are at
-the accepted head, reconciliation completed, due-work planning completed, and
-deployment prerequisites passed. Those checks cannot be inferred by these SQL
-functions and are not converted into caller booleans. The serialized controller
-operation owns their ordering. Registration, local probes, ready and activation
-occur after complete. A failure before complete leaves closing/starting and
-ordinary writes unavailable.
+fresh complete call, the serialized controller must separately prove that
+required migrations are at the accepted head, reconciliation completed, due-work
+planning completed, and deployment prerequisites passed. Those checks cannot be
+inferred by these SQL functions and are not converted into caller booleans. The
+serialized controller operation owns their ordering. Registration, local probes,
+ready and activation occur after complete. A failure before complete leaves
+closing/starting and ordinary writes unavailable.
 
 ## Time and digest
 
@@ -119,9 +119,10 @@ repeated operation/controller-operation ID, gate and write generation.
 An existing exact action validates marker binding, parent workflow, supplied
 expected generation/mode argument digest, every retained result field, result
 shape and recomputed result digest. It binds complete's marker mode from the
-parent. It does not check current gate, generations, counts, partitions or R8
-prerequisites; does not lock write_state; changes no durable row; finishes the
-private marker; and returns the immutable stored result with replayed=true.
+parent. It does not check current gate, generations, counts, partitions or
+controller prerequisites; does not lock write_state; changes no durable row;
+finishes the private marker; and returns the immutable stored result with
+replayed=true.
 
 Migration 15 does not retain every canonical argument. Any supplied canonical
 argument-digest mismatch, including an indistinguishable well-shaped stored
@@ -180,7 +181,7 @@ immutable identity.
 
 ## Prerequisite ownership
 
-R8's serialized controller owns proof that migrations, reconciliation, due-work
+The serialized controller owns proof that migrations, reconciliation, due-work
 planning and deployment prerequisites passed before fresh complete. SQL checks
 only the represented durable state listed above. The fixed signature stays
 unchanged: there is no prerequisite boolean or new durable evidence ledger in

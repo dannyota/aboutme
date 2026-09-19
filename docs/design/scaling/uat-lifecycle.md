@@ -307,7 +307,7 @@ admission for rotation is not final write-gate closure or an RDS stop. Existing
 controller ownership and exact target evidence serialize the procedure; it adds
 no lifecycle SQL action or ledger result.
 
-## Failing-first proof cases and commands not run
+## Required proof
 
 - Writer enters before receipt but commits late; writer attempts entry after
   exclusive lock; SELECT FOR UPDATE after entry; direct SELECT FOR UPDATE before
@@ -320,11 +320,6 @@ no lifecycle SQL action or ledger result.
 - Paused maintenance process after local work, after left receipt, and before
   EC2 termination; ECS STOPPED without EC2 proof; proof writer concurrent with
   charged mail/media claim; stale S3/DB generation and duplicate wake.
-
-Commands NOT RUN: make sqlc-check server-test-db server-test-integration
-server-migration-test; under apps/server, targeted go test -race -count=1 for
-store, privacyretention, mediacleanup, authmail, lifecycle, and controller
-packages. Root alone runs make ci and connected make scan.
 
 ## Unresolved implementation evidence
 

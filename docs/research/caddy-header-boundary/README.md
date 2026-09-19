@@ -1,5 +1,10 @@
 # Native Caddy trust-header experiment
 
+Status: historical experiment for the superseded CloudFront origin-secret
+design. Production uses Cloudflare origin-pull mutual TLS and the client-IP
+boundary in the
+[single-host design](../../design/single-host-production.md#edge).
+
 Pinned Caddy 2.11.4 can reject duplicate origin-secret and client-IP values
 using native expression matchers. The isolated raw-HTTP experiment passes all 21
 cases with [the strict configuration](green.Caddyfile). The permissive

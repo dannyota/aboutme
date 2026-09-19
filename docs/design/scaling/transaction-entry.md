@@ -162,7 +162,7 @@ No callback explicitly locks runtime_write_state. The runner's finish update is
 last. Finalize-stop takes the exclusive advisory lock, then runtime_write_state
 and the documented source rows. A writer either enters first and finishes before
 the finalizer gets exclusive, or waits before holding any application row. This
-removes the review's deadlock cycle.
+removes the deadlock cycle described above.
 
 ## Legacy direct transaction entry points to migrate
 
@@ -298,7 +298,7 @@ opens only migration admission while app/maintenance stay closed. Cluster role
 creation stays outside Goose. Final-stop authority remains absent until all
 caller and table coverage is complete.
 
-## Exact caller migration strategy
+## Release order
 
 1. Add runtime_enter_write/runtime_finish_write, assertion triggers,
    WriteTxRunner, and database/sql migrator equivalent with failing tests.
@@ -311,7 +311,7 @@ caller and table coverage is complete.
 5. Only then enable finalize-stop receipts. Until the inventory is empty and
    adversarial tests pass, no-op suppression remains disabled.
 
-## Failing-first cases and commands NOT RUN
+## Required proof
 
 - OAuth/account/auth-mail transaction holds its first SELECT FOR UPDATE row,
   then finalizer requests exclusive: writer completes without deadlock and
@@ -326,9 +326,3 @@ caller and table coverage is complete.
 - Forced constraints, savepoint rollback, finish failure, lookalike marker,
   poisoned-backend discard, pure DDL and exact Goose bookkeeping are proved
   independently. The temporary-marker feasibility probe is not this proof.
-
-Read-only rg transaction-entry/caller searches produced the inventories above.
-Commands NOT RUN: targeted `go test -race -count=1` for store, OAuth,
-accountapi, authmail, resume, mediacleanup, privacyretention, fixtures, and
-migration; make sqlc-check server-test-db server-test-integration
-server-migration-test. Root owns make ci and make scan.

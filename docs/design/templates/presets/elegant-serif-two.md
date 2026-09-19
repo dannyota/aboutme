@@ -79,5 +79,5 @@ repeats rather than ending with the first fragment. The expectation:
   (`contract.md` §7) and the panel vanishes.
 - **An icon-free page**: headings still render `iconKey`
   ([limitations item 5](../limitations.md)).
-- Apply resets `pageFormat` and `dateFormat`
+- Apply keeps `pageFormat` and resets `dateFormat`
   ([limitations item 2](../limitations.md)).

@@ -12,8 +12,8 @@ This is the copied-value boundary for the
 
 internal/store owns closed string-backed TransitionState, TransitionOperation,
 TargetKind, TransitionClass, and TargetResultKind plus copied scalar structs. It
-never imports publicstate. R2/R3 adapters convert their private plans/results to
-these store values.
+never imports publicstate. Coordinator and mutation adapters convert their
+private plans and results to these store values.
 
 Exact exported transport values are:
 
@@ -209,8 +209,9 @@ unproved; or on clean-release failure. QueryRow uses the same lease so the exact
 backend can be retired. Every error returns a zero value/no snapshot. No
 Pool.Query path may surrender the lease before this decision.
 
-internal/store never imports publicstate. R2/R3 map existing publicstate.Plan,
-ResumeTarget, TransitionClass, and CommittedState to these transport values and
-preserve the existing Coordinator and Transition caller surface. Any exact
-CoordinatorConfig/NewCoordinator dependency injection is a separate R2 contract
-that root must fix before R2 authoring; R1 must not choose or alter it.
+internal/store never imports publicstate. The coordinator and mutation callers
+map existing publicstate.Plan, ResumeTarget, TransitionClass, and CommittedState
+to these transport values and preserve the existing Coordinator and Transition
+caller surface. Any exact CoordinatorConfig/NewCoordinator dependency injection
+is a separate coordinator contract. The store transport must not choose or alter
+it.

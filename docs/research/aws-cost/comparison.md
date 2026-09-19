@@ -1,7 +1,9 @@
 # AWS hosting cost comparison
 
-Status: Phase 9 Task 9.2 comparison. Prices were retrieved on 2026-09-06.
-Amounts are US dollars before tax.
+Status: historical cost research from 2026-09-06. ADR 0037 superseded the UAT,
+CloudFront, load-balancer, and autoscaling release path with single-host
+production. Amounts are US dollars before tax and are not the current deployed
+topology.
 
 ## Result
 

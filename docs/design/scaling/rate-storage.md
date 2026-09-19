@@ -181,8 +181,8 @@ The migration samples clock_timestamp once and seeds:
 
 The seed creates no admission or debt. First serving activation enables logical
 partition 1; second enables 2. Existing native limiters remain authoritative
-until R5/R7 caller composition, so disabled target rows do not change current
-behavior.
+until shared rate and policy-caller composition, so disabled target rows do not
+change current behavior.
 
 ## Allocation and cleanup
 
@@ -285,14 +285,15 @@ both cleanup functions. Lifecycle may toggle partitions only through its
 existing capacity definers. No role has direct DML or a generic state-update
 function.
 
-R5 defines Policy, RateKey [32]byte, Decision, FailureState, AttemptReservation,
-AttemptResolution, and CleanupResult. RateStore exposes AdmitToken,
-FailureState, RecordFailure, ClearFailureSuccess, AdmitChangedSlug,
-ReserveFailedGrant, FinishAttempt, and cleanup only on the maintenance adapter.
-Callers retain their current response mapping and ordering. Store errors remain
-unavailable and never become allow, retry, refund, or identity disclosure.
-Internal/store owns only scalar transport and imports no R5 package. A returned
-runner error exposes a zero result; panic follows bounded cleanup and rethrow.
+The shared rate package defines Policy, RateKey [32]byte, Decision,
+FailureState, AttemptReservation, AttemptResolution, and CleanupResult.
+RateStore exposes AdmitToken, FailureState, RecordFailure, ClearFailureSuccess,
+AdmitChangedSlug, ReserveFailedGrant, FinishAttempt, and cleanup only on the
+maintenance adapter. Callers retain their current response mapping and ordering.
+Store errors remain unavailable and never become allow, retry, refund, or
+identity disclosure. Internal/store owns only scalar transport and imports no
+shared rate package. A returned runner error exposes a zero result; panic
+follows bounded cleanup and rethrow.
 
 ## Lock order
 
@@ -355,7 +356,7 @@ resume, token, client, or email rows.
   closed; debtless terminal P22 receipt retention does not block the zero-debt
   proof; neither key is exposed to SQL or a caller-selected generation.
 
-R1 authors run the focused migration/store tests and affected database gates.
-R5/R7 authors run their owned package tests. Root owns migration numbering, sqlc
-generation, full phase checks and hosted authorization. No runtime acceptance is
-claimed here.
+Store authors run the focused migration and store tests and affected database
+gates. Shared rate and policy-caller authors run their owned package tests. The
+integration owner owns migration numbering, sqlc generation, full release checks
+and hosted authorization. No runtime acceptance is claimed here.

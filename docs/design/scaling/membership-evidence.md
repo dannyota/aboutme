@@ -220,9 +220,10 @@ finish and commit. Any input, SQL, decode, finish, commit, or cleanup error
 returns the zero result plus wrapped cause. It never returns left/fenced or a
 receipt/evidence result alongside an error.
 
-After ambiguous proof commit, R8 retains the exact private request and may issue
-one same-argument runtime_record_ec2_termination call through a fresh runner.
-The function atomically resolves-or-inserts by evidence/replica uniqueness:
+After ambiguous proof commit, server composition retains the exact private
+request and may issue one same-argument runtime_record_ec2_termination call
+through a fresh runner. The function atomically resolves-or-inserts by
+evidence/replica uniqueness:
 
 - exact stored proof returns replayed=true;
 - absence permits that same-evidence retry to become the one fresh insert;

@@ -156,5 +156,5 @@ the shared database while another test suite is active.
 - Use `.dev/server.log`, `.dev/web.log`, and `.dev/caddy.log` for full startup
   errors. Do not commit `.dev/`.
 
-Authentication acceptance uses the HTTPS/443 UAT deployment because cookies are
+Authenticated local checks use the native HTTPS harness because cookies are
 Secure. Native HTTP remains the daily API and UI development origin.

@@ -130,9 +130,10 @@ admitted request.
 
 An exact retained pending or terminal receipt returns its historical admitted
 bucket shape with allowed=true, retry zero and replayed=true. It does not
-reroute through a current bucket or consume another slot. R5 rejects every
-replay for new work. No attempt state or timestamp is added to the result; the
-caller still never retries or reads back an ambiguous reserve to authorize work.
+reroute through a current bucket or consume another slot. The shared rate
+package rejects every replay for new work. No attempt state or timestamp is
+added to the result; the caller still never retries or reads back an ambiguous
+reserve to authorize work.
 
 For a new key, legitimately expire debt before allocating the first enabled
 partition with fewer than 10,000 keys. If none has capacity, evaluate the shared
@@ -202,6 +203,6 @@ deletion, expiry and lifecycle partition toggles. Prove no hidden retry, no lock
 cycle and no counter drift. Also prove client deletion preserves receipts,
 24-hour boundary behavior, page sizes 1/256 and rejection of 0/257, exact
 replay, conflicting caller outcomes, system-terminal late finishes and
-absent-after-GC no-op. R1 adds no OAuth caller or admission-package
+absent-after-GC no-op. The store adds no OAuth caller or admission-package
 implementation. Pin a fixed client UUID and expected digest in SQL and Go to
 prove their bucket key encodings agree.

@@ -129,9 +129,9 @@ pgtransport close-only capability before identity or SQL. Every ambiguous
 entry/version/commit/unlock/cleanup outcome physically retires the exact socket
 before return while leaving caller-owned *sql.DB open. Clean no-pending and
 successful paths exit both locks, reset local impersonation, prove marker tables
-empty, physically retire the migration backend under the existing B3 policy, and
-return without an artificial cleanup error. The frozen version-13 adoption
-manifest is unchanged.
+empty, physically retire the migration backend under the protected migrator
+policy, and return without an artificial cleanup error. The frozen version-13
+adoption manifest is unchanged.
 
 ## Source admission
 
@@ -181,4 +181,4 @@ design. ApplyWake never runs it and never repairs closing state.
 - Existing Status keeps its read-only metadata access without an advisory lock.
   The version-13 adoption manifest remains unchanged.
 
-These checks belong to the later wake implementation slice. They have not run.
+These checks are required before enabling the deferred wake path.

@@ -5,6 +5,10 @@ owns phase order, current state, and release gates. Active phases and tasks use
 numbers, such as Phase 10 and task 10.14. A phase directory owns the detailed
 tasks for that phase while the phase is active.
 
+[The v0.4.x roadmap](v0.4-roadmap.md) proposes small releases for Vietnamese
+localization, optional two-factor authentication, MCP acceptance, and link
+previews. It does not mark those features implemented or approved.
+
 ## Layout
 
 | Path                                     | Purpose                                       |
@@ -18,11 +22,11 @@ tasks for that phase while the phase is active.
 
 ## Lifecycle
 
-A phase exits through its `exit-criteria.md` checklist plus `make ci` and
-connected `make scan` at one unchanged candidate commit, after one fresh review
-of the integrated diff. See
-[ADR 0024](../adr/0024-single-pass-delivery-gates.md). A criterion that turns
-out to be wrong is corrected in the same phase, with the change noted.
+A phase exits through its `exit-criteria.md` checklist and green GitHub CI on
+the exact candidate commit, after one fresh review of the integrated diff.
+Authors run the affected checks locally. See
+[ADR 0046](../adr/0046-github-ci-delivery-gate.md). A criterion that turns out
+to be wrong is corrected in the same phase, with the change noted.
 
 When a phase exits, delete its directory and any design draft it carried. Git
 history keeps them. The traceability rows the phase proved, the architecture

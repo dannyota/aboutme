@@ -121,7 +121,7 @@ row locks. It then rolls back or remains unavailable. rolled_back proves no
 business change from that transition committed. Response receipts govern exact
 HTTP replay only. No unresolved writer is installed.
 
-Before changing a local fence, R2 loads the fixed
+Before changing a local fence, the coordinator loads the fixed
 [reconciliation snapshot](transition-reconciliation.md) while holding its local
 apply mutex. Later generations and immutable retirement evidence survive old
 notifications and restart; every current closing/unresolved blocker remains

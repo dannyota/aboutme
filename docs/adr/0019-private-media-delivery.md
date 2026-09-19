@@ -75,6 +75,6 @@ that reconciliation has proved unreferenced and removed.
   the storage or disclosure boundary.
 - Public photo responses share public-resume absence, live-state revalidation,
   and entity-tag behavior.
-- Implementation cannot begin until this ADR, its durable deletion-job contract,
-  the image-processing bounds, the orphan-sweep bounds, and the media acceptance
-  criteria are approved.
+- The durable deletion-job contract, image-processing bounds, orphan-sweep
+  bounds, and media acceptance criteria are part of this decision's
+  implementation boundary.

@@ -14,21 +14,6 @@ record of what exists:
   implemented it; the single-baseline migration and plain migrator replace them,
   and the design is kept as reference.
 
-These pages name code areas by their implementation slice:
-
-| Label | Code area                                                          |
-| ----- | ------------------------------------------------------------------ |
-| B1–B3 | Write barrier, live runner proof, and the protected migrator       |
-| R1    | Runtime coordination schema and store transports                   |
-| R1a   | Central write transaction entry                                    |
-| R2    | Distributed `publicstate` coordinator                              |
-| R3    | Mutation and deletion callers                                      |
-| R4    | Fleet render claims and origin affinity                            |
-| R5    | Distributed rate and claim packages                                |
-| R6    | Realtime fleet admission and drain                                 |
-| R7    | Policy callers: R7b for OAuth, R7d for maintenance commands        |
-| R8    | Server composition, readiness, shutdown, and the resource envelope |
-
 | Contract                                                  | Scope                                                                    | State                                     |
 | --------------------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------- |
 | [Runtime schema](runtime-schema.md)                       | Durable state, immutable outcomes and database privileges                | Removed by ADR 0038; design kept          |

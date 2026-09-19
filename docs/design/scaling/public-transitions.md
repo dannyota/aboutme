@@ -127,10 +127,10 @@ terminating incarnation, or an intersecting visible closing/unresolved target.
 Exact transition-ID replay returns the original row only when every immutable
 input and target matches; mismatch is SQLSTATE `AM001`.
 
-R2 creates one five-second deadline from its injected monotonic clock before any
-begin work. Immediately before SQL it passes the positive remaining whole
-milliseconds with ceiling, capped at 5,000. The function requires 1 through
-5,000, then computes:
+The coordinator creates one five-second deadline from its injected monotonic
+clock before any begin work. Immediately before SQL it passes the positive
+remaining whole milliseconds with ceiling, capped at 5,000. The function
+requires 1 through 5,000, then computes:
 
 ```text
 deadline_at = statement_timestamp() + remaining_milliseconds
@@ -186,13 +186,13 @@ runtime_ack_public_transition(
 ) RETURNS TABLE(acked_at timestamptz, replayed boolean)
 ```
 
-R8 binds the fixed replica, instance, and release tuple in a private adapter.
-Replicas share the app database role, so this is a stored-tuple compare-and-set,
-not database authentication. After locking parent and required detail, ack locks
-the exact `runtime_replicas` row. It requires matching identity and digest,
-closing state before deadline, active or draining membership, and no termination
-intent or fencing proof. It inserts local result `closed`. Exact replay is
-idempotent; changed metrics or identity are `AM001`.
+Server composition binds the fixed replica, instance, and release tuple in a
+private adapter. Replicas share the app database role, so this is a stored-tuple
+compare-and-set, not database authentication. After locking parent and required
+detail, ack locks the exact `runtime_replicas` row. It requires matching
+identity and digest, closing state before deadline, active or draining
+membership, and no termination intent or fencing proof. It inserts local result
+`closed`. Exact replay is idempotent; changed metrics or identity are `AM001`.
 
 A draining replica may ack only a transition that already requires its exact
 tuple after its local close and join. It cannot begin new ownership. An ack that
@@ -244,18 +244,18 @@ deletion records retirement and discovery only when planned. Account deletion
 records every planned resume retired plus discovery. Rollback records no result.
 
 Delayed, duplicate, or reordered notifications only wake reconciliation. This
-read supplies historical transition details. R2 applies the separate fixed
-[reconciliation snapshot](transition-reconciliation.md) under its local apply
-mutex before opening or retiring a fence. It preserves later generations,
-retained retirement evidence and every current closing/unresolved blocker.
-Current row absence alone never proves retirement.
+read supplies historical transition details. The coordinator applies the
+separate fixed [reconciliation snapshot](transition-reconciliation.md) under its
+local apply mutex before opening or retiring a fence. It preserves later
+generations, retained retirement evidence and every current closing/unresolved
+blocker. Current row absence alone never proves retirement.
 
 Same-incarnation recovery runs with admission closed. It may replay and ack a
 closing transition only after quarantine joined every local callback and rebuilt
 the exact target fences, while membership remains active/draining and no
 termination intent, proof, or lifecycle termination has begun. Draining never
-reopens admission. Every mutating recovery call uses R8's same tuple-bound
-adapter. A read-only recovery snapshot grants no authority.
+reopens admission. Every mutating recovery call uses the same server-owned,
+tuple-bound adapter. A read-only recovery snapshot grants no authority.
 
 A dead initiator follows the separate lifecycle recovery in
 [transition commit](transition-commit.md#fenced-initiator-recovery). It never
@@ -268,10 +268,10 @@ its transaction. Terminal functions notify `aboutme_runtime_terminal` with
 `1:<uuid>:<state>`. PostgreSQL delivers after commit. Payloads contain no
 target, identity, error, or authority.
 
-R2 polls every 250 milliseconds while any transition is closing and rereads all
-closing/unresolved and terminal rows after listener recovery. Malformed,
-unknown, duplicate, and stale notices are wake-only. SSE adds no frame; clients
-reconnect and refetch through existing revision transport.
+The coordinator polls every 250 milliseconds while any transition is closing and
+rereads all closing/unresolved and terminal rows after listener recovery.
+Malformed, unknown, duplicate, and stale notices are wake-only. SSE adds no
+frame; clients reconnect and refetch through existing revision transport.
 
 `aboutme_runtime_owner` owns all objects. Functions set
 `search_path = pg_catalog`, qualify every object, and use no dynamic SQL. Revoke
@@ -279,7 +279,7 @@ PUBLIC and direct table DML. The app role receives only the named EXECUTE
 grants. Lifecycle, fencing, maintenance, and restore receive no transition
 mutation grant except the lifecycle command's single fenced-initiator recovery
 function. Owner-only assertion triggers validate immutable and terminal state.
-Identity text comes only from the R8 adapter and must match immutable
+Identity text comes only from the server adapter and must match immutable
 membership.
 
 ## Acceptance
@@ -295,6 +295,6 @@ membership.
 - Fenced-initiator recovery requires the exact immutable EC2 proof reference and
   never manufactures an ack or committed result.
 - Real-role denial of direct DML, cross-role execution, forged result, and
-  writes outside [WriteTxRunner](transaction-entry.md#write-transaction-api).
+  writes outside [WriteTxRunner](transaction-entry.md#exported-go-seam).
 - Business DML cannot commit when transition terminalization is omitted or
   general write finish runs before the transition capability is finished.

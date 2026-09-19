@@ -18,30 +18,30 @@ produces the same document everywhere.
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
 
-The login and registration pages show the email/password form always and one
-provider link for each name in the capabilities read's `providers` list (ADR
-0039); an empty or missing list shows none. When the capabilities read reports
-`passwordRegistration` false, registration hides its form and shows a short note
-offering the listed providers instead (only the note and a Sign in link when
-none is listed); a register request that answers 404 shows the same note. Login
-keeps its password form. A missing `passwordRegistration` field counts as true,
-and while the read is pending the form holds its space hidden and inert. After
-registration, a notice tells everyone to check spam if the email does not
-arrive, and offers Google when it is listed; an expired or incomplete
-verification link offers Google the same way. Registration, verification,
-forgot-password, and reset-password are separate Nuxt pages. Verification and
-reset strip the `#token=` fragment before any network call and load no
-third-party resource. Account settings show whether a password is set and allow
-add/change after recent reauthentication. The sign-in providers block lists
-every linked identity with its link date, marks one whose provider is not listed
-as unavailable for sign-in, and offers Unlink behind a confirmation. Unlinking
-keeps every session signed in, so a successful unlink offers to sign out the
-other devices by revoking each non-current session. Unlink is disabled, with the
-reason, when removing that identity would leave no password and no other listed
-identity. The block offers Link only for listed providers that are not linked,
-and provider reauthentication uses only a linked provider that is listed. The
-connected-agents block appears only when `agentAccess` is true. Provider emails
-are never shown as a linkage decision.
+The login page always shows the email/password form. The registration page shows
+that form when the capabilities read reports `passwordRegistration` true. Each
+page shows one provider link for every name in the capabilities read's
+`providers` list (ADR 0039); an empty or missing list shows none. When
+`passwordRegistration` is false, registration hides its form and shows a short
+note offering the listed providers instead (only the note and a Sign in link
+when none is listed); a register request that answers 404 shows the same note. A
+missing `passwordRegistration` field counts as true, and while the read is
+pending the form holds its space hidden and inert. After registration, a notice
+tells everyone to check spam if the email does not arrive, and offers Google
+when it is listed; an expired or incomplete verification link offers Google the
+same way. Registration, verification, forgot-password, and reset-password are
+separate Nuxt pages. Verification and reset strip the `#token=` fragment before
+any network call and load no third-party resource. Account settings show whether
+a password is set and allow add/change after recent reauthentication. The
+sign-in providers block lists every linked identity with its link date, marks
+one whose provider is not listed as unavailable for sign-in, and offers Unlink
+behind a confirmation. Unlinking keeps every session signed in, so a successful
+unlink offers to sign out the other devices by revoking each non-current
+session. Unlink is disabled, with the reason, when removing that identity would
+leave no password and no other listed identity. The block offers Link only for
+listed providers that are not linked, and provider reauthentication uses only a
+linked provider that is listed. The connected-agents block appears only when
+`agentAccess` is true. Provider emails are never shown as a linkage decision.
 
 The application shell renders two variants from the client-side session state:
 signed out shows the brand, Sign in, Create account, and the theme toggle;

@@ -6,9 +6,10 @@ Status: Accepted detail of [shared claims](shared-claims.md) under
 
 ## Scope digest
 
-Use HMAC-SHA-256 with one nonzero 32-byte deployment admission key. R5 is the
-sole encoder. R1 receives a 32-byte digest, never a raw IP or account string.
-The key never enters PostgreSQL, logs, error messages or test fixtures.
+Use HMAC-SHA-256 with one nonzero 32-byte deployment admission key. The shared
+claim package is the sole encoder. The store receives a 32-byte digest, never a
+raw IP or account string. The key never enters PostgreSQL, logs, error messages
+or test fixtures.
 
 The input begins with the 30 bytes `aboutme.shared-claim.scope.v1\x00`, then:
 
@@ -23,17 +24,17 @@ Unmap. Domain, policy and kind separation prevent limits from sharing rows.
 
 Every replica verifies the same private pinned key-version tuple before
 readiness. The [rate identity contract](rate-identities.md) binds both admission
-and password-email key versions through trusted R8 composition and controller
-evidence, without changing membership or lifecycle SQL. Mixed or unverifiable
-versions remain unready.
+and password-email key versions through trusted server composition and
+controller evidence, without changing membership or lifecycle SQL. Mixed or
+unverifiable versions remain unready.
 
 Rotation closes application admission and activation, joins or exactly fences
 all admitted work, and proves zero claim counts plus zero rate/pending debt
 through the accepted bounded cleanup. Only then may the deployment replace a key
 and recompose every replica. Claim counts alone cannot justify a switch because
 the admission key also identifies rate buckets. No old-key fallback or
-clock-based live-claim reclamation exists. R8 owns loading, readiness and the
-executable runbook after infrastructure exists.
+clock-based live-claim reclamation exists. Server composition owns loading,
+readiness and the executable runbook after infrastructure exists.
 
 ## Request digest
 
@@ -81,8 +82,9 @@ private retry flag. A store error exposes no result authority.
 
 ClaimOperation retains the immutable request, original context, factory
 identity, createdAt and a reacquire-used flag privately. It exposes no SQL, pgx,
-caller clock, limit override, deadline override or fencing action. R5 provides
-Acquire, Resolve, Promote and Release through narrow domain types.
+caller clock, limit override, deadline override or fencing action. The shared
+claim package provides Acquire, Resolve, Promote and Release through narrow
+domain types.
 
 The factory captures createdAt from its injected process clock immediately
 before first Acquire. Production retains time.Now's monotonic reading. Tests

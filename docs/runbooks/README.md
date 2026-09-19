@@ -10,10 +10,10 @@ operations the repository supports now.
 | [Resume exports](exports.md)                | Runnable    | Check PDF/image rendering, public gates, and resource limits |
 | [Realtime](realtime.md)                     | Runnable    | Check stream bounds, recovery, refresh, and revocation       |
 | [Authentication email](email.md)            | SES sandbox | Verify and operate Google Workspace and AWS SES              |
-| [Production](production.md)                 | Partial     | Access, Cloudflare settings, and secrets for `aboutme.vn`    |
+| [Production](production.md)                 | Operational | Deploy, rollback, access, edge settings, and secrets         |
 
-Deploy, rollback, restore, and secret rotation procedures join the production
-runbook when their scripts exist. Planned behavior belongs in the
-[deployment design](../design/deployment.md), not in speculative runbooks.
+The production runbook covers only shipped scripts and current operator steps.
+Planned behavior belongs in the [deployment design](../design/deployment.md),
+not in speculative runbooks.
 
 Use [`../guides/`](../guides/README.md) for setup and explanatory workflows.

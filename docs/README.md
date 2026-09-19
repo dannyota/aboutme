@@ -43,6 +43,8 @@ entry points and project policy.
 
 ## Current entry points
 
+- [Live service](https://aboutme.vn)
+- [Production runbook](runbooks/production.md)
 - [Approved v4 design](design/README.md)
 - [Current-state architecture](architecture.md)
 - [Template system](design/templates/README.md)
@@ -57,5 +59,6 @@ Design v4 is approved. Changing a decision needs a new ADR; see the
 
 ## Writing and checks
 
-Follow [`standards/engineering.md`](standards/engineering.md). Run
-`make docs-fmt` and `make docs-lint` after Markdown or YAML changes.
+Follow [`standards/engineering.md`](standards/engineering.md). Format only the
+files you change, then run `make docs-lint`. See the
+[contributor checks](../CONTRIBUTING.md#checks) for commands.

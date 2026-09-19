@@ -10,8 +10,8 @@ slice.
 
 - `GET` and `HEAD` liveness and readiness probes.
 - Google and LinkedIn OpenID Connect plus GitHub OAuth login, and
-  email-and-password registration, verification, login, reset,
-  reauthentication, and add/change.
+  email-and-password registration, verification, login, reset, reauthentication,
+  and add/change.
 - Authenticated provider linking and reauthentication starts.
 - Opaque PostgreSQL-backed sessions, rotation with bounded predecessor grace,
   CSRF, current-user lookup, logout, session listing, per-session revoke, and
@@ -26,23 +26,24 @@ slice.
 - Publish, unpublish, rename, and slug delete, with public JSON, photo, HTML,
   Markdown, sitemap, robots, and llms.txt reads gated by publish state.
 - First-party OAuth 2.1 (dynamic client registration, S256 consent, token
-  rotation and revocation, discovery) and a bearer-authenticated MCP server
-  with fifteen resume tools.
+  rotation and revocation, discovery) and a bearer-authenticated MCP server with
+  fifteen resume tools.
 - Encrypted transactional authentication mail delivered through SES or a
   loopback capture server.
 
 Server-Sent Events, private print redemption, and direct public rendering are
-implemented across the Go and web components; Chromium is initialized only by
-the normal server path. Four privacy and media lifecycle jobs are available as
-one-shot commands:
-`idempotency-expiry-sweep`, `media-deletion-sweep`,
-`media-orphan-sweep` (with optional `--dry-run`), and
-`privacy-retention-sweep`. They run before HTTP and Chromium initialization,
-load only the database configuration they need (media commands also load the
-media backend), and emit a fixed identifier-free JSON result. Each run is
-bounded to 30 minutes, uses an advisory overlap lock, and joins work after
-cancellation. The [privacy runbook](../../docs/runbooks/privacy.md) describes
-the budgets, failure handling, and Phase 10 scheduler handoff.
+implemented across the Go and web components. Chromium is initialized only by
+the normal server path. Five privacy, media lifecycle, and release-retention
+jobs are available as one-shot commands: `idempotency-expiry-sweep`,
+`media-deletion-sweep`, `media-orphan-sweep` (with optional `--dry-run`),
+`privacy-retention-sweep`, and `release-snapshot-sweep`. The first four run
+before HTTP and Chromium initialization, load only the database configuration
+they need (media commands also load the media backend), and emit a fixed
+identifier-free JSON result. `release-snapshot-sweep` reads release snapshot
+metadata and needs no database or media configuration. Each run is bounded to 30
+minutes, uses an advisory overlap lock where database state is shared, and joins
+work after cancellation. The [privacy runbook](../../docs/runbooks/privacy.md)
+describes the budgets and failure handling. Production schedules all five jobs.
 
 ## Data sources
 
@@ -52,15 +53,16 @@ with `sql/queries.sql`. [ADR 0010](../../docs/adr/0010-goose-only-migrations.md)
 records this rule.
 
 The root `go.work` connects this module to the generated schema module at
-`packages/schema/gen/go`. Run Go commands from `apps/server` so the workspace
-is found upward.
+`packages/schema/gen/go`. Run Go commands from `apps/server` so the workspace is
+found upward.
 
 ## Configuration
 
 The server requires `DATABASE_URL`, `ENV`, and `PUBLIC_ORIGIN`. `PORT` defaults
 to `8080`, `LISTEN_HOST` to `127.0.0.1`, and `LOG_LEVEL` to `info`.
-`TRUSTED_PROXY_CIDRS` and provider credentials are required in staging and
-production. See [`.env.example`](../../.env.example) and
+`TRUSTED_PROXY_CIDRS` is required in staging and production. Provider
+credentials are required there only for providers enabled by
+`PROVIDER_LOGIN_ENABLED`. See [`.env.example`](../../.env.example) and
 [`internal/config/config.go`](internal/config/config.go) for the validated
 contract.
 
@@ -76,17 +78,18 @@ go vet ./...
 go test ./...
 ```
 
-Run these commands from this directory. Database-backed gates use the one
-shared container started by `make test-db-up` from the repository root.
+Run these commands from this directory. Database-backed gates use the one shared
+container started by `make test-db-up` from the repository root.
 
-Run a one-shot job from this directory with the same environment as the
-server. The command exits nonzero on an invalid command, invalid configuration,
-or failed job; its stdout still contains the fixed result when the worker
-returns one. Media commands require the configured private media backend.
+Run a one-shot job from this directory with the same environment as the server.
+The command exits nonzero on an invalid command, invalid configuration, or
+failed job; its stdout still contains the fixed result when the worker returns
+one. Media commands require the configured private media backend.
 
 ```sh
 go run ./cmd/server idempotency-expiry-sweep
 go run ./cmd/server media-deletion-sweep
 go run ./cmd/server media-orphan-sweep --dry-run
 go run ./cmd/server privacy-retention-sweep
+go run ./cmd/server release-snapshot-sweep
 ```

@@ -1,8 +1,7 @@
 # 0035: Shared replica coordination and a recoverable UAT lifecycle
 
 Status: Accepted (2026-09-06), following the owner's scaling and cost approval
-and delegated design review. Implementation and hosted proof remain pending.
-Superseded in part by
+and delegated design review. Superseded in part by
 [ADR 0036](0036-single-replica-launch-and-pipeline-migrations.md) and
 [ADR 0038](0038-single-baseline-and-plain-migrator.md).
 

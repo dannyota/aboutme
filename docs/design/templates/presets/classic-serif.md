@@ -77,6 +77,7 @@ styles are `text`, so no bar, dot, or tag ever renders.
   ([limitations item 5](../limitations.md)).
 - **Rule weight and colour, and justified text.** 1 px, 0.25 em below, and
   accent mixed 60 % toward the surface are renderer-fixed, so the rule can only
-  be pale blue-grey; justification is not a token at all.
+  be pale blue-grey. The preset cannot choose justification because applying a
+  template preserves the owner's `font.textAlign`.
 - Applying the preset resets `dateFormat` to `Mon YYYY`
   ([limitations item 2](../limitations.md)).

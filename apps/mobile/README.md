@@ -1,6 +1,6 @@
 # apps/mobile
 
-Flutter app — planned after web v1 ships, against the same `/api/v1`
-contract (OAuth code + PKCE, bearer tokens).
+Flutter app, deferred, against the same `/api/v1` contract (OAuth code + PKCE,
+bearer tokens).
 
-Placeholder only in v1.
+This directory is a placeholder. There is no implemented mobile client.

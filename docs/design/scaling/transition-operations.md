@@ -95,8 +95,9 @@ Reconciliation is separate. runtime_reconcile_public_transition is one STABLE
 SECURITY DEFINER function invoked by one top-level SELECT outside WriteTxRunner.
 It uses one established MVCC statement snapshot and performs no write, lock,
 advisory operation, temporary DDL, volatile helper, or callback. It returns at
-most four rows. The local apply mutex belongs to R2 and is held across this one
-read and one local application; no PostgreSQL lock is held while waiting for it.
+most four rows. The local apply mutex belongs to the coordinator and is held
+across this one read and one local application; no PostgreSQL lock is held while
+waiting for it.
 
 ## Roles and errors
 
@@ -184,10 +185,10 @@ in dependency order; no number is reserved here. The commit gate and its
 terminal function must never be split across deployments that expose one without
 the other.
 
-R1 fixed operations/store precede R1a, then R2-R7 caller migration, then R8
-coverage. R1 may install uncomposed functions and prove them with isolated fully
-fenced fixtures. Complete production writer coverage is required before caller
-composition or multi-replica authority, not before authoring R1 functions. The
-later structural writer inventory proves every generation/deletion/publication
-writer uses overlap and parent fencing; R1 tests do not claim that production
-coverage early.
+Fixed store operations precede central transaction entry, then caller migration,
+then server-composition coverage. The store may install uncomposed functions and
+prove them with isolated fully fenced fixtures. Complete production writer
+coverage is required before caller composition or multi-replica authority, not
+before authoring the store functions. The structural writer inventory must prove
+that every generation, deletion and publication writer uses overlap and parent
+fencing before release.

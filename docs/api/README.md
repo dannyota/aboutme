@@ -23,8 +23,8 @@ to a pinned generator, and the output is committed:
 | `apps/web/scripts/api-drift-check.sh` | Non-mutating drift gate (generates into `mktemp -d`, then `diff -r`).   |
 
 - **Generator:** `openapi-typescript`, pinned exactly in
-  `apps/web/package.json`. It emits types only — no runtime — so the artifact
-  stays reviewable and adds nothing to the bundle.
+  `apps/web/package.json`. It emits types only. It has no runtime, so the
+  artifact stays reviewable and adds nothing to the bundle.
 - **Transport:** `openapi-fetch`, pinned exactly in the same manifest. It is a
   thin `fetch` wrapper that infers method, path, params, and response union from
   the generated `paths` type.
@@ -34,6 +34,6 @@ to a pinned generator, and the output is committed:
 
 Regenerate: `make api-gen` (`npm run api:gen` in `apps/web`). Drift gate:
 `bash apps/web/scripts/api-drift-check.sh`, wired into `make api-check`. It
-generates into a throwaway directory and compares — it never writes inside the
+generates into a throwaway directory and compares. It never writes inside the
 repository, so it is safe to run in a dirty or shared worktree, and it reports
 drift instead of quietly repairing it.

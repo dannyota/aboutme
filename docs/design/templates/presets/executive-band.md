@@ -79,6 +79,5 @@ net.
 - **No on-band ink** — the preset names the fill, not the text on it: the
   difference between a minimum-passing `#7b8faa` and a brilliant white name.
 - **No band depth**, no bleed, no photo suppression
-  ([limitations item 3](../limitations.md)); apply also resets
-  `pageFormat`/`dateFormat` ([item 2](../limitations.md)), so a Letter user
-  ships A4.
+  ([limitations item 3](../limitations.md)). Apply keeps `pageFormat` and resets
+  `dateFormat` ([item 2](../limitations.md)).

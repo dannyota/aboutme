@@ -1,7 +1,8 @@
 # Resume exports
 
 Owner PDF and public PDF/image exports use the same Vue renderer and a bounded
-Chromium queue. They run locally; hosted resource acceptance remains Phase 10.
+Chromium queue. Local resource evidence is recorded below. A production resource
+rerun has not been recorded.
 
 ## Runtime
 
@@ -90,7 +91,7 @@ systemd-run --user --scope --collect \
   .dev/bin/render-budget \
   --repository-root "$PWD" \
   --chromium-executable "$(node scripts/chromium-path.mjs)" \
-  --output-directory "$PWD/.dev/phase-7/resource-run"
+  --output-directory "$PWD/.dev/render-budget/resource-run"
 ```
 
 The corpus contains minimal and full documents plus a valid 524,288-byte
@@ -113,8 +114,7 @@ count of successful samples. First valid PDF/PNG artifacts support local text,
 font, page-size, and visual checks.
 
 This is a local Go-plus-Chromium baseline. Nuxt runs in its own process outside
-the measured cgroup. Phase 10 repeats it on the selected host and exercises the
-full server workload before hosted activation.
+the measured cgroup. A hosted run must also exercise the full server workload.
 
 ### Local baseline, 2026-09-06
 
@@ -134,9 +134,8 @@ identical bytes across 26 calls, matching the earlier inspected baseline.
 Each p95 is the larger of the two measured series. The full PDF has two Letter
 pages, its normalized photo, and two columns. The maximum PDF has 128 A4 pages;
 text extraction finds all 1,536 unique entry labels. Both PDFs use epoch dates.
-Visual inspection confirms wrapped long text and the fixed share-image crop. Raw
-evidence and artifacts remain under `.dev/phase-7/resource-20260906-5/`; the
-runbook commands reproduce the protocol.
+Visual inspection confirmed wrapped long text and the fixed share-image crop.
+The runbook commands reproduce the protocol; raw evidence remains local.
 
 ## Failure handling
 

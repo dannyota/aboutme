@@ -80,5 +80,5 @@ in `infoHtml`, as body text.
   continuous tone is the worst object in this chain and a hairline SVG the
   second; neither can be suppressed.
 - **Meta size.** `--fs-meta` is pinned at 0.9 × base, so the smallest text is
-  also the only grey text. Apply also resets `pageFormat`/`dateFormat`
+  also the only grey text. Apply keeps `pageFormat` and resets `dateFormat`
   ([limitations item 2](../limitations.md)).

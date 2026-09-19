@@ -5,8 +5,8 @@ Status: Accepted (2026-09-04)
 Amends [ADR 0029](0029-application-ui-toolkit.md), whose decision text keeps
 "the existing zinc and emerald values", and the "Application UI" section of the
 web and rendering design (Approved v4, section 5), whose chrome paragraph names
-the zinc palette, Inter, and emerald. ADR 0029 lands on `main` with the phase PU
-rebase; this record is accepted alongside it.
+the zinc palette, Inter, and emerald. ADR 0029 was accepted alongside this
+record.
 
 ## Context
 
@@ -73,8 +73,8 @@ change. The publish contract, the API, and the agent boundary do not change.
 
 ## Consequences
 
-- Phase PU's `theme.css` values are replaced; the shadcn semantic token names
-  stay so generated primitives keep working. A `seal` button variant is added.
+- `theme.css` takes these values; the shadcn semantic token names stay so
+  generated primitives keep working. A `seal` button variant is added.
 - Every application page loads Be Vietnam Pro; the variable font is already
   shipped for the renderer, so no new asset or license enters the catalog.
 - Two shared components enter `components/app`: `AppSeal` and `StateMark` (which
@@ -84,8 +84,8 @@ change. The publish contract, the API, and the agent boundary do not change.
 - The web design's product section changes "static server-rendered text" to
   "static server-rendered content".
 - Browser proofs that assert hero button order, the password toggle text, list
-  row buttons, the "Estimated pages" label, or customization label paths are
-  updated with the change listed in the owning task.
+  row buttons, the "Estimated pages" label, or customization label paths change
+  with the behavior they verify.
 - The Impeccable records (`PRODUCT.md`, the landing surface brief, and
   `DESIGN.md` written at finish from the built pages) become part of the
   repository so later UI work starts from the built world, not from memory.

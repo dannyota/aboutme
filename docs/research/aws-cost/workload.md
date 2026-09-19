@@ -1,7 +1,8 @@
 # AWS cost workload
 
-Status: Phase 9 Task 9.1 research input. Prices and service facts were retrieved
-on 2026-09-06. Amounts are US dollars before tax.
+Status: historical research input from 2026-09-06. ADR 0037 superseded the UAT,
+CloudFront, load-balancer, and autoscaling release path. Amounts are US dollars
+before tax and describe the saved model, not the live production service.
 
 ## Cost boundary
 

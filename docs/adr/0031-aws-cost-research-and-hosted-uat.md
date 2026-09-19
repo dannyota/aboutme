@@ -8,8 +8,7 @@ part by [ADR 0033](0033-public-image-builds-private-deployment.md) and
 
 The earlier roadmap required an isolated local HTTPS deployment on port 443
 before cloud activation. The owner now wants UAT in AWS Singapore at
-`uat.aboutme.vn`, with Cloudflare DNS, and a cost study before deployment. The
-owner also wants numeric phase names that are easy to remember.
+`uat.aboutme.vn`, with Cloudflare DNS, and a cost study before deployment.
 
 ## Decision
 
@@ -33,12 +32,9 @@ owner also wants numeric phase names that are easy to remember.
   publication. CodeBuild and self-hosted build runners are not required. The
   private infrastructure repository's Actions minutes and storage belong in the
   cost model; public-repository free runner usage does not cover it.
-- Phase 10 contains infrastructure preparation, AWS deployment, complete product
-  UAT, and the operational rehearsal previously assigned to staging.
-  Infrastructure is a workstream within this phase, not a lettered phase.
-- Phase 11 is production promotion. Phase 12 is deferred Flutter work. Active
-  tasks use numeric identifiers such as 7.1 and 10.14. Completed phase
-  identifiers remain in historical evidence; they are not reassigned.
+- Infrastructure preparation, AWS deployment, complete product UAT, and the
+  operational rehearsal belong to one release workstream. Production promotion
+  and deferred Flutter work remain separate.
 - The owner authorizes AWS UAT resources in `ap-southeast-1` and Cloudflare DNS
   for `uat.aboutme.vn`, including supporting origin and certificate records for
   that environment. Record the resolved resource and DNS inventory before

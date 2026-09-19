@@ -1,6 +1,9 @@
 # 0013: Contact details render in array order, as plain text, with `label`
 
-Status: Accepted (2026-08-11)
+Status: Accepted (2026-08-11). Superseded in part by
+[ADR 0040](0040-contact-labels-beside-icons.md),
+[ADR 0041](0041-contact-link-display-and-body-justify.md), and
+[ADR 0043](0043-email-and-phone-links.md).
 
 ## Context
 
@@ -15,31 +18,29 @@ order of personalDetails.details (no separate detailsOrder field — order lives
 where it's used, mirroring how customization.layout.sections orders content
 sections)." [Template contract §5.1](../design/templates/contract.md#51-header)
 already states the array-order rule and says outright that it supersedes §5's
-`detailsOrder` reference, and a prior planning decision says the same. Three
-documents agree; one line of the design spec does not; and the template contract
-is marked `DRAFT v1 — not approved`, so as it stood, implementers were being
-asked to follow an unapproved supersession of the design spec. This is exactly
-the shape ADR 0009 resolved for section order: the authority already exists in
-the schema, and what is missing is the ratification.
+`detailsOrder` reference. The schema and contract agree; one line of the design
+spec does not; and the template contract identifies itself as a draft that is
+not approved. As it stood, implementers were being asked to follow an unapproved
+supersession of the design spec. This is exactly the shape ADR 0009 resolved for
+section order: the authority already exists in the schema, and what is missing
+is the ratification.
 
 **Linkification.** Genuinely contested.
 [Template contract §5.1](../design/templates/contract.md#51-header) permits
-`email` and `phone` to render as `mailto:` / `tel:`; a prior planning decision
-forbids it in v1. The schema settles which reading is safe: it scopes an
-exact-lowercase `https://` pattern to the four URL types (`website`, `linkedin`,
-`github`, `twitter`) and says of the rest that "every other detail type (email,
-phone, location, custom) has no design-spec-defined value format, so it is
-intentionally left as the plain bounded string above — do not extend this
-without a spec/ADR decision". Emitting a `mailto:` or `tel:` URL from a 256-char
-unconstrained string is precisely such an extension, made in the renderer, where
-the value has passed no format check at all.
+`email` and `phone` to render as `mailto:` / `tel:`. The schema settles which
+reading is safe: it scopes an exact-lowercase `https://` pattern to the four URL
+types (`website`, `linkedin`, `github`, `twitter`). Every other detail type
+(`email`, `phone`, `location`, and `custom`) has no design-defined value format,
+so the schema leaves it as a bounded string and warns against extending it
+without a specification or ADR decision. Emitting a `mailto:` or `tel:` URL from
+a 256-char unconstrained string is precisely such an extension, made in the
+renderer, where the value has passed no format check at all.
 
 **`label`.** `personalDetail.label` exists in the schema (optional,
 maxLength 40) and
 [template contract §5.1](../design/templates/contract.md#51-header) defines its
-behavior, but earlier planning never mentions it. Left undecided, the header
-renderer ships without it and every committed golden has to be regenerated when
-it arrives.
+behavior. Left undecided, the header renderer ships without it and every
+committed golden has to be regenerated when it arrives.
 
 ## Decision
 

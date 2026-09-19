@@ -46,10 +46,18 @@ In a coordinated worker session, workers run only their affected checks, and the
 pre-commit hook scans each commit for secrets. GitHub CI on `main` runs the full
 gate; a release requires it green.
 
-For documentation changes, run `make docs-fmt`; it formats and re-lints the
-documentation tree. [`.tool-versions`](.tool-versions) pins local and hosted CI
-tools. Run `make tools-check` to verify them. The [root Makefile](Makefile)
-lists component checks and generation drift gates.
+For documentation changes, format and lint the files you changed:
+
+```sh
+node_modules/.bin/prettier --write path/to/document.md
+npx markdownlint-cli2 path/to/document.md
+```
+
+Run `make docs-lint` to check the documentation tree. Avoid `make docs-fmt` in a
+shared worktree because it rewrites unrelated files.
+[`.tool-versions`](.tool-versions) pins local and hosted CI tools. Run
+`make tools-check` to verify them. The [root Makefile](Makefile) lists component
+checks and generation drift gates.
 
 ## Pull requests
 

@@ -33,8 +33,8 @@ methods, marker, table/action catalog and historical write-generation results.
 shared_rate_policy_key_shapes, shared_policy_clocks, shared_rate_partitions,
 shared_rate_buckets, shared_rate_overflow and shared_admission_attempts. App
 receives only fixed admission calls; maintenance receives only bounded cleanup
-calls. Key-version evidence remains private R8 composition input, with no new
-replica column, registration argument or lifecycle ledger field.
+calls. Key-version evidence remains private server-composition input, with no
+new replica column, registration argument or lifecycle ledger field.
 
 [Fixed claim operations](claim-operations.md) adds a result-only composite in a
 later operation migration, exact role/kind checks and value/presence transport.

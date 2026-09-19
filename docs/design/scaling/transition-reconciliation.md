@@ -118,24 +118,24 @@ one function SELECT, reads at most four rows, checks stable repeated parent
 fields and ordinal order, deep-copies arrays and byte values, consumes rows,
 checks Rows.Err and closes Rows before return. No `pgx.Rows`, connection or
 slice backed by driver memory escapes. A query, iteration or cleanup error
-returns no snapshot; R2 keeps fences closed. The store defines closed
-string-backed TransitionState, TransitionOperation, TargetKind, TransitionClass
-and TargetResultKind types and rejects unknown database values before returning.
-The publicstate adapter converts these private store values; store does not
-import publicstate. The [transport contract](transition-transport.md) requires
-an explicit pool lease and physical-retirement capability before the read. AM001
-retires that exact backend even after clean protocol completion. Every uncertain
-cleanup path returns no snapshot and cannot release an unproved connection for
-reuse.
+returns no snapshot; the coordinator keeps fences closed. The store defines
+closed string-backed TransitionState, TransitionOperation, TargetKind,
+TransitionClass and TargetResultKind types and rejects unknown database values
+before returning. The publicstate adapter converts these private store values;
+store does not import publicstate. The
+[transport contract](transition-transport.md) requires an explicit pool lease
+and physical-retirement capability before the read. AM001 retires that exact
+backend even after clean protocol completion. Every uncertain cleanup path
+returns no snapshot and cannot release an unproved connection for reuse.
 
 ## Local application order
 
-R2 acquires its local publicstate transition-apply mutex before starting that
-read. While holding the mutex it calls only this fixed store method. The single
-statement ends and its rows are closed before the immutable value returns. The
-store invokes no caller callback during SQL or pgx cleanup. R2 then applies that
-unchanged snapshot once while still holding the mutex and releases the mutex
-last.
+The coordinator acquires its local publicstate transition-apply mutex before
+starting that read. While holding the mutex it calls only this fixed store
+method. The single statement ends and its rows are closed before the immutable
+value returns. The store invokes no caller callback during SQL or pgx cleanup.
+The coordinator then applies that unchanged snapshot once while still holding
+the mutex and releases the mutex last.
 
 Local Begin/Close/terminal application uses the same mutex. Local close and join
 finish before ack SQL starts; no caller holds a PostgreSQL transition/business
@@ -197,10 +197,10 @@ missing singleton keeps discovery closed.
 Thus only an immutable committed retired result for the exact UUID authorizes
 retirement. Current absence never does. Delayed or reordered replay cannot
 regress a higher generation, reopen a retired resume or override a later
-transition fence. R2 decides the HTTP response after releasing the local apply
-mutex. A legitimately removed 24-hour response receipt does not invalidate
-committed publication authority. A later request after idempotency expiry
-follows existing fresh-request semantics and uses a new transition ID.
+transition fence. The coordinator decides the HTTP response after releasing the
+local apply mutex. A legitimately removed 24-hour response receipt does not
+invalidate committed publication authority. A later request after idempotency
+expiry follows existing fresh-request semantics and uses a new transition ID.
 
 ## Required proof
 
@@ -221,7 +221,7 @@ follows existing fresh-request semantics and uses a new transition ID.
   state is already retired. An unresolved/closing blocker never opens a target.
 - Expired response receipts do not reverse committed publication authority.
 
-R1 owns the serialized migration, fixed query and store tests. R2 owns the local
-mutex, fence application and multi-coordinator tests. Run their focused Go tests
-and the affected migration/database gates after implementation. No runtime proof
-is claimed by this design.
+The store owns the serialized migration, fixed query and store tests. The
+coordinator owns the local mutex, fence application and multi-coordinator tests.
+Run their focused Go tests and the affected migration/database gates after
+implementation. No runtime proof is claimed by this design.
