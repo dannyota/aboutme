@@ -127,7 +127,23 @@ rotating.
 To turn Google off, set `provider_login_enabled = ""`, apply, and deploy. Leave
 the parameters in place.
 
+## Email sign-up
+
+Email-and-password sign-up sends a verification email through SES. While the SES
+account is in the sandbox, that mail cannot reach most addresses, so turn
+sign-up off: set `password_registration_enabled = false` in `prod.tfvars`, run
+`tofu apply`, and redeploy the live tag with `deploy.sh <tag>`. The register
+route then returns 404 and the web hides the sign-up form. Google sign-up,
+login, password reset, and verification of pending registrations keep working.
+Turn it back on the same way with `true` once SES production access is granted.
+
 ## Deploy
+
+Public pages link the resume stylesheets and hydration script with a build-time
+content hash (`?v=`), so a release reaches browsers despite the one-year
+immutable cache. Font files under `/_nuxt/fonts/` keep fixed names, so a font
+file change must rename the `.woff2`; the rename changes the font stylesheet and
+with it the public stylesheet hash.
 
 A release is a `v*` tag on `main` with green CI. The `release-images` workflow
 publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag; the
