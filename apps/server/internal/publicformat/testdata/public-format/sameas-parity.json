@@ -1,0 +1,26 @@
+{
+  "$comment": "Shared by publicformat/jsonld_test.go and apps/web/test/public-render/render.test.ts. The public HTML validator requires the renderer's JSON-LD to byte-equal Go's, so both sameAs rules must agree on every case here.",
+  "details": [
+    { "type": "website", "value": "https://one.example/path" },
+    { "type": "github", "value": "https://one.example/path" },
+    { "type": "custom", "value": "https://orcid.example/ada" },
+    { "type": "linkedin", "value": "https://user@port.example:8443/path" },
+    { "type": "custom", "value": "HTTPS://upper.example/ada" },
+    { "type": "github", "value": "HTTPS://upper.example/gh" },
+    { "type": "custom", "value": " https://space.example" },
+    { "type": "custom", "value": "javascript:alert(1)" },
+    { "type": "custom", "value": "//relative.example" },
+    { "type": "custom", "value": "https://" },
+    { "type": "twitter", "value": "https://?query" },
+    { "type": "twitter", "value": "https://#fragment" },
+    { "type": "twitter", "value": "http://not-https.example" },
+    { "type": "email", "value": "https://mail.example" },
+    { "type": "phone", "value": "https://phone.example" },
+    { "type": "location", "value": "https://place.example" }
+  ],
+  "sameAs": [
+    "https://one.example/path",
+    "https://orcid.example/ada",
+    "https://user@port.example:8443/path"
+  ]
+}

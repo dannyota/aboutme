@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -78,5 +80,33 @@ func TestJSONLDSameAsUsesTheRendererExactHTTPSPrefix(t *testing.T) {
 	}))
 	if len(got) != 2 || got[0] != "https://orcid.example/ada" || got[1] != "https://ada.example" {
 		t.Fatalf("sameAs = %v, want only exact lowercase https links", got)
+	}
+}
+
+// The public HTML validator requires the renderer's JSON-LD to byte-equal
+// JSONLD's output, so the TS renderer must pick the same sameAs values. Both
+// suites read this corpus (apps/web/test/public-render/render.test.ts).
+func TestJSONLDSameAsMatchesTheSharedRendererCorpus(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "public-format", "sameas-parity.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var corpus struct {
+		Details []struct {
+			Type  string `json:"type"`
+			Value string `json:"value"`
+		} `json:"details"`
+		SameAs []string `json:"sameAs"`
+	}
+	if err := json.Unmarshal(raw, &corpus); err != nil {
+		t.Fatal(err)
+	}
+	details := make([]publicresume.PublicPersonalDetail, 0, len(corpus.Details))
+	for _, detail := range corpus.Details {
+		details = append(details, publicresume.PublicPersonalDetail{Type: detail.Type, Value: detail.Value})
+	}
+	got := jsonLDSameAs(publicresume.PresentPublicDetails(details))
+	if !slices.Equal(got, corpus.SameAs) {
+		t.Fatalf("sameAs = %v, want %v", got, corpus.SameAs)
 	}
 }
