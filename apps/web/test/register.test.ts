@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
   mountSuspended,
@@ -15,8 +15,11 @@ import {
 } from '../app/composables/usePasswordAuth';
 import { setSiteLocale } from './support/locale';
 
+const PENDING_KEY = 'aboutme.pendingReturnPath';
+
 // These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
+afterEach(() => window.localStorage.removeItem(PENDING_KEY));
 
 // The credentials test needs to observe the `credentials` option, which the
 // test runtime's `$fetch` swallows before the h3 mock server sees it. Route
@@ -328,6 +331,56 @@ describe('register.vue', () => {
       want === null ? '/login' : `/login?next=${encodeURIComponent(want)}`,
     );
   });
+
+  it('remembers a checked next in storage for verify-email to pick up',
+    async () => {
+      registerEndpoint('/api/v1/auth/password/register', {
+        method: 'POST',
+        handler: (event) => {
+          setResponseStatus(event, 202);
+          return { data: { accepted: true } };
+        },
+      });
+      const wrapper = await mountSuspended(RegisterPage, {
+        route: '/register?next=%2Fapp%2Fresumes',
+      });
+      await wrapper.get('#register-name').setValue(validInput.name);
+      await wrapper.get('#register-email').setValue(validInput.email);
+      await wrapper.get('#register-password').setValue(validInput.password);
+      await wrapper.get('#register-password-confirm')
+        .setValue(validInput.password);
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
+      await settle();
+      const stored = window.localStorage.getItem(PENDING_KEY);
+      expect(stored).not.toBeNull();
+      expect(JSON.parse(stored ?? '{}')).toMatchObject({
+        path: '/app/resumes',
+      });
+    });
+
+  it('removes a stale remembered next when the request carries none',
+    async () => {
+      window.localStorage.setItem(PENDING_KEY, JSON.stringify({
+        path: '/app/resumes',
+        expiresAt: Date.now() + 1000,
+      }));
+      registerEndpoint('/api/v1/auth/password/register', {
+        method: 'POST',
+        handler: (event) => {
+          setResponseStatus(event, 202);
+          return { data: { accepted: true } };
+        },
+      });
+      const wrapper = await mountSuspended(RegisterPage);
+      await wrapper.get('#register-name').setValue(validInput.name);
+      await wrapper.get('#register-email').setValue(validInput.email);
+      await wrapper.get('#register-password').setValue(validInput.password);
+      await wrapper.get('#register-password-confirm')
+        .setValue(validInput.password);
+      await wrapper.get('[data-testid="register-form"]').trigger('submit');
+      await settle();
+      expect(window.localStorage.getItem(PENDING_KEY)).toBeNull();
+    });
 
   it('replaces the form after success so no stale field or error remains',
     async () => {

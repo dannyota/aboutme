@@ -15,6 +15,7 @@ beforeEach(() => setSiteLocale('en'));
 mockNuxtImport('useHead', () => vi.fn());
 
 const TOKEN = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefg';
+const PENDING_KEY = 'aboutme.pendingReturnPath';
 
 describe('verify-email.vue (fragment handling)', () => {
   it('composes the auth page and shared error banner', async () => {
@@ -37,6 +38,7 @@ describe('verify-email.vue (fragment handling)', () => {
   beforeEach(() => {
     vi.mocked(useHead).mockClear();
     window.location.hash = '';
+    window.localStorage.removeItem(PENDING_KEY);
   });
 
   it('verifies a single token, stripping it before the fetch', async () => {
@@ -170,4 +172,45 @@ describe('verify-email.vue (fragment handling)', () => {
       await flushPromises();
       expect(calls).toBe(1);
     });
+
+  it('carries a stored next into the sign-in link and clears the key',
+    async () => {
+      window.localStorage.setItem(PENDING_KEY, JSON.stringify({
+        path: '/app/resumes',
+        expiresAt: Date.now() + 1000,
+      }));
+      const wrapper = await mountSuspended(VerifyEmailPage);
+      await flushPromises();
+      expect(
+        wrapper.get('[data-testid="verify-sign-in"]').attributes('href'),
+      ).toBe('/login?next=%2Fapp%2Fresumes');
+      expect(window.localStorage.getItem(PENDING_KEY)).toBeNull();
+    });
+
+  it('links to plain /login with no stored next', async () => {
+    const wrapper = await mountSuspended(VerifyEmailPage);
+    await flushPromises();
+    expect(
+      wrapper.get('[data-testid="verify-sign-in"]').attributes('href'),
+    ).toBe('/login');
+  });
+
+  it('links to plain /login when storage is blocked', async () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('blocked');
+      },
+    });
+    try {
+      const wrapper = await mountSuspended(VerifyEmailPage);
+      await flushPromises();
+      expect(
+        wrapper.get('[data-testid="verify-sign-in"]').attributes('href'),
+      ).toBe('/login');
+    } finally {
+      if (original) Object.defineProperty(window, 'localStorage', original);
+    }
+  });
 });
