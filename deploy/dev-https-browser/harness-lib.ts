@@ -136,6 +136,9 @@ export async function signInWithGoogle(
     options.keyboard === true ? target.press('Enter') : target.click()
   );
   if (options.fromLoginPage === true) {
+    // This path asserts the English sign-in copy. Pin it here too, because an
+    // account deletion clears site cookies, the language choice included.
+    await pinEnglish(page.context());
     const response = await page.goto('/login');
     expect(response?.status()).toBe(200);
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
