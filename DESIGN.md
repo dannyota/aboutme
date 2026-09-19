@@ -122,9 +122,15 @@ The editor is a four-region workspace:
    templates, and photo.
 
 The editor top bar keeps the brand, resume title, save state, public mark,
-Publish, and account menu. Publish is the seal button. The preview reports
-loading or unavailable photos without rendering a placeholder image, and a
-render failure says that edits are still safe.
+Download PDF with the page size beside it, Publish, and account menu. Publish is
+the seal button. The preview reports loading or unavailable photos without
+rendering a placeholder image, and a render failure says that edits are still
+safe.
+
+The Design panel opens with a Page & PDF group: page size with its dimensions,
+and margins as Narrow, Normal, Wide, or Custom presets, where Custom reveals the
+two axes. Margins show millimetres on A4 and inches on Letter, and a note says
+the settings apply to the PDF and printing, not the web page.
 
 Each template card in the inspector shows the sample resume rendered with that
 template at 0.18 scale. A thumbnail renders only while its card is near the

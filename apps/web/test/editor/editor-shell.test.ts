@@ -39,8 +39,8 @@ describe('EditorShell', () => {
     expect(publish.attributes('data-variant')).toBe('seal');
     expect(wrapper.findAll('[data-action="publish"]')).toHaveLength(1);
     const download = wrapper.get('[data-action="download-pdf"]');
-    expect(download.text()).toBe('Download PDF');
-    expect(download.attributes('aria-label')).toBe('Download PDF');
+    expect(download.text()).toBe('Download PDF A4');
+    expect(download.attributes('aria-label')).toBe('Download PDF, A4');
     expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });

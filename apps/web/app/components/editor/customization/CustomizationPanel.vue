@@ -20,6 +20,7 @@ import {
   type CustomizationField,
 } from './fields';
 import ColorField from './ColorField.vue';
+import PageSettings from './PageSettings.vue';
 import { enumLabel, FIELD_GROUPS, FIELD_LABELS } from './labels';
 
 const props = defineProps<{
@@ -53,17 +54,6 @@ function changeField(field: CustomizationField, event: Event): void {
   setLocalError(field.path, '');
   if (value === valueAt(field.path)) return;
   commit([{ op: 'set', path: field.path, value }]);
-}
-
-function enablePageMargin(): void {
-  commit([
-    { op: 'set', path: 'spacing.pageMargin.x', value: 15 },
-    { op: 'set', path: 'spacing.pageMargin.y', value: 15 },
-  ]);
-}
-
-function unsetPageMargin(): void {
-  commit([{ op: 'unset', path: 'spacing.pageMargin' }]);
 }
 
 function enableHeader(): void {
@@ -198,9 +188,7 @@ function labelFor(path: CustomizationSetPath): string {
 }
 
 function isDeferredPath(path: string): boolean {
-  return path === 'spacing.pageMargin.x'
-    || path === 'spacing.pageMargin.y'
-    || path === 'header.align'
+  return path === 'header.align'
     || path === 'header.detailsLayout'
     || path === 'header.iconStyle';
 }
@@ -280,7 +268,10 @@ function customizationValue(): Customization | undefined {
     title="Customization"
     title-id="customization-title"
   >
-    <div ref="root">
+    <div
+      ref="root"
+      class="grid gap-8"
+    >
       <fieldset
         v-for="group in FIELD_GROUPS"
         :key="group.title"
@@ -291,7 +282,12 @@ function customizationValue(): Customization | undefined {
           {{ group.title }}
         </legend>
         <div class="grid gap-4">
-          <template v-if="group.title === 'Colors'">
+          <PageSettings
+            v-if="group.title === 'Page & PDF'"
+            :customization="customizationValue()!"
+            @commit="commit"
+          />
+          <template v-else-if="group.title === 'Colors'">
             <div
               v-for="color in [
                 ['colors.primary', true],
@@ -378,44 +374,6 @@ function customizationValue(): Customization | undefined {
                 </FormField>
               </template>
             </template>
-            <SwitchField
-              v-if="group.title === 'Spacing'"
-              data-action="page-margin"
-              label="Page margins"
-              :model-value="customizationValue()?.spacing.pageMargin
-                !== undefined"
-              @update:model-value="$event
-                ? enablePageMargin() : unsetPageMargin()"
-            />
-            <div
-              v-if="group.title === 'Spacing'
-                && customizationValue()?.spacing.pageMargin !== undefined"
-              class="grid gap-4"
-            >
-              <FormField
-                v-for="path in ['spacing.pageMargin.x', 'spacing.pageMargin.y']"
-                :id="fieldId(pathFor(path))"
-                :key="path"
-                v-slot="{ id, describedBy, invalid }"
-                :error="localError(pathFor(path)) || undefined"
-                :label="path.endsWith('.x')
-                  ? labelFor('spacing.pageMargin.x')
-                  : labelFor('spacing.pageMargin.y')"
-                :name="path"
-              >
-                <Input
-                  :id="id"
-                  :aria-describedby="describedBy"
-                  :aria-invalid="invalid"
-                  :max="fieldFor(pathFor(path))?.maximum"
-                  :min="fieldFor(pathFor(path))?.minimum"
-                  :model-value="typedDisplay(pathFor(path), 15)"
-                  step="any"
-                  type="number"
-                  @change="changeField(fieldFor(pathFor(path))!, $event)"
-                />
-              </FormField>
-            </div>
             <SwitchField
               v-if="group.title === 'Headings'"
               data-action="header"

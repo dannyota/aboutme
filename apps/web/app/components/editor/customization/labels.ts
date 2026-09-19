@@ -30,6 +30,10 @@ export const FIELD_LABELS: Readonly<Record<CustomizationSetPath, string>> = {
 
 export const FIELD_GROUPS = [
   {
+    title: 'Page & PDF',
+    paths: ['pageFormat', 'spacing.pageMargin.x', 'spacing.pageMargin.y'],
+  },
+  {
     title: 'Type',
     paths: ['font.family', 'font.baseSizePx', 'font.textAlign'],
   },
@@ -39,8 +43,6 @@ export const FIELD_GROUPS = [
       'spacing.sectionGap',
       'spacing.entryGap',
       'spacing.lineHeight',
-      'spacing.pageMargin.x',
-      'spacing.pageMargin.y',
     ],
   },
   {
@@ -60,7 +62,6 @@ export const FIELD_GROUPS = [
       'layout.surfaceTarget',
       'sectionDisplay.skill.style',
       'sectionDisplay.language.style',
-      'pageFormat',
       'dateFormat',
     ],
   },
