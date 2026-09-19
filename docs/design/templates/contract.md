@@ -194,8 +194,8 @@ always keeps the full value (ADR 0041):
 | `full`          | the whole URL                                               |
 | `label`         | the label, else the default label; no separate label prefix |
 
-`display` has no effect on a value that renders as text. GitHub and X render
-their brand marks; LinkedIn and a linked `custom` detail render the generic link
+`display` has no effect on a value that renders as text. GitHub, LinkedIn, and X
+render their brand marks; a linked `custom` detail renders the generic link
 glyph.
 
 ### 5.2 Entry anatomy

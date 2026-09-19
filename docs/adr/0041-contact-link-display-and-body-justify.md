@@ -36,10 +36,8 @@ does not show which service a link points to.
    and skill or language tags never justify. Screen, paged preview, public page,
    and PDF share the rule.
 4. **Brand marks.** GitHub and Twitter render the GitHub and X marks from Simple
-   Icons (CC0-1.0), inline and monochrome in the icon colour. LinkedIn keeps the
-   generic link glyph, because Simple Icons no longer ships it and no CC0 source
-   exists. The `twitter` type's default label becomes "X"; the type name stays
-   `twitter`.
+   Icons (CC0-1.0), inline and monochrome in the icon colour. The `twitter`
+   type's default label becomes "X"; the type name stays `twitter`.
 
 ## Document version
 
@@ -66,4 +64,7 @@ must therefore be unique; store validation rejects a repeated id.
 - [Template contract §5.1](../design/templates/contract.md#51-header),
   [token design §2 and §3.4](../design/templates/tokens.md), and the
   [data design](../design/data.md#document-versions) state these rules.
+- LinkedIn renders Font Awesome Free's square LinkedIn mark (CC BY 4.0) the same
+  way. Simple Icons no longer ships a LinkedIn mark, and CC BY needs only
+  attribution, which suits the AGPL repository.
 - Brand-mark sources and licences are recorded in `THIRD_PARTY_NOTICES.md`.

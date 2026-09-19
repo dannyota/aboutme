@@ -179,9 +179,10 @@ and no value is ever hidden (ADR 0040).
 The enum is `none` | `outline`. Lucide is stroke-only, so a `solid` value would
 require a second icon family or a `fill: currentColor` hack that turns many
 marks into blobs. The schema and every preset therefore use `outline` for a
-visible header icon. The GitHub and X contacts are the exception: they render
-their filled brand marks from Simple Icons in the icon colour, because those
-brands have no stroked mark (ADR 0041).
+visible header icon. The GitHub, LinkedIn, and X contacts are the exception:
+they render their filled brand marks (Simple Icons for GitHub and X, Font
+Awesome Free for LinkedIn) in the icon colour, because those brands have no
+stroked mark (ADR 0041).
 
 Two boundaries this token must not cross. `header.iconStyle` covers the header's
 contact icons only — it never suppresses a section's `iconKey`, which every

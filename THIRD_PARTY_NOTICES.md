@@ -17,3 +17,18 @@ package manifests. Font notices are generated separately in
   owner's own profile, following each brand's guidelines
   ([GitHub](https://github.com/logos),
   [X](https://about.x.com/en/who-we-are/brand-toolkit)).
+
+## Font Awesome Free LinkedIn mark
+
+- Files: `apps/web/app/components/resume/brandIcons.ts` (the LinkedIn path
+  data).
+- Source: [Font Awesome Free](https://fontawesome.com/) npm package
+  `@fortawesome/fontawesome-free@7.3.1`, icon `svgs/brands/linkedin.svg`.
+  Copyright 2026 Fonticons, Inc.
+- Licence: icons [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), per
+  the package `LICENSE.txt` and <https://fontawesome.com/license/free>.
+- Changes: the path is unchanged; the viewBox changes from `0 0 448 512` to
+  `-14 18 476 476`, which centres the square with a small inset, and the fill is
+  the icon colour.
+- Trademarks: LinkedIn is a trademark of LinkedIn Corporation. CC BY covers the
+  path data only. The mark identifies a link to the owner's own profile.
