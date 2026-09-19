@@ -7,7 +7,8 @@ private-bucket initializer.
 
 This artifact is not ready for direct Internet exposure. Its Caddy listener is
 HTTP-only and its client-IP rule assumes the viewer connects directly to Caddy.
-Authentication UAT and public service require the planned HTTPS/443 edge path.
+Use the native HTTPS harness for authenticated local checks. The hosted service
+uses the separate AWS and Cloudflare deployment.
 
 ## Prerequisites
 
@@ -113,12 +114,12 @@ Do not delete the Compose volume as a routine stop or update step.
 
 ## Current limits
 
-- Resume HTTP, editor, rendering, publishing, realtime, and PDF output are not
-  implemented.
-- HTTPS termination and the production proxy-validation path are not present.
+- The Compose listener is HTTP-only, so it cannot prove Secure-cookie
+  authentication or the production proxy-validation path.
 - Backup, restore, rollback, and secret-rotation runbooks will be added only
-  when their supporting deployment exists.
-- AWS infrastructure is not part of the current repository.
+  when Compose gains those operator workflows.
+- Production infrastructure and operations are separate from this self-hosted
+  artifact.
 
 See [deployment artifacts](../../deploy/README.md) for the network shape and
 [current-state architecture](../architecture.md) for the implemented product

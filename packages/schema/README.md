@@ -19,8 +19,9 @@ Do not hand-edit generated files. Release a new document version by adding its
 snapshot and manifest entry, updating the working schema, then regenerating.
 Never change a released snapshot or manifest entry.
 
-Document schema v2 uses the licensed font catalog's stable IDs while retaining
-v1's immutable display-name identifiers. See the
+Document schema v4 is current. The registry accepts and emits document versions
+1 through 4. Document schema v2 uses the licensed font catalog's stable IDs
+while retaining v1's immutable display-name identifiers. See the
 [font catalog design](../../docs/design/fonts.md).
 
 ## Validation data
@@ -39,10 +40,9 @@ behavior fails both suites.
 
 ## Template presets
 
-`templates/` contains 20 committed preset JSON files. Their
-[design contract](../../docs/design/templates/README.md) is still draft. The
-renderer and font assets have not landed, so preset presence does not mean the
-template phase is accepted.
+`templates/` contains 20 committed preset JSON files. The web app uses the
+presets, renderer, and licensed font catalog. See the
+[template design](../../docs/design/templates/README.md).
 
 ## Commands
 

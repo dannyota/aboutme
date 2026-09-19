@@ -144,7 +144,8 @@ replay.
    termination gains EC2 audit proof. Ambiguous leave retains claims until
    proof.
 6. Only after no serving/maintenance replica or work remains may the separate
-   UAT finalizer close the gate. R1 neither defines nor grants finalize-stop.
+   UAT finalizer close the gate. The store defines or grants no finalize-stop
+   operation.
 
 When due-work recomputation after complete-wake proves no node work, steps 3-5
 are omitted. The existing finalizer may close the gate with zero replicas. This
@@ -241,8 +242,8 @@ later replacement activation under desired one.
 - Maintenance activation requires completed wake, stays outside serving desired
   capacity and public readiness, and permits only C03 `mail.send` shared claims.
   Existing mail/media leases remain separate protocols.
-- Lifecycle functions use the real lifecycle-command grants. R8 composes callers
-  and readiness; it adds no database privilege gate.
+- Lifecycle functions use the real lifecycle-command grants. Server composition
+  composes callers and readiness; it adds no database privilege gate.
 - Booked UAT serving wake and maintenance wake use distinct stored modes. The
   maintenance no-work branch launches no replica and adds no task or capacity.
 - Every fresh lifecycle action increments both generations once. Exact replay,

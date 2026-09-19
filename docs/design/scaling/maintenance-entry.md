@@ -149,7 +149,7 @@ Sources are under `apps/server/sql/`. No listed query may gain FOR UPDATE, FOR
 SHARE or their variants, advisory locks, DML, writable CTEs, mutating functions
 or transaction control. ListIdleOAuthClientCandidates uses FOR UPDATE SKIP
 LOCKED and therefore runs inside the bound transaction. Every other locking read
-and mutation uses that runner too. R8's existing operation inventory rejects
+and mutation uses that runner too. The server operation inventory rejects
 unclassified methods or changes to these classifications. A future locking read
 needs a named bound method or WithWriteTx.
 
@@ -177,11 +177,10 @@ pool capped at 12. No additional pool or capacity allowance is introduced.
 
 ## Ownership and proof
 
-R1/store owns the session primitive, definer functions and query seams in one
-root-serialized migration. R7d owns authmail, mediacleanup and privacyretention
-callers. R8/root owns cmd/server composition, generated SQL output, shared
-fixtures and final operation coverage. Goose retains its separate migration
-connection contract.
+The store owns the session primitive, definer functions and query seams in one
+serialized migration. Auth mail, media cleanup and privacy retention own their
+callers. Server composition owns generated SQL output, shared fixtures and final
+operation coverage. Goose retains its separate migration connection contract.
 
 Live tests must prove exact PID and runtime-before-command-before-row order,
 overlap across idle gaps, all four old/new lock pairs, marker contamination and

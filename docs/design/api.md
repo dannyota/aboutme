@@ -53,7 +53,7 @@ behavior that future contract changes must implement.
 | `PATCH /resumes/{id}/structure`                                    | Atomic section create, delete, move, or reorder                  |
 | `PATCH /resumes/{id}/personal-details`, `PATCH .../customization`  | Personal details and allowlisted customization deltas            |
 | `POST/GET/PATCH/DELETE /resumes/{id}/photo`                        | Owner-only photo upload, read, crop, replace, and delete         |
-| `POST /resumes/{id}/publish`                                       | Slug claim and three publish controls                            |
+| `POST /resumes/{id}/publish`                                       | Slug, publish controls, public title, and favicon                |
 | `GET /resumes/{id}/pdf`                                            | Owner PDF                                                        |
 | `GET /events`, `GET /live/{slug}`                                  | Authenticated and public SSE invalidation streams                |
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                             |

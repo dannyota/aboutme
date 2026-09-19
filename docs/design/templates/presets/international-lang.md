@@ -13,8 +13,9 @@ abroad, where languages are a qualification the reader screens on.
    so ADR 0008 heads the rail with languages. Only `language` gets a widget —
    `bar` against `skill: "text"` — the page's one non-text mark.
 2. **Year-only dates.** `MM/YYYY` reads month/day by North American habit;
-   `Mon YYYY` is English-only, since `contract.md` §5.4 pins `Mon` to a fixed
-   table, not `Intl`. `YYYY` is the enum's one unambiguous, neutral value.
+   `Mon YYYY` uses fixed English and Vietnamese tables, not `Intl`, and still
+   depends on the resume language. `YYYY` is the enum's one unambiguous,
+   language-neutral value.
 3. **Headings are not transformed.** `tokens.md` §3.3 makes `text-transform`
    locale-sensitive under the root's `lang` — a hazard in Turkish (`i` → `İ`)
    and German (`ß`). `showRule: true` replaces that boundary. Leading is 1.55
@@ -37,11 +38,9 @@ abroad, where languages are a qualification the reader screens on.
 ## Page format
 
 `a4`: ISO 216 is standard outside North America, and someone applying abroad
-more often applies _to_ an A4 market. ADR 0008's replace is wholesale, so
-**applying this preset overwrites the user's `pageFormat`** —
-[limitations item 2](../limitations.md), worst here because this preset's user
-is likeliest to have set Letter on purpose. The containment is an editor
-warning, not a preset field.
+more often applies _to_ an A4 market. The value seeds a resume started from the
+preset. Applying the preset to an existing resume keeps the owner's `pageFormat`
+([limitations item 2](../limitations.md)).
 
 ## Contrast, computed
 

@@ -75,10 +75,11 @@ generation, and nonzero recorded_at. Copy values inside the callback and expose
 them only after commit. Return zero RuntimeLeaveResult/RuntimeFenceResult on any
 error, including ambiguous commit.
 
-R8 owns exact local identity, local join proof, lifecycle selection inputs,
-external EC2 DescribeInstances evidence, and the single same-evidence ambiguity
-retry. Store transport exposes no callback, Queries, transaction, connection,
-raw proof row, AWS client, fencing helper, transition recovery, or retry loop.
+Server composition owns exact local identity, local join proof, lifecycle
+selection inputs, external EC2 DescribeInstances evidence, and the single
+same-evidence ambiguity retry. Store transport exposes no callback, Queries,
+transaction, connection, raw proof row, AWS client, fencing helper, transition
+recovery, or retry loop.
 
 RuntimeLeaveResult uses `ReplicaID uuid.UUID`; `State` and `ReceiptOperationID`
 as `string`; `ControllerGeneration int64`; `JoinedTransitionCount` and

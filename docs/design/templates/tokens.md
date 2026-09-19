@@ -75,7 +75,7 @@ the 15 required author-controlled leaves explicitly, adds its required
 arrays. `applyTemplate` computes those arrays. This accounts for all 17 required
 document leaves without inventing preset-owned placement arrays.
 
-The eight optional leaves work differently. The
+The ten optional leaves work differently. The
 [document-version rule](../data.md#document-versions) requires new fields to
 start optional so adding one does not force an all-document migration.
 `customization` therefore still has exactly the eight required keys
@@ -88,11 +88,10 @@ who has never opened the header panel from one who chose `align: "left"`, even
 though the two render identically. `contract.md` §6 records the same
 absent-versus-cleared rule for text fields.
 
-Two of them are **complete-or-absent** rather than per-leaf optional:
-`spacing.pageMargin` requires both `x` and `y` once present, and
-`customization.header` requires all three of its fields. A margin or a header
-treatment has no half-specified form, so the schema offers the whole object or
-nothing, matching every other nested object in the document.
+Two structures have grouped requirements. `spacing.pageMargin` requires both `x`
+and `y` once present. `customization.header` requires `align`, `detailsLayout`,
+and `iconStyle` together, while `photoPosition` remains optional. A margin or a
+header missing any required child is invalid rather than partially defaulted.
 
 `customization.header` is the **resume header** — the top block of name,
 headline, photo, and contact details (`contract.md` §5.1).

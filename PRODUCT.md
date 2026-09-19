@@ -21,11 +21,11 @@ agent the person connects to edit their own resumes.
 ## Product Purpose
 
 aboutme is an open-source resume builder and hosted display service. A person
-signs in with email and password, edits up to three resumes with a live preview
-of the exact page layout, and publishes each one at `aboutme.vn/{slug}` with
-explicit choices about PDF download and discovery. Success is a resume that
-looks the same in the editor, on the public page, and in the PDF, reached by a
-link the person controls and can withdraw immediately.
+signs in with an enabled provider or an existing password, edits up to three
+resumes with a live preview of the exact page layout, and publishes each one at
+`aboutme.vn/{slug}` with explicit choices about PDF download and discovery.
+Success is a resume that looks the same in the editor, on the public page, and
+in the PDF, reached by a link the person controls and can withdraw immediately.
 
 The intended product and architecture are defined in `docs/design/` (Approved
 v4); `docs/design/product.md` is the product section of that authority.
@@ -55,9 +55,10 @@ so.
   MCP-capable assistant). The agent speaks MCP to `aboutme.vn/mcp` after an
   OAuth 2.1 consent screen that names the client and the scopes; the settings
   page lists connected agents and revokes them.
-- The v1 application interface is English. Vietnamese resume content is a
-  first-class fixture; the bundled font catalog states measured script coverage
-  instead of claiming universal coverage.
+- The homepage, account pages, legal pages, and template gallery support
+  Vietnamese and English, with Vietnamese as the default. The editor, resume
+  list, and settings use English. Vietnamese resume content is supported; the
+  font catalog states measured script coverage.
 - Development is local-first: native Go, Nuxt, and Caddy at
   `http://localhost:20080` (`make dev-native`), an HTTPS harness at
   `https://localhost:20443` for authenticated browser proofs, and a seeded
@@ -72,10 +73,10 @@ so.
 - At most three resumes per account, enforced in PostgreSQL.
 - Slug grammar `^[a-z0-9]+(-[a-z0-9]+)*$`, 4 to 30 characters, globally unique;
   released slugs enter a 180-day tombstone. Reserved roots cannot be claimed.
-- Email and password authentication, plus provider login switched on one
-  provider at a time (ADR 0039). Production can enable only Google, and it stays
-  off until the owner turns it on. The UI shows a provider control only for a
-  name in the capabilities read's `providers` list.
+- Email and password authentication, plus independently enabled provider login
+  (ADR 0039). Production enables Google and disables password registration. The
+  UI shows a provider control only for a name in the capabilities read's
+  `providers` list.
 - The resume renderer is pure: `(document, renderContext) -> HTML`. Application
   chrome must never change how the renderer's output looks; renderer golden HTML
   and screenshot suites are the proof.
@@ -83,20 +84,13 @@ so.
   or CDNs at runtime. Fonts are self-hosted from a licensed catalog of 26
   families (all OFL-1.1); Be Vietnam Pro is rank 1 and Inter rank 2.
 - Application UI toolkit: Tailwind CSS v4 and shadcn-vue primitives with reka-ui
-  (ADR 0029). Decided 2026-09-04: UI work builds on branch `codex/phase-pu`
-  rebased onto `main`, which adds the publish dialog. The rebase and its fresh
-  phase review are the first UI task, not an assumption.
+  (ADR 0029).
 - Terminology: "resume" (never CV in English), "publish" and "unpublish",
   "public resume", "PDF download", "SEO and GEO", "connected agents", "signed-in
   devices", "slug". Vietnamese copy uses "CV", the common Vietnamese word.
   Buttons name the action they perform; copy is sentence case.
 - Out of v1: cover letters, job tracker, first-party AI writing, custom domains,
-  teams, analytics, a multilingual interface beyond the Vietnamese and English
-  homepage and authentication pages, collaborative editing, and any operator or
-  admin surface.
-- Undecided: the product name is in use as `aboutme` and the domain as
-  `aboutme.vn`, but a name and trademark review is pending before production. No
-  logo or wordmark exists beyond the lowercase word.
+  teams, analytics, collaborative editing, and any operator or admin surface.
 
 ## Brand Commitments
 
@@ -105,19 +99,17 @@ so.
   shipped behavior. Errors say what happened and how to fix it. Deletion copy
   distinguishes immediate access revocation from delayed physical deletion.
 - License: AGPL-3.0, stated on the landing page with a link to the repository.
-- Binding constraint volunteered by the owner: the emerald "saved" and "active"
-  accent and the zinc neutral scale are the current tokens; they are a starting
-  point, not a requirement.
+- Application colors and state marks follow [DESIGN.md](DESIGN.md): a cool-grey
+  desk, white paper, signature blue-black actions, and a red public seal.
 
 ## Evidence on Hand
 
-- Real resume fixture: the `full` fixture (Ada Lovelace, Analytical Engineer,
-  Hanoi) in `apps/web/test/fixtures/` and the seeded sample resume; renders
-  through the real renderer in every preset.
+- Fictional resume fixture: the `full` fixture (Ada Lovelace, Analytical
+  Engineer, Hanoi) in `apps/web/test/fixtures/` and the seeded sample resume;
+  renders through the real renderer in every preset.
 - Six named presets with golden screenshots in `apps/web/e2e/baselines/`.
 - Font catalog manifest with measured Vietnamese coverage:
   `apps/web/app/assets/fonts/catalog.json`.
-- Current-state screenshots (2026-09-04) under `.dev/design-qa/current/`.
 - Absent, never to be invented: testimonials, customer logos, user counts, paid
   plans or prices, benchmarks, press, and any claim about hosted uptime or
   scale.
@@ -141,5 +133,5 @@ Accessibility is a release requirement for the editor, publish flow, public
 page, and generated artifacts: no serious or critical axe violation in light and
 dark themes, keyboard-operable dialogs, menus, tabs, and rail with visible
 focus, reduced motion respected, and a persisted theme choice. Vietnamese
-diacritics must render correctly in every chrome typeface and every catalog font
-at every weight used.
+diacritics must render correctly through the catalog's verified font and
+fallback coverage at every weight used.

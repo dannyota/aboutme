@@ -318,16 +318,16 @@ IAM bindings, secret ARNs, deploy/controller automation, account-specific tests,
 cost alarms, and hosted evidence. No private repository or feature purchase has
 been approved; integration must record that decision before creating it.
 
-Rewrite these accepted-plan concepts during integration:
+Rewrite these stale concepts during integration:
 
 - deployment.md rows that assign a stable EIP/fixed-host origin to each replica:
   replace with ALB-to-ASG target registration and ephemeral node public IPv4.
-- infrastructure decisions/contracts/task 05 rows that describe a single
-  multi-container ECS task or distinctInstance spread: replace with three DAEMON
-  services plus exact complete-replica readiness.
-- edge/task 07 client-IP rows that grant XFF position authority: replace with
-  CloudFront viewer-request overwrite of X-Aboutme-Client-IP and Caddy boundary.
-- ADR 0034/task 10.18 lifecycle wording implying ABANDON cancels termination or
+- infrastructure decisions and contracts that describe a single multi-container
+  ECS task or distinctInstance spread: replace with three DAEMON services plus
+  exact complete-replica readiness.
+- edge client-IP rows that grant XFF position authority: replace with CloudFront
+  viewer-request overwrite of X-Aboutme-Client-IP and Caddy boundary.
+- ADR 0034 lifecycle wording implying ABANDON cancels termination or
   ALB/ECS/session state proves death: replace with CONTINUE and exact terminated
   instance proof.
 - UAT cost/lifecycle rows that stop RDS after each test window without the

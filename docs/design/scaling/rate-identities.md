@@ -46,16 +46,16 @@ SHA-256 encoding and does not use this encoder.
 
 ## Deployment key versions
 
-R8 defines one private approved deployment tuple containing the nonsecret pinned
-version of the admission HMAC key and the nonsecret pinned version of the
-password-email HMAC key. It resolves each key inside the Go process and verifies
-that the loaded key version equals that tuple before constructing any claim or
-rate adapter. The keys remain available only inside that process and never enter
-SQL, readiness output, logs, or errors. The tuple is immutable for the process
-lifetime and bound by private composition to its exact task, replica
-incarnation, and release identity.
+Server composition defines one private approved deployment tuple containing the
+nonsecret pinned version of the admission HMAC key and the nonsecret pinned
+version of the password-email HMAC key. It resolves each key inside the Go
+process and verifies that the loaded key version equals that tuple before
+constructing any claim or rate adapter. The keys remain available only inside
+that process and never enter SQL, readiness output, logs, or errors. The tuple
+is immutable for the process lifetime and bound by private composition to its
+exact task, replica incarnation, and release identity.
 
-This uses the existing trust boundary: reviewed private deployment input, R8
+This uses the existing trust boundary: reviewed private deployment input, server
 composition, exact ECS/task/release identity, and the serialized lifecycle
 controller. It adds no replica table, SQL column, registration argument,
 activation argument, lifecycle action, or ledger field. Before an existing
@@ -129,15 +129,16 @@ service is added by this contract.
   middleware path may choose peer identity; preserve its 400/429 response.
 - Policy, component, domain and key changes produce distinct digests. SQL, logs
   and errors contain no raw identity or key.
-- R8 rejects missing, mixed, stale or unverifiable key versions before adapter
-  construction/readiness. Controller evidence binds the exact immutable
-  process/task/replica/release before each existing activation.
+- Server composition rejects missing, mixed, stale or unverifiable key versions
+  before adapter construction/readiness. Controller evidence binds the exact
+  immutable process/task/replica/release before each existing activation.
 - Rotation cannot switch while any ordinary bucket, overflow debt, pending
   attempt or live claim remains. Each policy must return `policy_idle=true`
   through [bounded cleanup](rate-storage.md) while admission stays closed.
 - Rollout failure, replay and controller ownership loss keep admission closed.
   No old-key fallback, artificial clock advance or age-based claim release.
 
-The [deployment design](../deployment.md) carries this requirement. R8 writes
-and verifies the executable rotation runbook after the infrastructure and
-runtime operations exist. These checks have not run for the new runtime.
+The [deployment design](../deployment.md) carries this requirement. Server
+composition writes and verifies the executable rotation runbook after the
+infrastructure and runtime operations exist. These checks have not run for the
+new runtime.

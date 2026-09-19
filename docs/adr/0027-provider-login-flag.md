@@ -1,6 +1,7 @@
 # 0027: Provider login behind a server flag
 
-Status: Accepted (2026-09-02)
+Status: Accepted (2026-09-02). Superseded in part by
+[ADR 0039](0039-per-provider-login-enablement.md).
 
 Amends the authentication scope in ADR 0025 and the Approved v4 product and
 security design for the first release.
@@ -34,8 +35,7 @@ capabilities read and shows provider controls only when it is true.
 
 ## Consequences
 
-- A provider-only account cannot sign in while the flag is off. No such account
-  exists in production today.
+- A provider-only account cannot sign in while its only provider is off.
 - The native HTTPS harness sets the flag true because its proofs sign in through
   the local Google mock; the native HTTP stack and Compose leave it unset.
 - Turning the flag on in production is a configuration change with its own

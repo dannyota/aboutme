@@ -51,14 +51,14 @@ tests. Document size does not affect these metadata-only transport frames.
 
 The owner run passed. Peak Go heap growth was 104,369,848 bytes, including both
 test clients and server in one process. Cleanup returned to eight file
-descriptors, zero sockets, and two goroutines. Raw evidence remains local at
-`.dev/phase-6/connection-measurement-owner.log`. The process used Go's inherited
-effective descriptor limit; the test did not change host limits.
+descriptors, zero sockets, and two goroutines. Raw evidence remains local. The
+process used Go's inherited effective descriptor limit; the test did not change
+host limits.
 
 This is a local transport baseline. It does not prove the whole application fits
-an AWS task's 512 MiB budget or establish latency through AWS and Cloudflare.
-Phase 10 repeats resource and edge measurements on the selected runtime. The
-stress test does not emit a machine hostname or resume content.
+an AWS task's 512 MiB budget or establish latency through AWS and Cloudflare. A
+hosted resource and edge measurement has not been recorded. The stress test does
+not emit a machine hostname or resume content.
 
 ## Checks
 
@@ -81,5 +81,5 @@ accepted proof state.
 The [accepted fleet contract](../design/scaling/admission.md) retains PostgreSQL
 revision notifications, local queues and reconnect/refetch. Fleet claims enforce
 100 connections per IP and 20 per account; 2,000 connections remains a per-task
-cap. Cross-replica revocation, drain and admission proof remains pending for
-both local and hosted environments.
+cap. Cross-replica revocation, drain and admission proof remains pending for a
+future multi-replica environment.

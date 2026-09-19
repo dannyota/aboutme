@@ -5,10 +5,10 @@ Status: Accepted (2026-09-19)
 ## Context
 
 A public resume page's browser tab always reads `<full name> — Resume` and uses
-the site icon. Owners want their own tab title and a small icon; Danny's page
-wants "Danny from aboutme.vn" and a rocket. The public page head is closed: the
-server's HTML validator accepts only the exact values it expects, so any
-per-resume head value must be computed and checked by the server.
+the site icon. Owners want to set a custom tab title and emoji favicon for each
+resume. The public page head is closed: the server's HTML validator accepts only
+the exact values it expects, so any per-resume head value must be computed and
+checked by the server.
 
 ## Decision
 

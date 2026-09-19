@@ -27,8 +27,8 @@ runtime_lock_public_transition_for_commit(
 )
 ```
 
-R3 invokes this as the first callback query after `WriteTxRunner` entry. It
-locks the parent and requires:
+The mutation caller invokes this as the first callback query after
+`WriteTxRunner` entry. It locks the parent and requires:
 
 - closing state and exact initiator tuple and digest;
 - database time no later than the durable deadline;
@@ -96,11 +96,11 @@ runtime_commit_public_transition(
 ) RETURNS TABLE(terminal_at timestamptz, replayed boolean)
 ```
 
-Arrays map exactly to target ordinals. R3 invokes the function after all
-existing business, idempotency, media-reference, deletion-job, and generation
-work, but before `WriteTxRunner` finish. It requires the unfinished marker,
-advisory guard, and parent lock from commit entry. Missing, mismatched, or
-finished capability is `AM001`.
+Arrays map exactly to target ordinals. The mutation caller invokes the function
+after all existing business, idempotency, media-reference, deletion-job, and
+generation work, but before `WriteTxRunner` finish. It requires the unfinished
+marker, advisory guard, and parent lock from commit entry. Missing, mismatched,
+or finished capability is `AM001`.
 
 The function does not repeat the deadline test after authorized business work
 has begun. It rechecks closing state and digest. It proves a discovery result
@@ -113,9 +113,9 @@ The store exposes `WithTransitionCommitFence`. Its callback receives only
 transaction-bound `*store.Queries`. The method runs commit entry first, invokes
 the callback, requires one complete `store.TransitionCommitResults`, records the
 terminal results, then returns to `WriteTxRunner`. It exposes no raw
-transaction, commit, rollback, connection, capability, or post-finish query. R3
-maps the existing `publicstate.CommittedState` to this private store value;
-store never imports publicstate. The exact interfaces are in
+transaction, commit, rollback, connection, capability, or post-finish query. The
+mutation caller maps the existing `publicstate.CommittedState` to this private
+store value; store never imports publicstate. The exact interfaces are in
 [store transport](transition-transport.md).
 
 ## Rollback and unresolved state
@@ -154,10 +154,10 @@ only for closing. It records `business_not_started` only when that check passes.
 The code means no business change from the transition committed; it does not
 claim no SQL ran. Committed and rolled-back results remain immutable.
 
-R1/R3 install no unresolved writer. The atomic parent, target results and
-business commit are the outcome authority. Response receipts affect exact HTTP
-replay only. Unsafe closing recovery leaves closing unchanged and readiness
-unavailable. R2 uses the separate
+The store and mutation callers install no unresolved writer. The atomic parent,
+target results and business commit are the outcome authority. Response receipts
+affect exact HTTP replay only. Unsafe closing recovery leaves closing unchanged
+and readiness unavailable. The coordinator uses the separate
 [reconciliation snapshot](transition-reconciliation.md) before changing a local
 fence, preserving later generations, proved retirement and current blockers.
 
@@ -275,10 +275,11 @@ exception is EXECUTE on `runtime_recover_fenced_public_transition` for
 `aboutme_lifecycle_command`; it grants no other transition mutation. Owner-only
 triggers enforce framing, immutable results, and finished capability.
 
-R8's private app adapter supplies replica identity to every app mutator. Shared
-app credentials do not authenticate an incarnation. Every function matches the
-tuple to stored immutable membership. No HTTP request or general store caller
-sets identity, timestamps, terminal results, or notification payloads.
+The private server adapter supplies replica identity to every app mutator.
+Shared app credentials do not authenticate an incarnation. Every function
+matches the tuple to stored immutable membership. No HTTP request or general
+store caller sets identity, timestamps, terminal results, or notification
+payloads.
 
 ## Acceptance
 

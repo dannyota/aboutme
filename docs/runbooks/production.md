@@ -1,6 +1,6 @@
 # Production
 
-Status: **infrastructure built; not yet serving** (2026-09-17). This runbook
+Status: **serving production** at `v0.3.29` (verified 2026-09-19). This runbook
 covers the single-host production environment at `https://aboutme.vn`. The
 [single-host design](../design/single-host-production.md) explains why it is
 shaped this way.
@@ -242,6 +242,6 @@ by hand.
 - `https://aboutme.vn/healthz` and `/readyz` return 200 through Cloudflare, and
   `https://www.aboutme.vn/` redirects to the apex.
 - A request straight to the Elastic IP gets no response.
-- The four job schedules in group `aboutme-prod-jobs` are enabled.
+- The five job schedules in group `aboutme-prod-jobs` are enabled.
 - The `aboutme-prod-site-down` alarm (us-east-1) has actions enabled
   (`site_alarm_enabled = true` in `prod.tfvars`).

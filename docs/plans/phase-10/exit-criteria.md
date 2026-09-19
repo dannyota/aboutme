@@ -13,8 +13,9 @@
       verifiers, and the server image verifies RDS TLS. Each has passing tests.
 - [x] The first-task checks on a real Bottlerocket host pass: host-mode task
       roles, the bridge-gateway listener, and the IMDS hop-limit block.
-- [ ] Image builds and ARM64 smoke pass; `tofu validate` and a reviewed
-      `tofu plan` pass.
+- [x] The v0.3.29 release-image workflow builds and smokes all three ARM64
+      images.
+- [ ] `tofu validate` and a reviewed `tofu plan` pass.
 - [x] One fresh review, local `make ci`, and connected `make scan` pass at the
       candidate. The review confirms client-IP trust, origin lockdown, secret
       handling, IAM scope, and migration order by name.
@@ -22,9 +23,10 @@
 
 ## In production
 
-- [ ] The first deploy completes, including the three first-deploy database
-      steps, and its smoke checks pass. A direct request to the origin address
-      fails.
+- [ ] The first deploy completes, including the first-deploy database steps.
+- [x] v0.3.29 runs with one healthy app task and one healthy web task, and
+      public `/`, `/healthz`, and `/readyz` return 200.
+- [ ] A direct request to the origin address fails.
 - [ ] The owner tests registration, sign-in, editing, publishing, exports,
       realtime, MCP, account export and deletion.
 - [ ] Every alarm is triggered once and its email arrives.
@@ -53,6 +55,13 @@
       it need not land before the baseline.
 
 ## Notes
+
+- 2026-09-19: production serves v0.3.29. App revision 36 and web revision 32 use
+  the v0.3.29 image digests, each service has one healthy running task, and all
+  five schedules are enabled. The site-down alarm is OK with actions enabled.
+  Public `/`, `/healthz`, and `/readyz` return 200. These checks do not satisfy
+  the open product, job-result, alarm-delivery, restore, or traceability
+  criteria.
 
 - 2026-09-17: the fresh review found two blockers (origin pulls enabled too
   late; the instance role could read every production secret), two should-fix

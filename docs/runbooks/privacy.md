@@ -13,13 +13,13 @@ database; it uses the AWS credential chain, which is the `jobs` task role in
 production. Do not place secret values in command lines, logs, tickets, or
 evidence.
 
-| Command                    | Local use                                                          | Phase 10 schedule |
-| -------------------------- | ------------------------------------------------------------------ | ----------------- |
-| `idempotency-expiry-sweep` | Remove expired replay records                                      | Hourly            |
-| `media-deletion-sweep`     | Drain due exact-key deletion jobs                                  | Hourly            |
-| `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection      | Weekly            |
-| `privacy-retention-sweep`  | Apply session, lifecycle-audit, completed-media, and OAuth cleanup | Daily             |
-| `release-snapshot-sweep`   | Delete deploy.sh RDS snapshots more than 27 days old               | Daily             |
+| Command                    | Local use                                                          | Production cadence |
+| -------------------------- | ------------------------------------------------------------------ | ------------------ |
+| `idempotency-expiry-sweep` | Remove expired replay records                                      | Hourly             |
+| `media-deletion-sweep`     | Drain due exact-key deletion jobs                                  | Hourly             |
+| `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection      | Weekly             |
+| `privacy-retention-sweep`  | Apply session, lifecycle-audit, completed-media, and OAuth cleanup | Daily              |
+| `release-snapshot-sweep`   | Delete deploy.sh RDS snapshots more than 27 days old               | Daily              |
 
 Each run has a 30-minute deadline. PostgreSQL advisory locks make overlap a
 successful skip. `release-snapshot-sweep` takes no lock; an overlapping run can
@@ -87,16 +87,15 @@ reference revocation. Backup expiry is separate: backups follow the 30-day
 retention schedule and can outlive live revocation or physical object removal.
 Rollback restores the application and scheduler configuration to a reviewed
 previous version; it does not restore revoked references, sessions, or deleted
-media. Phase 10 supplies the hosted schedule, alarm, log-retention, and backup
-enforcement evidence.
+media.
 
 ## Local verification
 
-Phase 8 passed live database race tests for account deletion/export, auth, media
+Live database race tests passed for account deletion/export, auth, media
 cleanup, and privacy retention, plus the command/configuration tests. Native
-smokes passed for all four commands and the orphan dry run. The real orphan
-sweep removed 140 old unreferenced test objects with zero failures. The
-production server image also ran idempotency expiry through its normal entry
+smokes passed for the database and media commands and the orphan dry run. The
+real orphan sweep removed 140 old unreferenced test objects with zero failures.
+The production server image also ran idempotency expiry through its normal entry
 point as a non-root, read-only container with no added capabilities.
 
 `make native-http-check` removes its isolated fixture database and leaves the
@@ -118,14 +117,6 @@ entry, public, publish, password, exports, and privacy. The editor proof
 includes template partial recovery and the photo lifecycle after realtime
 adoption.
 
-Hosted schedule activation, alarm delivery, 180-day log retention and backup
-expiry have not run. Phase 10 owns that evidence.
-
-## Planned stopped-UAT scheduling
-
-The [accepted lifecycle contract](../design/scaling/uat-lifecycle.md) defines
-hourly controller evaluation, due-category checks and the final database stop
-receipt. A `proved_empty` evaluation cannot count as a successful job run or
-waive a privacy deadline. This scheduling and its write barrier are pending
-Phase 10 implementation and hosted proof; the commands above retain their
-current behavior.
+All five schedules are enabled in production. Successful job reports, alarm
+delivery, 180-day log retention, and backup-expiry evidence have not been
+recorded.

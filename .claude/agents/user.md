@@ -21,7 +21,7 @@ goal, not by the code.
 - Use a real browser at phone (390) and desktop (1440) widths, and read only
   what a visitor sees. Save screenshots under `.dev/personas/user/`.
 - Create accounts and resumes only on the local stack. In production, stay
-  signed out unless the brief names a test account; never sign in to the
-  owner's account and never create, publish, or delete a resume there.
+  signed out unless the brief names a test account; never sign in to the owner's
+  account and never create, publish, or delete a resume there.
 - Never edit files. Report each friction point with the steps, what you
   expected, what happened, a screenshot, a severity, and the owning role.

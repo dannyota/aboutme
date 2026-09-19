@@ -211,13 +211,13 @@ predicate that finds zero owned closing/unresolved transition, and zero waiting/
 running claim. Insert immutable receipt with both zero counts and change to left
 in one transaction. Exact replay returns the receipt. It is the app's final
 database mutation after all local callbacks/processes join; SQL proves durable
-ownership counts, while R8 proves the local join. It cannot release work or make
-readiness reopen. The wrappers fix and verify serving or maintenance kind.
-Serving leave requires the matching prepare-scale-in step. Maintenance leave
-requires the matching prepare-maintenance-drain step. The expected controller
-generation and receipt bind that step's historical result generation. Unrelated
-later controller actions do not invalidate a prepared leave. Neither role can
-call the other wrapper.
+ownership counts, while server composition proves the local join. It cannot
+release work or make readiness reopen. The wrappers fix and verify serving or
+maintenance kind. Serving leave requires the matching prepare-scale-in step.
+Maintenance leave requires the matching prepare-maintenance-drain step. The
+expected controller generation and receipt bind that step's historical result
+generation. Unrelated later controller actions do not invalidate a prepared
+leave. Neither role can call the other wrapper.
 
 ## Exact EC2 fencing
 
@@ -312,20 +312,21 @@ entering these database locks.
   owner-only and attach only as triggers or internal calls. No login executes
   them.
 
-R1 installs owner-owned tables, constraints, types, definer bodies and the exact
-named runtime-role grants above. PUBLIC remains revoked. Tests connect as every
-real role and prove allowed calls and cross-role denials. Do not create
+The store installs owner-owned tables, constraints, types, definer bodies and
+the exact named runtime-role grants above. PUBLIC remains revoked. Tests connect
+as every real role and prove allowed calls and cross-role denials. Do not create
 finalize_stop_receipt or grant final-stop in this slice. Do not compose app
 constructors, readiness or lifecycle tasks yet.
 
-After rates, claims and transitions exist and their local tests pass, R8 wires
-constructors against the fixed functions and real role grants. R8 constructs the
-private identity, membership, lifecycle, and proof adapters before registration,
-probes, or activation can run. Successful one-replica registration, join,
-activation, and aggregate readiness then permit public serving. Two-replica
-serving remains disabled until the unchanged candidate proves R1-R8 locally.
-Database grants remain the security authority; composition supplies private
-identity and controls public enablement timing.
+After rates, claims and transitions exist and their local tests pass, server
+composition wires constructors against the fixed functions and real role grants.
+Server composition constructs the private identity, membership, lifecycle, and
+proof adapters before registration, probes, or activation can run. Successful
+one-replica registration, join, activation, and aggregate readiness then permit
+public serving. Two-replica serving remains disabled until the unchanged
+candidate proves every runtime coordination component locally. Database grants
+remain the security authority; composition supplies private identity and
+controls public enablement timing.
 
 ## Required membership cases
 

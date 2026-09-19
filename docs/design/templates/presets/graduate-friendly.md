@@ -78,6 +78,6 @@ reason above. White beats black on the accent (5.79:1 vs 3.62:1), so chips fill.
   and `titlecase` cannot lowercase a `displayName` typed `EDUCATION`.
 - **Also unreachable**: photo suppression
   ([limitations item 3](../limitations.md)), icon-free headings
-  ([item 5](../limitations.md)), the `pageFormat`/`dateFormat` reset that hands
-  a Letter user A4 ([item 2](../limitations.md)), and page-fill targeting — past
-  eight entries this bet spills to page 2.
+  ([item 5](../limitations.md)), the `dateFormat` reset
+  ([item 2](../limitations.md)), and page-fill targeting. Past eight entries
+  this bet spills to page 2.

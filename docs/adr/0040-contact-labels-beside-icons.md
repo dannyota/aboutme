@@ -1,6 +1,7 @@
 # 0040: Contact labels beside icons, and scheme-free displayed addresses
 
-Status: Accepted (2026-09-19)
+Status: Accepted (2026-09-19). Superseded in part by
+[ADR 0041](0041-contact-link-display-and-body-justify.md).
 
 Amends [ADR 0013](0013-contact-detail-rendering.md) (c) and its consequence that
 icons "never suppress a detail's `label`".

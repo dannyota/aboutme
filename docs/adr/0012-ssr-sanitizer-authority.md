@@ -12,17 +12,12 @@ and its sanitizer contract pairs "bluemonday (write) and DOMPurify (render)"
 against a shared hostile corpus. Public resume pages are server-rendered, so a
 plain reading of "render" puts DOMPurify inside the SSR path.
 
-Three further documents restate that reading rather than resolve it:
+Two further sources restate that reading rather than resolve it:
 [template contract §5.5](../design/templates/contract.md#55-rich-text) ("The
 renderer re-sanitizes with DOMPurify against the same versioned allowlist"), the
-delivery plan's security-testing row (which names the corpus surfaces as
-"bluemonday+DOMPurify+SSR+real browser"), and the `packages/schema` validation
-artifacts, which describe DOMPurify as the "render path" without qualification.
-A prior planning note ruled the opposite way, reaching the conclusion this ADR
-ratifies, but that ruling was plan-level only, not binding, and no ADR existed
-yet on sanitizer authority. The contradiction was therefore live in four places
-at once, and it decides a production dependency, so it cannot be left to the
-implementer.
+`packages/schema` validation artifacts, which describe DOMPurify as the "render
+path" without qualification. The contradiction decided a production dependency,
+so it could not be left to the implementer.
 
 Two facts settle it.
 
@@ -71,16 +66,11 @@ Each of the following disagreed with this decision and is corrected by this ADR:
 - [Template contract §5.5](../design/templates/contract.md#55-rich-text): "the
   renderer re-sanitizes with DOMPurify" is scoped to the client render path.
   Edited in the same change.
-- The delivery plan's security-testing row and hostile corpus paragraph list
-  "bluemonday+DOMPurify+SSR+real browser". The four surfaces stand; "SSR" is not
-  to be read as DOMPurify executing under Node.
 - `packages/schema/README.md`,
   `packages/schema/validation/sanitizer-allowlist.v1.json`,
   `packages/schema/validation/hostile-corpus.json`, and `.semgrep.yml`: each
   describes DOMPurify as the "render path" sanitizer. True of the **client**
   render path only.
-- A prior planning note reached this conclusion first. This ADR ratifies it and
-  makes it authority rather than a plan note.
 
 ## Consequences
 
@@ -90,9 +80,9 @@ Each of the following disagreed with this decision and is corrected by this ADR:
   that the shared hostile corpus proves neutralization **on the SSR output**,
   bluemonday's committed output through `renderToString`, rather than assuming a
   second sanitizer would have caught what the first missed.
-- The Go public-read re-sanitize stops being an "owner-landing item" and becomes
-  a required deliverable. Without it, the defense-in-depth half of this decision
-  does not exist and Go's write-time pass is the only barrier.
+- The Go public-read re-sanitize is required. Without it, the defense-in-depth
+  half of this decision does not exist and Go's write-time pass is the only
+  barrier.
 - The build assertion that the server bundle contains no `dompurify` stays. It
   is the mechanical check for this ADR and must not be weakened to a
   source-level grep.

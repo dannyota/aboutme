@@ -7,11 +7,11 @@ Status: Accepted detail of [rate storage](rate-storage.md) under
 This contract fixes results, role checks, errors and the database-time test
 seam. It preserves schema 18, algorithms, limits, function inputs, grants and
 lock order. [OAuth attempts](admission-attempts.md) retains P22 identity and
-receipt semantics; [rate identities](rate-identities.md) retains R5 encoding.
-The internal reserve result adds only replayed to distinguish a retained
-historical admission from fresh work. It adds no stored or public API field.
-[Claim transport](claim-operations.md) supplies the verified one-call sqlc
-value/presence pattern; it does not prove these rate operations.
+receipt semantics; [rate identities](rate-identities.md) retains the shared rate
+encoding. The internal reserve result adds only replayed to distinguish a
+retained historical admission from fresh work. It adds no stored or public API
+field. [Claim transport](claim-operations.md) supplies the verified one-call
+sqlc value/presence pattern; it does not prove these rate operations.
 
 ## Inputs and direct roles
 
@@ -152,9 +152,10 @@ returns the immutable historical admitted bucket_kind and partition with
 allowed=true, retry=0, and replayed=true. Pending and terminal retained receipts
 return the same shape; the result discloses neither receipt state nor a current
 effective time. It does not reevaluate or reroute through a current bucket that
-may no longer exist. R5 rejects every replay for new work. The replay exists
-only to resolve durable identity; it cannot grant work, consume a second slot,
-reset a window, or become a caller retry/readback after an ambiguous reserve.
+may no longer exist. The shared rate package rejects every replay for new work.
+The replay exists only to resolve durable identity; it cannot grant work,
+consume a second slot, reset a window, or become a caller retry/readback after
+an ambiguous reserve.
 
 Conflicting attempt UUID reuse with another client is AM002. A definitive denial
 has no receipt and therefore no same-UUID replay guarantee; the caller
@@ -235,15 +236,15 @@ policy_idle value is returned alongside an error. A callback panic follows
 WriteTxRunner's accepted path: bounded cleanup joins, the transaction is rolled
 back/connection handled, and the original panic is rethrown. The transport
 neither converts that panic to an error nor exposes its decoded value. This is
-zero authority: R5 cannot start work, deny from a decoded row, clear debt, or
-retry merely because the SELECT produced a value.
+zero authority: the shared rate package cannot start work, deny from a decoded
+row, clear debt, or retry merely because the SELECT produced a value.
 
-R5 imports internal/store. It alone owns Policy, RateKey, digest encoding, P22
-attempt operation state, domain decisions, and public response mapping. It maps
-a committed internal scalar value only after validating the expected
-policy/shape. internal/store never imports R5 and never canonicalizes
-identities. Maintenance cleanup uses a separate store adapter and exposes no
-admission method.
+The shared rate package imports internal/store. It alone owns Policy, RateKey,
+digest encoding, P22 attempt operation state, domain decisions, and public
+response mapping. It maps a committed internal scalar value only after
+validating the expected policy and shape. internal/store never imports the
+shared rate package and never canonicalizes identities. Maintenance cleanup uses
+a separate store adapter and exposes no admission method.
 
 ## Database-time test seam
 

@@ -50,11 +50,11 @@ flowchart LR
 
 Three domains, disjoint by construction.
 
-| Domain            | Holds                                                                                                                                                                                         | Written by                                        | Template apply       |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------- |
-| **Document**      | `personalDetails`, `content` (entries, `displayName`, `iconKey`, `sectionType`)                                                                                                               | the user, through entry/section/details endpoints | never touched        |
-| **Customization** | the 25 leaf values under `customization` (§2 of `tokens.md`; 8 optional, including the two `spacing.pageMargin` axes, two optional colors, `layout.surfaceTarget`, and three `header` leaves) | the user, and a preset on apply                   | replaced wholesale   |
-| **Renderer**      | everything else: type scale ratios, weights, rule geometry, the absent-margin 15 mm fallback and derived page geometry, column ratio, photo shape                                             | the codebase                                      | identical everywhere |
+| Domain            | Holds                                                                                                                                                                                                | Written by                                        | Template apply       |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------- |
+| **Document**      | `personalDetails`, `content` (entries, `displayName`, `iconKey`, `sectionType`)                                                                                                                      | the user, through entry/section/details endpoints | never touched        |
+| **Customization** | 25 author-controlled leaf values under `customization` (§2 of `tokens.md`); 10 are optional, including `font.textAlign`, two margin axes, two colors, `layout.surfaceTarget`, and four header leaves | the user, and a preset on apply                   | replaced wholesale   |
+| **Renderer**      | everything else: type scale ratios, weights, rule geometry, the absent-margin 15 mm fallback and derived page geometry, column ratio, photo shape                                                    | the codebase                                      | identical everywhere |
 
 The boundary in one line each:
 
@@ -94,11 +94,11 @@ Consequences a template design must respect:
 - A preset declares `layout.placement` as either `"keep"` (preserve the
   document's current `main`/`sidebar` arrays) or `"byType"` with an ordered
   `sidebarSectionTypes` list. One-column presets use `"keep"`.
-- Proposed [ADR 0021](../../adr/0021-template-placement-order.md) fixes ADR
-  0008's missing tie-breaks. Current visual order is `main` followed by
-  `sidebar`. A `byType` apply visits the unique `sidebarSectionTypes` in list
-  order and places matching keys in their current visual order. Unselected keys
-  and all custom sections remain in `main`, in current visual order.
+- [ADR 0021](../../adr/0021-template-placement-order.md) fixes ADR 0008's
+  missing tie-breaks. Current visual order is `main` followed by `sidebar`. A
+  `byType` apply visits the unique `sidebarSectionTypes` in list order and
+  places matching keys in their current visual order. Unselected keys and all
+  custom sections remain in `main`, in current visual order.
 - Before either rule runs, the current arrays must contain every content key
   exactly once and no unknown key. Invalid placement, duplicate selectors, or a
   `custom` selector fails with a typed error. `keep` returns the validated
@@ -140,7 +140,7 @@ A key present in `layout.sections` but absent from `content` renders nothing —
 the store rejects that state on write, and the renderer must not crash on it.
 
 Template application is stricter than rendering stale input. It validates both
-arrays before apply and never derives an order by iterating `content`. Proposed
+arrays before apply and never derives an order by iterating `content`.
 [ADR 0021](../../adr/0021-template-placement-order.md) defines the exact apply
 order and fail-closed cases.
 

@@ -1,51 +1,43 @@
 # aboutme
 
-aboutme is an AGPL-3.0 resume builder and hosted display service. A person can
-build resumes in one account and publish each resume at its own URL. Accounts do
-not have public profile pages.
+[![CI](https://github.com/dannyota/aboutme/actions/workflows/ci.yml/badge.svg)](https://github.com/dannyota/aboutme/actions/workflows/ci.yml)
 
-Status: authentication, the resume API and private media, the authenticated
-editor, publishing, agent access over MCP, realtime updates, PDF and image
-export, and the privacy workers are on `main`. Production infrastructure is
-built and not yet serving. The
-[current-state architecture](docs/architecture.md) records exactly what exists.
+Build a resume, share its link, and export a PDF. aboutme is a free, open-source
+resume builder for Vietnamese and English content. Each account can hold up to
+three resumes, each with its own public URL. Accounts stay private.
 
-The intended product and architecture live in the
-[Approved v4 design](docs/design/README.md).
+[Use aboutme](https://aboutme.vn) ·
+[Browse templates](https://aboutme.vn/templates) ·
+[Read the docs](docs/README.md) · [Contribute](CONTRIBUTING.md)
 
-## Implemented now
+## Features
 
-- Google, GitHub, and LinkedIn sign-in; email-and-password registration,
-  verification, login, reset, and reauthentication; explicit provider linking;
-  opaque sessions; CSRF protection; session-management APIs.
-- Health and readiness probes, request bounds, security and cache headers,
-  trusted-proxy client-IP handling, and rate limiting.
-- A committed TypeScript API client generated from OpenAPI, with contract and
-  drift checks.
-- Goose-only migrations, sqlc data access, immutable resume schemas v1 and v2,
-  bounded validation, owner-scoped resume operations, revision compare-and-swap,
-  and transactional idempotency.
-- The private resume HTTP surface: resume, entry, section, structure,
-  customization, and photo operations over private media.
-- One pure Vue renderer with twenty template presets and a licensed self-hosted
-  font catalog, shared by the editor preview and the public page.
-- The authenticated editor with debounced autosave, conflict reconciliation,
-  template apply, and private photo crop.
-- Per-resume publishing with clean slug URLs, server-rendered public HTML,
-  JSON-LD, Markdown, sitemap, robots, and `llms.txt`, and immediate revocation.
-- User-authorized agent access: first-party OAuth 2.1 with PKCE and a
-  bearer-authenticated MCP server with fifteen resume tools.
+- Twenty templates, a public gallery, and fictional samples to start from.
+- An editor with autosave, live preview, layout controls, and photo crop.
+- Shared rendering across the editor, public resume, and PDF, with self-hosted
+  fonts that support Vietnamese.
+- Per-resume publishing with separate controls for public access, PDF download,
+  and search discovery. Unpublishing revokes public access.
+- Live updates, PDF export, and public share images.
+- Optional connections to MCP-compatible assistants for private resume editing.
+  Connected assistants cannot publish resumes.
+- Account export and deletion, session controls, and connected-agent revocation.
 
-- Live editor and public-page refresh over Server-Sent Events.
-- Owner PDF and image export.
-- Privacy workers: media deletion, orphan reconciliation, retention, and account
-  deletion.
+The hosted service runs at [aboutme.vn](https://aboutme.vn). Google sign-in is
+enabled; email-and-password registration is disabled. The homepage, account
+pages, policies, and template gallery support Vietnamese and English. The editor
+and settings are English.
 
-## Planned v1
+## Project status
 
-- The first production deploy at `https://aboutme.vn`.
+Production runs on AWS in Singapore behind Cloudflare. See
+[tags](https://github.com/dannyota/aboutme/tags) for published versions,
+[Actions](https://github.com/dannyota/aboutme/actions) for build results, and
+the [production runbook](docs/runbooks/production.md) for operations.
 
-Flutter is deferred until after the web service launches.
+The [architecture](docs/architecture.md) describes implemented behavior. The
+[design](docs/design/README.md) records intended behavior and the
+[roadmap](docs/plans/README.md) records remaining work. Flutter is deferred.
 
 ## Repository
 
@@ -80,6 +72,9 @@ See the [native development runbook](docs/runbooks/native-development.md) for
 status, logs, ports, and database rules. Run `make check` for the fast local
 gate. Independent contributors run `make ci` before a pull request. In a
 coordinated worker session, GitHub CI on `main` is the full gate.
+
+Report bugs through [GitHub issues](https://github.com/dannyota/aboutme/issues).
+Report vulnerabilities privately using the [security policy](SECURITY.md).
 
 ## Self-hosting
 

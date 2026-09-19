@@ -1,7 +1,8 @@
 # 0011: Delivery gates are risk-tiered, and the local gate is authoritative
 
 Status: Accepted (2026-08-11). Superseded in part by
-[ADR 0024](0024-single-pass-delivery-gates.md).
+[ADR 0024](0024-single-pass-delivery-gates.md) and
+[ADR 0046](0046-github-ci-delivery-gate.md).
 
 ## Context
 

@@ -57,14 +57,14 @@ Protected SessionLock order on that handle:
    enforcement metadata, Goose owner/shape/trigger/grants, and applied version
    under both locks.
 
-B1 provides `runtime_read_migrator_metadata()` as a SECURITY DEFINER, read-only
-accessor granted only to migrator. It returns gate, generation,
-migrator_enforcement_version, and migration_history_owner from the singleton.
-Apply calls it only after runtime_enter_migrator has acquired the runtime
-SESSION barrier on that same backend. It supports the locked classification and
-recheck; it is never a pre-entry probe. Migrator gets no direct
-runtime_write_state SELECT. The accessor accepts no input, exposes no receipt
-state, and does not authorize a write. Status has the explicit read-only
+The write foundation provides `runtime_read_migrator_metadata()` as a SECURITY
+DEFINER, read-only accessor granted only to migrator. It returns gate,
+generation, migrator_enforcement_version, and migration_history_owner from the
+singleton. Apply calls it only after runtime_enter_migrator has acquired the
+runtime SESSION barrier on that same backend. It supports the locked
+classification and recheck; it is never a pre-entry probe. Migrator gets no
+direct runtime_write_state SELECT. The accessor accepts no input, exposes no
+receipt state, and does not authorize a write. Status has the explicit read-only
 no-advisory exception described below.
 
 If step 2 returns 55000, reset local session authorization after confirmed
@@ -230,9 +230,10 @@ no protection in deployed operation.
 
 Ownership convergence preserves non-owner effective privileges on legacy
 objects. Compare ACLs after normalizing only PostgreSQL's expected old/new owner
-and grantor OID rewrite; byte-for-byte ACL equality is not required. R8 alone
-changes the planned legacy grants/triggers. After Goose ownership changes, only
-migrator receives the explicit direct SELECT/INSERT history grants above.
+and grantor OID rewrite; byte-for-byte ACL equality is not required. Server
+composition alone changes the planned legacy grants/triggers. After Goose
+ownership changes, only migrator receives the explicit direct SELECT/INSERT
+history grants above.
 
 Every N>=14 transactional Up uses canonical operation ID `migration-%05d` with
 N's zero-padded decimal version in the corresponding first begin call and uses

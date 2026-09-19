@@ -1,5 +1,9 @@
 # AWS hosting cost recommendation
 
+Status: historical recommendation from 2026-09-06. ADR 0037 superseded this UAT
+and autoscaling path for the first release. The current release authority is the
+[single-host production design](../../design/single-host-production.md).
+
 The owner approved part-time UAT and production autoscaling on 2026-09-06:
 **$20–30/month for UAT**, **$140–170/month for production**, and
 **$160–200/month combined**, in AWS Singapore (`ap-southeast-1`). Amounts are

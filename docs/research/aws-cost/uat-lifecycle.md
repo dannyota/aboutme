@@ -1,5 +1,9 @@
 # UAT lifecycle cost
 
+Status: historical model. ADR 0037 removed hosted UAT from the first release.
+The figures below preserve the earlier planning record and do not describe the
+live production service.
+
 The two-day planning campaign with 16 test hours costs **USD 27.636091 per
 730-hour month before tax**, without free-tier allowances. It leaves USD
 2.363909 below the approved USD 30 ceiling. This is a planning envelope under

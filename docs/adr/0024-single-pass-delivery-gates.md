@@ -1,6 +1,7 @@
 # 0024: Delivery uses one author pass and one phase review
 
-Status: Accepted (2026-08-12)
+Status: Accepted (2026-08-12). Superseded in part by
+[ADR 0046](0046-github-ci-delivery-gate.md).
 
 Supersedes the process parts of [ADR 0011](0011-risk-tiered-delivery-gates.md).
 ADR 0011's product decisions (local `make ci` as the gate of record, per-commit

@@ -1,9 +1,10 @@
-# Phase 10 — Production deployment
+# Phase 10: Production deployment
 
-Status: **In progress** (2026-09-16). Nothing is deployed.
+Status: **In progress** (2026-09-19). Production serves v0.3.29. Product and
+operational acceptance remain open.
 
-**Goal:** deploy web v1 to `https://aboutme.vn` on one AWS Singapore host and
-test the product there, under
+**Goal:** complete production acceptance for web v1 at `https://aboutme.vn` on
+one AWS Singapore host, under
 [ADR 0037](../../adr/0037-single-host-production-without-hosted-uat.md). There
 is no hosted UAT environment.
 
@@ -25,8 +26,6 @@ heavy checks one at a time.
 
 ## Candidate and verification
 
-Run local `make ci`, connected `make scan`, and the fresh review at one
-candidate commit before the first deploy. Commit
-`apps/server/migrations/.uat-baseline` before the first production migration;
-never rewrite migration history afterward. Complete the
-[exit checklist](exit-criteria.md) before closing the phase.
+The migration baseline is committed. Complete the
+[exit checklist](exit-criteria.md), including the remaining candidate evidence,
+before closing the phase.

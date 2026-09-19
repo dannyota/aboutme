@@ -170,17 +170,18 @@ retention bounds time and per-page work, not absolute traffic volume.
 
 ## Caller boundaries and proof
 
-R4 may generate an inert render job UUID before acquiring C01. It installs no
-queue entry, snapshot, capability, controller, callback or local authority until
-an exact positive claim exists. The acquire request binds that UUID in one round
-trip. Job ID alone grants nothing. Keep local render affinity and the returned
-admission time/deadline unchanged.
+The render caller may generate an inert render job UUID before acquiring C01. It
+installs no queue entry, snapshot, capability, controller, callback or local
+authority until an exact positive claim exists. The acquire request binds that
+UUID in one round trip. Job ID alone grants nothing. Keep local render affinity
+and the returned admission time/deadline unchanged.
 
-R7 preserves hash two/16, two actual mail sends with durable lease/fence rules,
-and MCP four/user with no waiting. R6 acquires IP/optional-account atomically
-before local Hub/FD admission; local failure releases the shared claim. Closing
-a stream joins local work before release. No stream holds a DB connection.
-Existing status, body, Retry-After, queue, heartbeat and local caps stay fixed.
+Policy callers preserve hash two/16, two actual mail sends with durable lease
+and fence rules, and MCP four/user with no waiting. Realtime acquires the IP and
+optional account atomically before local Hub/FD admission; local failure
+releases the shared claim. Closing a stream joins local work before release. No
+stream holds a DB connection. Existing status, body, Retry-After, queue,
+heartbeat and local caps stay fixed.
 
 Prove exact caps with two pools; atomic SSE denial; UUID/replica/work/scope
 replay and conflicts; promotion order; late positive response; cancellation and
@@ -189,6 +190,7 @@ forged catalog/parent/child states. Include several same-scope claims so request
 ordinal cannot accidentally limit capacity to one. Scope/digest vectors and
 ambiguity age boundaries are in the identity contract.
 
-R1 owns serialized schema, queries and store tests. R5 owns the adapter and
-encoder; caller packages follow afterward. R8 owns key/readiness composition and
-resource checks. No public HTTP, MCP, SSE or OpenAPI field changes.
+The store owns serialized schema, queries and store tests. The shared claim
+package owns the adapter and encoder; caller packages follow afterward. Server
+composition owns key and readiness composition and resource checks. No public
+HTTP, MCP, SSE or OpenAPI field changes.

@@ -180,7 +180,7 @@ function can prove it. Under valid constraints, parent and target shapes are
 consistent. A caller digest mismatch, missing caller data, timeout or
 unavailable database must return an error without changing durable state.
 
-R1/R3 install no unresolved mutator. The
+The store and mutation callers install no unresolved mutator. The
 [recovery evidence contract](transition-recovery.md) uses the atomic transition
 record as the outcome authority. Mutable current rows and retained response
 receipts cannot prove a transition-attributed contradiction. Unsafe closing

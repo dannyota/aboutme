@@ -1,5 +1,7 @@
 # Single-host production implementation plan
 
+Status: production serves v0.3.29. Task 16 acceptance and closure remain open.
+
 > **For agentic workers:** use superpowers:executing-plans within the ownership
 > rules in `AGENTS.md`. ADR 0024 keeps one author per task and one fresh phase
 > review. Steps use checkbox (`- [ ]`) syntax for tracking.

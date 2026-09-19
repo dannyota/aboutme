@@ -1,7 +1,8 @@
 # Current-state architecture
 
-This document describes the current integration candidate, verified on
-2026-09-06. The [design](design/README.md) owns intended behavior.
+This document describes the implemented system. Production serves
+`https://aboutme.vn`; the [production runbook](runbooks/production.md) covers
+operations. The [design](design/README.md) owns intended behavior.
 
 ## Running system
 
@@ -41,9 +42,9 @@ The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. A one-shot
 `migrate` command then applies migrations, and a media initializer sets up
 private storage. PostgreSQL is not published to the host. Caddy is the only
 published service. The current Compose Caddyfile serves HTTP; this is suitable
-for deployment smoke checks. No AWS application deployment exists yet.
+for deployment smoke checks.
 
-Production is planned as one AWS Singapore host behind Cloudflare, with RDS and
+Production runs on one AWS Singapore host behind Cloudflare, with RDS and
 private S3, per
 [ADR 0037](adr/0037-single-host-production-without-hosted-uat.md) and the
 [single-host design](design/single-host-production.md). It runs one replica
@@ -51,7 +52,14 @@ under [ADR 0036](adr/0036-single-replica-launch-and-pipeline-migrations.md).
 Revocation leases, print jobs, event subscribers, and limiters hold
 process-local state, which is correct only with one replica. The
 [scaling contract](design/scaling/README.md) records which parts of a
-multi-replica runtime exist.
+multi-replica runtime are deferred.
+
+Production enables Google sign-in and agent access. Email-and-password
+registration is disabled; existing password login remains available. The public
+capabilities endpoint reports these settings. Five enabled schedules invoke
+idempotency expiry, media deletion, orphan reconciliation, privacy retention,
+and release-snapshot cleanup. Successful job-run evidence remains open in the
+[production checklist](plans/phase-10/exit-criteria.md).
 
 The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
 `db-setup` creates and grants them, and every migration runs as
@@ -69,8 +77,8 @@ protocol and MCP endpoints follow their protocol contracts and the accepted
 includes:
 
 - `GET` and `HEAD` health and readiness probes;
-- an unauthenticated capabilities read that reports the enabled providers and
-  whether agent access is enabled;
+- an unauthenticated capabilities read that reports the enabled providers,
+  password-registration availability, and agent-access availability;
 - Google and LinkedIn OpenID Connect plus GitHub OAuth login, whose routes are
   registered only for the providers `PROVIDER_LOGIN_ENABLED` enables (none by
   default);
@@ -136,11 +144,16 @@ shadcn-vue primitives backed by reka-ui. Generated primitives under
 `app/components/ui/` own low-level behavior; shared composites under
 `app/components/app/` own the shell, page headers, fields, status and loading
 states, empty states, menus, and dialogs; pages and editor panels compose those
-layers with layout utilities. `AppShell` renders the signed-out navigation (Sign
-in, Create account, and theme toggle) until the session read resolves, then the
-signed-in navigation (Resumes, Settings, and the account menu). The signed-in
-theme action moves into the account menu. Capability-gated provider and
-connected-agent controls remain hidden when their capability is false.
+layers with layout utilities. `AppShell` links the public template gallery and
+renders Sign in, Create account, and a theme toggle until the session read
+resolves. Signed-in navigation adds Resumes, Settings, and the account menu. The
+signed-in theme action moves into the account menu. Capability-gated provider
+and connected-agent controls remain hidden when their capability is false.
+
+The homepage, account pages, legal pages, and template gallery support
+Vietnamese and English, with Vietnamese as the default. The editor, resume list,
+and settings use English. A site-language change does not translate resume
+content.
 
 The chrome tokens describe a cool-grey desk (`#EDEFEB`) with white paper, ink
 (`#171A18`), pencil text (`#5F6763`), hairlines (`#D8DDD9`), and signature
@@ -165,12 +178,11 @@ reduced-motion behavior stay on the shared accessible component boundary.
 The relational domain and transaction primitives back the complete private
 resume HTTP surface. The implemented boundary provides:
 
-- immutable resume schemas v1 and v2, retained generated types, explicit
-  adjacent converters, and released/accepted/emitted registries for both
-  versions;
-- hand-written goose migrations as the sole relational schema source; their
-  history remains correctable until the first release adds the immutable
-  baseline marker required by [ADR 0020](adr/0020-uat-migration-baseline.md);
+- immutable resume schemas v1 through v4, retained generated types, explicit
+  adjacent converters, and released/accepted/emitted version registries;
+- hand-written, append-only Goose migrations as the sole relational schema
+  source, with the frozen baseline described in
+  [ADR 0038](adr/0038-single-baseline-and-plain-migrator.md);
 - sqlc-generated data access from those migrations and `sql/` query sources;
 - schema-derived bounds, aggregate validation, and a bounded codec;
 - owner-scoped CRUD primitives, a three-resume cap, and revision
@@ -185,7 +197,7 @@ resume HTTP surface. The implemented boundary provides:
 Every mutation uses strict singleton headers, bounded and duplicate-key-safe
 decoding, owner-scoped lookup, revision CAS, and one aggregate sanitizer and
 validator boundary. A released v1 request is upgraded, changed, persisted as a
-complete current-v2 aggregate, and projected back to v1. The fixed customization
+complete current-v4 aggregate, and projected back to v1. The fixed customization
 allowlist is derived from the embedded current schema. The hourly global
 idempotency sweep uses the same user-first lock order and releases exact
 retained response bytes in each bounded transaction.
@@ -223,8 +235,9 @@ backend I/O. Filesystem and S3 implement the same create-only, bounded-page
 contract. Replacement and deletion revoke the database reference and enqueue the
 exact old key in one transaction. Definite failures compensate a proved-created
 candidate; unknown object-write or database outcomes remain private for later
-reconciliation. The deletion worker, its 24-hour target, and the 48-hour orphan
-reconciliation are not implemented yet.
+reconciliation. Scheduled workers process queued deletions and reconcile
+orphaned objects; the [privacy runbook](runbooks/privacy.md) defines their
+budgets and failure handling.
 
 ## Implemented authenticated editor
 
@@ -277,13 +290,14 @@ public link with Copy link.
 Publish state is one row per resume holding the live flag, slug, discovery
 generation, and a 180-day tombstone for released slugs. Public reads project a
 closed, privacy-safe document that omits every account/owner/storage/private/
-hidden value and re-sanitizes retained rich text. Discoverable JSON, photo,
-HTML, Markdown, sitemap, robots, and llms.txt all derive from that projection
-and respect the SEO/GEO and download flags; nondiscoverable and private states
-return the uniform public `404`. Nuxt renders public HTML through an isolated
-worker with a five-second deadline, exact request/origin bounds, deterministic
-JSON-LD, a single matching CSP hash, and external hydration that replaces only a
-mismatched revision.
+hidden value and re-sanitizes retained rich text. Public JSON, photos, HTML,
+Markdown, sitemap, robots, and llms.txt derive from that projection. Live pages
+remain accessible by link with discovery disabled; discovery artifacts respect
+the SEO/GEO flag, and PDF download respects the download flag. Private and
+unpublished resumes return the uniform public `404`. Nuxt renders public HTML
+through an isolated worker with a five-second deadline, exact request/origin
+bounds, deterministic JSON-LD, a single matching CSP hash, and external
+hydration that replaces only a mismatched revision.
 
 The native HTTPS publish proof creates one disposable complete resume, verifies
 accepted-save ordering and the full mutation-header envelope, checks discovery
@@ -346,12 +360,9 @@ completed jobs and lifecycle audits remain for 180 days. Session IP and user
 agent metadata is redacted after 90 days. See the
 [privacy runbook](runbooks/privacy.md) for command bounds and failure handling.
 
-## Known delivery gaps
+## Deferred work
 
-- Production infrastructure, deployment, scheduled jobs and live operational
-  evidence are not built yet. The owner tests the complete product in production
-  after the first deploy.
-
-## Not implemented
-
-AWS infrastructure, production deployment, and Flutter remain planned.
+The authenticated application is not fully localized. Optional two-factor
+authentication, multi-replica runtime coordination, and the Flutter client are
+not implemented. Remaining operational acceptance work is recorded in the
+[roadmap](plans/README.md).

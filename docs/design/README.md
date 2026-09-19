@@ -9,7 +9,7 @@ behavior lives in code, deployment configuration, and
 in [`../architecture.md`](../architecture.md).
 
 [Architecture Decision Records](../adr/) explain individual choices. ADRs
-0001–0038 are accepted, subject to recorded supersessions. If a page disagrees
+0001–0046 are accepted, subject to recorded supersessions. If a page disagrees
 with an accepted ADR, the ADR controls that decision until this text is
 corrected.
 
@@ -60,8 +60,9 @@ The design has five cross-cutting rules:
    the editor or a connected agent.
 4. Caddy is the sole client-IP trust boundary. Go accepts the canonical client
    address only from configured trusted proxies.
-5. Local verification precedes cloud work. Every feature passes its local checks
-   before any AWS deployment.
+5. Authors run the narrowest affected checks locally. GitHub CI is the full
+   delivery gate, and tagging or deployment waits for green CI on the exact
+   release commit under [ADR 0046](../adr/0046-github-ci-delivery-gate.md).
 
 ## Approval rule
 
