@@ -407,8 +407,8 @@ func TestCodec_AssembleCanonical_IncludesSchemaVersion(t *testing.T) {
 	if !ok {
 		t.Fatal("canonical document has no schemaVersion key")
 	}
-	if string(sv) != "3" {
-		t.Errorf("schemaVersion = %s, want 3", sv)
+	if string(sv) != "4" {
+		t.Errorf("schemaVersion = %s, want 4", sv)
 	}
 	for _, key := range []string{"personalDetails", "content", "customization"} {
 		if _, ok := generic[key]; !ok {

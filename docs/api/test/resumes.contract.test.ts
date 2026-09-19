@@ -847,7 +847,14 @@ describe("Phase 5A publish and public wire contract", () => {
         "title",
         "titleLink",
       ],
-      PublicProjectEntry: ["dates", "description", "id", "link", "title"],
+      PublicProjectEntry: [
+        "dates",
+        "description",
+        "id",
+        "link",
+        "subtitle",
+        "title",
+      ],
       PublicCustomEntry: [
         "city",
         "dates",

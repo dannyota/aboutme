@@ -183,22 +183,22 @@ func TestApplyAtWireVersionSanitizesAfterAcceptingCurrentShape(t *testing.T) {
 	up := func(raw json.RawMessage) (json.RawMessage, error) {
 		upCalls++
 		if upCalls == 1 {
-			return setVersion(3)(raw)
+			return setVersion(4)(raw)
 		}
 		doc := hostileProfileDocument(t)
-		doc.SchemaVersion = 3
+		doc.SchemaVersion = 4
 		return json.Marshal(doc)
 	}
 	acceptAny := func(json.RawMessage) error { return nil }
 	projector, err := docmigrate.NewProjector(
-		map[int32]docmigrate.AdjacentConverters{2: {Up: up, Down: setVersion(2)}},
-		map[int32]docmigrate.ValidateFunc{2: acceptAny, 3: acceptAny}, []int32{2, 3}, []int32{2, 3}, 3,
+		map[int32]docmigrate.AdjacentConverters{3: {Up: up, Down: setVersion(3)}},
+		map[int32]docmigrate.ValidateFunc{3: acceptAny, 4: acceptAny}, []int32{3, 4}, []int32{3, 4}, 4,
 	)
 	if err != nil {
 		t.Fatalf("NewProjector: %v", err)
 	}
 	service := &Service{projector: projector, sanitizeDocument: sanitizeDocument}
-	got, err := service.applyAtWireVersion(loadMinimalDocument(t), 2,
+	got, err := service.applyAtWireVersion(loadMinimalDocument(t), 3,
 		func(raw json.RawMessage) (json.RawMessage, error) { return raw, nil })
 	if err != nil {
 		t.Fatalf("apply old-wire mutation: %v", err)

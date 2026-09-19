@@ -218,7 +218,7 @@ took.
 A rollback cannot cross a document schema release. Every resume write persists
 the current document version, and an older release fails closed on a version it
 does not know. After a release that raises the document version, such as
-document v3 (ADR 0041), any resume saved since the deploy is unreadable and
+document v4 (ADR 0044), any resume saved since the deploy is unreadable and
 unwritable by the older release. Fix forward instead. A rollback past such a
 release first needs every newer row lowered to the older version, and no tool
 does that yet.

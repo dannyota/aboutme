@@ -99,7 +99,7 @@ func markdownEntries(section publicresume.PublicSection, format schema.DateForma
 		}
 	case "project":
 		for _, entry := range section.ProjectEntries {
-			appendEntry(heading(entry.Title, entry.Link), dateRange(entry.Dates, format), richPointer(entry.Description))
+			appendEntry(heading(entry.Title, entry.Link), plainPointer(entry.Subtitle), dateRange(entry.Dates, format), richPointer(entry.Description))
 		}
 	case "custom":
 		for _, entry := range section.CustomEntries {

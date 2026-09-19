@@ -75,7 +75,7 @@ describe('pure resume renderer', () => {
 
   it('renders the skill level widget inside the entry meta slot', async () => {
     const document: Resume = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       personalDetails: { fullName: 'Ada Lovelace' },
       content: {
         skill: {
@@ -116,7 +116,7 @@ describe('pure resume renderer', () => {
     'renders no entry meta for a text-style or absent skill level',
     async () => {
       const document: Resume = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         personalDetails: { fullName: 'Ada Lovelace' },
         content: {
           skill: {
@@ -192,7 +192,7 @@ describe('pure resume renderer', () => {
     'renders no heading text or substitute when displayName is %s',
     async (displayName) => {
       const document: Resume = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         personalDetails: { fullName: 'Ada Lovelace' },
         content: {
           work: {
@@ -226,7 +226,7 @@ describe('pure resume renderer', () => {
 
   it('omits hidden entries and hidden details from the DOM', async () => {
     const document: Resume = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       personalDetails: {
         fullName: 'Ada Lovelace',
         details: [
@@ -271,7 +271,7 @@ describe('pure resume renderer', () => {
 
   it('emits meta separators only between two present values', async () => {
     const document: Resume = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       personalDetails: { fullName: 'Ada Lovelace' },
       content: {
         work: {
@@ -402,7 +402,7 @@ describe('pure resume renderer', () => {
         entries: [],
       } as unknown as Section;
       const document: Resume = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         personalDetails: { fullName: 'Ada Lovelace' },
         content: { bad: unknown },
         customization: {

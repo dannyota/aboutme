@@ -24,7 +24,7 @@ import { ALLOWED_ORIGIN, httpFailureStatus } from "./network-policy";
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/privacy-proof.json";
-const SCHEMA_VERSION = "3";
+const SCHEMA_VERSION = "4";
 const ACCOUNT_LABEL = "Alice Local — alice@example.invalid";
 const CLIENT_NAME_PATH = "/uat-input/mcp-client-name";
 const REDIRECT_URI = "http://127.0.0.1:20090/callback";

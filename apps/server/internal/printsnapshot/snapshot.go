@@ -324,6 +324,7 @@ func cloneSection(source publicresume.PublicSection) publicresume.PublicSection 
 		entry, original := &out.ProjectEntries[index], source.ProjectEntries[index]
 		entry.Dates = cloneDates(original.Dates)
 		entry.Description, entry.Link, entry.Title = clonePointer(original.Description), clonePointer(original.Link), clonePointer(original.Title)
+		entry.Subtitle = clonePointer(original.Subtitle)
 	}
 	out.CustomEntries = append([]publicresume.PublicCustomEntry(nil), source.CustomEntries...)
 	for index := range out.CustomEntries {
@@ -354,12 +355,20 @@ func cloneYearMonth(source *publicresume.PublicYearMonth) *publicresume.PublicYe
 	return &out
 }
 
+func cloneHeader(source *schema.HeaderClass) *schema.HeaderClass {
+	out := clonePointer(source)
+	if out != nil {
+		out.PhotoPosition = clonePointer(source.PhotoPosition)
+	}
+	return out
+}
+
 func cloneCustomization(source schema.Customization) schema.Customization {
 	out := source
 	out.Font.TextAlign = clonePointer(source.Font.TextAlign)
 	out.Colors.Accent = clonePointer(source.Colors.Accent)
 	out.Colors.Surface = clonePointer(source.Colors.Surface)
-	out.Header = clonePointer(source.Header)
+	out.Header = cloneHeader(source.Header)
 	out.Layout.SurfaceTarget = clonePointer(source.Layout.SurfaceTarget)
 	out.Layout.Sections.Main = cloneStrings(source.Layout.Sections.Main)
 	out.Layout.Sections.Sidebar = cloneStrings(source.Layout.Sections.Sidebar)

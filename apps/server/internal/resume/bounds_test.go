@@ -505,6 +505,7 @@ var namedBounds = []boundCase{
 			"$.$defs.certificateEntry.allOf[1].properties.title.maxLength",
 			"$.$defs.certificateEntry.allOf[1].properties.issuer.maxLength",
 			"$.$defs.projectEntry.allOf[1].properties.title.maxLength",
+			"$.$defs.projectEntry.allOf[1].properties.subtitle.maxLength",
 			"$.$defs.customEntry.allOf[1].properties.title.maxLength",
 			"$.$defs.customEntry.allOf[1].properties.subtitle.maxLength",
 		},

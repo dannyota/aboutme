@@ -1467,6 +1467,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             link?: components["schemas"]["PublicLink"];
+            subtitle?: string;
             title?: string;
         };
         PublicCustomEntry: {
@@ -1573,6 +1574,11 @@ export interface components {
                 detailsLayout: "inline" | "stacked";
                 /** @enum {string} */
                 iconStyle: "none" | "outline";
+                /**
+                 * @description Photo above the name and contacts, or beside them on the left or right. Absent means `top`.
+                 * @enum {string}
+                 */
+                photoPosition?: "top" | "left" | "right";
             };
             layout: {
                 /** @enum {integer} */
@@ -1651,7 +1657,7 @@ export interface components {
          *       "seoGeoEnabled": true,
          *       "publicTitle": "Danny from aboutme.vn",
          *       "faviconEmoji": "🚀",
-         *       "schemaVersion": 3,
+         *       "schemaVersion": 4,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
          *     }
@@ -1693,7 +1699,7 @@ export interface components {
         /**
          * @description The resume document. Its shape is **not** restated here: it is governed by `packages/schema/resume.schema.json` at the version named by the `X-Resume-Schema-Version` header, and the generated client types come from `packages/schema/gen/ts`. Restating a 24-section, byte-bounded schema in this file would create a second source of truth for one contract and drift silently. This document owns the envelope, headers, statuses, and error shapes.
          * @example {
-         *       "schemaVersion": 3
+         *       "schemaVersion": 4
          *     }
          */
         ResumeDocument: Record<string, never>;
@@ -1963,11 +1969,11 @@ export interface components {
                  *         "seoGeoEnabled": true,
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
-                 *         "schemaVersion": 3,
+                 *         "schemaVersion": 4,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
                  *         "document": {
-                 *           "schemaVersion": 3
+                 *           "schemaVersion": 4
                  *         }
                  *       }
                  *     }
@@ -1998,11 +2004,11 @@ export interface components {
                  *         "seoGeoEnabled": true,
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
-                 *         "schemaVersion": 3,
+                 *         "schemaVersion": 4,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
                  *         "document": {
-                 *           "schemaVersion": 3
+                 *           "schemaVersion": 4
                  *         }
                  *       }
                  *     }
@@ -2027,7 +2033,8 @@ export interface components {
                  *           "acceptedVersions": [
                  *             1,
                  *             2,
-                 *             3
+                 *             3,
+                 *             4
                  *           ]
                  *         }
                  *       }
@@ -2229,7 +2236,7 @@ export interface components {
                  *         "details": {
                  *           "revision": "44",
                  *           "document": {
-                 *             "schemaVersion": 3
+                 *             "schemaVersion": 4
                  *           }
                  *         }
                  *       }
@@ -3324,7 +3331,7 @@ export interface components {
         ObjectETag: string;
         /**
          * @description The resume document version this response was emitted at. Absent from whole-resume deletion and from binary photo reads.
-         * @example 3
+         * @example 4
          */
         EmittedSchemaVersion: number;
         /**
@@ -4406,7 +4413,7 @@ export interface operations {
                     "Content-Disposition"?: "attachment; filename=\"aboutme-export.json\"";
                     /**
                      * @description Current emitted resume schema version.
-                     * @example 3
+                     * @example 4
                      */
                     "X-Resume-Schema-Version"?: string;
                     [name: string]: unknown;
@@ -5094,7 +5101,7 @@ export interface operations {
                      *           "seoGeoEnabled": true,
                      *           "publicTitle": "Danny from aboutme.vn",
                      *           "faviconEmoji": "🚀",
-                     *           "schemaVersion": 3,
+                     *           "schemaVersion": 4,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
                      *         }
@@ -5186,11 +5193,11 @@ export interface operations {
                      *         "seoGeoEnabled": false,
                      *         "publicTitle": null,
                      *         "faviconEmoji": null,
-                     *         "schemaVersion": 3,
+                     *         "schemaVersion": 4,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
                      *         "document": {
-                     *           "schemaVersion": 3
+                     *           "schemaVersion": 4
                      *         }
                      *       }
                      *     }

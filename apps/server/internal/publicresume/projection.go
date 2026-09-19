@@ -139,7 +139,7 @@ func projectSection(source schema.Section) (PublicSection, bool) {
 	case schema.Project:
 		for _, entry := range source.ProjectEntries {
 			if !hidden(entry.IsHidden) {
-				out.ProjectEntries = append(out.ProjectEntries, PublicProjectEntry{Dates: projectDates(entry.Dates), Description: sanitizeOptional(entry.Description), ID: entry.ID, Link: clonePointer(entry.Link), Title: clonePointer(entry.Title)})
+				out.ProjectEntries = append(out.ProjectEntries, PublicProjectEntry{Dates: projectDates(entry.Dates), Description: sanitizeOptional(entry.Description), ID: entry.ID, Link: clonePointer(entry.Link), Subtitle: clonePointer(entry.Subtitle), Title: clonePointer(entry.Title)})
 			}
 		}
 		return out, len(out.ProjectEntries) != 0
@@ -193,12 +193,20 @@ func projectDisplay(source *schema.Display) *string {
 	return &display
 }
 
+func cloneHeader(source *schema.HeaderClass) *schema.HeaderClass {
+	out := clonePointer(source)
+	if out != nil {
+		out.PhotoPosition = clonePointer(source.PhotoPosition)
+	}
+	return out
+}
+
 func cloneCustomization(source schema.Customization) schema.Customization {
 	out := source
 	out.Font.TextAlign = clonePointer(source.Font.TextAlign)
 	out.Colors.Accent = clonePointer(source.Colors.Accent)
 	out.Colors.Surface = clonePointer(source.Colors.Surface)
-	out.Header = clonePointer(source.Header)
+	out.Header = cloneHeader(source.Header)
 	out.Layout.SurfaceTarget = clonePointer(source.Layout.SurfaceTarget)
 	out.Layout.Sections.Main = cloneStrings(source.Layout.Sections.Main)
 	out.Layout.Sections.Sidebar = cloneStrings(source.Layout.Sections.Sidebar)

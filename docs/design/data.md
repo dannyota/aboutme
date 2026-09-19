@@ -106,7 +106,7 @@ one section.
 | `skill`       | `name`, optional `level` from 0–5, `infoHtml`                                     |
 | `language`    | `name`, optional `level` from 0–5                                                 |
 | `certificate` | `title`, `titleLink`, `issuer`, `date`, `description`                             |
-| `project`     | `title`, `link`, `dates`, `description`                                           |
+| `project`     | `title`, `subtitle`, `link`, `dates`, `description`                               |
 | `custom`      | `title`, `titleLink`, `subtitle`, `city`, `dates`, `description`                  |
 | Every entry   | Client-generated UUID `id` and optional `isHidden`                                |
 
@@ -158,10 +158,13 @@ persists the projected current shape with revision compare-and-swap (CAS).
 Background backfill compares the observed schema version and revision. It does
 not bump the revision, and it loses cleanly to any concurrent resume write.
 Adjacent up and down converters are explicit, validated at every step, and
-tested in both directions. The current release is document v3, and the server
-accepts and emits v1, v2, and v3. It declares two lossy emissions, and every
-other value must remain equal:
+tested in both directions. The current release is document v4, and the server
+accepts and emits v1 to v4. It declares three lossy emissions, and every other
+value must remain equal:
 
+- Emitting v1, v2, or v3 drops v4's `customization.header.photoPosition` and
+  every project entry's `subtitle`
+  ([ADR 0044](../adr/0044-header-photo-position-and-project-subtitle.md)).
 - Emitting v1 or v2 drops v3's `personalDetails.details[].display` and
   `customization.font.textAlign`
   ([ADR 0041](../adr/0041-contact-link-display-and-body-justify.md)).
@@ -170,7 +173,9 @@ other value must remain equal:
 
 Old-client mutations keep the stored font unless the operation explicitly
 targets that field. They always keep the stored `textAlign`, and each surviving
-detail's `display`, matched by its unique id. Retained types support
+detail's `display`, matched by its unique id. A v1 to v3 client write keeps the
+stored `photoPosition` while both documents have a header, and each surviving
+project entry's `subtitle`, matched by entry id. Retained types support
 compatibility testing; HTTP delta application may remain generic so handlers do
 not need one compiled code path per old version.
 [ADR 0017](../adr/0017-resume-document-versioning.md) records this boundary. A

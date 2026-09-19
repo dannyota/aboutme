@@ -176,13 +176,13 @@ func TestProjectionEveryPublicLeafAndRichText(t *testing.T) {
 
 func ptr(value string) *string { return &value }
 
-func TestProjectionCarriesV3DisplayAndTextAlign(t *testing.T) {
+func TestProjectionCarriesDisplayTextAlignAndPhotoPosition(t *testing.T) {
 	origin, err := ParsePublicOrigin("https://resume.example", "production")
 	if err != nil {
 		t.Fatal(err)
 	}
 	slug, lng := "ada", "en"
-	label, justify := schema.Label, schema.Justify
+	label, justify, right := schema.Label, schema.Justify, schema.Right
 	source := resume.Resume{
 		ID: uuid.New(), UserID: uuid.New(), Slug: &slug, Live: true, Revision: 7, Lng: &lng,
 		Doc: schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{
@@ -190,7 +190,10 @@ func TestProjectionCarriesV3DisplayAndTextAlign(t *testing.T) {
 				{ID: "labeled", Type: schema.Github, Value: "https://github.com/ada", Display: &label},
 				{ID: "plain", Type: schema.Website, Value: "https://ada.example"},
 			},
-		}, Customization: schema.Customization{Font: schema.Font{Family: schema.Inter, BaseSizePx: 14, TextAlign: &justify}}},
+		}, Customization: schema.Customization{
+			Font:   schema.Font{Family: schema.Inter, BaseSizePx: 14, TextAlign: &justify},
+			Header: &schema.HeaderClass{Align: schema.AlignLeft, DetailsLayout: schema.Inline, IconStyle: schema.Outline, PhotoPosition: &right},
+		}},
 	}
 	got, err := Project(source, origin)
 	if err != nil {
@@ -203,9 +206,44 @@ func TestProjectionCarriesV3DisplayAndTextAlign(t *testing.T) {
 	if align := got.Document.Customization.Font.TextAlign; align == nil || *align != schema.Justify {
 		t.Fatalf("projected textAlign = %v", align)
 	}
+	if header := got.Document.Customization.Header; header == nil || header.PhotoPosition == nil || *header.PhotoPosition != schema.Right {
+		t.Fatalf("projected header = %#v", header)
+	}
 	label = schema.Full
 	justify = schema.TextAlignLeft
-	if *details[0].Display != "label" || *got.Document.Customization.Font.TextAlign != schema.Justify {
+	right = schema.Top
+	source.Doc.Customization.Header.Align = schema.Center
+	if *details[0].Display != "label" || *got.Document.Customization.Font.TextAlign != schema.Justify ||
+		*got.Document.Customization.Header.PhotoPosition != schema.Right || got.Document.Customization.Header.Align != schema.AlignLeft {
 		t.Fatal("projection shares pointers with its source")
+	}
+}
+
+func TestProjectionCarriesProjectSubtitle(t *testing.T) {
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug, lng, title, subtitle := "ada", "en", "Engine", "Go, PostgreSQL"
+	source := resume.Resume{
+		ID: uuid.New(), UserID: uuid.New(), Slug: &slug, Live: true, Revision: 7, Lng: &lng,
+		Doc: schema.Resume{SchemaVersion: schema.CurrentVersion, Content: map[string]schema.Section{
+			"projects": schema.NewProjectSection(nil, nil, []schema.ProjectEntry{
+				{ID: "with", Title: &title, Subtitle: &subtitle},
+				{ID: "without", Title: &title},
+			}),
+		}, Customization: schema.Customization{Layout: schema.Layout{Sections: schema.Sections{Main: []string{"projects"}}}}},
+	}
+	got, err := Project(source, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := got.Document.Content["projects"].ProjectEntries
+	if len(entries) != 2 || entries[0].Subtitle == nil || *entries[0].Subtitle != subtitle || entries[1].Subtitle != nil {
+		t.Fatalf("projected project entries = %#v", entries)
+	}
+	subtitle = "changed"
+	if *entries[0].Subtitle != "Go, PostgreSQL" {
+		t.Fatal("projection shares the subtitle pointer with its source")
 	}
 }

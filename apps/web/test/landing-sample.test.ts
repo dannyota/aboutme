@@ -19,7 +19,7 @@ describe('landing sample resume', () => {
   it('is a schema-valid, photo-less compiled-in document', () => {
     expect(validate(sampleResume), ajv.errorsText(validate.errors)).toBe(true);
     expect(validateDocument(sampleResume)).toEqual([]);
-    expect(sampleResume.schemaVersion).toBe(3);
+    expect(sampleResume.schemaVersion).toBe(4);
     expect(sampleResume.personalDetails.photo).toBeUndefined();
     expect(sampleResume.personalDetails.fullName).toBe('Ada Lovelace');
     expect(sampleLink).toBe('/ada-lovelace');

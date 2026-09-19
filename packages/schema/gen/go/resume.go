@@ -57,7 +57,8 @@ type Font struct {
 // and contacts. It is distinct from customization.heading, which styles section headings.
 // See docs/design/templates/contract.md.
 type HeaderClass struct {
-	// Horizontal alignment for the complete top block. See docs/design/templates/contract.md.
+	// Horizontal alignment for the complete top block. With photoPosition left or right, it
+	// aligns only the text beside the photo. See docs/design/templates/contract.md.
 	Align Align `json:"align"`
 	// Displays contact details inline or stacked while preserving array order. See
 	// docs/design/templates/contract.md.
@@ -65,6 +66,9 @@ type HeaderClass struct {
 	// Contact-detail icon style for the top header: none or the Lucide outline glyph. See
 	// docs/design/templates/tokens.md.
 	IconStyle IconStyle `json:"iconStyle"`
+	// Places the photo above the name and contacts, or beside them on the left or right. Absent
+	// means top. See docs/design/templates/contract.md.
+	PhotoPosition *PhotoPosition `json:"photoPosition,omitempty"`
 }
 
 // Styles section headings. This is distinct from customization.header, which contains the
@@ -268,6 +272,7 @@ type ProjectEntry struct {
 	ID          string     `json:"id"`
 	IsHidden    *bool      `json:"isHidden,omitempty"`
 	Link        *string    `json:"link,omitempty"`
+	Subtitle    *string    `json:"subtitle,omitempty"`
 	Title       *string    `json:"title,omitempty"`
 }
 
@@ -337,7 +342,8 @@ const (
 	TextAlignLeft TextAlign = "left"
 )
 
-// Horizontal alignment for the complete top block. See docs/design/templates/contract.md.
+// Horizontal alignment for the complete top block. With photoPosition left or right, it
+// aligns only the text beside the photo. See docs/design/templates/contract.md.
 type Align string
 
 const (
@@ -361,6 +367,16 @@ type IconStyle string
 const (
 	IconStyleNone IconStyle = "none"
 	Outline       IconStyle = "outline"
+)
+
+// Places the photo above the name and contacts, or beside them on the left or right. Absent
+// means top. See docs/design/templates/contract.md.
+type PhotoPosition string
+
+const (
+	PhotoPositionLeft PhotoPosition = "left"
+	Right             PhotoPosition = "right"
+	Top               PhotoPosition = "top"
 )
 
 type HeadingStyle string

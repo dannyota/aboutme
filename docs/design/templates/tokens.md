@@ -35,8 +35,8 @@ is the same in every template by construction.
 
 ## 2. Customization leaves
 
-The complete document `customization` has 25 leaves: 23 author-controlled and 2
-derived placement arrays. Eight leaves are optional. Ranges and enums are the
+The complete document `customization` has 27 leaves: 25 author-controlled and 2
+derived placement arrays. Ten leaves are optional. Ranges and enums are the
 schema's, not this document's.
 
 | Token                           | Type                                            | Baseline (`fixtures/minimal.json`) | Owner        |
@@ -59,6 +59,7 @@ schema's, not this document's.
 | `header.align`                  | enum: `left`, `center`, **optional object**     | absent (renderer `left`)           | user, preset |
 | `header.detailsLayout`          | enum: `inline`, `stacked`, **optional object**  | absent (renderer `inline`)         | user, preset |
 | `header.iconStyle`              | enum: `none`, `outline`, **optional object**    | absent (renderer `outline`)        | user, preset |
+| `header.photoPosition`          | enum: `top`, `left`, `right`, **optional**      | absent (renders `top`)             | user         |
 | `layout.columns`                | enum: 1, 2                                      | `1`                                | user, preset |
 | `layout.surfaceTarget`          | enum: `none`, `header`, `sidebar`, **optional** | absent (renders as `none`)         | user, preset |
 | `layout.sections.main/.sidebar` | arrays of section keys                          | `[]`, `[]`                         | derived      |
@@ -160,17 +161,22 @@ snapshot determinism (`print.md` §7).
 It is presentation, never content — no value here adds, removes, reorders, or
 reveals a detail, and `isHidden` still wins in every combination.
 
-| Token                  | Value     | Effect                                                            |
-| ---------------------- | --------- | ----------------------------------------------------------------- |
-| `header.align`         | `left`    | the resolved header block sits on the content measure's left edge |
-|                        | `center`  | photo, name, headline, and details all centre together            |
-| `header.detailsLayout` | `inline`  | details flow on wrapping rows (header intervals below)            |
-|                        | `stacked` | each detail takes its own line, at the same row gap               |
-| `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone  |
-|                        | `outline` | the contact glyph at `--icon-size`; replaces default label        |
+| Token                  | Value     | Effect                                                                                 |
+| ---------------------- | --------- | -------------------------------------------------------------------------------------- |
+| `header.align`         | `left`    | the resolved header block sits on the content measure's left edge                      |
+|                        | `center`  | photo, name, headline, and details all center together; a side photo stays at its edge |
+| `header.detailsLayout` | `inline`  | details flow on wrapping rows (header intervals below)                                 |
+|                        | `stacked` | each detail takes its own line, at the same row gap                                    |
+| `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone                       |
+|                        | `outline` | the contact glyph at `--icon-size`; replaces default label                             |
+| `header.photoPosition` | `top`     | the photo sits above the name; absent means `top`                                      |
+|                        | `left`    | the photo sits left of the text block, which `header.align` aligns                     |
+|                        | `right`   | the photo sits right of the text block, which `header.align` aligns                    |
 
-Absent `header` renders `left` / `inline` / `outline`, which is what every
-document rendered before the token existed.
+Absent `header` renders `left` / `inline` / `outline` / `top`, which is what
+every document rendered before the token existed. A side photo keeps
+`--photo-size` and is vertically centered against the text block (`contract.md`
+§5.1).
 
 With `outline`, a typed detail's icon stands in for its default label, which is
 omitted. A non-empty user `label` and a `custom` detail's label still render,
