@@ -587,19 +587,15 @@ onBeforeUnmount(resetCopyState);
     </div>
 
     <template #footer>
+      <!-- Primary last: the footer stacks in reverse on phones (DESIGN.md). -->
       <Button
-        v-if="
-          !passwordReauth
-            && !providerReauth
-            && state.kind !== 'provider-started'
-            && state.kind !== 'unknown'
-        "
-        type="submit"
-        data-action="publish-submit"
-        :disabled="submitDisabled"
-        variant="seal"
+        type="button"
+        variant="outline"
+        data-action="publish-close"
+        :disabled="busy"
+        @click="close"
       >
-        {{ primaryAction }}
+        Cancel
       </Button>
       <Button
         v-if="
@@ -632,13 +628,18 @@ onBeforeUnmount(resetCopyState);
         Try provider reauthentication again
       </Button>
       <Button
-        type="button"
-        variant="ghost"
-        data-action="publish-close"
-        :disabled="busy"
-        @click="close"
+        v-if="
+          !passwordReauth
+            && !providerReauth
+            && state.kind !== 'provider-started'
+            && state.kind !== 'unknown'
+        "
+        type="submit"
+        data-action="publish-submit"
+        :disabled="submitDisabled"
+        variant="seal"
       >
-        Cancel
+        {{ primaryAction }}
       </Button>
     </template>
   </FormDialog>
