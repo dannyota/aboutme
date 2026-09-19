@@ -8,6 +8,7 @@ import type {
 } from '@aboutme/schema';
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 
+import { sectionIconKey } from './icons';
 import { type ResumeStyles, useResumeStyles } from './useResumeStyles';
 
 export interface RenderContext {
@@ -73,7 +74,13 @@ const resolveSections = (
 ): ResolvedSection[] =>
   keys.flatMap((key) => {
     const section = content[key];
-    return section === undefined ? [] : [{ key, section }];
+    if (section === undefined) return [];
+    // A heading icon the renderer lacks draws its section type's icon.
+    const iconKey = sectionIconKey(section);
+    return [{
+      key,
+      section: iconKey === section.iconKey ? section : { ...section, iconKey },
+    }];
   });
 
 export function resolveRenderModel(

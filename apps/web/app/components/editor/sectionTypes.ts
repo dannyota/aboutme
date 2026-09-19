@@ -40,7 +40,10 @@ export const defaultSectionIcons: Readonly<
   custom: null,
 };
 
-/** Heading icons a person can choose; the values are renderer icon keys. */
+/**
+ * Heading icons a person can choose: the common ones first, then the rest of
+ * the renderer's section icons by name. Every value is a renderer icon key.
+ */
 export const sectionIconOptions: readonly {
   readonly value: string;
   readonly label: string;
@@ -55,6 +58,52 @@ export const sectionIconOptions: readonly {
   { value: 'folder', label: 'Folder' },
   { value: 'trophy', label: 'Trophy' },
   { value: 'globe', label: 'Globe' },
+  { value: 'badge-check', label: 'Badge' },
+  { value: 'book-open', label: 'Book' },
+  { value: 'bookmark', label: 'Bookmark' },
+  { value: 'building-2', label: 'Building' },
+  { value: 'camera', label: 'Camera' },
+  { value: 'chart-line', label: 'Chart' },
+  { value: 'cpu', label: 'Chip' },
+  { value: 'compass', label: 'Compass' },
+  { value: 'database', label: 'Database' },
+  { value: 'file-text', label: 'Document' },
+  { value: 'dumbbell', label: 'Dumbbell' },
+  { value: 'flag', label: 'Flag' },
+  { value: 'flask-conical', label: 'Flask' },
+  { value: 'heart', label: 'Heart' },
+  { value: 'heart-handshake', label: 'Helping hands' },
+  { value: 'landmark', label: 'Landmark' },
+  { value: 'leaf', label: 'Leaf' },
+  { value: 'library', label: 'Library' },
+  { value: 'lightbulb', label: 'Light bulb' },
+  { value: 'link', label: 'Link' },
+  { value: 'mail', label: 'Mail' },
+  { value: 'map-pin', label: 'Map pin' },
+  { value: 'medal', label: 'Medal' },
+  { value: 'megaphone', label: 'Megaphone' },
+  { value: 'mic', label: 'Microphone' },
+  { value: 'microscope', label: 'Microscope' },
+  { value: 'music', label: 'Music' },
+  { value: 'newspaper', label: 'Newspaper' },
+  { value: 'palette', label: 'Palette' },
+  { value: 'pen-tool', label: 'Pen' },
+  { value: 'users', label: 'People' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'plane', label: 'Plane' },
+  { value: 'presentation', label: 'Presentation' },
+  { value: 'puzzle', label: 'Puzzle' },
+  { value: 'rocket', label: 'Rocket' },
+  { value: 'scale', label: 'Scale' },
+  { value: 'school', label: 'School' },
+  { value: 'scroll-text', label: 'Scroll' },
+  { value: 'sparkles', label: 'Sparkles' },
+  { value: 'star', label: 'Star' },
+  { value: 'stethoscope', label: 'Stethoscope' },
+  { value: 'target', label: 'Target' },
+  { value: 'terminal', label: 'Terminal' },
+  { value: 'trending-up', label: 'Trend' },
+  { value: 'wrench', label: 'Wrench' },
 ];
 
 /** A person-facing name for an entry: its title field, or its position. */
