@@ -27,6 +27,7 @@ test('proves a published resume hydrates in a real browser', async ({
   const dialogs: string[] = [];
   const pageErrors: string[] = [];
   const externalRequests: string[] = [];
+  const privateRequests: string[] = [];
 
   const attachDiagnostics = (openedPage: typeof page): void => {
     openedPage.on('console', (message) => {
@@ -123,6 +124,20 @@ test('proves a published resume hydrates in a real browser', async ({
     const publicContext = await browser.newContext();
     const publicPage = await publicContext.newPage();
     attachDiagnostics(publicPage);
+    // A signed-out public page may call only public endpoints, and none may
+    // answer as if a session were expected.
+    publicPage.on('response', (publicResponse) => {
+      const url = new URL(publicResponse.url());
+      if (url.origin !== ORIGIN) return;
+      if (url.pathname.startsWith('/api/')
+        && !url.pathname.startsWith('/api/v1/public/')
+        && !url.pathname.startsWith('/api/v1/live/')) {
+        privateRequests.push(url.pathname);
+      }
+      if (publicResponse.status() === 401 || publicResponse.status() === 403) {
+        privateRequests.push(`${publicResponse.status()} ${url.pathname}`);
+      }
+    });
     await publicContext.route('**/*', async (route) => {
       const url = new URL(route.request().url());
       if (!isAllowedHTTPURL(url.href) && !isAllowedWebSocketURL(url.href)) {
@@ -211,6 +226,7 @@ test('proves a published resume hydrates in a real browser', async ({
   expect(dialogs).toEqual([]);
   expect(pageErrors).toEqual([]);
   expect(externalRequests).toEqual([]);
+  expect(privateRequests).toEqual([]);
 
   await writeFile(EVIDENCE_PATH, `${JSON.stringify({
     schemaVersion: 1,
