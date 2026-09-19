@@ -222,6 +222,37 @@ export function validateEntryIdUniqueness(
   return issues;
 }
 
+/**
+ * Enforces unique contact detail IDs. Old-client writes restore each detail's
+ * display by ID (docs/adr/0041-contact-link-display-and-body-justify.md).
+ * Missing or non-string IDs normalize to the empty Go string value.
+ */
+export function validateDetailIdUniqueness(
+  personalDetails: PersonalDetails | undefined,
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const pathsById = new Map<string, string[]>();
+  toArray<PersonalDetail>(personalDetails?.details).forEach((detail, index) => {
+    const id = typeof detail?.id === "string" ? detail.id : "";
+    const paths = pathsById.get(id) ?? [];
+    paths.push(`personalDetails.details[${index}].id`);
+    pathsById.set(id, paths);
+  });
+  for (const id of [...pathsById.keys()].sort()) {
+    const paths = pathsById.get(id)!;
+    if (paths.length <= 1) continue;
+    const sortedPaths = [...paths].sort();
+    for (const path of sortedPaths) {
+      issues.push({
+        rule: "duplicate-detail-id",
+        path,
+        message: `${path}: detail id "${id}" is not unique — also used at ${formatOtherPaths(sortedPaths, path)}`,
+      });
+    }
+  }
+  return issues;
+}
+
 interface YearMonth {
   y: number;
   m?: number;
@@ -302,6 +333,7 @@ const DETAIL_TYPES_WITHOUT_URL_CONSTRAINT = new Set([
 ]);
 
 interface PersonalDetail {
+  id?: string;
   type?: string;
   value?: string;
 }
@@ -398,6 +430,7 @@ export function validateDocument(
     ...validateDateRanges(doc.content),
     ...validateEntryIdUniqueness(doc.content),
     ...validatePersonalDetailUrlSchemes(doc.personalDetails),
+    ...validateDetailIdUniqueness(doc.personalDetails),
     ...validatePhotoKeyTraversal(doc.personalDetails),
   ];
   return issues.sort(compareIssues);

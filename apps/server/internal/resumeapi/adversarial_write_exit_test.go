@@ -658,7 +658,7 @@ func assertAdversarial412MatchesImmediateGET(t *testing.T, h *resumeAPITestHarne
 	mismatch testHTTPResponse,
 ) {
 	t.Helper()
-	fresh := resumeRequest(t, h, http.MethodGet, apiResumePath+"/"+resumeID.String(), "", 0, uuid.Nil, "2")
+	fresh := resumeRequest(t, h, http.MethodGet, apiResumePath+"/"+resumeID.String(), "", 0, uuid.Nil, "3")
 	if fresh.status != http.StatusOK {
 		t.Fatalf("fresh GET status = %d body=%s", fresh.status, fresh.body)
 	}

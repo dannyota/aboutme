@@ -101,8 +101,10 @@ export function isValidCrop(crop: PhotoCrop): boolean {
 
 /**
  * How to draw a crop in a square frame: the image scaled so the crop fills
- * the frame and shifted so the crop's corner sits at the frame's corner. The
- * renderer uses the same model, so the preview matches the resume.
+ * the frame and shifted so the crop's corner sits at the frame's corner.
+ * `object-fit: cover` keeps a crop that is not square in pixels from
+ * stretching. The renderer uses the same model, so the preview matches the
+ * resume.
  */
 export function cropImageStyle(crop: PhotoCrop): Record<string, string> {
   return {
@@ -112,5 +114,6 @@ export function cropImageStyle(crop: PhotoCrop): Record<string, string> {
     left: `${round((-crop.x / crop.width) * 100)}%`,
     top: `${round((-crop.y / crop.height) * 100)}%`,
     maxWidth: 'none',
+    objectFit: 'cover',
   };
 }

@@ -306,5 +306,23 @@ func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 	if len(fontTargeted) == 0 || !fontTargeted[0] {
 		doc.Customization.Font.Family = current.Customization.Font.Family
 	}
+	if version < 3 {
+		keepV3Fields(&doc, current)
+	}
 	return s.prepareDocumentForPersistence(doc)
+}
+
+// keepV3Fields restores what a v1 or v2 client cannot express: the stored
+// body alignment, and the display of every detail that survives the write,
+// matched by id. A detail the client added gets none.
+// See docs/adr/0041-contact-link-display-and-body-justify.md.
+func keepV3Fields(doc *schema.Resume, current schema.Resume) {
+	doc.Customization.Font.TextAlign = current.Customization.Font.TextAlign
+	displays := make(map[string]*schema.Display, len(current.PersonalDetails.Details))
+	for _, detail := range current.PersonalDetails.Details {
+		displays[detail.ID] = detail.Display
+	}
+	for index := range doc.PersonalDetails.Details {
+		doc.PersonalDetails.Details[index].Display = displays[doc.PersonalDetails.Details[index].ID]
+	}
 }

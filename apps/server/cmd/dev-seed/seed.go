@@ -201,7 +201,7 @@ func runSeedWithDB(ctx context.Context, db *sql.DB) error {
 		INSERT INTO resumes
 			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
 			 schema_version, revision, personal_details, content, customization)
-		VALUES ($1, $2, $3, NULL, false, true, false, 2, 1, $4, $5, $6)`,
+		VALUES ($1, $2, $3, NULL, false, true, false, 3, 1, $4, $5, $6)`,
 		seedResumeID, seedUser.ID, seedResumeTitle, personalDetails, content, customization)
 	if err != nil {
 		return fmt.Errorf("insert resume: %w", err)
@@ -274,8 +274,8 @@ func splitResumeDoc(raw []byte) (personalDetails, content, customization []byte,
 	if unmarshalErr := json.Unmarshal(raw, &doc); unmarshalErr != nil {
 		return nil, nil, nil, fmt.Errorf("decode full.json: %w", unmarshalErr)
 	}
-	if doc.SchemaVersion != 2 {
-		return nil, nil, nil, fmt.Errorf("full.json schemaVersion = %d, want 2", doc.SchemaVersion)
+	if doc.SchemaVersion != 3 {
+		return nil, nil, nil, fmt.Errorf("full.json schemaVersion = %d, want 3", doc.SchemaVersion)
 	}
 	personalDetails, err = withoutPhoto(doc.PersonalDetails)
 	if err != nil {

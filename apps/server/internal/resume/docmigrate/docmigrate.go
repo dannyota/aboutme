@@ -248,8 +248,8 @@ func cloneMap[V any](m map[int32]V) map[int32]V {
 }
 
 // NewIdentityProjector returns the immutable production projector. The name is
-// retained for API compatibility; released adjacent converters now lift v1 to
-// current v2 and emit v2 through the declared v1 font fallback policy.
+// retained for API compatibility; released adjacent converters lift v1 and v2
+// to current v3 and emit older versions through the declared loss policy.
 // The returned projector is immutable and shared.
 func NewIdentityProjector() *Projector { return identityProjector }
 
@@ -257,7 +257,10 @@ var identityProjector = mustIdentityProjector()
 
 func mustIdentityProjector() *Projector {
 	p, err := newProjector(
-		map[int32]AdjacentConverters{1: {Up: convertV1ToV2, Down: convertV2ToV1}},
+		map[int32]AdjacentConverters{
+			1: {Up: convertV1ToV2, Down: convertV2ToV1},
+			2: {Up: convertV2ToV3, Down: convertV3ToV2},
+		},
 		releasedValidators,
 		acceptedVersions,
 		emittedVersions,

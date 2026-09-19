@@ -257,6 +257,11 @@
   ],
   "storeFixtures": [
     {
+      "file": "store/invalid-duplicate-detail-id.json",
+      "expect": "valid",
+      "storeExpect": "invalid"
+    },
+    {
       "file": "store/invalid-duplicate-entry-id.json",
       "expect": "valid",
       "storeExpect": "invalid"

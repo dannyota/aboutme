@@ -33,7 +33,7 @@ func Markdown(resume publicresume.PublicResume) ([]byte, error) {
 			if label == "" {
 				label = contactLabel(detail.Type)
 			}
-			if isLinkContact(detail.Type) {
+			if isLinkContact(detail.Type, detail.Value) {
 				value = link(value, detail.Value)
 			}
 			contacts = append(contacts, "- "+label+": "+value)
@@ -207,14 +207,21 @@ func contactLabel(kind string) string {
 	case "github":
 		return "GitHub"
 	case "twitter":
-		return "Twitter"
+		return "X"
 	default:
 		return "Detail"
 	}
 }
 
-func isLinkContact(kind string) bool {
-	return kind == "website" || kind == "linkedin" || kind == "github" || kind == "twitter"
+// isLinkContact follows the renderer: a URL type or custom detail links only
+// when its value has the exact lowercase https:// prefix (ADR 0013, ADR 0041).
+func isLinkContact(kind, value string) bool {
+	switch kind {
+	case "website", "linkedin", "github", "twitter", "custom":
+		return strings.HasPrefix(value, "https://")
+	default:
+		return false
+	}
 }
 
 func metadata(values ...string) string { return strings.Join(nonempty(values), " · ") }

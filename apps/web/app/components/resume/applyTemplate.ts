@@ -79,7 +79,34 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
   return sidebarSectionTypes;
 }
 
+/**
+ * Text alignment belongs to the owner, not the preset (ADR 0041), so a
+ * template switch keeps the current `font.textAlign`, or its absence.
+ */
+function withCurrentTextAlign(
+  current: Customization,
+  next: Customization,
+): Customization {
+  const { textAlign: _presetAlign, ...font } = next.font;
+  const textAlign = current.font.textAlign;
+  return {
+    ...next,
+    font: textAlign === undefined ? font : { ...font, textAlign },
+  };
+}
+
 export function applyTemplate(
+  current: Customization,
+  preset: TemplatePreset,
+  content: Content,
+): Customization {
+  return withCurrentTextAlign(
+    current,
+    presetCustomization(current, preset, content),
+  );
+}
+
+function presetCustomization(
   current: Customization,
   preset: TemplatePreset,
   content: Content,

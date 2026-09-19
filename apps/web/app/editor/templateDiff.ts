@@ -100,7 +100,8 @@ function isUnsetPath(
 ): path is Extract<CustomizationDelta, { op: 'unset' }>['path'] {
   return (
     intended === undefined
-    && (path === 'colors.accent'
+    && (path === 'font.textAlign'
+      || path === 'colors.accent'
       || path === 'colors.surface'
       || path === 'spacing.pageMargin'
       || path === 'header'

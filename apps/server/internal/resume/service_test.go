@@ -1052,17 +1052,21 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 		t.Fatalf("commit: %v", commitErr)
 	}
 
-	// Query-plan evidence: the bounded oldest-due claim shape P8-priv uses
-	// is supported by the partial active-job (next_attempt_at, id) index.
-	// enable_seqscan off makes the planner's index choice deterministic on a
-	// small table.
+	// Query-plan evidence: the partial active-job (next_attempt_at, id) index
+	// serves the bounded oldest-due claim in order, with no sort. The shared
+	// test database keeps rows from earlier runs, so its statistics can make
+	// a bitmap scan of another partial index plus a sort cheaper; turning off
+	// sequential scans, bitmap scans, and sorts leaves only the ordered index
+	// scan this proof is about, whatever the table holds.
 	planTx, err := pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin plan tx: %v", err)
 	}
 	defer rollbackSeamTx(ctx, t, planTx)
-	if _, execErr := planTx.Exec(ctx, `SET LOCAL enable_seqscan = off`); execErr != nil {
-		t.Fatalf("disable seqscan: %v", execErr)
+	for _, setting := range []string{"enable_seqscan", "enable_bitmapscan", "enable_sort"} {
+		if _, execErr := planTx.Exec(ctx, `SET LOCAL `+setting+` = off`); execErr != nil {
+			t.Fatalf("disable %s: %v", setting, execErr)
+		}
 	}
 	rows, err := planTx.Query(ctx,
 		`EXPLAIN SELECT id FROM media_deletion_jobs
@@ -1083,7 +1087,8 @@ func TestMediaDeletionJobs_DueOrderIndexSupportsBoundedClaim(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("plan rows error: %v", err)
 	}
-	if !strings.Contains(plan.String(), "media_deletion_jobs_next_attempt_idx") {
-		t.Errorf("bounded oldest-due claim plan does not use media_deletion_jobs_next_attempt_idx:\n%s", plan.String())
+	if !strings.Contains(plan.String(), "Scan using media_deletion_jobs_next_attempt_idx") ||
+		strings.Contains(plan.String(), "Sort") {
+		t.Errorf("bounded oldest-due claim plan is not an ordered media_deletion_jobs_next_attempt_idx scan:\n%s", plan.String())
 	}
 }

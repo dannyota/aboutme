@@ -847,6 +847,7 @@ type boundsManifestDoc struct {
 // content: an out-of-enum sectionType, a required key absent, and a
 // scheme-restricted value respectively).
 var storeFixtureSchemaExpectations = map[string]bool{ // name -> schema-valid
+	"invalid-duplicate-detail-id.json":                true,
 	"invalid-duplicate-entry-id.json":                 true,
 	"invalid-hostile-sectiontype-constructor.json":    false,
 	"invalid-hostile-sectiontype-hasownproperty.json": false,

@@ -43,6 +43,7 @@ schema's, not this document's.
 | ------------------------------- | ----------------------------------------------- | ---------------------------------- | ------------ |
 | `font.family`                   | stable ID from the released font catalog        | `inter`                            | user, preset |
 | `font.baseSizePx`               | integer 10–20                                   | `14`                               | user, preset |
+| `font.textAlign`                | enum: `left`, `justify`, **optional**           | absent (renders `left`)            | user         |
 | `colors.primary`                | `#rrggbb`                                       | `#1a1a1a`                          | user, preset |
 | `colors.text`                   | `#rrggbb`                                       | `#1a1a1a`                          | user, preset |
 | `colors.background`             | `#rrggbb`                                       | `#ffffff`                          | user, preset |
@@ -122,6 +123,12 @@ Every size is a renderer-fixed multiple of `--fs-base`, which is
 
 `--lh-body` is `spacing.lineHeight`. `--lh-heading` is renderer-fixed at `1.2`.
 
+`font.textAlign` sets `--body-align`. `justify` justifies entry and summary body
+paragraphs and list items and sets `hyphens: auto`, which hyphenates by the
+resume's `lang`. Headings, the header, dates and meta lines, contact rows, and
+skill or language tags never justify. A template switch keeps the user's choice,
+so presets do not set it (ADR 0041).
+
 ### 3.2 Weights
 
 The renderer requests weights 400 and 700 and sets `font-synthesis: none`. The
@@ -160,7 +167,7 @@ reveals a detail, and `isHidden` still wins in every combination.
 | `header.detailsLayout` | `inline`  | details flow on one wrapping line, separated by `--gap-inline`    |
 |                        | `stacked` | each detail takes its own line, separated by `--gap-block`        |
 | `header.iconStyle`     | `none`    | no icon before a contact detail; the label or value stands alone  |
-|                        | `outline` | the stroked lucide glyph at `--icon-size`; replaces default label |
+|                        | `outline` | the contact glyph at `--icon-size`; replaces default label        |
 
 Absent `header` renders `left` / `inline` / `outline`, which is what every
 document rendered before the token existed.
@@ -172,7 +179,9 @@ and no value is ever hidden (ADR 0040).
 The enum is `none` | `outline`. Lucide is stroke-only, so a `solid` value would
 require a second icon family or a `fill: currentColor` hack that turns many
 marks into blobs. The schema and every preset therefore use `outline` for a
-visible header icon.
+visible header icon. The GitHub and X contacts are the exception: they render
+their filled brand marks from Simple Icons in the icon colour, because those
+brands have no stroked mark (ADR 0041).
 
 Two boundaries this token must not cross. `header.iconStyle` covers the header's
 contact icons only — it never suppresses a section's `iconKey`, which every

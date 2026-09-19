@@ -801,7 +801,7 @@ describe("Phase 5A publish and public wire contract", () => {
     expect(schemas.PublicPhoto.required).toEqual(["url"]);
 
     const exactLeafProperties: Record<string, string[]> = {
-      PublicPersonalDetail: ["id", "label", "type", "value"],
+      PublicPersonalDetail: ["id", "label", "type", "value", "display"],
       PublicPhoto: ["url", "crop"],
       PublicPhotoCrop: ["height", "width", "x", "y"],
       PublicYearMonth: ["m", "y"],

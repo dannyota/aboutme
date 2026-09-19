@@ -125,7 +125,7 @@ function minimalSectionPayload(sectionType: string) {
 
 function minimalValidResume(sectionType: string) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     personalDetails: { fullName: "Ada Lovelace", details: [] },
     content: { [sectionType]: minimalSectionPayload(sectionType) },
     customization: {

@@ -77,7 +77,7 @@ func jsonLDSameAs(details publicresume.PublicDetails) []string {
 	seen := make(map[string]struct{})
 	result := []string{}
 	for _, detail := range details.Value() {
-		if !isLinkContact(detail.Type) || !isHTTPSURL(detail.Value) {
+		if !isLinkContact(detail.Type, detail.Value) || !isHTTPSURL(detail.Value) {
 			continue
 		}
 		if _, exists := seen[detail.Value]; exists {

@@ -618,14 +618,14 @@ func TestResumeCreate_SeedVersionsPhotoRejectionAndBounds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reload v1 seed: %v", err)
 	}
-	if stored.StoredSchemaVersion != 2 || stored.Doc.SchemaVersion != 2 {
-		t.Fatalf("v1 seed stored versions = row %d doc %d, want current 2", stored.StoredSchemaVersion, stored.Doc.SchemaVersion)
+	if stored.StoredSchemaVersion != 3 || stored.Doc.SchemaVersion != 3 {
+		t.Fatalf("v1 seed stored versions = row %d doc %d, want current 3", stored.StoredSchemaVersion, stored.Doc.SchemaVersion)
 	}
 
-	for _, version := range []string{"1", "2"} {
+	for _, version := range []string{"1", "3"} {
 		var document map[string]any
 		fixture := v1
-		if version == "2" {
+		if version == "3" {
 			fixture, err = os.ReadFile("../../../../packages/schema/fixtures/minimal.json")
 			if err != nil {
 				t.Fatalf("read current fixture: %v", err)
@@ -794,8 +794,8 @@ func TestResumeMetadata_LanguageProjectionAndCompleteLegacyUpgrade(t *testing.T)
 	if err != nil {
 		t.Fatalf("reload upgraded resume: %v", err)
 	}
-	if stored.StoredSchemaVersion != 2 || stored.Revision != beforeRevision+1 {
-		t.Fatalf("upgraded row schema=%d revision=%d, want 2 and %d",
+	if stored.StoredSchemaVersion != 3 || stored.Revision != beforeRevision+1 {
+		t.Fatalf("upgraded row schema=%d revision=%d, want 3 and %d",
 			stored.StoredSchemaVersion, stored.Revision, beforeRevision+1)
 	}
 	profile := stored.Doc.Content["profile"].ProfileEntries[0]

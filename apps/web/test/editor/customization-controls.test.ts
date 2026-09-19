@@ -19,6 +19,7 @@ import { acceptedFixture } from './fixture';
 const paths = [
   'font.family',
   'font.baseSizePx',
+  'font.textAlign',
   'colors.primary',
   'colors.text',
   'colors.background',
@@ -640,6 +641,7 @@ function schemaKind(node: SchemaNode): CustomizationField['kind'] {
 
 function recordWithEveryCustomizationLeaf(): ResumeRecord {
   const record = recordFor();
+  record.current.document.customization.font.textAlign = 'left';
   record.current.document.customization.colors.accent = '#abcdef';
   record.current.document.customization.colors.surface = '#fedcba';
   record.current.document.customization.spacing.pageMargin = {

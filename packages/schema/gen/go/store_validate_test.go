@@ -743,3 +743,36 @@ func TestResumeSchemaPatterns_CompileUnderGoRE2(t *testing.T) {
 		}
 	}
 }
+
+// Old-client writes restore each detail's display by id
+// (docs/adr/0041-contact-link-display-and-body-justify.md), so detail ids must
+// be unique. The messages mirror test/store-validation.test.ts.
+func TestValidateDocument_DuplicateDetailID(t *testing.T) {
+	resume := loadResumeFixture(t, "store", "invalid-duplicate-detail-id.json")
+	var duplicates []ValidationIssue
+	for _, issue := range ValidateDocument(resume) {
+		if issue.Rule == "duplicate-detail-id" {
+			duplicates = append(duplicates, issue)
+		}
+	}
+	want := []ValidationIssue{
+		{
+			Rule:    "duplicate-detail-id",
+			Path:    "personalDetails.details[0].id",
+			Message: `personalDetails.details[0].id: detail id "4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f" is not unique — also used at personalDetails.details[2].id`,
+		},
+		{
+			Rule:    "duplicate-detail-id",
+			Path:    "personalDetails.details[2].id",
+			Message: `personalDetails.details[2].id: detail id "4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f" is not unique — also used at personalDetails.details[0].id`,
+		},
+	}
+	if !reflect.DeepEqual(duplicates, want) {
+		t.Fatalf("got %#v, want %#v", duplicates, want)
+	}
+
+	resume.PersonalDetails.Details[2].ID = "7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e"
+	if issues := ValidateDocument(resume); len(issues) != 0 {
+		t.Fatalf("unique detail ids reported %v", issues)
+	}
+}

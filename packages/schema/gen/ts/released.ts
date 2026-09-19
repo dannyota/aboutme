@@ -16,13 +16,13 @@ export interface ReleasedSchema {
 /**
  * The document-shape version resume.schema.json currently describes.
  */
-export const CURRENT_VERSION = 2;
+export const CURRENT_VERSION = 3;
 
 /** Wire versions accepted by production, authored independently of releases. */
-export const ACCEPTED_VERSIONS: readonly number[] = Object.freeze([1, 2]);
+export const ACCEPTED_VERSIONS: readonly number[] = Object.freeze([1, 2, 3]);
 
 /** Wire versions emitted by production, authored independently of releases. */
-export const EMITTED_VERSIONS: readonly number[] = Object.freeze([1, 2]);
+export const EMITTED_VERSIONS: readonly number[] = Object.freeze([1, 2, 3]);
 
 /**
  * Every released version, ascending. Frozen: the registry is a contract, not
@@ -40,6 +40,12 @@ export const RELEASED_SCHEMAS: readonly ReleasedSchema[] = Object.freeze([
     schema: "resume.v2.schema.json",
     goPackage: "gen/go/v2",
     tsTypes: "gen/ts/v2/resume.ts",
+  }),
+  Object.freeze({
+    version: 3,
+    schema: "resume.v3.schema.json",
+    goPackage: "gen/go/v3",
+    tsTypes: "gen/ts/v3/resume.ts",
   }),
 ]);
 

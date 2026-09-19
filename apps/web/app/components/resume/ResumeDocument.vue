@@ -105,9 +105,20 @@ a[href="#public-resume"]:focus {
 }
 
 .resume-document .resume-photo {
+  position: relative;
+  display: inline-block;
   width: var(--photo-size);
   height: var(--photo-size);
+  overflow: hidden;
   border-radius: var(--photo-radius);
+}
+
+.resume-document .resume-photo-image {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
 }
 
 .resume-document .resume-name {
@@ -215,6 +226,8 @@ a[href="#public-resume"]:focus {
 .resume-document .entry-body li {
   orphans: 2;
   widows: 2;
+  text-align: var(--body-align);
+  hyphens: var(--body-hyphens);
 }
 
 .resume-document .entry-body li,

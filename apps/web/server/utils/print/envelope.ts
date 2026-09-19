@@ -1,3 +1,5 @@
+import { CURRENT_VERSION } from '@aboutme/schema/released';
+
 import type { components } from '../../../app/api/generated/openapi';
 
 import validatePrintDocument from '#print-document-validator';
@@ -194,7 +196,9 @@ export function decodePrintEnvelope(source: string): PrintEnvelope {
       || !validatePrintDocument(envelope.document)
     ) fail();
     const document = envelope.document as PublicResumeDocument;
-    if (document.schemaVersion !== 2 || !validPhoto(document)) fail();
+    if (
+      document.schemaVersion !== CURRENT_VERSION || !validPhoto(document)
+    ) fail();
     return envelope as unknown as PrintEnvelope;
   } catch {
     return fail();

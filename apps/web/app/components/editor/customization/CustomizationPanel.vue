@@ -95,8 +95,24 @@ function commitEnum(
     return;
   }
   setLocalError(field.path, '');
+  if (field.path === 'font.textAlign') {
+    commitTextAlign(typed);
+    return;
+  }
   if (typed === valueAt(field.path)) return;
   commit([{ op: 'set', path: field.path, value: typed }]);
+}
+
+// Absent `font.textAlign` means left (ADR 0041), so Left clears the key.
+function commitTextAlign(value: string | number): void {
+  const stored = valueAt('font.textAlign');
+  if (value === 'justify') {
+    if (stored !== 'justify') {
+      commit([{ op: 'set', path: 'font.textAlign', value }]);
+    }
+  } else if (stored !== undefined) {
+    commit([{ op: 'unset', path: 'font.textAlign' }]);
+  }
 }
 
 function unsetSurfaceTarget(): void {
@@ -330,7 +346,8 @@ function customizationValue(): Customization | undefined {
                   :label="labelFor(pathFor(path))"
                   :model-value="typedDisplay(
                     pathFor(path),
-                    path === 'layout.surfaceTarget' ? 'none' : '',
+                    path === 'layout.surfaceTarget' ? 'none'
+                    : path === 'font.textAlign' ? 'left' : '',
                   )"
                   :name="path"
                   :options="valuesFor(fieldFor(path)!).map((value) => ({

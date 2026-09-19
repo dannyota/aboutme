@@ -60,7 +60,7 @@ function revealLabel(index: number): void {
 
 async function focusField(
   index: number,
-  field: 'value' | 'label' | 'type' | 'is-hidden',
+  field: 'value' | 'label' | 'type' | 'display' | 'is-hidden',
 ): Promise<void> {
   const detail = details.value[index];
   if (detail === undefined) return;
@@ -159,6 +159,21 @@ function changeHidden(id: string, isHidden: boolean): void {
   );
 }
 
+// Absent `display` means short (ADR 0041), so choosing short drops the key.
+function changeDisplay(id: string, display: LinkDisplay): void {
+  const detail = detailById(id);
+  if (detail === undefined || display === (detail.display ?? 'short')) return;
+  replace(
+    details.value.map((candidate) => {
+      if (candidate.id !== id) return candidate;
+      const { display: _display, ...withoutDisplay } = candidate;
+      return display === 'short'
+        ? withoutDisplay
+        : { ...withoutDisplay, display };
+    }),
+  );
+}
+
 function unsetLabel(id: string): void {
   const detail = detailById(id);
   if (detail?.label === undefined) return;
@@ -210,6 +225,21 @@ function isWebProfile(type: PersonalDetail['type']): boolean {
   );
 }
 
+// Only a detail that renders as a link has a display choice: the four URL
+// types, and a custom value with the renderer's exact https:// prefix.
+function rendersAsLink(detail: PersonalDetail): boolean {
+  return isWebProfile(detail.type)
+    || (detail.type === 'custom' && detail.value.startsWith('https://'));
+}
+
+type LinkDisplay = NonNullable<PersonalDetail['display']>;
+
+const displayOptions = [
+  { value: 'short', label: 'Short address' },
+  { value: 'full', label: 'Full address' },
+  { value: 'label', label: 'Label' },
+] as const;
+
 const typeOptions = [
   { value: 'email', label: 'Email' },
   { value: 'phone', label: 'Phone' },
@@ -217,7 +247,7 @@ const typeOptions = [
   { value: 'website', label: 'Website' },
   { value: 'linkedin', label: 'LinkedIn' },
   { value: 'github', label: 'GitHub' },
-  { value: 'twitter', label: 'Twitter' },
+  { value: 'twitter', label: 'X (Twitter)' },
   { value: 'custom', label: 'Custom' },
 ] as const;
 </script>
@@ -323,6 +353,17 @@ const typeOptions = [
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <SelectField
+          v-if="rendersAsLink(detail)"
+          label="Show as"
+          hint="Label shows the detail's label, or the type's name."
+          :model-value="detail.display ?? 'short'"
+          :options="displayOptions"
+          :control-attrs="{ 'data-detail-display': '' }"
+          @update:model-value="
+            changeDisplay(detail.id, $event as LinkDisplay)
+          "
+        />
         <TextField
           v-if="labelVisible(detail)"
           label="Label"

@@ -1,9 +1,9 @@
 // Code generated from resume.schema.json. DO NOT EDIT.
 
 /**
- * Document-shape version. This schema validates version 2 only; see docs/design/data.md#document-versions.
+ * Document-shape version. This schema validates version 3 only; see docs/design/data.md#document-versions.
  */
-export type SchemaVersion = 2;
+export type SchemaVersion = 3;
 export type Uuid = string;
 /**
  * Draft section selected by sectionType. Only sectionType and entries are required. See docs/design/data.md#resume-aggregate.
@@ -227,6 +227,10 @@ export interface PersonalDetail {
    */
   value: string;
   isHidden: boolean;
+  /**
+   * Anchor text for a detail that renders as a link: short (address without scheme or trailing slash), full (whole URL), or label (the detail's label, else the type's default label). Absent means short. No effect on a value that renders as text. See docs/adr/0041-contact-link-display-and-body-justify.md.
+   */
+  display?: "short" | "full" | "label";
 }
 /**
  * Map of at most 24 section keys to sections. The store enforces document-wide entry ID uniqueness. See docs/design/data.md#resume-aggregate.
@@ -289,6 +293,10 @@ export interface Customization {
       | "atkinson-hyperlegible-next"
       | "source-sans-3";
     baseSizePx: number;
+    /**
+     * Alignment of entry and summary body text; absent means left. Justify applies to body paragraphs and list items only. See docs/adr/0041-contact-link-display-and-body-justify.md.
+     */
+    textAlign?: "left" | "justify";
   };
   colors: {
     primary: HexColor;

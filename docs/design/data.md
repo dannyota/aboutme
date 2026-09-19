@@ -158,14 +158,25 @@ persists the projected current shape with revision compare-and-swap (CAS).
 Background backfill compares the observed schema version and revision. It does
 not bump the revision, and it loses cleanly to any concurrent resume write.
 Adjacent up and down converters are explicit, validated at every step, and
-tested in both directions. The v2 compatibility release accepts and emits both
-v1 and v2. Its only declared lossy emission is a v2 font ID that v1 cannot
-represent: emission uses the catalog entry's explicit v1 fallback, and every
-non-font value must remain equal. Old-client mutations preserve the stored v2
-font unless the operation explicitly targets that field. Retained types support
+tested in both directions. The current release is document v3, and the server
+accepts and emits v1, v2, and v3. It declares two lossy emissions, and every
+other value must remain equal:
+
+- Emitting v1 or v2 drops v3's `personalDetails.details[].display` and
+  `customization.font.textAlign`
+  ([ADR 0041](../adr/0041-contact-link-display-and-body-justify.md)).
+- Emitting v1 replaces a font ID that v1 cannot represent with the catalog
+  entry's explicit v1 fallback.
+
+Old-client mutations keep the stored font unless the operation explicitly
+targets that field. They always keep the stored `textAlign`, and each surviving
+detail's `display`, matched by its unique id. Retained types support
 compatibility testing; HTTP delta application may remain generic so handlers do
 not need one compiled code path per old version.
-[ADR 0017](../adr/0017-resume-document-versioning.md) records this boundary.
+[ADR 0017](../adr/0017-resume-document-versioning.md) records this boundary. A
+release that raises the document version cannot be rolled back once it has
+stored the new version; see the
+[production runbook](../runbooks/production.md#rollback).
 
 ## Schema and migrations
 

@@ -64,3 +64,19 @@ func TestJSONLDNondiscoverableUsesBaseCSP(t *testing.T) {
 		t.Fatalf("JSONLD(false) = %#v, want nil JSON/script and base CSP", got)
 	}
 }
+
+func TestJSONLDSameAsUsesTheRendererExactHTTPSPrefix(t *testing.T) {
+	got := jsonLDSameAs(publicresume.PresentPublicDetails([]publicresume.PublicPersonalDetail{
+		{Type: "custom", Value: "https://orcid.example/ada"},
+		{Type: "custom", Value: "HTTPS://upper.example/ada"},
+		{Type: "custom", Value: "javascript:alert(1)"},
+		{Type: "custom", Value: "//evil.example"},
+		{Type: "custom", Value: " https://space.example"},
+		{Type: "email", Value: "https://mail.example"},
+		{Type: "github", Value: "HTTPS://github.example/ada"},
+		{Type: "website", Value: "https://ada.example"},
+	}))
+	if len(got) != 2 || got[0] != "https://orcid.example/ada" || got[1] != "https://ada.example" {
+		t.Fatalf("sameAs = %v, want only exact lowercase https links", got)
+	}
+}

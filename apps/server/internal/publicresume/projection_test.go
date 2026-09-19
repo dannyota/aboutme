@@ -175,3 +175,37 @@ func TestProjectionEveryPublicLeafAndRichText(t *testing.T) {
 }
 
 func ptr(value string) *string { return &value }
+
+func TestProjectionCarriesV3DisplayAndTextAlign(t *testing.T) {
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug, lng := "ada", "en"
+	label, justify := schema.Label, schema.Justify
+	source := resume.Resume{
+		ID: uuid.New(), UserID: uuid.New(), Slug: &slug, Live: true, Revision: 7, Lng: &lng,
+		Doc: schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{
+			Details: []schema.PersonalDetail{
+				{ID: "labelled", Type: schema.Github, Value: "https://github.com/ada", Display: &label},
+				{ID: "plain", Type: schema.Website, Value: "https://ada.example"},
+			},
+		}, Customization: schema.Customization{Font: schema.Font{Family: schema.Inter, BaseSizePx: 14, TextAlign: &justify}}},
+	}
+	got, err := Project(source, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	details := got.Document.PersonalDetails.Details.Value()
+	if len(details) != 2 || details[0].Display == nil || *details[0].Display != "label" || details[1].Display != nil {
+		t.Fatalf("projected details = %#v", details)
+	}
+	if align := got.Document.Customization.Font.TextAlign; align == nil || *align != schema.Justify {
+		t.Fatalf("projected textAlign = %v", align)
+	}
+	label = schema.Full
+	justify = schema.TextAlignLeft
+	if *details[0].Display != "label" || *got.Document.Customization.Font.TextAlign != schema.Justify {
+		t.Fatal("projection shares pointers with its source")
+	}
+}

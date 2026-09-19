@@ -41,7 +41,7 @@ describe('contact chips', () => {
     },
   );
 
-  it.each(['email', 'phone', 'location', 'custom'] as const)(
+  it.each(['email', 'phone', 'location'] as const)(
     'keeps %s plain text',
     (type) => {
       const wrapper = mount(ContactChip, {

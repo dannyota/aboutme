@@ -96,7 +96,7 @@ func TestMarkdownEveryContactEntryAndDateFormGolden(t *testing.T) {
 	resume := publicresume.PublicResume{Document: publicresume.PublicResumeDocument{
 		PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Full", Details: publicresume.PresentPublicDetails([]publicresume.PublicPersonalDetail{
 			{Type: "email", Value: "mail@example.test"}, {Type: "phone", Value: "+1"}, {Type: "location", Value: "Hanoi"},
-			{Type: "website", Value: "https://site.test"}, {Type: "linkedin", Value: "https://linkedin.test"}, {Type: "github", Value: "https://github.test"}, {Type: "twitter", Value: "https://twitter.test"}, {Type: "custom", Value: "detail"}, {Type: "email", Label: ptr("Custom label"), Value: "custom@example.test"},
+			{Type: "website", Value: "https://site.test"}, {Type: "linkedin", Value: "https://linkedin.test"}, {Type: "github", Value: "https://github.test"}, {Type: "twitter", Value: "https://twitter.test"}, {Type: "custom", Value: "detail"}, {Type: "custom", Label: ptr("Scholar"), Value: "https://scholar.test/ada"}, {Type: "custom", Value: "HTTPS://upper.test"}, {Type: "custom", Value: "javascript:alert(1)"}, {Type: "email", Label: ptr("Custom label"), Value: "custom@example.test"},
 		})},
 		Content: publicresume.PublicContent{
 			"profile":     {SectionType: "profile", DisplayName: ptr("Profile"), ProfileEntries: []publicresume.PublicProfileEntry{{ID: "1", Text: ptr("Profile body")}}},

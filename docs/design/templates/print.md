@@ -171,9 +171,12 @@ general outbound network access. Everything the page needs must arrive with it.
 - `/print` awaits `document.fonts.ready` **and** decode of every image before
   signalling readiness to chromedp. Fonts alone are not enough; an undecoded
   image prints as empty space.
-- `photo.crop` is applied in CSS — `object-fit: cover` with `object-position`
-  computed from the crop rectangle — so the same source image crops identically
-  in all three targets. The renderer never rasterizes or re-crops.
+- `photo.crop` is applied in CSS, so the same source image crops identically in
+  all three targets. The photo box clips an absolutely positioned image sized
+  `1/width` by `1/height` of the box and offset by `-x/width` and `-y/height`,
+  so the crop rectangle fills the box. `object-fit: cover` keeps the image
+  aspect: a crop that is square in pixels is exact, and any other crop is
+  centred, never stretched. The renderer never rasterizes or re-crops.
 - Supply the photo at no less than twice `--photo-size` (192 px for a 96 px
   box). The PDF embeds the raster at its natural resolution, so a 96 px source
   prints visibly soft.

@@ -72,7 +72,8 @@ func projectPersonal(source schema.PersonalDetails, photoURL string) PublicPerso
 			if detail.IsHidden || detail.Value == "" {
 				continue
 			}
-			values = append(values, PublicPersonalDetail{ID: detail.ID, Label: clonePointer(detail.Label), Type: string(detail.Type), Value: detail.Value})
+			values = append(values, PublicPersonalDetail{ID: detail.ID, Label: clonePointer(detail.Label), Type: string(detail.Type),
+				Value: detail.Value, Display: projectDisplay(detail.Display)})
 		}
 		details = PresentPublicDetails(values)
 	}
@@ -184,8 +185,17 @@ func cloneStrings(source []string) []string {
 	return append([]string{}, source...)
 }
 
+func projectDisplay(source *schema.Display) *string {
+	if source == nil {
+		return nil
+	}
+	display := string(*source)
+	return &display
+}
+
 func cloneCustomization(source schema.Customization) schema.Customization {
 	out := source
+	out.Font.TextAlign = clonePointer(source.Font.TextAlign)
 	out.Colors.Accent = clonePointer(source.Colors.Accent)
 	out.Colors.Surface = clonePointer(source.Colors.Surface)
 	out.Header = clonePointer(source.Header)

@@ -124,6 +124,27 @@ func TestSplitResumeDocStripsPhoto(t *testing.T) {
         "type": "website",
         "value": "https://ada.example.com",
         "isHidden": false
+      },
+      {
+        "id": "5b0f3c1e-8d2a-4f6b-9c3e-1a2b3c4d5e6f",
+        "type": "github",
+        "value": "https://github.com/ada",
+        "isHidden": false,
+        "display": "label"
+      },
+      {
+        "id": "7c1e4d2f-9e3b-4a7c-8d4f-2b3c4d5e6f70",
+        "type": "twitter",
+        "value": "https://x.com/ada",
+        "isHidden": false,
+        "display": "full"
+      },
+      {
+        "id": "8d2f5e3a-af4c-4b8d-9e5a-3c4d5e6f7081",
+        "type": "custom",
+        "label": "Google Scholar",
+        "value": "https://scholar.example.com/ada",
+        "isHidden": false
       }
     ]
   }`)
@@ -252,7 +273,7 @@ func TestSeedIsIdempotentAndCleanupIsExact(t *testing.T) {
 	if err := db.QueryRowContext(ctx, `SELECT encoded_hash FROM password_credentials WHERE user_id = $1`, seedUser.ID).Scan(&originalHash); err != nil {
 		t.Fatalf("read original credential hash: %v", err)
 	}
-	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 2`, seedResumeID, seedUser.ID); n != 1 {
+	if n := countRows(ctx, t, db, `SELECT count(*) FROM resumes WHERE id = $1 AND user_id = $2 AND live = false AND slug IS NULL AND revision = 1 AND schema_version = 3`, seedResumeID, seedUser.ID); n != 1 {
 		t.Fatalf("seed resume rows = %d, want 1 private v2 resume at revision 1", n)
 	}
 
@@ -346,7 +367,7 @@ func TestSeedAndCleanupRefuseFixedResumeIDOwnedByAnotherUser(t *testing.T) {
 		INSERT INTO resumes
 			(id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
 			 schema_version, revision, personal_details, content, customization)
-		VALUES ($1, $2, 'Other resume', NULL, false, true, false, 2, 7, $3, $4, $5)`,
+		VALUES ($1, $2, 'Other resume', NULL, false, true, false, 3, 7, $3, $4, $5)`,
 		seedResumeID, otherUserID, personalDetails, content, customization)
 	if err != nil {
 		t.Fatalf("insert colliding resume: %v", err)

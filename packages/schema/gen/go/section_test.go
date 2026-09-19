@@ -434,7 +434,7 @@ func TestSectionValidate_RejectsMultipleEntriesPopulated(t *testing.T) {
 
 func TestResumeContent_RoundTripsThroughSection(t *testing.T) {
 	resume := Resume{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		PersonalDetails: PersonalDetails{
 			FullName: ptr("Jane Doe"),
 			Details:  []PersonalDetail{},

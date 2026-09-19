@@ -16,7 +16,7 @@ const labels: Record<PersonalDetail['type'], string> = {
   website: 'Website',
   linkedin: 'LinkedIn',
   github: 'GitHub',
-  twitter: 'Twitter',
+  twitter: 'X',
   custom: 'Detail',
 };
 const iconKeys: Record<PersonalDetail['type'], string> = {
@@ -34,26 +34,38 @@ const linkTypes = new Set<PersonalDetail['type']>([
   'linkedin',
   'github',
   'twitter',
+  'custom',
 ]);
+// The renderer re-checks the exact lowercase https:// prefix itself and never
+// trusts write-time validation (ADR 0013, ADR 0041).
 const isLink = computed(
   () =>
     linkTypes.has(props.detail.type)
     && props.detail.value.startsWith('https://'),
 );
+const iconKey = computed(() =>
+  props.detail.type === 'custom' && isLink.value
+    ? 'link'
+    : iconKeys[props.detail.type]);
 const label = computed(() => props.detail.label || labels[props.detail.type]);
+const display = computed(() =>
+  isLink.value ? props.detail.display ?? 'short' : 'short');
 // An icon already names a typed contact, so its default label would repeat
 // it. A user-set label, a custom detail's label, or an icon-free header keep
-// the label.
+// the label. In label display the label is the anchor text instead.
 const showLabel = computed(
   () =>
-    props.iconStyle === 'none'
-    || props.detail.type === 'custom'
-    || Boolean(props.detail.label),
+    display.value !== 'label'
+    && (props.iconStyle === 'none'
+      || props.detail.type === 'custom'
+      || Boolean(props.detail.label)),
 );
-// A link shows its address without the scheme or a trailing slash; the href
-// keeps the full URL.
+// Short display drops the scheme and one trailing slash; the href keeps the
+// full URL.
 const shownValue = computed(() => {
   if (!isLink.value) return props.detail.value;
+  if (display.value === 'label') return label.value;
+  if (display.value === 'full') return props.detail.value;
   const shown = props.detail.value.slice('https://'.length).replace(/\/$/u, '');
   return shown === '' ? props.detail.value : shown;
 });
@@ -63,7 +75,7 @@ const shownValue = computed(() => {
   <span class="contact-chip">
     <Icon
       v-if="iconStyle === 'outline'"
-      :icon-key="iconKeys[detail.type]"
+      :icon-key="iconKey"
     />
     <span
       v-if="showLabel"

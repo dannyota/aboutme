@@ -164,6 +164,39 @@ describe("store-layer validator: reversed date range (start > end)", () => {
   });
 });
 
+describe("store-layer validator: contact detail id uniqueness", () => {
+  // Old-client writes restore each detail's display by id
+  // (docs/adr/0041-contact-link-display-and-body-justify.md), so ids must be
+  // unique.
+  it("reports every occurrence of a repeated detail id", () => {
+    const issues = validateDocument(
+      fixture("store", "invalid-duplicate-detail-id.json"),
+    );
+    expect(issues.filter((i) => i.rule === "duplicate-detail-id")).toEqual([
+      {
+        rule: "duplicate-detail-id",
+        path: "personalDetails.details[0].id",
+        message:
+          'personalDetails.details[0].id: detail id "4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f" is not unique — also used at personalDetails.details[2].id',
+      },
+      {
+        rule: "duplicate-detail-id",
+        path: "personalDetails.details[2].id",
+        message:
+          'personalDetails.details[2].id: detail id "4f1c2d3e-5a6b-4c7d-8e9f-0a1b2c3d4e5f" is not unique — also used at personalDetails.details[0].id',
+      },
+    ]);
+  });
+
+  it("accepts unique detail ids and absent details", () => {
+    const doc = fixture("store", "invalid-duplicate-detail-id.json");
+    doc.personalDetails.details[2].id = "7b8c9d0e-1f2a-4b3c-9d4e-5f6a7b8c9d0e";
+    expect(validateDocument(doc)).toEqual([]);
+    delete doc.personalDetails.details;
+    expect(validateDocument(doc)).toEqual([]);
+  });
+});
+
 describe("store-layer validator: entry-id uniqueness across the whole resume (AC-DOC-002)", () => {
   it("rejects the same entry id reused in a different section — a single section's uniqueItems could never catch this", () => {
     const issues = validateDocument(

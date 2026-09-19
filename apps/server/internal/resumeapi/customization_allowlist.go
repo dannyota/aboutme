@@ -29,7 +29,7 @@ const (
 
 var fixedCustomizationAllowlist = customizationAllowlist{
 	Set: customizationPathSet{
-		"font.family": {}, "font.baseSizePx": {},
+		"font.family": {}, "font.baseSizePx": {}, "font.textAlign": {},
 		"colors.primary": {}, "colors.text": {}, "colors.background": {},
 		"colors.accent": {}, "colors.surface": {},
 		"spacing.sectionGap": {}, "spacing.entryGap": {}, "spacing.lineHeight": {},
@@ -41,13 +41,14 @@ var fixedCustomizationAllowlist = customizationAllowlist{
 		"pageFormat": {}, "dateFormat": {},
 	},
 	Unset: customizationPathSet{
-		"colors.accent": {}, "colors.surface": {},
+		"font.textAlign": {}, "colors.accent": {}, "colors.surface": {},
 		"spacing.pageMargin": {}, "header": {}, "layout.surfaceTarget": {},
 	},
 }
 
 var customizationSetValueKinds = map[string]customizationValueKind{
 	"font.family": customizationString, "font.baseSizePx": customizationInteger,
+	"font.textAlign": customizationString,
 	"colors.primary": customizationString, "colors.text": customizationString,
 	"colors.background": customizationString, "colors.accent": customizationString,
 	"colors.surface":     customizationString,

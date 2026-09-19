@@ -289,11 +289,11 @@ func splitDoc(t *testing.T, doc json.RawMessage) (pd, content, customization jso
 
 // --- Production declarations ---
 
-func TestDeclarations_ProductionSetsAreV1AndV2(t *testing.T) {
+func TestDeclarations_ProductionSetsAreV1ToV3(t *testing.T) {
 	t.Parallel()
 
-	if docmigrate.CurrentVersion != 2 {
-		t.Fatalf("CurrentVersion = %d, want 2", docmigrate.CurrentVersion)
+	if docmigrate.CurrentVersion != 3 {
+		t.Fatalf("CurrentVersion = %d, want 3", docmigrate.CurrentVersion)
 	}
 	for _, tc := range []struct {
 		name string
@@ -302,8 +302,8 @@ func TestDeclarations_ProductionSetsAreV1AndV2(t *testing.T) {
 		{"accepted", docmigrate.AcceptedVersions()},
 		{"emitted", docmigrate.EmittedVersions()},
 	} {
-		if !slices.Equal(tc.got, []int32{1, 2}) {
-			t.Errorf("%sVersions() = %v, want [1 2]", tc.name, tc.got)
+		if !slices.Equal(tc.got, []int32{1, 2, 3}) {
+			t.Errorf("%sVersions() = %v, want [1 2 3]", tc.name, tc.got)
 		}
 	}
 }
@@ -339,11 +339,11 @@ func TestDeclarations_ReturnedSlicesCannotMutateInternalState(t *testing.T) {
 	accepted[0] = 99
 	emitted[0] = 99
 
-	if got := docmigrate.AcceptedVersions(); !slices.Equal(got, []int32{1, 2}) {
-		t.Errorf("AcceptedVersions() = %v after mutating a returned copy, want [1 2]", got)
+	if got := docmigrate.AcceptedVersions(); !slices.Equal(got, []int32{1, 2, 3}) {
+		t.Errorf("AcceptedVersions() = %v after mutating a returned copy, want [1 2 3]", got)
 	}
-	if got := docmigrate.EmittedVersions(); !slices.Equal(got, []int32{1, 2}) {
-		t.Errorf("EmittedVersions() = %v after mutating a returned copy, want [1 2]", got)
+	if got := docmigrate.EmittedVersions(); !slices.Equal(got, []int32{1, 2, 3}) {
+		t.Errorf("EmittedVersions() = %v after mutating a returned copy, want [1 2 3]", got)
 	}
 }
 
@@ -373,7 +373,7 @@ func TestIdentityProjector_ProjectConvertsV1ToCurrent(t *testing.T) {
 		t.Fatalf("Project(parts, 1): %v", err)
 	}
 	assembled, err := json.Marshal(map[string]json.RawMessage{
-		"schemaVersion":   json.RawMessage("2"),
+		"schemaVersion":   json.RawMessage("3"),
 		"personalDetails": gotPD,
 		"content":         gotContent,
 		"customization":   gotCustomization,
@@ -416,7 +416,7 @@ func TestIdentityProjector_UnknownStoredVersion_FailsClosed(t *testing.T) {
 	p := docmigrate.NewIdentityProjector()
 	pd, content, customization := splitDoc(t, fullV1Doc(t))
 
-	for _, stored := range []int32{0, 3, 7} {
+	for _, stored := range []int32{0, 4, 7} {
 		if _, _, _, err := p.Project(pd, content, customization, stored); !errors.Is(err, docmigrate.ErrUnknownVersion) {
 			t.Errorf("Project(parts, %d) error = %v, want ErrUnknownVersion", stored, err)
 		}

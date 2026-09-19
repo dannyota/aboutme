@@ -38,6 +38,7 @@ describe('current document validation', () => {
     'invalid-missing-required.json',
     'store/invalid-layout-duplicate-across-arrays.json',
     'store/invalid-duplicate-entry-id.json',
+    'store/invalid-duplicate-detail-id.json',
     'store/invalid-personal-detail-url-scheme.json',
     'store/invalid-hostile-sectiontype-proto.json',
   ])('rejects invalid fixture %s', (name) => {

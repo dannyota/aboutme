@@ -530,6 +530,40 @@ func ValidatePhotoKeyTraversal(photo *Photo) []ValidationIssue {
 // order for valid UTF-8 (by construction) — the same total order TS's plain
 // `<`/`>` string comparison produces for the ASCII/BMP content this codebase
 // actually emits into Path/Rule/Message.
+// ValidateDetailIDUniqueness mirrors validation/store.ts's
+// validateDetailIdUniqueness. Old-client writes restore each detail's display
+// by id (docs/adr/0041-contact-link-display-and-body-justify.md), so detail
+// ids must be unique; every occurrence of a repeated id is reported.
+func ValidateDetailIDUniqueness(details []PersonalDetail) []ValidationIssue {
+	pathsByID := make(map[string][]string)
+	for i, d := range details {
+		pathsByID[d.ID] = append(pathsByID[d.ID], fmt.Sprintf("personalDetails.details[%d].id", i))
+	}
+	ids := make([]string, 0, len(pathsByID))
+	for id := range pathsByID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	var issues []ValidationIssue
+	for _, id := range ids {
+		paths := pathsByID[id]
+		if len(paths) <= 1 {
+			continue
+		}
+		sorted := append([]string(nil), paths...)
+		sort.Strings(sorted)
+		for _, path := range sorted {
+			issues = append(issues, ValidationIssue{
+				Rule: "duplicate-detail-id",
+				Path: path,
+				Message: fmt.Sprintf("%s: detail id %q is not unique — also used at %s",
+					path, id, formatOtherPaths(sorted, path)),
+			})
+		}
+	}
+	return issues
+}
+
 func ValidateDocument(r Resume) []ValidationIssue {
 	var issues []ValidationIssue
 	issues = append(issues, validateRichTextLengths(r.Content)...)
@@ -537,6 +571,7 @@ func ValidateDocument(r Resume) []ValidationIssue {
 	issues = append(issues, validateDateRanges(r.Content)...)
 	issues = append(issues, ValidateEntryIDUniqueness(r.Content)...)
 	issues = append(issues, ValidatePersonalDetailURLSchemes(r.PersonalDetails.Details)...)
+	issues = append(issues, ValidateDetailIDUniqueness(r.PersonalDetails.Details)...)
 	issues = append(issues, ValidatePhotoKeyTraversal(r.PersonalDetails.Photo)...)
 	sort.SliceStable(issues, func(i, j int) bool {
 		if issues[i].Path != issues[j].Path {

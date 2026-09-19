@@ -199,19 +199,19 @@ func TestRevisionSerializedAsString(t *testing.T) {
 	if _, err := h.pool.Exec(h.ctx, `UPDATE resumes SET revision = $1 WHERE id = $2`, revision, created.ID); err != nil {
 		t.Fatalf("seed large revision: %v", err)
 	}
-	get := resumeRequest(t, h, http.MethodGet, apiResumePath+"/"+created.ID.String(), "", 0, uuid.Nil, "2")
+	get := resumeRequest(t, h, http.MethodGet, apiResumePath+"/"+created.ID.String(), "", 0, uuid.Nil, "3")
 	if get.status != http.StatusOK || responseRevision(t, get.body) != fmt.Sprint(revision) {
 		t.Fatalf("GET large revision = %d %s", get.status, get.body)
 	}
-	list := resumeRequest(t, h, http.MethodGet, apiResumePath, "", 0, uuid.Nil, "2")
+	list := resumeRequest(t, h, http.MethodGet, apiResumePath, "", 0, uuid.Nil, "3")
 	if list.status != http.StatusOK || listResponseRevision(t, list.body) != fmt.Sprint(revision) {
 		t.Fatalf("list large revision = %d %s", list.status, list.body)
 	}
-	stale := resumeRequest(t, h, http.MethodPatch, apiResumePath+"/"+created.ID.String(), `{"title":"stale"}`, revision-1, uuid.New(), "2")
+	stale := resumeRequest(t, h, http.MethodPatch, apiResumePath+"/"+created.ID.String(), `{"title":"stale"}`, revision-1, uuid.New(), "3")
 	if stale.status != http.StatusPreconditionFailed || errorResponseRevision(t, stale.body) != fmt.Sprint(revision) {
 		t.Fatalf("412 large revision = %d %s", stale.status, stale.body)
 	}
-	written := resumeRequest(t, h, http.MethodPatch, apiResumePath+"/"+created.ID.String(), `{"title":"exact"}`, revision, uuid.New(), "2")
+	written := resumeRequest(t, h, http.MethodPatch, apiResumePath+"/"+created.ID.String(), `{"title":"exact"}`, revision, uuid.New(), "3")
 	if written.status != http.StatusOK || responseRevision(t, written.body) != fmt.Sprint(revision+1) ||
 		written.header.Get("ETag") != fmt.Sprintf(`"r%d"`, revision+1) {
 		t.Fatalf("write large revision = %d headers=%v body=%s", written.status, written.header, written.body)
@@ -239,7 +239,7 @@ func TestByteVsCodePointBounds(t *testing.T) {
 		if codePoints := 9_000; codePoints >= contract.richTextBytes || len(strings.Repeat("é", codePoints)) <= contract.richTextBytes {
 			t.Fatalf("UTF-8 fixture does not distinguish code points from bytes")
 		}
-		response := resumeRequest(t, h, http.MethodPatch, path, body, created.Revision, uuid.New(), "2")
+		response := resumeRequest(t, h, http.MethodPatch, path, body, created.Revision, uuid.New(), "3")
 		assertRouteError(t, response, http.StatusUnprocessableEntity, "document_invalid")
 		assertBoundsHTTPWriteState(t, h, before, "9,000-code-point rich text rejection")
 	})
@@ -250,13 +250,13 @@ func TestByteVsCodePointBounds(t *testing.T) {
 		path := apiResumePath + "/" + created.ID.String()
 		atLimit := strings.Repeat("😀", contract.titleCodePoints)
 		accepted := resumeRequest(t, h, http.MethodPatch, path,
-			string(mustResumeTestJSON(t, map[string]any{"title": atLimit})), created.Revision, uuid.New(), "2")
+			string(mustResumeTestJSON(t, map[string]any{"title": atLimit})), created.Revision, uuid.New(), "3")
 		if accepted.status != http.StatusOK {
 			t.Fatalf("%d-code-point astral title = %d %s, want 200", contract.titleCodePoints, accepted.status, accepted.body)
 		}
 		before := snapshotBoundsHTTPWriteState(t, h)
 		rejected := resumeRequest(t, h, http.MethodPatch, path,
-			string(mustResumeTestJSON(t, map[string]any{"title": atLimit + "😀"})), created.Revision+1, uuid.New(), "2")
+			string(mustResumeTestJSON(t, map[string]any{"title": atLimit + "😀"})), created.Revision+1, uuid.New(), "3")
 		assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 		assertBoundsHTTPWriteState(t, h, before, "astral title limit+1 rejection")
 	})
@@ -307,12 +307,12 @@ func testBoundsHTTPRequestBytes(t *testing.T, contract boundsHTTPContract) {
 	if len(body) != contract.requestBytes {
 		t.Fatalf("request fixture = %d bytes, want %d", len(body), contract.requestBytes)
 	}
-	accepted := resumeRequest(t, h, http.MethodPost, apiResumePath, body, 0, uuid.New(), "2")
+	accepted := resumeRequest(t, h, http.MethodPost, apiResumePath, body, 0, uuid.New(), "3")
 	if accepted.status != http.StatusCreated {
 		t.Fatalf("request at %d bytes = %d %s, want 201", contract.requestBytes, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
-	rejected := resumeRequest(t, h, http.MethodPost, apiResumePath, body+" ", 0, uuid.New(), "2")
+	rejected := resumeRequest(t, h, http.MethodPost, apiResumePath, body+" ", 0, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusRequestEntityTooLarge, "body_too_large")
 	assertBoundsHTTPWriteState(t, h, before, "request-byte limit+1 rejection")
 }
@@ -326,7 +326,7 @@ func testBoundsHTTPDocumentBytes(t *testing.T, contract boundsHTTPContract) {
 	}
 	path := apiResumePath + "/" + created.ID.String()
 	accepted := resumeRequest(t, h, http.MethodPatch, path,
-		`{"title":"aggregate bound accepted"}`, created.Revision, uuid.New(), "2")
+		`{"title":"aggregate bound accepted"}`, created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("document at %d bytes = %d %s, want 200", contract.documentBytes, accepted.status, accepted.body)
 	}
@@ -340,7 +340,7 @@ func testBoundsHTTPDocumentBytes(t *testing.T, contract boundsHTTPContract) {
 	overEntry.Description = &overDescription
 	body := string(mustResumeTestJSON(t, map[string]any{"entry": overEntry}))
 	before := snapshotBoundsHTTPWriteState(t, h)
-	rejected := resumeRequest(t, h, http.MethodPatch, path+"/entries/work", body, created.Revision+1, uuid.New(), "2")
+	rejected := resumeRequest(t, h, http.MethodPatch, path+"/entries/work", body, created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "document-byte limit+1 rejection")
 }
@@ -362,13 +362,13 @@ func testBoundsHTTPSections(t *testing.T, contract boundsHTTPContract) {
 	}
 	path := apiResumePath + "/" + created.ID.String() + "/structure"
 	atLimitBody := fmt.Sprintf(`{"commands":[{"op":"createSection","key":"x","sectionType":"work","column":"main","index":%d}]}`, contract.sections-1)
-	accepted := resumeRequest(t, h, http.MethodPatch, path, atLimitBody, created.Revision, uuid.New(), "2")
+	accepted := resumeRequest(t, h, http.MethodPatch, path, atLimitBody, created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("section %d = %d %s, want 200", contract.sections, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
 	overBody := fmt.Sprintf(`{"commands":[{"op":"createSection","key":"y","sectionType":"work","column":"main","index":%d}]}`, contract.sections)
-	rejected := resumeRequest(t, h, http.MethodPatch, path, overBody, created.Revision+1, uuid.New(), "2")
+	rejected := resumeRequest(t, h, http.MethodPatch, path, overBody, created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "section limit+1 rejection")
 }
@@ -389,13 +389,13 @@ func testBoundsHTTPEntries(t *testing.T, contract boundsHTTPContract) {
 	}
 	path := apiResumePath + "/" + created.ID.String() + "/entries/work"
 	accepted := resumeRequest(t, h, http.MethodPatch, path,
-		`{"entry":{"id":"20000000-0000-4000-8000-000000000064"}}`, created.Revision, uuid.New(), "2")
+		`{"entry":{"id":"20000000-0000-4000-8000-000000000064"}}`, created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("entry %d = %d %s, want 200", contract.entriesPerSection, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
 	rejected := resumeRequest(t, h, http.MethodPatch, path,
-		`{"entry":{"id":"20000000-0000-4000-8000-000000000065"}}`, created.Revision+1, uuid.New(), "2")
+		`{"entry":{"id":"20000000-0000-4000-8000-000000000065"}}`, created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "entry limit+1 rejection")
 }
@@ -406,12 +406,12 @@ func testBoundsHTTPRichText(t *testing.T, contract boundsHTTPContract) {
 	if len(atLimit) != contract.richTextBytes {
 		t.Fatalf("rich-text fixture = %d bytes, want %d", len(atLimit), contract.richTextBytes)
 	}
-	accepted := resumeRequest(t, h, http.MethodPatch, path, richTextEntryBody(t, atLimit), created.Revision, uuid.New(), "2")
+	accepted := resumeRequest(t, h, http.MethodPatch, path, richTextEntryBody(t, atLimit), created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("rich text at %d bytes = %d %s, want 200", contract.richTextBytes, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
-	rejected := resumeRequest(t, h, http.MethodPatch, path, richTextEntryBody(t, atLimit+"a"), created.Revision+1, uuid.New(), "2")
+	rejected := resumeRequest(t, h, http.MethodPatch, path, richTextEntryBody(t, atLimit+"a"), created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "rich-text byte limit+1 rejection")
 }
@@ -429,12 +429,12 @@ func testBoundsHTTPPersonalDetails(t *testing.T, contract boundsHTTPContract) {
 	bodyFor := func(count int) string {
 		return string(mustResumeTestJSON(t, map[string]any{"details": details[:count]}))
 	}
-	accepted := resumeRequest(t, h, http.MethodPatch, path, bodyFor(contract.personalDetails), created.Revision, uuid.New(), "2")
+	accepted := resumeRequest(t, h, http.MethodPatch, path, bodyFor(contract.personalDetails), created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("%d details = %d %s, want 200", contract.personalDetails, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
-	rejected := resumeRequest(t, h, http.MethodPatch, path, bodyFor(contract.personalDetails+1), created.Revision+1, uuid.New(), "2")
+	rejected := resumeRequest(t, h, http.MethodPatch, path, bodyFor(contract.personalDetails+1), created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "personal-details limit+1 rejection")
 }
@@ -445,13 +445,13 @@ func testBoundsHTTPTitle(t *testing.T, contract boundsHTTPContract) {
 	path := apiResumePath + "/" + created.ID.String()
 	atLimit := strings.Repeat("😀", contract.titleCodePoints)
 	accepted := resumeRequest(t, h, http.MethodPatch, path,
-		string(mustResumeTestJSON(t, map[string]any{"title": atLimit})), created.Revision, uuid.New(), "2")
+		string(mustResumeTestJSON(t, map[string]any{"title": atLimit})), created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("title at %d code points = %d %s, want 200", contract.titleCodePoints, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
 	rejected := resumeRequest(t, h, http.MethodPatch, path,
-		string(mustResumeTestJSON(t, map[string]any{"title": atLimit + "😀"})), created.Revision+1, uuid.New(), "2")
+		string(mustResumeTestJSON(t, map[string]any{"title": atLimit + "😀"})), created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "title code-point limit+1 rejection")
 }
@@ -466,13 +466,13 @@ func testBoundsHTTPLanguage(t *testing.T, contract boundsHTTPContract) {
 	created := h.createResume(t)
 	path := apiResumePath + "/" + created.ID.String()
 	accepted := resumeRequest(t, h, http.MethodPatch, path,
-		string(mustResumeTestJSON(t, map[string]any{"lng": atLimit})), created.Revision, uuid.New(), "2")
+		string(mustResumeTestJSON(t, map[string]any{"lng": atLimit})), created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("lng at %d code points = %d %s, want 200", contract.lngCodePoints, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
 	rejected := resumeRequest(t, h, http.MethodPatch, path,
-		string(mustResumeTestJSON(t, map[string]any{"lng": limitPlusOne})), created.Revision+1, uuid.New(), "2")
+		string(mustResumeTestJSON(t, map[string]any{"lng": limitPlusOne})), created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "lng limit+1 rejection")
 }
@@ -491,14 +491,14 @@ func testBoundsHTTPStructureCommands(t *testing.T, contract boundsHTTPContract) 
 	command := `{"op":"reorderColumn","column":"main","keys":["work"]}`
 	accepted := resumeRequest(t, h, http.MethodPatch, path,
 		`{"commands":`+repeatedJSONArray(command, contract.structureCommands)+`}`,
-		created.Revision, uuid.New(), "2")
+		created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("%d structure commands = %d %s, want 200", contract.structureCommands, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
 	rejected := resumeRequest(t, h, http.MethodPatch, path,
 		`{"commands":`+repeatedJSONArray(command, contract.structureCommands+1)+`}`,
-		created.Revision+1, uuid.New(), "2")
+		created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "structure-command limit+1 rejection")
 }
@@ -510,14 +510,14 @@ func testBoundsHTTPCustomizationDeltas(t *testing.T, contract boundsHTTPContract
 	delta := `{"op":"set","path":"font.baseSizePx","value":16}`
 	accepted := resumeRequest(t, h, http.MethodPatch, path,
 		`{"deltas":`+repeatedJSONArray(delta, contract.customizationDeltas)+`}`,
-		created.Revision, uuid.New(), "2")
+		created.Revision, uuid.New(), "3")
 	if accepted.status != http.StatusOK {
 		t.Fatalf("%d customization deltas = %d %s, want 200", contract.customizationDeltas, accepted.status, accepted.body)
 	}
 	before := snapshotBoundsHTTPWriteState(t, h)
 	rejected := resumeRequest(t, h, http.MethodPatch, path,
 		`{"deltas":`+repeatedJSONArray(delta, contract.customizationDeltas+1)+`}`,
-		created.Revision+1, uuid.New(), "2")
+		created.Revision+1, uuid.New(), "3")
 	assertRouteError(t, rejected, http.StatusUnprocessableEntity, "document_invalid")
 	assertBoundsHTTPWriteState(t, h, before, "customization-delta limit+1 rejection")
 }
@@ -563,7 +563,7 @@ func TestNoUnboundedWork(t *testing.T) {
 	before := snapshotBoundsHTTPWriteState(t, h)
 	for _, request := range requests {
 		t.Run(request.name, func(t *testing.T) {
-			response := resumeRequest(t, h, request.method, request.path, request.body, request.revision, uuid.New(), "2")
+			response := resumeRequest(t, h, request.method, request.path, request.body, request.revision, uuid.New(), "3")
 			assertRouteError(t, response, http.StatusUnprocessableEntity, "document_invalid")
 			assertBoundsHTTPWriteState(t, h, before, request.name+" rejection")
 		})
