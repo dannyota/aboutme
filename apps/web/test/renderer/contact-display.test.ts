@@ -1,7 +1,9 @@
 import type { PersonalDetail } from '@aboutme/schema';
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { computed } from 'vue';
 
+import { ResumeLngKey } from '../../app/components/resume/formatDate';
 import ContactChip from '../../app/components/resume/primitives/ContactChip.vue'; // eslint-disable-line max-len
 
 // Link display modes, custom https links, and brand marks
@@ -182,5 +184,19 @@ describe('brand marks', () => {
   it('labels twitter X when icons are off', () => {
     const wrapper = chip(detail('twitter', 'https://x.com/ada'), 'none');
     expect(wrapper.get('.contact-label').text()).toBe('X:');
+  });
+});
+
+describe('default labels in a Vietnamese resume', () => {
+  it.each([
+    ['phone', '+84 90 000 0000', 'Điện thoại:'],
+    ['location', 'Hà Nội', 'Địa chỉ:'],
+    ['email', 'an@example.com', 'Email:'],
+  ] as const)('labels %s in Vietnamese', (type, value, text) => {
+    const wrapper = mount(ContactChip, {
+      props: { detail: detail(type, value), iconStyle: 'none' },
+      global: { provide: { [ResumeLngKey as symbol]: computed(() => 'vi') } },
+    });
+    expect(wrapper.get('.contact-label').text()).toBe(text);
   });
 });

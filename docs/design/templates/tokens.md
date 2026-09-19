@@ -148,6 +148,10 @@ weights, but catalog admission remains license-only.
 | `titlecase` | `text-transform: capitalize` | `0`            |
 | `normal`    | none                         | `0`            |
 
+Title case is an English convention. A resume whose language is `vi` keeps
+`titlecase` headings as typed (`text-transform: none`), since Vietnamese
+capitalizes only the first word.
+
 `text-transform` is locale-sensitive in Chromium, so the resume root carries the
 server-normalized render language. A valid `resumes.lng` becomes its canonical
 BCP 47 form; null, empty, or invalid legacy data becomes `und`. Without this

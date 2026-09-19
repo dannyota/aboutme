@@ -151,6 +151,6 @@ export function resolveRenderModel(
     pageFormat: customization.pageFormat,
     lng: context.lng,
     mode: context.mode,
-    styles: useResumeStyles(customization),
+    styles: useResumeStyles(customization, context.lng),
   };
 }

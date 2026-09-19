@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Resume } from '@aboutme/schema';
-import { computed, type CSSProperties } from 'vue';
+import { computed, type CSSProperties, provide } from 'vue';
 
+import { ResumeLngKey } from './formatDate';
 import LayoutColumns from './LayoutColumns.vue';
 import PagedResume from './PagedResume.vue';
 import {
@@ -16,6 +17,7 @@ const props = defineProps<{
 }>();
 
 const model = computed(() => resolveRenderModel(props.document, props.context));
+provide(ResumeLngKey, computed(() => model.value.lng));
 const rootStyle = computed<CSSProperties>(() => ({
   ...model.value.styles.root,
   fontSynthesis: 'none',
@@ -130,6 +132,9 @@ body:has(> #public-resume) {
 .resume-document {
   box-sizing: border-box;
   min-height: 100%;
+  /* A ligature reaches a PDF text layer as one character (ff as U+FB00), so
+     a keyword search for "offensive" would miss it. */
+  font-variant-ligatures: no-common-ligatures;
   padding: var(--page-margin-y) var(--page-margin-x);
   color: var(--color-body);
   background: var(--color-surface);
@@ -151,6 +156,7 @@ body:has(> #public-resume) {
 .resume-document .resume-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  padding: var(--header-padding);
   margin-block-end: var(--gap-header);
   break-inside: avoid;
 }
@@ -357,6 +363,41 @@ body:has(> #public-resume) {
 .resume-document .entry-meta {
   color: var(--color-meta);
   font-size: var(--fs-meta);
+}
+
+/* Rich text sets its own rhythm instead of browser defaults: a list reads as
+   one block with its items close together, and paragraphs part by half a
+   line. The entry header to body gap is the entry's slot gap. */
+.resume-document .entry-header + .entry-body {
+  margin-block-start: var(--gap-block);
+}
+
+.resume-document .entry-body p {
+  margin: 0 0 0.5em;
+}
+
+.resume-document .entry-body ul,
+.resume-document .entry-body ol {
+  margin: 0.35em 0;
+  padding-inline-start: 1.25em;
+}
+
+.resume-document .entry-body li > p,
+.resume-document .entry-body li > ul,
+.resume-document .entry-body li > ol {
+  margin: 0;
+}
+
+.resume-document .entry-body li + li {
+  margin-block-start: 0.25em;
+}
+
+.resume-document .entry-body > :first-child {
+  margin-block-start: 0;
+}
+
+.resume-document .entry-body > :last-child {
+  margin-block-end: 0;
 }
 
 .resume-document .entry-body p,

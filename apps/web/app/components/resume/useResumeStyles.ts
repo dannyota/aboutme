@@ -52,8 +52,19 @@ const colorRoles = (
   surface: string,
 ): Record<string, string> => {
   const accent = customization.colors.accent ?? customization.colors.primary;
-  const heading = requiredClamp(customization.colors.primary, surface, 4.5);
-  const body = requiredClamp(customization.colors.text, surface, 4.5);
+  // On a dark surface a clamped ink turns a muddy mid-tone that passes the
+  // ratio but reads faint, so an ink that fails outright goes near white.
+  const dark
+    = contrastRatio('#ffffff', surface) > contrastRatio('#000000', surface);
+  const ink = (color: string, lightInk: string): string =>
+    dark && contrastRatio(color, surface) < 4.5
+      ? lightInk
+      : requiredClamp(color, surface, 4.5);
+  const heading = ink(customization.colors.primary, '#ffffff');
+  const body = ink(
+    customization.colors.text,
+    mixInSRGB('#ffffff', surface, 0.12),
+  );
   const meta = requiredClamp(
     mixInSRGB(customization.colors.text, surface, 0.25),
     surface,
@@ -82,7 +93,21 @@ const colorRoles = (
   };
 };
 
-export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
+// Title case is an English convention. Vietnamese capitalizes only the first
+// word, so a Vietnamese resume keeps its headings as typed.
+const headingTransform = (
+  style: Customization['heading']['style'],
+  lng: string,
+): string => {
+  if (style === 'uppercase') return 'uppercase';
+  if (style !== 'titlecase') return 'none';
+  return lng.toLowerCase().split('-')[0] === 'vi' ? 'none' : 'capitalize';
+};
+
+export function useResumeStyles(
+  tokens: ResumeStyleTokens,
+  lng = 'en',
+): ResumeStyles {
   const page = resolvePageGeometry(tokens);
   const target = effectiveSurfaceTarget(tokens);
   const pageSurface = tokens.colors.background;
@@ -116,6 +141,7 @@ export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
     // details, photo to name, header to body. A details row gap of 0.15 line
     // heights gives the rows the headline's line pitch.
     '--gap-header': `${tokens.spacing.sectionGap * 1.5}px`,
+    '--header-padding': '0',
     '--header-photo-gap': '0.9em',
     '--header-photo-gap-side': '1.25em',
     '--header-name-gap': '0.2em',
@@ -126,12 +152,7 @@ export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
     '--chip-icon-gap': '0.3em',
     '--page-margin-x': `${page.marginXmm}mm`,
     '--page-margin-y': `${page.marginYmm}mm`,
-    '--heading-transform':
-      tokens.heading.style === 'titlecase'
-        ? 'capitalize'
-        : tokens.heading.style === 'uppercase'
-          ? 'uppercase'
-          : 'none',
+    '--heading-transform': headingTransform(tokens.heading.style, lng),
     '--heading-letter-spacing':
       tokens.heading.style === 'uppercase' ? '0.06em' : '0',
     '--rule-width': tokens.heading.showRule ? '1px' : '0',
@@ -150,7 +171,11 @@ export function useResumeStyles(tokens: ResumeStyleTokens): ResumeStyles {
   };
   const styles: ResumeStyles = { root, page };
   if (target === 'header') {
-    styles.header = colorRoles(tokens, tokens.colors.surface!);
+    styles.header = {
+      ...colorRoles(tokens, tokens.colors.surface!),
+      // A filled plate needs air between its edge and the name and details.
+      '--header-padding': '1em 1.25em',
+    };
   }
   if (target === 'sidebar') {
     styles.sidebar = colorRoles(tokens, tokens.colors.surface!);

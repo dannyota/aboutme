@@ -61,6 +61,45 @@ describe('resume styles', () => {
     expect(root['--header-photo-gap']).toBe('0.9em');
   });
 
+  it('pads a header plate and inks a dark one near white', () => {
+    const band = {
+      ...customization,
+      colors: {
+        ...customization.colors,
+        primary: '#16273d',
+        surface: '#16273d',
+      },
+      layout: {
+        ...customization.layout,
+        columns: 1 as const,
+        surfaceTarget: 'header' as const,
+      },
+    };
+    const styles = useResumeStyles(band);
+    expect(styles.root['--header-padding']).toBe('0');
+    expect(styles.header?.['--header-padding']).toBe('1em 1.25em');
+    expect(styles.header?.['--color-heading']).toBe('#ffffff');
+    const light = useResumeStyles({
+      ...band,
+      colors: { ...band.colors, surface: '#f4efe6' },
+    });
+    expect(light.header?.['--color-heading']).toBe('#16273d');
+    expect(light.header?.['--header-padding']).toBe('1em 1.25em');
+  });
+
+  it('keeps Vietnamese headings as typed under titlecase', () => {
+    const titlecase = {
+      ...customization,
+      heading: { ...customization.heading, style: 'titlecase' as const },
+    };
+    expect(useResumeStyles(titlecase).root['--heading-transform'])
+      .toBe('capitalize');
+    expect(useResumeStyles(titlecase, 'vi').root['--heading-transform'])
+      .toBe('none');
+    expect(useResumeStyles(customization, 'vi').root['--heading-transform'])
+      .toBe('uppercase');
+  });
+
   it('justifies and hyphenates body text only for justify', () => {
     const left = useResumeStyles(customization).root;
     expect(left['--body-align']).toBe('left');

@@ -1,7 +1,10 @@
 package printrender
 
 import (
+	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/chromedp/cdproto/network"
@@ -154,4 +157,37 @@ func header(headers []*headerEntry, name string) string {
 		}
 	}
 	return ""
+}
+
+func TestFontPathsMatchTheWebFontCatalog(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "web", "app", "assets", "fonts", "catalog.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Entries []struct {
+			Assets []struct {
+				Path string `json:"path"`
+			} `json:"assets"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]struct{}{}
+	for _, entry := range catalog.Entries {
+		for _, asset := range entry.Assets {
+			want["/_nuxt/fonts/"+asset.Path] = struct{}{}
+		}
+	}
+	for path := range want {
+		if _, ok := fontPaths[path]; !ok {
+			t.Errorf("catalog font %s is not allowlisted for print", path)
+		}
+	}
+	for path := range fontPaths {
+		if _, ok := want[path]; !ok {
+			t.Errorf("allowlisted font %s is not in the catalog", path)
+		}
+	}
 }
