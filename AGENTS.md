@@ -66,6 +66,10 @@ pushes, tags, and deploys. A manager may spawn a sub-manager as a subagent
 (Claude Code allows three layers below the main conversation) or run it as a
 separate named session.
 
+Every new Claude Code session in this repository starts as the manager
+(`"agent": "manager"` in `.claude/settings.json`). A lane session takes its lane
+from its first brief; `claude --agent <role>` starts a session in another role.
+
 **Lane managers.** Long-running named sessions (`aboutme-backend`,
 `aboutme-frontend`, `aboutme-designer`, `aboutme-devops`) run on Opus as
 sub-managers for their lane. A lane manager takes briefs from the top manager,
