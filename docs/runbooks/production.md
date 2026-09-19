@@ -1,6 +1,6 @@
 # Production
 
-Status: **serving production** at `v0.3.30` (verified 2026-09-20). This runbook
+Status: **serving production** at `v0.3.31` (verified 2026-09-20). This runbook
 covers the single-host production environment at `https://aboutme.vn`. The
 [single-host design](../design/single-host-production.md) explains why it is
 shaped this way.
