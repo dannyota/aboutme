@@ -75,6 +75,7 @@ apps/web/app/components/editor/customization/labels.ts
 apps/web/app/components/editor/forms/ContactList.vue
 apps/web/app/components/editor/forms/DateRangeField.vue
 apps/web/app/components/editor/forms/PersonalDetailsPanel.vue
+apps/web/app/components/editor/forms/ResumeLanguageField.vue
 apps/web/app/components/editor/forms/SectionPanel.vue
 apps/web/app/components/editor/forms/YearMonthField.vue
 apps/web/app/components/editor/forms/entries/CertificateEntryFields.vue
@@ -95,6 +96,7 @@ apps/web/app/components/editor/list/ResumeList.vue
 apps/web/app/components/editor/photo/CropEditor.vue
 apps/web/app/components/editor/photo/PhotoPanel.vue
 apps/web/app/components/editor/previewProjection.ts
+apps/web/app/components/editor/resumeLanguage.ts
 apps/web/app/components/editor/richtext/RichTextEditor.vue
 apps/web/app/components/editor/richtext/lists.ts
 apps/web/app/components/editor/richtext/schema.ts
