@@ -89,5 +89,8 @@ export function suggestedTitle(
   if (request.kind === 'template') return `${request.template.name} resume`;
   const role = sampleRole(request.template, request.lng, request.lng);
   if (role === undefined) return `${request.template.name} resume`;
-  return request.lng === 'vi' ? `CV ${role.toLowerCase()}` : `${role} resume`;
+  // Only the first letter drops to lower case, so FP&A stays FP&A.
+  return request.lng === 'vi'
+    ? `CV ${role.charAt(0).toLocaleLowerCase('vi')}${role.slice(1)}`
+    : `${role} resume`;
 }

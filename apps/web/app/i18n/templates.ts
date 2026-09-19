@@ -29,6 +29,7 @@ export interface GalleryCopy {
     readonly layout: string;
     readonly oneColumn: string;
     readonly twoColumns: string;
+    readonly paper: string;
     readonly photo: string;
     readonly suitsPhoto: string;
     readonly photoNotRecommended: string;
@@ -45,14 +46,13 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
   vi: {
     title: 'Mẫu CV',
     seoTitle: 'Mẫu CV miễn phí',
-    lead: '20 mẫu miễn phí. Mỗi mẫu hiển thị bằng chính trình hiển thị của '
-      + 'aboutme, nên trang bạn thấy ở đây giống trang nhà tuyển dụng mở và '
-      + 'bản PDF.',
+    lead: '20 mẫu miễn phí. Trang bạn xem ở đây chính là trang nhà tuyển dụng '
+      + 'mở và bản PDF họ tải về.',
     filtersLabel: 'Lọc mẫu CV',
     all: (count) => `Tất cả ${count}`,
     filters: {
       'sample': 'Có CV mẫu',
-      'ats': 'Qua ATS',
+      'ats': 'Chuẩn ATS',
       'one-page': 'Một trang',
       'photo': 'Hợp với ảnh',
       'first-job': 'Mới tốt nghiệp',
@@ -65,11 +65,11 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       breadcrumb: 'Mẫu CV',
       seoTitle: (name) => `Mẫu CV ${name}`,
       sampleToggle: 'Ngôn ngữ của CV mẫu',
-      sampleLanguages: { vi: 'CV mẫu tiếng Việt', en: 'English' },
+      sampleLanguages: { vi: 'Tiếng Việt', en: 'Tiếng Anh' },
       tabsLabel: 'Cách xem CV mẫu',
       pageTab: 'Trang CV',
-      atsTab: 'Máy ATS đọc được gì',
-      atsHint: 'Chữ trong CV, theo thứ tự một hệ thống lọc hồ sơ đọc.',
+      atsTab: 'ATS đọc được gì',
+      atsHint: 'Nội dung CV theo đúng thứ tự phần mềm lọc hồ sơ (ATS) đọc.',
       sample: 'CV mẫu',
       fictional: '(nhân vật hư cấu)',
       pages: 'Số trang',
@@ -77,9 +77,10 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       layout: 'Bố cục',
       oneColumn: 'Một cột',
       twoColumns: 'Hai cột',
+      paper: 'Khổ giấy',
       photo: 'Ảnh',
-      suitsPhoto: 'Hợp với ảnh: trên đầu, trái hoặc phải tên',
-      photoNotRecommended: 'Không khuyến nghị ảnh',
+      suitsPhoto: 'Hợp với ảnh (đặt trên, bên trái hoặc bên phải tên)',
+      photoNotRecommended: 'Không nên dùng ảnh',
       twoColumnNote: [
         'Cổng tuyển dụng có thể đọc cột bên sau cột chính. Khi nộp qua cổng '
         + 'trực tuyến, hãy dùng ',
@@ -97,13 +98,13 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
   en: {
     title: 'Resume templates',
     seoTitle: 'Free resume templates',
-    lead: '20 free templates. Each one is drawn by aboutme’s own renderer, so '
-      + 'what you see here is what a recruiter opens and what the PDF prints.',
+    lead: '20 free templates. What you see here is exactly the page a '
+      + 'recruiter opens and the PDF they download.',
     filtersLabel: 'Filter templates',
     all: (count) => `All ${count}`,
     filters: {
-      'sample': 'With sample',
-      'ats': 'ATS-safe',
+      'sample': 'With a sample',
+      'ats': 'ATS-friendly',
       'one-page': 'One page',
       'photo': 'Suits a photo',
       'first-job': 'First job',
@@ -129,6 +130,7 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       layout: 'Layout',
       oneColumn: 'One column',
       twoColumns: 'Two columns',
+      paper: 'Paper',
       photo: 'Photo',
       suitsPhoto: 'Suits a photo: above, left, or right of the name',
       photoNotRecommended: 'Photo not recommended',

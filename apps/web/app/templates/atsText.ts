@@ -45,7 +45,7 @@ function sectionLines(
   entry: Entry,
   range: Range,
 ): void {
-  const value = entry as Record<string, unknown>;
+  const value = entry as unknown as Record<string, unknown>;
   const text = (key: string) =>
     typeof value[key] === 'string' ? value[key] as string : undefined;
   const dates = value.dates as Parameters<typeof formatDateRange>[0]

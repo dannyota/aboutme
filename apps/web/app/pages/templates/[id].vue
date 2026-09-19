@@ -90,8 +90,8 @@ useHead(computed(() => ({
 
 <template>
   <main
-    class="template-detail mx-auto w-full max-w-[1240px] px-4 pb-28 pt-8
-      sm:px-10 sm:pb-16 sm:pt-12"
+    class="template-detail mx-auto w-full max-w-7xl px-4 pb-28 pt-8
+      sm:px-8 sm:pb-16 sm:pt-12"
     :data-template="template.id"
     data-testid="template-detail"
   >
@@ -163,6 +163,14 @@ useHead(computed(() => ({
           </div>
           <div>
             <dt class="text-muted-foreground">
+              {{ detail.paper }}
+            </dt>
+            <dd data-fact="paper">
+              {{ template.pageFormat === 'letter' ? 'Letter' : 'A4' }}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-muted-foreground">
               {{ detail.photo }}
             </dt>
             <dd data-fact="photo">
@@ -189,24 +197,14 @@ useHead(computed(() => ({
         >
           {{ detail.fillerNote }}
         </p>
+        <!-- On phones this block is a bar holding the primary action only. -->
         <div class="template-detail__actions grid gap-3">
           <NuxtLink
-            v-if="isSample"
             :class="buttonVariants({ variant: 'default', size: 'lg' })"
-            data-action="use-sample"
-            :to="useSampleLink"
+            :data-action="isSample ? 'use-sample' : 'use-blank'"
+            :to="isSample ? useSampleLink : useBlankLink"
           >
-            {{ detail.useSample }}
-          </NuxtLink>
-          <NuxtLink
-            :class="isSample
-              ? 'justify-self-center text-sm text-primary underline '
-                + 'underline-offset-4'
-              : buttonVariants({ variant: 'default', size: 'lg' })"
-            data-action="use-blank"
-            :to="useBlankLink"
-          >
-            {{ detail.useBlank }}
+            {{ isSample ? detail.useSample : detail.useBlank }}
           </NuxtLink>
         </div>
         <p
@@ -215,6 +213,15 @@ useHead(computed(() => ({
         >
           {{ detail.privateCopy }}
         </p>
+        <NuxtLink
+          v-if="isSample"
+          class="justify-self-start text-sm text-primary underline
+            underline-offset-4"
+          data-action="use-blank"
+          :to="useBlankLink"
+        >
+          {{ detail.useBlank }}
+        </NuxtLink>
       </aside>
 
       <section

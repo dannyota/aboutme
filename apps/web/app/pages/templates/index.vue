@@ -56,7 +56,7 @@ useHead(computed(() => ({
 
 <template>
   <main
-    class="mx-auto w-full max-w-[1440px] px-4 py-10 sm:px-10 sm:py-14"
+    class="mx-auto w-full max-w-7xl px-4 py-10 sm:px-8 sm:py-14"
     data-testid="template-gallery"
   >
     <h1 class="text-3xl font-bold tracking-[-0.02em] sm:text-5xl">
