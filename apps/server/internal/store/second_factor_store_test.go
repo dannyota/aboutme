@@ -184,11 +184,11 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 	}
 
 	for attempt := 1; attempt <= 4; attempt++ {
-		updated, err := seed.RecordPendingAuthenticationFailure(ctx, store.RecordPendingAuthenticationFailureParams{
+		updated, recordErr := seed.RecordPendingAuthenticationFailure(ctx, store.RecordPendingAuthenticationFailureParams{
 			ID: pending.ID, AttemptedAt: now.Add(time.Duration(attempt) * time.Second),
 		})
-		if err != nil {
-			t.Fatalf("RecordPendingAuthenticationFailure(%d): %v", attempt, err)
+		if recordErr != nil {
+			t.Fatalf("RecordPendingAuthenticationFailure(%d): %v", attempt, recordErr)
 		}
 		if updated.FailedAttempts != int32(attempt) {
 			t.Errorf("failed attempts after %d = %d", attempt, updated.FailedAttempts)
@@ -205,8 +205,8 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 	}
 	t.Cleanup(func() { rollbackOAuthStoreTx(t, txB) })
 	var pidB int32
-	if err := txB.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pidB); err != nil {
-		t.Fatalf("B backend PID: %v", err)
+	if pidErr := txB.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pidB); pidErr != nil {
+		t.Fatalf("B backend PID: %v", pidErr)
 	}
 	fail := func(tx pgx.Tx) (store.PendingAuthentication, error) {
 		return store.New(tx).RecordPendingAuthenticationFailure(ctx, store.RecordPendingAuthenticationFailureParams{ID: pending.ID, AttemptedAt: now.Add(5 * time.Second)})
@@ -221,8 +221,8 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 	type outcome struct{ err error }
 	outcomeB := make(chan outcome, 1)
 	go func() {
-		_, err := fail(txB)
-		outcomeB <- outcome{err: err}
+		_, failureErr := fail(txB)
+		outcomeB <- outcome{err: failureErr}
 	}()
 	waitForBlockedBackend(ctx, t, pool, pidB)
 	if err := txA.Commit(ctx); err != nil {
@@ -365,8 +365,8 @@ func TestSecondFactorStore_FinalPasskeyRemovalHasOneConcurrentWinner(t *testing.
 		t.Fatalf("CreateWebAuthnCredential: %v", err)
 	}
 	t.Cleanup(func() {
-		if _, err := pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID); err != nil {
-			t.Errorf("cleanup user: %v", err)
+		if _, cleanupErr := pool.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, userID); cleanupErr != nil {
+			t.Errorf("cleanup user: %v", cleanupErr)
 		}
 	})
 
@@ -474,10 +474,10 @@ func TestSecondFactorStore_DoesNotUpdateProofsForDeadSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSession(idle): %v", err)
 	}
-	if _, err := q.UpdateCurrentSessionProofs(ctx, store.UpdateCurrentSessionProofsParams{
+	if _, updateErr := q.UpdateCurrentSessionProofs(ctx, store.UpdateCurrentSessionProofsParams{
 		ID: idleSession.ID, UserID: userID, AuthEpoch: 0, VerifiedAt: now, Now: now, IdleCutoff: idleCutoff,
-	}); !errors.Is(err, pgx.ErrNoRows) {
-		t.Errorf("idle session proof update error = %v, want pgx.ErrNoRows", err)
+	}); !errors.Is(updateErr, pgx.ErrNoRows) {
+		t.Errorf("idle session proof update error = %v, want pgx.ErrNoRows", updateErr)
 	}
 
 	rotatedSession, err := q.CreateSession(ctx, store.CreateSessionParams{
