@@ -27,7 +27,9 @@ answer to your parent: the owner, or the manager that briefed you.
 - Split work into small releases and disjoint file sets. Brief one role per set
   with the contract in AGENTS.md "Briefs and reports", and set the model on
   every dispatch.
-- Verify each report: reread the diff and rerun its key check before staging.
+- Verify each report by reading the diff and exact-commit CI evidence. Do
+  not rerun checks just to confirm another report. Limit all child managers
+  together to four workers and one bounded local check.
 - As a sub-manager or lane manager, stay inside the scope, paths, and version
   your brief names. Report exact file sets upward; only the top manager commits,
   pushes, tags, and deploys.
@@ -55,3 +57,9 @@ answer to your parent: the owner, or the manager that briefed you.
   or was skipped, say so with the output.
 - Answer in plain, short sentences. Lead with the result, skip preambles and
   recaps, and reference code as `path:line`.
+
+- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
+  Local tests, builds, lint suites, installs, and stacks need a manager brief
+  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
+  Read-only inspection and small formatting checks need no runtime stack.
+  Never repeat a failed or OOM command unchanged.

@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Full SHA of the trusted ancestor commit to compare with the candidate.
+        required: true
+        type: string
 
 # Least-privilege default for every job: the workflow only reads the repo. No
 # job writes back to it, and semgrep ci authenticates to its own platform via
@@ -274,8 +280,16 @@ jobs:
           # into the script: `${{ }}` expansion happens before the shell sees
           # the line, so event-derived values belong in env: as a rule, even
           # when — as here — they are commit SHAs.
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
         run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if ! [[ "$BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] ||
+              ! git cat-file -e "$BASE_SHA^{commit}" ||
+              ! git merge-base --is-ancestor "$BASE_SHA" "$GITHUB_SHA"; then
+              echo "Manual CI requires base_sha to be a full ancestor commit SHA." >&2
+              exit 1
+            fi
+          fi
           bash scripts/check-migrations-append-only.sh --commits "$BASE_SHA" HEAD
 
   # Released resume schemas are immutable (docs/design/data.md, "Document
@@ -298,8 +312,16 @@ jobs:
           # Passed through the environment rather than interpolated directly
           # into the script, for the same reason migrations-append-only does
           # it: `${{ }}` expansion happens before the shell sees the line.
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
         run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if ! [[ "$BASE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] ||
+              ! git cat-file -e "$BASE_SHA^{commit}" ||
+              ! git merge-base --is-ancestor "$BASE_SHA" "$GITHUB_SHA"; then
+              echo "Manual CI requires base_sha to be a full ancestor commit SHA." >&2
+              exit 1
+            fi
+          fi
           if ! base=$(git rev-parse --verify --quiet "$BASE_SHA^{commit}") ||
             ! head=$(git rev-parse --verify --quiet "HEAD^{commit}"); then
             echo "Could not resolve released-schema comparison commits." >&2
@@ -363,10 +385,11 @@ jobs:
   # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
   # Supply Chain covers dependency CVEs for Go and npm. It authenticates with
   # SEMGREP_APP_TOKEN, which GitHub withholds from FORK pull requests, so run
-  # it on push and same-repo PRs only — a fork PR would have no token and fail.
+  # it on pushes, manual runs, and same-repo PRs only. A fork PR would have no
+  # token and fail.
   semgrep:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

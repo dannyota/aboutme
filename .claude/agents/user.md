@@ -25,3 +25,9 @@ goal, not by the code.
   account and never create, publish, or delete a resume there.
 - Never edit files. Report each friction point with the steps, what you
   expected, what happened, a screenshot, a severity, and the owning role.
+
+- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
+  Local tests, builds, lint suites, installs, and stacks need a manager brief
+  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
+  Read-only inspection and small formatting checks need no runtime stack.
+  Never repeat a failed or OOM command unchanged.
