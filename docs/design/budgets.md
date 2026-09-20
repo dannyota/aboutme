@@ -120,6 +120,21 @@ Callers use these shared policies only after the caller integration that ADR
 | Register/forgot                                 | 5/h per email, 20/h per IP                          | Password rate policies                                   |
 | Verify/reset token consumption                  | 10/h per IP                                         | Password rate policies                                   |
 | Add/change/reauth                               | 10/h per (account, IP)                              | Password rate policies                                   |
+| Pending-auth token and CSRF secret              | 32 random bytes each; token stored as SHA-256       | Second-factor authentication                             |
+| Pending-auth lifetime / live rows / failures    | 5 min / 5 per account / 5 per row                   | Second-factor authentication                             |
+| Second-factor attempts                          | 10/15 min per (account, IP); 30/min per IP          | Second-factor rate policies                              |
+| Active passkeys per account                     | ≤ 5                                                 | Second-factor store                                      |
+| WebAuthn challenge / ceremony lifetime          | 32 random bytes / 5 min                             | WebAuthn service                                         |
+| WebAuthn ceremony token                         | 32 random bytes; stored as SHA-256                  | WebAuthn service and store                               |
+| WebAuthn credential ID / public key             | 16–1,023 / ≤ 2,048 bytes                            | WebAuthn service and store                               |
+| WebAuthn request body                           | ≤ 32,768 bytes                                      | Second-factor routes                                     |
+| WebAuthn client data / attestation object       | ≤ 4,096 / 16,384 bytes                              | WebAuthn decoder                                         |
+| WebAuthn authenticator data / signature         | ≤ 4,096 / 1,024 bytes                               | WebAuthn decoder                                         |
+| WebAuthn user handle                            | 32 bytes generated; ≤ 64 bytes received             | WebAuthn service                                         |
+| WebAuthn and pending cleanup                    | ≤ 200 expired rows per run                          | Second-factor store                                      |
+| Authentication security-event retention         | 180 days; 1,000/page; 10,000/run                    | Privacy sweep                                            |
+| Recovery-code set / entropy                     | 10 codes / 128 random bits per code                 | Second-factor recovery                                   |
+| Recovery verification request body              | ≤ 4,096 bytes                                       | Second-factor recovery route                             |
 | Local mail capture                              | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | Local mail capture                                       |
 | Capture ports                                   | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | Local mail capture                                       |
 | `/oauth/register` per IP                        | ≤ 5/hour                                            | OAuth and MCP rate policies                              |
@@ -260,6 +275,16 @@ attempt. The local capture retains at most 50 messages and 256 KiB total,
 rejects a message over 16 KiB, and binds loopback on the fixed native and HTTPS
 ports. Password rate policies share the 10,000-key bounded store and add the
 login, failure, register/forgot, token, and account-mutation budgets.
+
+**Passkey second-factor rows.** A pending authentication admits five total
+verification failures across methods, then is consumed. Account and IP limits
+apply after primary authentication, while the outer IP limit bounds distributed
+account probes. WebAuthn sizes are decoded-byte ceilings checked before CBOR,
+COSE, or signature work. The 32 KiB route body includes base64url expansion and
+JSON overhead. Five credentials bound every options response. Recovery codes
+carry enough random entropy for digest-only storage; display encoding does not
+reduce that entropy. Each admitted pending or ceremony creation runs both
+bounded expiry cleanups. The daily privacy sweep owns security-event retention.
 
 **Agent access rows.** This table is the enforcement authority for agent access.
 Registration is unauthenticated, so five per hour per IP admits a genuine first

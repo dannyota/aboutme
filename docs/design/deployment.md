@@ -211,6 +211,21 @@ locker. The Provider acquires the lock before it checks which migrations remain
 pending, applies that set, and releases it, so no runner acts on a stale pending
 list.
 
+### Authentication release fence
+
+Production passkey enrollment requires the monotonic DynamoDB minimum and
+serialized operation lock in the
+[passkey release-fence contract](passkey-release-fence.md). The AWS-login
+principal assumes the dedicated operator role, then the dedicated deploy role;
+application and other runtime roles cannot read or write the fence.
+
+Enrollment stays off until a healthy capable release raises the fence. Every
+supported rollback and restoration continues through the current deployer, not a
+script from the target release. DynamoDB cannot constrain a pre-fence script,
+OpenTofu, or an AWS account administrator. The production runbook and IAM
+boundary must remove ordinary direct mutations and require a compatibility proof
+before that privileged bypass.
+
 A breaking schema change uses expand, backfill, and contract across releases, so
 the previous server keeps working against the migrated schema. The deploy script
 does not test that, so redeploying an earlier image is a supported rollback only

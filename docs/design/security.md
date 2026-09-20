@@ -89,6 +89,24 @@ pending registrations, login, reset, and password add or change still work, and
 provider sign-up is unaffected. The capabilities read reports
 `passwordRegistration` so the web hides the sign-up form.
 
+## Passkey second factor
+
+An enrolled account requires a primary password or provider proof followed by a
+passkey or single-use recovery code. Primary proof creates a bounded pending
+authentication instead of a session. The pending cookie grants no access to
+`/me`, consent, resumes, MCP, or any other session route. V0.4.2 has no TOTP
+surface.
+
+The account authentication epoch binds sessions, connected-agent grants,
+authorization codes, pending authentications, and WebAuthn ceremonies. A factor
+change advances the epoch and revokes stale authority in the same transaction.
+Sensitive actions on an enrolled account require a current-epoch concrete
+session with both primary and factor proof inside the 15-minute window.
+[ADR 0048](../adr/0048-passkey-second-factor-authentication.md), the
+[shared design](second-factor-authentication.md), and the
+[v0.4.2 contract](passkey-second-factor-contract.md) own the exact flows and
+invariants.
+
 ## OAuth transaction
 
 All providers use authorization code with PKCE S256. OIDC providers also use a
@@ -146,15 +164,15 @@ SHA-256 hash. The cookie is
 `__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/` with no `Domain`
 attribute.
 
-| Control           | Rule                                                                                                                                |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                                               |
-| Absolute expiry   | 90 days                                                                                                                             |
-| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                                       |
-| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it                      |
-| Recent reauth     | 15 minutes                                                                                                                          |
-| Sensitive actions | Provider link, password add/change, account deletion, slug release, per-session revoke, and logout-everywhere require recent reauth |
-| Visibility        | Account settings list sessions and permit per-session revoke                                                                        |
+| Control           | Rule                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                                                          |
+| Absolute expiry   | 90 days                                                                                                                                        |
+| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                                                  |
+| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it                                 |
+| Recent reauth     | 15 minutes                                                                                                                                     |
+| Sensitive actions | Provider link, password add/change, factor management, account deletion, slug release, session/grant revoke, and consent require recent reauth |
+| Visibility        | Account settings list sessions and permit per-session revoke                                                                                   |
 
 Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
 Logout-everywhere revokes all sessions. Password reset revokes every session and
@@ -196,10 +214,10 @@ the deferred mobile client will make the same one-time choice.
 `internal/oauthsrv` is a first-party OAuth 2.1 authorization server. Agents are
 public clients that register dynamically, then obtain tokens through
 authorization code with PKCE. `code_challenge_method=S256` is required and
-`plain` is rejected. The authorize request is validated in full — `client_id`,
+`plain` is rejected. The authorize request is validated in full: `client_id`,
 exact registered `redirect_uri`, `response_type`, requested scopes, and the
-challenge — before any redirect or user interaction, so an open-redirect or
-`redirect_uri` substitution attempt fails closed.
+challenge. Validation finishes before any redirect or user interaction, so an
+open-redirect or `redirect_uri` substitution attempt fails closed.
 
 Authorization codes are single-use, expire in 60 seconds, and bind the client,
 user, scopes, challenge, and exact redirect URI. Replaying a consumed code
