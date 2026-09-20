@@ -33,6 +33,16 @@ type AuthEmailJob struct {
 	TerminalAt     *time.Time
 }
 
+type AuthenticationSecurityEvent struct {
+	ID              uuid.UUID
+	Kind            string
+	UserID          uuid.UUID
+	PasskeyID       uuid.UUID
+	StoredCounter   int64
+	ReceivedCounter int64
+	OccurredAt      time.Time
+}
+
 type IdempotencyRecord struct {
 	ID              uuid.UUID
 	UserID          uuid.UUID
@@ -93,6 +103,8 @@ type OAuthAuthorizationCode struct {
 	ExpiresAt      time.Time
 	ConsumedAt     *time.Time
 	IssuedFamilyID *uuid.UUID
+	GrantID        uuid.UUID
+	AuthEpoch      int64
 }
 
 type OAuthClient struct {
@@ -110,6 +122,7 @@ type OAuthGrant struct {
 	Scopes    string
 	CreatedAt time.Time
 	RevokedAt *time.Time
+	AuthEpoch int64
 }
 
 type OAuthToken struct {
@@ -170,6 +183,22 @@ type PasswordResetToken struct {
 	ExpiresAt   time.Time
 }
 
+type PendingAuthentication struct {
+	ID                uuid.UUID
+	TokenDigest       []byte
+	CSRFSecret        []byte
+	UserID            uuid.UUID
+	Purpose           string
+	AuthEpoch         int64
+	SessionID         *uuid.UUID
+	PrimaryVerifiedAt time.Time
+	ReturnPath        string
+	FailedAttempts    int32
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+	ConsumedAt        *time.Time
+}
+
 type PrivacySweepState struct {
 	Name      string
 	Cursor    string
@@ -201,20 +230,35 @@ type Resume struct {
 	FaviconEmoji    *string
 }
 
-type Session struct {
-	ID                 uuid.UUID
+type SecondFactorPolicy struct {
 	UserID             uuid.UUID
-	TokenHash          []byte
-	CSRFSecret         []byte
-	CreatedAt          time.Time
-	LastSeenAt         time.Time
-	ReauthenticatedAt  time.Time
-	AbsoluteExpiresAt  time.Time
-	RotationGraceUntil *time.Time
-	RevokedAt          *time.Time
-	UA                 *string
-	IP                 *netip.Addr
-	RotatedFrom        *uuid.UUID
+	WebauthnUserHandle []byte
+	EnabledAt          time.Time
+}
+
+type SecondFactorRecoveryCode struct {
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	CodeDigest []byte
+	CreatedAt  time.Time
+}
+
+type Session struct {
+	ID                     uuid.UUID
+	UserID                 uuid.UUID
+	TokenHash              []byte
+	CSRFSecret             []byte
+	CreatedAt              time.Time
+	LastSeenAt             time.Time
+	ReauthenticatedAt      time.Time
+	AbsoluteExpiresAt      time.Time
+	RotationGraceUntil     *time.Time
+	RevokedAt              *time.Time
+	UA                     *string
+	IP                     *netip.Addr
+	RotatedFrom            *uuid.UUID
+	AuthEpoch              int64
+	SecondFactorVerifiedAt *time.Time
 }
 
 type SlugTombstone struct {
@@ -231,4 +275,33 @@ type User struct {
 	AvatarKey *string
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	AuthEpoch int64
+}
+
+type WebauthnCeremony struct {
+	ID                      uuid.UUID
+	TokenDigest             []byte
+	ChallengeDigest         []byte
+	UserID                  uuid.UUID
+	Purpose                 string
+	AuthEpoch               int64
+	SessionID               *uuid.UUID
+	PendingAuthenticationID *uuid.UUID
+	ProposedUserHandle      []byte
+	CreatedAt               time.Time
+	ExpiresAt               time.Time
+	ConsumedAt              *time.Time
+}
+
+type WebauthnCredential struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	CredentialID   []byte
+	PublicKey      []byte
+	SignCount      int64
+	BackupEligible bool
+	BackupState    bool
+	Transports     []string
+	CreatedAt      time.Time
+	LastUsedAt     *time.Time
 }

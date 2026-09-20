@@ -45,7 +45,7 @@ func (q *Queries) GetAccountDeletedAuditEvent(ctx context.Context, id uuid.UUID)
 }
 
 const getAccountDeletionSessionForUpdate = `-- name: GetAccountDeletionSessionForUpdate :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at
 FROM sessions
 WHERE id = $1::uuid
   AND user_id = $2::uuid
@@ -74,6 +74,8 @@ func (q *Queries) GetAccountDeletionSessionForUpdate(ctx context.Context, arg Ge
 		&i.UA,
 		&i.IP,
 		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
 	)
 	return i, err
 }

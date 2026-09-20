@@ -11,8 +11,8 @@ import (
 
 // EnqueueRequest is the caller's full description of a job to enqueue. Exactly
 // one scope FK must be set, matching the kind (D3). TokenDigest is required
-// for verify/reset and must be absent for password_changed; authmail only ever
-// receives the 32-byte digest, never a raw token.
+// for verify/reset and must be absent for every user-scoped job; authmail only
+// ever receives the 32-byte digest, never a raw token.
 type EnqueueRequest struct {
 	JobID          uuid.UUID
 	Kind           Kind
@@ -50,8 +50,11 @@ func (o *Outbox) EnqueueTx(ctx context.Context, qtx *store.Queries, req EnqueueR
 	if err := validateRequest(req); err != nil {
 		return err
 	}
+	if err := validatePayload(req.Kind, req.Payload); err != nil {
+		return err
+	}
 	now := o.clock()
-	if err := validateExpiry(now, req.ExpiresAt); err != nil {
+	if err := validateExpiry(req.Kind, req.Payload, now, req.ExpiresAt); err != nil {
 		return err
 	}
 
@@ -117,7 +120,9 @@ func validateRequest(req EnqueueRequest) error {
 		if req.TokenDigest == nil {
 			return ErrScope
 		}
-	case KindPasswordChanged:
+	case KindPasswordChanged, KindSecondFactorEnabled, KindPasskeyAdded,
+		KindPasskeyRemoved, KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
 		if req.UserID == nil || *req.UserID == uuid.Nil {
 			return ErrScope
 		}
@@ -133,14 +138,31 @@ func validateRequest(req EnqueueRequest) error {
 	return nil
 }
 
-// validateExpiry enforces D3: a job must expire after creation and no later
-// than 24 hours after creation.
-func validateExpiry(now, expiresAt time.Time) error {
+// validateExpiry enforces the existing version 1 lifetime and the version 2
+// event-plus-24-hour expiry contract.
+func validateExpiry(kind Kind, payload Payload, now, expiresAt time.Time) error {
 	if !expiresAt.After(now) {
 		return ErrExpiry
 	}
 	if expiresAt.After(now.Add(24 * time.Hour)) {
 		return ErrExpiry
 	}
+	if isSecurityKind(kind) {
+		occurredAt, err := time.Parse(time.RFC3339, payload.OccurredAt)
+		if err != nil || !expiresAt.Equal(occurredAt.Add(24*time.Hour)) {
+			return ErrExpiry
+		}
+	}
 	return nil
+}
+
+func isSecurityKind(kind Kind) bool {
+	switch kind {
+	case KindSecondFactorEnabled, KindPasskeyAdded, KindPasskeyRemoved,
+		KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
+		return true
+	default:
+		return false
+	}
 }

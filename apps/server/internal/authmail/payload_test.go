@@ -140,8 +140,100 @@ func TestDecodePayloadStrictRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decodePayloadStrict: %v", err)
 	}
-	if got != p {
-		t.Fatalf("decoded = %+v, want %+v", got, p)
+	if got.Version != p.Version || got.To != p.To || got.Link != p.Link || got.OccurredAt != p.OccurredAt || got.RemainingRecoveryCodes != p.RemainingRecoveryCodes {
+		t.Fatalf("decoded public payload = %+v, want %+v", got, p)
+	}
+}
+
+func TestDecodePayloadStrictAcceptsVersionTwoSecurityPayload(t *testing.T) {
+	cases := []struct {
+		name string
+		kind Kind
+		json string
+	}{
+		{
+			name: "factor enabled",
+			kind: Kind("second_factor_enabled"),
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z"}`,
+		},
+		{
+			name: "recovery code used",
+			kind: Kind("recovery_code_used"),
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":9}`,
+		},
+		{
+			name: "attempts exhausted",
+			kind: Kind("second_factor_attempts_exhausted"),
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z"}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := decodePayloadStrict([]byte(tc.json))
+			if err != nil {
+				t.Fatalf("decodePayloadStrict: %v", err)
+			}
+			if err := validatePayload(tc.kind, payload); err != nil {
+				t.Fatalf("validatePayload: %v", err)
+			}
+		})
+	}
+}
+
+func TestDecodePayloadStrictRejectsMalformedVersionTwoSecurityPayload(t *testing.T) {
+	cases := []string{
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00.001Z"}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00+00:00"}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":10}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":null}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","credentialId":"forbidden"}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":"forbidden"}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":9}`,
+		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":""}`,
+	}
+	for _, input := range cases {
+		payload, err := decodePayloadStrict([]byte(input))
+		if err == nil {
+			err = validatePayload(Kind("recovery_code_used"), payload)
+		}
+		if err == nil {
+			t.Fatalf("security payload %s accepted", input)
+		}
+	}
+}
+
+func TestDecodePayloadStrictRejectsExplicitEmptyInapplicableFields(t *testing.T) {
+	cases := []struct {
+		name string
+		kind Kind
+		json string
+	}{
+		{
+			name: "security link",
+			kind: KindSecondFactorEnabled,
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":""}`,
+		},
+		{
+			name: "version one occurred at",
+			kind: KindPasswordChanged,
+			json: `{"version":1,"to":"alice@example.com","occurredAt":""}`,
+		},
+		{
+			name: "password changed link",
+			kind: KindPasswordChanged,
+			json: `{"version":1,"to":"alice@example.com","link":""}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload, err := decodePayloadStrict([]byte(tc.json))
+			if err != nil {
+				t.Fatalf("decodePayloadStrict: %v", err)
+			}
+			if err := validatePayload(tc.kind, payload); err == nil {
+				t.Fatal("validatePayload accepted an explicit inapplicable field")
+			}
+		})
 	}
 }
 

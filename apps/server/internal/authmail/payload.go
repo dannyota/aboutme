@@ -11,22 +11,31 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"time"
 )
 
-// Kind names the three closed transactional-email types. It is the single
-// authority for the auth_email_jobs.kind values (D3).
+// Kind names a closed transactional-email type. It is the single authority for
+// auth_email_jobs.kind values.
 type Kind string
 
 // Closed Kind values written to auth_email_jobs.kind (D3).
 const (
-	KindVerify          Kind = "verify"
-	KindReset           Kind = "reset"
-	KindPasswordChanged Kind = "password_changed"
+	KindVerify                        Kind = "verify"
+	KindReset                         Kind = "reset"
+	KindPasswordChanged               Kind = "password_changed"
+	KindSecondFactorEnabled           Kind = "second_factor_enabled"
+	KindPasskeyAdded                  Kind = "passkey_added"
+	KindPasskeyRemoved                Kind = "passkey_removed"
+	KindSecondFactorDisabled          Kind = "second_factor_disabled"
+	KindRecoveryCodesRegenerated      Kind = "recovery_codes_regenerated"
+	KindRecoveryCodeUsed              Kind = "recovery_code_used"
+	KindSecondFactorAttemptsExhausted Kind = "second_factor_attempts_exhausted"
 )
 
-// payloadVersion is the only supported payload version. Any other version is
-// rejected on both seal and open.
+// payloadVersion remains the closed payload version for existing email jobs.
 const payloadVersion = 1
+
+const securityPayloadVersion = 2
 
 // canonicalLinkOrigin is the hard-coded origin used to build verification and
 // reset links (ruling: a clearly-named placeholder, not a sender identity).
@@ -39,13 +48,19 @@ const (
 	resetLinkPrefix  = canonicalLinkOrigin + "/reset-password#token="
 )
 
-// Payload is the closed outbox plaintext. Link is empty (and omitted) for
-// password-changed; for verify/reset it is the canonical origin plus the D8
-// fragment route and token.
+// Payload is the closed outbox plaintext. Version 1 has a verification or
+// reset link when required. Version 2 has an exact UTC event time and only
+// recovery-code use carries a remaining count.
 type Payload struct {
-	Version int    `json:"version"`
-	To      string `json:"to"`
-	Link    string `json:"link,omitempty"`
+	Version                int    `json:"version"`
+	To                     string `json:"to"`
+	Link                   string `json:"link,omitempty"`
+	OccurredAt             string `json:"occurredAt,omitempty"`
+	RemainingRecoveryCodes *int   `json:"remainingRecoveryCodes,omitempty"`
+
+	linkPresent                   bool
+	occurredAtPresent             bool
+	remainingRecoveryCodesPresent bool
 }
 
 // Sealed is an encrypted payload plus the metadata the database stores beside
@@ -79,7 +94,10 @@ var (
 
 func validateKind(k Kind) error {
 	switch k {
-	case KindVerify, KindReset, KindPasswordChanged:
+	case KindVerify, KindReset, KindPasswordChanged,
+		KindSecondFactorEnabled, KindPasskeyAdded, KindPasskeyRemoved,
+		KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
 		return nil
 	default:
 		return ErrInvalidKind
@@ -137,13 +155,39 @@ func validatePayload(kind Kind, p Payload) error {
 	if err := validateKind(kind); err != nil {
 		return err
 	}
-	if p.Version != payloadVersion {
-		return ErrUnknownVersion
-	}
 	if err := validateEmail(p.To); err != nil {
 		return err
 	}
-	return validateLink(kind, p.Link)
+	switch kind {
+	case KindVerify, KindReset, KindPasswordChanged:
+		if p.Version != payloadVersion || p.occurredAtPresent || p.remainingRecoveryCodesPresent || p.OccurredAt != "" || p.RemainingRecoveryCodes != nil {
+			return ErrUnknownVersion
+		}
+		if kind == KindPasswordChanged && p.linkPresent {
+			return ErrInvalidLink
+		}
+		return validateLink(kind, p.Link)
+	default:
+		if p.Version != securityPayloadVersion || p.linkPresent || p.Link != "" || !isWholeSecondUTC(p.OccurredAt) {
+			return ErrUnknownVersion
+		}
+		if kind == KindRecoveryCodeUsed {
+			if !p.remainingRecoveryCodesPresent && p.RemainingRecoveryCodes == nil {
+				return ErrStrictJSON
+			}
+			if p.RemainingRecoveryCodes == nil || *p.RemainingRecoveryCodes < 0 || *p.RemainingRecoveryCodes > 9 {
+				return ErrStrictJSON
+			}
+		} else if p.remainingRecoveryCodesPresent || p.RemainingRecoveryCodes != nil {
+			return ErrStrictJSON
+		}
+		return nil
+	}
+}
+
+func isWholeSecondUTC(value string) bool {
+	parsed, err := time.Parse(time.RFC3339, value)
+	return err == nil && parsed.Location() == time.UTC && parsed.Nanosecond() == 0 && parsed.Format(time.RFC3339) == value
 }
 
 // validateKeyID matches the database key_id check: 1–64 printable ASCII bytes
@@ -183,7 +227,7 @@ func decodePayloadStrict(data []byte) (Payload, error) {
 	}
 
 	var p Payload
-	seen := make(map[string]bool, 3)
+	seen := make(map[string]bool, 5)
 	for dec.More() {
 		keyTok, keyErr := dec.Token()
 		if keyErr != nil {
@@ -217,6 +261,25 @@ func decodePayloadStrict(data []byte) (Payload, error) {
 				return Payload{}, ErrStrictJSON
 			}
 			p.Link = s
+			p.linkPresent = true
+		case "occurredAt":
+			var s string
+			if decodeErr := dec.Decode(&s); decodeErr != nil {
+				return Payload{}, ErrStrictJSON
+			}
+			p.OccurredAt = s
+			p.occurredAtPresent = true
+		case "remainingRecoveryCodes":
+			var raw json.RawMessage
+			if decodeErr := dec.Decode(&raw); decodeErr != nil || bytes.Equal(raw, []byte("null")) {
+				return Payload{}, ErrStrictJSON
+			}
+			var n int
+			if decodeErr := json.Unmarshal(raw, &n); decodeErr != nil {
+				return Payload{}, ErrStrictJSON
+			}
+			p.RemainingRecoveryCodes = &n
+			p.remainingRecoveryCodesPresent = true
 		default:
 			return Payload{}, ErrStrictJSON
 		}

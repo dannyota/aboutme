@@ -51,15 +51,18 @@ type Result struct {
 	IdempotencyBacklog              int64 `json:"idempotencyBacklog"`
 	IdempotencyOldestExpiredSeconds int64 `json:"idempotencyOldestExpiredSeconds"`
 
-	SessionMetadataRedacted     int64 `json:"sessionMetadataRedacted"`
-	SessionMetadataBacklog      int64 `json:"sessionMetadataBacklog"`
-	SessionOldestAgeSeconds     int64 `json:"sessionOldestAgeSeconds"`
-	LifecycleAuditDeleted       int64 `json:"lifecycleAuditDeleted"`
-	LifecycleAuditBacklog       int64 `json:"lifecycleAuditBacklog"`
-	LifecycleAuditOldestSeconds int64 `json:"lifecycleAuditOldestSeconds"`
-	CompletedMediaJobsDeleted   int64 `json:"completedMediaJobsDeleted"`
-	CompletedMediaJobsBacklog   int64 `json:"completedMediaJobsBacklog"`
-	CompletedMediaOldestSeconds int64 `json:"completedMediaOldestSeconds"`
+	SessionMetadataRedacted                   int64 `json:"sessionMetadataRedacted"`
+	SessionMetadataBacklog                    int64 `json:"sessionMetadataBacklog"`
+	SessionOldestAgeSeconds                   int64 `json:"sessionOldestAgeSeconds"`
+	LifecycleAuditDeleted                     int64 `json:"lifecycleAuditDeleted"`
+	LifecycleAuditBacklog                     int64 `json:"lifecycleAuditBacklog"`
+	LifecycleAuditOldestSeconds               int64 `json:"lifecycleAuditOldestSeconds"`
+	CompletedMediaJobsDeleted                 int64 `json:"completedMediaJobsDeleted"`
+	CompletedMediaJobsBacklog                 int64 `json:"completedMediaJobsBacklog"`
+	CompletedMediaOldestSeconds               int64 `json:"completedMediaOldestSeconds"`
+	AuthenticationSecurityEventsDeleted       int64 `json:"authenticationSecurityEventsDeleted"`
+	AuthenticationSecurityEventsBacklog       int64 `json:"authenticationSecurityEventsBacklog"`
+	AuthenticationSecurityEventsOldestSeconds int64 `json:"authenticationSecurityEventsOldestSeconds"`
 
 	OAuthTransactionsDeleted       int64 `json:"oauthTransactionsDeleted"`
 	OAuthAuthorizationCodesDeleted int64 `json:"oauthAuthorizationCodesDeleted"`
@@ -248,6 +251,12 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 	if err != nil {
 		return w.failed(result)
 	}
+	result.AuthenticationSecurityEventsDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteAuthenticationSecurityEventsPage(ctx, store.DeleteAuthenticationSecurityEventsPageParams{Cutoff: now.Add(-auditRetention), LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
 
 	if err := w.cleanupOAuth(runCtx, conn, q, now, &result); err != nil {
 		return w.failed(result)
@@ -391,12 +400,20 @@ func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now
 	if err != nil {
 		return err
 	}
+	events, err := q.GetAuthenticationSecurityEventsBacklog(ctx, store.GetAuthenticationSecurityEventsBacklogParams{
+		Now: now, Cutoff: now.Add(-auditRetention),
+	})
+	if err != nil {
+		return err
+	}
 	result.SessionMetadataBacklog = sessions.Backlog
 	result.SessionOldestAgeSeconds = sessions.OldestAgeSeconds
 	result.LifecycleAuditBacklog = audits.Backlog
 	result.LifecycleAuditOldestSeconds = audits.OldestAgeSeconds
 	result.CompletedMediaJobsBacklog = media.Backlog
 	result.CompletedMediaOldestSeconds = media.OldestAgeSeconds
+	result.AuthenticationSecurityEventsBacklog = events.Backlog
+	result.AuthenticationSecurityEventsOldestSeconds = events.OldestAgeSeconds
 	return nil
 }
 
@@ -429,6 +446,9 @@ func (w *Worker) logResult(ctx context.Context, command string, result Result) {
 		"completed_media_jobs_deleted", result.CompletedMediaJobsDeleted,
 		"completed_media_jobs_backlog", result.CompletedMediaJobsBacklog,
 		"completed_media_oldest_seconds", result.CompletedMediaOldestSeconds,
+		"authentication_security_events_deleted", result.AuthenticationSecurityEventsDeleted,
+		"authentication_security_events_backlog", result.AuthenticationSecurityEventsBacklog,
+		"authentication_security_events_oldest_seconds", result.AuthenticationSecurityEventsOldestSeconds,
 		"oauth_transactions_deleted", result.OAuthTransactionsDeleted,
 		"oauth_authorization_codes_deleted", result.OAuthAuthorizationCodesDeleted,
 		"oauth_tokens_deleted", result.OAuthTokensDeleted,

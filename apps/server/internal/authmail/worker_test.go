@@ -354,6 +354,19 @@ func enqueueVerifyJob(ctx context.Context, t *testing.T, qtx *store.Queries, rin
 	return jobID
 }
 
+func enqueueSecurityJob(ctx context.Context, t *testing.T, qtx *store.Queries, ring *KeyRing, clock func() time.Time, userID uuid.UUID, kind Kind) uuid.UUID {
+	t.Helper()
+	o := newTestOutbox(t, ring, clock)
+	jobID := uuid.New()
+	if err := o.EnqueueTx(ctx, qtx, EnqueueRequest{
+		JobID: jobID, Kind: kind, UserID: &userID, Payload: securityPayloadAt(kind, clock()),
+		ExpiresAt: clock().Add(24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("EnqueueTx: %v", err)
+	}
+	return jobID
+}
+
 func newTestWorker(t *testing.T, sp *store.Pool, q *store.Queries, ring *KeyRing, sender Sender, clock *testutil.Clock, jitter func(time.Duration) time.Duration, id uuid.UUID) *Worker {
 	t.Helper()
 	if jitter == nil {
@@ -427,6 +440,35 @@ func TestWorkerRunOnceSendsAndMarksSent(t *testing.T) {
 	}
 	if keyID != nil || nonce != nil || ct != nil {
 		t.Fatalf("sent job retains sealed/lease fields: key=%v nonce=%v ct=%v", keyID != nil, nonce != nil, ct != nil)
+	}
+}
+
+func TestWorkerDeliversSecurityJobUnderUserScopeLock(t *testing.T) {
+	ctx, sp, q := newWorkerPool(t)
+	clock := testutil.NewClockAtEpoch()
+	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
+	user, err := q.CreateUser(ctx, store.CreateUserParams{Email: uuid.NewString() + "@example.com", Name: "Worker Test"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	t.Cleanup(func() { _, _ = sp.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID) })
+	tx := beginWorkerTx(ctx, t, sp)
+	jobID := enqueueSecurityJob(ctx, t, q.WithTx(tx), ring, clock.Now, user.ID, KindRecoveryCodeUsed)
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+
+	sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
+	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
+	if err := w.RunOnce(ctx); err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if sender.count() != 1 || !strings.Contains(sender.calls[0].TextBody, "9 recovery codes remain") {
+		t.Fatalf("security delivery = %+v", sender.calls)
+	}
+	state, _ := jobState(ctx, t, sp, jobID)
+	if state != "sent" {
+		t.Fatalf("state = %q, want sent", state)
 	}
 }
 

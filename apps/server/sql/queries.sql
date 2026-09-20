@@ -46,9 +46,10 @@ VALUES ('identity_unlinked', sqlc.arg(occurred_at)::timestamptz, NULL);
 -- for a rotated successor. The partial unique index makes this an exact,
 -- one-successor lineage link.
 INSERT INTO sessions (
-    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip, rotated_from
+    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at,
+    absolute_expires_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 ) RETURNING *;
 
 -- name: GetSessionByTokenHash :one
@@ -603,6 +604,197 @@ RETURNING *;
 -- The user-row lock every session issuer and password mutation serializes on.
 SELECT * FROM users WHERE id = $1 FOR UPDATE;
 
+-- name: AdvanceUserAuthEpoch :one
+UPDATE users
+SET auth_epoch = auth_epoch + 1
+WHERE id = $1
+RETURNING *;
+
+-- name: GetSecondFactorPolicyForUpdate :one
+SELECT * FROM second_factor_policies WHERE user_id = $1 FOR UPDATE;
+
+-- name: ListWebAuthnCredentialsForUser :many
+SELECT * FROM webauthn_credentials
+WHERE user_id = sqlc.arg(user_id)::uuid
+ORDER BY created_at, id;
+
+-- name: GetWebAuthnCredentialForUpdate :one
+SELECT * FROM webauthn_credentials
+WHERE id = sqlc.arg(id)::uuid AND user_id = sqlc.arg(user_id)::uuid
+FOR UPDATE;
+
+-- name: UpdateWebAuthnCredentialAfterAssertion :one
+UPDATE webauthn_credentials
+SET sign_count = sqlc.arg(sign_count)::bigint,
+    backup_eligible = sqlc.arg(backup_eligible)::boolean,
+    backup_state = sqlc.arg(backup_state)::boolean,
+    last_used_at = sqlc.arg(last_used_at)::timestamptz
+WHERE id = sqlc.arg(id)::uuid
+  AND user_id = sqlc.arg(user_id)::uuid
+  AND (
+      (sign_count = 0 AND sqlc.arg(sign_count)::bigint = 0)
+      OR sqlc.arg(sign_count)::bigint > sign_count
+  )
+RETURNING *;
+
+-- name: CreateSecondFactorPolicy :one
+INSERT INTO second_factor_policies (user_id, webauthn_user_handle, enabled_at)
+VALUES ($1, $2, $3) RETURNING *;
+
+-- name: CreateWebAuthnCredential :one
+INSERT INTO webauthn_credentials (
+    user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *;
+
+-- name: CreateSecondFactorRecoveryCode :one
+INSERT INTO second_factor_recovery_codes (user_id, code_digest, created_at)
+VALUES ($1, $2, $3) RETURNING *;
+
+-- name: ConsumeSecondFactorRecoveryCode :one
+DELETE FROM second_factor_recovery_codes
+WHERE id = (
+    SELECT candidate.id FROM second_factor_recovery_codes AS candidate
+    WHERE candidate.user_id = sqlc.arg(user_id)::uuid
+      AND candidate.code_digest = sqlc.arg(code_digest)
+    FOR UPDATE
+)
+RETURNING *;
+
+-- name: CountSecondFactorRecoveryCodes :one
+SELECT count(*) FROM second_factor_recovery_codes WHERE user_id = $1;
+
+-- name: DeleteSecondFactorRecoveryCodesForUser :execrows
+DELETE FROM second_factor_recovery_codes WHERE user_id = $1;
+
+-- name: CreatePendingAuthentication :one
+INSERT INTO pending_authentications (
+    token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id,
+    primary_verified_at, return_path, created_at, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;
+
+-- name: GetPendingAuthenticationByTokenDigestForUpdate :one
+SELECT * FROM pending_authentications
+WHERE token_digest = sqlc.arg(token_digest)
+FOR UPDATE;
+
+-- name: RecordPendingAuthenticationFailure :one
+UPDATE pending_authentications
+SET failed_attempts = failed_attempts + 1,
+    consumed_at = CASE
+        WHEN failed_attempts + 1 = 5 THEN sqlc.arg(attempted_at)::timestamptz
+        ELSE consumed_at
+    END
+WHERE id = sqlc.arg(id)::uuid
+  AND consumed_at IS NULL
+  AND expires_at > sqlc.arg(attempted_at)::timestamptz
+  AND failed_attempts < 5
+RETURNING *;
+
+-- name: ConsumeOldestLivePendingAuthentication :one
+WITH live AS MATERIALIZED (
+    SELECT id, created_at FROM pending_authentications
+    WHERE user_id = sqlc.arg(user_id)::uuid
+      AND consumed_at IS NULL
+      AND expires_at > sqlc.arg(consumed_at)::timestamptz
+    ORDER BY created_at, id
+    FOR UPDATE
+), oldest AS (
+    SELECT id FROM live ORDER BY created_at, id LIMIT 1
+), at_capacity AS (
+    SELECT count(*) >= 5 AS reached FROM live
+)
+UPDATE pending_authentications AS target
+SET consumed_at = sqlc.arg(consumed_at)::timestamptz
+FROM oldest, at_capacity
+WHERE target.id = oldest.id
+  AND at_capacity.reached
+RETURNING target.*;
+
+-- name: ClaimPendingAuthentication :one
+UPDATE pending_authentications
+SET consumed_at = sqlc.arg(consumed_at)::timestamptz
+WHERE token_digest = sqlc.arg(token_digest)
+  AND consumed_at IS NULL
+  AND expires_at > sqlc.arg(consumed_at)::timestamptz
+RETURNING *;
+
+-- name: CreateWebAuthnCeremony :one
+INSERT INTO webauthn_ceremonies (
+    token_digest, challenge_digest, user_id, purpose, auth_epoch, session_id,
+    pending_authentication_id, proposed_user_handle, created_at, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;
+
+-- name: GetWebAuthnCeremonyByTokenDigestForUpdate :one
+SELECT * FROM webauthn_ceremonies
+WHERE token_digest = sqlc.arg(token_digest)
+FOR UPDATE;
+
+-- name: ConsumeLiveWebAuthnCeremoniesForBinding :execrows
+UPDATE webauthn_ceremonies
+SET consumed_at = sqlc.arg(consumed_at)::timestamptz
+WHERE user_id = sqlc.arg(user_id)::uuid
+  AND purpose = sqlc.arg(purpose)::text
+  AND session_id IS NOT DISTINCT FROM sqlc.narg(session_id)::uuid
+  AND pending_authentication_id IS NOT DISTINCT FROM sqlc.narg(pending_authentication_id)::uuid
+  AND consumed_at IS NULL
+  AND expires_at > sqlc.arg(consumed_at)::timestamptz;
+
+-- name: ClaimWebAuthnCeremony :one
+UPDATE webauthn_ceremonies
+SET consumed_at = sqlc.arg(consumed_at)::timestamptz
+WHERE token_digest = sqlc.arg(token_digest)
+  AND consumed_at IS NULL
+  AND expires_at > sqlc.arg(consumed_at)::timestamptz
+RETURNING *;
+
+-- name: UpdateCurrentSessionProofs :one
+UPDATE sessions
+SET reauthenticated_at = sqlc.arg(verified_at)::timestamptz,
+    second_factor_verified_at = sqlc.arg(verified_at)::timestamptz
+WHERE id = sqlc.arg(id)::uuid
+  AND user_id = sqlc.arg(user_id)::uuid
+  AND auth_epoch = sqlc.arg(auth_epoch)::bigint
+  AND revoked_at IS NULL
+  AND last_seen_at >= sqlc.arg(idle_cutoff)::timestamptz
+  AND absolute_expires_at >= sqlc.arg(now)::timestamptz
+  AND (rotation_grace_until IS NULL OR rotation_grace_until >= sqlc.arg(now)::timestamptz)
+RETURNING *;
+
+-- name: DeleteExpiredPendingAuthentications :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM pending_authentications
+    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY expires_at, id
+    LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM pending_authentications AS target USING candidates
+WHERE target.id = candidates.id;
+
+-- name: DeleteExpiredWebAuthnCeremonies :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM webauthn_ceremonies
+    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY expires_at, id
+    LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM webauthn_ceremonies AS target USING candidates
+WHERE target.id = candidates.id;
+
+-- name: InsertPasskeyCounterSecurityEvent :one
+INSERT INTO authentication_security_events (
+    kind, user_id, passkey_id, stored_counter, received_counter, occurred_at
+) VALUES ('passkey_counter_non_increasing', $1, $2, $3, $4, $5) RETURNING *;
+
+-- name: DeleteWebAuthnCredentialForUser :one
+DELETE FROM webauthn_credentials
+WHERE id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: DeleteSecondFactorPolicyForUser :execrows
+DELETE FROM second_factor_policies WHERE user_id = $1;
+
 -- name: GetUserByCanonicalEmail :one
 -- Ownership read before a new-account insert. The caller passes the canonical
 -- lowercase form; users.email is citext so the comparison is already
@@ -880,12 +1072,13 @@ DELETE FROM oauth_clients WHERE id = ANY(sqlc.arg(ids)::uuid[]);
 -- agent carries.
 INSERT INTO oauth_authorization_codes (
     code_digest, client_id, user_id, scopes, code_challenge, redirect_uri,
-    created_at, expires_at
+    created_at, expires_at, grant_id, auth_epoch
 ) VALUES (
     sqlc.arg(code_digest), sqlc.arg(client_id), sqlc.arg(user_id), sqlc.arg(scopes),
     sqlc.arg(code_challenge), sqlc.arg(redirect_uri),
     sqlc.arg(created_at)::timestamptz,
-    sqlc.arg(created_at)::timestamptz + interval '60 seconds'
+    sqlc.arg(created_at)::timestamptz + interval '60 seconds',
+    sqlc.narg(grant_id)::uuid, sqlc.narg(auth_epoch)::bigint
 )
 RETURNING *;
 
@@ -938,13 +1131,13 @@ WHERE target.id = candidates.id;
 -- rule the database enforces. created_at is never rewritten -- the settings
 -- list shows when the agent was first connected, not when it was last
 -- re-approved.
-INSERT INTO oauth_grants (user_id, client_id, scopes, created_at)
+INSERT INTO oauth_grants (user_id, client_id, scopes, created_at, auth_epoch)
 VALUES (
     sqlc.arg(user_id), sqlc.arg(client_id), sqlc.arg(scopes),
-    sqlc.arg(created_at)::timestamptz
+    sqlc.arg(created_at)::timestamptz, sqlc.arg(auth_epoch)::bigint
 )
 ON CONFLICT (user_id, client_id) WHERE revoked_at IS NULL
-DO UPDATE SET scopes = EXCLUDED.scopes
+DO UPDATE SET scopes = EXCLUDED.scopes, auth_epoch = EXCLUDED.auth_epoch
 RETURNING *;
 
 -- name: GetLiveOAuthGrant :one
