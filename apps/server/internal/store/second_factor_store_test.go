@@ -225,14 +225,14 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 		outcomeB <- outcome{err: failureErr}
 	}()
 	waitForBlockedBackend(ctx, t, pool, pidB)
-	if err := txA.Commit(ctx); err != nil {
-		t.Fatalf("A commit: %v", err)
+	if commitErr := txA.Commit(ctx); commitErr != nil {
+		t.Fatalf("A commit: %v", commitErr)
 	}
 	if got := <-outcomeB; !errors.Is(got.err, pgx.ErrNoRows) {
 		t.Errorf("B failure error = %v, want pgx.ErrNoRows", got.err)
 	}
-	if err := txB.Rollback(ctx); err != nil {
-		t.Fatalf("B rollback: %v", err)
+	if rollbackErr := txB.Rollback(ctx); rollbackErr != nil {
+		t.Fatalf("B rollback: %v", rollbackErr)
 	}
 	stored, err := seed.GetPendingAuthenticationByTokenDigestForUpdate(ctx, pending.TokenDigest)
 	if err != nil {
