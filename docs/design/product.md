@@ -182,16 +182,19 @@ fence and its 60-second cache trade-off.
   targeted within 24 hours, and expiry from the 30-day backup schedule. An
   overdue physical delete is audited and retried; it does not restore access.
 - The homepage, authentication and recovery pages, legal pages, template
-  gallery, and resume workspace support Vietnamese and English. The resume
-  workspace includes the list, creation, editor, publish, owner PDF export, and
-  shared account-menu chrome. Vietnamese is the default; the English toggle is
-  stored in the `aboutme-locale` cookie. Settings, account destination pages,
-  connected-agent controls, and consent stay English. Interface language is
-  independent from resume language and never changes authored or default resume
-  data. Public resume chrome follows resume language. Vietnamese resume content
-  is a first-class fixture and fallback target because the initial community is
-  Vietnamese. Other scripts remain valid content; font choices state measured
-  coverage instead of claiming universal coverage
-  ([ADR 0047](../adr/0047-bilingual-resume-workspace.md)).
+  gallery, resume workspace, account settings, and agent consent support
+  Vietnamese and English. The resume workspace includes the list, creation,
+  editor, publish, owner PDF export, and shared account-menu chrome. Account
+  settings include sessions, password, identities, privacy, and connected-agent
+  controls. Vietnamese is the default; the English toggle is stored in the
+  `aboutme-locale` cookie. Interface language is independent from resume
+  language and never changes authored or default resume data. Public resume
+  chrome follows resume language. Vietnamese resume content is a first-class
+  fixture and fallback target because the initial community is Vietnamese. Other
+  scripts remain valid content; font choices state measured coverage instead of
+  claiming universal coverage. The contracts live in
+  [the resume workspace localization design](editor-localization.md),
+  [the account localization design](account-localization.md), and
+  [ADR 0047](../adr/0047-bilingual-resume-workspace.md).
 - Accessibility is a release requirement for the editor, publish flow, public
   page, and generated artifacts.

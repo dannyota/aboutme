@@ -36,10 +36,10 @@ type fixtureAccount struct {
 var fixtureUser = fixtureAccount{
 	ID:             uuid.MustParse("53000000-0000-4000-8000-000000000001"),
 	IdentityID:     uuid.MustParse("53000000-0000-4000-8000-000000000011"),
-	Email:          "bob@example.invalid",
-	Name:           "Bob Local",
+	Email:          "mcp-proof@example.invalid",
+	Name:           "MCP Proof",
 	Provider:       "google",
-	ProviderUserID: "uat-google-003",
+	ProviderUserID: "uat-google-006",
 }
 
 func parseConfig(args []string) (string, Config, error) {

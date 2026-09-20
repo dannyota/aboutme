@@ -26,16 +26,12 @@ export function pageTitle(name: string): string {
   return `${name} · ${siteName}`;
 }
 
-/** Titles for the English-only application pages. */
-export const appTitles = {
-  settings: pageTitle('Settings'),
-  authorize: pageTitle('Authorize an agent'),
-} as const;
-
 type WorkspaceTitles = {
   readonly resumes: string;
   readonly newResume: string;
   readonly editor: string;
+  readonly settings: string;
+  readonly authorize: string;
 };
 
 export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
@@ -43,11 +39,15 @@ export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
     resumes: pageTitle('CV'),
     newResume: pageTitle('Tạo CV'),
     editor: pageTitle('CV'),
+    settings: pageTitle('Cài đặt'),
+    authorize: pageTitle('Cấp quyền cho tác nhân'),
   },
   en: {
     resumes: pageTitle('Resumes'),
     newResume: pageTitle('New resume'),
     editor: pageTitle('Resume'),
+    settings: pageTitle('Settings'),
+    authorize: pageTitle('Authorize an agent'),
   },
 };
 

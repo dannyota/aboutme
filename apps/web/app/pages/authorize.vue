@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import {
   type OAuthConsentDecision,
   type OAuthConsentRequest,
@@ -8,17 +9,19 @@ import {
 } from '../composables/useOAuthConsent';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
-import { appTitles } from '@/i18n/meta';
+import { consentCopy } from '@/i18n/consent';
+import { workspaceTitles } from '@/i18n/meta';
 
-useHead({ title: appTitles.authorize });
+const { locale } = useLocale();
+const copy = computed(() => consentCopy[locale.value]);
+
+useHead({ title: computed(() => workspaceTitles[locale.value].authorize) });
 
 const route = useRoute();
 const consent = useOAuthConsent();
 
 type PageState = 'loading' | 'ready' | 'invalid' | 'unavailable';
 
-const INVALID_COPY = 'This authorization request is invalid.';
-const UNAVAILABLE_COPY = 'Unable to load authorization. Please try again.';
 const state = ref<PageState>('loading');
 const view = ref<{
   clientName: string;
@@ -142,22 +145,20 @@ onMounted(() => {
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
     >
-      {{
-        view ? `Allow ${view.clientName} to edit your resumes?` : 'Allow access'
-      }}
+      {{ view ? copy.allowClient(view.clientName) : copy.title }}
     </h1>
     <p
       v-if="view"
       class="mt-4 text-base text-muted-foreground"
     >
       <strong data-testid="consent-client-name">{{ view.clientName }}</strong>
-      is requesting access to your resumes.
+      {{ copy.clientRequest }}
     </p>
     <p
       v-if="state === 'loading'"
       class="mt-8 text-base text-muted-foreground"
     >
-      Loading authorization…
+      {{ copy.loading }}
     </p>
     <StatusBanner
       v-else-if="state === 'invalid' || state === 'unavailable'"
@@ -167,7 +168,7 @@ onMounted(() => {
       kind="error"
       testid="consent-error"
     >
-      {{ state === 'invalid' ? INVALID_COPY : UNAVAILABLE_COPY }}
+      {{ state === 'invalid' ? copy.invalid : copy.unavailable }}
     </StatusBanner>
     <form
       v-else-if="view"
@@ -177,7 +178,7 @@ onMounted(() => {
       @submit.prevent="submit('approve')"
     >
       <dl
-        aria-label="Requested permissions"
+        :aria-label="copy.requestedPermissions"
         class="divide-y border-y"
         data-testid="consent-scopes"
       >
@@ -186,13 +187,11 @@ onMounted(() => {
           :key="scope"
         >
           <dt class="pt-3 font-medium first:pt-4">
-            {{ scope === 'resumes:read' ? 'Read resumes' : 'Write resumes' }}
+            {{ copy.scopes[scope].name }}
           </dt>
           <dd class="pb-3 text-sm text-muted-foreground last:pb-4">
             {{
-              scope === 'resumes:read'
-                ? 'View your resumes.'
-                : 'Create and edit your resumes.'
+              copy.scopes[scope].description
             }}
           </dd>
         </template>
@@ -204,7 +203,7 @@ onMounted(() => {
           :disabled="pending"
           type="submit"
         >
-          {{ pending ? 'Working…' : 'Approve' }}
+          {{ pending ? copy.working : copy.approve }}
         </Button>
         <Button
           class="h-9"
@@ -214,7 +213,7 @@ onMounted(() => {
           variant="ghost"
           @click="submit('deny')"
         >
-          Deny
+          {{ copy.deny }}
         </Button>
       </div>
     </form>

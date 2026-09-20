@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
   mountSuspended,
@@ -9,8 +9,10 @@ import { createError, readRawBody, setResponseStatus, type H3Event } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { providerNames } from '../app/composables/useCapabilities';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
+beforeEach(() => setSiteLocale('en'));
 
 mockNuxtImport('navigateTo', () => vi.fn());
 

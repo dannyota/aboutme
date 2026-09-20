@@ -7,6 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
@@ -61,6 +62,7 @@ async function linkButtons(wrapper: Wrapper): Promise<string[]> {
 }
 
 beforeEach(() => {
+  setSiteLocale('en');
   linked = [];
   clearNuxtData();
 });

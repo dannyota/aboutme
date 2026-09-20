@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { readRawBody, setResponseStatus } from 'h3';
 
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
+beforeEach(() => setSiteLocale('en'));
 
 interface MockEvent {
   method?: string;

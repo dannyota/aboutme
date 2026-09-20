@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { describeUserAgent } from '../../app/utils/userAgent';
+import {
+  describeUserAgent,
+  type UserAgentCopy,
+} from '../../app/utils/userAgent';
+
+const vietnameseCopy: UserAgentCopy = {
+  unknown: 'Trình duyệt không xác định',
+  on: (browser, system) => `${browser} ${system}`,
+};
 
 describe('describeUserAgent', () => {
   it.each([
@@ -58,5 +66,19 @@ describe('describeUserAgent', () => {
       'Unknown browser',
     );
     expect(describeUserAgent({} as unknown as string)).toBe('Unknown browser');
+  });
+
+  it('uses supplied presentation copy', () => {
+    const ua = [
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ',
+      '(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+    ].join('');
+
+    expect(describeUserAgent(ua, vietnameseCopy)).toBe(
+      'Chrome 152 Linux',
+    );
+    expect(describeUserAgent('', vietnameseCopy)).toBe(
+      'Trình duyệt không xác định',
+    );
   });
 });

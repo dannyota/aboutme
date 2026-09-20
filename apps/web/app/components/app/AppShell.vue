@@ -14,9 +14,16 @@ import ThemeToggle from './ThemeToggle.vue';
 const { authState } = useAuth();
 const route = useRoute();
 const signedIn = computed(() => authState.value === 'authenticated');
-// Only the homepage and account pages are bilingual; other routes stay
-// English (app/i18n/locale.ts).
+// Localized routes show the language control (app/i18n/locale.ts).
 const localized = computed(() => isLocalizedPath(route.path));
+const hidePhoneAccountLinks = computed(() => {
+  const path = route.path.length > 1
+    ? route.path.replace(/\/+$/, '')
+    : route.path;
+  return localized.value
+    && path !== '/app/settings/sessions'
+    && path !== '/authorize';
+});
 // On the account pages themselves, carry a validated next along so a click
 // on the header's other link does not drop it (login.vue and register.vue
 // carry it the same way on their own cross-link).
@@ -92,18 +99,18 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
     </nav>
     <div class="ml-auto flex items-center gap-2">
       <template v-if="!signedIn">
-        <!-- On phones these pages carry their own account links. -->
+        <!-- Settings and consent have no in-page account links on phones. -->
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
-            localized && 'max-sm:hidden',
+            hidePhoneAccountLinks && 'max-sm:hidden',
           )"
           :to="signInLink"
         >{{ copy.signIn }}</NuxtLink>
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'secondary', size: 'sm' }),
-            localized && 'max-sm:hidden',
+            hidePhoneAccountLinks && 'max-sm:hidden',
           )"
           :to="createAccountLink"
         >{{ copy.createAccount }}</NuxtLink>
@@ -112,6 +119,7 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
         v-if="localized"
         :label="copy.localeLabel"
         test-id="landing-locale"
+        @pointerdown.prevent
       />
       <AccountMenu v-if="signedIn" />
       <ThemeToggle

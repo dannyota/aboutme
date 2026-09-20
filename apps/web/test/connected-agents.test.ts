@@ -10,6 +10,7 @@ import { setResponseStatus } from 'h3';
 import ConnectedAgents from '../app/components/settings/ConnectedAgents.vue';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
 
@@ -79,6 +80,7 @@ function registerCommon(grants: unknown = [grant]): void {
 
 describe('ConnectedAgents', () => {
   beforeEach(() => {
+    setSiteLocale('en');
     registerCommon();
     vi.mocked(navigateTo).mockClear();
   });
@@ -113,6 +115,20 @@ describe('ConnectedAgents', () => {
       );
     },
   );
+
+  it('renders Vietnamese copy and UTC dates', async () => {
+    setSiteLocale('vi');
+    const wrapper = await mountSuspended(ConnectedAgents);
+    await flushPromises();
+
+    expect(wrapper.get('[data-testid="connected-agents"] h2').text()).toBe(
+      'Tác nhân đã kết nối',
+    );
+    expect(wrapper.text()).toContain('Đọc CV');
+    expect(wrapper.text()).toContain('Chỉnh sửa CV');
+    expect(wrapper.text()).toContain('Đã tạo ngày 1 tháng 9, 2026');
+    expect(wrapper.text()).toContain('Chưa từng dùng');
+  });
 
   it('explains MCP in the empty state without an external link', async () => {
     agentHandler = () => ({ data: { grants: [] } });
@@ -201,6 +217,38 @@ describe('ConnectedAgents', () => {
       await flushPromises();
       expect(document.body.querySelector('[role="alertdialog"]')).toBeNull();
       expect(document.activeElement).toBe(revoke.element);
+    },
+  );
+
+  it(
+    'keeps the selected grant and request count while the revoke dialog '
+    + 'changes language',
+    async () => {
+      setSiteLocale('vi');
+      const wrapper = await mountSuspended(ConnectedAgents, {
+        attachTo: document.body,
+      });
+      await flushPromises();
+      await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
+      await flushPromises();
+
+      const english = document.body.querySelector<HTMLButtonElement>(
+        '[role="alertdialog"] [aria-label="English"]',
+      )!;
+      english.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      english.click();
+      await flushPromises();
+
+      const dialog = document.body.querySelector('[role="alertdialog"]')!;
+      expect(dialog.textContent).toContain('Revoke access');
+      expect(agentRequests).toBe(1);
+      expect(wrapper.text()).toContain(grant.clientName);
+
+      document.body.querySelector<HTMLButtonElement>(
+        '[data-action="agent-revoke-cancel"]',
+      )!.click();
+      await flushPromises();
+      wrapper.unmount();
     },
   );
 
@@ -313,6 +361,46 @@ describe('ConnectedAgents', () => {
       expect(wrapper.text()).toContain('Connected agents are unavailable');
     },
   );
+
+  it('keeps a pending revoke pending when the language changes', async () => {
+    setSiteLocale('vi');
+    let release: () => void = () => {};
+    let deletes = 0;
+    deleteHandler = () => new Promise((resolve) => {
+      deletes += 1;
+      release = () => resolve(null);
+    });
+    const wrapper = await mountSuspended(ConnectedAgents, {
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await wrapper.get('[data-testid="agent-revoke"]').trigger('click');
+    document.body.querySelector<HTMLButtonElement>(
+      '[data-action="agent-revoke-confirm"]',
+    )!.click();
+    await flushPromises();
+
+    const english = document.body.querySelector<HTMLButtonElement>(
+      '[role="alertdialog"] [aria-label="English"]',
+    )!;
+    english.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    english.click();
+    await flushPromises();
+
+    const confirm = document.body.querySelector<HTMLButtonElement>(
+      '[data-action="agent-revoke-confirm"]',
+    )!;
+    expect(deletes).toBe(1);
+    expect(agentRequests).toBe(1);
+    expect(confirm.disabled).toBe(true);
+    expect(document.body.querySelector('[role="alertdialog"]')?.textContent)
+      .toContain('Revoke access');
+
+    release();
+    await flushPromises();
+    await flushPromises();
+    wrapper.unmount();
+  });
 
   it('navigates to login for an exact revoke session failure', async () => {
     deleteHandler = (event) => {

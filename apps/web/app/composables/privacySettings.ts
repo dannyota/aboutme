@@ -7,7 +7,12 @@ export const MAX_ACCOUNT_EXPORT_BYTES = 12_582_912;
 export type AccountExportState
   = | { readonly kind: 'idle' }
     | { readonly kind: 'pending' }
-    | { readonly kind: 'error'; readonly message: string };
+    | { readonly kind: 'error'; readonly error: AccountExportErrorKind };
+
+export type AccountExportErrorKind
+  = | 'session-required'
+    | 'temporarily-unavailable'
+    | 'unavailable';
 
 export interface AccountExportController {
   readonly state: Readonly<Ref<AccountExportState>>;
@@ -126,12 +131,7 @@ export function createAccountExportController(
   function fail(status?: number): AccountExportState {
     state.value = {
       kind: 'error',
-      message:
-        status === 401
-          ? 'Your session ended. Sign in again.'
-          : status === 429 || status === 503
-            ? 'Your export is temporarily unavailable. Try again.'
-            : 'Could not export your data. Try again.',
+      error: exportErrorKind(status),
     };
     return state.value;
   }
@@ -148,6 +148,12 @@ export function createAccountExportController(
   function isCurrent(request: AbortController): boolean {
     return active === request && !request.signal.aborted;
   }
+}
+
+function exportErrorKind(status?: number): AccountExportErrorKind {
+  if (status === 401) return 'session-required';
+  if (status === 429 || status === 503) return 'temporarily-unavailable';
+  return 'unavailable';
 }
 
 function failureStatus(error: unknown): number | null {

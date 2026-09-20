@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { readRawBody, setResponseStatus, type H3Event } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
@@ -123,13 +124,17 @@ type Wrapper = Awaited<ReturnType<typeof mountSuspended>>;
 
 async function mountSettings(
   providers: readonly string[] = ['google'],
+  attachTo?: Element,
 ): Promise<Wrapper> {
   registerCapabilities({
     providerLogin: providers.length > 0,
     agentAccess: false,
     providers,
   });
-  const wrapper = await mountSuspended(SessionsPage, { props: { now } });
+  const wrapper = await mountSuspended(SessionsPage, {
+    attachTo,
+    props: { now },
+  });
   await flushPromises();
   return wrapper;
 }
@@ -146,13 +151,18 @@ async function confirmUnlink(wrapper: Wrapper, id: string): Promise<void> {
   const confirm = document.body.querySelector<HTMLElement>(
     '[data-action="confirm-unlink"]',
   );
-  expect(confirm?.textContent?.trim()).toBe('Unlink Google');
+  expect(confirm?.textContent).toContain(
+    linked.find((item) => item.id === id)?.provider === 'github'
+      ? 'GitHub'
+      : 'Google',
+  );
   confirm?.click();
   await flushPromises();
   await flushPromises();
 }
 
 beforeEach(() => {
+  setSiteLocale('en');
   linked = [];
   hasPassword = true;
   meCalls = 0;
@@ -165,6 +175,67 @@ beforeEach(() => {
 });
 
 describe('unlinking a provider identity', () => {
+  it('renders linked identity copy and UTC dates in Vietnamese', async () => {
+    setSiteLocale('vi');
+    linked = [identity('id-a', 'google')];
+
+    const wrapper = await mountSettings();
+
+    expect(wrapper.get('[data-identity-id="id-a"]').text()).toContain(
+      'Đã liên kết ngày 18 tháng 9, 2026',
+    );
+    expect(unlinkButton(wrapper, 'id-a').text()).toBe('Hủy liên kết');
+  });
+
+  it('keeps the selected identity when the unlink dialog changes locale',
+    async () => {
+      linked = [
+        identity('id-a', 'google'),
+        identity('id-b', 'github'),
+      ];
+      const wrapper = await mountSettings(['google', 'github']);
+
+      await unlinkButton(wrapper, 'id-b').trigger('click');
+      await flushPromises();
+      const dialog = document.body.querySelector<HTMLElement>(
+        '[role="alertdialog"]',
+      );
+      expect(dialog?.textContent).toContain('Unlink GitHub?');
+
+      dialog?.querySelector<HTMLElement>('[aria-label="Tiếng Việt"]')?.click();
+      await flushPromises();
+
+      expect(dialog?.textContent).toContain('Hủy liên kết GitHub?');
+      dialog?.querySelector<HTMLElement>(
+        '[data-action="confirm-unlink"]',
+      )?.click();
+      await flushPromises();
+      await flushPromises();
+
+      expect(deletes).toEqual([{ id: 'id-b', csrf: 'csrf', body: '' }]);
+      expect(wrapper.find('[data-identity-id="id-a"]').exists()).toBe(true);
+      expect(wrapper.find('[data-identity-id="id-b"]').exists()).toBe(false);
+    });
+
+  it('shows a safe Vietnamese message for an unknown unlink failure',
+    async () => {
+      setSiteLocale('vi');
+      linked = [identity('id-a', 'google')];
+      respondToDelete = (event) => {
+        setResponseStatus(event, 500);
+        return {
+          error: { code: 'unexpected', message: 'private backend detail' },
+        };
+      };
+      const wrapper = await mountSettings();
+
+      await confirmUnlink(wrapper, 'id-a');
+
+      const error = wrapper.get('[data-testid="unlink-error"]').text();
+      expect(error).toBe('Đã xảy ra lỗi. Vui lòng thử lại.');
+      expect(error).not.toContain('private backend detail');
+    });
+
   it('shows the link date and unlinks after confirmation', async () => {
     linked = [identity('id-a', 'google')];
     const wrapper = await mountSettings();
@@ -259,6 +330,33 @@ describe('unlinking a provider identity', () => {
       wrapper.find('[data-testid="unlink-reauth-password"]').exists(),
     ).toBe(false);
   });
+
+  it('translates password visibility name and preserves reauthentication draft',
+    async () => {
+      linked = [identity('id-a', 'google')];
+      respondToDelete = (event) => {
+        setResponseStatus(event, 403);
+        return { error: { code: 'reauth_required', message: 'x' } };
+      };
+      const wrapper = await mountSettings(['google'], document.body);
+      await confirmUnlink(wrapper, 'id-a');
+
+      const password = wrapper.get('#unlink-current-password');
+      await password.setValue('correct horse');
+      (password.element as HTMLInputElement).focus();
+
+      useState<'vi' | 'en'>('aboutme-locale').value = 'vi';
+      await flushPromises();
+
+      expect(wrapper.get('#unlink-current-password').element).toBe(
+        password.element,
+      );
+      expect((password.element as HTMLInputElement).value)
+        .toBe('correct horse');
+      expect(document.activeElement).toBe(password.element);
+      expect(wrapper.get('[aria-label="Hiện mật khẩu hiện tại"]').exists())
+        .toBe(true);
+    });
 
   it('offers provider reauthentication when there is no password',
     async () => {

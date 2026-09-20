@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { createError, readRawBody, setResponseStatus } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
 
@@ -71,6 +72,7 @@ registerEndpoint('/api/v1/sessions', () => ({ data: sessionsData }));
 
 describe('sessions.vue', () => {
   beforeEach(() => {
+    setSiteLocale('en');
     vi.mocked(navigateTo).mockClear();
   });
 
@@ -680,6 +682,7 @@ describe('sessions.vue', () => {
 
 describe('sessions.vue capability gating', () => {
   beforeEach(() => {
+    setSiteLocale('en');
     clearNuxtData();
   });
 

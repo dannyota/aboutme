@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import ConfirmDialog from '../app/ConfirmDialog.vue';
+import LocaleToggle from '../app/LocaleToggle.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import PasswordField from '../auth/PasswordField.vue';
 import { Button } from '../ui/button';
 import type { AuthProvider } from '../../composables/useAuth';
 import {
+  type AccountExportErrorKind,
   PrivacySettingsActionsKey,
   PrivacySettingsFailure,
 } from '../../composables/privacySettings';
+import {
+  privacySettingsCopy,
+  type PrivacySettingsReauthErrorKind,
+} from '../../i18n/privacy-settings';
+import { providerNames } from '../../composables/useCapabilities';
 
 const props = defineProps<{
   hasPassword: boolean;
@@ -16,23 +23,20 @@ const props = defineProps<{
 
 const emit = defineEmits<{ deleted: [] }>();
 const actions = inject(PrivacySettingsActionsKey, null);
+const locale = useRouteLocale();
+const copy = computed(() => privacySettingsCopy[locale.value]);
 
 type DeleteMode = 'idle' | 'confirm' | 'reauth-password' | 'reauth-provider';
 
 const deleteMode = ref<DeleteMode>('idle');
 const deletePending = ref(false);
 const exportPending = ref(false);
-const errorMessage = ref<string | null>(null);
-const exportError = ref<string | null>(null);
+const errorKind = ref<PrivacySettingsReauthErrorKind | null>(null);
+const exportErrorKind = ref<AccountExportErrorKind | null>(null);
 const currentPassword = ref('');
-const deletionDisclosure = [
-  'Access ends immediately.',
-  'Private-media removal targets 24 hours.',
-  'Backup copies expire on the 30-day schedule.',
-].join(' ');
 
 function openDelete(): void {
-  errorMessage.value = null;
+  errorKind.value = null;
   deleteMode.value = 'confirm';
 }
 
@@ -45,12 +49,12 @@ function cancelDelete(): void {
 async function exportAccount(): Promise<void> {
   if (!actions || exportPending.value) return;
   exportPending.value = true;
-  exportError.value = null;
+  exportErrorKind.value = null;
   try {
     const result = await actions.exportAccount();
-    if (result.kind === 'error') exportError.value = result.message;
+    if (result.kind === 'error') exportErrorKind.value = result.error;
   } catch {
-    exportError.value = 'Could not export your data. Try again.';
+    exportErrorKind.value = 'unavailable';
   } finally {
     exportPending.value = false;
   }
@@ -59,7 +63,7 @@ async function exportAccount(): Promise<void> {
 async function confirmDelete(): Promise<void> {
   if (!actions || deletePending.value) return;
   deletePending.value = true;
-  errorMessage.value = null;
+  errorKind.value = null;
   try {
     await actions.deleteAccount();
     deleteMode.value = 'idle';
@@ -74,7 +78,7 @@ async function confirmDelete(): Promise<void> {
       return;
     }
     deleteMode.value = 'idle';
-    errorMessage.value = deletionCopy(failure);
+    errorKind.value = failure.kind;
   } finally {
     deletePending.value = false;
   }
@@ -83,17 +87,17 @@ async function confirmDelete(): Promise<void> {
 async function submitPasswordReauth(): Promise<void> {
   if (!actions || deletePending.value) return;
   if (!currentPassword.value) {
-    errorMessage.value = 'Enter your current password.';
+    errorKind.value = 'current-password-required';
     return;
   }
   deletePending.value = true;
-  errorMessage.value = null;
+  errorKind.value = null;
   try {
     await actions.reauthenticate(currentPassword.value);
     currentPassword.value = '';
     deleteMode.value = 'confirm';
   } catch (error) {
-    errorMessage.value = reauthCopy(asPrivacyFailure(error));
+    errorKind.value = asPrivacyFailure(error).kind;
   } finally {
     deletePending.value = false;
   }
@@ -102,11 +106,11 @@ async function submitPasswordReauth(): Promise<void> {
 async function startProviderReauth(provider: AuthProvider): Promise<void> {
   if (!actions || deletePending.value) return;
   deletePending.value = true;
-  errorMessage.value = null;
+  errorKind.value = null;
   try {
     await actions.startProviderReauth(provider);
   } catch (error) {
-    errorMessage.value = reauthCopy(asPrivacyFailure(error));
+    errorKind.value = asPrivacyFailure(error).kind;
   } finally {
     deletePending.value = false;
   }
@@ -120,36 +124,6 @@ function asPrivacyFailure(error: unknown): PrivacySettingsFailure {
   }
   return new PrivacySettingsFailure('unavailable');
 }
-
-function deletionCopy(failure: PrivacySettingsFailure): string {
-  switch (failure.kind) {
-    case 'session-required':
-      return 'Your session ended. Sign in again.';
-    case 'account-changed':
-      return 'Your account changed. Review it and try again.';
-    case 'rate-limited':
-      return 'Too many attempts. Try again later.';
-    case 'reauth-required':
-    case 'reauth-failed':
-    case 'unavailable':
-      return 'Account deletion is temporarily unavailable. Try again.';
-  }
-}
-
-function reauthCopy(failure: PrivacySettingsFailure): string {
-  switch (failure.kind) {
-    case 'reauth-failed':
-      return 'Incorrect password.';
-    case 'rate-limited':
-      return 'Too many attempts. Try again later.';
-    case 'session-required':
-      return 'Your session ended. Sign in again.';
-    case 'reauth-required':
-    case 'account-changed':
-    case 'unavailable':
-      return 'Something went wrong. Please try again.';
-  }
-}
 </script>
 
 <template>
@@ -162,21 +136,21 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
       id="privacy-title"
       class="text-lg font-semibold"
     >
-      Privacy
+      {{ copy.title }}
     </h2>
     <div class="grid gap-2">
       <h3 class="font-medium">
-        Download your data
+        {{ copy.exportTitle }}
       </h3>
       <p class="text-sm text-muted-foreground">
-        Download a JSON copy of your account and resumes.
+        {{ copy.exportDescription }}
       </p>
       <StatusBanner
-        v-if="exportError"
+        v-if="exportErrorKind"
         kind="error"
         testid="account-export-error"
       >
-        {{ exportError }}
+        {{ copy.exportError(exportErrorKind) }}
       </StatusBanner>
       <Button
         data-testid="account-export-action"
@@ -185,24 +159,28 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
         variant="outline"
         @click="exportAccount"
       >
-        {{ exportPending ? "Preparing download…" : "Download your data" }}
+        {{ exportPending ? copy.exportPending : copy.exportAction }}
       </Button>
     </div>
 
     <div class="grid gap-2 border-t pt-6">
       <h3 class="font-medium text-destructive">
-        Delete account
+        {{ copy.deleteTitle }}
       </h3>
       <p class="text-sm text-muted-foreground">
-        This permanently deletes your account and resumes.
+        {{ copy.deleteDescription }}
       </p>
       <StatusBanner
-        v-if="errorMessage"
+        v-if="errorKind"
         kind="error"
         testid="account-delete-error"
         focus-on-mount
       >
-        {{ errorMessage }}
+        {{
+          deleteMode === 'idle'
+            ? copy.deleteError(errorKind)
+            : copy.reauthError(errorKind)
+        }}
       </StatusBanner>
       <Button
         data-testid="account-delete-action"
@@ -211,7 +189,7 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
         variant="destructive"
         @click="openDelete"
       >
-        Delete my account
+        {{ copy.deleteAction }}
       </Button>
     </div>
 
@@ -222,11 +200,12 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
       novalidate
       @submit.prevent="submitPasswordReauth"
     >
-      <p>Sign in again to confirm it’s you before deleting your account.</p>
+      <p>{{ copy.passwordReauthDescription }}</p>
       <PasswordField
         id="account-delete-current-password"
         v-model="currentPassword"
-        label="Current password"
+        :label="copy.currentPassword"
+        :locale="locale"
         autocomplete="current-password"
       />
       <div class="flex gap-2">
@@ -235,7 +214,7 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
           type="submit"
           variant="secondary"
         >
-          {{ deletePending ? "Checking…" : "Continue" }}
+          {{ deletePending ? copy.checking : copy.continue }}
         </Button>
         <Button
           :disabled="deletePending"
@@ -243,7 +222,7 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
           variant="ghost"
           @click="cancelDelete"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </form>
@@ -253,7 +232,7 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
       class="grid gap-3"
       data-testid="account-delete-reauth-provider"
     >
-      <p>Sign in again with your provider, then confirm deletion again.</p>
+      <p>{{ copy.providerReauthDescription }}</p>
       <div class="flex flex-wrap gap-2">
         <Button
           v-for="provider in providers"
@@ -262,7 +241,7 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
           type="button"
           @click="startProviderReauth(provider)"
         >
-          Continue with {{ provider }}
+          {{ copy.providerContinue(providerNames[provider]) }}
         </Button>
         <Button
           :disabled="deletePending"
@@ -270,7 +249,7 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
           variant="ghost"
           @click="cancelDelete"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </div>
@@ -278,18 +257,25 @@ function reauthCopy(failure: PrivacySettingsFailure): string {
     <ConfirmDialog
       :busy="deletePending"
       cancel-action="cancel-account-delete"
-      cancel-label="Cancel"
+      :cancel-label="copy.cancel"
       class="max-w-md"
       confirm-action="confirm-account-delete"
-      confirm-label="Delete account"
+      :confirm-label="copy.deleteTitle"
       confirm-text="DELETE"
-      confirm-input-label="Type DELETE to permanently delete your account"
+      :confirm-input-label="copy.deleteConfirmInput"
       destructive
       :open="deleteMode === 'confirm'"
-      title="Delete your account?"
-      :description="deletionDisclosure"
+      :title="copy.deleteDialogTitle"
+      :description="copy.deletionDisclosure"
       @cancel="cancelDelete"
       @confirm="confirmDelete"
-    />
+    >
+      <template #header-actions>
+        <LocaleToggle
+          :label="copy.localeLabel"
+          @pointerdown.prevent
+        />
+      </template>
+    </ConfirmDialog>
   </section>
 </template>

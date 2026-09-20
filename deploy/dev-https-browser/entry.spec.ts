@@ -33,6 +33,19 @@ function stage(name: string): void {
   console.log(`entry-stage:${name}`);
 }
 
+function consoleStage(message: { location(): { url: string }; text(): string }): string {
+  let path = 'unknown';
+  try {
+    const url = new URL(message.location().url);
+    path = url.origin === ORIGIN && url.pathname.startsWith('/api/v1/')
+      ? 'api'
+      : url.origin === ORIGIN ? 'origin' : 'external';
+  } catch {
+    path = 'unknown';
+  }
+  return `console-${path}-${/\b[45]\d\d\b/.test(message.text()) ? 'http' : 'other'}`;
+}
+
 async function expectSignedOutShell(page: Page): Promise<void> {
   const header = page.getByRole('banner');
   await expect(header.getByRole('link', { name: 'Sign in' })).toBeVisible();
@@ -98,6 +111,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   pageDiagnosticsAttacher(counters, {
     countConsoleError: (message) =>
       !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+    onCountedConsoleError: (message) => stage(consoleStage(message)),
   })(page);
 
   try {
@@ -326,6 +340,36 @@ for (const viewport of [
     await page.getByTestId('landing-locale-vi').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+
+    stage(`workspace-locale-${viewport.name}-settings-vietnamese`);
+    await page.goto(`${ORIGIN}/app/settings/sessions`);
+    await waitForHydration(page);
+    await expect(page).toHaveTitle('Cài đặt · aboutme');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Cài đặt' }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: 'Thiết bị đã đăng nhập' }),
+    ).toBeVisible();
+    let localeRequests = 0;
+    const countLocaleRequests = (request: { url(): string }): void => {
+      const url = new URL(request.url());
+      if (url.origin === ORIGIN && url.pathname.startsWith('/api/v1/')) {
+        localeRequests += 1;
+      }
+    };
+    page.on('request', countLocaleRequests);
+    const settingsEnglish = page.getByTestId('landing-locale-en');
+    await settingsEnglish.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page).toHaveTitle('Settings · aboutme');
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Settings' }),
+    ).toBeVisible();
+    await expect(settingsEnglish).toBeFocused();
+    expect(localeRequests).toBe(0);
+    page.off('request', countLocaleRequests);
 
     stage(`workspace-locale-${viewport.name}-account-menu-open`);
     await page.getByTestId('account-menu').click();

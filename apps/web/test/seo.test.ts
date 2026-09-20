@@ -193,12 +193,25 @@ describe('page titles and noindex', () => {
     route,
     title,
   ) => {
+    setSiteLocale('en');
     await visit(route);
     await waitForTitle(title);
     expect(meta('meta[name="robots"]')).toBe('noindex');
   });
 
-  it('titles resumes in both locales and keeps settings English', async () => {
+  it.each([
+    ['/authorize', 'Cấp quyền cho tác nhân · aboutme'],
+    ['/app/settings/sessions', 'Cài đặt · aboutme'],
+  ])('uses Vietnamese for an invalid cookie on %s', async (route, title) => {
+    setSiteLocale('fr');
+    await visit(route);
+
+    await waitForTitle(title);
+    expect(document.documentElement.lang).toBe('vi');
+    expect(meta('meta[name="robots"]')).toBe('noindex');
+  });
+
+  it('titles resumes and settings in both locales', async () => {
     setSiteLocale('vi');
     await visit('/app/resumes');
     await waitForTitle('CV · aboutme');
@@ -210,7 +223,7 @@ describe('page titles and noindex', () => {
 
     setSiteLocale('vi');
     await visit('/app/settings/sessions');
-    await waitForTitle('Settings · aboutme');
+    await waitForTitle('Cài đặt · aboutme');
   });
 });
 

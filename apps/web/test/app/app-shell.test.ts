@@ -38,8 +38,6 @@ registerEndpoint('/api/v1/auth/logout', {
     return null;
   },
 });
-// The homepage and account pages localize the shell, so default to an
-// English-only route.
 function mountShell(route = '/app/resumes') {
   return mountSuspended(AppShell, { route });
 }
@@ -83,6 +81,38 @@ describe('AppShell', () => {
     expect(found['Settings']).toBeUndefined();
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
   });
+  it.each(['/app/settings/sessions', '/authorize'])(
+    'keeps signed-out account links visible on phones at %s',
+    async (route) => {
+      meStatus = 401;
+      const wrapper = await mountShell(route);
+      await flushPromises();
+      const signIn = wrapper.findAll('a')
+        .find((link) => link.attributes('href') === '/login');
+      const createAccount = wrapper.findAll('a')
+        .find((link) => link.attributes('href') === '/register');
+
+      expect(signIn?.classes()).not.toContain('max-sm:hidden');
+      expect(createAccount?.classes()).not.toContain('max-sm:hidden');
+      wrapper.unmount();
+    },
+  );
+  it.each(['/', '/login', '/privacy'])(
+    'keeps signed-out account links compact on phones at %s',
+    async (route) => {
+      meStatus = 401;
+      const wrapper = await mountShell(route);
+      await flushPromises();
+      const signIn = wrapper.findAll('a')
+        .find((link) => link.attributes('href') === '/login');
+      const createAccount = wrapper.findAll('a')
+        .find((link) => link.attributes('href') === '/register');
+
+      expect(signIn?.classes()).toContain('max-sm:hidden');
+      expect(createAccount?.classes()).toContain('max-sm:hidden');
+      wrapper.unmount();
+    },
+  );
   it('shows app navigation and account menu when authenticated', async () => {
     meStatus = 200;
     const originalName = me.data.user.name;
@@ -214,6 +244,28 @@ describe('AppShell', () => {
         true,
       );
     });
+  it('preserves focus when the header locale control uses a pointer',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const wrapper = await mountShell('/app/settings/sessions');
+      await flushPromises();
+      const field = document.createElement('input');
+      document.body.append(field);
+      field.focus();
+      const localeButton = wrapper.get('[data-testid="landing-locale-vi"]');
+      const pointerdown = new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+      });
+
+      localeButton.element.dispatchEvent(pointerdown);
+
+      expect(pointerdown.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(field);
+      field.remove();
+      wrapper.unmount();
+    });
   it('offers the language toggle on / when signed in', async () => {
     meStatus = 200;
     const wrapper = await mountShell('/');
@@ -337,14 +389,26 @@ describe('AppShell', () => {
     wrapper.unmount();
   });
 
-  it('keeps Settings English-only', async () => {
+  it.each([
+    [undefined, '/app/settings/sessions', 'CV', 'Cài đặt'],
+    ['fr', '/authorize', 'CV', 'Cài đặt'],
+    ['en', '/app/settings/sessions', 'Resumes', 'Settings'],
+    ['en', '/authorize', 'Resumes', 'Settings'],
+  ])('localizes the shell with locale %s on %s', async (
+    locale,
+    route,
+    resumes,
+    settings,
+  ) => {
     meStatus = 200;
-    setSiteLocale('vi');
-    const wrapper = await mountShell('/app/settings/sessions');
+    setSiteLocale(locale);
+    const wrapper = await mountShell(route);
     await flushPromises();
-    expect(links(wrapper)['Resumes']).toBe('/app/resumes');
-    expect(links(wrapper)['Settings']).toBe('/app/settings/sessions');
-    expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(false);
+    const found = links(wrapper);
+    expect(found[resumes]).toBe('/app/resumes');
+    expect(found[settings]).toBe('/app/settings/sessions');
+    expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(true);
     wrapper.unmount();
   });
 

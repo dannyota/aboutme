@@ -1,12 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
   mountSuspended,
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
+import { createError } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
 mockNuxtImport('navigateTo', () => vi.fn());
@@ -51,6 +53,10 @@ registerEndpoint('/api/v1/me', () => ({
 registerEndpoint('/api/v1/sessions', () => ({ data: sessions }));
 
 describe('settings sessions page', () => {
+  beforeEach(() => {
+    setSiteLocale('en');
+  });
+
   it(
     'describes devices, uses relative time, and hides raw UA from row text',
     async () => {
@@ -113,4 +119,71 @@ describe('settings sessions page', () => {
     expect(source).toMatch(/useCookie<Theme \| undefined>\(["']aboutme-theme/);
     expect(source).toMatch(/["']data-theme["']:\s*theme\.value/);
   });
+
+  it(
+    'translates device copy live without another sessions request',
+    async () => {
+      let sessionsCalls = 0;
+      registerEndpoint('/api/v1/sessions', () => {
+        sessionsCalls += 1;
+        return { data: sessions };
+      });
+
+      setSiteLocale('vi');
+      const wrapper = await mountSuspended(SessionsPage, { props: { now } });
+      await flushPromises();
+
+      expect(wrapper.get('h1').text()).toBe('Cài đặt');
+      expect(wrapper.get('h2').text()).toBe('Thiết bị đã đăng nhập');
+      expect(wrapper.text()).toContain('Thiết bị này');
+      expect(wrapper.text()).toContain('Hoạt động lần cuối 2 giờ trước');
+
+      const callsBeforeLocaleChange = sessionsCalls;
+      const locale = useState<'vi' | 'en'>('aboutme-locale');
+      locale.value = 'en';
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('h1').text()).toBe('Settings');
+      expect(wrapper.get('h2').text()).toBe('Signed-in devices');
+      expect(wrapper.text()).toContain('This device');
+      expect(sessionsCalls).toBe(callsBeforeLocaleChange);
+    },
+  );
+
+  it(
+    'translates a revoke failure without repeating the revoke request',
+    async () => {
+      let revokeCalls = 0;
+      registerEndpoint('/api/v1/sessions/other', {
+        method: 'DELETE',
+        handler: () => {
+          revokeCalls += 1;
+          throw createError({ statusCode: 500, message: 'untrusted detail' });
+        },
+      });
+
+      setSiteLocale('vi');
+      const wrapper = await mountSuspended(SessionsPage, { props: { now } });
+      await flushPromises();
+
+      await wrapper
+        .get('[data-testid="session-row-other"] [data-testid="revoke-button"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+        'Không thể thu hồi',
+      );
+      expect(wrapper.text()).not.toContain('untrusted detail');
+
+      const locale = useState<'vi' | 'en'>('aboutme-locale');
+      locale.value = 'en';
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+        'Could not revoke',
+      );
+      expect(revokeCalls).toBe(1);
+    },
+  );
 });
