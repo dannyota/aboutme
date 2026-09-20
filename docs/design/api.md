@@ -36,49 +36,64 @@ behavior that future contract changes must implement.
 
 ## Endpoint groups
 
-| Endpoint group                                                     | Purpose                                                          |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `GET /auth/{provider}/start`, `GET /auth/{provider}/callback`      | Login start and callback                                         |
-| `POST /auth/{provider}/start`                                      | Authenticated provider link or recent reauthentication start     |
-| `POST /auth/logout`, `GET /me`                                     | Logout and current identity/CSRF state                           |
-| `GET /capabilities`                                                | Unauthenticated read of optional surfaces and the sign-up switch |
-| `POST /auth/password/register`, `POST /auth/password/verify`       | Email-and-password registration and single-use verification      |
-| `POST /auth/password/login`, `POST /auth/password/reauth`          | Password login and recent reauthentication                       |
-| `POST /auth/password/forgot`, `POST /auth/password/reset`          | Password reset request and single-use token consumption          |
-| `PUT /me/password`                                                 | Add or replace the account password credential                   |
-| `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions`       | Device list, per-session revoke, and logout-everywhere           |
-| `GET/POST /resumes`, `GET/PATCH/DELETE /resumes/{id}`              | Resume list, create, read, metadata update, and delete           |
-| `PATCH /resumes/{id}/entries/{sectionKey}`, `DELETE .../{entryId}` | Entry upsert and delete                                          |
-| `PATCH /resumes/{id}/sections/{sectionKey}`                        | Section display metadata and entry order                         |
-| `PATCH /resumes/{id}/structure`                                    | Atomic section create, delete, move, or reorder                  |
-| `PATCH /resumes/{id}/personal-details`, `PATCH .../customization`  | Personal details and allowlisted customization deltas            |
-| `POST/GET/PATCH/DELETE /resumes/{id}/photo`                        | Owner-only photo upload, read, crop, replace, and delete         |
-| `POST /resumes/{id}/publish`                                       | Slug, publish controls, public title, and favicon                |
-| `GET /resumes/{id}/pdf`                                            | Owner PDF                                                        |
-| `GET /events`, `GET /live/{slug}`                                  | Authenticated and public SSE invalidation streams                |
-| `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`   | Live-gated public document and photo                             |
-| `GET /public/resumes/{slug}/pdf`                                   | Live and download-gated public PDF                               |
-| `GET /public/resumes/{slug}/og.png`                                | Live-gated 1200 by 630 PNG share image; ADR 0032                 |
-| `GET /oauth/consent`, `POST /oauth/consent`                        | Agent consent read and the approve/deny decision                 |
-| `GET /me/agents`, `DELETE /me/agents/{grantId}`                    | Connected-agent list and grant revocation                        |
-| `GET /me/export`, `DELETE /me`                                     | Data export and recent-reauthenticated account deletion          |
-| `DELETE /me/identities/{identityId}`                               | Recent-reauthenticated provider unlink                           |
+| Endpoint group                                                        | Purpose                                                          |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `GET /auth/{provider}/start`, `GET /auth/{provider}/callback`         | Login start and callback                                         |
+| `POST /auth/{provider}/start`                                         | Authenticated provider link or recent reauthentication start     |
+| `POST /auth/logout`, `GET /me`                                        | Logout and current identity/CSRF state                           |
+| `GET /capabilities`                                                   | Unauthenticated read of optional surfaces and the sign-up switch |
+| `POST /auth/password/register`, `POST /auth/password/verify`          | Email-and-password registration and single-use verification      |
+| `POST /auth/password/login`, `POST /auth/password/reauth`             | Password login and recent reauthentication                       |
+| `POST /auth/password/forgot`, `POST /auth/password/reset`             | Password reset request and single-use token consumption          |
+| `PUT /me/password`                                                    | Add or replace the account password credential                   |
+| `GET /auth/second-factor`                                             | Read a pending login or reauthentication                         |
+| `POST /auth/second-factor/passkey/options`                            | Start a pending passkey assertion                                |
+| `POST /auth/second-factor/passkey/verify`, `POST .../recovery/verify` | Complete a pending authentication                                |
+| `GET /me/second-factor`                                               | Read passkeys and recovery-code count                            |
+| `POST /me/second-factor/passkeys/options`, `POST .../passkeys`        | Start and complete passkey registration                          |
+| `DELETE /me/second-factor/passkeys/{id}`                              | Remove an owned passkey                                          |
+| `POST /me/second-factor/recovery-codes`                               | Replace all recovery codes and return them once                  |
+| `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions`          | Device list, per-session revoke, and logout-everywhere           |
+| `GET/POST /resumes`, `GET/PATCH/DELETE /resumes/{id}`                 | Resume list, create, read, metadata update, and delete           |
+| `PATCH /resumes/{id}/entries/{sectionKey}`, `DELETE .../{entryId}`    | Entry upsert and delete                                          |
+| `PATCH /resumes/{id}/sections/{sectionKey}`                           | Section display metadata and entry order                         |
+| `PATCH /resumes/{id}/structure`                                       | Atomic section create, delete, move, or reorder                  |
+| `PATCH /resumes/{id}/personal-details`, `PATCH .../customization`     | Personal details and allowlisted customization deltas            |
+| `POST/GET/PATCH/DELETE /resumes/{id}/photo`                           | Owner-only photo upload, read, crop, replace, and delete         |
+| `POST /resumes/{id}/publish`                                          | Slug, publish controls, public title, and favicon                |
+| `GET /resumes/{id}/pdf`                                               | Owner PDF                                                        |
+| `GET /events`, `GET /live/{slug}`                                     | Authenticated and public SSE invalidation streams                |
+| `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`      | Live-gated public document and photo                             |
+| `GET /public/resumes/{slug}/pdf`                                      | Live and download-gated public PDF                               |
+| `GET /public/resumes/{slug}/og.png`                                   | Live-gated 1200 by 630 PNG share image; ADR 0032                 |
+| `GET /oauth/consent`, `POST /oauth/consent`                           | Agent consent read and the approve/deny decision                 |
+| `GET /me/agents`, `DELETE /me/agents/{grantId}`                       | Connected-agent list and grant revocation                        |
+| `GET /me/export`, `DELETE /me`                                        | Data export and recent-reauthenticated account deletion          |
+| `DELETE /me/identities/{identityId}`                                  | Recent-reauthenticated provider unlink                           |
 
 Provider start and callback operations are registered only when
 `PROVIDER_LOGIN_ENABLED` enables that provider; the OpenAPI description on each
 says so. The capabilities read is `security: []`, returns the required
-`providerLogin`, `providers`, `agentAccess`, and `passwordRegistration` fields,
-and uses `Cache-Control: no-store`. `POST /auth/password/register` is registered
-only when `PASSWORD_REGISTRATION_ENABLED` is not `false`.
+`providerLogin`, `providers`, `agentAccess`, `passwordRegistration`, and
+`passkeyEnrollment` fields, and uses `Cache-Control: no-store`.
+`POST /auth/password/register` is registered only when
+`PASSWORD_REGISTRATION_ENABLED` is not `false`.
 
 Password routes use strict JSON with a 4,096-byte body cap and the exact
 `application/json` media type. Registration and forgot-password return an
-identical `202`; login, verification, reset, reauthentication, and add/change
-succeed with `204`. A well-shaped but absent, expired, consumed, or replaced
-token is `400 credential_token_invalid`. The public error vocabulary is closed
-and never discloses account state, provider, token, or hash detail. `GET /me`
-adds the non-null Boolean `hasPassword`; provider emails are not exposed through
-linked identities.
+identical `202`; verification, reset, and add/change succeed with `204`.
+Password login and reauthentication succeed with `204` for an unenrolled
+account. An enrolled account receives an exact `202` pending response and no new
+authenticated session until factor completion. A well-shaped but absent,
+expired, consumed, or replaced token is `400 credential_token_invalid`. The
+public error vocabulary is closed and never discloses account state, provider,
+token, or hash detail. `GET /me` adds the non-null Boolean `hasPassword`;
+provider emails are not exposed through linked identities.
+
+The [passkey second-factor contract](passkey-second-factor-contract.md) owns the
+exact pending response, cookie, redirect, CSRF, WebAuthn JSON, completion,
+recovery download, and error shapes. V0.4.2 exposes no TOTP route,
+`totpEnrollment` capability, `totpEnabled` state, or `totp` pending method.
 
 ### Photo intake
 

@@ -9,9 +9,8 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decision is
-[ADR 0047](0047-bilingual-resume-workspace.md), which adds Vietnamese and
-English resume-workspace chrome while keeping interface and resume language
-independent.
+[ADR 0048](0048-passkey-second-factor-authentication.md), which adds optional
+passkey second-factor authentication, recovery codes, and a release fence.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.
