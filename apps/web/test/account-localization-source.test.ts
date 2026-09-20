@@ -331,9 +331,9 @@ function accountCatalogImportViolations(
   file: string,
   input: string,
   fixtures: FixtureSources = {},
+  visited = new Set<string>(),
 ): string[] {
   const violations: string[] = [];
-  const visited = new Set<string>();
   const readModule = (path: string): string | undefined => {
     if (path in fixtures) return fixtures[path];
     const absolute = join(appRoot, path);
@@ -395,10 +395,13 @@ function accountCatalogImportViolations(
 }
 
 function accountCatalogViolationsFromRoots(files: readonly string[]): string[] {
+  const visited = new Set<string>();
   return files.flatMap((file) =>
     accountCatalogImportViolations(
       relative(appRoot, file),
       readFileSync(file, 'utf8'),
+      {},
+      visited,
     ),
   );
 }
@@ -517,5 +520,36 @@ describe('account localization source guard', () => {
         fixtures,
       ),
     ).not.toEqual([]);
+  });
+
+  test('checks every root while visiting shared imports once', () => {
+    const fixtures = {
+      'shared/consent-helper.ts':
+        'export { consentCopy } from \'@/i18n/consent\';',
+    };
+    const visited = new Set<string>();
+    const violations = [
+      ...accountCatalogImportViolations(
+        'pages/templates/first.ts',
+        'import \'../../shared/consent-helper\';',
+        fixtures,
+        visited,
+      ),
+      ...accountCatalogImportViolations(
+        'pages/templates/second.ts',
+        'import \'../../shared/consent-helper\';',
+        fixtures,
+        visited,
+      ),
+    ];
+
+    expect(violations).toHaveLength(1);
+    expect(visited).toEqual(
+      new Set([
+        'pages/templates/first.ts',
+        'shared/consent-helper.ts',
+        'pages/templates/second.ts',
+      ]),
+    );
   });
 });
