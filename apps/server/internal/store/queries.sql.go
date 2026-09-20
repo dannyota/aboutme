@@ -28,6 +28,28 @@ func (q *Queries) AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	return discovery_generation, err
 }
 
+const advanceUserAuthEpoch = `-- name: AdvanceUserAuthEpoch :one
+UPDATE users
+SET auth_epoch = auth_epoch + 1
+WHERE id = $1
+RETURNING id, email, name, avatar_key, created_at, updated_at, auth_epoch
+`
+
+func (q *Queries) AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, advanceUserAuthEpoch, id)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Name,
+		&i.AvatarKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.AuthEpoch,
+	)
+	return i, err
+}
+
 const backfillResumeDocumentCAS = `-- name: BackfillResumeDocumentCAS :execrows
 UPDATE resumes
 SET personal_details = $1,
@@ -171,6 +193,75 @@ func (q *Queries) ClaimAuthEmailJobs(ctx context.Context, arg ClaimAuthEmailJobs
 	return items, nil
 }
 
+const claimPendingAuthentication = `-- name: ClaimPendingAuthentication :one
+UPDATE pending_authentications
+SET consumed_at = $1::timestamptz
+WHERE token_digest = $2
+  AND consumed_at IS NULL
+  AND expires_at > $1::timestamptz
+RETURNING id, token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id, primary_verified_at, return_path, failed_attempts, created_at, expires_at, consumed_at
+`
+
+type ClaimPendingAuthenticationParams struct {
+	ConsumedAt  time.Time
+	TokenDigest []byte
+}
+
+func (q *Queries) ClaimPendingAuthentication(ctx context.Context, arg ClaimPendingAuthenticationParams) (PendingAuthentication, error) {
+	row := q.db.QueryRow(ctx, claimPendingAuthentication, arg.ConsumedAt, arg.TokenDigest)
+	var i PendingAuthentication
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.CSRFSecret,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PrimaryVerifiedAt,
+		&i.ReturnPath,
+		&i.FailedAttempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const claimWebAuthnCeremony = `-- name: ClaimWebAuthnCeremony :one
+UPDATE webauthn_ceremonies
+SET consumed_at = $1::timestamptz
+WHERE token_digest = $2
+  AND consumed_at IS NULL
+  AND expires_at > $1::timestamptz
+RETURNING id, token_digest, challenge_digest, user_id, purpose, auth_epoch, session_id, pending_authentication_id, proposed_user_handle, created_at, expires_at, consumed_at
+`
+
+type ClaimWebAuthnCeremonyParams struct {
+	ConsumedAt  time.Time
+	TokenDigest []byte
+}
+
+func (q *Queries) ClaimWebAuthnCeremony(ctx context.Context, arg ClaimWebAuthnCeremonyParams) (WebauthnCeremony, error) {
+	row := q.db.QueryRow(ctx, claimWebAuthnCeremony, arg.ConsumedAt, arg.TokenDigest)
+	var i WebauthnCeremony
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.ChallengeDigest,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PendingAuthenticationID,
+		&i.ProposedUserHandle,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
 const cleanupExpiredPasswordRegistrations = `-- name: CleanupExpiredPasswordRegistrations :execrows
 DELETE FROM password_registrations
 WHERE id IN (
@@ -263,6 +354,39 @@ func (q *Queries) ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeEx
 	return id, err
 }
 
+const consumeLiveWebAuthnCeremoniesForBinding = `-- name: ConsumeLiveWebAuthnCeremoniesForBinding :execrows
+UPDATE webauthn_ceremonies
+SET consumed_at = $1::timestamptz
+WHERE user_id = $2::uuid
+  AND purpose = $3::text
+  AND session_id IS NOT DISTINCT FROM $4::uuid
+  AND pending_authentication_id IS NOT DISTINCT FROM $5::uuid
+  AND consumed_at IS NULL
+  AND expires_at > $1::timestamptz
+`
+
+type ConsumeLiveWebAuthnCeremoniesForBindingParams struct {
+	ConsumedAt              time.Time
+	UserID                  uuid.UUID
+	Purpose                 string
+	SessionID               *uuid.UUID
+	PendingAuthenticationID *uuid.UUID
+}
+
+func (q *Queries) ConsumeLiveWebAuthnCeremoniesForBinding(ctx context.Context, arg ConsumeLiveWebAuthnCeremoniesForBindingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeLiveWebAuthnCeremoniesForBinding,
+		arg.ConsumedAt,
+		arg.UserID,
+		arg.Purpose,
+		arg.SessionID,
+		arg.PendingAuthenticationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const consumeOAuthAuthorizationCode = `-- name: ConsumeOAuthAuthorizationCode :one
 UPDATE oauth_authorization_codes
 SET consumed_at = $1::timestamptz,
@@ -270,7 +394,7 @@ SET consumed_at = $1::timestamptz,
 WHERE code_digest = $3
   AND consumed_at IS NULL
   AND expires_at > $1::timestamptz
-RETURNING id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id
+RETURNING id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch
 `
 
 type ConsumeOAuthAuthorizationCodeParams struct {
@@ -301,6 +425,8 @@ func (q *Queries) ConsumeOAuthAuthorizationCode(ctx context.Context, arg Consume
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.IssuedFamilyID,
+		&i.GrantID,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
@@ -348,6 +474,81 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 	return i, err
 }
 
+const consumeOldestLivePendingAuthentication = `-- name: ConsumeOldestLivePendingAuthentication :one
+WITH live AS MATERIALIZED (
+    SELECT id, created_at FROM pending_authentications
+    WHERE user_id = $2::uuid
+      AND consumed_at IS NULL
+      AND expires_at > $1::timestamptz
+    ORDER BY created_at, id
+    FOR UPDATE
+), oldest AS (
+    SELECT id FROM live ORDER BY created_at, id LIMIT 1
+), at_capacity AS (
+    SELECT count(*) >= 5 AS reached FROM live
+)
+UPDATE pending_authentications AS target
+SET consumed_at = $1::timestamptz
+FROM oldest, at_capacity
+WHERE target.id = oldest.id
+  AND at_capacity.reached
+RETURNING target.id, target.token_digest, target.csrf_secret, target.user_id, target.purpose, target.auth_epoch, target.session_id, target.primary_verified_at, target.return_path, target.failed_attempts, target.created_at, target.expires_at, target.consumed_at
+`
+
+type ConsumeOldestLivePendingAuthenticationParams struct {
+	ConsumedAt time.Time
+	UserID     uuid.UUID
+}
+
+func (q *Queries) ConsumeOldestLivePendingAuthentication(ctx context.Context, arg ConsumeOldestLivePendingAuthenticationParams) (PendingAuthentication, error) {
+	row := q.db.QueryRow(ctx, consumeOldestLivePendingAuthentication, arg.ConsumedAt, arg.UserID)
+	var i PendingAuthentication
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.CSRFSecret,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PrimaryVerifiedAt,
+		&i.ReturnPath,
+		&i.FailedAttempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const consumeSecondFactorRecoveryCode = `-- name: ConsumeSecondFactorRecoveryCode :one
+DELETE FROM second_factor_recovery_codes
+WHERE id = (
+    SELECT candidate.id FROM second_factor_recovery_codes AS candidate
+    WHERE candidate.user_id = $1::uuid
+      AND candidate.code_digest = $2
+    FOR UPDATE
+)
+RETURNING id, user_id, code_digest, created_at
+`
+
+type ConsumeSecondFactorRecoveryCodeParams struct {
+	UserID     uuid.UUID
+	CodeDigest []byte
+}
+
+func (q *Queries) ConsumeSecondFactorRecoveryCode(ctx context.Context, arg ConsumeSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error) {
+	row := q.db.QueryRow(ctx, consumeSecondFactorRecoveryCode, arg.UserID, arg.CodeDigest)
+	var i SecondFactorRecoveryCode
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CodeDigest,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const countLiveOAuthGrantsForUser = `-- name: CountLiveOAuthGrantsForUser :one
 SELECT count(*) FROM oauth_grants WHERE user_id = $1 AND revoked_at IS NULL
 `
@@ -368,6 +569,17 @@ SELECT count(*) FROM resumes WHERE user_id = $1
 
 func (q *Queries) CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countResumesForUser, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countSecondFactorRecoveryCodes = `-- name: CountSecondFactorRecoveryCodes :one
+SELECT count(*) FROM second_factor_recovery_codes WHERE user_id = $1
+`
+
+func (q *Queries) CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSecondFactorRecoveryCodes, userID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -517,14 +729,15 @@ func (q *Queries) CreateIdentity(ctx context.Context, arg CreateIdentityParams) 
 const createOAuthAuthorizationCode = `-- name: CreateOAuthAuthorizationCode :one
 INSERT INTO oauth_authorization_codes (
     code_digest, client_id, user_id, scopes, code_challenge, redirect_uri,
-    created_at, expires_at
+    created_at, expires_at, grant_id, auth_epoch
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6,
     $7::timestamptz,
-    $7::timestamptz + interval '60 seconds'
+    $7::timestamptz + interval '60 seconds',
+    $8::uuid, $9::bigint
 )
-RETURNING id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id
+RETURNING id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch
 `
 
 type CreateOAuthAuthorizationCodeParams struct {
@@ -535,6 +748,8 @@ type CreateOAuthAuthorizationCodeParams struct {
 	CodeChallenge string
 	RedirectURI   string
 	CreatedAt     time.Time
+	GrantID       *uuid.UUID
+	AuthEpoch     *int64
 }
 
 // Code issue (M2). expires_at is computed here, not passed in, so the exact
@@ -550,6 +765,8 @@ func (q *Queries) CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOA
 		arg.CodeChallenge,
 		arg.RedirectURI,
 		arg.CreatedAt,
+		arg.GrantID,
+		arg.AuthEpoch,
 	)
 	var i OAuthAuthorizationCode
 	err := row.Scan(
@@ -564,6 +781,8 @@ func (q *Queries) CreateOAuthAuthorizationCode(ctx context.Context, arg CreateOA
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.IssuedFamilyID,
+		&i.GrantID,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
@@ -794,6 +1013,58 @@ func (q *Queries) CreatePasswordResetToken(ctx context.Context, arg CreatePasswo
 	return i, err
 }
 
+const createPendingAuthentication = `-- name: CreatePendingAuthentication :one
+INSERT INTO pending_authentications (
+    token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id,
+    primary_verified_at, return_path, created_at, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id, primary_verified_at, return_path, failed_attempts, created_at, expires_at, consumed_at
+`
+
+type CreatePendingAuthenticationParams struct {
+	TokenDigest       []byte
+	CSRFSecret        []byte
+	UserID            uuid.UUID
+	Purpose           string
+	AuthEpoch         int64
+	SessionID         *uuid.UUID
+	PrimaryVerifiedAt time.Time
+	ReturnPath        string
+	CreatedAt         time.Time
+	ExpiresAt         time.Time
+}
+
+func (q *Queries) CreatePendingAuthentication(ctx context.Context, arg CreatePendingAuthenticationParams) (PendingAuthentication, error) {
+	row := q.db.QueryRow(ctx, createPendingAuthentication,
+		arg.TokenDigest,
+		arg.CSRFSecret,
+		arg.UserID,
+		arg.Purpose,
+		arg.AuthEpoch,
+		arg.SessionID,
+		arg.PrimaryVerifiedAt,
+		arg.ReturnPath,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	var i PendingAuthentication
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.CSRFSecret,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PrimaryVerifiedAt,
+		&i.ReturnPath,
+		&i.FailedAttempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
 const createResume = `-- name: CreateResume :one
 INSERT INTO resumes (user_id, title, schema_version, lng,
                      personal_details, content, customization)
@@ -843,25 +1114,69 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 	return i, err
 }
 
+const createSecondFactorPolicy = `-- name: CreateSecondFactorPolicy :one
+INSERT INTO second_factor_policies (user_id, webauthn_user_handle, enabled_at)
+VALUES ($1, $2, $3) RETURNING user_id, webauthn_user_handle, enabled_at
+`
+
+type CreateSecondFactorPolicyParams struct {
+	UserID             uuid.UUID
+	WebauthnUserHandle []byte
+	EnabledAt          time.Time
+}
+
+func (q *Queries) CreateSecondFactorPolicy(ctx context.Context, arg CreateSecondFactorPolicyParams) (SecondFactorPolicy, error) {
+	row := q.db.QueryRow(ctx, createSecondFactorPolicy, arg.UserID, arg.WebauthnUserHandle, arg.EnabledAt)
+	var i SecondFactorPolicy
+	err := row.Scan(&i.UserID, &i.WebauthnUserHandle, &i.EnabledAt)
+	return i, err
+}
+
+const createSecondFactorRecoveryCode = `-- name: CreateSecondFactorRecoveryCode :one
+INSERT INTO second_factor_recovery_codes (user_id, code_digest, created_at)
+VALUES ($1, $2, $3) RETURNING id, user_id, code_digest, created_at
+`
+
+type CreateSecondFactorRecoveryCodeParams struct {
+	UserID     uuid.UUID
+	CodeDigest []byte
+	CreatedAt  time.Time
+}
+
+func (q *Queries) CreateSecondFactorRecoveryCode(ctx context.Context, arg CreateSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error) {
+	row := q.db.QueryRow(ctx, createSecondFactorRecoveryCode, arg.UserID, arg.CodeDigest, arg.CreatedAt)
+	var i SecondFactorRecoveryCode
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CodeDigest,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createSession = `-- name: CreateSession :one
 INSERT INTO sessions (
-    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip, rotated_from
+    user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at,
+    absolute_expires_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+) RETURNING id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at
 `
 
 type CreateSessionParams struct {
-	UserID            uuid.UUID
-	TokenHash         []byte
-	CSRFSecret        []byte
-	CreatedAt         time.Time
-	LastSeenAt        time.Time
-	ReauthenticatedAt time.Time
-	AbsoluteExpiresAt time.Time
-	UA                *string
-	IP                *netip.Addr
-	RotatedFrom       *uuid.UUID
+	UserID                 uuid.UUID
+	TokenHash              []byte
+	CSRFSecret             []byte
+	CreatedAt              time.Time
+	LastSeenAt             time.Time
+	ReauthenticatedAt      time.Time
+	AbsoluteExpiresAt      time.Time
+	UA                     *string
+	IP                     *netip.Addr
+	RotatedFrom            *uuid.UUID
+	AuthEpoch              int64
+	SecondFactorVerifiedAt *time.Time
 }
 
 // Always inserts a brand-new row -- used both by Issue (fixation defense: a
@@ -885,6 +1200,8 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		arg.UA,
 		arg.IP,
 		arg.RotatedFrom,
+		arg.AuthEpoch,
+		arg.SecondFactorVerifiedAt,
 	)
 	var i Session
 	err := row.Scan(
@@ -901,13 +1218,15 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 		&i.UA,
 		&i.IP,
 		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
 	)
 	return i, err
 }
 
 const createUser = `-- name: CreateUser :one
 
-INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING id, email, name, avatar_key, created_at, updated_at
+INSERT INTO users (email, name, avatar_key) VALUES ($1, $2, $3) RETURNING id, email, name, avatar_key, created_at, updated_at, auth_epoch
 `
 
 type CreateUserParams struct {
@@ -930,6 +1249,102 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.AvatarKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthEpoch,
+	)
+	return i, err
+}
+
+const createWebAuthnCeremony = `-- name: CreateWebAuthnCeremony :one
+INSERT INTO webauthn_ceremonies (
+    token_digest, challenge_digest, user_id, purpose, auth_epoch, session_id,
+    pending_authentication_id, proposed_user_handle, created_at, expires_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, token_digest, challenge_digest, user_id, purpose, auth_epoch, session_id, pending_authentication_id, proposed_user_handle, created_at, expires_at, consumed_at
+`
+
+type CreateWebAuthnCeremonyParams struct {
+	TokenDigest             []byte
+	ChallengeDigest         []byte
+	UserID                  uuid.UUID
+	Purpose                 string
+	AuthEpoch               int64
+	SessionID               *uuid.UUID
+	PendingAuthenticationID *uuid.UUID
+	ProposedUserHandle      []byte
+	CreatedAt               time.Time
+	ExpiresAt               time.Time
+}
+
+func (q *Queries) CreateWebAuthnCeremony(ctx context.Context, arg CreateWebAuthnCeremonyParams) (WebauthnCeremony, error) {
+	row := q.db.QueryRow(ctx, createWebAuthnCeremony,
+		arg.TokenDigest,
+		arg.ChallengeDigest,
+		arg.UserID,
+		arg.Purpose,
+		arg.AuthEpoch,
+		arg.SessionID,
+		arg.PendingAuthenticationID,
+		arg.ProposedUserHandle,
+		arg.CreatedAt,
+		arg.ExpiresAt,
+	)
+	var i WebauthnCeremony
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.ChallengeDigest,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PendingAuthenticationID,
+		&i.ProposedUserHandle,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const createWebAuthnCredential = `-- name: CreateWebAuthnCredential :one
+INSERT INTO webauthn_credentials (
+    user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at, last_used_at
+`
+
+type CreateWebAuthnCredentialParams struct {
+	UserID         uuid.UUID
+	CredentialID   []byte
+	PublicKey      []byte
+	SignCount      int64
+	BackupEligible bool
+	BackupState    bool
+	Transports     []string
+	CreatedAt      time.Time
+}
+
+func (q *Queries) CreateWebAuthnCredential(ctx context.Context, arg CreateWebAuthnCredentialParams) (WebauthnCredential, error) {
+	row := q.db.QueryRow(ctx, createWebAuthnCredential,
+		arg.UserID,
+		arg.CredentialID,
+		arg.PublicKey,
+		arg.SignCount,
+		arg.BackupEligible,
+		arg.BackupState,
+		arg.Transports,
+		arg.CreatedAt,
+	)
+	var i WebauthnCredential
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CredentialID,
+		&i.PublicKey,
+		&i.SignCount,
+		&i.BackupEligible,
+		&i.BackupState,
+		&i.Transports,
+		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -1141,6 +1556,56 @@ func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg Delete
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredPendingAuthentications = `-- name: DeleteExpiredPendingAuthentications :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM pending_authentications
+    WHERE expires_at <= $1::timestamptz
+    ORDER BY expires_at, id
+    LIMIT LEAST($2::int, 200)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM pending_authentications AS target USING candidates
+WHERE target.id = candidates.id
+`
+
+type DeleteExpiredPendingAuthenticationsParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+func (q *Queries) DeleteExpiredPendingAuthentications(ctx context.Context, arg DeleteExpiredPendingAuthenticationsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPendingAuthentications, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteExpiredWebAuthnCeremonies = `-- name: DeleteExpiredWebAuthnCeremonies :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM webauthn_ceremonies
+    WHERE expires_at <= $1::timestamptz
+    ORDER BY expires_at, id
+    LIMIT LEAST($2::int, 200)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM webauthn_ceremonies AS target USING candidates
+WHERE target.id = candidates.id
+`
+
+type DeleteExpiredWebAuthnCeremoniesParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+func (q *Queries) DeleteExpiredWebAuthnCeremonies(ctx context.Context, arg DeleteExpiredWebAuthnCeremoniesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredWebAuthnCeremonies, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteIdentityForUser = `-- name: DeleteIdentityForUser :execrows
 DELETE FROM identities WHERE id = $1 AND user_id = $2
 `
@@ -1311,6 +1776,30 @@ func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePub
 	return i, err
 }
 
+const deleteSecondFactorPolicyForUser = `-- name: DeleteSecondFactorPolicyForUser :execrows
+DELETE FROM second_factor_policies WHERE user_id = $1
+`
+
+func (q *Queries) DeleteSecondFactorPolicyForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSecondFactorPolicyForUser, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteSecondFactorRecoveryCodesForUser = `-- name: DeleteSecondFactorRecoveryCodesForUser :execrows
+DELETE FROM second_factor_recovery_codes WHERE user_id = $1
+`
+
+func (q *Queries) DeleteSecondFactorRecoveryCodesForUser(ctx context.Context, userID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSecondFactorRecoveryCodesForUser, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteTerminalOAuthTokens = `-- name: DeleteTerminalOAuthTokens :execrows
 WITH candidates AS MATERIALIZED (
     SELECT candidate.id FROM oauth_tokens AS candidate
@@ -1350,6 +1839,35 @@ func (q *Queries) DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTermi
 	return result.RowsAffected(), nil
 }
 
+const deleteWebAuthnCredentialForUser = `-- name: DeleteWebAuthnCredentialForUser :one
+DELETE FROM webauthn_credentials
+WHERE id = $1 AND user_id = $2
+RETURNING id, user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at, last_used_at
+`
+
+type DeleteWebAuthnCredentialForUserParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) DeleteWebAuthnCredentialForUser(ctx context.Context, arg DeleteWebAuthnCredentialForUserParams) (WebauthnCredential, error) {
+	row := q.db.QueryRow(ctx, deleteWebAuthnCredentialForUser, arg.ID, arg.UserID)
+	var i WebauthnCredential
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CredentialID,
+		&i.PublicKey,
+		&i.SignCount,
+		&i.BackupEligible,
+		&i.BackupState,
+		&i.Transports,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
 const enqueueMediaDeletionJob = `-- name: EnqueueMediaDeletionJob :execrows
 INSERT INTO media_deletion_jobs (resume_id, object_key)
 VALUES ($1, $2)
@@ -1373,7 +1891,7 @@ func (q *Queries) EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaD
 }
 
 const findLiveSuccessorSession = `-- name: FindLiveSuccessorSession :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL
 `
 
 // Finds the exact unrevoked successor through rotated_from. The partial unique
@@ -1397,6 +1915,8 @@ func (q *Queries) FindLiveSuccessorSession(ctx context.Context, rotatedFrom *uui
 		&i.UA,
 		&i.IP,
 		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
 	)
 	return i, err
 }
@@ -1532,7 +2052,7 @@ func (q *Queries) GetLeasedAuthEmailJobForUpdate(ctx context.Context, arg GetLea
 }
 
 const getLiveOAuthGrant = `-- name: GetLiveOAuthGrant :one
-SELECT id, user_id, client_id, scopes, created_at, revoked_at FROM oauth_grants
+SELECT id, user_id, client_id, scopes, created_at, revoked_at, auth_epoch FROM oauth_grants
 WHERE user_id = $1 AND client_id = $2 AND revoked_at IS NULL
 `
 
@@ -1553,6 +2073,7 @@ func (q *Queries) GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantPa
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
@@ -1591,7 +2112,7 @@ func (q *Queries) GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMed
 }
 
 const getOAuthAuthorizationCodeByDigest = `-- name: GetOAuthAuthorizationCodeByDigest :one
-SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id FROM oauth_authorization_codes WHERE code_digest = $1
+SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch FROM oauth_authorization_codes WHERE code_digest = $1
 `
 
 // Replay lookup: returns the row whether or not it was consumed, so the caller
@@ -1611,12 +2132,14 @@ func (q *Queries) GetOAuthAuthorizationCodeByDigest(ctx context.Context, codeDig
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.IssuedFamilyID,
+		&i.GrantID,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
 
 const getOAuthAuthorizationCodeByDigestForUpdate = `-- name: GetOAuthAuthorizationCodeByDigestForUpdate :one
-SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id FROM oauth_authorization_codes WHERE code_digest = $1 FOR UPDATE
+SELECT id, code_digest, client_id, user_id, scopes, code_challenge, redirect_uri, created_at, expires_at, consumed_at, issued_family_id, grant_id, auth_epoch FROM oauth_authorization_codes WHERE code_digest = $1 FOR UPDATE
 `
 
 // The locked replay lookup used before a consumed-code replay revokes the
@@ -1636,6 +2159,8 @@ func (q *Queries) GetOAuthAuthorizationCodeByDigestForUpdate(ctx context.Context
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.IssuedFamilyID,
+		&i.GrantID,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
@@ -1679,7 +2204,7 @@ func (q *Queries) GetOAuthClientForUpdate(ctx context.Context, id uuid.UUID) (OA
 }
 
 const getOAuthGrantForUpdate = `-- name: GetOAuthGrantForUpdate :one
-SELECT id, user_id, client_id, scopes, created_at, revoked_at FROM oauth_grants WHERE id = $1 FOR UPDATE
+SELECT id, user_id, client_id, scopes, created_at, revoked_at, auth_epoch FROM oauth_grants WHERE id = $1 FOR UPDATE
 `
 
 // The grant-row lock every token-family revocation takes first, so a rotation
@@ -1694,12 +2219,13 @@ func (q *Queries) GetOAuthGrantForUpdate(ctx context.Context, id uuid.UUID) (OAu
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
 
 const getOAuthTokenAuthorityByDigest = `-- name: GetOAuthTokenAuthorityByDigest :one
-SELECT token_row.id, token_row.token_digest, token_row.kind, token_row.family_id, token_row.rotated_from, token_row.client_id, token_row.user_id, token_row.grant_id, token_row.created_at, token_row.expires_at, token_row.family_expires_at, token_row.revoked_at, token_row.superseded_at, token_row.last_used_at, grant_row.id, grant_row.user_id, grant_row.client_id, grant_row.scopes, grant_row.created_at, grant_row.revoked_at, user_row.id, user_row.email, user_row.name, user_row.avatar_key, user_row.created_at, user_row.updated_at
+SELECT token_row.id, token_row.token_digest, token_row.kind, token_row.family_id, token_row.rotated_from, token_row.client_id, token_row.user_id, token_row.grant_id, token_row.created_at, token_row.expires_at, token_row.family_expires_at, token_row.revoked_at, token_row.superseded_at, token_row.last_used_at, grant_row.id, grant_row.user_id, grant_row.client_id, grant_row.scopes, grant_row.created_at, grant_row.revoked_at, grant_row.auth_epoch, user_row.id, user_row.email, user_row.name, user_row.avatar_key, user_row.created_at, user_row.updated_at, user_row.auth_epoch
 FROM oauth_tokens AS token_row
 JOIN oauth_grants AS grant_row ON grant_row.id = token_row.grant_id
 JOIN users AS user_row ON user_row.id = token_row.user_id
@@ -1740,12 +2266,14 @@ func (q *Queries) GetOAuthTokenAuthorityByDigest(ctx context.Context, tokenDiges
 		&i.OAuthGrant.Scopes,
 		&i.OAuthGrant.CreatedAt,
 		&i.OAuthGrant.RevokedAt,
+		&i.OAuthGrant.AuthEpoch,
 		&i.User.ID,
 		&i.User.Email,
 		&i.User.Name,
 		&i.User.AvatarKey,
 		&i.User.CreatedAt,
 		&i.User.UpdatedAt,
+		&i.User.AuthEpoch,
 	)
 	return i, err
 }
@@ -1905,6 +2433,33 @@ func (q *Queries) GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UU
 		&i.TokenDigest,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const getPendingAuthenticationByTokenDigestForUpdate = `-- name: GetPendingAuthenticationByTokenDigestForUpdate :one
+SELECT id, token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id, primary_verified_at, return_path, failed_attempts, created_at, expires_at, consumed_at FROM pending_authentications
+WHERE token_digest = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetPendingAuthenticationByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error) {
+	row := q.db.QueryRow(ctx, getPendingAuthenticationByTokenDigestForUpdate, tokenDigest)
+	var i PendingAuthentication
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.CSRFSecret,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PrimaryVerifiedAt,
+		&i.ReturnPath,
+		&i.FailedAttempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
 	)
 	return i, err
 }
@@ -2104,8 +2659,19 @@ func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserPara
 	return i, err
 }
 
+const getSecondFactorPolicyForUpdate = `-- name: GetSecondFactorPolicyForUpdate :one
+SELECT user_id, webauthn_user_handle, enabled_at FROM second_factor_policies WHERE user_id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error) {
+	row := q.db.QueryRow(ctx, getSecondFactorPolicyForUpdate, userID)
+	var i SecondFactorPolicy
+	err := row.Scan(&i.UserID, &i.WebauthnUserHandle, &i.EnabledAt)
+	return i, err
+}
+
 const getSessionByID = `-- name: GetSessionByID :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE id = $1
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE id = $1
 `
 
 // Loads a target so the caller can revoke its rotation partner.
@@ -2128,12 +2694,14 @@ func (q *Queries) GetSessionByID(ctx context.Context, id uuid.UUID) (Session, er
 		&i.UA,
 		&i.IP,
 		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
 	)
 	return i, err
 }
 
 const getSessionByIDForUpdate = `-- name: GetSessionByIDForUpdate :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE id = $1 FOR UPDATE
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE id = $1 FOR UPDATE
 `
 
 // Session-row lock for password add/change, which revokes the current session
@@ -2155,12 +2723,14 @@ func (q *Queries) GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Se
 		&i.UA,
 		&i.IP,
 		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
 	)
 	return i, err
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions WHERE token_hash = $1
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE token_hash = $1
 `
 
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error) {
@@ -2180,6 +2750,8 @@ func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (
 		&i.UA,
 		&i.IP,
 		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
 	)
 	return i, err
 }
@@ -2212,7 +2784,7 @@ func (q *Queries) GetSlugTombstoneForUpdate(ctx context.Context, slug string) (S
 }
 
 const getUserByCanonicalEmail = `-- name: GetUserByCanonicalEmail :one
-SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM users WHERE email = $1
 `
 
 // Ownership read before a new-account insert. The caller passes the canonical
@@ -2228,12 +2800,13 @@ func (q *Queries) GetUserByCanonicalEmail(ctx context.Context, email string) (Us
 		&i.AvatarKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -2246,12 +2819,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.AvatarKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -2264,13 +2838,14 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.AvatarKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
 
 const getUserForUpdate = `-- name: GetUserForUpdate :one
 
-SELECT id, email, name, avatar_key, created_at, updated_at FROM users WHERE id = $1 FOR UPDATE
+SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM users WHERE id = $1 FOR UPDATE
 `
 
 // ---------------------------------------------------------------------------
@@ -2289,6 +2864,62 @@ func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, err
 		&i.AvatarKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthEpoch,
+	)
+	return i, err
+}
+
+const getWebAuthnCeremonyByTokenDigestForUpdate = `-- name: GetWebAuthnCeremonyByTokenDigestForUpdate :one
+SELECT id, token_digest, challenge_digest, user_id, purpose, auth_epoch, session_id, pending_authentication_id, proposed_user_handle, created_at, expires_at, consumed_at FROM webauthn_ceremonies
+WHERE token_digest = $1
+FOR UPDATE
+`
+
+func (q *Queries) GetWebAuthnCeremonyByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (WebauthnCeremony, error) {
+	row := q.db.QueryRow(ctx, getWebAuthnCeremonyByTokenDigestForUpdate, tokenDigest)
+	var i WebauthnCeremony
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.ChallengeDigest,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PendingAuthenticationID,
+		&i.ProposedUserHandle,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
+const getWebAuthnCredentialForUpdate = `-- name: GetWebAuthnCredentialForUpdate :one
+SELECT id, user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at, last_used_at FROM webauthn_credentials
+WHERE id = $1::uuid AND user_id = $2::uuid
+FOR UPDATE
+`
+
+type GetWebAuthnCredentialForUpdateParams struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+func (q *Queries) GetWebAuthnCredentialForUpdate(ctx context.Context, arg GetWebAuthnCredentialForUpdateParams) (WebauthnCredential, error) {
+	row := q.db.QueryRow(ctx, getWebAuthnCredentialForUpdate, arg.ID, arg.UserID)
+	var i WebauthnCredential
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CredentialID,
+		&i.PublicKey,
+		&i.SignCount,
+		&i.BackupEligible,
+		&i.BackupState,
+		&i.Transports,
+		&i.CreatedAt,
+		&i.LastUsedAt,
 	)
 	return i, err
 }
@@ -2302,6 +2933,41 @@ VALUES ('identity_unlinked', $1::timestamptz, NULL)
 func (q *Queries) InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error {
 	_, err := q.db.Exec(ctx, insertIdentityUnlinkedAuditEvent, occurredAt)
 	return err
+}
+
+const insertPasskeyCounterSecurityEvent = `-- name: InsertPasskeyCounterSecurityEvent :one
+INSERT INTO authentication_security_events (
+    kind, user_id, passkey_id, stored_counter, received_counter, occurred_at
+) VALUES ('passkey_counter_non_increasing', $1, $2, $3, $4, $5) RETURNING id, kind, user_id, passkey_id, stored_counter, received_counter, occurred_at
+`
+
+type InsertPasskeyCounterSecurityEventParams struct {
+	UserID          uuid.UUID
+	PasskeyID       uuid.UUID
+	StoredCounter   int64
+	ReceivedCounter int64
+	OccurredAt      time.Time
+}
+
+func (q *Queries) InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error) {
+	row := q.db.QueryRow(ctx, insertPasskeyCounterSecurityEvent,
+		arg.UserID,
+		arg.PasskeyID,
+		arg.StoredCounter,
+		arg.ReceivedCounter,
+		arg.OccurredAt,
+	)
+	var i AuthenticationSecurityEvent
+	err := row.Scan(
+		&i.ID,
+		&i.Kind,
+		&i.UserID,
+		&i.PasskeyID,
+		&i.StoredCounter,
+		&i.ReceivedCounter,
+		&i.OccurredAt,
+	)
+	return i, err
 }
 
 const insertRotatedOAuthToken = `-- name: InsertRotatedOAuthToken :one
@@ -2606,7 +3272,7 @@ func (q *Queries) ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOA
 }
 
 const listLiveSessionsForUser = `-- name: ListLiveSessionsForUser :many
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from FROM sessions
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions
 WHERE user_id = $1
   AND revoked_at IS NULL
   AND last_seen_at >= $2::timestamptz
@@ -2662,6 +3328,8 @@ func (q *Queries) ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessi
 			&i.UA,
 			&i.IP,
 			&i.RotatedFrom,
+			&i.AuthEpoch,
+			&i.SecondFactorVerifiedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2733,6 +3401,43 @@ func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]R
 			&i.UpdatedAt,
 			&i.PublicTitle,
 			&i.FaviconEmoji,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWebAuthnCredentialsForUser = `-- name: ListWebAuthnCredentialsForUser :many
+SELECT id, user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at, last_used_at FROM webauthn_credentials
+WHERE user_id = $1::uuid
+ORDER BY created_at, id
+`
+
+func (q *Queries) ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error) {
+	rows, err := q.db.Query(ctx, listWebAuthnCredentialsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WebauthnCredential
+	for rows.Next() {
+		var i WebauthnCredential
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.CredentialID,
+			&i.PublicKey,
+			&i.SignCount,
+			&i.BackupEligible,
+			&i.BackupState,
+			&i.Transports,
+			&i.CreatedAt,
+			&i.LastUsedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -2934,6 +3639,46 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 	return i, err
 }
 
+const recordPendingAuthenticationFailure = `-- name: RecordPendingAuthenticationFailure :one
+UPDATE pending_authentications
+SET failed_attempts = failed_attempts + 1,
+    consumed_at = CASE
+        WHEN failed_attempts + 1 = 5 THEN $1::timestamptz
+        ELSE consumed_at
+    END
+WHERE id = $2::uuid
+  AND consumed_at IS NULL
+  AND expires_at > $1::timestamptz
+  AND failed_attempts < 5
+RETURNING id, token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id, primary_verified_at, return_path, failed_attempts, created_at, expires_at, consumed_at
+`
+
+type RecordPendingAuthenticationFailureParams struct {
+	AttemptedAt time.Time
+	ID          uuid.UUID
+}
+
+func (q *Queries) RecordPendingAuthenticationFailure(ctx context.Context, arg RecordPendingAuthenticationFailureParams) (PendingAuthentication, error) {
+	row := q.db.QueryRow(ctx, recordPendingAuthenticationFailure, arg.AttemptedAt, arg.ID)
+	var i PendingAuthentication
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.CSRFSecret,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PrimaryVerifiedAt,
+		&i.ReturnPath,
+		&i.FailedAttempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
 const releaseIdempotencyUsage = `-- name: ReleaseIdempotencyUsage :execrows
 UPDATE idempotency_usage
 SET retained_records = retained_records - $2::bigint,
@@ -3061,7 +3806,7 @@ const revokeOAuthGrantForUser = `-- name: RevokeOAuthGrantForUser :one
 UPDATE oauth_grants
 SET revoked_at = $1::timestamptz
 WHERE id = $2 AND user_id = $3 AND revoked_at IS NULL
-RETURNING id, user_id, client_id, scopes, created_at, revoked_at
+RETURNING id, user_id, client_id, scopes, created_at, revoked_at, auth_epoch
 `
 
 type RevokeOAuthGrantForUserParams struct {
@@ -3083,6 +3828,7 @@ func (q *Queries) RevokeOAuthGrantForUser(ctx context.Context, arg RevokeOAuthGr
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }
@@ -3383,6 +4129,59 @@ func (q *Queries) TryReserveIdempotencyUsage(ctx context.Context, arg TryReserve
 	return i, err
 }
 
+const updateCurrentSessionProofs = `-- name: UpdateCurrentSessionProofs :one
+UPDATE sessions
+SET reauthenticated_at = $1::timestamptz,
+    second_factor_verified_at = $1::timestamptz
+WHERE id = $2::uuid
+  AND user_id = $3::uuid
+  AND auth_epoch = $4::bigint
+  AND revoked_at IS NULL
+  AND last_seen_at >= $5::timestamptz
+  AND absolute_expires_at >= $6::timestamptz
+  AND (rotation_grace_until IS NULL OR rotation_grace_until >= $6::timestamptz)
+RETURNING id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at
+`
+
+type UpdateCurrentSessionProofsParams struct {
+	VerifiedAt time.Time
+	ID         uuid.UUID
+	UserID     uuid.UUID
+	AuthEpoch  int64
+	IdleCutoff time.Time
+	Now        time.Time
+}
+
+func (q *Queries) UpdateCurrentSessionProofs(ctx context.Context, arg UpdateCurrentSessionProofsParams) (Session, error) {
+	row := q.db.QueryRow(ctx, updateCurrentSessionProofs,
+		arg.VerifiedAt,
+		arg.ID,
+		arg.UserID,
+		arg.AuthEpoch,
+		arg.IdleCutoff,
+		arg.Now,
+	)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.CSRFSecret,
+		&i.CreatedAt,
+		&i.LastSeenAt,
+		&i.ReauthenticatedAt,
+		&i.AbsoluteExpiresAt,
+		&i.RotationGraceUntil,
+		&i.RevokedAt,
+		&i.UA,
+		&i.IP,
+		&i.RotatedFrom,
+		&i.AuthEpoch,
+		&i.SecondFactorVerifiedAt,
+	)
+	return i, err
+}
+
 const updateResumeDocumentCAS = `-- name: UpdateResumeDocumentCAS :one
 UPDATE resumes
 SET personal_details = $4, content = $5, customization = $6,
@@ -3496,15 +4295,64 @@ func (q *Queries) UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitl
 	return revision, err
 }
 
+const updateWebAuthnCredentialAfterAssertion = `-- name: UpdateWebAuthnCredentialAfterAssertion :one
+UPDATE webauthn_credentials
+SET sign_count = $1::bigint,
+    backup_eligible = $2::boolean,
+    backup_state = $3::boolean,
+    last_used_at = $4::timestamptz
+WHERE id = $5::uuid
+  AND user_id = $6::uuid
+  AND (
+      (sign_count = 0 AND $1::bigint = 0)
+      OR $1::bigint > sign_count
+  )
+RETURNING id, user_id, credential_id, public_key, sign_count, backup_eligible, backup_state, transports, created_at, last_used_at
+`
+
+type UpdateWebAuthnCredentialAfterAssertionParams struct {
+	SignCount      int64
+	BackupEligible bool
+	BackupState    bool
+	LastUsedAt     time.Time
+	ID             uuid.UUID
+	UserID         uuid.UUID
+}
+
+func (q *Queries) UpdateWebAuthnCredentialAfterAssertion(ctx context.Context, arg UpdateWebAuthnCredentialAfterAssertionParams) (WebauthnCredential, error) {
+	row := q.db.QueryRow(ctx, updateWebAuthnCredentialAfterAssertion,
+		arg.SignCount,
+		arg.BackupEligible,
+		arg.BackupState,
+		arg.LastUsedAt,
+		arg.ID,
+		arg.UserID,
+	)
+	var i WebauthnCredential
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CredentialID,
+		&i.PublicKey,
+		&i.SignCount,
+		&i.BackupEligible,
+		&i.BackupState,
+		&i.Transports,
+		&i.CreatedAt,
+		&i.LastUsedAt,
+	)
+	return i, err
+}
+
 const upsertOAuthGrant = `-- name: UpsertOAuthGrant :one
-INSERT INTO oauth_grants (user_id, client_id, scopes, created_at)
+INSERT INTO oauth_grants (user_id, client_id, scopes, created_at, auth_epoch)
 VALUES (
     $1, $2, $3,
-    $4::timestamptz
+    $4::timestamptz, $5::bigint
 )
 ON CONFLICT (user_id, client_id) WHERE revoked_at IS NULL
-DO UPDATE SET scopes = EXCLUDED.scopes
-RETURNING id, user_id, client_id, scopes, created_at, revoked_at
+DO UPDATE SET scopes = EXCLUDED.scopes, auth_epoch = EXCLUDED.auth_epoch
+RETURNING id, user_id, client_id, scopes, created_at, revoked_at, auth_epoch
 `
 
 type UpsertOAuthGrantParams struct {
@@ -3512,6 +4360,7 @@ type UpsertOAuthGrantParams struct {
 	ClientID  uuid.UUID
 	Scopes    string
 	CreatedAt time.Time
+	AuthEpoch int64
 }
 
 // Consent approval (M8): records a new grant or refreshes the live one's
@@ -3526,6 +4375,7 @@ func (q *Queries) UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantPara
 		arg.ClientID,
 		arg.Scopes,
 		arg.CreatedAt,
+		arg.AuthEpoch,
 	)
 	var i OAuthGrant
 	err := row.Scan(
@@ -3535,6 +4385,7 @@ func (q *Queries) UpsertOAuthGrant(ctx context.Context, arg UpsertOAuthGrantPara
 		&i.Scopes,
 		&i.CreatedAt,
 		&i.RevokedAt,
+		&i.AuthEpoch,
 	)
 	return i, err
 }

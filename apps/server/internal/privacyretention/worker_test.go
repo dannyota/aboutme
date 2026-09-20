@@ -403,6 +403,9 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	// The sweep deletes every audit kind by age, including provider unlinks.
 	exactAudit := insertAudit(ctx, t, pool, "identity_unlinked", retentionNow.Add(-180*24*time.Hour))
 	youngAudit := insertAccountDeletionAudit(ctx, t, q, pool, retentionNow.Add(-180*24*time.Hour+time.Second))
+	oldSecurityEvent := insertAuthenticationSecurityEvent(ctx, t, pool, userID, retentionNow.Add(-180*24*time.Hour-time.Second))
+	exactSecurityEvent := insertAuthenticationSecurityEvent(ctx, t, pool, userID, retentionNow.Add(-180*24*time.Hour))
+	youngSecurityEvent := insertAuthenticationSecurityEvent(ctx, t, pool, userID, retentionNow.Add(-180*24*time.Hour+time.Second))
 
 	oldCompleted := insertMediaJob(ctx, t, pool, retentionNow.Add(-181*24*time.Hour), retentionNow.Add(-180*24*time.Hour-time.Second), true)
 	exactCompleted := insertMediaJob(ctx, t, pool, retentionNow.Add(-181*24*time.Hour), retentionNow.Add(-180*24*time.Hour), true)
@@ -411,6 +414,7 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	oauth := insertOAuthRetentionRows(ctx, t, q, pool, userID)
 	t.Cleanup(func() {
 		cleanupExec(ctx, t, pool, "audit rows", `DELETE FROM lifecycle_audit_events WHERE id = ANY($1::uuid[])`, []uuid.UUID{oldAudit, exactAudit, youngAudit})
+		cleanupExec(ctx, t, pool, "authentication security events", `DELETE FROM authentication_security_events WHERE id = ANY($1::uuid[])`, []uuid.UUID{oldSecurityEvent, exactSecurityEvent, youngSecurityEvent})
 		cleanupExec(ctx, t, pool, "media rows", `DELETE FROM media_deletion_jobs WHERE id = ANY($1::uuid[])`, []uuid.UUID{oldCompleted, exactCompleted, youngCompleted, pending})
 	})
 
@@ -418,7 +422,7 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Retain: %v", err)
 	}
-	if result.SessionMetadataRedacted != 2 || result.LifecycleAuditDeleted != 2 || result.CompletedMediaJobsDeleted != 2 {
+	if result.SessionMetadataRedacted != 2 || result.LifecycleAuditDeleted != 2 || result.CompletedMediaJobsDeleted != 2 || result.AuthenticationSecurityEventsDeleted != 2 {
 		t.Errorf("retention counts = %+v", result)
 	}
 	if result.OAuthTransactionsDeleted != 1 || result.OAuthAuthorizationCodesDeleted != 1 || result.OAuthTokensDeleted != 1 || result.OAuthClientsDeleted != 1 {
@@ -430,6 +434,9 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	assertRowExists(ctx, t, pool, "lifecycle_audit_events", oldAudit, false)
 	assertRowExists(ctx, t, pool, "lifecycle_audit_events", exactAudit, false)
 	assertRowExists(ctx, t, pool, "lifecycle_audit_events", youngAudit, true)
+	assertRowExists(ctx, t, pool, "authentication_security_events", oldSecurityEvent, false)
+	assertRowExists(ctx, t, pool, "authentication_security_events", exactSecurityEvent, false)
+	assertRowExists(ctx, t, pool, "authentication_security_events", youngSecurityEvent, true)
 	assertRowExists(ctx, t, pool, "media_deletion_jobs", oldCompleted, false)
 	assertRowExists(ctx, t, pool, "media_deletion_jobs", exactCompleted, false)
 	assertRowExists(ctx, t, pool, "media_deletion_jobs", youngCompleted, true)
@@ -441,7 +448,7 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Retain: %v", err)
 	}
-	if again.SessionMetadataRedacted != 0 || again.LifecycleAuditDeleted != 0 || again.CompletedMediaJobsDeleted != 0 {
+	if again.SessionMetadataRedacted != 0 || again.LifecycleAuditDeleted != 0 || again.CompletedMediaJobsDeleted != 0 || again.AuthenticationSecurityEventsDeleted != 0 {
 		t.Errorf("second Retain mutated retained rows: %+v", again)
 	}
 }
@@ -528,6 +535,18 @@ func insertAudit(ctx context.Context, t *testing.T, pool *store.Pool, kind strin
 	id := uuid.New()
 	if _, err := pool.Exec(ctx, `INSERT INTO lifecycle_audit_events (id, kind, occurred_at) VALUES ($1, $2, $3)`, id, kind, occurredAt); err != nil {
 		t.Fatalf("insert audit: %v", err)
+	}
+	return id
+}
+
+func insertAuthenticationSecurityEvent(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, occurredAt time.Time) uuid.UUID {
+	t.Helper()
+	var id uuid.UUID
+	if err := pool.QueryRow(ctx, `
+		INSERT INTO authentication_security_events (kind, user_id, passkey_id, stored_counter, received_counter, occurred_at)
+		VALUES ('passkey_counter_non_increasing', $1, $2, 1, 1, $3)
+		RETURNING id`, userID, uuid.New(), occurredAt).Scan(&id); err != nil {
+		t.Fatalf("insert authentication security event: %v", err)
 	}
 	return id
 }

@@ -429,7 +429,9 @@ func (w *Worker) lockScope(ctx context.Context, qtx *store.Queries, job store.Au
 			return nil, err
 		}
 		return &scopeState{tokenDigest: tok.TokenDigest}, nil
-	case KindPasswordChanged:
+	case KindPasswordChanged, KindSecondFactorEnabled, KindPasskeyAdded,
+		KindPasskeyRemoved, KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
 		if job.UserID == nil {
 			return nil, ErrScope
 		}
@@ -448,8 +450,8 @@ type scopeState struct {
 }
 
 // tokenMatches reports whether the job's stored digest is still the scope
-// row's current digest. password_changed jobs have no token authority, so any
-// digest (including nil) matches.
+// row's current digest. User-scoped jobs have no token authority, so any digest
+// (including nil) matches.
 func (s *scopeState) tokenMatches(jobDigest []byte) bool {
 	if s.tokenDigest == nil {
 		return true

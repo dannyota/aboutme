@@ -13,6 +13,7 @@ import (
 
 type Querier interface {
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
+	AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error)
 	// This system backfill intentionally does not change revision or updated_at:
 	// it persists the same projected document already served to readers. It is
 	// not user-scoped. See docs/adr/0017-resume-document-versioning.md.
@@ -38,6 +39,8 @@ type Querier interface {
 	// Media deletion and orphan-reconciliation queries. The document photo key is
 	// the ownership authority; media_deletion_jobs is only durable cleanup work.
 	ClaimMediaDeletionJobs(ctx context.Context, arg ClaimMediaDeletionJobsParams) ([]MediaDeletionJob, error)
+	ClaimPendingAuthentication(ctx context.Context, arg ClaimPendingAuthenticationParams) (PendingAuthentication, error)
+	ClaimWebAuthnCeremony(ctx context.Context, arg ClaimWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	ClassifyMediaObject(ctx context.Context, objectKey string) (ClassifyMediaObjectRow, error)
 	CleanupExpiredPasswordRegistrations(ctx context.Context, arg CleanupExpiredPasswordRegistrationsParams) (int64, error)
 	CleanupExpiredPasswordResetTokens(ctx context.Context, arg CleanupExpiredPasswordResetTokensParams) (int64, error)
@@ -46,6 +49,7 @@ type Querier interface {
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
 	CompleteClaimedMediaDeletion(ctx context.Context, arg CompleteClaimedMediaDeletionParams) (bool, error)
 	ConsumeExpiredSlugTombstone(ctx context.Context, arg ConsumeExpiredSlugTombstoneParams) (uuid.UUID, error)
+	ConsumeLiveWebAuthnCeremoniesForBinding(ctx context.Context, arg ConsumeLiveWebAuthnCeremoniesForBindingParams) (int64, error)
 	// Single-use consumption (M2). One conditional UPDATE both takes the row lock
 	// and decides the winner: under two concurrent exchanges of the same code the
 	// second blocks, re-evaluates the predicate after the first commits, matches
@@ -65,11 +69,14 @@ type Querier interface {
 	// transaction just like any other outcome, so it can never be retried
 	// against the correct provider either.
 	ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthTransactionParams) (OAuthTransaction, error)
+	ConsumeOldestLivePendingAuthentication(ctx context.Context, arg ConsumeOldestLivePendingAuthenticationParams) (PendingAuthentication, error)
+	ConsumeSecondFactorRecoveryCode(ctx context.Context, arg ConsumeSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
 	// The M5 live-grant cap check. Callers serialize it with the user row lock
 	// (GetUserForUpdate) so two concurrent approvals cannot both read the same
 	// pre-cap count.
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
 	CreateAndClaimOrphanMediaDeletion(ctx context.Context, arg CreateAndClaimOrphanMediaDeletionParams) (MediaDeletionJob, error)
 	// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
 	// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
@@ -112,7 +119,10 @@ type Querier interface {
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
 	CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error)
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
+	CreatePendingAuthentication(ctx context.Context, arg CreatePendingAuthenticationParams) (PendingAuthentication, error)
 	CreateResume(ctx context.Context, arg CreateResumeParams) (Resume, error)
+	CreateSecondFactorPolicy(ctx context.Context, arg CreateSecondFactorPolicyParams) (SecondFactorPolicy, error)
+	CreateSecondFactorRecoveryCode(ctx context.Context, arg CreateSecondFactorRecoveryCodeParams) (SecondFactorRecoveryCode, error)
 	// Always inserts a brand-new row -- used both by Issue (fixation defense: a
 	// login never reuses an existing session row) and by the >24h rotation
 	// winner's successor insert (internal/auth.SessionManager.Authenticate),
@@ -128,7 +138,10 @@ type Querier interface {
 	// Relational schema changes belong in apps/server/migrations; see
 	// docs/design/data.md.
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateWebAuthnCeremony(ctx context.Context, arg CreateWebAuthnCeremonyParams) (WebauthnCeremony, error)
+	CreateWebAuthnCredential(ctx context.Context, arg CreateWebAuthnCredentialParams) (WebauthnCredential, error)
 	DeleteAccountUser(ctx context.Context, id uuid.UUID) (int64, error)
+	DeleteAuthenticationSecurityEventsPage(ctx context.Context, arg DeleteAuthenticationSecurityEventsPageParams) (int64, error)
 	DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCompletedMediaJobsPageParams) (int64, error)
 	// Deletes exactly this key's record if (and only if) it has expired, and
 	// reports the counters to release — zero rows deleted still returns one
@@ -165,6 +178,8 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
+	DeleteExpiredPendingAuthentications(ctx context.Context, arg DeleteExpiredPendingAuthenticationsParams) (int64, error)
+	DeleteExpiredWebAuthnCeremonies(ctx context.Context, arg DeleteExpiredWebAuthnCeremoniesParams) (int64, error)
 	// Unlinks one identity only when it belongs to the given user. The caller holds
 	// the user-row lock, so the last-sign-in-method check and this delete cannot
 	// interleave with another unlink.
@@ -186,6 +201,8 @@ type Querier interface {
 	// from absence without creating an existence oracle.
 	DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeForUserCASParams) (Resume, error)
 	DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error)
+	DeleteSecondFactorPolicyForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	DeleteSecondFactorRecoveryCodesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Bounded token cleanup. An access token leaves as soon as it has expired or
 	// been revoked: it carries no replay-detection role. A refresh token is kept
 	// until its whole family has expired, because a superseded or revoked refresh
@@ -193,6 +210,7 @@ type Querier interface {
 	// than as an unknown token. rotated_from is ON DELETE SET NULL, so removing a
 	// predecessor detaches its successor instead of cascading past the batch bound.
 	DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTerminalOAuthTokensParams) (int64, error)
+	DeleteWebAuthnCredentialForUser(ctx context.Context, arg DeleteWebAuthnCredentialForUserParams) (WebauthnCredential, error)
 	// Records exact-key cleanup work in the caller's transaction (ADR 0019).
 	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
 	// table's own check constraint rejects a malformed or cross-resume key.
@@ -211,6 +229,7 @@ type Querier interface {
 	// names, and owner resume rows. Credentials, provider subjects, object keys,
 	// and lifecycle records do not cross the HTTP export boundary.
 	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
+	GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error)
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
 	// Inputs for the capacity Retry-After decision: while an expired retained
 	// row remains the caller retries in one second (the next mutation's
@@ -269,6 +288,7 @@ type Querier interface {
 	GetPasswordResetTokenByDigest(ctx context.Context, tokenDigest []byte) (PasswordResetToken, error)
 	GetPasswordResetTokenByUserForUpdate(ctx context.Context, userID uuid.UUID) (PasswordResetToken, error)
 	GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UUID) (PasswordResetToken, error)
+	GetPendingAuthenticationByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error)
 	// The generation and eligible slug set are selected by one PostgreSQL
 	// statement so aggregate discovery admission cannot pair different commits.
 	GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDiscoverySnapshotRow, error)
@@ -283,6 +303,7 @@ type Querier interface {
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
+	GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error)
 	// Loads a target so the caller can revoke its rotation partner.
 	// RevokeSessionForUser returns only a row count, and the target need not be the
 	// caller's current session, so the lineage values require this read.
@@ -307,9 +328,12 @@ type Querier interface {
 	// ---------------------------------------------------------------------------
 	// The user-row lock every session issuer and password mutation serializes on.
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)
+	GetWebAuthnCeremonyByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (WebauthnCeremony, error)
+	GetWebAuthnCredentialForUpdate(ctx context.Context, arg GetWebAuthnCredentialForUpdateParams) (WebauthnCredential, error)
 	InsertAccountDeletedAuditEvent(ctx context.Context, arg InsertAccountDeletedAuditEventParams) (LifecycleAuditEvent, error)
 	// Records the unlink's kind and time only: no user, provider, or identity.
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
+	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
 	// Refresh rotation (M3). Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted
 	// from the caller, so a rotated token structurally cannot join a different
@@ -371,6 +395,7 @@ type Querier interface {
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
+	ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
 	// Account deletion owns the global lock order documented in
 	// docs/design/operations.md. The caller takes slug advisory locks and
 	// public_state before these account-scoped locks.
@@ -393,6 +418,7 @@ type Querier interface {
 	// with backfill, insert, and cleanup.
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
+	RecordPendingAuthenticationFailure(ctx context.Context, arg RecordPendingAuthenticationFailureParams) (PendingAuthentication, error)
 	RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error)
 	// Releases exactly the counters of physically deleted records, in the same
 	// transaction as their deletion. The migration's purge-then-backfill order
@@ -488,6 +514,7 @@ type Querier interface {
 	TryReserveIdempotencyUsage(ctx context.Context, arg TryReserveIdempotencyUsageParams) (TryReserveIdempotencyUsageRow, error)
 	UnlockIdempotencyExpirySweep(ctx context.Context) (bool, error)
 	UnlockPrivacyRetentionSweep(ctx context.Context) (bool, error)
+	UpdateCurrentSessionProofs(ctx context.Context, arg UpdateCurrentSessionProofsParams) (Session, error)
 	// The returned revision is the NEW revision (revision + 1), never the
 	// caller's expected one. A stale or non-matching $3 updates zero rows and
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into
@@ -505,6 +532,7 @@ type Querier interface {
 	// surfaces as pgx.ErrNoRows, which internal/resume turns into
 	// *RevisionMismatchError or ErrNotFound.
 	UpdateResumeTitleCAS(ctx context.Context, arg UpdateResumeTitleCASParams) (int64, error)
+	UpdateWebAuthnCredentialAfterAssertion(ctx context.Context, arg UpdateWebAuthnCredentialAfterAssertionParams) (WebauthnCredential, error)
 	// Consent approval (M8): records a new grant or refreshes the live one's
 	// scopes. The conflict target names the partial unique index's predicate, so
 	// the upsert arbitrates on exactly the "one live grant per (user, client)"

@@ -10,6 +10,32 @@ import (
 	"time"
 )
 
+const deleteAuthenticationSecurityEventsPage = `-- name: DeleteAuthenticationSecurityEventsPage :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM authentication_security_events
+    WHERE occurred_at <= $1::timestamptz
+    ORDER BY occurred_at, id
+    LIMIT LEAST($2::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM authentication_security_events AS event
+USING candidates
+WHERE event.id = candidates.id
+`
+
+type DeleteAuthenticationSecurityEventsPageParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+func (q *Queries) DeleteAuthenticationSecurityEventsPage(ctx context.Context, arg DeleteAuthenticationSecurityEventsPageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteAuthenticationSecurityEventsPage, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteCompletedMediaJobsPage = `-- name: DeleteCompletedMediaJobsPage :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id
@@ -139,6 +165,32 @@ func (q *Queries) ExpireIdempotencyPage(ctx context.Context, arg ExpireIdempoten
 		&i.ReleasedRecords,
 		&i.ReleasedBytes,
 	)
+	return i, err
+}
+
+const getAuthenticationSecurityEventsBacklog = `-- name: GetAuthenticationSecurityEventsBacklog :one
+SELECT count(*)::bigint AS backlog,
+       (COALESCE(floor(extract(epoch FROM
+           greatest($1::timestamptz - min(occurred_at), interval '0 seconds'))), 0))::bigint
+           AS oldest_age_seconds
+FROM authentication_security_events
+WHERE occurred_at <= $2::timestamptz
+`
+
+type GetAuthenticationSecurityEventsBacklogParams struct {
+	Now    time.Time
+	Cutoff time.Time
+}
+
+type GetAuthenticationSecurityEventsBacklogRow struct {
+	Backlog          int64
+	OldestAgeSeconds int64
+}
+
+func (q *Queries) GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error) {
+	row := q.db.QueryRow(ctx, getAuthenticationSecurityEventsBacklog, arg.Now, arg.Cutoff)
+	var i GetAuthenticationSecurityEventsBacklogRow
+	err := row.Scan(&i.Backlog, &i.OldestAgeSeconds)
 	return i, err
 }
 

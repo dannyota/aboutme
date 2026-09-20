@@ -263,6 +263,74 @@ func TestOutboxEnqueueScopeMapping(t *testing.T) {
 	}
 }
 
+func TestOutboxEnqueueSecurityKindUsesUserScope(t *testing.T) {
+	for _, kind := range []Kind{
+		KindSecondFactorEnabled,
+		KindPasskeyAdded,
+		KindPasskeyRemoved,
+		KindSecondFactorDisabled,
+		KindRecoveryCodesRegenerated,
+		KindRecoveryCodeUsed,
+		KindSecondFactorAttemptsExhausted,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
+			o := newTestOutbox(t, ring, func() time.Time { return testNow })
+			userID := uuid.New()
+			payload := securityPayloadForKind(kind)
+			f := &fakeDBTX{}
+			err := o.EnqueueTx(context.Background(), store.New(f), EnqueueRequest{
+				JobID: uuid.New(), Kind: kind, UserID: &userID, Payload: payload,
+				ExpiresAt: testNow.Add(24 * time.Hour),
+			})
+			if err != nil {
+				t.Fatalf("EnqueueTx: %v", err)
+			}
+			if len(f.inserts) != 1 {
+				t.Fatalf("inserts = %d, want 1", len(f.inserts))
+			}
+			args := f.inserts[0].args
+			if !isNilAny(args[3]) || !isNilAny(args[4]) {
+				t.Fatalf("security job scopes = registration %v reset %v, want nil", args[3], args[4])
+			}
+			if got, ok := args[5].(*uuid.UUID); !ok || got == nil || *got != userID {
+				t.Fatalf("security job user scope = %v, want %s", args[5], userID)
+			}
+			if !isNilAny(args[6]) {
+				t.Fatalf("security job token digest = %v, want nil", args[6])
+			}
+		})
+	}
+}
+
+func TestOutboxEnqueueSecurityKindRequiresEventPlus24HourExpiry(t *testing.T) {
+	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
+	o := newTestOutbox(t, ring, func() time.Time { return testNow })
+	userID := uuid.New()
+	payload := securityPayloadForKind(KindSecondFactorEnabled)
+	for _, expiresAt := range []time.Time{testNow.Add(23 * time.Hour), testNow.Add(24*time.Hour + time.Second)} {
+		err := o.EnqueueTx(context.Background(), store.New(&fakeDBTX{}), EnqueueRequest{
+			JobID: uuid.New(), Kind: KindSecondFactorEnabled, UserID: &userID, Payload: payload, ExpiresAt: expiresAt,
+		})
+		if !errors.Is(err, ErrExpiry) {
+			t.Fatalf("EnqueueTx expiry %s = %v, want ErrExpiry", expiresAt, err)
+		}
+	}
+}
+
+func securityPayloadForKind(kind Kind) Payload {
+	return securityPayloadAt(kind, testNow)
+}
+
+func securityPayloadAt(kind Kind, occurredAt time.Time) Payload {
+	p := Payload{Version: 2, To: "alice@example.com", OccurredAt: occurredAt.UTC().Format(time.RFC3339)}
+	if kind == KindRecoveryCodeUsed {
+		remaining := 9
+		p.RemainingRecoveryCodes = &remaining
+	}
+	return p
+}
+
 func TestOutboxEnqueueEncryptedOnlyInsert(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	o := newTestOutbox(t, ring, func() time.Time { return testNow })

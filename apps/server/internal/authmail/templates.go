@@ -2,6 +2,7 @@ package authmail
 
 import (
 	"html"
+	"strconv"
 	"strings"
 )
 
@@ -41,6 +42,7 @@ type template struct {
 	preheader string
 	action    string
 	vi, en    section
+	security  bool
 }
 
 var templates = map[Kind]template{
@@ -94,6 +96,29 @@ var templates = map[Kind]template{
 			note:    "If you did not make this change, reply to this email right away and we will help.",
 		},
 	},
+	KindSecondFactorEnabled:           securityTemplate("Xác thực hai bước đã bật / Second factor enabled", "Xác thực hai bước đã được bật", "Second-factor authentication was enabled"),
+	KindPasskeyAdded:                  securityTemplate("Passkey đã được thêm / Passkey added", "Một passkey đã được thêm", "A passkey was added"),
+	KindPasskeyRemoved:                securityTemplate("Passkey đã được xóa / Passkey removed", "Một passkey đã được xóa", "A passkey was removed"),
+	KindSecondFactorDisabled:          securityTemplate("Xác thực hai bước đã tắt / Second factor disabled", "Xác thực hai bước đã được tắt", "Second-factor authentication was disabled"),
+	KindRecoveryCodesRegenerated:      securityTemplate("Mã khôi phục đã tạo lại / Recovery codes regenerated", "Mã khôi phục đã được tạo lại", "Recovery codes were regenerated"),
+	KindRecoveryCodeUsed:              securityTemplate("Mã khôi phục đã được dùng / Recovery code used", "Một mã khôi phục đã được dùng", "A recovery code was used"),
+	KindSecondFactorAttemptsExhausted: securityTemplate("Đã hết lượt xác thực hai bước / Second-factor attempts exhausted", "Đã hết lượt thử xác thực hai bước", "Second-factor verification attempts were exhausted"),
+}
+
+func securityTemplate(subject, viAction, enAction string) template {
+	return template{
+		subject:   subject,
+		preheader: "Thông báo bảo mật aboutme. aboutme security notice.",
+		vi: section{
+			lang: "vi", heading: "Thông báo bảo mật", body: viAction,
+			note: "Nếu bạn không thực hiện việc này, hãy đổi mật khẩu và thu hồi các phiên đăng nhập ngay.",
+		},
+		en: section{
+			lang: "en", heading: "Security notice", body: enAction,
+			note: "If you did not do this, change your password and revoke your sessions right away.",
+		},
+		security: true,
+	}
 }
 
 // buildMessage renders the fixed template for a decrypted payload. An unknown
@@ -102,6 +127,9 @@ func buildMessage(kind Kind, p Payload) Message {
 	t, ok := templates[kind]
 	if !ok {
 		return Message{Kind: kind, To: p.To}
+	}
+	if t.security {
+		t = withSecurityDetails(t, p)
 	}
 	link := ""
 	if t.action != "" {
@@ -114,6 +142,17 @@ func buildMessage(kind Kind, p Payload) Message {
 		TextBody: renderText(t, link),
 		HTMLBody: renderHTML(t, link),
 	}
+}
+
+func withSecurityDetails(t template, p Payload) template {
+	t.vi.body += " vào lúc " + p.OccurredAt + "."
+	t.en.body += " at " + p.OccurredAt + "."
+	if p.RemainingRecoveryCodes != nil {
+		count := strconv.Itoa(*p.RemainingRecoveryCodes)
+		t.vi.body += " Còn lại " + count + " mã khôi phục."
+		t.en.body += " " + count + " recovery codes remain."
+	}
+	return t
 }
 
 func renderText(t template, link string) string {

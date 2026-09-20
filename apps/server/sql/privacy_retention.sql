@@ -141,3 +141,23 @@ SELECT count(*)::bigint AS backlog,
 FROM media_deletion_jobs
 WHERE completed_at IS NOT NULL
   AND completed_at <= sqlc.arg(cutoff)::timestamptz;
+
+-- name: DeleteAuthenticationSecurityEventsPage :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id FROM authentication_security_events
+    WHERE occurred_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY occurred_at, id
+    LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM authentication_security_events AS event
+USING candidates
+WHERE event.id = candidates.id;
+
+-- name: GetAuthenticationSecurityEventsBacklog :one
+SELECT count(*)::bigint AS backlog,
+       (COALESCE(floor(extract(epoch FROM
+           greatest(sqlc.arg(now)::timestamptz - min(occurred_at), interval '0 seconds'))), 0))::bigint
+           AS oldest_age_seconds
+FROM authentication_security_events
+WHERE occurred_at <= sqlc.arg(cutoff)::timestamptz;

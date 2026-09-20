@@ -177,6 +177,7 @@ func TestOAuthCodeConsumeHasOneWinnerUnderConcurrentTransactions(t *testing.T) {
 
 	userID := newOAuthStoreUser(ctx, t, seed)
 	client := newOAuthStoreClient(ctx, t, seed, oauthStoreNow)
+	newOAuthStoreGrant(ctx, t, seed, userID, client.ID, oauthStoreScopesBoth)
 	code := newOAuthStoreCode(ctx, t, seed, userID, client.ID, oauthStoreNow)
 	t.Cleanup(func() {
 		cleanupCtx := context.Background()
@@ -257,6 +258,7 @@ func TestOAuthCodeConsumeRejectsExpiredAndReplayedCodes(t *testing.T) {
 	ctx, _, _, q := newOAuthStoreTx(t)
 	userID := newOAuthStoreUser(ctx, t, q)
 	client := newOAuthStoreClient(ctx, t, q, oauthStoreNow)
+	newOAuthStoreGrant(ctx, t, q, userID, client.ID, oauthStoreScopesBoth)
 
 	fresh := newOAuthStoreCode(ctx, t, q, userID, client.ID, oauthStoreNow)
 	if want := oauthStoreNow.Add(oauthStoreCodeTTL); !fresh.ExpiresAt.Equal(want) {
