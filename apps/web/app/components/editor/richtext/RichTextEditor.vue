@@ -37,6 +37,11 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>();
 const { locale } = useLocale();
 const copy = computed(() => editorControlsCopy[locale.value].richText);
 const label = computed(() => props.label ?? copy.value.editorLabel);
+const editorAttributes = computed(() => ({
+  'aria-label': label.value,
+  'aria-multiline': 'true',
+  'role': 'textbox',
+}));
 
 /** Typing pauses this long before the text goes to the store. */
 const RICH_TEXT_COMMIT_DELAY_MS = 400;
@@ -195,11 +200,7 @@ function blockDroppedFiles(event: DragEvent): void {
 onMounted(() => {
   if (editorRoot.value === undefined) return;
   view = new EditorView(editorRoot.value, {
-    attributes: {
-      'aria-label': label.value,
-      'aria-multiline': 'true',
-      'role': 'textbox',
-    },
+    attributes: editorAttributes.value,
     dispatchTransaction,
     handleTextInput: handleListMarkerInput,
     handleDrop: (_editor, event) => {
@@ -235,6 +236,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   commitPending();
   view?.destroy();
+});
+
+watch(editorAttributes, (attributes) => {
+  view?.setProps({ attributes });
 });
 
 watch(

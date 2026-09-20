@@ -140,16 +140,68 @@ describe('RichTextEditor', () => {
     });
     const editor = wrapper.get('[contenteditable="true"]');
     await selectEditorText(editor.element);
-    const documentBefore = editor.html();
+    const documentBefore = editor.element.innerHTML;
     expect(window.getSelection()?.toString()).toBe('selected text');
 
     locale.value = 'vi';
     await nextTick();
 
-    expect(editor.html()).toBe(documentBefore);
+    expect(editor.element.innerHTML).toBe(documentBefore);
     expect(window.getSelection()?.toString()).toBe('selected text');
     expect(wrapper.get('[role="toolbar"]').attributes('aria-label'))
       .toBe('Điều khiển văn bản có định dạng');
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it(
+    'updates the editable label without changing the selected document',
+    async () => {
+      const wrapper = mount(RichTextEditor, {
+        attachTo: document.body,
+        props: { modelValue: '<p>selected text</p>' },
+      });
+      const editor = wrapper.get('[contenteditable="true"]');
+      await selectEditorText(editor.element);
+      const documentBefore = editor.element.innerHTML;
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect(editor.attributes('aria-label')).toBe('Văn bản có định dạng');
+      expect(editor.element.innerHTML).toBe(documentBefore);
+      expect(window.getSelection()?.toString()).toBe('selected text');
+      expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+      wrapper.unmount();
+    },
+  );
+
+  it('keeps the localized editable label after a document update', async () => {
+    const wrapper = mount(RichTextEditor, {
+      attachTo: document.body,
+      props: { modelValue: '<p>selected text</p>' },
+    });
+    const editor = wrapper.get('[contenteditable="true"]');
+    const editorElement = editor.element;
+    await selectEditorText(editorElement);
+
+    locale.value = 'vi';
+    await nextTick();
+
+    const paste = new Event('paste', { cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: {
+        files: [],
+        getData: (kind: string) => kind === 'text/plain' ? 'draft' : '',
+      },
+    });
+    editorElement.dispatchEvent(paste);
+    await nextTick();
+
+    expect(editor.element).toBe(editorElement);
+    expect(document.activeElement).toBe(editorElement);
+    expect(editor.attributes('aria-label')).toBe('Văn bản có định dạng');
+    expect(editor.html()).toContain('draft');
     expect(wrapper.emitted('update:modelValue')).toBeUndefined();
     wrapper.unmount();
   });
