@@ -4,8 +4,8 @@ Role: frontend. Model: `gpt-5.6-terra`.
 
 ## Objective and authority
 
-Regenerate the web source manifest and run the integrated Nuxt gate after both
-passkey UI tasks are accepted. Read `AGENTS.md`,
+Regenerate the web source manifest and add the focused generated-client contract
+case after both passkey UI tasks are accepted. Read `AGENTS.md`,
 `docs/design/second-factor-authentication.md`,
 `docs/design/passkey-second-factor-contract.md`, ADR 0048, both frontend
 reports, and the source-manifest scripts before editing.
@@ -25,21 +25,23 @@ any other source or test defect to its owning frontend author.
 
 Start with `git status --short`. Add the focused generated-client contract case,
 then confirm the working tree contains only the accepted release files before
-regenerating. The top manager must grant one frontend build lane before these
-commands run:
+regenerating the manifest through `make web-source-manifest-update`. The update
+is an authoring step, not verification. Do not run local tests, builds, lint,
+installs, database writes, browsers, or development stacks. Report these checks
+as unrun pending GitHub CI on the exact candidate:
 
 ```bash
 (cd apps/web && npx vitest run test/nuxt/api-contract.test.ts)
-make web-source-manifest-update
 make web-source-manifest-check
 make web-lint web-typecheck web-test web-build
 ```
 
-Do not update pixel baselines. Run `make web-e2e` only if the manager finds a
-renderer or public-page dependency, which this release forbids.
+Do not update pixel baselines. Hosted `make web-e2e` remains a regression gate;
+it does not replace the hosted passkey browser proof.
 
-Definition of done: the manifest includes every new web source, the complete
-Nuxt gate passes, and no public renderer or print source changed. Report the
-exact generated manifest lines, commands and results, skipped checks with exact
-reason, client JavaScript byte delta if the manager requests it, and open items.
-Do not perform Git operations. Use short plain text with no em dash.
+Definition of done: the manifest includes every new web source, exact-candidate
+CI passes the complete Nuxt gate, and no public renderer or print source
+changed. Report the exact generated manifest lines, checks and results or
+awaiting CI, skipped checks with exact reason, client JavaScript byte delta if
+the manager requests it, and open items. Do not perform Git operations. Use
+short plain text with no em dash.

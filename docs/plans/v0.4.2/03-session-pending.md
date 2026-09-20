@@ -53,8 +53,9 @@ OpenAPI, web files, migrations, or infrastructure.
 
 Start with `git status --short`. Add failing unit and live-database race tests
 for stale epochs, pending isolation, sixth-row expiry, wrong binding, concurrent
-completion, exhaustion, and session replacement. The top manager must grant the
-database and normal test lanes before these commands run:
+completion, exhaustion, and session replacement. Do not run local tests, builds,
+lint, installs, database writes, browsers, or development stacks. Report these
+checks as unrun pending GitHub CI on the exact candidate:
 
 ```bash
 (cd apps/server && go test -count=1 ./internal/auth)

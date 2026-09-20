@@ -48,8 +48,9 @@ web files, migrations, or infrastructure.
 
 Start with `git status --short`. Add failing tests for stale grants, codes,
 bearers, refresh tokens, silent reuse, concurrent issue and exchange, and
-factor-change revocation. The top manager must grant the database and normal
-test lanes before these commands run:
+factor-change revocation. Do not run local tests, builds, lint, installs,
+database writes, browsers, or development stacks. Report these checks as unrun
+pending GitHub CI on the exact candidate:
 
 ```bash
 (cd apps/server && go test -count=1 ./internal/oauthsrv ./internal/mcpapi)

@@ -49,8 +49,9 @@ infrastructure files.
 
 Start with `git status --short`. Add failing authorization, export-absence,
 cascade, stale-session, rename, unpublish, delete, slug-release, and concurrency
-cases first. The top manager must grant the database and normal test lanes
-before these commands run:
+cases first. Do not run local tests, builds, lint, installs, database writes,
+browsers, or development stacks. Report these checks as unrun pending GitHub CI
+on the exact candidate:
 
 ```bash
 (cd apps/server && go test -count=1 ./internal/accountapi ./internal/resumeapi)

@@ -58,8 +58,10 @@ design sources. Do not run AWS or apply OpenTofu.
 ## Test-first cycle and checks
 
 Start with `git status --short`. Add configuration validation or static contract
-tests before resources where the repository pattern supports them. The top
-manager must grant the infrastructure lane before these commands run:
+tests before resources where the repository pattern supports them. Do not run
+local tests, builds, lint, installs, database writes, browsers, development
+stacks, OpenTofu initialization, or OpenTofu validation. Report these checks as
+unrun pending GitHub CI on the exact candidate:
 
 ```bash
 tofu fmt -check -recursive deploy/aws

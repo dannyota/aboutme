@@ -50,8 +50,9 @@ manifest, browser specs, backend, design, or infrastructure. Do not add TOTP UI.
 Start with `git status --short`. Add failing tests for 204 versus 202, password
 and provider landings, invalid return paths, no normal session access, browser
 cancel, malformed options, recovery cleanup, both locales, and locale changes
-during a pending attempt. The top manager must grant the frontend lanes before
-these commands run:
+during a pending attempt. Do not run local tests, builds, lint, installs,
+database writes, browsers, or development stacks. Report these checks as unrun
+pending GitHub CI on the exact candidate:
 
 ```bash
 (cd apps/web && npx vitest run test/login.test.ts test/second-factor-login.test.ts test/webauthn.test.ts)

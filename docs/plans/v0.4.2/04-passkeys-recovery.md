@@ -62,8 +62,10 @@ OpenAPI, web, migration, or infrastructure files. Do not implement TOTP.
 
 Start with `git status --short`. Add failing unit, HTTP, and live-database race
 tests before implementation. Include a frozen hostile assertion corpus and
-counter, replay, wrong-binding, notification rollback, and recovery races. The
-top manager must grant database and normal test lanes before these commands run:
+counter, replay, wrong-binding, notification rollback, and recovery races. Do
+not run local tests, builds, lint, installs, database writes, browsers, or
+development stacks. Report these checks as unrun pending GitHub CI on the exact
+candidate:
 
 ```bash
 (cd apps/server && go mod tidy && go mod verify)

@@ -5,7 +5,7 @@ Role: reviewer. Model: `gpt-5.6-sol`.
 ## Objective and authority
 
 Review the complete v0.4.2 release once, after the manager verifies every author
-report and local acceptance proof. Read `AGENTS.md`,
+report and before the candidate leaves the local repository. Read `AGENTS.md`,
 `docs/design/second-factor-authentication.md`,
 `docs/design/passkey-second-factor-contract.md`,
 `docs/design/passkey-release-fence.md`, ADR 0048, affected design and budget
@@ -39,12 +39,18 @@ working-tree changes.
   failed-deploy restoration, activation, and flag order.
 - Inspect both locales, recovery plaintext cleanup, browser evidence, all
   acceptance evidence, dependency version review, and every claimed command.
+- Confirm the docs job only compiles and lists the passkey browser mode. Confirm
+  the separate `passkey-browser-proof` job contract executes the candidate with
+  fictional data, bounded secret-free evidence, test cleanup, and unconditional
+  stack and runner-local database teardown. Hosted results are a later manager
+  gate on the unchanged reviewed commit.
 
 ## Report contract
 
 Rank findings by severity. For each finding, state the failure scenario, exact
 path and line, violated authority, and owning author brief. Name every invariant
-confirmed. List reports and checks inspected, checks not run with reason,
-evidence paths, and open items. Findings return to the original path owner. The
+confirmed. List reports and checks inspected, checks not run with reason, exact
+candidate SHA, and open items. Do not launch a local test, build, linter,
+browser, database, or stack. Findings return to the original path owner. The
 same reviewer confirms each fix against the corrected integrated diff. Use short
 plain text with no em dash.
