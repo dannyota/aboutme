@@ -326,6 +326,7 @@ func TestOAuthAuthorizationCodeConstraints(t *testing.T) {
 	tx, ctx := newResumeSchemaTx(t)
 	userID := createTestUser(ctx, t, tx)
 	clientID := insertOAuthClient(ctx, t, tx)
+	insertOAuthGrant(ctx, t, tx, userID, clientID)
 
 	type codeRow struct {
 		digest      []byte

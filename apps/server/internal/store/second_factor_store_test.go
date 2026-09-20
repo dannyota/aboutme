@@ -231,6 +231,9 @@ func TestSecondFactorStore_FifthPendingFailureHasOneWinner(t *testing.T) {
 	if got := <-outcomeB; !errors.Is(got.err, pgx.ErrNoRows) {
 		t.Errorf("B failure error = %v, want pgx.ErrNoRows", got.err)
 	}
+	if err := txB.Rollback(ctx); err != nil {
+		t.Fatalf("B rollback: %v", err)
+	}
 	stored, err := seed.GetPendingAuthenticationByTokenDigestForUpdate(ctx, pending.TokenDigest)
 	if err != nil {
 		t.Fatalf("stored pending: %v", err)

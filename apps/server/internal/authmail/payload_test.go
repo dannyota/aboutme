@@ -181,23 +181,26 @@ func TestDecodePayloadStrictAcceptsVersionTwoSecurityPayload(t *testing.T) {
 }
 
 func TestDecodePayloadStrictRejectsMalformedVersionTwoSecurityPayload(t *testing.T) {
-	cases := []string{
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00.001Z"}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00+00:00"}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":10}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":null}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","credentialId":"forbidden"}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":"forbidden"}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":9}`,
-		`{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":""}`,
+	cases := []struct {
+		kind  Kind
+		input string
+	}{
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00.001Z"}`},
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00+00:00"}`},
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":10}`},
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":null}`},
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","credentialId":"forbidden"}`},
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":"forbidden"}`},
+		{KindSecondFactorEnabled, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":9}`},
+		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":""}`},
 	}
-	for _, input := range cases {
-		payload, err := decodePayloadStrict([]byte(input))
+	for _, tc := range cases {
+		payload, err := decodePayloadStrict([]byte(tc.input))
 		if err == nil {
-			err = validatePayload(Kind("recovery_code_used"), payload)
+			err = validatePayload(tc.kind, payload)
 		}
 		if err == nil {
-			t.Fatalf("security payload %s accepted", input)
+			t.Fatalf("security payload %s accepted for %q", tc.input, tc.kind)
 		}
 	}
 }
