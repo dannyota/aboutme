@@ -1,8 +1,6 @@
-// Site languages. The homepage, the account pages (sign in, registration,
-// password recovery, email verification), the Privacy Policy and Terms, and
-// the template gallery are bilingual and default to Vietnamese for the
-// initial community (docs/design/product.md). The resume workspace is also
-// bilingual. Settings and authorization stay English.
+// Site languages. The homepage, account pages, the Privacy Policy and Terms,
+// template gallery, resume workspace, settings, and authorization are
+// bilingual and default to Vietnamese (docs/design/account-localization.md).
 
 export const locales = ['vi', 'en'] as const;
 
@@ -38,6 +36,8 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/verify-email',
   '/privacy',
   '/terms',
+  '/app/settings/sessions',
+  '/authorize',
 ]);
 
 /** The template gallery, /templates, and its template pages. */

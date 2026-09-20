@@ -33,9 +33,13 @@ import {
 } from '../../../composables/providerAuthorization';
 import { formatRelativeTime } from '../../../utils/relativeTime';
 import { describeUserAgent } from '../../../utils/userAgent';
-import { appTitles } from '@/i18n/meta';
+import { workspaceTitles } from '@/i18n/meta';
+import { settingsCopy } from '@/i18n/settings';
 
-useHead({ title: appTitles.settings });
+const { locale } = useLocale();
+const copy = computed(() => settingsCopy[locale.value]);
+
+useHead({ title: computed(() => workspaceTitles[locale.value].settings) });
 
 interface SessionInfo {
   id: string;
@@ -89,7 +93,14 @@ const sessions = computed(
   () => sessionsOverride.value ?? sessionsResponse.value?.data ?? [],
 );
 
-const revokeError = ref<string | null>(null);
+type RevokeError = 'single' | 'all';
+
+const revokeError = ref<RevokeError | null>(null);
+const revokeErrorMessage = computed(() => {
+  if (revokeError.value === 'single') return copy.value.revokeFailed;
+  if (revokeError.value === 'all') return copy.value.logOutEverywhereFailed;
+  return null;
+});
 
 async function refreshSessions(): Promise<void> {
   const response = await $fetch<SessionsEnvelope>('/api/v1/sessions', {
@@ -119,19 +130,14 @@ function isNotFound(error: unknown): boolean {
 
 type ReauthReason = 'link' | 'action';
 
-const reauthMessages: Record<ReauthReason, string> = {
-  link: [
-    'Sign in again to confirm it\'s you before we link a new',
-    'provider.',
-  ].join(' '),
-  action: 'Sign in again to confirm it\'s you, then try again.',
-};
-
 const reauthRequired = ref(route.query.error === 'reauth_required');
 const reauthReason = ref<ReauthReason>(
   route.query.error === 'reauth_required' ? 'link' : 'action',
 );
-const reauthMessage = computed(() => reauthMessages[reauthReason.value]);
+const reauthMessage = computed(() =>
+  reauthReason.value === 'link'
+    ? copy.value.reauthLink
+    : copy.value.reauthAction);
 const reauthProvider = computed(
   () => enabledIdentities.value[0]?.provider ?? null,
 );
@@ -151,7 +157,7 @@ async function revokeSession(id: string): Promise<void> {
       return;
     }
     if (!isNotFound(error)) {
-      revokeError.value = 'Could not revoke that session. Try again.';
+      revokeError.value = 'single';
       return;
     }
     // An already-absent session means the stale list can be refreshed.
@@ -191,7 +197,7 @@ async function revokeAll(): Promise<void> {
       triggerReauthPrompt('action');
       return;
     }
-    revokeError.value = 'Could not log out everywhere. Try again.';
+    revokeError.value = 'all';
     return;
   }
   // This also destroys the current session, so there is nothing to refresh.
@@ -207,7 +213,7 @@ const unlinkedProviders = computed(() =>
 
 const showAddProvider = ref(false);
 const startPending = ref(false);
-const startError = ref<string | null>(null);
+const startError = ref(false);
 
 async function openAddProvider(): Promise<void> {
   // Refresh identities/csrfToken before offering link targets, so we don't
@@ -220,7 +226,7 @@ async function startOAuth(
   provider: AuthProvider,
   purpose: 'link' | 'reauth',
 ): Promise<void> {
-  startError.value = null;
+  startError.value = false;
   startPending.value = true;
   try {
     const response = await mutate<AuthStartEnvelope>(
@@ -235,7 +241,7 @@ async function startOAuth(
       triggerReauthPrompt('link');
       return;
     }
-    startError.value = 'Something went wrong. Please try again.';
+    startError.value = true;
   } finally {
     startPending.value = false;
   }
@@ -336,13 +342,6 @@ async function onPasswordUpdated(): Promise<void> {
 }
 
 // OAuthCallbackErrorCode in OpenAPI is the closed callback vocabulary.
-const linkErrorMessages: Record<string, string> = {
-  auth_failed: 'Something went wrong. Please try again.',
-  cancelled: 'That was cancelled.',
-  identity_already_linked:
-    'That provider is already linked to a ' + 'different aboutme account.',
-};
-
 const linkErrorCode = computed(() => {
   const value = route.query.error;
   if (typeof value !== 'string' || value === 'reauth_required') return null;
@@ -350,12 +349,13 @@ const linkErrorCode = computed(() => {
 });
 
 const linkErrorMessage = computed(() => {
-  if (startError.value) return startError.value;
+  if (startError.value) return copy.value.genericError;
   if (!linkErrorCode.value) return null;
-  if (Object.hasOwn(linkErrorMessages, linkErrorCode.value)) {
-    return linkErrorMessages[linkErrorCode.value];
+  if (linkErrorCode.value === 'cancelled') return copy.value.cancelled;
+  if (linkErrorCode.value === 'identity_already_linked') {
+    return copy.value.identityAlreadyLinked;
   }
-  return linkErrorMessages.auth_failed;
+  return copy.value.genericError;
 });
 </script>
 
@@ -365,7 +365,7 @@ const linkErrorMessage = computed(() => {
     data-testid="settings-page"
   >
     <h1 class="text-xl font-semibold">
-      Settings
+      {{ copy.title }}
     </h1>
 
     <section
@@ -376,14 +376,14 @@ const linkErrorMessage = computed(() => {
         id="devices-title"
         class="text-lg font-semibold"
       >
-        Signed-in devices
+        {{ copy.devices }}
       </h2>
       <StatusBanner
         v-if="revokeError"
         kind="error"
         testid="revoke-error"
       >
-        {{ revokeError }}
+        {{ revokeErrorMessage }}
       </StatusBanner>
       <ul class="mt-4 divide-y">
         <li
@@ -395,18 +395,20 @@ const linkErrorMessage = computed(() => {
           <div>
             <span
               data-testid="session-description"
-              :title="session.ua ?? 'Unknown device'"
-            >{{ describeUserAgent(session.ua ?? "") }}</span>
+              :title="session.ua ?? copy.unknownDevice"
+            >{{ describeUserAgent(session.ua ?? '', copy.userAgent) }}</span>
             <span
               v-if="session.current"
               class="ml-2 text-xs text-muted-foreground"
             >
-              This device
+              {{ copy.currentDevice }}
             </span>
             <span
               class="block text-xs text-muted-foreground tabular-nums"
               data-testid="session-last-seen"
-            >Last seen {{ formatRelativeTime(session.lastSeenAt, now) }}</span>
+            >{{
+              copy.lastSeen(formatRelativeTime(session.lastSeenAt, now, locale))
+            }}</span>
           </div>
           <Button
             v-if="session.current"
@@ -414,7 +416,7 @@ const linkErrorMessage = computed(() => {
             variant="secondary"
             @click="logout"
           >
-            Log out
+            {{ copy.logOut }}
           </Button>
           <Button
             v-else
@@ -423,7 +425,7 @@ const linkErrorMessage = computed(() => {
             variant="secondary"
             @click="revokeSession(session.id)"
           >
-            Revoke
+            {{ copy.revoke }}
           </Button>
         </li>
       </ul>
@@ -434,7 +436,7 @@ const linkErrorMessage = computed(() => {
         variant="outline"
         @click="revokeAll"
       >
-        Log out everywhere
+        {{ copy.logOutEverywhere }}
       </Button>
     </section>
 
@@ -473,7 +475,7 @@ const linkErrorMessage = computed(() => {
         id="providers-title"
         class="text-lg font-semibold"
       >
-        Sign-in providers
+        {{ copy.providers }}
       </h2>
       <StatusBanner
         v-if="linkErrorMessage"
@@ -499,8 +501,7 @@ const linkErrorMessage = computed(() => {
         kind="success"
         testid="unlink-success"
       >
-        {{ unlinkedNotice }} is unlinked. Devices that are already signed in
-        stay signed in.
+        {{ copy.unlinked(unlinkedNotice) }} {{ copy.sessionsRemain }}
         <Button
           v-if="otherSessions.length"
           class="mt-2"
@@ -511,7 +512,7 @@ const linkErrorMessage = computed(() => {
           variant="outline"
           @click="signOutOtherDevices"
         >
-          Sign out other devices
+          {{ copy.signOutOtherDevices }}
         </Button>
       </StatusBanner>
       <StatusBanner
@@ -526,7 +527,7 @@ const linkErrorMessage = computed(() => {
           variant="outline"
           @click="startOAuth(reauthProvider, 'reauth')"
         >
-          Sign in again with {{ providerNames[reauthProvider] }}
+          {{ copy.signInAgainWith(providerNames[reauthProvider]) }}
         </Button>
       </StatusBanner>
       <div
@@ -539,7 +540,7 @@ const linkErrorMessage = computed(() => {
           variant="outline"
           @click="openAddProvider"
         >
-          Add another sign-in provider
+          {{ copy.addProvider }}
         </Button>
         <ul
           v-else
@@ -554,7 +555,7 @@ const linkErrorMessage = computed(() => {
               variant="outline"
               @click="startOAuth(provider, 'link')"
             >
-              Link {{ providerNames[provider] }}
+              {{ copy.linkProvider(providerNames[provider]) }}
             </Button>
           </li>
         </ul>

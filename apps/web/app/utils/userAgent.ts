@@ -1,5 +1,15 @@
 const MAX_USER_AGENT_LENGTH = 4096;
 
+export interface UserAgentCopy {
+  readonly unknown: string;
+  readonly on: (browser: string, system: string) => string;
+}
+
+const englishCopy: UserAgentCopy = {
+  unknown: 'Unknown browser',
+  on: (browser, system) => `${browser} on ${system}`,
+};
+
 interface BrowserMatch {
   name: string;
   major: string;
@@ -33,20 +43,20 @@ function operatingSystemOf(ua: string): string | null {
   return null;
 }
 
-export function describeUserAgent(ua: string): string {
+export function describeUserAgent(ua: string, copy = englishCopy): string {
   if (
     typeof ua !== 'string'
     || ua.length === 0
     || ua.length > MAX_USER_AGENT_LENGTH
     || Array.from(ua).some((character) => character.charCodeAt(0) > 0x7f)
   ) {
-    return 'Unknown browser';
+    return copy.unknown;
   }
 
   const browser = browserOf(ua);
-  if (browser === null) return 'Unknown browser';
+  if (browser === null) return copy.unknown;
   const operatingSystem = operatingSystemOf(ua);
   return operatingSystem === null
     ? `${browser.name} ${browser.major}`
-    : `${browser.name} ${browser.major} on ${operatingSystem}`;
+    : copy.on(`${browser.name} ${browser.major}`, operatingSystem);
 }

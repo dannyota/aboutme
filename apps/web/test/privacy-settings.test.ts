@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 
 import PrivacySettings from '../app/components/settings/PrivacySettings.vue';
 import {
@@ -11,6 +12,9 @@ import {
   type PrivacySettingsActions,
 } from '../app/composables/privacySettings';
 import { PasswordSettingsFailure } from '../app/composables/passwordSettings';
+import { setSiteLocale } from './support/locale';
+
+beforeEach(() => setSiteLocale('en'));
 
 function actionsFor(
   overrides: Partial<PrivacySettingsActions> = {},
@@ -24,10 +28,13 @@ function actionsFor(
   };
 }
 
-function mountSettings(actions: PrivacySettingsActions) {
+function mountSettings(
+  actions: PrivacySettingsActions,
+  props: Partial<{ hasPassword: boolean; providers: string[] }> = {},
+) {
   return mount(PrivacySettings, {
     attachTo: document.body,
-    props: { hasPassword: true, providers: ['google'] },
+    props: { hasPassword: true, providers: ['google'], ...props },
     global: { provide: { [PrivacySettingsActionsKey]: actions } },
   });
 }
@@ -53,6 +60,98 @@ function confirmDelete(): void {
 }
 
 describe('PrivacySettings', () => {
+  it(
+    'translates an open deletion dialog without changing its confirmation',
+    async () => {
+      const deleteAccount = vi.fn(async () => {
+        throw new PrivacySettingsFailure('rate-limited');
+      });
+      const wrapper = mountSettings(actionsFor({ deleteAccount }));
+
+      await openDelete(wrapper);
+      const input = document.body.querySelector<HTMLInputElement>(
+        '[role="alertdialog"] input',
+      );
+      expect(input?.value).toBe('DELETE');
+
+      useState<'vi' | 'en'>('aboutme-locale').value = 'vi';
+      await nextTick();
+
+      expect(document.body.textContent).toContain('Xóa tài khoản của bạn?');
+      expect(document.body.textContent).toContain(
+        'Mục tiêu là xóa tệp riêng tư trong vòng 24 giờ.',
+      );
+      expect(input?.value).toBe('DELETE');
+      expect(
+        document.body.querySelector('[role="alertdialog"] [role="group"]'),
+      ).not.toBeNull();
+
+      confirmDelete();
+      await flushPromises();
+      expect(deleteAccount).toHaveBeenCalledOnce();
+      expect(wrapper.get('[data-testid="account-delete-error"]').text()).toBe(
+        'Bạn đã thử quá nhiều lần. Hãy thử lại sau.',
+      );
+
+      useState<'vi' | 'en'>('aboutme-locale').value = 'en';
+      await nextTick();
+      expect(wrapper.get('[data-testid="account-delete-error"]').text()).toBe(
+        'Too many attempts. Try again later.',
+      );
+      expect(deleteAccount).toHaveBeenCalledOnce();
+      wrapper.unmount();
+    },
+  );
+
+  it(
+    'keeps a pending deletion and its confirmation during a locale change',
+    async () => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const deleteAccount = vi.fn(async () => pending);
+      const wrapper = mountSettings(actionsFor({ deleteAccount }));
+
+      await openDelete(wrapper);
+      confirmDelete();
+      await flushPromises();
+      useState<'vi' | 'en'>('aboutme-locale').value = 'vi';
+      await nextTick();
+
+      const dialog = document.body.querySelector('[role="alertdialog"]');
+      expect(deleteAccount).toHaveBeenCalledOnce();
+      expect(dialog?.getAttribute('aria-busy')).toBe('true');
+      expect(dialog?.textContent).toContain('Xóa tài khoản');
+      expect(dialog?.querySelector<HTMLInputElement>('input')?.value).toBe(
+        'DELETE',
+      );
+
+      release();
+      await flushPromises();
+      wrapper.unmount();
+    },
+  );
+
+  it('uses localized generic copy for an unknown failure', async () => {
+    const deleteAccount = vi.fn(async () => {
+      throw new Error('internal server detail');
+    });
+    const wrapper = mountSettings(actionsFor({ deleteAccount }));
+
+    await openDelete(wrapper);
+    confirmDelete();
+    await flushPromises();
+    useState<'vi' | 'en'>('aboutme-locale').value = 'vi';
+    await nextTick();
+
+    const error = wrapper.get('[data-testid="account-delete-error"]').text();
+    expect(error).toBe('Không thể xóa tài khoản lúc này. Hãy thử lại.');
+    expect(error).not.toContain('internal server detail');
+    expect(deleteAccount).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
   it(
     'discloses the deletion schedule and cancellation makes no request',
     async () => {
@@ -154,6 +253,54 @@ describe('PrivacySettings', () => {
       wrapper.unmount();
     },
   );
+
+  it(
+    'translates the password visibility label without losing the reauth draft',
+    async () => {
+      const deleteAccount = vi.fn(async () => {
+        throw new PrivacySettingsFailure('reauth-required');
+      });
+      const wrapper = mountSettings(actionsFor({ deleteAccount }));
+
+      await openDelete(wrapper);
+      confirmDelete();
+      await flushPromises();
+      const password = wrapper.get<HTMLInputElement>(
+        '#account-delete-current-password',
+      );
+      await password.setValue('current-secret');
+      await password.element.focus();
+
+      useState<'vi' | 'en'>('aboutme-locale').value = 'vi';
+      await nextTick();
+
+      expect(password.element.value).toBe('current-secret');
+      expect(document.activeElement).toBe(password.element);
+      expect(
+        wrapper.get('button[aria-label="Hiện mật khẩu hiện tại"]').exists(),
+      ).toBe(true);
+      expect(deleteAccount).toHaveBeenCalledOnce();
+      wrapper.unmount();
+    },
+  );
+
+  it('uses a provider brand name for provider reauthentication', async () => {
+    const deleteAccount = vi.fn(async () => {
+      throw new PrivacySettingsFailure('reauth-required');
+    });
+    const wrapper = mountSettings(
+      actionsFor({ deleteAccount }),
+      { hasPassword: false },
+    );
+
+    await openDelete(wrapper);
+    confirmDelete();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Continue with Google');
+    expect(wrapper.text()).not.toContain('Continue with google');
+    wrapper.unmount();
+  });
 
   it('does not retry deletion after failed reauthentication', async () => {
     const deleteAccount = vi.fn(async () => {
@@ -268,7 +415,7 @@ describe('account export download', () => {
       expect(download).not.toHaveBeenCalled();
       expect(controller.state.value).toEqual({
         kind: 'error',
-        message: 'Could not export your data. Try again.',
+        error: 'unavailable',
       });
     },
   );
@@ -362,24 +509,27 @@ describe('account export download', () => {
   );
 
   it.each([
-    [429, 'Your export is temporarily unavailable. Try again.'],
-    [503, 'Your export is temporarily unavailable. Try again.'],
-    [401, 'Your session ended. Sign in again.'],
-  ])('maps export status %i to fixed copy', async (status, message) => {
-    const controller = createAccountExportController({
-      fetcher: async () => new Response('server-secret-value', { status }),
-      createObjectURL: vi.fn(() => 'blob:account-export'),
-      revokeObjectURL: vi.fn(),
-      download: vi.fn(),
-    });
+    [429, 'temporarily-unavailable'],
+    [503, 'temporarily-unavailable'],
+    [401, 'session-required'],
+  ] as const)(
+    'maps export status %i to a semantic error',
+    async (status, error) => {
+      const controller = createAccountExportController({
+        fetcher: async () => new Response('server-secret-value', { status }),
+        createObjectURL: vi.fn(() => 'blob:account-export'),
+        revokeObjectURL: vi.fn(),
+        download: vi.fn(),
+      });
 
-    await controller.download();
+      await controller.download();
 
-    expect(controller.state.value).toEqual({ kind: 'error', message });
-    expect(JSON.stringify(controller.state.value)).not.toContain(
-      'server-secret-value',
-    );
-  });
+      expect(controller.state.value).toEqual({ kind: 'error', error });
+      expect(JSON.stringify(controller.state.value)).not.toContain(
+        'server-secret-value',
+      );
+    },
+  );
 });
 
 describe('account deletion error mapping', () => {

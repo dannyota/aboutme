@@ -116,15 +116,16 @@ The interface locale is `vi` or `en`, defaults to Vietnamese, and persists in
 the script-readable `aboutme-locale` cookie for one year at path `/` with
 `SameSite=Lax`. Missing and invalid values select Vietnamese. The homepage,
 authentication and recovery pages, legal pages, template gallery, and resume
-workspace use this locale. Settings, account destination pages, connected-agent
-controls, and agent consent use English.
+workspace use this locale. The exact account routes `/app/settings/sessions` and
+`/authorize` use it too. No other route joins the locale scope through the
+account localization contract.
 
 The resume workspace comprises the list, blank and sample creation, editor,
 publish dialog, owner PDF export, browser titles, errors, accessible copy, and
 shared account menu. The application shell exposes the language control on the
-list and creation routes. The editor exposes it in its own top bar. Shared menu
-copy includes its accessible name, Settings link, theme action, and logout
-action; following Settings may open an English page.
+list, creation, settings, and consent routes. The editor exposes it in its own
+top bar. Shared menu copy includes its accessible name, Settings link, theme
+action, and logout action.
 
 Each surface owns typed Vietnamese and English copy maps with identical keys.
 Controllers retain semantic states, error codes, field paths, and retry data;
@@ -144,7 +145,9 @@ page names. A loaded editor title keeps the authored resume title. The page HTML
 `lang` follows interface language, while each preview root keeps resume
 language. [ADR 0047](../adr/0047-bilingual-resume-workspace.md) records the
 choice; the [localization design](editor-localization.md) defines scope,
-compatibility, security, and acceptance.
+compatibility, security, and acceptance. The
+[account localization design](account-localization.md) defines the settings and
+consent extension.
 
 ## Agent consent and connected agents
 

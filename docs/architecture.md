@@ -150,12 +150,12 @@ resolves. Signed-in navigation adds Resumes, Settings, and the account menu. The
 signed-in theme action moves into the account menu. Capability-gated provider
 and connected-agent controls remain hidden when their capability is false.
 
-The homepage, authentication pages, legal pages, template gallery, and resume
-workspace support Vietnamese and English, with Vietnamese as the default. The
-workspace reuses the `aboutme-locale` cookie for creation, editing, publishing,
-and owner PDF controls. Settings and agent consent remain English. Interface
-language does not change resume content or resume language. See
-[workspace localization](design/editor-localization.md).
+The homepage, authentication pages, legal pages, template gallery, resume
+workspace, settings, and agent consent support Vietnamese and English, with
+Vietnamese as the default. These surfaces reuse the `aboutme-locale` cookie.
+Interface language does not change resume content or resume language. See
+[workspace localization](design/editor-localization.md) and
+[account localization](design/account-localization.md).
 
 The chrome tokens describe a cool-grey desk (`#EDEFEB`) with white paper, ink
 (`#171A18`), pencil text (`#5F6763`), hairlines (`#D8DDD9`), and signature
@@ -364,7 +364,6 @@ agent metadata is redacted after 90 days. See the
 
 ## Deferred work
 
-Settings and agent consent are not localized. Optional two-factor
-authentication, multi-replica runtime coordination, and the Flutter client are
-not implemented. Remaining operational acceptance work is recorded in the
-[roadmap](plans/README.md).
+Optional two-factor authentication, multi-replica runtime coordination, and the
+Flutter client are not implemented. Remaining operational acceptance work is
+recorded in the [roadmap](plans/README.md).

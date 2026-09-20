@@ -20,14 +20,14 @@ describe('workspace locale', () => {
     '/app/resumes/resume-1',
     '/app/resumes/resume-1/',
     '/app/resumes//',
+    '/app/settings/sessions',
+    '/authorize',
   ])('localizes %s', (path) => {
     expect(isLocalizedPath(path)).toBe(true);
   });
 
   it.each([
     '/app',
-    '/app/settings/sessions',
-    '/authorize',
     '/app/resumes/resume-1/history',
     '/app/resumes/../settings',
     '/app/resumes/resume-1/..',
@@ -61,6 +61,17 @@ describe('workspace locale', () => {
     );
     expect(Object.keys(workspaceTitles.vi)).toEqual(
       Object.keys(workspaceTitles.en),
+    );
+  });
+
+  it('provides localized settings and authorization titles', () => {
+    expect(workspaceTitles.vi.settings).toBe('Cài đặt · aboutme');
+    expect(workspaceTitles.en.settings).toBe('Settings · aboutme');
+    expect(workspaceTitles.vi.authorize).toBe(
+      'Cấp quyền cho tác nhân · aboutme',
+    );
+    expect(workspaceTitles.en.authorize).toBe(
+      'Authorize an agent · aboutme',
     );
   });
 });

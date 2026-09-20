@@ -4,7 +4,7 @@ import type { AuthProvider } from './useAuth';
 import type { PasswordIssue } from './usePasswordAuth';
 
 /**
- * `passwordSettings` — the closed contract behind the account-settings
+ * `passwordSettings`: the closed contract behind the account-settings
  * password controls (add/change a password, password reauth, and provider
  * reauth).
  *

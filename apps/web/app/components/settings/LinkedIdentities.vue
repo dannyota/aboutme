@@ -11,12 +11,15 @@
  * provider round trip, then the unlink is retried.
  */
 import ConfirmDialog from '../app/ConfirmDialog.vue';
+import LocaleToggle from '../app/LocaleToggle.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import PasswordField from '../auth/PasswordField.vue';
 import { Button } from '../ui/button';
 import type { LinkedIdentityActions } from '../../composables/identitySettings';
 import type { AuthIdentity, AuthProvider } from '../../composables/useAuth';
 import { providerNames } from '../../composables/useCapabilities';
+import { identitySettingsCopy } from '../../i18n/identity-settings';
+import { shellCopy } from '../../i18n/shell';
 
 const props = defineProps<{
   identities: readonly AuthIdentity[];
@@ -26,16 +29,32 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ changed: []; unlinked: [name: string] }>();
 
-const lastMethodCopy
-  = 'Add a password or link another provider before removing this one.';
-
 type Mode = 'idle' | 'confirm' | 'reauth-password' | 'reauth-provider';
+type ErrorKind
+  = | 'current-password-required'
+    | 'reauth-failed'
+    | 'last-method'
+    | 'rate-limited'
+    | 'unavailable';
 
 const mode = ref<Mode>('idle');
 const target = ref<AuthIdentity | null>(null);
 const pending = ref(false);
-const errorMessage = ref<string | null>(null);
+const errorKind = ref<ErrorKind | null>(null);
 const currentPassword = ref('');
+const locale = useRouteLocale();
+const copy = computed(() => identitySettingsCopy[locale.value]);
+const errorMessage = computed(() => {
+  if (errorKind.value === null) return null;
+  const errors: Record<Exclude<ErrorKind, null>, string> = {
+    'current-password-required': copy.value.errors.currentPasswordRequired,
+    'reauth-failed': copy.value.errors.reauthFailed,
+    'last-method': copy.value.errors.lastMethod,
+    'rate-limited': copy.value.errors.rateLimited,
+    'unavailable': copy.value.errors.unavailable,
+  };
+  return errors[errorKind.value];
+});
 
 function isUsable(identity: AuthIdentity): boolean {
   return props.loginProviders.includes(identity.provider);
@@ -63,14 +82,12 @@ const reauthProviders = computed(() => [
 const targetName = computed(() =>
   target.value ? providerNames[target.value.provider] : '');
 const confirmDescription = computed(() =>
-  `You will no longer be able to sign in with this ${targetName.value} `
-  + 'account. Your other sign-in methods and signed-in devices stay as they '
-  + 'are.');
+  copy.value.unlinkDescription(targetName.value));
 
 function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(locale.value === 'vi' ? 'vi-VN' : 'en-US', {
     timeZone: 'UTC',
     year: 'numeric',
     month: 'long',
@@ -79,7 +96,7 @@ function formatDate(value: string): string {
 }
 
 function openUnlink(identity: AuthIdentity): void {
-  errorMessage.value = null;
+  errorKind.value = null;
   target.value = identity;
   mode.value = 'confirm';
 }
@@ -99,7 +116,7 @@ async function unlink(): Promise<void> {
   const identity = target.value;
   if (!identity || pending.value) return;
   pending.value = true;
-  errorMessage.value = null;
+  errorKind.value = null;
   try {
     await props.actions.unlink(identity.id);
     emit('unlinked', providerNames[identity.provider]);
@@ -117,11 +134,11 @@ async function unlink(): Promise<void> {
       return;
     }
     mode.value = 'idle';
-    errorMessage.value = kind === 'last-method'
-      ? lastMethodCopy
+    errorKind.value = kind === 'last-method'
+      ? 'last-method'
       : kind === 'rate-limited'
-        ? 'Too many attempts. Try again later.'
-        : `Could not unlink ${targetName.value}. Try again.`;
+        ? 'rate-limited'
+        : 'unavailable';
   } finally {
     pending.value = false;
   }
@@ -136,18 +153,18 @@ function finish(): void {
 async function submitPasswordReauth(): Promise<void> {
   if (pending.value) return;
   if (!currentPassword.value) {
-    errorMessage.value = 'Enter your current password.';
+    errorKind.value = 'current-password-required';
     return;
   }
   pending.value = true;
-  errorMessage.value = null;
+  errorKind.value = null;
   try {
     await props.actions.reauthenticate(currentPassword.value);
   } catch (error) {
     pending.value = false;
-    errorMessage.value = failureKind(error) === 'reauth-failed'
-      ? 'Incorrect password.'
-      : 'Something went wrong. Please try again.';
+    errorKind.value = failureKind(error) === 'reauth-failed'
+      ? 'reauth-failed'
+      : 'unavailable';
     return;
   }
   currentPassword.value = '';
@@ -159,11 +176,11 @@ async function submitPasswordReauth(): Promise<void> {
 async function startProviderReauth(provider: AuthProvider): Promise<void> {
   if (pending.value) return;
   pending.value = true;
-  errorMessage.value = null;
+  errorKind.value = null;
   try {
     await props.actions.startProviderReauth(provider);
   } catch {
-    errorMessage.value = 'Something went wrong. Please try again.';
+    errorKind.value = 'unavailable';
   } finally {
     pending.value = false;
   }
@@ -195,8 +212,8 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
         <div class="grid gap-0.5">
           <span class="font-medium">{{ row.name }}</span>
           <span class="text-sm text-muted-foreground">
-            {{ row.linkedOn ? `Linked on ${row.linkedOn}` : 'Linked' }}{{
-              row.usable ? '' : '. Not available for sign-in'
+            {{ row.linkedOn ? copy.linkedOn(row.linkedOn) : copy.linked }}{{
+              row.usable ? '' : copy.unavailableForSignIn
             }}
           </span>
           <span
@@ -205,7 +222,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
             class="text-sm text-muted-foreground"
             data-testid="unlink-blocked"
           >
-            {{ lastMethodCopy }}
+            {{ copy.lastMethod }}
           </span>
         </div>
         <Button
@@ -219,7 +236,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
           variant="outline"
           @click="openUnlink(row.identity)"
         >
-          Unlink
+          {{ copy.unlink }}
         </Button>
       </li>
     </ul>
@@ -232,13 +249,14 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
       @submit.prevent="submitPasswordReauth"
     >
       <p>
-        Sign in again to confirm it’s you before unlinking {{ targetName }}.
+        {{ copy.passwordReauthDescription(targetName) }}
       </p>
       <PasswordField
         id="unlink-current-password"
         v-model="currentPassword"
         autocomplete="current-password"
-        label="Current password"
+        :label="copy.currentPassword"
+        :locale="locale"
       />
       <div class="flex gap-2">
         <Button
@@ -246,7 +264,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
           type="submit"
           variant="secondary"
         >
-          {{ pending ? 'Checking…' : 'Continue' }}
+          {{ pending ? copy.checking : copy.continue }}
         </Button>
         <Button
           :disabled="pending"
@@ -254,7 +272,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
           variant="ghost"
           @click="cancel"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </form>
@@ -265,7 +283,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
       data-testid="unlink-reauth-provider"
     >
       <p>
-        Sign in again with your provider, then unlink {{ targetName }} again.
+        {{ copy.providerReauthDescription(targetName) }}
       </p>
       <div class="flex flex-wrap gap-2">
         <Button
@@ -275,7 +293,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
           type="button"
           @click="startProviderReauth(provider)"
         >
-          Continue with {{ providerNames[provider] }}
+          {{ copy.continueWith(providerNames[provider]) }}
         </Button>
         <Button
           :disabled="pending"
@@ -283,7 +301,7 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
           variant="ghost"
           @click="cancel"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </div>
@@ -291,15 +309,23 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
     <ConfirmDialog
       :busy="pending"
       cancel-action="cancel-unlink"
+      :cancel-label="copy.cancel"
       class="max-w-md"
       confirm-action="confirm-unlink"
-      :confirm-label="`Unlink ${targetName}`"
+      :confirm-label="copy.unlinkConfirm(targetName)"
       :description="confirmDescription"
       destructive
       :open="mode === 'confirm'"
-      :title="`Unlink ${targetName}?`"
+      :title="copy.unlinkTitle(targetName)"
       @cancel="cancel"
       @confirm="unlink"
-    />
+    >
+      <template #header-actions>
+        <LocaleToggle
+          :label="shellCopy[locale].localeLabel"
+          @pointerdown.prevent
+        />
+      </template>
+    </ConfirmDialog>
   </div>
 </template>

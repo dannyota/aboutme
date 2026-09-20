@@ -21,7 +21,7 @@ const EVIDENCE_PATH = '/evidence/mcp-proof.json';
 const CA_PATH = '/uat-input/caddy-root.crt';
 const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
 const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
-const UAT_ACCOUNT = 'Bob Local — bob@example.invalid';
+const UAT_ACCOUNT = 'MCP Proof — mcp-proof@example.invalid';
 const ENTRY_TITLE = 'MCP UAT Entry';
 const ENTRY_ID = '53000000-0000-4000-8000-000000000021';
 const EXPECTED_TOOLS = [
@@ -354,6 +354,21 @@ test('proves MCP agent access over trusted HTTPS', async ({
     const permissions = page.getByTestId('consent-scopes');
     await expect(permissions).toContainText('Read resumes');
     await expect(permissions).toContainText('Write resumes');
+    let consentRequests = 0;
+    const countConsentRequests = (request: { url(): string }): void => {
+      const url = new URL(request.url());
+      if (url.origin === ORIGIN && url.pathname === '/api/v1/oauth/consent') consentRequests += 1;
+    };
+    page.on('request', countConsentRequests);
+    await page.getByTestId('landing-locale-vi').click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
+    await expect(page.getByRole('heading', { name: `Cho phép ${clientName} chỉnh sửa CV của bạn?`, exact: true })).toBeVisible();
+    await expect(permissions).toContainText('Đọc CV');
+    await expect(permissions).toContainText('Chỉnh sửa CV');
+    await page.getByTestId('landing-locale-en').click();
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
+    expect(consentRequests).toBe(0);
+    page.off('request', countConsentRequests);
 
     stage('approve-consent');
     await Promise.all([
@@ -491,6 +506,12 @@ test('proves MCP agent access over trusted HTTPS', async ({
       .getByTestId('agent-row')
       .filter({ hasText: clientName });
     await expect(grantRow).toHaveCount(1);
+    let agentRequests = 0;
+    const countAgentRequests = (request: { url(): string }): void => {
+      const url = new URL(request.url());
+      if (url.origin === ORIGIN && url.pathname.startsWith('/api/v1/me/agents')) agentRequests += 1;
+    };
+    page.on('request', countAgentRequests);
     const revoked = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
@@ -500,8 +521,17 @@ test('proves MCP agent access over trusted HTTPS', async ({
       );
     });
     await grantRow.getByTestId('agent-revoke').click();
-    const dialog = page.getByRole('alertdialog', { name: 'Revoke access' });
+    const dialog = page.getByRole('alertdialog');
     await expect(dialog).toBeVisible();
+    await expect(dialog).toHaveAccessibleName('Revoke access');
+    const revokeTitle = dialog.getByRole('heading');
+    await dialog.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Tiếng Việt' }).click();
+    await expect(revokeTitle).toHaveText('Thu hồi quyền truy cập');
+    await expect(dialog).toHaveAccessibleName('Thu hồi quyền truy cập');
+    await dialog.getByRole('group', { name: 'Ngôn ngữ' }).getByRole('button', { name: 'English' }).click();
+    await expect(dialog).toHaveAccessibleName('Revoke access');
+    expect(agentRequests).toBe(0);
+    page.off('request', countAgentRequests);
     await dialog.getByRole('button', { name: 'Revoke access' }).click();
     expect((await revoked).status()).toBe(204);
     await expect(grantRow).toHaveCount(0);

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import PasswordSettings from '../app/components/auth/PasswordSettings.vue';
@@ -9,6 +9,7 @@ import {
 } from '../app/composables/passwordSettings';
 import type { AuthProvider } from '../app/composables/useAuth';
 import { registerCapabilities } from './support/capabilities';
+import { setSiteLocale } from './support/locale';
 
 registerCapabilities();
 
@@ -28,9 +29,14 @@ function makeActions(
   };
 }
 
-function mountSettings(props: SettingsProps, actions: PasswordSettingsActions) {
+function mountSettings(
+  props: SettingsProps,
+  actions: PasswordSettingsActions,
+  attachTo?: Element,
+) {
   return mountSuspended(PasswordSettings, {
     props,
+    ...(attachTo === undefined ? {} : { attachTo }),
     global: {
       provide: {
         [PasswordSettingsActionsKey]: actions,
@@ -40,6 +46,188 @@ function mountSettings(props: SettingsProps, actions: PasswordSettingsActions) {
 }
 
 describe('PasswordSettings', () => {
+  beforeEach(() => {
+    setSiteLocale('en');
+  });
+
+  it(
+    'renders Vietnamese password labels, policy, and visibility copy',
+    async () => {
+      setSiteLocale('vi');
+      const actions = makeActions({
+        setPassword: vi.fn(async () => {
+          throw new PasswordSettingsFailure('password-invalid', 'length');
+        }),
+      });
+      const wrapper = await mountSettings(
+        { hasPassword: false, providers: ['google'] },
+        actions,
+      );
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="password-settings"] h2').text()).toBe(
+        'Mật khẩu',
+      );
+      expect(wrapper.get('[data-testid="password-status"]').text()).toBe(
+        'Chưa đặt mật khẩu.',
+      );
+      expect(wrapper.get('[data-testid="password-action"]').text()).toBe(
+        'Thêm mật khẩu',
+      );
+
+      await wrapper.get('[data-testid="password-action"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.get('label[for="password-new"]').text()).toBe(
+        'Mật khẩu mới',
+      );
+      expect(wrapper.get('label[for="password-new-confirm"]').text()).toBe(
+        'Nhập lại mật khẩu',
+      );
+      expect(
+        wrapper.get('button[aria-label="Hiện mật khẩu mới"]').exists(),
+      ).toBe(true);
+
+      await wrapper.get('#password-new').setValue('short');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
+        'Mật khẩu phải có ít nhất 12 ký tự.',
+      );
+    },
+  );
+
+  it('translates a retained failure without replaying the password command',
+    async () => {
+      const setPassword = vi.fn(async () => {
+        throw new PasswordSettingsFailure('unavailable');
+      });
+      const wrapper = await mountSettings(
+        { hasPassword: false, providers: ['google'] },
+        makeActions({ setPassword }),
+        document.body,
+      );
+      await flushPromises();
+
+      await wrapper.get('[data-testid="password-action"]').trigger('click');
+      await wrapper.get('#password-new').setValue('new-secret');
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
+        'Something went wrong. Please try again.',
+      );
+
+      useState('aboutme-locale').value = 'vi';
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
+        'Đã có lỗi. Hãy thử lại.',
+      );
+      expect(setPassword).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('uses generic copy for malformed failures without replaying the command',
+    async () => {
+      const rawMessage = 'raw server message must not render';
+      const failures = [
+        {
+          failure: new Error(rawMessage),
+          english: 'Something went wrong. Please try again.',
+          vietnamese: 'Đã có lỗi. Hãy thử lại.',
+        },
+        {
+          failure: null,
+          english: 'Something went wrong. Please try again.',
+          vietnamese: 'Đã có lỗi. Hãy thử lại.',
+        },
+        {
+          failure: { kind: 'unknown', message: rawMessage },
+          english: 'Something went wrong. Please try again.',
+          vietnamese: 'Đã có lỗi. Hãy thử lại.',
+        },
+        {
+          failure: new PasswordSettingsFailure(
+            'password-invalid',
+            'unknown' as never,
+          ),
+          english: 'Password does not meet our requirements.',
+          vietnamese: 'Mật khẩu chưa đáp ứng yêu cầu.',
+        },
+      ];
+
+      for (const expected of failures) {
+        setSiteLocale('en');
+        const setPassword = vi.fn(async () => {
+          throw expected.failure;
+        });
+        const wrapper = await mountSettings(
+          { hasPassword: false, providers: ['google'] },
+          makeActions({ setPassword }),
+        );
+        await flushPromises();
+
+        await wrapper.get('[data-testid="password-action"]').trigger('click');
+        await wrapper.get('#password-new').setValue('new-secret');
+        await wrapper.get('[data-testid="password-form"]').trigger('submit');
+        await flushPromises();
+
+        expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
+          expected.english,
+        );
+        expect(wrapper.text()).not.toContain(rawMessage);
+
+        useState('aboutme-locale').value = 'vi';
+        await flushPromises();
+        expect(wrapper.get('[data-testid="password-error"]').text()).toBe(
+          expected.vietnamese,
+        );
+        expect(setPassword).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it(
+    'keeps draft, selection, focus, and pending command on locale change',
+    async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const setPassword = vi.fn(async () => {
+        await gate;
+      });
+      const wrapper = await mountSettings(
+        { hasPassword: false, providers: ['google'] },
+        makeActions({ setPassword }),
+        document.body,
+      );
+      await flushPromises();
+
+      await wrapper.get('[data-testid="password-action"]').trigger('click');
+      const field = wrapper.get<HTMLInputElement>('#password-new');
+      await field.setValue('new-secret');
+      field.element.focus();
+      field.element.setSelectionRange(1, 4);
+      await wrapper.get('[data-testid="password-form"]').trigger('submit');
+      await flushPromises();
+
+      useState('aboutme-locale').value = 'vi';
+      await flushPromises();
+
+      expect(wrapper.get('#password-new').element.value).toBe('new-secret');
+      expect(document.activeElement).toBe(field.element);
+      expect(field.element.selectionStart).toBe(1);
+      expect(field.element.selectionEnd).toBe(4);
+      const submit = wrapper.get('[data-testid="password-set-submit"]');
+      expect(submit.attributes('disabled')).toBeDefined();
+      expect(submit.text()).toBe('Đang lưu…');
+      expect(setPassword).toHaveBeenCalledOnce();
+
+      release();
+      await flushPromises();
+    },
+  );
+
   it(
     'shows the add action and no-password status for a ' + 'provider-only user',
     async () => {

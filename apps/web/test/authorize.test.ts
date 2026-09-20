@@ -102,6 +102,51 @@ describe('/authorize', () => {
     );
   });
 
+  it(
+    'renders Vietnamese consent copy and keeps scope identifiers private',
+    async () => {
+      setSiteLocale('vi');
+      consentMocks.get.mockResolvedValue({
+        clientName: 'Resume agent',
+        scopes: ['resumes:read', 'resumes:write'],
+      });
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+
+      expect(wrapper.get('[data-page-title]').text()).toContain(
+        'Cho phép Resume agent chỉnh sửa CV của bạn?',
+      );
+      expect(wrapper.get('[data-testid="consent-scopes"]').text()).toContain(
+        'Đọc CV',
+      );
+      expect(wrapper.get('[data-testid="consent-scopes"]').text()).toContain(
+        'Chỉnh sửa CV',
+      );
+      expect(wrapper.text()).not.toContain('resumes:read');
+    },
+  );
+
+  it(
+    'changes loaded consent copy without repeating the read or changing '
+    + 'its request',
+    async () => {
+      setSiteLocale('vi');
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      expect(consentMocks.get).toHaveBeenCalledTimes(1);
+
+      useLocale().setLocale('en');
+      await flushPromises();
+
+      expect(wrapper.get('[data-page-title]').text()).toContain(
+        'Allow Resume agent to edit your resumes?',
+      );
+      expect(consentMocks.get).toHaveBeenCalledTimes(1);
+      expect(consentMocks.get).toHaveBeenLastCalledWith(query);
+      expect(consentMocks.decide).not.toHaveBeenCalled();
+    },
+  );
+
   it.each(['approve', 'deny'] as const)(
     'posts exact %s decision body',
     async (decision) => {

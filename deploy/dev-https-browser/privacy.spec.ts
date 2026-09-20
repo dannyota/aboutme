@@ -627,13 +627,28 @@ test("proves account export, reauthentication, and deletion", async ({
       }
     };
     page.on("request", countDeletes);
+    let localeRequests = 0;
+    const countLocaleRequests = (request: { url(): string }): void => {
+      const url = new URL(request.url());
+      if (url.origin === ORIGIN && (url.pathname === "/api/v1/me/export" || url.pathname === "/api/v1/me")) localeRequests += 1;
+    };
+    page.on("request", countLocaleRequests);
+    await page.getByTestId("landing-locale-vi").click();
+    await expect(page.getByTestId("privacy-settings")).toContainText("Quyền riêng tư");
     await page.getByTestId("account-delete-action").click();
-    const cancelled = page.getByRole("alertdialog", {
-      name: "Delete your account?",
-    });
-    await cancelled
-      .getByLabel("Type DELETE to permanently delete your account")
-      .fill("DELETE");
+    const cancelled = page.getByRole("alertdialog");
+    const deletionTitle = cancelled.getByRole("heading");
+    await expect(deletionTitle).toHaveText("Xóa tài khoản của bạn?");
+    const deletionInput = cancelled.getByLabel("Nhập DELETE để xóa vĩnh viễn tài khoản của bạn");
+    await deletionInput.fill("DELETE");
+    await deletionInput.focus();
+    await cancelled.getByRole("group", { name: "Ngôn ngữ" }).getByRole("button", { name: "English" }).click();
+    await expect(deletionTitle).toHaveText("Delete your account?");
+    const translatedDeletionInput = cancelled.getByLabel("Type DELETE to permanently delete your account");
+    await expect(translatedDeletionInput).toHaveValue("DELETE");
+    await expect(translatedDeletionInput).toBeFocused();
+    expect(localeRequests).toBe(0);
+    page.off("request", countLocaleRequests);
     await cancelled.getByRole("button", { name: "Cancel" }).click();
     expect(deleteRequests).toBe(0);
     steps.cancel = true;

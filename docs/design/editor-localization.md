@@ -22,10 +22,11 @@ The accepted product choices are:
    document data.
 4. **Extend the existing typed copy maps.** The release adds no localization
    framework, remote catalog, API field, or document field.
-5. **Localize shared account chrome and defer its destinations.** The account
-   menu shown in the application shell and editor is in scope. Settings, account
-   session, password, identity, and privacy pages, connected-agent controls, and
-   agent consent remain outside this release.
+5. **Localize shared account chrome.** The account menu shown in the application
+   shell and editor is in scope. Account settings and agent consent use the same
+   interface locale under the
+   [account localization design](account-localization.md), but remain outside
+   this resume-workspace contract.
 
 ## Two language domains
 
@@ -88,19 +89,19 @@ Brand names, template names, user text, resume titles, URLs, language tags,
 error codes, test hooks, and protocol identifiers remain unchanged. A short,
 reviewed allowlist owns other intentionally invariant terms.
 
-Following the localized Settings link may open an English page. The release does
-not translate settings pages, account-security dialogs, connected-agent
-controls, or `/authorize`. Those destinations belong to v0.4.1. Public resume
-chrome and authentication email copy retain their current language rules. The
-pure renderer, public page, print route, and PDF content are outside this
-interface change.
+Account settings and `/authorize` use the same interface locale under the
+[account localization design](account-localization.md). They remain outside this
+resume-workspace contract. Public resume chrome and authentication email copy
+retain their current language rules. The pure renderer, public page, print
+route, and PDF content are outside this interface change.
 
 ## Copy and state
 
 The web reuses the existing `Locale` type, `useLocale()`, and
 `useRouteLocale()`. Route classification includes `/app/new`, `/app/resumes`,
-and the editor routes below `/app/resumes/`. It does not include settings or
-`/authorize`.
+and the editor routes below `/app/resumes/`. The
+[account localization design](account-localization.md) extends the same route
+classification to `/app/settings/sessions` and `/authorize`.
 
 Vietnamese and English catalogs have the same typed keys. Catalogs are split by
 surface and expose `Record<Locale, SurfaceCopy>`, so resume-editor copy does not

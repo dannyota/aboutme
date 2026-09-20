@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * `PasswordSettings` — add/change a password from account settings.
+ * `PasswordSettings`: add or change a password from account settings.
  *
  * Presentational: it receives the current `hasPassword` status and the
  * linked providers as props, and it performs exactly three side effects
@@ -18,11 +18,14 @@ import StatusBanner from '../app/StatusBanner.vue';
 import { Button } from '../ui/button';
 import {
   PasswordSettingsActionsKey,
-  type PasswordSettingsFailure,
+  PasswordSettingsFailure,
 } from '../../composables/passwordSettings';
 import type { AuthProvider } from '../../composables/useAuth';
-import type { PasswordIssue } from '../../composables/usePasswordAuth';
 import { providerNames } from '@/composables/useCapabilities';
+import {
+  passwordSettingsCopy,
+  type PasswordSettingsMessage,
+} from '@/i18n/password-settings';
 
 const props = defineProps<{
   hasPassword: boolean;
@@ -34,13 +37,8 @@ const emit = defineEmits<{
 }>();
 
 const actions = inject(PasswordSettingsActionsKey, null);
-
-const ISSUE_COPY: Record<PasswordIssue, string> = {
-  length: 'Password must be at least 12 characters.',
-  common: 'That password is too common. Choose a different one.',
-  breached:
-    'That password was exposed in a data breach. Choose a different one.',
-};
+const { locale } = useLocale();
+const copy = computed(() => passwordSettingsCopy[locale.value]);
 
 type Mode = 'idle' | 'set' | 'reauth-password' | 'reauth-provider';
 
@@ -48,30 +46,64 @@ const mode = ref<Mode>('idle');
 const currentPassword = ref('');
 const newPassword = ref('');
 const pending = ref(false);
-const errorMessage = ref<string | null>(null);
-const successMessage = ref<string | null>(null);
+type LocalError = Exclude<
+  PasswordSettingsMessage,
+  PasswordSettingsFailure['kind']
+>;
+const error = ref<PasswordSettingsFailure | LocalError | null>(null);
+const success = ref<'added' | 'changed' | null>(null);
 const passwordField = ref<InstanceType<typeof PasswordField> | null>(null);
 
-function copyFor(failure: PasswordSettingsFailure): string {
-  switch (failure.kind) {
-    case 'reauth-failed':
-      return 'Incorrect password.';
-    case 'reauth-required':
-      return 'Sign in again to confirm it\'s you before continuing.';
-    case 'password-invalid':
-      return failure.issue
-        ? ISSUE_COPY[failure.issue]
-        : 'Password does not meet our requirements.';
-    case 'rate-limited':
-      return 'Too many attempts. Try again later.';
-    case 'unavailable':
-      return 'Something went wrong. Please try again.';
+const passwordSettingsErrorKinds = [
+  'reauth-failed',
+  'reauth-required',
+  'password-invalid',
+  'rate-limited',
+  'unavailable',
+] as const;
+const passwordIssues = ['length', 'common', 'breached'] as const;
+
+const errorMessage = computed(() => {
+  if (error.value === null) return '';
+  if (typeof error.value === 'string') return copy.value.errors[error.value];
+  if (error.value.kind === 'password-invalid') {
+    return copy.value.passwordPolicy[error.value.issue ?? 'generic'];
   }
+  return copy.value.errors[error.value.kind];
+});
+
+function isPasswordSettingsErrorKind(
+  value: unknown,
+): value is PasswordSettingsFailure['kind'] {
+  return typeof value === 'string'
+    && (passwordSettingsErrorKinds as readonly string[]).includes(value);
+}
+
+function isPasswordIssue(
+  value: unknown,
+): value is NonNullable<PasswordSettingsFailure['issue']> {
+  return typeof value === 'string'
+    && (passwordIssues as readonly string[]).includes(value);
+}
+
+function errorFor(failure: unknown): PasswordSettingsFailure {
+  if (
+    !(failure instanceof PasswordSettingsFailure)
+    || !isPasswordSettingsErrorKind(failure.kind)
+  ) {
+    return new PasswordSettingsFailure('unavailable');
+  }
+  return new PasswordSettingsFailure(
+    failure.kind,
+    failure.kind === 'password-invalid' && isPasswordIssue(failure.issue)
+      ? failure.issue
+      : undefined,
+  );
 }
 
 function start(): void {
-  errorMessage.value = null;
-  successMessage.value = null;
+  error.value = null;
+  success.value = null;
   currentPassword.value = '';
   newPassword.value = '';
   mode.value = props.hasPassword ? 'reauth-password' : 'set';
@@ -79,7 +111,7 @@ function start(): void {
 
 function cancel(): void {
   mode.value = 'idle';
-  errorMessage.value = null;
+  error.value = null;
   currentPassword.value = '';
   newPassword.value = '';
   pending.value = false;
@@ -88,18 +120,18 @@ function cancel(): void {
 async function submitReauth(): Promise<void> {
   if (pending.value || !actions) return;
   if (!currentPassword.value) {
-    errorMessage.value = 'Enter your current password.';
+    error.value = 'current-password-required';
     return;
   }
   pending.value = true;
-  errorMessage.value = null;
+  error.value = null;
   try {
     await actions.reauthenticate(currentPassword.value);
     currentPassword.value = '';
     newPassword.value = '';
     mode.value = 'set';
   } catch (failure) {
-    errorMessage.value = copyFor(failure as PasswordSettingsFailure);
+    error.value = errorFor(failure);
   } finally {
     pending.value = false;
   }
@@ -108,32 +140,30 @@ async function submitReauth(): Promise<void> {
 async function submitSet(): Promise<void> {
   if (pending.value || !actions) return;
   if (passwordField.value?.confirmMismatch) {
-    errorMessage.value = 'Passwords do not match.';
+    error.value = 'passwords-do-not-match';
     return;
   }
   if (!newPassword.value) {
-    errorMessage.value = 'Enter a new password.';
+    error.value = 'new-password-required';
     return;
   }
   pending.value = true;
-  errorMessage.value = null;
+  error.value = null;
   try {
     await actions.setPassword(newPassword.value);
     currentPassword.value = '';
     newPassword.value = '';
-    successMessage.value = props.hasPassword
-      ? 'Password changed.'
-      : 'Password added.';
+    success.value = props.hasPassword ? 'changed' : 'added';
     mode.value = 'idle';
     emit('updated');
   } catch (failure) {
-    const kind = (failure as PasswordSettingsFailure).kind;
-    if (kind === 'reauth-required') {
+    const normalizedFailure = errorFor(failure);
+    if (normalizedFailure.kind === 'reauth-required') {
       currentPassword.value = '';
       newPassword.value = '';
       mode.value = props.hasPassword ? 'reauth-password' : 'reauth-provider';
     }
-    errorMessage.value = copyFor(failure as PasswordSettingsFailure);
+    error.value = normalizedFailure;
   } finally {
     pending.value = false;
   }
@@ -142,11 +172,11 @@ async function submitSet(): Promise<void> {
 async function submitProviderReauth(provider: AuthProvider): Promise<void> {
   if (pending.value || !actions) return;
   pending.value = true;
-  errorMessage.value = null;
+  error.value = null;
   try {
     await actions.startProviderReauth(provider);
   } catch (failure) {
-    errorMessage.value = copyFor(failure as PasswordSettingsFailure);
+    error.value = errorFor(failure);
   } finally {
     pending.value = false;
   }
@@ -162,21 +192,21 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
       id="password-title"
       class="text-lg font-semibold"
     >
-      Password
+      {{ copy.title }}
     </h2>
     <p data-testid="password-status">
-      {{ hasPassword ? "You have a password." : "No password set." }}
+      {{ hasPassword ? copy.hasPassword : copy.noPassword }}
     </p>
 
     <StatusBanner
-      v-if="successMessage"
+      v-if="success"
       kind="success"
       testid="password-success"
     >
-      {{ successMessage }}
+      {{ copy.success[success] }}
     </StatusBanner>
     <StatusBanner
-      v-if="errorMessage"
+      v-if="error"
       kind="error"
       testid="password-error"
       focus-on-mount
@@ -190,7 +220,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
       type="button"
       @click="start"
     >
-      {{ hasPassword ? "Change password" : "Add a password" }}
+      {{ hasPassword ? copy.changePassword : copy.addPassword }}
     </Button>
 
     <form
@@ -204,9 +234,11 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
         id="password-new"
         ref="passwordField"
         v-model="newPassword"
-        label="New password"
+        :label="copy.newPassword"
         autocomplete="new-password"
+        :confirm-label="copy.confirmPassword"
         confirm
+        :locale="locale"
       />
       <div class="flex gap-2">
         <Button
@@ -215,7 +247,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           variant="secondary"
           type="submit"
         >
-          {{ pending ? "Saving…" : "Save password" }}
+          {{ pending ? copy.saving : copy.savePassword }}
         </Button>
         <Button
           data-testid="password-cancel"
@@ -223,7 +255,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           variant="ghost"
           @click="cancel"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </form>
@@ -238,8 +270,9 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
       <PasswordField
         id="password-current"
         v-model="currentPassword"
-        label="Current password"
+        :label="copy.currentPassword"
         autocomplete="current-password"
+        :locale="locale"
       />
       <div class="flex gap-2">
         <Button
@@ -248,7 +281,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           variant="secondary"
           type="submit"
         >
-          {{ pending ? "Checking…" : "Continue" }}
+          {{ pending ? copy.checking : copy.continue }}
         </Button>
         <Button
           data-testid="password-cancel"
@@ -256,7 +289,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           variant="ghost"
           @click="cancel"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </form>
@@ -265,7 +298,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
       v-else-if="mode === 'reauth-provider'"
       class="grid gap-3"
     >
-      <p>Sign in again with your provider to continue.</p>
+      <p>{{ copy.providerReauth }}</p>
       <div class="flex flex-wrap gap-2">
         <Button
           v-for="provider in providers"
@@ -275,7 +308,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           type="button"
           @click="submitProviderReauth(provider)"
         >
-          {{ `Continue with ${providerNames[provider]}` }}
+          {{ copy.continueWithProvider(providerNames[provider]) }}
         </Button>
         <Button
           data-testid="password-cancel"
@@ -283,7 +316,7 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
           variant="ghost"
           @click="cancel"
         >
-          Cancel
+          {{ copy.cancel }}
         </Button>
       </div>
     </div>

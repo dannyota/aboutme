@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type Frame,
   type Page,
 } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
@@ -24,6 +25,42 @@ const ORIGIN = ALLOWED_ORIGIN;
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const CAPTURE_TOKEN_PATH = '/uat-input/mail-capture-token';
 const EVIDENCE_PATH = '/evidence/password-proof.json';
+const DIAGNOSTIC_PATH = '/evidence/password-diagnostic.json';
+let passwordStage = 'before-localization';
+let passwordDetail = 'none';
+
+function setPasswordStage(stage: string): void {
+  passwordStage = stage;
+  passwordDetail = 'none';
+}
+
+function callbackCategory(value: string): string {
+  const url = new URL(value);
+  if (url.pathname !== '/app/settings/sessions') return 'callback-other';
+  const code = url.searchParams.get('error');
+  if (code === null && url.search === '') return 'callback-settings-empty';
+  if (code === 'auth_failed') return 'callback-settings-auth-failed';
+  if (code === 'email_not_verified') return 'callback-settings-email-not-verified';
+  if (code === 'cancelled') return 'callback-settings-cancelled';
+  if (code === 'email_already_registered') return 'callback-settings-email-already-registered';
+  if (code === 'identity_already_linked') return 'callback-settings-identity-already-linked';
+  if (code === 'reauth_required') return 'callback-settings-reauth-required';
+  return 'callback-settings-unrecognized-error';
+}
+
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  await writeFile(
+    DIAGNOSTIC_PATH,
+    `${JSON.stringify({
+      error: testInfo.error === undefined ? 'none'
+        : testInfo.error.message.includes('Timeout') ? 'timeout' : 'assertion',
+      detail: passwordDetail,
+      stage: passwordStage,
+    })}\n`,
+    { flag: 'wx', mode: 0o600 },
+  );
+});
 
 interface CapturedMessage {
   kind: string;
@@ -188,24 +225,89 @@ test('proves password authentication over native HTTPS', async ({
   expect(await meStatus(page)).toBe(200);
 
   // 4. Link a provider whose verified email differs from the account email.
+  setPasswordStage('settings-navigation');
   await gotoHydrated(page, '/app/settings/sessions');
+  setPasswordStage('locale-toggle');
+  let localeMutations = 0;
+  const countLocaleMutations = (request: { method(): string; url(): string }): void => {
+    const url = new URL(request.url());
+    if (url.origin === ORIGIN && request.method() !== 'GET' && (url.pathname === '/api/v1/auth/password/reauth' || url.pathname === '/api/v1/me/password')) localeMutations += 1;
+  };
+  page.on('request', countLocaleMutations);
+  await page.getByTestId('landing-locale-vi').click();
+  await expect(page.getByRole('heading', { name: 'Mật khẩu' })).toBeVisible();
+  await page.getByTestId('password-action').click();
+  setPasswordStage('password-draft');
+  const currentPassword = page.getByLabel('Mật khẩu hiện tại', { exact: true });
+  await currentPassword.fill(password);
+  await currentPassword.focus();
+  setPasswordStage('password-english-toggle');
+  await page.getByTestId('landing-locale-en').click();
+  setPasswordStage('password-english-render');
+  const translatedCurrentPassword = page.getByLabel('Current password', { exact: true });
+  await expect(translatedCurrentPassword).toHaveValue(password);
+  setPasswordStage('password-focus');
+  await expect(translatedCurrentPassword).toBeFocused();
+  expect(localeMutations).toBe(0);
+  page.off('request', countLocaleMutations);
+  await page.getByTestId('password-cancel').click();
+  setPasswordStage('add-provider');
   await page.getByTestId('add-provider-button').click();
+  const linkGoogle = page.getByRole('button', {
+    name: 'Link Google',
+    exact: true,
+  });
+  setPasswordStage('link-provider-visible');
+  await expect(linkGoogle).toBeVisible();
+  setPasswordStage('link-provider-start');
   await Promise.all([
     page.waitForURL((url) =>
       url.origin === ORIGIN
       && url.pathname === '/__uat/oauth/google/authorize'
     ),
-    page.getByRole('button', { name: 'Link Google' }).click(),
+    linkGoogle.click(),
   ]);
-  await page.getByLabel('Bob Local — bob@example.invalid').check();
-  await Promise.all([
-    page.waitForURL((url) =>
-      url.origin === ORIGIN
-      && url.pathname === '/app/settings/sessions'
-      && url.search === ''
-    ),
-    page.getByRole('button', { name: 'Continue with Google' }).click(),
-  ]);
+  setPasswordStage('link-provider-select-account');
+  await page.getByLabel('Password Link — pa-link@example.invalid').check();
+  setPasswordStage('link-provider-callback');
+  const recordCallbackNavigation = (frame: Frame): void => {
+    if (frame === page.mainFrame()) passwordDetail = callbackCategory(frame.url());
+  };
+  page.on('framenavigated', recordCallbackNavigation);
+  try {
+    await Promise.all([
+      page.waitForURL(
+        (url) =>
+          url.origin === ORIGIN
+          && url.pathname === '/app/settings/sessions'
+          && url.search === '',
+        { timeout: 20_000 },
+      ),
+      page.getByRole('button', { name: 'Continue with Google' }).click(),
+    ]);
+  } catch (error) {
+    passwordDetail = callbackCategory(page.url());
+    throw error;
+  } finally {
+    page.off('framenavigated', recordCallbackNavigation);
+  }
+  setPasswordStage('link-provider-callback');
+  const linkedGoogle = page.getByTestId('linked-provider-google');
+  setPasswordStage('unlink-open');
+  await linkedGoogle.getByTestId('unlink-button').click();
+  const unlinkDialog = page.getByRole('alertdialog');
+  const unlinkTitle = unlinkDialog.getByRole('heading');
+  await expect(unlinkTitle).toHaveText('Unlink Google?');
+  setPasswordStage('unlink-vietnamese-toggle');
+  await unlinkDialog.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Tiếng Việt' }).click();
+  setPasswordStage('unlink-vietnamese-title');
+  await expect(unlinkTitle).toHaveText('Hủy liên kết Google?');
+  setPasswordStage('unlink-english');
+  await unlinkDialog.getByRole('group', { name: 'Ngôn ngữ' }).getByRole('button', { name: 'English' }).click();
+  await expect(unlinkTitle).toHaveText('Unlink Google?');
+  setPasswordStage('unlink-cancel');
+  await unlinkDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  setPasswordStage('after-identity-localization');
 
   // 5. Provider-only account: sign in, then add a password.
   const providerContext = await browser.newContext();

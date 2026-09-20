@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import ConfirmDialog from '../app/ConfirmDialog.vue';
 import EmptyState from '../app/EmptyState.vue';
 import LoadingState from '../app/LoadingState.vue';
 import StatusBanner from '../app/StatusBanner.vue';
+import LocaleToggle from '../app/LocaleToggle.vue';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import {
   type AgentGrant,
-  type AgentGrantScope,
   AgentGrantsFailure,
   useAgentGrants,
 } from '../../composables/agentGrants';
 import { useAuth } from '../../composables/useAuth';
+import { agentSettingsCopy } from '../../i18n/agent-settings';
 
 const { grants, refresh, revoke } = useAgentGrants();
 const { csrfToken } = useAuth();
@@ -21,14 +22,11 @@ const loading = ref(true);
 const unavailable = ref(false);
 const selected = ref<AgentGrant | null>(null);
 const revokePending = ref(false);
-
-const scopeLabels: Record<AgentGrantScope, string> = {
-  'resumes:read': 'Read resumes',
-  'resumes:write': 'Write resumes',
-};
+const { locale } = useLocale();
+const copy = computed(() => agentSettingsCopy[locale.value]);
 
 function formatTime(value: string): string {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(locale.value === 'vi' ? 'vi-VN' : 'en-US', {
     timeZone: 'UTC',
     year: 'numeric',
     month: 'long',
@@ -124,11 +122,11 @@ async function refreshAfterAction(): Promise<void> {
       id="agents-title"
       class="text-lg font-semibold"
     >
-      Connected agents
+      {{ copy.title }}
     </h2>
     <LoadingState
       v-if="loading"
-      label="Loading connected agents…"
+      :label="copy.loading"
       testid="agents-loading"
     />
 
@@ -138,7 +136,7 @@ async function refreshAfterAction(): Promise<void> {
           kind="error"
           testid="agents-error"
         >
-          Connected agents are unavailable. Try again.
+          {{ copy.unavailable }}
         </StatusBanner>
         <Button
           data-testid="agents-retry"
@@ -146,14 +144,14 @@ async function refreshAfterAction(): Promise<void> {
           variant="outline"
           @click="load"
         >
-          Retry
+          {{ copy.retry }}
         </Button>
       </template>
 
       <EmptyState
         v-if="!unavailable && grants.length === 0"
-        title="No connected agents."
-        description="Agents connect through MCP after you approve access."
+        :title="copy.emptyTitle"
+        :description="copy.emptyDescription"
       />
 
       <div
@@ -175,22 +173,21 @@ async function refreshAfterAction(): Promise<void> {
               :key="scope"
               variant="secondary"
             >
-              {{ scopeLabels[scope] }}
+              {{ copy.scopes[scope] }}
             </Badge>
           </div>
           <p class="text-muted-foreground text-sm">
-            Created
+            {{ copy.created }}
             <time :datetime="grant.createdAt">{{
               formatTime(grant.createdAt)
             }}</time>
           </p>
           <p class="text-muted-foreground text-sm">
-            Last used
             <time
               v-if="grant.lastUsedAt !== null"
               :datetime="grant.lastUsedAt"
-            >{{ formatTime(grant.lastUsedAt) }}</time>
-            <span v-else>Never</span>
+            >{{ copy.lastUsed }} {{ formatTime(grant.lastUsedAt) }}</time>
+            <span v-else>{{ copy.neverUsed }}</span>
           </p>
           <Button
             data-testid="agent-revoke"
@@ -199,7 +196,7 @@ async function refreshAfterAction(): Promise<void> {
             variant="secondary"
             @click="openConfirmation(grant)"
           >
-            Revoke
+            {{ copy.revoke }}
           </Button>
         </div>
       </div>
@@ -207,15 +204,23 @@ async function refreshAfterAction(): Promise<void> {
 
     <ConfirmDialog
       :open="selected !== null"
-      title="Revoke access"
-      description="Revoke this connected agent's access?"
-      confirm-label="Revoke access"
+      :title="copy.revokeTitle"
+      :description="copy.revokeDescription"
+      :confirm-label="copy.revokeConfirm"
+      :cancel-label="copy.cancel"
       destructive
       :busy="revokePending"
       confirm-action="agent-revoke-confirm"
       cancel-action="agent-revoke-cancel"
       @confirm="confirmRevoke"
       @cancel="closeConfirmation"
-    />
+    >
+      <template #header-actions>
+        <LocaleToggle
+          :label="copy.localeLabel"
+          @pointerdown.prevent
+        />
+      </template>
+    </ConfirmDialog>
   </div>
 </template>

@@ -73,11 +73,14 @@ func TestFixtureIdentityAndClientMarkersAreClosed(t *testing.T) {
 	if fixtureUser.IdentityID.String() != "53000000-0000-4000-8000-000000000011" {
 		t.Fatalf("fixture identity ID = %s", fixtureUser.IdentityID)
 	}
-	if fixtureUser.Email != "bob@example.invalid" || fixtureUser.Name != "Bob Local" {
+	if fixtureUser.Email != "mcp-proof@example.invalid" || fixtureUser.Name != "MCP Proof" {
 		t.Fatalf("fixture user = %#v", fixtureUser)
 	}
-	if fixtureUser.Provider != "google" || fixtureUser.ProviderUserID != "uat-google-003" {
+	if fixtureUser.Provider != "google" || fixtureUser.ProviderUserID != "uat-google-006" {
 		t.Fatalf("fixture provider = %q/%q", fixtureUser.Provider, fixtureUser.ProviderUserID)
+	}
+	if fixtureUser.Email == "bob@example.invalid" || fixtureUser.ProviderUserID == "uat-google-003" {
+		t.Fatalf("fixture user shares Bob Local: %#v", fixtureUser)
 	}
 	if fixtureClientNamePrefix != "aboutme MCP UAT " {
 		t.Fatalf("fixture client name prefix = %q", fixtureClientNamePrefix)
