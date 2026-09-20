@@ -350,7 +350,7 @@ Resource rules. Reuse completed evidence when code has not changed.
 | Renderer or public page       | Nuxt gate plus `make web-e2e`; baselines as in [Releases](#releases)                                           |
 | Authenticated UI              | `make dev-https-auth-check dev-https-editor-check dev-https-mcp-check dev-https-entry-check`                   |
 | Public surface                | `make native-http-check` and `make dev-https-public-check`                                                     |
-| Security-sensitive or release | CI's Semgrep and gitleaks jobs; diagnose their hosted logs without a local scan |
+| Security-sensitive or release | CI's Semgrep and gitleaks jobs; diagnose their hosted logs without a local scan                                |
 
 Reusable browser automation is scripted headless Playwright. To author it, use
 the Playwright MCP server to inspect real selectors, requests, and state, then
