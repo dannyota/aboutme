@@ -451,7 +451,11 @@ func TestWorkerDeliversSecurityJobUnderUserScopeLock(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	t.Cleanup(func() { _, _ = sp.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID) })
+	t.Cleanup(func() {
+		if _, cleanupErr := sp.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID); cleanupErr != nil {
+			t.Errorf("cleanup user: %v", cleanupErr)
+		}
+	})
 	tx := beginWorkerTx(ctx, t, sp)
 	jobID := enqueueSecurityJob(ctx, t, q.WithTx(tx), ring, clock.Now, user.ID, KindRecoveryCodeUsed)
 	if err := tx.Commit(ctx); err != nil {
