@@ -21,9 +21,12 @@ notification pause, restore, and cleanup contract.
 - Modify `deploy/aws/scripts/deploy_test.sh`.
 - Modify `deploy/aws/scripts/testdata/respond`.
 - Modify `docs/runbooks/production.md`.
+- Modify `.github/workflows/ci.yml` only for the hosted passkey browser proof.
+- Modify `scripts/test/workflow-safety-test.sh` only for that job's contract.
 
-Do not edit Terraform, application code, workflows, secrets, or design sources.
-Do not run AWS, OpenTofu plan or apply, or production commands.
+Do not edit Terraform, application code, another workflow, secrets, or design
+sources. Do not run AWS, OpenTofu plan or apply, production commands, local
+tests, builds, lint, installs, browsers, database writes, or development stacks.
 
 ## Required behavior
 
@@ -64,6 +67,24 @@ Do not run AWS, OpenTofu plan or apply, or production commands.
   proof, fence raise, flag enablement, synthetic account proof, and failure
   recovery without printing secrets or fence internals that the contract marks
   private.
+- Add a `passkey-browser-proof` job to `.github/workflows/ci.yml`. Give it a
+  fixed 45-minute timeout. Use the pinned repository toolchain and repository
+  lifecycle targets to start `make dev-https`, build the pinned browser image,
+  and execute `make dev-https-passkey-check` on the exact candidate. Upload only
+  bounded, secret-free evidence from fictional accounts at
+  `.dev/native-https/evidence/passkey-*`. Use `if: always()` steps to stop the
+  HTTPS stack and its runner-local database on success, failure, and
+  cancellation.
+- Add workflow-safety assertions for the named job, exact repository targets,
+  fixed timeout, bounded artifact path, lack of production secrets, and
+  unconditional stack and database cleanup. A compile or Playwright list result
+  does not satisfy the hosted proof.
+- Document the two manager-owned production browser proofs from the release
+  plan. GitHub CI cannot observe the deployed fence, enrollment flag, live
+  identity providers, or production origin. Each proof uses only the named
+  fictional account and the exact bounded command from the plan, starts no
+  product stack, and removes the proof's factors, recovery plaintext, and live
+  sessions on every exit.
 
 ## Test-first cycle and checks
 
@@ -73,8 +94,9 @@ uncertain acquisition resolved as exact-owner success, uncertain acquisition
 resolved as absent or foreign ownership, conditional raise race, exact-owner
 release, crash-closed state, normal deploy, rollback, pre-migration restoration,
 post-migration failure, raise-before-flag order, and notification restoration
-before release on each new fence exit path. After the top manager grants a
-normal test lane, run:
+before release on each new fence exit path. Add the failing workflow-safety
+contract before the hosted job. Report these checks as unrun pending GitHub CI
+on the exact candidate:
 
 ```bash
 bash -n deploy/aws/scripts/deploy.sh deploy/aws/scripts/deploy_test.sh
@@ -83,8 +105,13 @@ node_modules/.bin/prettier --check docs/runbooks/production.md
 npx markdownlint-cli2 docs/runbooks/production.md
 ```
 
+The exact CI run must also show the docs job, workflow-safety test, and
+`passkey-browser-proof` job green. Do not repeat any hosted check locally.
+
 Definition of done: every supported image-start path enforces the same durable
-minimum and the runbook gives one safe release and recovery order. Report exact
-files, checks and results, skipped checks with command and reason, stub
-coverage, and open items. Do not perform Git operations or external writes. Use
-short plain text with no em dash.
+minimum, the runbook gives one safe release and recovery order, and the hosted
+job executes the synthetic passkey proof with unconditional cleanup. Report
+exact files and hunks, checks and results or awaiting CI, skipped checks with
+command and reason, stub and workflow coverage, hosted artifact path or `none`,
+and open items. Do not perform Git operations or external writes. Use short
+plain text with no em dash.

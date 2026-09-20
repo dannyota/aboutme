@@ -49,8 +49,9 @@ generated API client.
 
 Start with `git status --short`. Add failing config, capability, route,
 composition, focused second-factor, and API contract tests. Regenerate the
-client only from OpenAPI. The top manager must grant normal build and package
-lanes before these commands run:
+client only from OpenAPI. Do not run local tests, builds, lint, installs,
+database writes, browsers, or development stacks. Report these checks as unrun
+pending GitHub CI on the exact candidate:
 
 ```bash
 make api-check

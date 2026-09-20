@@ -71,8 +71,9 @@ OpenAPI, web files, migrations, or infrastructure.
 
 Start with `git status --short`. Add failing password and provider matrices for
 unenrolled and enrolled accounts, stale epoch, callback replay, reset bypass,
-reauth binding, and concurrent factor changes. The top manager must grant the
-database and normal test lanes before these commands run:
+reauth binding, and concurrent factor changes. Do not run local tests, builds,
+lint, installs, database writes, browsers, or development stacks. Report these
+checks as unrun pending GitHub CI on the exact candidate:
 
 ```bash
 (cd apps/server && go test -count=1 ./internal/auth)

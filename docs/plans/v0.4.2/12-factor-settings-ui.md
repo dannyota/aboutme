@@ -51,7 +51,9 @@ backend, design, or infrastructure. Do not add TOTP controls or QR code code.
 
 Start with `git status --short`. Add failing capability, state, enrollment,
 removal, recovery, cleanup, locale, accessibility, and session-rotation tests.
-The top manager must grant frontend lanes before these commands run:
+Do not run local tests, builds, lint, installs, database writes, browsers, or
+development stacks. Report these checks as unrun pending GitHub CI on the exact
+candidate:
 
 ```bash
 (cd apps/web && npx vitest run test/useCapabilities.test.ts test/second-factor-settings.test.ts test/sessions-settings.test.ts test/sessions-csrf-gating.test.ts test/sessions-privileged-start-adversarial.test.ts)
