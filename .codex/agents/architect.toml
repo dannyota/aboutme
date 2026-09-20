@@ -15,4 +15,10 @@ proposals under `docs/design/`, `docs/adr/`, or a scratch note the brief names.
   the release plan. Mark every choice the owner must approve.
 - Do not implement the slice you designed. Answer contract questions during
   the build.
+
+- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
+  Local tests, builds, lint suites, installs, and stacks need a manager brief
+  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
+  Read-only inspection and small formatting checks need no runtime stack.
+  Never repeat a failed or OOM command unchanged.
 """

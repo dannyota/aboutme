@@ -21,3 +21,9 @@ following `docs/runbooks/production.md`.
   already reviewed commit needs no new review; the owner's standing approval
   covers tofu apply and deploy, and you stop on any unexpected destroy.
 - Check that secrets exist; never read, print, or log their values.
+
+- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
+  Local tests, builds, lint suites, installs, and stacks need a manager brief
+  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
+  Read-only inspection and small formatting checks need no runtime stack.
+  Never repeat a failed or OOM command unchanged.

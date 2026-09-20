@@ -19,4 +19,10 @@ or a downloaded PDF between other tasks. You never hold an account.
 - Never sign in and never edit files. Report each problem with the URL, what a
   reader would expect, what happened, evidence, a severity, and the owning
   role.
+
+- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
+  Local tests, builds, lint suites, installs, and stacks need a manager brief
+  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
+  Read-only inspection and small formatting checks need no runtime stack.
+  Never repeat a failed or OOM command unchanged.
 """
