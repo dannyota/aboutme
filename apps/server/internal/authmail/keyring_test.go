@@ -119,9 +119,42 @@ func TestSealOpenRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if got != p {
+	if !payloadSemanticallyEqual(got, p) {
 		t.Fatalf("Open = %+v, want %+v", got, p)
 	}
+}
+
+func TestSealOpenRecoveryCodeUsedRoundtrip(t *testing.T) {
+	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
+	remaining := 9
+	p := Payload{
+		Version:                securityPayloadVersion,
+		To:                     "alice@example.com",
+		OccurredAt:             "2026-09-20T09:00:00Z",
+		RemainingRecoveryCodes: &remaining,
+	}
+
+	s, err := ring.Seal(fixedJobID(), KindRecoveryCodeUsed, p)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	got, err := ring.Open(fixedJobID(), KindRecoveryCodeUsed, s)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if !payloadSemanticallyEqual(got, p) {
+		t.Fatalf("Open = %+v, want %+v", got, p)
+	}
+}
+
+func payloadSemanticallyEqual(a, b Payload) bool {
+	if a.Version != b.Version || a.To != b.To || a.Link != b.Link || a.OccurredAt != b.OccurredAt {
+		return false
+	}
+	if a.RemainingRecoveryCodes == nil || b.RemainingRecoveryCodes == nil {
+		return a.RemainingRecoveryCodes == nil && b.RemainingRecoveryCodes == nil
+	}
+	return *a.RemainingRecoveryCodes == *b.RemainingRecoveryCodes
 }
 
 func TestSealOpenRandomNonceInequality(t *testing.T) {

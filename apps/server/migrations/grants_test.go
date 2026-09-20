@@ -2,7 +2,7 @@
 // owns every object in public (including goose_db_version and the citext
 // extension) and belongs to no other role, and aboutme_app holds exactly
 // SELECT/INSERT/UPDATE/DELETE (no grant option, nothing else) on each of
-// the twenty business tables, nothing at all on any other relation in
+// the 26 business tables, nothing at all on any other relation in
 // public, and cannot create or alter schema objects. Every check is proven
 // against the real ACL and catalog state a live goose-migrated database
 // produces, not against the migration source text.
@@ -18,9 +18,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// businessTables is the exact table set 00001_baseline.sql's GRANT
-// statement names. TestBusinessTableSetMatchesPublicSchema fails when
-// schema public gains a table this list does not name.
+// businessTables is the exact public table set that aboutme_app may access.
+// TestBusinessTableSetMatchesPublicSchema fails when schema public gains a
+// table this list does not name.
 var businessTables = []string{
 	"users", "identities", "oauth_transactions", "sessions", "idempotency_records",
 	"resumes", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
@@ -28,6 +28,8 @@ var businessTables = []string{
 	"password_reset_tokens", "auth_email_jobs", "oauth_clients",
 	"oauth_authorization_codes", "oauth_grants", "oauth_tokens",
 	"lifecycle_audit_events", "privacy_sweep_state",
+	"second_factor_policies", "webauthn_credentials", "second_factor_recovery_codes",
+	"pending_authentications", "webauthn_ceremonies", "authentication_security_events",
 }
 
 func TestBusinessTableSetMatchesPublicSchema(t *testing.T) {
