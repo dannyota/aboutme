@@ -29,7 +29,7 @@ case "$cmd $args" in
     fi
     echo 200 ;;
   "curl -s -m 10 -w "*)
-    if [[ $STUB_CASE == maintenance_smoke_fails || $STUB_CASE == maintenance_down_fails ]]; then
+    if [[ $STUB_CASE == maintenance_smoke_fails || $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails ]]; then
       printf 'unavailable\n502\n'
     else
       printf '<!-- aboutme:maintenance -->\n503\n'
@@ -87,7 +87,7 @@ case "$cmd $args" in
     if [[ $STUB_CASE == start_fails ]]; then exit 255; fi ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-maintenance"*)
     if [[ $STUB_CASE == maint_up_fails ]]; then exit 255; fi
-    if [[ $STUB_CASE == maintenance_down_fails ]]; then
+    if [[ $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails ]]; then
       n=$(($(cat "$STUB_DIR/$STUB_CASE.maint-wait-count" 2>/dev/null || echo 0) + 1))
       echo "$n" >"$STUB_DIR/$STUB_CASE.maint-wait-count"
       ((n != 2)) || exit 255
@@ -111,6 +111,27 @@ case "$cmd $args" in
     if [[ $STUB_CASE == *migrate_fails && $args == *deploy-migrate* ]]; then echo 1;
     elif [[ $STUB_CASE == *db_setup_fails && $args == *deploy-db-setup* ]]; then echo 1;
     else echo 0; fi ;;
+  "aws "*"cloudwatch describe-alarms"*)
+    if [[ $STUB_CASE == alerts_initially_disabled ]]; then echo False
+    elif [[ $STUB_CASE == alerts_site_mismatch && -e $STUB_DIR/site-disabled ]]; then echo True
+    elif [[ -e $STUB_DIR/site-disabled ]]; then echo False
+    else echo True; fi ;;
+  "aws "*"cloudwatch disable-alarm-actions"*)
+    : >"$STUB_DIR/site-disabled"
+    if [[ $STUB_CASE == alerts_site_lost ]]; then exit 255; fi ;;
+  "aws "*"cloudwatch enable-alarm-actions"*)
+    rm -f "$STUB_DIR/site-disabled"
+    [[ $STUB_CASE != alerts_restore_fails ]] || exit 255 ;;
+  "aws "*"events describe-rule"*)
+    if [[ $STUB_CASE == alerts_initially_disabled ]]; then echo DISABLED
+    elif [[ -e $STUB_DIR/task-rule-disabled ]]; then echo DISABLED
+    else echo ENABLED; fi ;;
+  "aws "*"events disable-rule"*)
+    : >"$STUB_DIR/task-rule-disabled"
+    if [[ $STUB_CASE == alerts_rule_lost ]]; then exit 255; fi
+    if [[ $STUB_CASE == alerts_signal ]]; then kill -TERM "$PPID"; fi ;;
+  "aws "*"events enable-rule"*)
+    rm -f "$STUB_DIR/task-rule-disabled" ;;
   "aws "*"scheduler list-schedules"*) printf 'a\tb\tc\td\n' ;;
   "aws "*"scheduler get-schedule"*)
     state=ENABLED

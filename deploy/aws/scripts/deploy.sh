@@ -24,6 +24,7 @@
 set -euo pipefail
 
 region=ap-southeast-1
+site_alarm_region=us-east-1
 cluster=aboutme-prod
 group=aboutme-prod-jobs
 repo=dannyota/aboutme
@@ -46,6 +47,7 @@ case "$#:${1:-}:${2:-}" in
 esac
 
 aws_() { aws --region "$region" "$@"; }
+aws_site_alarm_() { aws --region "$site_alarm_region" "$@"; }
 say() { printf 'deploy: %s\n' "$*" >&2; }
 work=$(mktemp -d)
 
@@ -74,15 +76,113 @@ migration_may_be_applied=0
 app_start_requested=0
 app_stable=0
 schedules_enabled=()
-on_exit() {
-  local status=$?
-  if ((status != 0)) && [[ $phase == changing ]]; then
-    restore
+site_alarm_restore=0
+task_stopped_rule_restore=0
+
+# The planned handoff stops the app and starts maintenance, so suppress only
+# the resulting site-down and stopped-task notifications. Database, capacity,
+# Scheduler, and host recovery alarms remain live throughout the deploy.
+restore_deploy_notifications() {
+  local failed=0 actions state
+  if ((task_stopped_rule_restore)); then
+    if ! aws_ events enable-rule --name aboutme-prod-task-stopped >/dev/null; then
+      say "could not re-enable the task-stopped notification rule"
+      failed=1
+    else
+      state=$(aws_ events describe-rule --name aboutme-prod-task-stopped --query State --output text) || state=""
+      if [[ $state != ENABLED ]]; then
+        say "task-stopped notification rule is '$state', want ENABLED"
+        failed=1
+      else
+        task_stopped_rule_restore=0
+      fi
+    fi
   fi
+  if ((site_alarm_restore)); then
+    if ! aws_site_alarm_ cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down >/dev/null; then
+      say "could not re-enable site-down alarm actions"
+      failed=1
+    else
+      actions=$(aws_site_alarm_ cloudwatch describe-alarms --alarm-names aboutme-prod-site-down \
+        --query 'MetricAlarms[0].ActionsEnabled' --output text) || actions=""
+      if [[ $actions != True ]]; then
+        say "site-down alarm actions are '$actions', want True"
+        failed=1
+      else
+        site_alarm_restore=0
+      fi
+    fi
+  fi
+  return "$failed"
+}
+
+pause_deploy_notifications() {
+  local actions state
+  actions=$(aws_site_alarm_ cloudwatch describe-alarms --alarm-names aboutme-prod-site-down \
+    --query 'MetricAlarms[0].ActionsEnabled' --output text) || { say "could not read site-down alarm actions"; return 1; }
+  case $actions in True|False) ;; *) say "site-down alarm actions are '$actions', want True or False"; return 1;; esac
+  state=$(aws_ events describe-rule --name aboutme-prod-task-stopped --query State --output text) ||
+    { say "could not read the task-stopped notification rule"; return 1; }
+  case $state in ENABLED|DISABLED) ;; *) say "task-stopped notification rule is '$state', want ENABLED or DISABLED"; return 1;; esac
+
+  say "deployment notification states: site-down actions=$actions, task-stopped rule=$state"
+
+  if [[ $actions == True ]]; then
+    # Mark first because AWS can accept a request even when the client loses its
+    # response. Cleanup must then treat the action as possibly disabled.
+    site_alarm_restore=1
+    if ! aws_site_alarm_ cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down >/dev/null; then
+      say "could not disable site-down alarm actions"
+      restore_deploy_notifications || true
+      return 1
+    fi
+    actions=$(aws_site_alarm_ cloudwatch describe-alarms --alarm-names aboutme-prod-site-down \
+      --query 'MetricAlarms[0].ActionsEnabled' --output text) || actions=""
+    if [[ $actions != False ]]; then
+      say "site-down alarm actions are '$actions', want False before the handoff"
+      restore_deploy_notifications || true
+      return 1
+    fi
+  fi
+
+  if [[ $state == ENABLED ]]; then
+    task_stopped_rule_restore=1
+    if ! aws_ events disable-rule --name aboutme-prod-task-stopped >/dev/null; then
+      say "could not disable the task-stopped notification rule"
+      restore_deploy_notifications || true
+      return 1
+    fi
+    state=$(aws_ events describe-rule --name aboutme-prod-task-stopped --query State --output text) || state=""
+    if [[ $state != DISABLED ]]; then
+      say "task-stopped notification rule is '$state', want DISABLED before the handoff"
+      restore_deploy_notifications || true
+      return 1
+    fi
+  fi
+}
+
+on_exit() {
+  local status=$? cleanup_failed=0
+  if ((status != 0)) && [[ $phase == changing ]]; then
+    # Keep notification cleanup reachable even when a recovery safety check
+    # fails. The deployment's original nonzero status still wins.
+    if ! restore; then
+      say "service recovery did not complete; restoring deployment notifications"
+    fi
+  fi
+  restore_deploy_notifications || cleanup_failed=1
   rm -rf "$work"
+  ((cleanup_failed)) && status=1
   exit "$status"
 }
 trap on_exit EXIT
+on_signal() { # name exit status
+  say "received $1; restoring deployment notifications"
+  exit "$2"
+}
+trap 'on_signal HUP 129' HUP
+trap 'on_signal INT 130' INT
+trap 'on_signal TERM 143' TERM
 
 digest() { # image name -> sha256:...
   local token
@@ -315,7 +415,7 @@ restore() {
   if ! maintenance_down; then
     say "could not confirm that maintenance released host port 443"
     say "the previous app was not started; check both services before retrying"
-    return
+    return 1
   fi
   if ! aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
     --task-definition "$previous_app" --desired-count 1 >/dev/null; then
@@ -332,6 +432,11 @@ restore() {
     fi
   done
 }
+
+# Do not start the handoff until both notification sources are confirmed
+# suppressed. A failure here restores any uncertain change and leaves app,
+# maintenance, schedules, and database untouched.
+pause_deploy_notifications || { say "notification suppression failed; refusing to disrupt the site"; exit 1; }
 
 phase=changing
 for name in $schedules; do
@@ -431,4 +536,5 @@ if curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$smoke_ip/"; t
   say "smoke: the origin answered a direct request"
   exit 1
 fi
+restore_deploy_notifications || { say "notification restoration failed after the deploy"; exit 1; }
 say "deployed $tag"

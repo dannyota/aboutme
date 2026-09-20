@@ -163,18 +163,43 @@ bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 The script checks the tag and CI, resolves image digests, compares Cloudflare
 ranges, checks that every secret the new revisions reference exists (by name,
 never reading a value), snapshots RDS, registers task definition revisions,
-disables the job schedules, and stops `app`. It then swaps in the `maintenance`
-service: the same Caddy image, in a mode that serves
-`deploy/caddy/production/maintenance.html` at 503 for every path, including
-`/readyz` and `/api/*`. With the maintenance page up, it runs the database
-steps, starts `web`, swaps `maintenance` back out, starts `app`, re-enables the
-schedules, and smoke-tests through Cloudflare. The script requires the
-maintenance page's 503 response through Cloudflare before it starts a database
-task. `app` and `maintenance` both bind host port 443, so exactly one of them is
-ever asked to run at once. Task placement and image pulls determine how long the
-maintenance page remains up. After maintenance stops, Cloudflare can return 521
-until `app` accepts traffic. The v0.3.30 handoff returned 521 for about one
-minute. Do not promise a bounded downtime window.
+disables the `aboutme-prod-site-down` alarm actions and the
+`aboutme-prod-task-stopped` rule when they were enabled, disables the job
+schedules, and stops `app`. It then swaps in the `maintenance` service: the same
+Caddy image, in a mode that serves `deploy/caddy/production/maintenance.html` at
+503 for every path, including `/readyz` and `/api/*`. With the maintenance page
+up, it runs the database steps, starts `web`, swaps `maintenance` back out,
+starts `app`, re-enables the schedules, and smoke-tests through Cloudflare. The
+script requires the maintenance page's 503 response through Cloudflare before it
+starts a database task. `app` and `maintenance` both bind host port 443, so
+exactly one of them is ever asked to run at once. Task placement and image pulls
+determine how long the maintenance page remains up. After maintenance stops,
+Cloudflare can return 521 until `app` accepts traffic. The v0.3.30 handoff
+returned 521 for about one minute. Do not promise a bounded downtime window.
+
+The deploy records the prior state of the site-down alarm actions and
+task-stopped rule before it changes either source. It restores only sources that
+were enabled after service recovery, including normal, rollback, error, and HUP,
+INT, or TERM exits. It leaves database, capacity, Scheduler, and host recovery
+alarms active. SIGKILL, host loss, and shell death cannot run cleanup. Before
+retrying after one of those failures, use the recorded
+`deployment notification states` line from the deploy output. If the recorded
+task-stopped rule was `ENABLED`, run:
+
+```sh
+aws events enable-rule --region ap-southeast-1 --name aboutme-prod-task-stopped
+```
+
+If the recorded site-down actions were `True`, run:
+
+```sh
+aws cloudwatch enable-alarm-actions --region us-east-1 \
+  --alarm-names aboutme-prod-site-down
+```
+
+Leave either source unchanged when its recorded state was `DISABLED` or `False`.
+If the deploy output is unavailable, do not change either source until the
+operator establishes its prior state from operational evidence.
 
 Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
 deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes

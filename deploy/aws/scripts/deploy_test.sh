@@ -83,6 +83,80 @@ grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "ok: schedules
 jq -e '.Target.EcsParameters.TaskDefinitionArn == "arn:aws:ecs:ap-southeast-1:1:task-definition/new:4"' \
   "$work/last-schedule.json" >/dev/null || { echo "ok: schedules not pinned to the released revision" >&2; exit 1; }
 
+# Planned service handoffs suppress only the site-down alarm actions and the
+# stopped-task EventBridge notification rule. Other alarms stay live.
+before "$f" "events disable-rule --name aboutme-prod-task-stopped" "$stop_app"
+before "$f" "cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down" "$stop_app"
+before "$f" "$start_app" "events enable-rule --name aboutme-prod-task-stopped"
+before "$f" "$start_app" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+[[ $(count "$f" "events disable-rule --name aboutme-prod-task-stopped") == 1 ]] ||
+  { echo "ok: task-stopped rule was not disabled once" >&2; exit 1; }
+[[ $(count "$f" "cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "ok: site-down actions were not disabled once" >&2; exit 1; }
+[[ $(count "$f" "host-recover") == 0 ]] || { echo "ok: touched host recovery" >&2; exit 1; }
+
+# Existing disabled states must stay disabled and need no mutation.
+run_case alerts_initially_disabled 0 v0.1.0
+f=$work/alerts_initially_disabled.calls
+absent "$f" "events disable-rule --name aboutme-prod-task-stopped"
+absent "$f" "events enable-rule --name aboutme-prod-task-stopped"
+absent "$f" "cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down"
+absent "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+
+# An ambiguous or mismatched suppression response must restore what could have
+# changed and fail before the app is stopped.
+for alert_failure in alerts_site_lost alerts_site_mismatch alerts_rule_lost; do
+  run_case "$alert_failure" fail v0.1.0
+  f=$work/$alert_failure.calls
+  absent "$f" "$stop_app"
+  grep -qF -- "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down" "$f" ||
+    { echo "$alert_failure: site-down actions were not restored" >&2; exit 1; }
+done
+f=$work/alerts_rule_lost.calls
+grep -qF -- "events enable-rule --name aboutme-prod-task-stopped" "$f" ||
+  { echo "alerts_rule_lost: task-stopped rule was not restored" >&2; exit 1; }
+
+# A notification restore failure is an error, but does not invoke service
+# recovery after the new app is already healthy.
+run_case alerts_restore_fails fail v0.1.0
+f=$work/alerts_restore_fails.calls
+[[ $(count "$f" "$stop_app") == 1 ]] || { echo "alerts_restore_fails: app was stopped again" >&2; exit 1; }
+[[ $(count "$f" "$start_app") == 1 ]] || { echo "alerts_restore_fails: app start changed" >&2; exit 1; }
+absent "$f" "$prev_app_up"
+
+# A failed service-recovery step must not bypass notification cleanup. The
+# original deployment failure remains the process result, and no unsafe ECS
+# start follows the failed recovery state check.
+run_case alerts_recovery_fails fail v0.1.0
+f=$work/alerts_recovery_fails.calls
+grep -qF -- "events enable-rule --name aboutme-prod-task-stopped" "$f" ||
+  { echo "alerts_recovery_fails: task-stopped rule was not restored" >&2; exit 1; }
+grep -qF -- "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down" "$f" ||
+  { echo "alerts_recovery_fails: site-down actions were not restored" >&2; exit 1; }
+absent "$f" "$prev_app_up"
+grep -q "service recovery did not complete; restoring deployment notifications" "$work/alerts_recovery_fails.out" ||
+  { echo "alerts_recovery_fails: recovery failure was not reported" >&2; exit 1; }
+
+# The suppression boundary applies to first deploy and rollback too.
+for alert_success in alerts_first alerts_rollback; do
+  if [[ $alert_success == alerts_first ]]; then run_case "$alert_success" 0 v0.1.0 --first-deploy
+  else run_case "$alert_success" 0 --rollback v0.0.9
+  fi
+  f=$work/$alert_success.calls
+  grep -qF -- "events disable-rule --name aboutme-prod-task-stopped" "$f" ||
+    { echo "$alert_success: task-stopped rule was not disabled" >&2; exit 1; }
+  grep -qF -- "cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down" "$f" ||
+    { echo "$alert_success: site-down actions were not disabled" >&2; exit 1; }
+done
+
+# HUP, INT and TERM exit through cleanup. The stub sends TERM while the rule
+# suppression call is in flight, before a service can be changed.
+run_case alerts_signal fail v0.1.0
+f=$work/alerts_signal.calls
+absent "$f" "$stop_app"
+grep -qF -- "events enable-rule --name aboutme-prod-task-stopped" "$f" ||
+  { echo "alerts_signal: task-stopped rule was not restored" >&2; exit 1; }
+
 # Every task secret is checked by name, once, before anything changes, and no
 # value is ever read.
 before "$f" "ssm describe-parameters" "rds create-db-snapshot"
