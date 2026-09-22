@@ -14,7 +14,6 @@ import (
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
-	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -184,8 +183,8 @@ func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 	}
 	if current.Slug != nil {
 		if mutation.Agent == nil {
-			if reauthErr := auth.RequireRecentReauth(mutation.Session, op.service.clock()); reauthErr != nil {
-				return mutationRunResult{}, reauthErr
+			if authorityErr := op.service.requireSensitiveResumeAuthority(ctx, qtx, mutation, op.service.clock()); authorityErr != nil {
+				return mutationRunResult{}, authorityErr
 			}
 		}
 		releasedAt := input.ReleasedAt

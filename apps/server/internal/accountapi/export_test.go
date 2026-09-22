@@ -94,6 +94,31 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 		}
 	}
 
+	// Second-factor material must never cross the export boundary: policy,
+	// credential, public key, recovery digest, and recovery code all stay
+	// server-side. See docs/design/passkey-second-factor-contract.md.
+	factorNow := time.Now().UTC()
+	handleSentinel := exportSecondFactorSentinel("sfhandlesentnl")
+	credentialIDSentinel := exportSecondFactorSentinel("sfcredentialid")
+	publicKeySentinel := exportSecondFactorSentinel("sfpublickeysnt")
+	recoveryDigestSentinel := exportSecondFactorSentinel("sfrecoverycode")
+	if _, err := h.q.CreateSecondFactorPolicy(h.ctx, store.CreateSecondFactorPolicyParams{
+		UserID: h.user.ID, WebauthnUserHandle: handleSentinel, EnabledAt: factorNow,
+	}); err != nil {
+		t.Fatalf("seed second-factor policy: %v", err)
+	}
+	if _, err := h.q.CreateWebAuthnCredential(h.ctx, store.CreateWebAuthnCredentialParams{
+		UserID: h.user.ID, CredentialID: credentialIDSentinel, PublicKey: publicKeySentinel,
+		SignCount: 0, BackupEligible: true, BackupState: false, Transports: []string{"internal"}, CreatedAt: factorNow,
+	}); err != nil {
+		t.Fatalf("seed webauthn credential: %v", err)
+	}
+	if _, err := h.q.CreateSecondFactorRecoveryCode(h.ctx, store.CreateSecondFactorRecoveryCodeParams{
+		UserID: h.user.ID, CodeDigest: recoveryDigestSentinel, CreatedAt: factorNow,
+	}); err != nil {
+		t.Fatalf("seed recovery code: %v", err)
+	}
+
 	photoBytes := exportTestPNG(t)
 	photo := h.insertResume(t, "", true, photoBytes)
 	h.insertResume(t, "draft one", false, nil)
@@ -154,7 +179,15 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 	if got, err := base64.StdEncoding.DecodeString(output.Data.Resumes[0].Photo.Data); err != nil || !bytes.Equal(got, photoBytes) {
 		t.Errorf("portable photo = %x, %v; want original PNG bytes", got, err)
 	}
-	for _, sentinel := range []string{credentialSentinel, avatarSentinel, "subject-sentinel"} {
+	sentinels := []string{
+		credentialSentinel, avatarSentinel, "subject-sentinel",
+		"sfhandlesentnl", "sfcredentialid", "sfpublickeysnt", "sfrecoverycode",
+		base64.StdEncoding.EncodeToString(handleSentinel),
+		base64.StdEncoding.EncodeToString(credentialIDSentinel),
+		base64.StdEncoding.EncodeToString(publicKeySentinel),
+		base64.StdEncoding.EncodeToString(recoveryDigestSentinel),
+	}
+	for _, sentinel := range sentinels {
 		if bytes.Contains(response.Body.Bytes(), []byte(sentinel)) || strings.Contains(h.logs.String(), sentinel) {
 			t.Errorf("sentinel %q escaped the portable export boundary", sentinel)
 		}
@@ -587,6 +620,18 @@ type exportTestFailReader struct{}
 func (exportTestFailReader) Read([]byte) (int, error) { return 0, errors.New("read") }
 
 type exportTestUnknownLengthReader struct{ io.Reader }
+
+// exportSecondFactorSentinel returns 32 bytes: a readable 16-byte marker
+// (zero-padded or truncated) followed by a fresh random 16-byte suffix, so a
+// second-factor column's uniqueness constraint never collides across test
+// runs while the marker stays searchable in a leak check.
+func exportSecondFactorSentinel(marker string) []byte {
+	out := make([]byte, 32)
+	copy(out, marker)
+	unique := uuid.New()
+	copy(out[16:], unique[:])
+	return out
+}
 
 func exportTestPhotoKey(resumeID uuid.UUID) string {
 	return "resumes/" + resumeID.String() + "/photo-00000000000000000000000000000000.png"

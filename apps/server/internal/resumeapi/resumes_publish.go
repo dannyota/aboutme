@@ -46,8 +46,8 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 		return mutationRunResult{}, publishInvalidError(validated.Issues)
 	}
 	if publishRequiresRecentReauth(state, validated) {
-		if reauthErr := auth.RequireRecentReauth(mutation.Session, op.service.clock()); reauthErr != nil {
-			return mutationRunResult{}, reauthErr
+		if authorityErr := op.service.requireSensitiveResumeAuthority(ctx, qtx, mutation, op.service.clock()); authorityErr != nil {
+			return mutationRunResult{}, authorityErr
 		}
 	}
 	if validated.ChangedSlug && validated.Effective.Slug != nil {
