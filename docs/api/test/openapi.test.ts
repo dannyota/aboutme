@@ -171,6 +171,28 @@ describe("openapi contract", () => {
     );
   });
 
+  it("scopes the pending-authentication cookie and CSRF token to /auth/second-factor only", () => {
+    // pendingCookie/pendingCsrfToken authorize only the bounded pending
+    // authentication, never `/me`, a resume route, consent, or MCP — see
+    // docs/design/passkey-second-factor-contract.md. This is a whole-document
+    // invariant: docs/api/test/second-factor.test.ts owns the second-factor
+    // surface's own contract in detail.
+    for (const [path, item] of Object.entries<any>(doc.paths)) {
+      for (const [method, operation] of Object.entries<any>(item)) {
+        if (typeof operation !== "object" || !operation?.security) continue;
+        const usesPending = operation.security.some(
+          (req: Record<string, unknown>) =>
+            "pendingCookie" in req || "pendingCsrfToken" in req,
+        );
+        if (!usesPending) continue;
+        expect(
+          path.startsWith("/auth/second-factor"),
+          `${method.toUpperCase()} ${path}: only /auth/second-factor* should use the pending cookie`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("defines a closed public resume distinct from the owner resume", () => {
     const publicResume = doc.components.schemas.PublicResume;
     expect(publicResume.additionalProperties).toBe(false);

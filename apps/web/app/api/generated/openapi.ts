@@ -191,10 +191,22 @@ export interface paths {
          *
          *     Always redirects. This is a top-level browser navigation, never a JSON response:
          *
-         *     - **Success**: `302` to the app's own origin (`/`) for
-         *       `purpose=login`, or to `/app/settings/sessions` for
+         *     - **Success, unenrolled account**: `302` to the app's own origin
+         *       (`/`) for `purpose=login`, or to `/app/settings/sessions` for
          *       `purpose=link`/`reauth` — with the `__Host-session`
          *       cookie set for `purpose=login` only.
+         *
+         *     - **Success, enrolled account, `purpose=login`/`reauth`**: `302` to
+         *       `/login/second-factor` instead, with the `__Host-auth-pending`
+         *       cookie set and NO session cookie. `purpose=login` binds a fresh
+         *       pending login whose return path is the transaction's validated
+         *       `next`; `purpose=reauth` binds the caller's own live session,
+         *       fixes the return path to `/app/settings/sessions`, and leaves
+         *       both of that session's recent-reauthentication timestamps
+         *       unchanged until the pending factor completes. `purpose=link`
+         *       never reaches this branch — linking an identity issues no
+         *       session and does not change enforcement. See
+         *       `docs/design/passkey-second-factor-contract.md`.
          *
          *     - **Rejected**: `302` to `/login?error=<code>` for `purpose=login`,
          *       or to `/app/settings/sessions?error=<code>` for `purpose=link`/
@@ -202,7 +214,10 @@ export interface paths {
          *       session cookie set. The no-oracle contract means every internal
          *       rejection reason not explicitly listed
          *       collapses into the generic `auth_failed` code — the response
-         *       never lets a caller distinguish which specific check failed.
+         *       never lets a caller distinguish which specific check failed. A
+         *       pending row that fails to create for an enrolled account also
+         *       collapses into this branch's `auth_failed` and creates no
+         *       authority.
          *
          *
          *     `__Host-oauth-tx` is cleared on every exit path, success or rejection alike.
@@ -397,7 +412,7 @@ export interface paths {
         };
         /**
          * Which optional sign-in and agent surfaces this deployment enables
-         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), and `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
+         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`), and `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
          */
         get: operations["getCapabilities"];
         put?: never;
@@ -985,7 +1000,7 @@ export interface paths {
         put?: never;
         /**
          * Create an opaque session from email and password
-         * @description Verifies the email and password, then creates the same opaque `__Host-session` cookie as a provider login. Unknown email, provider-only account, and wrong password are indistinguishable.
+         * @description Verifies the email and password. For an unenrolled account, creates the same opaque `__Host-session` cookie as a provider login. For an account enrolled in a second factor, creates no session: it returns `202` and sets only the `__Host-auth-pending` cookie instead — see the `202` response. Unknown email, provider-only account, and wrong password are indistinguishable. A present pending cookie from a prior unfinished attempt is consumed (unenrolled success) or replaced (enrolled success); primary-authentication failure creates or replaces neither.
          */
         post: operations["postAuthPasswordLogin"];
         delete?: never;
@@ -1045,7 +1060,7 @@ export interface paths {
         put?: never;
         /**
          * Refresh recent reauthentication with the current password
-         * @description Verifies the current password and refreshes the completing session's recent-reauthentication time. Requires a live session and CSRF.
+         * @description Verifies the current password. For an unenrolled account, refreshes the completing session's recent-reauthentication time and returns `204`. For an account enrolled in a second factor, changes no session: it returns `202` and sets only the `__Host-auth-pending` cookie instead — see the `202` response. The pending row's purpose is `reauth`, bound to the completing session, with its return path fixed to `/app/settings/sessions`; neither proof timestamp updates until the second factor completes. Requires a live session and CSRF.
          */
         post: operations["postAuthPasswordReauth"];
         delete?: never;
@@ -1068,6 +1083,186 @@ export interface paths {
          */
         put: operations["putMePassword"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/second-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a pending login or reauthentication
+         * @description Authenticates only the `__Host-auth-pending` cookie. A `reauth` row also requires its bound `__Host-session` cookie to remain live, current-epoch, and owned by the same account. Returns the available completion methods in fixed order (`passkey` then `recovery`), the pending row's expiry, its validated return path, and the pending CSRF token every pending POST requires.
+         */
+        get: operations["getAuthSecondFactor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/second-factor/passkey/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a pending passkey assertion ceremony
+         * @description Starts a WebAuthn assertion ceremony for the pending account. Accepts exactly `{}`. Ignores `PASSKEY_ENROLLMENT_ENABLED` — an already-enrolled account can always complete a pending authentication. Every pending POST is checked in this order: media type, bounded body, strict JSON, pending authentication, Origin and CSRF, then rate admission.
+         */
+        post: operations["postAuthSecondFactorPasskeyOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/second-factor/passkey/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a pending authentication with a passkey assertion
+         * @description Verifies the submitted assertion against the ceremony started by `POST .../passkey/options` and, on success, completes the pending authentication. Login completion issues a fresh `__Host-session` cookie; reauth completion refreshes the bound session in place and sets no session cookie. Every successful completion clears the `__Host-auth-pending` cookie.
+         */
+        post: operations["postAuthSecondFactorPasskeyVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/second-factor/recovery/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a pending authentication with a recovery code
+         * @description Verifies the submitted recovery code and, on success, deletes it and completes the pending authentication exactly like `POST .../passkey/verify`. Concurrent use of the same code has one winner. Recovery needs no WebAuthn ceremony, so this operation never returns `challenge_invalid`.
+         */
+        post: operations["postAuthSecondFactorRecoveryVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read account factor state
+         * @description Returns whether the account is enrolled, its passkeys, and the remaining recovery-code count from one read-only snapshot.
+         */
+        get: operations["getMeSecondFactor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor/passkeys/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start passkey registration
+         * @description Registered only while `PASSKEY_ENROLLMENT_ENABLED=true`; otherwise this path returns the uniform not-found response before any session, CSRF, or state check, exactly like `POST /auth/password/register` while password sign-up is off. Requires a live current-epoch session and a recent reauthentication — primary alone for the first factor, or primary plus an active factor or recovery code once already enrolled. Accepts exactly `{}`.
+         */
+        post: operations["postMeSecondFactorPasskeysOptions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor/passkeys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify and store a passkey
+         * @description Completes the ceremony started by `POST .../passkeys/options` and stores the verified credential. First completion (no existing factor-policy row) creates the account's factor policy, first credential, and ten recovery codes in one transaction and returns them once; a later passkey omits `recoveryCodes`. While `PASSKEY_ENROLLMENT_ENABLED` is off, every outcome — including a rate rejection — is the same uniform `404`: the claimed ceremony is still consumed so it cannot be retried once enrollment reopens, but nothing is stored. Every successful add delivers the replacement `__Host-session` cookie.
+         */
+        post: operations["postMeSecondFactorPasskeys"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor/passkeys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one owned passkey
+         * @description Removes one owned passkey. Final versus non-final removal is decided only from the shared count of active factors of every type, taken under the user lock — never from passkey count alone. Removing the final active factor deletes the recovery-code set and clears the factor-proof time; removing a non-final passkey preserves both. Every successful removal delivers the replacement `__Host-session` cookie. Ignores `PASSKEY_ENROLLMENT_ENABLED`.
+         */
+        delete: operations["deleteMeSecondFactorPasskey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace every recovery code and return the new set once
+         * @description Atomically replaces every recovery-code digest, advances the authentication epoch, revokes every other session and connected-agent grant, rotates the current session, and returns the ten new codes once. Requires recent primary plus active-factor or recovery-code verification. Accepts exactly `{}`. Ignores `PASSKEY_ENROLLMENT_ENABLED`.
+         */
+        post: operations["postMeSecondFactorRecoveryCodes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1225,6 +1420,8 @@ export interface components {
             agentAccess: boolean;
             /** @description Email-and-password sign-up is open (`PASSWORD_REGISTRATION_ENABLED` is not `false`). Sign-in, reset, and verification of pending registrations do not depend on it. */
             passwordRegistration: boolean;
+            /** @description New passkey enrollment is open (`PASSKEY_ENROLLMENT_ENABLED`). Verification, removal, recovery, and state routes are always registered and are unaffected by this flag. Never derived from any account's own state — this is a deployment-wide switch. See `docs/design/passkey-second-factor-contract.md`. */
+            passkeyEnrollment: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes the link's own id, its provider, and when it was linked — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client. `id` is the value `DELETE /me/identities/{identityId}` takes.
@@ -1876,6 +2073,8 @@ export interface components {
         PasswordLoginRequest: {
             email: components["schemas"]["PasswordEmail"];
             password: components["schemas"]["PasswordValue"];
+            /** @description Optional same-origin relative path to open after a successful, unenrolled login, validated by the same return-path parser as `next` on `GET /auth/{provider}/start` (see the `AuthReturnPath` parameter). Missing or invalid input becomes `/app/resumes`. For an enrolled account, the validated path is carried on the pending login instead and returned by `GET /auth/second-factor`'s `returnPath` once the second factor completes. */
+            next?: string;
         };
         PasswordForgotRequest: {
             email: components["schemas"]["PasswordEmail"];
@@ -1889,6 +2088,268 @@ export interface components {
         };
         PasswordSetRequest: {
             password: components["schemas"]["PasswordValue"];
+        };
+        PasswordSecondFactorRequiredResponse: {
+            data: {
+                /**
+                 * @description Always `true`. The primary credential verified for an account enrolled in a second factor; no session was issued.
+                 * @constant
+                 */
+                secondFactorRequired: true;
+            };
+        };
+        /**
+         * @description Independent 32-byte random value, unpadded base64url.
+         * @example AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         */
+        SecondFactorCeremonyID: string;
+        /**
+         * @description The exact empty JSON object; no other body is accepted.
+         * @constant
+         */
+        SecondFactorEmptyBody: Record<string, never>;
+        /**
+         * @description A method that can complete a pending authentication.
+         * @enum {string}
+         */
+        SecondFactorPendingMethod: "passkey" | "recovery";
+        /**
+         * @example {
+         *       "data": {
+         *         "purpose": "login",
+         *         "methods": [
+         *           "passkey",
+         *           "recovery"
+         *         ],
+         *         "expiresAt": "2026-09-20T09:05:00Z",
+         *         "returnPath": "/app/resumes",
+         *         "csrfToken": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+         *       }
+         *     }
+         */
+        SecondFactorPendingStatusResponse: {
+            data: {
+                /** @enum {string} */
+                purpose: "login" | "reauth";
+                /** @description Fixed order `passkey` then `recovery`. Passkey is present when the account has an active passkey; recovery is present only while a code remains. An enrolled v0.4.2 account with no available method is corrupt state and this operation returns `503 authentication_unavailable` instead of this response. */
+                methods: components["schemas"]["SecondFactorPendingMethod"][];
+                /** Format: date-time */
+                expiresAt: string;
+                /** @description The validated, same-origin path the web navigates to once the pending authentication completes. */
+                returnPath: string;
+                /** @description The pending row's own 32-byte CSRF secret, base64url-encoded. Distinct from the session synchronizer token returned by `GET /me`: sent as `X-CSRF-Token` on every pending POST, and only ever valid together with the `__Host-auth-pending` cookie that named this pending row. */
+                csrfToken: string;
+            };
+        };
+        /** @enum {string} */
+        WebAuthnTransport: "usb" | "nfc" | "ble" | "smart-card" | "hybrid" | "internal";
+        WebAuthnCredentialDescriptor: {
+            /** @constant */
+            type: "public-key";
+            /** @description Canonical unpadded base64url credential ID. */
+            id: string;
+            /** @description Omitted — never `null` or empty — when no transport hint is stored for this credential. Otherwise a unique array in the fixed order `usb`, `nfc`, `ble`, `smart-card`, `hybrid`, `internal`. Display-only; never changes authorization. */
+            transports?: components["schemas"]["WebAuthnTransport"][];
+        };
+        /** @description Standards-shaped `PublicKeyCredentialCreationOptions` fields, fixed for every v0.4.2 registration. See `docs/design/passkey-second-factor-contract.md#webauthn-json`. No `extensions` or `hints` member is ever present. */
+        WebAuthnRegistrationPublicKey: {
+            /** @description 32 random bytes, unpadded base64url. */
+            challenge: string;
+            rp: {
+                /** @constant */
+                name: "aboutme";
+                /** @description The canonical `PUBLIC_ORIGIN` host — the exact WebAuthn relying-party ID. */
+                id: string;
+            };
+            user: {
+                /** @description 32-byte random user handle, unpadded base64url. Carries no personal data. */
+                id: string;
+                /** @description Canonical account email. */
+                name: string;
+                /** @description Account display name. */
+                displayName: string;
+            };
+            /** @description Fixed `[ES256, RS256]` in that order. */
+            pubKeyCredParams: {
+                /** @constant */
+                type: "public-key";
+                /** @enum {integer} */
+                alg: -7 | -257;
+            }[];
+            /** @constant */
+            timeout: 300000;
+            /** @description Every credential the account currently holds. */
+            excludeCredentials: components["schemas"]["WebAuthnCredentialDescriptor"][];
+            authenticatorSelection: {
+                /** @constant */
+                residentKey: "required";
+                /** @constant */
+                requireResidentKey: true;
+                /** @constant */
+                userVerification: "required";
+            };
+            /**
+             * @description The server requests `none` but does not require it: with no FIDO metadata service configured, a non-`none` format is verified and accepted, never rejected or normalized. No attestation format or type is stored.
+             * @constant
+             */
+            attestation: "none";
+        };
+        /** @description Standards-shaped `PublicKeyCredentialRequestOptions` fields, fixed for every v0.4.2 assertion. No `extensions` or `hints` member is ever present. */
+        WebAuthnAssertionPublicKey: {
+            /** @description 32 random bytes, unpadded base64url. */
+            challenge: string;
+            /** @constant */
+            timeout: 300000;
+            /** @description The canonical `PUBLIC_ORIGIN` host. */
+            rpId: string;
+            /** @description Every active passkey. Never empty — an account with none gets `404 factor_not_found` instead of this response. */
+            allowCredentials: components["schemas"]["WebAuthnCredentialDescriptor"][];
+            /** @constant */
+            userVerification: "required";
+        };
+        SecondFactorRegistrationOptionsResponse: {
+            data: {
+                ceremonyId: components["schemas"]["SecondFactorCeremonyID"];
+                publicKey: components["schemas"]["WebAuthnRegistrationPublicKey"];
+            };
+        };
+        SecondFactorAssertionOptionsResponse: {
+            data: {
+                ceremonyId: components["schemas"]["SecondFactorCeremonyID"];
+                publicKey: components["schemas"]["WebAuthnAssertionPublicKey"];
+            };
+        };
+        /** @description Accepts exactly these members; unknown, duplicate, missing, or malformed fields fail closed as `request_invalid` before any CBOR or signature work. */
+        PasskeyRegistrationCompletionRequest: {
+            ceremonyId: components["schemas"]["SecondFactorCeremonyID"];
+            credential: {
+                /** @description Canonical unpadded base64url credential ID; must decode to the same bytes as `rawId`. */
+                id: string;
+                /** @description Unpadded base64url, 16 to 1,023 decoded bytes. */
+                rawId: string;
+                /** @constant */
+                type: "public-key";
+                response: {
+                    /** @description Unpadded base64url, at most 4,096 decoded bytes. */
+                    clientDataJSON: string;
+                    /** @description Unpadded base64url, at most 16,384 decoded bytes. */
+                    attestationObject: string;
+                    /** @description Required; may be empty. Unknown hints are dropped; known ones are stored in the fixed canonical transport order. */
+                    transports: string[];
+                };
+                /**
+                 * @description Required empty object — v0.4.2 requests no WebAuthn extensions, so client extension output must be empty.
+                 * @constant
+                 */
+                clientExtensionResults: Record<string, never>;
+            };
+        };
+        /** @description Accepts exactly these members, under the same strict-decode rules as `PasskeyRegistrationCompletionRequest`. */
+        PasskeyAssertionCompletionRequest: {
+            ceremonyId: components["schemas"]["SecondFactorCeremonyID"];
+            credential: {
+                /** @description Canonical unpadded base64url credential ID; must decode to the same bytes as `rawId`. */
+                id: string;
+                /** @description Unpadded base64url, 16 to 1,023 decoded bytes. */
+                rawId: string;
+                /** @constant */
+                type: "public-key";
+                response: {
+                    /** @description Unpadded base64url, at most 4,096 decoded bytes. */
+                    clientDataJSON: string;
+                    /** @description Unpadded base64url, at most 4,096 decoded bytes. */
+                    authenticatorData: string;
+                    /** @description Unpadded base64url, at most 1,024 decoded bytes. */
+                    signature: string;
+                    /** @description Required; may be `null`, or an unpadded base64url value decoding to at most 64 bytes. An empty string decodes exactly like `null` — no handle to compare, so it never matches the account's stored handle. */
+                    userHandle: string | null;
+                };
+                /**
+                 * @description Required empty object.
+                 * @constant
+                 */
+                clientExtensionResults: Record<string, never>;
+            };
+        };
+        RecoveryVerifyRequest: {
+            /**
+             * @description Recovery code, `amr_` prefix. Accepts ASCII hyphens and spaces anywhere and any letter case before canonicalization; every other shape is rejected before database work.
+             * @example amr_00000-00000-00000-00000-00000-0
+             */
+            code: string;
+        };
+        SecondFactorPasskey: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastUsedAt: string | null;
+        };
+        /**
+         * @example {
+         *       "data": {
+         *         "enabled": true,
+         *         "passkeys": [
+         *           {
+         *             "id": "01900000-0000-7000-8000-000000000001",
+         *             "createdAt": "2026-09-20T09:00:00Z",
+         *             "lastUsedAt": null
+         *           }
+         *         ],
+         *         "recoveryCodesRemaining": 10
+         *       }
+         *     }
+         */
+        SecondFactorStateResponse: {
+            data: {
+                /** @description Derived from the active-factor count in the same read-only snapshot as `passkeys` and `recoveryCodesRemaining` — never read from stored state on its own. `false`, an empty `passkeys` array, and `0` together for an unenrolled account. */
+                enabled: boolean;
+                /** @description Ordered by `(created_at, id)`. */
+                passkeys: components["schemas"]["SecondFactorPasskey"][];
+                recoveryCodesRemaining: number;
+            };
+        };
+        /**
+         * @description 128 random bits encoded as 26 uppercase Crockford Base32 characters (no I, L, O, or U) with an `amr_` prefix and display-only hyphen groups of 5, 5, 5, 5, 5, and 1.
+         * @example amr_00000-00000-00000-00000-00000-0
+         */
+        SecondFactorRecoveryCode: string;
+        /**
+         * @example {
+         *       "data": {
+         *         "passkey": {
+         *           "id": "01900000-0000-7000-8000-000000000001",
+         *           "createdAt": "2026-09-20T09:00:00Z",
+         *           "lastUsedAt": null
+         *         },
+         *         "recoveryCodes": [
+         *           "amr_00000-00000-00000-00000-00000-0",
+         *           "amr_00000-00000-00000-00000-00000-1",
+         *           "amr_00000-00000-00000-00000-00000-2",
+         *           "amr_00000-00000-00000-00000-00000-3",
+         *           "amr_00000-00000-00000-00000-00000-4",
+         *           "amr_00000-00000-00000-00000-00000-5",
+         *           "amr_00000-00000-00000-00000-00000-6",
+         *           "amr_00000-00000-00000-00000-00000-7",
+         *           "amr_00000-00000-00000-00000-00000-8",
+         *           "amr_00000-00000-00000-00000-00000-9"
+         *         ]
+         *       }
+         *     }
+         */
+        SecondFactorRegistrationResponse: {
+            data: {
+                passkey: components["schemas"]["SecondFactorPasskey"];
+                /** @description Present with exactly ten codes only on first enrollment — decided from factor-policy existence, not from passkey count. Omitted, never `null` or an empty array, on a later passkey. Shown once; the server never returns a recovery code again outside `POST /me/second-factor/recovery-codes`. */
+                recoveryCodes?: components["schemas"]["SecondFactorRecoveryCode"][];
+            };
+        };
+        SecondFactorRecoveryCodesResponse: {
+            data: {
+                /** @description Ten new codes, replacing every prior digest. Shown once. */
+                recoveryCodes: components["schemas"]["SecondFactorRecoveryCode"][];
+            };
         };
     };
     responses: {
@@ -3197,6 +3658,181 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description `secondFactorRequired`: the primary credential verified for an account enrolled in a second factor. No session is issued; the response sets only the `__Host-auth-pending` cookie. The web navigates to `/login/second-factor`, whose `GET /auth/second-factor` read returns the validated return path, available methods, expiry, and pending CSRF token. See `docs/design/passkey-second-factor-contract.md`. */
+        PasswordSecondFactorRequired: {
+            headers: {
+                /** @description `__Host-auth-pending=<token>; Path=/; Secure; HttpOnly; SameSite=Strict`. No `__Host-session` cookie is set on this response. */
+                "Set-Cookie"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "data": {
+                 *         "secondFactorRequired": true
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["PasswordSecondFactorRequiredResponse"];
+            };
+        };
+        /** @description `authentication_required`: the `__Host-auth-pending` cookie is absent, or the pending row it names is expired, consumed, bound to a different authentication epoch, or bound to a session other than the caller's own. Clears the `__Host-auth-pending` cookie. */
+        SecondFactorPendingRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "authentication_required",
+                 *         "message": "authentication required"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `challenge_invalid`: the ceremony ID is unknown, expired, consumed, bound to a different pending row or session, or created for the wrong purpose (registration vs. assertion). */
+        SecondFactorChallengeInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "challenge_invalid",
+                 *         "message": "the ceremony is invalid or expired"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `factor_not_found`: the pending account has no active passkey (assertion options), or the passkey ID is malformed, missing, foreign, or already removed (passkey removal). Creates no ceremony and leaves the pending row and its failure count unchanged. */
+        SecondFactorNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "factor_not_found",
+                 *         "message": "no such factor"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `passkey_limit_reached`: the account already holds five active passkeys, the budgeted maximum (see `docs/design/budgets.md`). Registration options refuses a sixth ceremony before any device interaction; registration completion rechecks the count again at commit. */
+        SecondFactorLimitReached: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "passkey_limit_reached",
+                 *         "message": "the passkey limit is reached"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `verification_failed`: a well-formed assertion or recovery code that does not verify, without naming the account, credential, or failed method. The fifth failed completion atomically consumes the pending row, records its notification, and clears the `__Host-auth-pending` cookie; a later attempt on the same cookie returns `SecondFactorPendingRequired` instead. */
+        SecondFactorPendingVerificationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "verification_failed",
+                 *         "message": "verification failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `verification_failed`: WebAuthn verification of the submitted registration credential failed — ceremony type, exact origin, challenge, RP ID hash, public-key algorithm, user presence and verification flags, the backup-eligible/backup-state consistency check, or signature validity — or the verified credential ID already exists for any account. The claimed ceremony stays consumed either way, so the same ceremony ID cannot be retried. */
+        SecondFactorRegistrationVerificationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "verification_failed",
+                 *         "message": "verification failed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: the shared second-factor attempt budget rejected the request — 10 per 15 minutes per (account, client IP), and 30 per minute per client IP, the outer IP bucket checked first. Carries `Retry-After` in whole seconds. */
+        SecondFactorAttemptRateLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `body_too_large`: the request exceeded the WebAuthn route's 32,768-byte cap (`docs/design/budgets.md`) — larger than the 4,096-byte cap on every other password and recovery route because it includes base64url-expanded attestation and authenticator data. */
+        SecondFactorWebAuthnBodyTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "body_too_large",
+                 *         "message": "request body is too large"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: the shared 10-per-hour-per-(account, client IP) factor-management limit rejected the request. The same limiter is checked by passkey registration options, completion, removal, and recovery-code regeneration; a disabled-enrollment completion enforces it internally but always answers `404 not_found` instead of `429`, matching every other outcome while enrollment is off. Carries `Retry-After` in whole seconds. */
+        SecondFactorManagementRateLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
     };
     parameters: {
         /**
@@ -3277,6 +3913,11 @@ export interface components {
          * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
          */
         ResumeID: string;
+        /**
+         * @description An owned passkey's id (`webauthn_credentials.id`, `uuidv7`). An invalid, missing, foreign, or already-removed id answers the same `404 factor_not_found`.
+         * @example 01900000-0000-7000-8000-000000000001
+         */
+        PasskeyID: string;
         /**
          * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
          * @example ada-lovelace
@@ -4521,7 +5162,8 @@ export interface operations {
                      *           "google"
                      *         ],
                      *         "agentAccess": false,
-                     *         "passwordRegistration": true
+                     *         "passwordRegistration": true,
+                     *         "passkeyEnrollment": false
                      *       }
                      *     }
                      */
@@ -4879,20 +5521,12 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description CSRF or exact-Origin validation failed. */
+            /** @description CSRF/exact-Origin validation failed, OR — for `decision: approve` on an account enrolled in a second factor — the caller's recent second-factor proof is stale: two distinct codes under the same status (`csrf_rejected`, `reauth_required`); the CSRF check always runs first. `decision: deny` never requires a recent second-factor proof. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    /**
-                     * @example {
-                     *       "error": {
-                     *         "code": "csrf_rejected",
-                     *         "message": "CSRF validation failed"
-                     *       }
-                     *     }
-                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
@@ -6527,6 +7161,7 @@ export interface operations {
             };
         };
         responses: {
+            202: components["responses"]["PasswordSecondFactorRequired"];
             /** @description Authenticated. No body; the session is set on the `__Host-session` cookie. */
             204: {
                 headers: {
@@ -6607,6 +7242,7 @@ export interface operations {
             };
         };
         responses: {
+            202: components["responses"]["PasswordSecondFactorRequired"];
             /** @description Reauthenticated. No body. */
             204: {
                 headers: {
@@ -6650,6 +7286,389 @@ export interface operations {
             415: components["responses"]["PasswordMediaTypeUnsupported"];
             422: components["responses"]["PasswordPolicyInvalid"];
             429: components["responses"]["PasswordRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    getAuthSecondFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending authentication's status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondFactorPendingStatusResponse"];
+                };
+            };
+            401: components["responses"]["SecondFactorPendingRequired"];
+            /** @description `authentication_unavailable`: an enrolled account has no available completion method (corrupt state), or a required dependency is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "authentication_unavailable",
+                     *         "message": "authentication is temporarily unavailable"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postAuthSecondFactorPasskeyOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecondFactorEmptyBody"];
+            };
+        };
+        responses: {
+            /** @description Assertion options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondFactorAssertionOptionsResponse"];
+                };
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["SecondFactorPendingRequired"];
+            403: components["responses"]["PasswordCsrfRejected"];
+            404: components["responses"]["SecondFactorNotFound"];
+            413: components["responses"]["SecondFactorWebAuthnBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorAttemptRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthSecondFactorPasskeyVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyAssertionCompletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed. No body. Login completion sets `__Host-session`; reauth completion sets no session cookie. Clears `__Host-auth-pending` either way. */
+            204: {
+                headers: {
+                    /** @description `__Host-session=<token>...` on login completion only; the cleared `__Host-auth-pending` cookie either way. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `request_invalid` for a malformed body, or `challenge_invalid` for an unknown, expired, consumed, foreign, or wrong-purpose ceremony. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `authentication_required` (see `SecondFactorPendingRequired`), or `verification_failed` for a well-formed but invalid assertion — see `SecondFactorPendingVerificationFailed`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["SecondFactorWebAuthnBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorAttemptRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postAuthSecondFactorRecoveryVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoveryVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed. No body. Login completion sets `__Host-session`; reauth completion sets no session cookie. Clears `__Host-auth-pending` either way. */
+            204: {
+                headers: {
+                    /** @description `__Host-session=<token>...` on login completion only; the cleared `__Host-auth-pending` cookie either way. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            /** @description `authentication_required` (see `SecondFactorPendingRequired`), or `verification_failed` for a well-formed but unknown or already-used code. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["PasswordCsrfRejected"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorAttemptRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    getMeSecondFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account factor state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondFactorStateResponse"];
+                };
+            };
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postMeSecondFactorPasskeysOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecondFactorEmptyBody"];
+            };
+        };
+        responses: {
+            /** @description Registration options. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondFactorRegistrationOptionsResponse"];
+                };
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            /** @description `csrf_rejected` (CSRF/exact-Origin validation failed), OR `reauth_required` (the recent-reauthentication window is not satisfied). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Passkey enrollment is turned off (`PASSKEY_ENROLLMENT_ENABLED` is not `true`); the path is not registered. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "not found"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["SecondFactorLimitReached"];
+            413: components["responses"]["SecondFactorWebAuthnBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorManagementRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postMeSecondFactorPasskeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasskeyRegistrationCompletionRequest"];
+            };
+        };
+        responses: {
+            /** @description Passkey stored. */
+            201: {
+                headers: {
+                    /** @description Replacement `__Host-session` cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondFactorRegistrationResponse"];
+                };
+            };
+            /** @description `request_invalid` for a malformed body, `challenge_invalid` for an unknown, expired, consumed, foreign, or wrong-purpose ceremony, or `verification_failed` for a failed WebAuthn verification or a duplicate credential ID — see `SecondFactorRegistrationVerificationFailed`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            /** @description `csrf_rejected`, or `reauth_required` (see `POST .../passkeys/options`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Passkey enrollment is turned off (`PASSKEY_ENROLLMENT_ENABLED` is not `true`); the path is not registered. The matching ceremony is still consumed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "not found"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            409: components["responses"]["SecondFactorLimitReached"];
+            413: components["responses"]["SecondFactorWebAuthnBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorManagementRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    deleteMeSecondFactorPasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description An owned passkey's id (`webauthn_credentials.id`, `uuidv7`). An invalid, missing, foreign, or already-removed id answers the same `404 factor_not_found`.
+                 * @example 01900000-0000-7000-8000-000000000001
+                 */
+                id: components["parameters"]["PasskeyID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Passkey removed. No body. */
+            204: {
+                headers: {
+                    /** @description Replacement `__Host-session` cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            /** @description `csrf_rejected`, or `reauth_required` (see `POST .../passkeys/options`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["SecondFactorNotFound"];
+            429: components["responses"]["SecondFactorManagementRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postMeSecondFactorRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecondFactorEmptyBody"];
+            };
+        };
+        responses: {
+            /** @description New recovery codes. */
+            200: {
+                headers: {
+                    /** @description Replacement `__Host-session` cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecondFactorRecoveryCodesResponse"];
+                };
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            /** @description `csrf_rejected`, or `reauth_required` (see `POST .../passkeys/options`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["SecondFactorNotFound"];
+            413: components["responses"]["SecondFactorWebAuthnBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorManagementRateLimited"];
             503: components["responses"]["PasswordUnavailable"];
         };
     };
