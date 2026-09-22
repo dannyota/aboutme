@@ -306,8 +306,10 @@ func (s *Service) CompletePasskeyRegistration(ctx context.Context, current store
 		}
 		verified, verifyErr := s.rp.verifyRegistration(reg, ceremony.ChallengeDigest, handle, user.Email, user.Name)
 		if verifyErr != nil {
+			// Commit the ceremony consumption and report the failure through
+			// outcome, so a rejected registration cannot be retried.
 			outcome = verifyErr
-			return nil
+			return nil //nolint:nilerr // the failure is returned through outcome after commit
 		}
 		// The writes run in a savepoint so a duplicate credential ID rolls
 		// back only them and the ceremony stays consumed.

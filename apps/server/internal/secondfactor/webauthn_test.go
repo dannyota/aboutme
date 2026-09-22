@@ -450,8 +450,8 @@ func TestVerifyAssertion_HostileCorpus(t *testing.T) {
 		"extension data":    func(s *assertionSpec) { s.flags |= 0x80 },
 	}
 	for name, mutate := range corpus {
-		if _, err := verify(12, mutate); !errors.Is(err, auth.ErrSecondFactorVerificationFailed) {
-			t.Errorf("verifyAssertion(%s) error = %v, want ErrSecondFactorVerificationFailed", name, err)
+		if _, mutateErr := verify(12, mutate); !errors.Is(mutateErr, auth.ErrSecondFactorVerificationFailed) {
+			t.Errorf("verifyAssertion(%s) error = %v, want ErrSecondFactorVerificationFailed", name, mutateErr)
 		}
 	}
 	assertion, err := decodeAssertion(a.assertionBody(ceremonyID, challenge, 12, nil))
