@@ -22,6 +22,12 @@ resource "aws_instance" "host" {
   iam_instance_profile    = var.instance_profile_name
   disable_api_termination = true
 
+  # Pin the live mode so a replacement host cannot fall back to standard
+  # credits and throttle under burst.
+  credit_specification {
+    cpu_credits = "unlimited"
+  }
+
   # Hop limit 1 keeps bridge-network containers away from instance metadata.
   metadata_options {
     http_endpoint               = "enabled"
