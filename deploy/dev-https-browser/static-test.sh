@@ -420,10 +420,24 @@ if grep -oE "stage\('[^']*'\)" "$SECOND_FACTOR_SPEC" |
   grep -vqE "^stage\('[a-z0-9-]+'\)$"; then
   fail 'a second-factor stage name is outside the runner vocabulary'
 fi
-if grep -oE "'(callback|landing)-[^']*'" "$SECOND_FACTOR_SPEC" |
-  grep -vqE "^'(callback|landing)-[a-z0-9-]+'$"; then
-  fail 'a second-factor landing or callback name is outside the runner vocabulary'
+if grep -oE "'(callback|landing|submit)-[^']*'" "$SECOND_FACTOR_SPEC" |
+  grep -vqE "^'(callback|landing|submit)-[a-z0-9-]+'$"; then
+  fail 'a second-factor landing, callback or submit name is outside the runner vocabulary'
 fi
+# A landing that gave up also reports whether the sign-in form is still
+# submitting, read from the control's disabled state so no page text can
+# reach the log.
+grep -Fq "stage(settled ? where : \`\${where}-\${await submitState(page)}\`);" \
+  "$SECOND_FACTOR_SPEC" ||
+  fail 'the give-up landing no longer reports the submit state'
+grep -Fq 'await submit.isDisabled() ? ' "$SECOND_FACTOR_SPEC" ||
+  fail 'the submit state is not read from the disabled control'
+for word in submit-busy submit-idle submit-absent; do
+  grep -Fq "'$word'" "$SECOND_FACTOR_SPEC" ||
+    fail 'a second-factor submit state word is missing'
+done
+grep -Fq 'const WAIT_LANDING_MS = 180_000;' "$SECOND_FACTOR_SPEC" ||
+  fail 'the first app landing has no bound of its own'
 # The landing of a sign-in or a completion is named from that closed set, not
 # waited on as one exact path: an app route this proof did not predict must be
 # reported, never waited on until the budget runs out.

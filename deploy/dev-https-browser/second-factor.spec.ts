@@ -77,6 +77,12 @@ const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 // fails at its own stage instead of consuming the whole test budget.
 const WAIT_RESPONSE_MS = 30_000;
 const WAIT_NAVIGATION_MS = 60_000;
+// The first visit to an app route pulls that route's whole module graph from
+// the harness's Vite dev server, transformed on demand and replayed through
+// this proof's request interception, so it is far slower than any later
+// navigation. Three minutes is a ceiling, not a cost: only the first landing
+// approaches it, and it stays well inside the 900-second test budget.
+const WAIT_LANDING_MS = 180_000;
 const WAIT_CDP_MS = 30_000;
 const WAIT_LOOPBACK_MS = 20_000;
 const WAIT_MAIL_MS = 45_000;
@@ -254,44 +260,56 @@ function landingCategory(value: string): string {
 }
 
 /**
+ * Whether the sign-in form is still submitting, as one closed word. A form
+ * that is still busy means its navigation started and the destination has not
+ * settled; an idle form means the submit finished without one. Read from the
+ * control's disabled state, never from its text.
+ */
+async function submitState(page: Page): Promise<string> {
+  const submit = page
+    .getByTestId('login-form')
+    .locator('button[type="submit"]');
+  if (await submit.count() === 0) return 'submit-absent';
+  return await submit.isDisabled() ? 'submit-busy' : 'submit-idle';
+}
+
+/**
  * Waits for the page to leave `from`, then records and returns the closed
- * name for where it stopped. A page that never leaves is named too, and a
- * login page is split by whether it is showing an error, so the one forwarded
- * line says which side is wrong.
+ * name for where it stopped. A page that never leaves is named too, a login
+ * page is split by whether it is showing an error, and a wait that gave up
+ * also records whether the form is still submitting. That one forwarded line
+ * then says which side is wrong without carrying any page text.
  */
 async function landedAfter(page: Page, from: string): Promise<string> {
+  let settled = true;
   try {
     await page.waitForURL(
       (url) => url.origin === ORIGIN && url.pathname !== from,
-      { timeout: WAIT_NAVIGATION_MS },
+      { timeout: WAIT_LANDING_MS },
     );
   } catch {
-    // Not a failure on its own: the category below names where it stayed.
+    settled = false;
   }
-  const where = landingCategory(page.url());
-  if (where !== 'landing-login') {
-    stage(where);
-    return where;
+  let where = landingCategory(page.url());
+  if (where === 'landing-login') {
+    where = await page.getByTestId('login-form-error').count() > 0
+      ? 'landing-login-error'
+      : 'landing-login-idle';
   }
-  const showsError
-    = await page.getByTestId('login-form-error').count() > 0;
-  const named = showsError ? 'landing-login-error' : 'landing-login-idle';
-  stage(named);
-  return named;
+  stage(settled ? where : `${where}-${await submitState(page)}`);
+  return where;
 }
 
 /** Asserts exactly where the page landed, naming it as a stage first. */
 function expectLanding(page: Page, want: string): void {
-  const where = landingCategory(page.url());
-  stage(where);
-  expect(where).toBe(want);
+  // landedAfter already recorded this landing, with its discriminator when
+  // its wait gave up; recording the plain name again would drop that.
+  expect(landingCategory(page.url())).toBe(want);
 }
 
 /** Asserts the browser holds a signed-in app session, wherever it landed. */
 async function expectSignedInApp(page: Page): Promise<void> {
-  const where = landingCategory(page.url());
-  stage(where);
-  expect(APP_LANDINGS).toContain(where);
+  expect(APP_LANDINGS).toContain(landingCategory(page.url()));
   expect(await meStatus(page)).toBe(200);
 }
 
