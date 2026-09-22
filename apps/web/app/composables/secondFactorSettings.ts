@@ -165,10 +165,10 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
     const value = data.value?.data;
     return typeof value === 'object' && value !== null
       ? (value as {
-        enabled?: unknown;
-        passkeys?: unknown;
-        recoveryCodesRemaining?: unknown;
-      })
+          enabled?: unknown;
+          passkeys?: unknown;
+          recoveryCodesRemaining?: unknown;
+        })
       : null;
   });
   const enabled = computed(() => envelope.value?.enabled === true);
@@ -225,7 +225,9 @@ export function mapPasskeyOptionsError(
   if (status === 403 && code === 'reauth_required') {
     return new SecondFactorSettingsFailure('reauth-required');
   }
-  if (status === 404) return new SecondFactorSettingsFailure('enrollment-closed');
+  if (status === 404) {
+    return new SecondFactorSettingsFailure('enrollment-closed');
+  }
   if (status === 409 && code === 'passkey_limit_reached') {
     return new SecondFactorSettingsFailure('limit-reached');
   }
@@ -249,7 +251,9 @@ export function mapPasskeyCompletionError(
   if (status === 403 && code === 'reauth_required') {
     return new SecondFactorSettingsFailure('reauth-required');
   }
-  if (status === 404) return new SecondFactorSettingsFailure('enrollment-closed');
+  if (status === 404) {
+    return new SecondFactorSettingsFailure('enrollment-closed');
+  }
   if (status === 409 && code === 'passkey_limit_reached') {
     return new SecondFactorSettingsFailure('limit-reached');
   }
@@ -325,8 +329,13 @@ function base64UrlToBytes(value: string): Uint8Array {
 function bytesToBase64Url(bytes: ArrayBuffer | Uint8Array): string {
   const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   let binary = '';
-  for (let i = 0; i < array.length; i += 1) binary += String.fromCharCode(array[i]!);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  for (let i = 0; i < array.length; i += 1) {
+    binary += String.fromCharCode(array[i]!);
+  }
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 /**
@@ -355,11 +364,11 @@ export async function createPasskeyCredential(
         type: 'public-key' as const,
         id: base64UrlToBytes(credential.id),
         transports: credential.transports as AuthenticatorTransport[]
-          | undefined,
+        | undefined,
       })),
       authenticatorSelection: {
-        residentKey:
-          publicKey.authenticatorSelection.residentKey as ResidentKeyRequirement,
+        residentKey: publicKey.authenticatorSelection
+          .residentKey as ResidentKeyRequirement,
         requireResidentKey:
           publicKey.authenticatorSelection.requireResidentKey,
         userVerification: publicKey.authenticatorSelection
@@ -397,8 +406,9 @@ export const RECOVERY_CODES_FILENAME = 'aboutme-recovery-codes.txt';
 
 /**
  * The exact downloaded byte contract: UTF-8, no byte-order mark, LF line
- * endings, one trailing LF, and a locale-selected heading
- * (`docs/design/passkey-second-factor-contract.md#management-responses-and-recovery-download`).
+ * endings, one trailing LF, and a locale-selected heading. See
+ * "Management responses and recovery download" in
+ * `docs/design/passkey-second-factor-contract.md`.
  */
 export function recoveryCodesDownloadText(
   codes: readonly string[],

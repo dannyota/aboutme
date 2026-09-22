@@ -1,4 +1,6 @@
-import type { SecondFactorSettingsErrorKind } from '../composables/secondFactorSettings';
+import type {
+  SecondFactorSettingsErrorKind,
+} from '../composables/secondFactorSettings';
 import type { WorkspaceCopy } from './workspace';
 
 export type SecondFactorSettingsMessage
@@ -49,7 +51,9 @@ export type SecondFactorSettingsCopy = {
   readonly errors: Readonly<Record<SecondFactorSettingsMessage, string>>;
 };
 
-export const secondFactorSettingsCopy: WorkspaceCopy<SecondFactorSettingsCopy> = {
+export const secondFactorSettingsCopy: WorkspaceCopy<
+  SecondFactorSettingsCopy
+> = {
   vi: {
     title: 'Passkey',
     description: 'Passkey là lớp xác thực thứ hai gắn với thiết bị của bạn.',
@@ -158,7 +162,8 @@ export const secondFactorSettingsCopy: WorkspaceCopy<SecondFactorSettingsCopy> =
     copied: 'Copied.',
     downloadCodes: 'Download',
     closeReveal: 'I\'ve saved these codes',
-    reauthPasswordDescription: 'Enter your current password to confirm it\'s you.',
+    reauthPasswordDescription:
+      'Enter your current password to confirm it\'s you.',
     currentPassword: 'Current password',
     continueLabel: 'Continue',
     checking: 'Checking…',
@@ -166,7 +171,8 @@ export const secondFactorSettingsCopy: WorkspaceCopy<SecondFactorSettingsCopy> =
       'Sign in again with your provider to confirm it\'s you.',
     continueWithProvider: (provider) => `Continue with ${provider}`,
     errors: {
-      'reauth-required': 'Sign in again to confirm it\'s you before continuing.',
+      'reauth-required':
+        'Sign in again to confirm it\'s you before continuing.',
       'enrollment-closed': 'Adding a new passkey is turned off right now.',
       'limit-reached': 'You have reached the passkey limit.',
       'challenge-invalid': 'That request expired. Try again.',

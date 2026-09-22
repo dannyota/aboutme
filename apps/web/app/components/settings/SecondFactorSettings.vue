@@ -32,6 +32,7 @@ import {
 import type { AuthProvider } from '../../composables/useAuth';
 import { PasswordSettingsFailure } from '../../composables/passwordSettings';
 import {
+  type SecondFactorSettingsFailure,
   createPasskeyCredential,
   downloadRecoveryCodes,
   isPasskeyCancellation,
@@ -41,7 +42,6 @@ import {
   mapPasskeyRemovalError,
   mapRecoveryRegenerationError,
   SecondFactorSettingsActionsKey,
-  SecondFactorSettingsFailure,
   useSecondFactorState,
   type SecondFactorPasskey,
 } from '../../composables/secondFactorSettings';
@@ -472,7 +472,10 @@ function formatTimestamp(value: string): string {
           v-for="passkey in passkeys"
           :key="passkey.id"
           :data-testid="`passkey-row-${passkey.id}`"
-          class="grid grid-cols-[1fr_auto] items-center gap-3 border-b py-3 last:border-b-0"
+          :class="[
+            'grid grid-cols-[1fr_auto] items-center gap-3 border-b py-3',
+            'last:border-b-0',
+          ]"
         >
           <div>
             <p class="text-sm">
@@ -485,7 +488,8 @@ function formatTimestamp(value: string): string {
               <time
                 v-if="passkey.lastUsedAt !== null"
                 :datetime="passkey.lastUsedAt"
-              >{{ copy.lastUsed }} {{ formatTimestamp(passkey.lastUsedAt) }}</time>
+              >{{ copy.lastUsed }}
+                {{ formatTimestamp(passkey.lastUsedAt) }}</time>
               <span v-else>{{ copy.neverUsed }}</span>
             </p>
           </div>
