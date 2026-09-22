@@ -89,8 +89,141 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
 ]);
 const REMOVAL_PATH = /^\/api\/v1\/me\/second-factor\/passkeys\/[^/]+$/u;
 
+// --- Failure reporting ------------------------------------------------------
+//
+// The runner prints only the last stage line it finds and withholds every
+// other byte of browser output, so that one line has to carry the whole
+// diagnosis. It is assembled from three closed vocabularies and never from an
+// exception message, a URL, a response body, or an account value. Teardown
+// stops updating the recorded stage, so a failure keeps the stage it happened
+// in instead of being relabelled as cleanup.
+
+type FailureOutcome
+  = | 'timeout'
+    | 'navigation'
+    | 'response'
+    | 'locator'
+    | 'ceremony'
+    | 'capture'
+    | 'assertion'
+    | 'unknown';
+
+type AccountRole = 'none' | 'primary' | 'recovery' | 'attempts' | 'disabled';
+
+let recordedStage = 'start';
+let recordedRole: AccountRole = 'none';
+let tearingDown = false;
+
 function stage(name: string): void {
+  if (!tearingDown) recordedStage = name;
   console.log(`${MODE}-stage:${name}`);
+}
+
+function role(next: AccountRole): void {
+  if (!tearingDown) recordedRole = next;
+}
+
+/** Marks the point after which stage and role stop being recorded. */
+function beginTeardown(): void {
+  tearingDown = true;
+  console.log(`${MODE}-stage:cleanup`);
+}
+
+// Ordered classifiers. Each maps a Playwright or helper failure to one fixed
+// word; the matched text itself is never printed.
+const OUTCOME_PATTERNS: ReadonlyArray<readonly [RegExp, FailureOutcome]> = [
+  [/^Test timeout of \d+ms exceeded/u, 'timeout'],
+  [/waitForURL|waiting for navigation/u, 'navigation'],
+  [/waitForResponse|waitForEvent/u, 'response'],
+  [
+    /credentials\.(get|create)|WebAuthn|NotAllowedError|InvalidStateError|virtual authenticator/u,
+    'ceremony',
+  ],
+  [/capture (read|reset) failed|message within \d+s/u, 'capture'],
+  [/^(locator|page|frame|elementHandle)\./u, 'locator'],
+  [/expect|Timed out \d+ms waiting for/u, 'assertion'],
+];
+
+function outcomeOf(status: string, message: string): FailureOutcome {
+  if (status === 'timedOut') return 'timeout';
+  for (const [pattern, outcome] of OUTCOME_PATTERNS) {
+    if (pattern.test(message)) return outcome;
+  }
+  return 'unknown';
+}
+
+test.afterEach(({}, testInfo) => {
+  // One spec serves both modes, so the other mode's test is always skipped.
+  // Only a real failure may add a line.
+  if (testInfo.status === 'skipped') return;
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const outcome = outcomeOf(
+    testInfo.status ?? 'unknown',
+    testInfo.error?.message ?? '',
+  );
+  console.log(
+    `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`,
+  );
+});
+
+/**
+ * Names where a provider round trip landed, from a closed set. The harness
+ * redirects a failed link or login back to the settings or login page with an
+ * `error` code, and waiting for the clean URL alone would hang on a page that
+ * has already finished loading. Recording the category turns that into a
+ * named stage.
+ */
+function callbackCategory(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return 'callback-unparsed';
+  }
+  if (url.origin !== ORIGIN) return 'callback-foreign-origin';
+  if (url.pathname === '/login/second-factor') return 'callback-second-factor';
+  if (url.pathname === '/login') return 'callback-login';
+  if (url.pathname !== '/app/settings/sessions') return 'callback-other-path';
+  const code = url.searchParams.get('error');
+  if (code === null) return 'callback-settings-clean';
+  switch (code) {
+    case 'auth_failed': return 'callback-settings-auth-failed';
+    case 'authentication_required':
+      return 'callback-settings-authentication-required';
+    case 'cancelled': return 'callback-settings-cancelled';
+    case 'email_already_registered':
+      return 'callback-settings-email-already-registered';
+    case 'email_not_verified':
+      return 'callback-settings-email-not-verified';
+    case 'identity_already_linked':
+      return 'callback-settings-identity-already-linked';
+    case 'reauth_required': return 'callback-settings-reauth-required';
+    default: return 'callback-settings-unrecognized';
+  }
+}
+
+/**
+ * Runs a provider round trip while recording where each main-frame navigation
+ * landed. A failure is re-stamped with that closed category, so the withheld
+ * log still names the exact callback outcome.
+ */
+async function watchingCallback(
+  page: Page,
+  body: () => Promise<void>,
+): Promise<void> {
+  let landed = 'callback-none';
+  const record = (frame: { url(): string; parentFrame(): unknown }): void => {
+    if (frame.parentFrame() === null) landed = callbackCategory(frame.url());
+  };
+  page.on('framenavigated', record);
+  try {
+    await body();
+  } catch (error) {
+    if (!tearingDown) recordedStage = landed;
+    throw error;
+  } finally {
+    page.off('framenavigated', record);
+  }
 }
 
 function isUnexpectedSecondFactorConsole(message: ConsoleMessage): boolean {
@@ -662,12 +795,14 @@ test('proves the passkey second factor over native HTTPS', async ({
   await setLocale(context, 'en');
   await page.setViewportSize(DESKTOP);
 
+  stage('capture-reset');
   const ca = await readFile(CA_PATH);
   const capture = captureClient(
     (await readFile(CAPTURE_TOKEN_PATH, 'utf8')).trim(),
   );
   await capture.reset();
 
+  stage('virtual-authenticator');
   const pool = await AuthenticatorPool.attach(context, page);
   const authPrimary = await pool.add();
 
@@ -688,6 +823,7 @@ test('proves the passkey second factor over native HTTPS', async ({
 
   try {
     // 1. A fictional primary account with a password and a linked provider.
+    role('primary');
     stage('primary-register');
     await registerVerified(
       page,
@@ -696,26 +832,42 @@ test('proves the passkey second factor over native HTTPS', async ({
       primaryPassword,
       'Passkey Proof',
     );
+    stage('primary-first-sign-in');
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('session');
 
-    stage('primary-link-provider');
+    stage('primary-open-settings');
     await gotoHydrated(page, '/app/settings/sessions');
+    stage('primary-open-provider-list');
     await page.getByTestId('add-provider-button').click();
+    const linkGoogle = page.getByRole('button', {
+      exact: true,
+      name: 'Link Google',
+    });
+    await expect(linkGoogle).toBeVisible();
+    stage('primary-link-authorize');
     await Promise.all([
       page.waitForURL((url) =>
         url.origin === ORIGIN
         && url.pathname === '/__uat/oauth/google/authorize'),
-      page.getByRole('button', { name: 'Link Google', exact: true }).click(),
+      linkGoogle.click(),
     ]);
+    stage('primary-link-select-account');
     await page.getByLabel(LINK_ACCOUNT_LABEL).check();
-    await Promise.all([
-      page.waitForURL((url) =>
-        url.origin === ORIGIN
-        && url.pathname === '/app/settings/sessions'
-        && url.search === ''),
-      page.getByRole('button', { name: 'Continue with Google' }).click(),
-    ]);
+    stage('primary-link-callback');
+    // Wait for the settings page itself, then judge the outcome from the
+    // closed callback vocabulary. Waiting for the clean URL alone would hang
+    // on an error redirect that has already finished loading.
+    await watchingCallback(page, async () => {
+      await Promise.all([
+        page.waitForURL((url) =>
+          url.origin === ORIGIN
+          && url.pathname === '/app/settings/sessions'),
+        page.getByRole('button', { name: 'Continue with Google' }).click(),
+      ]);
+      expect(callbackCategory(page.url())).toBe('callback-settings-clean');
+    });
+    await waitForHydration(page);
     await expect(page.getByTestId('linked-provider-google')).toBeVisible();
     steps.providerAccount = true;
 
@@ -854,6 +1006,11 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(new URL(page.url()).pathname).toBe('/login/second-factor');
     expect(await meStatus(page)).toBe(401);
     await pool.setUserVerified(authPrimary, true);
+    // A rejected ceremony must not stay outstanding: a second concurrent
+    // request would be refused by the browser, not by the server. Reloading
+    // discards it before the completion that follows.
+    await page.reload();
+    await waitForHydration(page);
     steps.userVerificationRequired = true;
 
     stage('pending-passkey-completion');
@@ -899,11 +1056,11 @@ test('proves the passkey second factor over native HTTPS', async ({
     // 10. Provider sign-in on the enrolled account also stops at pending.
     stage('provider-pending');
     await signOut(page);
-    await signInWithGoogle(page, {
+    await watchingCallback(page, () => signInWithGoogle(page, {
       accountLabel: LINK_ACCOUNT_LABEL,
       fromLoginPage: true,
       returnPath: '/login/second-factor',
-    });
+    }));
     await waitForHydration(page);
     expect(await meStatus(page)).toBe(401);
     await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
@@ -974,6 +1131,7 @@ test('proves the passkey second factor over native HTTPS', async ({
 
     // 14. A second fictional account carries the recovery-code and ceremony
     //     cases, which need their own attempt budget.
+    role('recovery');
     stage('recovery-account');
     await signOut(page);
     authRecovery = await pool.add();
@@ -1066,6 +1224,7 @@ test('proves the passkey second factor over native HTTPS', async ({
 
     // 15. A third fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
+    role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
     authAttempts = await pool.add();
@@ -1100,7 +1259,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
   } finally {
-    stage('cleanup');
+    beginTeardown();
     const removed = [
       await deleteAccount(page, pool, {
         authenticatorId: authPrimary,
@@ -1180,6 +1339,7 @@ test('proves disabled passkey enrollment answers as an unregistered route',
     await page.setViewportSize(DESKTOP);
 
     try {
+      role('disabled');
       stage('disabled-capability');
       await signInWithGoogle(page, {
         accountLabel: DISABLED_ACCOUNT_LABEL,
@@ -1258,7 +1418,7 @@ test('proves disabled passkey enrollment answers as an unregistered route',
       steps.locales = true;
       steps.viewports = true;
     } finally {
-      stage('cleanup');
+      beginTeardown();
       steps.cleanup = await deleteSignedInAccount(page).catch(() => false);
       await writeFile(
         DISABLED_EVIDENCE_PATH,

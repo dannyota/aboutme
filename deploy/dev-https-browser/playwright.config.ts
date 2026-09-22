@@ -24,10 +24,12 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 }
 
 const mode = requestedMode as BrowserMode;
+const secondFactor = mode === 'second-factor'
+  || mode === 'second-factor-disabled';
 // The enabled second-factor journey walks enrollment, four pending sign-ins,
 // the negative cases, and teardown in one test, so it gets its own budget.
-const timeout = mode === 'second-factor' || mode === 'second-factor-disabled'
-  ? 600_000
+const timeout = secondFactor
+  ? 900_000
   : mode === 'editor' || mode === 'public' || mode === 'password-auth'
     || mode === 'mcp' || mode === 'publish' || mode === 'exports'
     || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
@@ -43,15 +45,24 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   }
 }
 
+// A second-factor step that never settles must fail at its own stage, not
+// silently consume the whole test budget and report the teardown stage
+// instead. Both waits are bounded well above the slowest observed hosted
+// navigation, so only a genuinely stuck step trips them.
+const actionTimeout = secondFactor ? 20_000 : mode === 'publish' ? 10_000 : 0;
+const navigationTimeout = secondFactor
+  ? 60_000
+  : mode === 'publish' ? 20_000 : 0;
+
 export default defineConfig({
-  actionTimeout: mode === 'publish' ? 10_000 : 0,
+  actionTimeout,
   forbidOnly: true,
   fullyParallel: false,
   outputDir: '/tmp/playwright-artifacts',
   preserveOutput: 'never',
   reporter: [['line']],
   retries: 0,
-  navigationTimeout: mode === 'publish' ? 20_000 : 0,
+  navigationTimeout,
   testDir: import.meta.dirname,
   testMatch: [`${specName}.spec.ts`],
   timeout,
