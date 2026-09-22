@@ -79,6 +79,12 @@ registerEndpoint('/api/v1/me', {
 });
 
 registerEndpoint('/api/v1/sessions', () => ({ data: [] }));
+// Second-factor state is read regardless of the enrollment capability, so
+// every mount of this page needs a registered response; it plays no part
+// in this file's OAuth-start assertions and stays unenrolled throughout.
+registerEndpoint('/api/v1/me/second-factor', () => ({
+  data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
+}));
 
 async function handleStart(
   provider: Provider,

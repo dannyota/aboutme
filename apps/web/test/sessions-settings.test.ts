@@ -51,6 +51,13 @@ registerEndpoint('/api/v1/me', () => ({
   },
 }));
 registerEndpoint('/api/v1/sessions', () => ({ data: sessions }));
+// Second-factor state is read regardless of the enrollment capability, so
+// every mount of this page needs a registered response; this file's own
+// cases stay focused on the existing sections, and
+// `test/second-factor-settings.test.ts` covers the new section's behavior.
+registerEndpoint('/api/v1/me/second-factor', () => ({
+  data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
+}));
 
 describe('settings sessions page', () => {
   beforeEach(() => {
@@ -137,6 +144,7 @@ describe('settings sessions page', () => {
       expect(wrapper.get('h2').text()).toBe('Thiết bị đã đăng nhập');
       expect(wrapper.text()).toContain('Thiết bị này');
       expect(wrapper.text()).toContain('Hoạt động lần cuối 2 giờ trước');
+      expect(wrapper.get('#second-factor-title').text()).toBe('Passkey');
 
       const callsBeforeLocaleChange = sessionsCalls;
       const locale = useState<'vi' | 'en'>('aboutme-locale');
@@ -146,6 +154,7 @@ describe('settings sessions page', () => {
       expect(wrapper.get('h1').text()).toBe('Settings');
       expect(wrapper.get('h2').text()).toBe('Signed-in devices');
       expect(wrapper.text()).toContain('This device');
+      expect(wrapper.get('#second-factor-title').text()).toBe('Passkeys');
       expect(sessionsCalls).toBe(callsBeforeLocaleChange);
     },
   );
