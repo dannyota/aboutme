@@ -4,7 +4,8 @@ import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
 import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
 import LinkedIdentities from '@/components/settings/LinkedIdentities.vue';
 import PrivacySettings from '../../../components/settings/PrivacySettings.vue';
-import SecondFactorSettings from '../../../components/settings/SecondFactorSettings.vue';
+import SecondFactorSettings
+  from '../../../components/settings/SecondFactorSettings.vue';
 import StatusBanner from '../../../components/app/StatusBanner.vue';
 import { Button } from '../../../components/ui/button';
 import {

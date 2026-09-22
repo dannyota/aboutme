@@ -51,7 +51,7 @@ describe('recoveryCodesDownloadText', () => {
 });
 
 describe('downloadRecoveryCodes', () => {
-  it('creates one object URL, clicks a download anchor, then revokes it', () => {
+  it('creates one object URL, clicks the anchor, then revokes it', () => {
     const createObjectURL = vi.fn(() => 'blob:recovery');
     const revokeObjectURL = vi.fn();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click')
@@ -122,7 +122,7 @@ describe('isWebAuthnSupported', () => {
   });
 
   it('is true once PublicKeyCredential and navigator.credentials exist', () => {
-    vi.stubGlobal('PublicKeyCredential', class {});
+    vi.stubGlobal('PublicKeyCredential', function PublicKeyCredential() {});
     vi.stubGlobal('navigator', {
       ...navigator,
       credentials: { create: vi.fn(), get: vi.fn() },
@@ -173,7 +173,7 @@ describe('createPasskeyCredential', () => {
     vi.unstubAllGlobals();
   });
 
-  it('decodes options and re-encodes the credential as canonical base64url', async () => {
+  it('decodes options and re-encodes the credential as base64url', async () => {
     vi.stubGlobal('PublicKeyCredential', FakePublicKeyCredential);
     vi.stubGlobal(
       'AuthenticatorAttestationResponse',
@@ -374,7 +374,7 @@ registerEndpoint('/api/v1/sessions', () => {
 });
 registerEndpoint('/api/v1/me/second-factor', {
   method: 'GET',
-  handler: (event) => {
+  handler: (_event) => {
     if (stateResponse !== undefined) return stateResponse;
     return {
       data: { enabled, passkeys, recoveryCodesRemaining },
@@ -552,7 +552,7 @@ describe('second-factor settings', () => {
 
   // --- capability ------------------------------------------------------
 
-  it('hides only the add-passkey control when enrollment is closed', async () => {
+  it('hides add-passkey when enrollment is closed', async () => {
     const wrapper = await mountSettings({ passkeyEnrollment: false });
     expect(wrapper.find('[data-testid="passkey-add"]').exists()).toBe(false);
     expect(
@@ -583,7 +583,7 @@ describe('second-factor settings', () => {
     expect(wrapper.find('[data-testid="passkey-add"]').exists()).toBe(false);
   });
 
-  it('shows the add-passkey control once enrollment opens and WebAuthn is supported', async () => {
+  it('shows add-passkey once enrollment and WebAuthn are ready', async () => {
     stubWebAuthnSupport();
     const wrapper = await mountSettings({ passkeyEnrollment: true });
     expect(wrapper.find('[data-testid="passkey-add"]').exists()).toBe(true);
@@ -592,7 +592,7 @@ describe('second-factor settings', () => {
     ).toBe(false);
   });
 
-  it('shows an unsupported note instead of the button on an unsupporting browser', async () => {
+  it('shows unsupported note when the browser lacks WebAuthn', async () => {
     const wrapper = await mountSettings({ passkeyEnrollment: true });
     expect(wrapper.find('[data-testid="passkey-add"]').exists()).toBe(false);
     expect(
@@ -602,7 +602,7 @@ describe('second-factor settings', () => {
 
   // --- state -------------------------------------------------------------
 
-  it('lists passkeys in order with safe created and last-used timestamps', async () => {
+  it('lists passkeys in order with safe created/last-used times', async () => {
     passkeys = [
       { id: 'pk-1', createdAt: '2026-09-01T00:00:00Z', lastUsedAt: null },
       {
@@ -645,7 +645,7 @@ describe('second-factor settings', () => {
     expect(wrapper.text()).not.toContain('should-never-render');
   });
 
-  it('degrades a failed or malformed state read to the unenrolled empty view', async () => {
+  it('degrades a failed state read to the unenrolled view', async () => {
     stateResponse = { error: { code: 'internal', message: 'oops' } };
     const wrapper = await mountSettings();
     expect(wrapper.find('[data-testid="second-factor-empty"]').exists())
@@ -667,7 +667,7 @@ describe('second-factor settings', () => {
 
   // --- enrollment ----------------------------------------------------
 
-  it('reveals ten recovery codes once on first enrollment, then clears them on close', async () => {
+  it('reveals ten codes on first enrollment, clears on close', async () => {
     passkeys = [];
     enabled = false;
     recoveryCodesRemaining = 0;
@@ -690,7 +690,7 @@ describe('second-factor settings', () => {
       .toBeNull();
   });
 
-  it('adding a later passkey shows a success banner without a reveal', async () => {
+  it('adding a later passkey shows success without a reveal', async () => {
     completionResponse = () => ({
       data: {
         passkey: {
@@ -712,7 +712,7 @@ describe('second-factor settings', () => {
       .toBe('Passkey added.');
   });
 
-  it('surfaces a cancelled ceremony without treating it as an error', async () => {
+  it('surfaces a cancelled ceremony, not as an error', async () => {
     vi.stubGlobal('PublicKeyCredential', FakePublicKeyCredential);
     vi.stubGlobal('navigator', {
       ...navigator,
@@ -734,7 +734,7 @@ describe('second-factor settings', () => {
     ).toBeUndefined();
   });
 
-  it('maps enrollment turned off mid-flow to the closed-enrollment message', async () => {
+  it('maps enrollment closed mid-flow to closed-enrollment', async () => {
     optionsResponse = (event) => errorBody(event, 404, 'not_found');
     stubWebAuthnSupport();
     const wrapper = await mountSettings({ passkeyEnrollment: true });
@@ -773,7 +773,7 @@ describe('second-factor settings', () => {
     expect(sessionsCalls).toBeGreaterThan(sessionsCallsBefore);
   });
 
-  it('warns that the final removal disables second-factor sign-in', async () => {
+  it('warns final removal disables second-factor sign-in', async () => {
     const wrapper = await mountSettings();
     await wrapper.get('[data-testid="passkey-remove-pk-1"]').trigger('click');
     await flushPromises();
@@ -799,7 +799,7 @@ describe('second-factor settings', () => {
 
   // --- recent reauthentication ----------------------------------------
 
-  it('switches to the password reauth form on reauth_required, then lets the user retry', async () => {
+  it('switches to password reauth, then lets the user retry', async () => {
     registerRemoval(
       'pk-1',
       (event) => errorBody(event, 403, 'reauth_required'),
@@ -899,7 +899,7 @@ describe('second-factor settings', () => {
       .toBe('3 recovery codes remaining.');
   });
 
-  it('regenerating warns about ending other sessions and reveals new codes once', async () => {
+  it('regenerating warns about other sessions, reveals codes', async () => {
     const wrapper = await mountSettings();
     const sessionsCallsBefore = sessionsCalls;
     await wrapper.get('[data-testid="recovery-regenerate"]').trigger('click');
@@ -954,7 +954,7 @@ describe('second-factor settings', () => {
       .toBeNull();
   });
 
-  it('keeps a revealed set intact when the best-effort refresh afterward fails', async () => {
+  it('keeps a revealed set intact when the refresh fails', async () => {
     let stateCalls = 0;
     registerEndpoint('/api/v1/me/second-factor', {
       method: 'GET',
@@ -979,7 +979,7 @@ describe('second-factor settings', () => {
 
   // --- locale ------------------------------------------------------------
 
-  it('preserves an open reveal dialog and its codes across a locale change', async () => {
+  it('preserves an open reveal dialog across a locale change', async () => {
     const wrapper = await mountSettings();
     await wrapper.get('[data-testid="recovery-regenerate"]').trigger('click');
     await flushPromises();
@@ -999,7 +999,7 @@ describe('second-factor settings', () => {
     ).toBe(codesBefore);
   });
 
-  it('preserves a reauth password draft and the reauth mode across a locale change', async () => {
+  it('preserves a reauth password draft across a locale change', async () => {
     registerRemoval(
       'pk-1',
       (event) => errorBody(event, 403, 'reauth_required'),
@@ -1043,7 +1043,7 @@ describe('second-factor settings', () => {
 
   // --- session rotation ------------------------------------------------
 
-  it('refetches the account and device list after a passkey mutation', async () => {
+  it('refetches account and device list after a mutation', async () => {
     const wrapper = await mountSettings();
     const meCallsBefore = meCalls;
     const sessionsCallsBefore = sessionsCalls;
