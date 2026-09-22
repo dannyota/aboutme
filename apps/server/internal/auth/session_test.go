@@ -252,6 +252,204 @@ func TestAuthenticate_UnknownToken_ReturnsSessionInvalid(t *testing.T) {
 	}
 }
 
+func TestAuthenticate_RejectsStaleAuthenticationEpoch(t *testing.T) {
+	q := newTestQueries(t)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManager(q)
+	ctx := context.Background()
+
+	raw, _, err := sm.Issue(ctx, userID, "ua", "203.0.113.200")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	if _, execErr := newRowInspectorPool(t).Exec(ctx, "UPDATE users SET auth_epoch = auth_epoch + 1 WHERE id = $1", userID); execErr != nil {
+		t.Fatalf("advance auth epoch: %v", execErr)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, raw); !errors.Is(authErr, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(stale epoch) error = %v, want ErrSessionInvalid", authErr)
+	}
+}
+
+// TestAuthenticate_PoolBackedRejectsStaleAuthenticationEpoch covers the
+// production manager: the epoch compare lives in the token lookup, so the
+// pool-backed path rejects a stale session without taking the user lock.
+func TestAuthenticate_PoolBackedRejectsStaleAuthenticationEpoch(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManagerWithPoolForTest(pool, time.Now)
+
+	raw, _, err := sm.Issue(ctx, userID, "ua", "203.0.113.204")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, raw); authErr != nil {
+		t.Fatalf("Authenticate(current epoch) error = %v", authErr)
+	}
+	if _, execErr := pool.Exec(ctx, "UPDATE users SET auth_epoch = auth_epoch + 1 WHERE id = $1", userID); execErr != nil {
+		t.Fatalf("advance auth epoch: %v", execErr)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, raw); !errors.Is(authErr, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(stale epoch) error = %v, want ErrSessionInvalid", authErr)
+	}
+}
+
+// advanceEpochAndReplace runs the deliberate epoch change the way a factor
+// mutation does: lock the user, advance its epoch, then replace the session.
+func advanceEpochAndReplace(ctx context.Context, pool *store.Pool, q *store.Queries, sm *auth.SessionManager, userID, sessionID uuid.UUID, factorAt *time.Time) (auth.SessionIssue, error) {
+	var replacement auth.SessionIssue
+	err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+		qtx := q.WithTx(tx)
+		if _, lockErr := qtx.GetUserForUpdate(ctx, userID); lockErr != nil {
+			return lockErr
+		}
+		if _, advanceErr := qtx.AdvanceUserAuthEpoch(ctx, userID); advanceErr != nil {
+			return advanceErr
+		}
+		var replaceErr error
+		replacement, replaceErr = sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, sessionID, factorAt)
+		return replaceErr
+	})
+	return replacement, err
+}
+
+func TestReplaceAfterEpochChangeTx_RevokesPriorSessionsAndPreservesWindows(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	clk := testutil.NewClock(time.Now().UTC().Truncate(time.Microsecond))
+	sm := auth.NewSessionManagerWithPoolForTest(pool, clk.Now)
+	raw, current, err := sm.Issue(ctx, userID, "ua", "203.0.113.201")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	_, other, err := sm.Issue(ctx, userID, "other-ua", "203.0.113.202")
+	if err != nil {
+		t.Fatalf("Issue(other) error = %v", err)
+	}
+	clk.Advance(5 * time.Minute)
+	factorAt := clk.Now()
+	replacement, err := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, &factorAt)
+	if err != nil {
+		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
+	}
+	got := replacement.Session
+	if got.RotatedFrom != nil || got.AuthEpoch != current.AuthEpoch+1 {
+		t.Fatalf("replacement lineage = %v, epoch = %d, want nil lineage at epoch %d", got.RotatedFrom, got.AuthEpoch, current.AuthEpoch+1)
+	}
+	if got.UA == nil || current.UA == nil || *got.UA != *current.UA {
+		t.Fatalf("replacement UA = %v, current UA = %v", got.UA, current.UA)
+	}
+	if got.IP == nil || current.IP == nil || got.IP.String() != current.IP.String() {
+		t.Fatalf("replacement IP = %v, current IP = %v", got.IP, current.IP)
+	}
+	if !got.ReauthenticatedAt.Equal(current.ReauthenticatedAt) {
+		t.Fatalf("replacement primary proof = %v, want copied %v (the change must not extend the window)", got.ReauthenticatedAt, current.ReauthenticatedAt)
+	}
+	if got.SecondFactorVerifiedAt == nil || !got.SecondFactorVerifiedAt.Equal(factorAt) {
+		t.Fatalf("replacement factor proof = %v, want %v", got.SecondFactorVerifiedAt, factorAt)
+	}
+	if !got.CreatedAt.Equal(current.CreatedAt) || !got.AbsoluteExpiresAt.Equal(current.AbsoluteExpiresAt) {
+		t.Fatal("replacement changed the original creation or absolute expiry time")
+	}
+	if !got.LastSeenAt.Equal(factorAt) {
+		t.Fatalf("replacement last seen = %v, want mutation time %v", got.LastSeenAt, factorAt)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, raw); !errors.Is(authErr, auth.ErrSessionInvalid) {
+		t.Fatalf("Authenticate(prior) error = %v, want ErrSessionInvalid", authErr)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, replacement.RawToken); authErr != nil {
+		t.Fatalf("Authenticate(replacement) error = %v", authErr)
+	}
+	storedOther, err := q.GetSessionByID(ctx, other.ID)
+	if err != nil || storedOther.RevokedAt == nil {
+		t.Fatalf("other browser session not revoked, session = %+v, err = %v", storedOther, err)
+	}
+}
+
+func TestReplaceAfterEpochChangeTx_FinalRemovalClearsFactorProof(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManagerWithPoolForTest(pool, time.Now)
+	_, current, err := sm.Issue(ctx, userID, "ua", "203.0.113.205")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	if _, execErr := pool.Exec(ctx, "UPDATE sessions SET second_factor_verified_at = reauthenticated_at WHERE id = $1", current.ID); execErr != nil {
+		t.Fatalf("set factor proof: %v", execErr)
+	}
+	replacement, err := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, nil)
+	if err != nil {
+		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
+	}
+	if replacement.Session.SecondFactorVerifiedAt != nil {
+		t.Fatalf("replacement factor proof = %v, want nil after final removal", replacement.Session.SecondFactorVerifiedAt)
+	}
+}
+
+func TestReplaceAfterEpochChangeTx_RejectsAnOlderEpochSession(t *testing.T) {
+	ctx := context.Background()
+	p := newTestPool(t)
+	q := store.New(p)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManagerWithPoolForTest(p, time.Now)
+	_, current, err := sm.Issue(ctx, userID, "ua", "203.0.113.203")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	err = pgx.BeginFunc(ctx, p, func(tx pgx.Tx) error {
+		qtx := q.WithTx(tx)
+		if _, lockErr := qtx.GetUserForUpdate(ctx, userID); lockErr != nil {
+			return lockErr
+		}
+		for range 2 {
+			if _, advanceErr := qtx.AdvanceUserAuthEpoch(ctx, userID); advanceErr != nil {
+				return advanceErr
+			}
+		}
+		_, replaceErr := sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, current.ID, nil)
+		return replaceErr
+	})
+	if !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Fatalf("ReplaceAfterEpochChangeTx(older epoch) error = %v, want ErrSessionInvalid", err)
+	}
+}
+
+// TestReplaceAfterEpochChangeTx_LogoutEverywhereFirstMintsNothing proves the
+// replacement re-reads the current session under lock: a logout everywhere
+// that committed after the caller last saw the session leaves no live session.
+func TestReplaceAfterEpochChangeTx_LogoutEverywhereFirstMintsNothing(t *testing.T) {
+	ctx := context.Background()
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManagerWithPoolForTest(pool, time.Now)
+	raw, current, err := sm.Issue(ctx, userID, "ua", "203.0.113.206")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, raw); authErr != nil {
+		t.Fatalf("Authenticate(before logout) error = %v", authErr)
+	}
+	if _, revokeErr := sm.RevokeAll(ctx, userID); revokeErr != nil {
+		t.Fatalf("RevokeAll() error = %v", revokeErr)
+	}
+	if _, replaceErr := advanceEpochAndReplace(ctx, pool, q, sm, userID, current.ID, nil); !errors.Is(replaceErr, auth.ErrSessionInvalid) {
+		t.Fatalf("ReplaceAfterEpochChangeTx(after logout everywhere) error = %v, want ErrSessionInvalid", replaceErr)
+	}
+	var live int
+	if scanErr := pool.QueryRow(ctx, "SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL", userID).Scan(&live); scanErr != nil {
+		t.Fatalf("count live sessions: %v", scanErr)
+	}
+	if live != 0 {
+		t.Fatalf("live sessions after logout everywhere = %d, want 0", live)
+	}
+}
+
 // TestAuthenticate_RevokedSession_ReturnsSessionInvalid covers
 // Authenticate's revoked branch directly. Revocation is independent of any
 // rotation grace window.
@@ -620,6 +818,14 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Issue() error = %v", err)
 	}
+	factorAt := clk.Now().Add(-time.Minute)
+	if _, execErr := newRowInspectorPool(t).Exec(ctx, "UPDATE sessions SET second_factor_verified_at = $1 WHERE id = $2", factorAt, predecessor.ID); execErr != nil {
+		t.Fatalf("set factor proof: %v", execErr)
+	}
+	predecessor, err = q.GetSessionByID(ctx, predecessor.ID)
+	if err != nil {
+		t.Fatalf("reload predecessor: %v", err)
+	}
 
 	clk.Advance(25 * time.Hour)
 
@@ -641,6 +847,12 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 	}
 	if !successor.ReauthenticatedAt.Equal(predecessor.ReauthenticatedAt) {
 		t.Errorf("successor.ReauthenticatedAt = %v, want %v (rotation is not itself a fresh OAuth login -- must not reset the recent-reauth gate)", successor.ReauthenticatedAt, predecessor.ReauthenticatedAt)
+	}
+	if successor.AuthEpoch != predecessor.AuthEpoch {
+		t.Errorf("successor.AuthEpoch = %d, want %d", successor.AuthEpoch, predecessor.AuthEpoch)
+	}
+	if successor.SecondFactorVerifiedAt == nil || predecessor.SecondFactorVerifiedAt == nil || !successor.SecondFactorVerifiedAt.Equal(*predecessor.SecondFactorVerifiedAt) {
+		t.Errorf("successor factor proof = %v, predecessor = %v", successor.SecondFactorVerifiedAt, predecessor.SecondFactorVerifiedAt)
 	}
 	// Rotation must mint a new CSRF secret while preserving session lineage.
 	if len(successor.CSRFSecret) != 32 {

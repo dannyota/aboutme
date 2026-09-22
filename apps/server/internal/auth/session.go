@@ -49,7 +49,7 @@ type SessionManager struct {
 	// successor insert serializes on. It is nil for query-only managers
 	// (authentication, revocation, resumeapi middleware, and existing
 	// non-fence tests); production issuance and rotation always set it so the
-	// user-row lock fence in D4 is enforced. See Issue and tryRotate.
+	// user-row lock fence is enforced. See Issue and tryRotate.
 	pool *store.Pool
 	now  func() time.Time
 
@@ -84,11 +84,16 @@ type SessionIssue struct {
 	Session  store.Session
 }
 
-// IssueTx is the only primitive that constructs a fresh login session. Its
-// caller must already hold the exact user row lock via GetUserForUpdate in the
-// same transaction; IssueTx never opens or commits a transaction of its own.
-// It inserts the existing opaque session format with rotated_from = NULL.
+// IssueTx is the only primitive that constructs a fresh login session. It runs
+// in the caller's transaction and never opens or commits one of its own. It
+// takes the user row lock itself (a no-op when the caller already holds it) and
+// copies the locked row's authentication epoch, so a stale user snapshot cannot
+// mint a stale-epoch session. It inserts a session with rotated_from = NULL.
 func (m *SessionManager) IssueTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (SessionIssue, error) {
+	lockedUser, err := qtx.GetUserForUpdate(ctx, user.ID)
+	if err != nil {
+		return SessionIssue{}, fmt.Errorf("auth: issue session: lock user: %w", err)
+	}
 	raw, err := randomSessionToken()
 	if err != nil {
 		return SessionIssue{}, fmt.Errorf("auth: issue session: %w", err)
@@ -104,7 +109,7 @@ func (m *SessionManager) IssueTx(ctx context.Context, qtx *store.Queries, user s
 
 	now := m.now()
 	sess, err := qtx.CreateSession(ctx, store.CreateSessionParams{
-		UserID:            user.ID,
+		UserID:            lockedUser.ID,
 		TokenHash:         hashSessionToken(raw),
 		CSRFSecret:        csrfSecret,
 		CreatedAt:         now,
@@ -113,6 +118,7 @@ func (m *SessionManager) IssueTx(ctx context.Context, qtx *store.Queries, user s
 		AbsoluteExpiresAt: now.Add(absoluteTimeout),
 		UA:                stringParam(ua),
 		IP:                ipParam,
+		AuthEpoch:         lockedUser.AuthEpoch,
 		// RotatedFrom is deliberately omitted (nil): a fresh login is
 		// never a rotation successor -- see tryRotate's own successor
 		// insert (below) for the one call site that sets it.
@@ -131,7 +137,11 @@ func (m *SessionManager) IssueTx(ctx context.Context, qtx *store.Queries, user s
 // fixation; it returns the raw token but stores only its SHA-256 hash.
 func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip string) (rawToken string, sess store.Session, err error) {
 	if m.pool == nil {
-		issued, issueErr := m.IssueTx(ctx, m.q, store.User{ID: userID}, ua, ip)
+		user, readErr := m.q.GetUserByID(ctx, userID)
+		if readErr != nil {
+			return "", store.Session{}, fmt.Errorf("auth: issue session: read user: %w", readErr)
+		}
+		issued, issueErr := m.IssueTx(ctx, m.q, user, ua, ip)
 		if issueErr != nil {
 			return "", store.Session{}, issueErr
 		}
@@ -160,8 +170,14 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 
 // Authenticate returns the governing session and a raw successor token only to
 // the rotation winner. Dead sessions never rotate. Successors inherit identity,
-// absolute expiry, reauth time, user agent, and IP; rotation extends none of
-// them. See docs/adr/0015-session-rotation-delivery.md.
+// absolute expiry, reauth time, user agent, IP, authentication epoch, and
+// factor-proof time; rotation extends none of them. See
+// docs/adr/0015-session-rotation-delivery.md.
+//
+// The token lookup compares the session's copied authentication epoch with the
+// account's current epoch in the same statement, so a stale-epoch session
+// authenticates nothing without a user-row lock on the request path. See
+// docs/design/second-factor-authentication.md.
 func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (sess store.Session, rotatedToken string, err error) {
 	now := m.now()
 
@@ -197,15 +213,16 @@ func (m *SessionManager) Authenticate(ctx context.Context, rawToken string) (ses
 		// A rotation loser continues with the still-live predecessor.
 	}
 
-	if err := m.touchLastSeenAt(ctx, &sess, now); err != nil {
+	if err = m.touchLastSeenAt(ctx, &sess, now); err != nil {
 		return store.Session{}, "", err
 	}
 	return sess, "", nil
 }
 
 // errRotationPredecessorRevoked marks a successor insert aborted because the
-// predecessor was revoked after its admission update committed -- the reset
-// fence in D4. It is a closed, non-error outcome for the rotation loser.
+// predecessor was revoked after its admission update committed, the reset
+// fence under the user-row lock. It is a closed, non-error outcome for the
+// rotation loser.
 var errRotationPredecessorRevoked = errors.New("auth: rotation predecessor revoked")
 
 // tryRotate admits at most one rotation winner. The admission update and
@@ -216,8 +233,9 @@ var errRotationPredecessorRevoked = errors.New("auth: rotation predecessor revok
 // A pool-backed manager inserts the successor in a short transaction that locks
 // the user row and re-reads the predecessor as live, so a reset that already
 // revoked the predecessor (RevokeAllSessions under the same user lock) cannot
-// mint a successor past that fence. A query-only manager (nil pool) keeps the
-// historic direct insert.
+// mint a successor past that fence. An epoch that advanced after admission
+// returns ErrSessionInvalid: the predecessor neither rotates nor authenticates
+// the request. A query-only manager (nil pool) keeps the historic direct insert.
 func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Session, now time.Time) (successor store.Session, raw string, won bool, err error) {
 	graceUntil := now.Add(rotationAge)
 	if graceUntil.After(predecessor.AbsoluteExpiresAt) {
@@ -248,18 +266,23 @@ func (m *SessionManager) tryRotate(ctx context.Context, predecessor store.Sessio
 
 	err = pgx.BeginFunc(ctx, m.pool, func(tx pgx.Tx) error {
 		qtx := m.q.WithTx(tx)
-		if _, lockErr := qtx.GetUserForUpdate(ctx, predecessor.UserID); lockErr != nil {
+		user, lockErr := qtx.GetUserForUpdate(ctx, predecessor.UserID)
+		if lockErr != nil {
 			return fmt.Errorf("auth: rotate session: lock user: %w", lockErr)
 		}
 		live, readErr := qtx.GetSessionByIDForUpdate(ctx, predecessor.ID)
 		if readErr != nil {
 			return fmt.Errorf("auth: rotate session: re-read predecessor: %w", readErr)
 		}
+		if live.AuthEpoch != user.AuthEpoch {
+			return ErrSessionInvalid
+		}
 		if live.RevokedAt != nil {
 			return errRotationPredecessorRevoked
 		}
-		successor, raw, err = m.createRotationSuccessor(ctx, qtx, predecessor, now)
-		return err
+		var createErr error
+		successor, raw, createErr = m.createRotationSuccessor(ctx, qtx, live, now)
+		return createErr
 	})
 	if err != nil {
 		if errors.Is(err, errRotationPredecessorRevoked) {
@@ -295,7 +318,9 @@ func (m *SessionManager) createRotationSuccessor(ctx context.Context, qtx *store
 		IP:                predecessor.IP,
 		// RotatedFrom is the database-enforced lineage link used when revoking
 		// either half of a rotation pair.
-		RotatedFrom: &predecessor.ID,
+		RotatedFrom:            &predecessor.ID,
+		AuthEpoch:              predecessor.AuthEpoch,
+		SecondFactorVerifiedAt: predecessor.SecondFactorVerifiedAt,
 	})
 	if err != nil {
 		return store.Session{}, "", fmt.Errorf("auth: rotate session: create successor: %w", err)
@@ -405,6 +430,65 @@ func (m *SessionManager) TouchReauthenticated(ctx context.Context, sessionID uui
 		return fmt.Errorf("auth: touch reauthenticated: %w", err)
 	}
 	return nil
+}
+
+// ReplaceAfterEpochChangeTx replaces the deliberate current session after the
+// caller advanced the user's authentication epoch by one in qtx's transaction.
+// It re-locks the user row and then locks and re-reads currentSessionID, so a
+// session revoked, expired, or advanced by another commit mints nothing. It
+// revokes every session of the user and inserts a fresh session with no
+// rotation lineage at the new epoch. The replacement copies the prior creation
+// time, absolute expiry, device metadata, and primary-proof time, so no window
+// is extended. Only the factor-proof time comes from the caller: the completion
+// time for first enrollment, the prior value while enforcement stays, and nil
+// for final removal. See docs/design/second-factor-authentication.md.
+func (m *SessionManager) ReplaceAfterEpochChangeTx(ctx context.Context, qtx *store.Queries, userID, currentSessionID uuid.UUID, secondFactorVerifiedAt *time.Time) (SessionIssue, error) {
+	user, err := qtx.GetUserForUpdate(ctx, userID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SessionIssue{}, ErrSessionInvalid
+		}
+		return SessionIssue{}, fmt.Errorf("auth: replace session: lock user: %w", err)
+	}
+	current, err := qtx.GetSessionByIDForUpdate(ctx, currentSessionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return SessionIssue{}, ErrSessionInvalid
+		}
+		return SessionIssue{}, fmt.Errorf("auth: replace session: lock current session: %w", err)
+	}
+	now := m.now()
+	if current.UserID != user.ID || current.AuthEpoch+1 != user.AuthEpoch || RequireLiveSession(current, now) != nil {
+		return SessionIssue{}, ErrSessionInvalid
+	}
+	if _, err = qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: user.ID, RevokedAt: &now}); err != nil {
+		return SessionIssue{}, fmt.Errorf("auth: replace session: revoke sessions: %w", err)
+	}
+	raw, err := randomSessionToken()
+	if err != nil {
+		return SessionIssue{}, fmt.Errorf("auth: replace session: %w", err)
+	}
+	csrf, err := randomCSRFSecret()
+	if err != nil {
+		return SessionIssue{}, fmt.Errorf("auth: replace session: %w", err)
+	}
+	replacement, err := qtx.CreateSession(ctx, store.CreateSessionParams{
+		UserID:                 user.ID,
+		TokenHash:              hashSessionToken(raw),
+		CSRFSecret:             csrf,
+		CreatedAt:              current.CreatedAt,
+		LastSeenAt:             now,
+		ReauthenticatedAt:      current.ReauthenticatedAt,
+		AbsoluteExpiresAt:      current.AbsoluteExpiresAt,
+		UA:                     current.UA,
+		IP:                     current.IP,
+		AuthEpoch:              user.AuthEpoch,
+		SecondFactorVerifiedAt: secondFactorVerifiedAt,
+	})
+	if err != nil {
+		return SessionIssue{}, fmt.Errorf("auth: replace session: create replacement: %w", err)
+	}
+	return SessionIssue{RawToken: raw, Session: replacement}, nil
 }
 
 // RequireRecentReauth enforces the window in docs/design/security.md.

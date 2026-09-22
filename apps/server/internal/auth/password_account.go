@@ -142,7 +142,7 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 			}
 			return serr
 		}
-		if live.RevokedAt != nil {
+		if live.RevokedAt != nil || live.UserID != user.ID || live.AuthEpoch != user.AuthEpoch {
 			return errPasswordReauthRequired
 		}
 		if _, uerr := qtx.UpsertPasswordCredential(ctx, store.UpsertPasswordCredentialParams{
@@ -179,8 +179,11 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 
 // createFreshSessionTx mints the forced-replacement session after a credential
 // change: fresh token and CSRF material with rotated_from NULL, preserving the
-// old current session's absolute expiry, user agent, and IP, and setting a new
-// reauthenticated_at. It is not an ADR 0015 rotation lineage.
+// old current session's absolute expiry, user agent, IP, and factor-proof time,
+// copying the locked user's authentication epoch, and setting a new
+// reauthenticated_at. It is not an ADR 0015 rotation lineage. A password change
+// does not change the epoch, so the factor proof stays valid; see
+// docs/design/second-factor-authentication.md.
 func (s *PasswordService) createFreshSessionTx(ctx context.Context, qtx *store.Queries, user store.User, old store.Session, now time.Time) (string, error) {
 	raw, err := randomSessionToken()
 	if err != nil {
@@ -190,18 +193,20 @@ func (s *PasswordService) createFreshSessionTx(ctx context.Context, qtx *store.Q
 	if err != nil {
 		return "", errPasswordUnavailable
 	}
-	if _, err := qtx.CreateSession(ctx, store.CreateSessionParams{
-		UserID:            user.ID,
-		TokenHash:         hashSessionToken(raw),
-		CSRFSecret:        csrf,
-		CreatedAt:         now,
-		LastSeenAt:        now,
-		ReauthenticatedAt: now,
-		AbsoluteExpiresAt: old.AbsoluteExpiresAt,
-		UA:                old.UA,
-		IP:                old.IP,
-	}); err != nil {
-		return "", fmt.Errorf("auth: change password: create fresh session: %w", err)
+	if _, createErr := qtx.CreateSession(ctx, store.CreateSessionParams{
+		UserID:                 user.ID,
+		TokenHash:              hashSessionToken(raw),
+		CSRFSecret:             csrf,
+		CreatedAt:              now,
+		LastSeenAt:             now,
+		ReauthenticatedAt:      now,
+		AbsoluteExpiresAt:      old.AbsoluteExpiresAt,
+		UA:                     old.UA,
+		IP:                     old.IP,
+		AuthEpoch:              user.AuthEpoch,
+		SecondFactorVerifiedAt: old.SecondFactorVerifiedAt,
+	}); createErr != nil {
+		return "", fmt.Errorf("auth: change password: create fresh session: %w", createErr)
 	}
 	return raw, nil
 }
