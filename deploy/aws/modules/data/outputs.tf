@@ -17,3 +17,11 @@ output "media_bucket_arn" {
 output "media_bucket_name" {
   value = aws_s3_bucket.media.bucket
 }
+
+output "release_fence_table_arn" {
+  value = aws_dynamodb_table.release_fence.arn
+}
+
+output "release_fence_table_name" {
+  value = aws_dynamodb_table.release_fence.name
+}

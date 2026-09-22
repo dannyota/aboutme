@@ -17,3 +17,11 @@ output "jobs_task_role_arn" {
 output "log_group_name" {
   value = aws_cloudwatch_log_group.main.name
 }
+
+output "operator_role_arn" {
+  value = aws_iam_role.operator.arn
+}
+
+output "deploy_role_arn" {
+  value = aws_iam_role.deploy.arn
+}

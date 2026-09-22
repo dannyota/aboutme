@@ -37,6 +37,13 @@ variable "password_registration_enabled" {
   description = "PASSWORD_REGISTRATION_ENABLED for the server"
 }
 
+# Off until a healthy capable release raises the production minimum-release
+# fence. See docs/design/passkey-release-fence.md.
+variable "passkey_enrollment_enabled" {
+  type        = bool
+  description = "PASSKEY_ENROLLMENT_ENABLED for the server"
+}
+
 # Only Google's credentials are wired, so only Google may be enabled here.
 variable "provider_login_enabled" {
   type        = string

@@ -30,12 +30,14 @@ module "data" {
 }
 
 module "identity" {
-  source               = "../modules/identity"
-  name                 = local.name
-  account_id           = var.account_id
-  media_bucket_arn     = module.data.media_bucket_arn
-  db_master_secret_arn = module.data.db_master_secret_arn
-  ses_from_address     = var.ses_from_address
+  source                  = "../modules/identity"
+  name                    = local.name
+  account_id              = var.account_id
+  media_bucket_arn        = module.data.media_bucket_arn
+  db_master_secret_arn    = module.data.db_master_secret_arn
+  ses_from_address        = var.ses_from_address
+  release_fence_table_arn = module.data.release_fence_table_arn
+  operator_principal_arn  = var.operator_principal_arn
 }
 
 module "tasks" {
@@ -50,6 +52,7 @@ module "tasks" {
   ses_configuration_set         = var.ses_configuration_set
   provider_login_enabled        = var.provider_login_enabled
   password_registration_enabled = var.password_registration_enabled
+  passkey_enrollment_enabled    = var.passkey_enrollment_enabled
   exec_role_arns                = module.identity.exec_role_arns
   app_task_role_arn             = module.identity.app_task_role_arn
   jobs_task_role_arn            = module.identity.jobs_task_role_arn

@@ -9,7 +9,7 @@ mkdir -p "$work/bin"
 for cmd in aws gh git curl date; do
   cat >"$work/bin/$cmd" <<'STUB'
 #!/usr/bin/env bash
-printf '%s %s\n' "$(basename "$0")" "$*" >>"$CALLS"
+printf '[%s] %s %s\n' "${AWS_PROFILE:-none}" "$(basename "$0")" "$*" >>"$CALLS"
 exec bash "$STUB_DIR/respond" "$(basename "$0")" "$@"
 STUB
   chmod +x "$work/bin/$cmd"
@@ -22,6 +22,7 @@ run_case() { # name expected-exit|fail args...
   : >"$work/$name.calls"
   set +e
   CALLS="$work/$name.calls" STUB_DIR="$work" STUB_CASE="$name" PATH="$work/bin:$PATH" \
+    AWS_CONFIG_FILE="$work/no-such-aws-config" AWS_PROFILE=test-base \
     DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1
   got=$?
   set -e
@@ -95,6 +96,36 @@ before "$f" "$start_app" "cloudwatch enable-alarm-actions --alarm-names aboutme-
   { echo "ok: site-down actions were not disabled once" >&2; exit 1; }
 [[ $(count "$f" "host-recover") == 0 ]] || { echo "ok: touched host recovery" >&2; exit 1; }
 
+# The operation lock releases only after notifications are restored, and only
+# once, with the exact operation ID this run acquired.
+before "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down" "REMOVE operation_id"
+[[ $(count "$f" "REMOVE operation_id") == 1 ]] || { echo "ok: lock released more than once" >&2; exit 1; }
+grep -qF ":o\":{\"S\":\"$(cat "$work/lock-oid")\"" "$f" ||
+  { echo "ok: lock was not released with its own operation ID" >&2; exit 1; }
+
+# A checkpoint runs before every mutating call that starts an image: the
+# snapshot, the register loop, both notification-suppression calls, 4
+# schedule disables, the migration, the web and app starts, and 4 schedule
+# enables. The maintenance start is never checkpointed (deploy.sh's own
+# comment on maintenance_up explains why).
+# "SET operation_checked_at=:s --condition-expression" is unique to a
+# checkpoint call; the lock acquisition's SET clause also touches that
+# attribute but continues with more fields before its own condition.
+[[ $(count "$f" "SET operation_checked_at=:s --condition-expression") == 15 ]] ||
+  { echo "ok: want 15 fence checkpoints, one per mutating image start" >&2; exit 1; }
+
+# Every mutation runs as the deploy role; only the fence's own strong read
+# runs as the operator role.
+absent "$f" "[fence-operator] aws --region ap-southeast-1 ecs"
+absent "$f" "[fence-operator] aws --region ap-southeast-1 dynamodb update-item"
+absent "$f" "[fence-operator] aws --region us-east-1"
+grep -qF "[fence-deploy] aws --region ap-southeast-1 ecs register-task-definition" "$f" ||
+  { echo "ok: task registration did not run as the deploy role" >&2; exit 1; }
+grep -F -- "$start_app" "$f" | grep -qF "[fence-deploy]" ||
+  { echo "ok: the app start did not run as the deploy role" >&2; exit 1; }
+grep -qF "[fence-operator] aws --region ap-southeast-1 dynamodb get-item" "$f" ||
+  { echo "ok: the fence read did not run as the operator role" >&2; exit 1; }
+
 # Existing disabled states must stay disabled and need no mutation.
 run_case alerts_initially_disabled 0 v0.1.0
 f=$work/alerts_initially_disabled.calls
@@ -156,6 +187,15 @@ f=$work/alerts_signal.calls
 absent "$f" "$stop_app"
 grep -qF -- "events enable-rule --name aboutme-prod-task-stopped" "$f" ||
   { echo "alerts_signal: task-stopped rule was not restored" >&2; exit 1; }
+
+# A second signal arriving during cleanup itself must not re-enter on_signal
+# and race the restore/release sequence already in progress; on_exit ignores
+# it and finishes with the original failure's status.
+run_case signal_during_cleanup fail v0.1.0
+grep -q "received TERM" "$work/signal_during_cleanup.out" &&
+  { echo "signal_during_cleanup: a signal during cleanup was not ignored" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$work/signal_during_cleanup.calls" ||
+  { echo "signal_during_cleanup: lock was not released" >&2; exit 1; }
 
 # Every task secret is checked by name, once, before anything changes, and no
 # value is ever read.
@@ -344,6 +384,25 @@ before "$f" "ssm describe-parameters" "ecs register-task-definition"
 before "$f" "$stop_app" "$up_maintenance"
 before "$f" "$down_maintenance" "$start_app"
 
+# A rollback runs through the same fence-aware script and is rejected the
+# same way a forward deploy is when the target is below the fence minimum.
+run_case rollback_below_fence fail --rollback v0.0.9
+absent "$work/rollback_below_fence.calls" "ecs register-task-definition"
+grep -qF "below the release fence minimum" "$work/rollback_below_fence.out" ||
+  { echo "rollback_below_fence: no fence-minimum message" >&2; exit 1; }
+
+# A rollback target equal to the fence minimum is accepted.
+run_case rollback_equal_fence 0 --rollback v0.0.9
+
+# restore() refuses a previous_app below the current fence minimum instead of
+# restarting a release the fence no longer allows; maintenance stays up.
+run_case restore_below_fence fail --rollback v0.5.0
+f=$work/restore_below_fence.calls
+absent "$f" "$prev_app_up"
+absent "$f" "$down_maintenance"
+grep -qF "is below the fence minimum" "$work/restore_below_fence.out" ||
+  { echo "restore_below_fence: no below-fence message" >&2; exit 1; }
+
 # Bringing the maintenance page up can lose its steady-state confirmation. The
 # recovery path must not start the previous app if it cannot prove that
 # maintenance released host port 443.
@@ -359,6 +418,160 @@ absent "$f" "deploy-migrate"
 for calls in "$work"/*.calls; do
   absent "$calls" "delete-db-snapshot"
 done
+
+# The release fence blocks a target below its minimum before any mutation.
+run_case fence_lower fail v0.1.0
+f=$work/fence_lower.calls
+absent "$f" "rds create-db-snapshot"
+absent "$f" "ecs register-task-definition"
+absent "$f" "ecs update-service"
+absent "$f" "scheduler update-schedule"
+grep -qF "below the release fence minimum" "$work/fence_lower.out" ||
+  { echo "fence_lower: no fence-minimum message" >&2; exit 1; }
+
+# An equal target is accepted without lowering or rewriting the fence: a
+# normal deploy never raises it.
+run_case fence_equal 0 v0.1.0
+absent "$work/fence_equal.calls" "minimum_release=:c, minimum_tag=:t"
+
+# A present but malformed fence item blocks before any mutation.
+run_case fence_malformed fail v0.1.0
+absent "$work/fence_malformed.calls" "ecs register-task-definition"
+grep -qF "release fence item is malformed" "$work/fence_malformed.out" ||
+  { echo "fence_malformed: no malformed-item message" >&2; exit 1; }
+
+# A missing fence item blocks unless the running app proves enrollment off.
+run_case fence_missing_enrolled fail v0.1.0
+absent "$work/fence_missing_enrolled.calls" "ecs register-task-definition"
+grep -qF "does not prove passkey enrollment off" "$work/fence_missing_enrolled.out" ||
+  { echo "fence_missing_enrolled: no enrollment message" >&2; exit 1; }
+
+# OpenTofu creates aboutme-prod-app with its own placeholder task definition
+# at desired count 0, so a fresh host never reports an absent service; the
+# plain "first" case above already exercises that real, untouched-placeholder
+# shape and proves the true-first-deploy path still succeeds. This case is
+# the other shape at the same zero counts: a real prior deploy stamp, proving
+# --first-deploy checks the stamp, not just running and desired counts.
+run_case fence_first_already_running fail v0.1.0 --first-deploy
+absent "$work/fence_first_already_running.calls" "ecs register-task-definition"
+grep -qF "already runs" "$work/fence_first_already_running.out" ||
+  { echo "fence_first_already_running: no already-runs message" >&2; exit 1; }
+
+# A read error on the missing-item check fails closed, not open.
+run_case fence_missing_describe_error fail v0.1.0
+absent "$work/fence_missing_describe_error.calls" "ecs register-task-definition"
+grep -qF "could not read the running app service" "$work/fence_missing_describe_error.out" ||
+  { echo "fence_missing_describe_error: no read-failure message" >&2; exit 1; }
+
+# fence_read checks the service's actual running revision, not a family's
+# latest: a newer, not-yet-deployed registration with enrollment on must not
+# block a deploy while the service itself still proves enrollment off.
+run_case fence_running_revision_differs 0 v0.1.0
+
+# An existing operation fails lock acquisition before any other mutation.
+run_case fence_locked fail v0.1.0
+f=$work/fence_locked.calls
+absent "$f" "rds create-db-snapshot"
+absent "$f" "ecs register-task-definition"
+
+# An uncertain lock result that a strong read proves this process owns
+# proceeds normally; one that proves a foreign owner stops without a retry.
+run_case fence_uncertain_owned 0 v0.1.0
+run_case fence_uncertain_foreign fail v0.1.0
+f=$work/fence_uncertain_foreign.calls
+absent "$f" "ecs register-task-definition"
+[[ $(count "$f" "SET operation_id=:o, operation_kind=:k") == 1 ]] ||
+  { echo "fence_uncertain_foreign: retried lock acquisition" >&2; exit 1; }
+
+# A ConditionalCheckFailedException on lock acquisition can be an SDK retry
+# of this exact request seeing its own success, not a foreign owner. The
+# same strong read that resolves an uncertain result also resolves this one.
+run_case fence_lock_retry_success 0 v0.1.0
+[[ $(count "$work/fence_lock_retry_success.calls" "SET operation_id=:o, operation_kind=:k") == 1 ]] ||
+  { echo "fence_lock_retry_success: retried lock acquisition" >&2; exit 1; }
+
+# A mid-deploy checkpoint failure stops before the guarded mutation, and the
+# lock this process holds is still released.
+run_case fence_checkpoint_fails fail v0.1.0
+f=$work/fence_checkpoint_fails.calls
+absent "$f" "rds create-db-snapshot"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "fence_checkpoint_fails: lock was not released" >&2; exit 1; }
+
+# A checkpoint failure right after maintenance comes down (section 8, just
+# before the app start it guards) must not leave the site fully dark:
+# recovery brings maintenance back up rather than leaving both it and the
+# app at zero.
+run_case checkpoint_fails_after_maintenance_down fail v0.1.0
+f=$work/checkpoint_fails_after_maintenance_down.calls
+grep -qF -- "$down_maintenance" "$f" ||
+  { echo "checkpoint_fails_after_maintenance_down: maintenance never came down" >&2; exit 1; }
+[[ $(count "$f" "$up_maintenance") == 2 ]] ||
+  { echo "checkpoint_fails_after_maintenance_down: maintenance was not restored after coming down" >&2; exit 1; }
+absent "$f" "$start_app"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "checkpoint_fails_after_maintenance_down: lock was not released" >&2; exit 1; }
+
+# A checkpoint failure right after a migration leaves the maintenance page up
+# rather than attempting an unproved app start.
+run_case checkpoint_fails_after_migration fail v0.1.0
+f=$work/checkpoint_fails_after_migration.calls
+grep -qF -- "$up_maintenance" "$f" ||
+  { echo "checkpoint_fails_after_migration: maintenance page not left up" >&2; exit 1; }
+absent "$f" "$start_web"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "checkpoint_fails_after_migration: lock was not released" >&2; exit 1; }
+
+# --activate only raises the fence: no image, ECS, snapshot, or notification
+# mutation, whether the raise succeeds or a race fails it after the lock.
+run_case fence_activate 0 --activate v0.1.0
+f=$work/fence_activate.calls
+absent "$f" "ecs register-task-definition"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "cloudwatch disable-alarm-actions"
+grep -qF "raised the release fence to v0.1.0" "$work/fence_activate.out" ||
+  { echo "fence_activate: no raise message" >&2; exit 1; }
+
+run_case fence_raise_race fail --activate v0.1.0
+f=$work/fence_raise_race.calls
+absent "$f" "ecs register-task-definition"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "fence_raise_race: lock was not released after a failed raise" >&2; exit 1; }
+
+# Activation requires the running app service to already be the exact
+# candidate; a tag that is not what the service runs is refused before the
+# lock is ever acquired.
+run_case fence_activate_not_running fail --activate v0.1.0
+f=$work/fence_activate_not_running.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+grep -qF "not the activation candidate" "$work/fence_activate_not_running.out" ||
+  { echo "fence_activate_not_running: no release-mismatch message" >&2; exit 1; }
+
+# A candidate that never reaches the fence (CI is not green) never acquires
+# or releases the lock: a crash before the lock exists leaves nothing to
+# clear, unlike a crash after acquisition, which the runbook's manual clear
+# then owns.
+run_case fence_ci_fails fail v0.1.0
+f=$work/fence_ci_fails.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "REMOVE operation_id"
+
+# An early verify_role failure, well before on_exit's full trap replaces the
+# minimal one installed right after mktemp, must still not leave deploy.sh's
+# own temp directory behind in TMPDIR.
+tmproot=$work/verify_role_fails.tmproot
+mkdir -p "$tmproot"
+set +e
+CALLS="$work/verify_role_fails.calls" STUB_DIR="$work" STUB_CASE="verify_role_fails" PATH="$work/bin:$PATH" \
+  AWS_CONFIG_FILE="$work/no-such-aws-config" AWS_PROFILE=test-base TMPDIR="$tmproot" \
+  DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 bash "$here/deploy.sh" v0.1.0 >"$work/verify_role_fails.out" 2>&1
+got=$?
+set -e
+((got != 0)) || { echo "verify_role_fails: exit 0, want failure" >&2; exit 1; }
+grep -qF "not an assumed-role session" "$work/verify_role_fails.out" ||
+  { echo "verify_role_fails: no identity-mismatch message" >&2; exit 1; }
+[ -z "$(ls -A "$tmproot")" ] ||
+  { echo "verify_role_fails: left a temp directory behind in TMPDIR" >&2; exit 1; }
 
 run_case usage 2
 echo "deploy-script-test: ok"

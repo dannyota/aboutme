@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Deploys a tagged release to aboutme-prod. See docs/runbooks/production.md.
+# Deploys a tagged release to aboutme-prod. See docs/runbooks/production.md
+# and docs/design/passkey-release-fence.md.
 #
 #   deploy.sh <tag>                  normal deploy
 #   deploy.sh <tag> --first-deploy   also creates roles, grants, and logins
 #   deploy.sh --rollback <tag>       earlier images, no snapshot, no migration
+#   deploy.sh --activate <tag>       raises the release fence; no ECS change
 #
-# Order: build revisions, check that every task secret exists, snapshot,
-# register revisions, stop jobs and app, swap in the maintenance page, migrate,
-# start web, swap maintenance back out, start app, re-enable jobs, smoke. The
-# maintenance and app services bind the same host port, so exactly one of them
-# is ever asked to run at once. The release-snapshot-sweep job deletes this
-# script's tagged snapshots once they are more than 27 days old, before they
-# reach 30.
+# Every mode assumes the operator role, strongly reads the release fence,
+# assumes the deploy role, and holds one operation lock across the run (see
+# the sourced fence.sh). Order: build revisions, check that every task secret
+# exists, snapshot, register revisions, stop jobs and app, swap in the
+# maintenance page, migrate, start web, swap maintenance back out, start app,
+# re-enable jobs, smoke. The maintenance and app services bind the same host
+# port, so exactly one of them is ever asked to run at once. The
+# release-snapshot-sweep job deletes this script's tagged snapshots once they
+# are more than 27 days old, before they reach 30.
 #
 # Any failure after the app stops restores the previous app before a migration,
 # or leaves maintenance up after a database task may have run. A failed ECS
@@ -34,22 +38,43 @@ snapshot_tag_key=aboutme:created-by
 snapshot_tag_value=deploy.sh
 
 usage() {
-  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag>" >&2
+  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag> | deploy.sh --activate <tag>" >&2
   exit 2
 }
 first=0
 rollback=0
+activate=0
 case "$#:${1:-}:${2:-}" in
   2:--rollback:?*) rollback=1 tag=$2 ;;
+  2:--activate:?*) activate=1 tag=$2 ;;
   1:[!-]*:) tag=$1 ;;
   2:[!-]*:--first-deploy) first=1 tag=$1 ;;
   *) usage ;;
 esac
+operation_kind=deploy
+((!rollback)) || operation_kind=rollback
+((!activate)) || operation_kind=activate
 
-aws_() { aws --region "$region" "$@"; }
-aws_site_alarm_() { aws --region "$site_alarm_region" "$@"; }
 say() { printf 'deploy: %s\n' "$*" >&2; }
+
+# A strict vMAJOR.MINOR.PATCH tag, no leading zero, components 0 through 999,
+# maps to MAJOR*1000000 + MINOR*1000 + PATCH. Defined here, before fence.sh is
+# sourced, so a malformed tag is rejected before any AWS credential or config
+# work; fence_read reuses this same function afterward.
+release_number() {
+  [[ $1 =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] || return 1
+  echo $(( 10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} ))
+}
+candidate=$(release_number "$tag") || { say "$tag is not a strict vMAJOR.MINOR.PATCH tag"; exit 1; }
+
 work=$(mktemp -d)
+# Cleared as soon as fence.sh's role and identity work needs it, so an early
+# exit (a malformed tag, a failed identity check) never leaves it behind;
+# on_exit below replaces this trap with the full cleanup once it is defined.
+trap 'rm -rf "$work"' EXIT
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=fence.sh
+source "$script_dir/fence.sh"
 
 # Shared by the mid-deploy maintenance-page check and the final smoke checks.
 smoke_attempts=5
@@ -128,6 +153,7 @@ pause_deploy_notifications() {
   say "deployment notification states: site-down actions=$actions, task-stopped rule=$state"
 
   if [[ $actions == True ]]; then
+    fence_checkpoint || { say "fence checkpoint failed before pausing notifications"; return 1; }
     # Mark first because AWS can accept a request even when the client loses its
     # response. Cleanup must then treat the action as possibly disabled.
     site_alarm_restore=1
@@ -146,6 +172,7 @@ pause_deploy_notifications() {
   fi
 
   if [[ $state == ENABLED ]]; then
+    fence_checkpoint || { say "fence checkpoint failed before pausing notifications"; return 1; }
     task_stopped_rule_restore=1
     if ! aws_ events disable-rule --name aboutme-prod-task-stopped >/dev/null; then
       say "could not disable the task-stopped notification rule"
@@ -163,6 +190,9 @@ pause_deploy_notifications() {
 
 on_exit() {
   local status=$? cleanup_failed=0
+  # A second HUP/INT/TERM during cleanup must not re-enter on_signal and race
+  # this same restore/release sequence against itself.
+  trap '' HUP INT TERM
   if ((status != 0)) && [[ $phase == changing ]]; then
     # Keep notification cleanup reachable even when a recovery safety check
     # fails. The deployment's original nonzero status still wins.
@@ -171,6 +201,8 @@ on_exit() {
     fi
   fi
   restore_deploy_notifications || cleanup_failed=1
+  ((!lock_held)) || fence_release ||
+    { say "could not release the operation lock; the runbook owns the manual clear"; cleanup_failed=1; }
   rm -rf "$work"
   ((cleanup_failed)) && status=1
   exit "$status"
@@ -193,14 +225,21 @@ digest() { # image name -> sha256:...
     tr -d '\r' | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }'
 }
 
-current_def() {
-  aws_ ecs describe-task-definition --task-definition "aboutme-prod-$1" --query taskDefinition --output json
+current_def() { describe_task_def "aboutme-prod-$1"; }
+# Unlike current_def, takes an exact family:revision or full ARN rather than
+# assuming the family's latest registration; fence_read uses it to prove what
+# a service actually runs, not what was most recently registered.
+describe_task_def() {
+  aws_ ecs describe-task-definition --task-definition "$1" --query taskDefinition --output json
 }
 
 # The app and maintenance services both bind host port 443, so only one of
 # them ever runs at once. Scaling a service to zero also waits for its actual
 # tasks to stop, not just for the service to report stable, so the host port
 # is deterministically free before the other service is asked to claim it.
+# A scale-down is never fence-checkpointed: it is always safe to attempt, and
+# gating it could strand a stop half-done. Only the image start that follows
+# is checkpointed, by its own caller.
 scale_to_zero_and_wait() { # service
   local task running_tasks stopping_tasks
   local -a tasks=()
@@ -230,6 +269,9 @@ scale_to_zero_and_wait() { # service
 # maintenance_up starts the just-registered revision (so a release's Caddy
 # image takes effect during the window).
 maintenance_up() {
+  # Never fence-checkpointed: Caddy's maintenance page carries no release or
+  # enrollment logic, and restore() relies on it as a safety net that must
+  # stay reachable even when a genuine lock loss blocks the app itself.
   aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-maintenance \
     --task-definition "${revision[maintenance]}" --desired-count 1 >/dev/null || return 1
   aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-maintenance || return 1
@@ -243,6 +285,31 @@ commit=$(git rev-list -n1 "$tag")
 git merge-base --is-ancestor "$commit" origin/main || { say "$tag is not on main"; exit 1; }
 ci=$(gh run list --workflow ci.yml --commit "$commit" --json conclusion -q '.[0].conclusion')
 [[ $ci == success ]] || { say "CI for $tag is '$ci', not success"; exit 1; }
+
+fence_read || exit 1
+((candidate >= fence_min)) ||
+  { say "$tag ($candidate) is below the release fence minimum $fence_min_tag ($fence_min)"; exit 1; }
+
+# --activate only raises the fence, while the activation operation holds the
+# lock: no image, ECS, snapshot, or notification mutation. It requires the
+# running app service to already be the exact stable candidate, so the raise
+# always describes a release already healthy in production.
+if ((activate)); then
+  service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
+    { say "could not read the running app service"; exit 1; }
+  service_td=$(jq -r '.services[0].taskDefinition // empty' <<<"$service")
+  running_count=$(jq -r '.services[0].runningCount // 0' <<<"$service")
+  desired_count=$(jq -r '.services[0].desiredCount // 0' <<<"$service")
+  [[ -n $service_td ]] && ((running_count > 0)) && ((running_count == desired_count)) ||
+    { say "the running app service is not stable; activation requires a healthy running app"; exit 1; }
+  service_release=$(task_def_release_number "$service_td") || { say "could not verify the running app's release"; exit 1; }
+  [[ $service_release == "$candidate" ]] ||
+    { say "the running app is release $service_release, not the activation candidate $candidate"; exit 1; }
+  fence_lock || exit 1
+  fence_raise || exit 1
+  say "raised the release fence to $tag ($candidate)"
+  exit 0
+fi
 
 declare -A image
 for name in server web caddy; do
@@ -264,21 +331,29 @@ maintenance_status=$(aws_ ecs describe-services --cluster "$cluster" --services 
   { say "the aboutme-prod-maintenance service does not exist (status: $maintenance_status); run tofu apply first"; exit 1; }
 
 # 2. Build revisions with the release images. A rollback keeps the current
-# maintenance image because older Caddy images do not contain maintenance mode.
+# maintenance image, because older Caddy images do not contain maintenance
+# mode, and its release stamp, since that image is not the rollback target.
 for family in "${families[@]}"; do
   caddy_image=${image[caddy]}
+  stamp_tag=$tag
+  stamp_rel=$candidate
   if ((rollback)) && [[ $family == maintenance ]]; then
     caddy_image=$(current_def maintenance | jq -r '.containerDefinitions[] | select(.name == "caddy") | .image')
     [[ -n $caddy_image && $caddy_image != null ]] || { say "no current maintenance Caddy image"; exit 1; }
+    read -r stamp_tag stamp_rel < <(current_def maintenance | jq -r '.containerDefinitions[] | select(.name == "caddy")
+      | (.environment // []) as $e | [($e[]? | select(.name=="DEPLOY_RELEASE_TAG").value), ($e[]? | select(.name=="DEPLOY_RELEASE_NUMBER").value)] | @tsv')
+    [[ -n $stamp_tag && -n $stamp_rel ]] || { stamp_tag=$tag; stamp_rel=$candidate; }
   fi
   current_def "$family" | jq \
-    --arg server "${image[server]}" --arg web "${image[web]}" --arg caddy "$caddy_image" '
+    --arg server "${image[server]}" --arg web "${image[web]}" --arg caddy "$caddy_image" \
+    --arg tag "$stamp_tag" --argjson rel "$stamp_rel" '
     .containerDefinitions |= map(
       .image = (if .name == "caddy" then $caddy elif .name == "web" then $web else $server end)
-      | .environment = ((.environment // []) | map(
+      | .environment = (((.environment // []) | map(
           if .name == "APP_BUILD_DIGEST" then .value = $server
           elif .name == "PUBLIC_RENDERER_BUILD_DIGEST" then .value = $web
-          else . end)))
+          else . end) | map(select(.name != "DEPLOY_RELEASE_TAG" and .name != "DEPLOY_RELEASE_NUMBER")))
+          + [{name:"DEPLOY_RELEASE_TAG",value:$tag},{name:"DEPLOY_RELEASE_NUMBER",value:($rel|tostring)}]))
     | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions,
        requiresCompatibilities, volumes}
     | with_entries(select(.value != null))' >"$work/$family.json"
@@ -294,10 +369,10 @@ secret_exists() { # valueFrom: SSM parameter ARN or name, or Secrets Manager ARN
   case $ref in
     arn:aws:secretsmanager:*)
       # Drop any :json-key:version-stage:version-id suffix.
-      aws --region "$region_" secretsmanager describe-secret --secret-id "$(cut -d: -f1-7 <<<"$ref")" \
+      aws_dep_ "$region_" secretsmanager describe-secret --secret-id "$(cut -d: -f1-7 <<<"$ref")" \
         --query ARN --output text >/dev/null 2>&1 ;;
     arn:aws:ssm:*)
-      [[ $(aws --region "$region_" ssm describe-parameters --parameter-filters "Key=Name,Values=${ref#*:parameter}" \
+      [[ $(aws_dep_ "$region_" ssm describe-parameters --parameter-filters "Key=Name,Values=${ref#*:parameter}" \
         --query 'length(Parameters)' --output text 2>/dev/null) == 1 ]] ;;
     *)
       [[ $(aws_ ssm describe-parameters --parameter-filters "Key=Name,Values=$ref" \
@@ -317,8 +392,11 @@ while IFS= read -r ref; do
 done < <(sort -u <<<"$refs")
 ((!missing)) || { say "create the missing secrets, or turn off the setting that needs them, then rerun"; exit 1; }
 
+fence_lock || exit 1
+
 # 4. Snapshot.
 if ((!rollback)); then
+  fence_checkpoint || exit 1
   snap="aboutme-prod-${tag//./-}-$(date -u +%Y%m%d%H%M)"
   aws_ rds create-db-snapshot --db-instance-identifier aboutme-prod --db-snapshot-identifier "$snap" \
     --tags "Key=$snapshot_tag_key,Value=$snapshot_tag_value" >/dev/null
@@ -327,6 +405,7 @@ if ((!rollback)); then
 fi
 
 # 5. Register the revisions.
+fence_checkpoint || exit 1
 declare -A revision
 for family in "${families[@]}"; do
   revision[$family]=$(aws_ ecs register-task-definition --cli-input-json "file://$work/$family.json" \
@@ -338,6 +417,7 @@ say "registered revisions for $tag"
 schedules=$(aws_ scheduler list-schedules --group-name "$group" --query 'Schedules[].Name' --output text)
 declare -A schedule_state
 set_schedule() { # name state [task-definition]
+  fence_checkpoint || return 1
   aws_ scheduler get-schedule --group-name "$group" --name "$1" --output json |
     jq --arg s "$2" --arg td "${3:-}" '{Name, GroupName, ScheduleExpression, ScheduleExpressionTimezone,
       FlexibleTimeWindow, Target, Description, StartDate, EndDate, KmsKeyArn,
@@ -409,6 +489,22 @@ restore() {
     fi
     return
   fi
+  # One checkpoint covers the whole sequence below: it runs before
+  # maintenance is touched, so a transient checkpoint failure never leaves
+  # maintenance down with no app started to replace it. A genuine
+  # below-the-fence previous release is refused the same way, before either
+  # service changes.
+  if ! fence_checkpoint; then
+    say "operation lock or release floor no longer holds; leaving maintenance up"
+    return
+  fi
+  local prev_release
+  prev_release=$(task_def_release_number "$previous_app") ||
+    { say "could not verify the previous app's release; leaving maintenance up"; return; }
+  if ((prev_release < fence_min)); then
+    say "the previous app's release ($prev_release) is below the fence minimum ($fence_min); leaving maintenance up"
+    return
+  fi
   say "failed; restoring the previous app and job schedules"
   # Turn the maintenance page off before the app comes back: both bind host
   # port 443, so bringing the app up first would fail to place.
@@ -470,6 +566,7 @@ fi
 
 # 7. Database steps.
 run_once() { # family
+  fence_checkpoint || return 1
   local code
   [[ $1 != migrate ]] || migration_may_be_applied=1
   oneshot_task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
@@ -491,6 +588,7 @@ if ((!rollback)); then
 fi
 
 # 8. Start the release.
+fence_checkpoint || exit 1
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-web \
   --task-definition "${revision[web]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-web
@@ -502,6 +600,7 @@ maintenance_down
 say "maintenance down"
 
 app_start_requested=1
+fence_checkpoint || exit 1
 aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
   --task-definition "${revision[app]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
@@ -523,7 +622,9 @@ status_ok() { # path
 }
 hsts_ok() { curl -fsSI https://aboutme.vn/ | grep -qi '^strict-transport-security:'; }
 origin_ip() {
-  smoke_ip=$(aws_ ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
+  # ec2:DescribeAddresses is outside the deploy role's closed list; this
+  # smoke-only read uses the base caller's own credentials instead.
+  smoke_ip=$(aws --region "$region" ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
     --query 'Addresses[0].PublicIp' --output text) &&
     [[ $smoke_ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]
 }
