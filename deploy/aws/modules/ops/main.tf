@@ -227,11 +227,14 @@ resource "aws_cloudwatch_metric_alarm" "host_recover" {
 
 # ---- Site health (Route 53 metrics exist only in us-east-1) ----
 
+# Readiness includes the database, so the site-down alarm fires when users
+# cannot use the site. The ECS container check stays on /healthz so a database
+# outage never restarts a healthy task.
 resource "aws_route53_health_check" "site" {
   fqdn              = "aboutme.vn"
   port              = 443
   type              = "HTTPS"
-  resource_path     = "/healthz"
+  resource_path     = "/readyz"
   request_interval  = 30
   failure_threshold = 3
   tags              = { Name = "${var.name}-site" }
