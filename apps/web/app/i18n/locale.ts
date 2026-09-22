@@ -30,6 +30,7 @@ export function isLocale(value: unknown): value is Locale {
 const localizedPaths: ReadonlySet<string> = new Set([
   '/',
   '/login',
+  '/login/second-factor',
   '/register',
   '/forgot-password',
   '/reset-password',

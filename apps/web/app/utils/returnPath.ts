@@ -88,3 +88,35 @@ export function validateReturnPath(value: unknown): string | null {
   }
   return value;
 }
+
+// Every path this app's client (Vue) router renders itself. A validated
+// return path outside this set is still a legitimate same-origin
+// destination — for example `/oauth/authorize`, served by the Go backend —
+// so it needs a real browser navigation instead of a client-side route
+// change, which would otherwise land on nothing the router can match.
+const APP_ROUTE_PATTERNS: readonly RegExp[] = [
+  /^\/$/u,
+  /^\/login$/u,
+  /^\/login\/second-factor$/u,
+  /^\/register$/u,
+  /^\/forgot-password$/u,
+  /^\/reset-password$/u,
+  /^\/verify-email$/u,
+  /^\/authorize$/u,
+  /^\/privacy$/u,
+  /^\/terms$/u,
+  /^\/templates(?:\/[^/]+)?$/u,
+  /^\/app\/new$/u,
+  /^\/app\/resumes(?:\/[^/]+)?$/u,
+  /^\/app\/settings\/sessions$/u,
+];
+
+/**
+ * True when `path` is a page this app's own client router can render.
+ * Deliberately exact: an unrecognized path defaults to `false` (a real
+ * browser navigation) rather than risking a client-side dead end.
+ */
+export function isAppRoute(path: string): boolean {
+  const pathname = path.split(/[?#]/u, 1)[0] ?? '';
+  return APP_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
+}

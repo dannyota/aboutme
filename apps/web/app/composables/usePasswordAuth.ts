@@ -12,6 +12,15 @@
  * local/session storage, an error object, a logger, or analytics. All
  * requests send `credentials: 'include'` so the `__Host-session` cookie (and
  * its exact same-origin pair) travel with the call.
+ *
+ * `login` distinguishes the existing unenrolled `204` from the `202`
+ * `{data:{secondFactorRequired:true}}` an enrolled account now receives (see
+ * docs/design/passkey-second-factor-contract.md): only the pending cookie is
+ * set, and the caller must navigate to the fixed `/login/second-factor`
+ * path, never a computed or server-echoed one. Its optional `next` is
+ * validated server-side the same way as provider login's return path; the
+ * enrolled case carries it on the pending row instead of an immediate
+ * client-side navigation.
  */
 
 export type PasswordIssue = 'length' | 'common' | 'breached';
@@ -38,6 +47,16 @@ export class PasswordAuthFailure extends Error {
   }
 }
 
+/** `login`'s result: which of the two closed success outcomes occurred. */
+export interface PasswordLoginResult {
+  /**
+   * True when the account is enrolled in a second factor: no session was
+   * issued, only the pending cookie. False is the existing unenrolled `204`
+   * with a session.
+   */
+  secondFactorRequired: boolean;
+}
+
 export interface UsePasswordAuth {
   register(input: {
     name: string;
@@ -45,7 +64,11 @@ export interface UsePasswordAuth {
     password: string;
   }): Promise<void>;
   verify(token: string): Promise<void>;
-  login(input: { email: string; password: string }): Promise<void>;
+  login(input: {
+    email: string;
+    password: string;
+    next?: string;
+  }): Promise<PasswordLoginResult>;
   forgot(email: string): Promise<void>;
   reset(input: { token: string; password: string }): Promise<void>;
 }
@@ -139,6 +162,38 @@ async function post(
   }
 }
 
+interface SecondFactorRequiredBody {
+  data?: { secondFactorRequired?: unknown };
+}
+
+/**
+ * `POST /auth/password/login`. Reads the status code rather than trusting
+ * body shape alone: only an exact `202` with `secondFactorRequired: true`
+ * counts as the pending outcome, so a `204` (or anything unexpected) never
+ * accidentally routes an unenrolled login into the pending flow.
+ */
+async function login(
+  input: { email: string; password: string; next?: string },
+): Promise<PasswordLoginResult> {
+  const body: Record<string, unknown> = {
+    email: input.email,
+    password: input.password,
+  };
+  if (input.next) body.next = input.next;
+  try {
+    const response = await $fetch.raw<SecondFactorRequiredBody | null>(
+      '/api/v1/auth/password/login',
+      { method: 'POST', body, credentials: 'include' },
+    );
+    return {
+      secondFactorRequired: response.status === 202
+        && response._data?.data?.secondFactorRequired === true,
+    };
+  } catch (error) {
+    throw mapPasswordAuthError(error);
+  }
+}
+
 export function usePasswordAuth(): UsePasswordAuth {
   return {
     async register(input) {
@@ -147,9 +202,7 @@ export function usePasswordAuth(): UsePasswordAuth {
     async verify(token) {
       await post('/api/v1/auth/password/verify', { token });
     },
-    async login(input) {
-      await post('/api/v1/auth/password/login', input);
-    },
+    login,
     async forgot(email) {
       await post('/api/v1/auth/password/forgot', { email });
     },
