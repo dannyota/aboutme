@@ -452,12 +452,26 @@ grep -Fq 'async function warmRoutes(' "$SECOND_FACTOR_SPEC" ||
 if grep -Fq 'waitForHydration' "$SECOND_FACTOR_SPEC"; then
   fail 'second-factor proof uses the unbounded shared hydration wait'
 fi
-warm_paths=$(grep -cE "^  \['/[a-z/-]*', 'warm-[a-z-]+'\],$" "$SECOND_FACTOR_SPEC")
-[ "$warm_paths" -ge 11 ] ||
+warm_paths=$(grep -cE "^  \['/[a-z/-]*', '[a-z0-9-]+'\],$" "$SECOND_FACTOR_SPEC")
+[ "$warm_paths" -ge 9 ] ||
   fail 'the warm route table lost entries'
-if grep -oE "'warm-[^']*'" "$SECOND_FACTOR_SPEC" |
-  grep -vqE "^'warm-[a-z0-9-]+'$"; then
-  fail 'a second-factor warm stage name is outside the runner vocabulary'
+grep -Fq "stage(\`warm-\${token}\`);" "$SECOND_FACTOR_SPEC" ||
+  fail 'a warm visit no longer names its page'
+# Each warm visit is judged on its own, so a page that dirties a counter
+# names itself and the counter class before the assertion fails.
+grep -Fq "if (dirty !== null) stage(\`warm-dirty-\${token}-\${dirty}\`);" \
+  "$SECOND_FACTOR_SPEC" ||
+  fail 'a dirty warm visit no longer names its page and counter'
+grep -Fq 'const before = { ...counters };' "$SECOND_FACTOR_SPEC" ||
+  fail 'the warm pass no longer checks the counters per page'
+grep -Fq "type CounterClass = 'certificate' | 'console' | 'external' | 'page';" \
+  "$SECOND_FACTOR_SPEC" ||
+  fail 'the warm counter classes are no longer a closed set'
+# A page that needs a session is warmed with one, not signed out.
+grep -Fq 'const SIGNED_IN_WARM_ROUTES' "$SECOND_FACTOR_SPEC" ||
+  fail 'the signed-in warm pass is gone'
+if grep -qE "^  \['/app/[a-z/-]*', '[a-z0-9-]+'\],$" <<<"$(sed -n '/^const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")"; then
+  fail 'an app page is warmed while signed out'
 fi
 # The landing of a sign-in or a completion is named from that closed set, not
 # waited on as one exact path: an app route this proof did not predict must be
@@ -476,7 +490,7 @@ fi
 grep -Fq 'const actionTimeout = secondFactor ? 20_000' \
   "$SOURCE/playwright.config.ts" ||
   fail 'second-factor actions are not bounded'
-grep -Fq 'const navigationTimeout = secondFactor ? 60_000' \
+grep -Fq 'const navigationTimeout = secondFactor ? 120_000' \
   "$SOURCE/playwright.config.ts" ||
   fail 'second-factor navigations are not bounded'
 grep -Fqx '    actionTimeout,' "$SOURCE/playwright.config.ts" ||

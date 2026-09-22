@@ -60,8 +60,11 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
 // read by nobody and every mode runs unbounded. Bounding another mode's proof
 // needs its own brief, so every mode but this one keeps the unlimited default
 // it runs with today.
+// The navigation bound covers one landing per journey that reaches an app
+// page before the signed-in warm pass has run, so it is wider than an
+// ordinary warm navigation needs.
 const actionTimeout = secondFactor ? 20_000 : 0;
-const navigationTimeout = secondFactor ? 60_000 : 0;
+const navigationTimeout = secondFactor ? 120_000 : 0;
 
 export default defineConfig({
   forbidOnly: true,
