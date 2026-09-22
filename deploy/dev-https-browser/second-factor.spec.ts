@@ -43,6 +43,7 @@ import {
   installExternalWebSocketFirewall,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
+  type DiagnosticCounters,
   signInWithGoogle,
 } from './harness-lib';
 import {
@@ -649,32 +650,67 @@ async function setLocale(
  * proof's console filter already accepts.
  */
 const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
-  ['/register', 'warm-register'],
-  ['/verify-email', 'warm-verify-email'],
-  ['/login', 'warm-login'],
-  ['/login/second-factor', 'warm-login-second-factor'],
-  ['/forgot-password', 'warm-forgot-password'],
-  ['/reset-password', 'warm-reset-password'],
-  ['/app/resumes', 'warm-app-resumes'],
-  ['/app/settings/sessions', 'warm-app-settings-sessions'],
+  ['/register', 'register'],
+  ['/verify-email', 'verify-email'],
+  ['/login', 'login'],
+  ['/login/second-factor', 'login-second-factor'],
+  ['/forgot-password', 'forgot-password'],
+  ['/reset-password', 'reset-password'],
 ];
 
-/** The pages the disabled-enrollment journey opens. */
+/**
+ * Pages that require a session. Warming these signed out would make the
+ * account reads behind them answer 401, which is correct behaviour but noise
+ * this proof would then have to accept everywhere, so they are warmed once
+ * the journey has a session instead. The one landing that reaches an app
+ * page before that runs under the landing bound.
+ */
+const SIGNED_IN_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
+  ['/app/resumes', 'app-resumes'],
+  ['/app/settings/sessions', 'app-settings-sessions'],
+];
+
+/** The signed-out page the disabled-enrollment journey opens first. */
 const DISABLED_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
-  ['/login', 'warm-login'],
-  ['/app/resumes', 'warm-app-resumes'],
-  ['/app/settings/sessions', 'warm-app-settings-sessions'],
+  ['/login', 'login'],
 ];
 
-/** Opens each route once, so its first compile happens in a named stage. */
+/** The counter classes a warm visit may move, as closed words. */
+type CounterClass = 'certificate' | 'console' | 'external' | 'page';
+
+/** The first counter class that moved, or null when the visit was clean. */
+function dirtiedCounter(
+  before: DiagnosticCounters,
+  after: DiagnosticCounters,
+): CounterClass | null {
+  if (after.certificateErrors !== before.certificateErrors) {
+    return 'certificate';
+  }
+  if (after.consoleErrors !== before.consoleErrors) return 'console';
+  if (after.externalRequests !== before.externalRequests) return 'external';
+  if (after.pageErrors !== before.pageErrors) return 'page';
+  return null;
+}
+
+/**
+ * Opens each route once, so its first compile happens in a stage that names
+ * it, and checks the diagnostic counters after every visit rather than once
+ * at the end. A page that dirties a counter names itself and the counter
+ * class before the assertion fails.
+ */
 async function warmRoutes(
   page: Page,
   routes: ReadonlyArray<readonly [string, string]>,
+  counters: DiagnosticCounters,
 ): Promise<void> {
-  for (const [path, name] of routes) {
-    stage(name);
+  for (const [path, token] of routes) {
+    stage(`warm-${token}`);
+    const before = { ...counters };
     await page.goto(path, { timeout: WAIT_WARM_MS });
     await hydrated(page, WAIT_WARM_MS);
+    const dirty = dirtiedCounter(before, counters);
+    if (dirty !== null) stage(`warm-dirty-${token}-${dirty}`);
+    expect(dirty).toBeNull();
   }
 }
 
@@ -1017,9 +1053,7 @@ test('proves the passkey second factor over native HTTPS', async ({
   await setLocale(context, 'en');
   await page.setViewportSize(DESKTOP);
 
-  await warmRoutes(page, WARM_ROUTES);
-  stage('warm-clean');
-  expect({ ...counters }).toEqual(newDiagnosticCounters());
+  await warmRoutes(page, WARM_ROUTES, counters);
 
   stage('capture-reset');
   const ca = await readFile(CA_PATH);
@@ -1061,6 +1095,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     stage('primary-first-sign-in');
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('session');
+    await warmRoutes(page, SIGNED_IN_WARM_ROUTES, counters);
 
     stage('primary-open-settings');
     await gotoHydrated(page, '/app/settings/sessions');
@@ -1569,15 +1604,14 @@ test('proves disabled passkey enrollment answers as an unregistered route',
 
     try {
       role('disabled');
-      await warmRoutes(page, DISABLED_WARM_ROUTES);
-      stage('warm-clean');
-      expect({ ...counters }).toEqual(newDiagnosticCounters());
+      await warmRoutes(page, DISABLED_WARM_ROUTES, counters);
 
       stage('disabled-capability');
       await signInWithGoogle(page, {
         accountLabel: DISABLED_ACCOUNT_LABEL,
         fromLoginPage: true,
       });
+      await warmRoutes(page, SIGNED_IN_WARM_ROUTES, counters);
       const capability = await page.evaluate(async () => {
         const response = await fetch('/api/v1/capabilities', {
           cache: 'no-store',
