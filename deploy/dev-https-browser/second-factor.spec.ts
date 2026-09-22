@@ -218,6 +218,83 @@ function callbackCategory(value: string): string {
   }
 }
 
+/** Every landing that means the browser holds a signed-in app session. */
+const APP_LANDINGS: readonly string[] = [
+  'landing-app-new',
+  'landing-app-other',
+  'landing-app-resume',
+  'landing-app-resumes',
+  'landing-app-settings',
+];
+
+/**
+ * Names where a sign-in or a pending completion landed, from a closed set.
+ * The proof asserts the class of destination it depends on, not one exact
+ * path, so an app route this spec did not predict is named rather than
+ * waited on until the budget runs out.
+ */
+function landingCategory(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return 'landing-unparsed';
+  }
+  if (url.origin !== ORIGIN) return 'landing-foreign-origin';
+  const path = url.pathname;
+  if (path === '/login') return 'landing-login';
+  if (path === '/login/second-factor') return 'landing-second-factor';
+  if (path === '/app/resumes') return 'landing-app-resumes';
+  if (path.startsWith('/app/resumes/')) return 'landing-app-resume';
+  if (path === '/app/new') return 'landing-app-new';
+  if (path === '/app/settings/sessions') return 'landing-app-settings';
+  if (path.startsWith('/app/')) return 'landing-app-other';
+  if (path === '/') return 'landing-home';
+  return 'landing-other-path';
+}
+
+/**
+ * Waits for the page to leave `from`, then records and returns the closed
+ * name for where it stopped. A page that never leaves is named too, and a
+ * login page is split by whether it is showing an error, so the one forwarded
+ * line says which side is wrong.
+ */
+async function landedAfter(page: Page, from: string): Promise<string> {
+  try {
+    await page.waitForURL(
+      (url) => url.origin === ORIGIN && url.pathname !== from,
+      { timeout: WAIT_NAVIGATION_MS },
+    );
+  } catch {
+    // Not a failure on its own: the category below names where it stayed.
+  }
+  const where = landingCategory(page.url());
+  if (where !== 'landing-login') {
+    stage(where);
+    return where;
+  }
+  const showsError
+    = await page.getByTestId('login-form-error').count() > 0;
+  const named = showsError ? 'landing-login-error' : 'landing-login-idle';
+  stage(named);
+  return named;
+}
+
+/** Asserts exactly where the page landed, naming it as a stage first. */
+function expectLanding(page: Page, want: string): void {
+  const where = landingCategory(page.url());
+  stage(where);
+  expect(where).toBe(want);
+}
+
+/** Asserts the browser holds a signed-in app session, wherever it landed. */
+async function expectSignedInApp(page: Page): Promise<void> {
+  const where = landingCategory(page.url());
+  stage(where);
+  expect(APP_LANDINGS).toContain(where);
+  expect(await meStatus(page)).toBe(200);
+}
+
 /**
  * Runs a provider round trip while recording where each main-frame navigation
  * landed. A failure is re-stamped with that closed category, so the withheld
@@ -649,13 +726,15 @@ async function passwordSignIn(
   await page.getByRole('button', { name: 'Sign in' }).click();
   const status = (await response).status();
   stage('sign-in-landing');
+  const where = await landedAfter(page, '/login');
   if (status === 202) {
-    await page.waitForURL(`${ORIGIN}/login/second-factor`, { timeout: WAIT_NAVIGATION_MS });
+    expect(where).toBe('landing-second-factor');
     await waitForHydration(page);
     return 'pending';
   }
   expect(status).toBe(204);
-  await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
+  expect(APP_LANDINGS).toContain(where);
+  expect(await meStatus(page)).toBe(200);
   return 'session';
 }
 
@@ -674,10 +753,7 @@ async function clickPasskey(page: Page): Promise<void> {
 /** Completes the open pending authentication with a passkey. */
 async function completeWithPasskey(page: Page): Promise<void> {
   await clickPasskey(page);
-  await page.waitForURL(
-    (url) => url.origin === ORIGIN && url.pathname !== '/login/second-factor',
-    { timeout: WAIT_NAVIGATION_MS },
-  );
+  await landedAfter(page, '/login/second-factor');
 }
 
 /** Submits one recovery code by keyboard and returns the response status. */
@@ -697,10 +773,7 @@ async function submitRecoveryCode(page: Page, code: string): Promise<number> {
 /** Completes the open pending authentication with one recovery code. */
 async function completeWithRecovery(page: Page, code: string): Promise<void> {
   expect(await submitRecoveryCode(page, code)).toBe(204);
-  await page.waitForURL(
-    (url) => url.origin === ORIGIN && url.pathname !== '/login/second-factor',
-    { timeout: WAIT_NAVIGATION_MS },
-  );
+  await landedAfter(page, '/login/second-factor');
 }
 
 /** Answers the settings reauthentication prompt with the account password. */
@@ -1095,8 +1168,7 @@ test('proves the passkey second factor over native HTTPS', async ({
 
     stage('pending-passkey-completion');
     await completeWithPasskey(page);
-    await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
-    expect(await meStatus(page)).toBe(200);
+    await expectSignedInApp(page);
     steps.passkeyCompletion = true;
 
     // 9. A settings reauthentication opens a pending row bound to this exact
@@ -1131,7 +1203,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(unbound).toEqual({ code: 'authentication_required', status: 401 });
     steps.wrongBindingRejected = true;
     await completeWithRecovery(page, primaryCodes[0] as string);
-    await page.waitForURL(`${ORIGIN}/app/settings/sessions`, { timeout: WAIT_NAVIGATION_MS });
+    expectLanding(page, 'landing-app-settings');
 
     // 10. Provider sign-in on the enrolled account also stops at pending.
     stage('provider-pending');
@@ -1146,6 +1218,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
     steps.providerPending = true;
     await completeWithRecovery(page, primaryCodes[1] as string);
+    await expectSignedInApp(page);
 
     // 11. Both locales at both proof widths on the pending page.
     stage('locales');
@@ -1185,7 +1258,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       .toBe('pending');
     steps.resetPreservesEnforcement = true;
     await completeWithRecovery(page, primaryCodes[4] as string);
-    await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
+    await expectSignedInApp(page);
 
     // 13. Removing the final factor turns second-factor sign-in off.
     stage('final-removal');
@@ -1266,8 +1339,7 @@ test('proves the passkey second factor over native HTTPS', async ({
 
     stage('recovery-completion');
     await completeWithRecovery(page, codes[0] as string);
-    await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
-    expect(await meStatus(page)).toBe(200);
+    await expectSignedInApp(page);
     steps.recoveryCompletion = true;
 
     stage('recovery-reuse');
@@ -1720,7 +1792,7 @@ async function provePendingLocale(
   expect(await page.evaluate(() =>
     document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await completeWithRecovery(page, options.code);
-  await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
+  await expectSignedInApp(page);
 }
 
 interface DisabledProbes {

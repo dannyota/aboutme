@@ -420,9 +420,19 @@ if grep -oE "stage\('[^']*'\)" "$SECOND_FACTOR_SPEC" |
   grep -vqE "^stage\('[a-z0-9-]+'\)$"; then
   fail 'a second-factor stage name is outside the runner vocabulary'
 fi
-if grep -oE "return 'callback-[^']*';" "$SECOND_FACTOR_SPEC" |
-  grep -vqE "^return 'callback-[a-z0-9-]+';$"; then
-  fail 'a second-factor callback category is outside the runner vocabulary'
+if grep -oE "'(callback|landing)-[^']*'" "$SECOND_FACTOR_SPEC" |
+  grep -vqE "^'(callback|landing)-[a-z0-9-]+'$"; then
+  fail 'a second-factor landing or callback name is outside the runner vocabulary'
+fi
+# The landing of a sign-in or a completion is named from that closed set, not
+# waited on as one exact path: an app route this proof did not predict must be
+# reported, never waited on until the budget runs out.
+grep -Fq 'function landingCategory(' "$SECOND_FACTOR_SPEC" ||
+  fail 'second-factor landings are no longer named'
+grep -Fq 'async function landedAfter(' "$SECOND_FACTOR_SPEC" ||
+  fail 'second-factor sign-in no longer records where it landed'
+if grep -Fq 'waitForURL(`${ORIGIN}/app/resumes`' "$SECOND_FACTOR_SPEC"; then
+  fail 'second-factor proof waits on one exact app landing again'
 fi
 # A step that never settles must fail at its own stage instead of consuming
 # the whole test budget and reporting teardown. Playwright declares these two
