@@ -44,7 +44,6 @@ import {
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
   signInWithGoogle,
-  waitForHydration,
 } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
@@ -83,6 +82,13 @@ const WAIT_NAVIGATION_MS = 60_000;
 // navigation. Three minutes is a ceiling, not a cost: only the first landing
 // approaches it, and it stays well inside the 900-second test budget.
 const WAIT_LANDING_MS = 180_000;
+// A first visit to a page compiles its route on the harness's dev server and
+// pulls its module graph through this proof's request interception, so it is
+// far slower than any later visit. The journey pays that once up front, under
+// the warm bound; every visit after it uses the tight hydration bound, which
+// is what makes a hydration failure inside the journey mean something.
+const WAIT_WARM_MS = 90_000;
+const WAIT_HYDRATE_MS = 30_000;
 const WAIT_CDP_MS = 30_000;
 const WAIT_LOOPBACK_MS = 20_000;
 const WAIT_MAIL_MS = 45_000;
@@ -634,9 +640,58 @@ async function setLocale(
   ]);
 }
 
+/**
+ * Every page the journey opens, with the closed word that names it. A first
+ * visit is compiled on demand by the harness's dev server, so paying all of
+ * them once, up front and in a stage of their own, keeps a later failure
+ * about the behaviour under test rather than about a cold route. None of
+ * these pages issues a request while signed out beyond the reads this
+ * proof's console filter already accepts.
+ */
+const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
+  ['/register', 'warm-register'],
+  ['/verify-email', 'warm-verify-email'],
+  ['/login', 'warm-login'],
+  ['/login/second-factor', 'warm-login-second-factor'],
+  ['/forgot-password', 'warm-forgot-password'],
+  ['/reset-password', 'warm-reset-password'],
+  ['/app/resumes', 'warm-app-resumes'],
+  ['/app/settings/sessions', 'warm-app-settings-sessions'],
+];
+
+/** The pages the disabled-enrollment journey opens. */
+const DISABLED_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
+  ['/login', 'warm-login'],
+  ['/app/resumes', 'warm-app-resumes'],
+  ['/app/settings/sessions', 'warm-app-settings-sessions'],
+];
+
+/** Opens each route once, so its first compile happens in a named stage. */
+async function warmRoutes(
+  page: Page,
+  routes: ReadonlyArray<readonly [string, string]>,
+): Promise<void> {
+  for (const [path, name] of routes) {
+    stage(name);
+    await page.goto(path, { timeout: WAIT_WARM_MS });
+    await hydrated(page, WAIT_WARM_MS);
+  }
+}
+
+async function hydrated(page: Page, timeout: number): Promise<void> {
+  await expect.poll(
+    () => page.evaluate(() => Boolean(
+      (document.getElementById('__nuxt') as HTMLElement & {
+        __vue_app__?: unknown;
+      } | null)?.__vue_app__,
+    )),
+    { timeout },
+  ).toBe(true);
+}
+
 async function gotoHydrated(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await waitForHydration(page);
+  await hydrated(page, WAIT_HYDRATE_MS);
 }
 
 async function meStatus(page: Page): Promise<number> {
@@ -747,7 +802,7 @@ async function passwordSignIn(
   const where = await landedAfter(page, '/login');
   if (status === 202) {
     expect(where).toBe('landing-second-factor');
-    await waitForHydration(page);
+    await hydrated(page, WAIT_HYDRATE_MS);
     return 'pending';
   }
   expect(status).toBe(204);
@@ -962,6 +1017,10 @@ test('proves the passkey second factor over native HTTPS', async ({
   await setLocale(context, 'en');
   await page.setViewportSize(DESKTOP);
 
+  await warmRoutes(page, WARM_ROUTES);
+  stage('warm-clean');
+  expect({ ...counters }).toEqual(newDiagnosticCounters());
+
   stage('capture-reset');
   const ca = await readFile(CA_PATH);
   const capture = captureClient(
@@ -1038,7 +1097,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       ]);
       expect(callbackCategory(page.url())).toBe('callback-settings-clean');
     });
-    await waitForHydration(page);
+    await hydrated(page, WAIT_HYDRATE_MS);
     await expect(page.getByTestId('linked-provider-google')).toBeVisible();
     steps.providerAccount = true;
 
@@ -1120,7 +1179,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.recoveryRegenerated = true;
     primaryCleanupCode = primaryCodes[9] as string;
     await stalePage.reload({ timeout: WAIT_NAVIGATION_MS });
-    await waitForHydration(stalePage);
+    await hydrated(stalePage, WAIT_HYDRATE_MS);
     await expect(stalePage.getByTestId('second-factor-expired')).toBeVisible();
     steps.staleEpochRejected = true;
     await staleContext.close();
@@ -1181,7 +1240,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     // request would be refused by the browser, not by the server. Reloading
     // discards it before the completion that follows.
     await page.reload({ timeout: WAIT_NAVIGATION_MS });
-    await waitForHydration(page);
+    await hydrated(page, WAIT_HYDRATE_MS);
     steps.userVerificationRequired = true;
 
     stage('pending-passkey-completion');
@@ -1203,7 +1262,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       page.waitForURL(`${ORIGIN}/login/second-factor`, { timeout: WAIT_NAVIGATION_MS }),
       page.getByTestId('second-factor-reauth-submit').click(),
     ]);
-    await waitForHydration(page);
+    await hydrated(page, WAIT_HYDRATE_MS);
     steps.reauthPending = true;
 
     stage('reauth-wrong-binding');
@@ -1231,7 +1290,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       fromLoginPage: true,
       returnPath: '/login/second-factor',
     }));
-    await waitForHydration(page);
+    await hydrated(page, WAIT_HYDRATE_MS);
     expect(await meStatus(page)).toBe(401);
     await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
     steps.providerPending = true;
@@ -1423,7 +1482,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     }
     expect(await cookieValue(context, PENDING_COOKIE)).toBeNull();
     await page.reload({ timeout: WAIT_NAVIGATION_MS });
-    await waitForHydration(page);
+    await hydrated(page, WAIT_HYDRATE_MS);
     await expect(page.getByTestId('second-factor-expired')).toBeVisible();
     await expect(page.getByTestId('second-factor-sign-in-again')).toBeVisible();
     expect(await meStatus(page)).toBe(401);
@@ -1510,6 +1569,10 @@ test('proves disabled passkey enrollment answers as an unregistered route',
 
     try {
       role('disabled');
+      await warmRoutes(page, DISABLED_WARM_ROUTES);
+      stage('warm-clean');
+      expect({ ...counters }).toEqual(newDiagnosticCounters());
+
       stage('disabled-capability');
       await signInWithGoogle(page, {
         accountLabel: DISABLED_ACCOUNT_LABEL,

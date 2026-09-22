@@ -438,6 +438,27 @@ for word in submit-busy submit-idle submit-absent; do
 done
 grep -Fq 'const WAIT_LANDING_MS = 180_000;' "$SECOND_FACTOR_SPEC" ||
   fail 'the first app landing has no bound of its own'
+
+# Every page the journey opens is compiled once up front, in a stage that
+# names it, so a later failure is about the behaviour under test and not
+# about a cold route. Warm visits get their own bound; the journey keeps the
+# tight one.
+grep -Fq 'const WAIT_WARM_MS = 90_000;' "$SECOND_FACTOR_SPEC" ||
+  fail 'the first visit to a page has no bound of its own'
+grep -Fq 'const WAIT_HYDRATE_MS = 30_000;' "$SECOND_FACTOR_SPEC" ||
+  fail 'the journey hydration wait has no explicit bound'
+grep -Fq 'async function warmRoutes(' "$SECOND_FACTOR_SPEC" ||
+  fail 'the journey no longer warms the pages it opens'
+if grep -Fq 'waitForHydration' "$SECOND_FACTOR_SPEC"; then
+  fail 'second-factor proof uses the unbounded shared hydration wait'
+fi
+warm_paths=$(grep -cE "^  \['/[a-z/-]*', 'warm-[a-z-]+'\],$" "$SECOND_FACTOR_SPEC")
+[ "$warm_paths" -ge 11 ] ||
+  fail 'the warm route table lost entries'
+if grep -oE "'warm-[^']*'" "$SECOND_FACTOR_SPEC" |
+  grep -vqE "^'warm-[a-z0-9-]+'$"; then
+  fail 'a second-factor warm stage name is outside the runner vocabulary'
+fi
 # The landing of a sign-in or a completion is named from that closed set, not
 # waited on as one exact path: an app route this proof did not predict must be
 # reported, never waited on until the budget runs out.
