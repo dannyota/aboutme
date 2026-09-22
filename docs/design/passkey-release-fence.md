@@ -43,8 +43,17 @@ A lower target or existing operation fails before any other AWS mutation. An
 unknown acquisition result is resolved by a strong read for the exact operation
 ID; no retry may replace another owner. Before each task registration, service
 update, one-shot start, schedule change, alarm suppression, or EventBridge rule
-change, the deployer conditionally updates `operation_checked_at` only when the
-operation ID still matches and `minimum_release <= :candidate`.
+change that starts an image, the deployer conditionally updates
+`operation_checked_at` only when the operation ID still matches and
+`minimum_release <= :candidate`.
+
+Two mutations are exempt. Scaling a service down, or stopping it, needs no
+checkpoint: it starts nothing below the floor and is always safe to attempt.
+Starting the maintenance service needs none either: its revision was itself
+registered only after a checkpoint proved the floor moments earlier, and its one
+container serves a static 503 page with no authentication, database, or
+enrollment logic of its own to place below the floor. Every other image start,
+and every other mutation this contract names, still checkpoints first.
 
 The lock remains held through normal completion and every automatic restoration
 path. Release removes only the four operation attributes with a condition on the
@@ -108,12 +117,15 @@ IAM does not inspect a tag, image, task definition, or release number.
 
 Every registered task definition records its exact release tag and numeric
 release in environment metadata. The script validates those fields and the lock
-before registering or starting maintenance, web, app, any one-shot task, or job
-schedules. Failed-deploy restoration rejects a previous task definition with a
-missing or lower release. A read or conditional-check failure stops. If
-maintenance already serves, it stays serving rather than start an unproved
-image. Every exit path restores alarm actions and the task-stopped notification
-rule before it releases the operation lock.
+before registering, and before starting web, app, or any one-shot task, or
+changing job schedules. Starting maintenance is not separately gated: its
+revision was registered under that same checkpoint, and the exemption in
+[Serialized production operation](#serialized-production-operation) covers it.
+Failed-deploy restoration rejects a previous task definition with a missing or
+lower release. A read or conditional-check failure stops. If maintenance already
+serves, it stays serving rather than start an unproved image. Every exit path
+restores alarm actions and the task-stopped notification rule before it releases
+the operation lock.
 
 ## Activation and rollback
 

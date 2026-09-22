@@ -7,7 +7,12 @@ shaped this way.
 
 ## Access
 
-- AWS: `aws login` into the owner's account, region `ap-southeast-1`.
+- AWS: `aws login` into the owner's account, region `ap-southeast-1`. This
+  identity applies OpenTofu directly. `deploy.sh` never mutates ECS, Scheduler,
+  a release snapshot, or the release fence with it directly: it assumes
+  `aboutme-prod-operator`, which may only read the fence and assume
+  `aboutme-prod-deploy`, which performs every deployment mutation. See
+  [Passkey release fence](#passkey-release-fence).
 - OpenTofu: `deploy/aws/prod` with the ignored `backend.hcl` and `prod.tfvars`.
   Every `tofu plan` and `tofu apply` takes `-var-file=prod.tfvars`, because
   state encryption reads the key ARN before a saved plan loads.
@@ -160,7 +165,9 @@ bash deploy/aws/scripts/deploy.sh <tag>                 # normal release
 bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 ```
 
-The script checks the tag and CI, resolves image digests, compares Cloudflare
+The script verifies the caller, assumes the operator then deploy role, reads the
+release fence, and rejects a target below its minimum before any AWS mutation.
+It then checks the tag and CI, resolves image digests, compares Cloudflare
 ranges, checks that every secret the new revisions reference exists (by name,
 never reading a value), snapshots RDS, registers task definition revisions,
 disables the `aboutme-prod-site-down` alarm actions and the
@@ -256,6 +263,13 @@ when the failed release applied no migration. After a migration, fix forward
 with a new release, or restore the database from the snapshot the failed deploy
 took.
 
+A rollback also runs through the fence-aware `deploy.sh`, never a copy from the
+target tag, and is rejected the same way a forward deploy is when the target is
+below the release fence minimum. Once passkey enrollment has ever been possible
+in production, rolling back below that minimum is a forward fix or privileged
+administration, not a supported rollback; see
+[Passkey release fence](#passkey-release-fence).
+
 A rollback cannot cross a document schema release. Every resume write persists
 the current document version, and an older release fails closed on a version it
 does not know. After a release that raises the document version, such as
@@ -277,6 +291,129 @@ release. Each day without a successful run uses one day of the 30-day margin, so
 ship the fix-forward release within a day, or delete expired release snapshots
 by hand.
 
+## Passkey release fence
+
+[The release-fence contract](../design/passkey-release-fence.md) keeps a durable
+minimum release in DynamoDB table `aboutme-prod-release-fence` (item id
+`application`) and one nonexpiring operation lock on the same item. `deploy.sh`
+assumes `aboutme-prod-operator`, which may only read the fence and assume
+`aboutme-prod-deploy`, which holds every ECS, Scheduler, snapshot, fence, and
+alarm-suppression permission the script needs. A normal deploy,
+`--first-deploy`, and `--rollback` all read the fence, reject a target below its
+minimum before any mutation, and hold the lock for the whole run, rechecking it
+before every task registration, service, one-shot, schedule, alarm, and rule
+mutation that starts an image. The maintenance page is the one exception: it
+carries no release or enrollment logic and stays available as a recovery
+fallback even when a checkpoint elsewhere fails. The lock releases only once
+notifications are restored, using the exact operation ID this run acquired.
+
+The one-time bootstrap, before the first fence-aware deploy: set
+`operator_principal_arn` in the ignored `prod.tfvars` to the owner's `aws login`
+identity, run `sync.sh` in the `aboutme-infra` repository to back up that
+change, then `tofu apply`.
+
+Accepted residual risk: the deploy role's `ecs:RegisterTaskDefinition` is
+unscoped and its `ecs:RunTask` covers every revision of the migrate, db-setup,
+and jobs families, so it can register and run those families with an arbitrary
+image or command. `iam:PassRole` still limits which task and execution roles
+such a task can assume. This is accepted because the deploy role is reachable
+only through the operator role, which the AWS-login principal alone may assume.
+
+### Activation
+
+Enrollment stays off in production until a healthy release at or above v0.4.2
+runs with `PASSKEY_ENROLLMENT_ENABLED=false` and passes the first production
+proof below. Only then:
+
+```sh
+bash deploy/aws/scripts/deploy.sh --activate <tag>
+```
+
+This requires `aboutme-prod-app` to already be stable and running exactly the
+candidate release, acquires the lock, raises the fence to the tag's release with
+one idempotent conditional update, and releases the lock. It makes no image,
+ECS, snapshot, or notification change. A lower or malformed fence state, an
+operation already in progress, or a running app that is not the exact stable
+candidate, fails it before the raise. Only after it succeeds does a reviewed
+`tofu apply` set `passkey_enrollment_enabled = true` in `prod.tfvars`; then
+redeploy the same tag with a normal `deploy.sh <tag>` run. Enabling the flag
+before the raise, or redeploying a different tag after it, is not the supported
+order. If the raise succeeds but the apply or the redeploy then fails, the fence
+stays raised; fix forward with the same or a newer capable tag, never a flag-off
+image that predates the raise.
+
+### Recovery
+
+A script failure or signal restores alarm actions and the task-stopped rule,
+then releases the lock it holds, the same as a successful run. Only an unhandled
+process death (SIGKILL, host loss) skips this and leaves the lock closed. Before
+clearing it by hand, using the AWS-login principal's own credentials, which
+OpenTofu and account administration already trust as a privileged bypass:
+
+1. Confirm no `deploy.sh` process is running.
+2. Confirm no database task and no release snapshot from a prior run is still in
+   flight:
+
+   ```sh
+   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-migrate
+   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-db-setup
+   aws rds describe-db-snapshots --region ap-southeast-1 --db-instance-identifier aboutme-prod \
+     --query 'DBSnapshots[?Status!=`available`]'
+   ```
+
+   Both `list-tasks` calls must return no task ARNs, and the snapshot query must
+   return an empty list, before continuing.
+
+3. Inspect `aboutme-prod-app`, `aboutme-prod-web`, `aboutme-prod-maintenance`,
+   the job schedules, the `aboutme-prod-site-down` alarm, and the
+   `aboutme-prod-task-stopped` rule against [Healthy state](#healthy-state).
+4. Strongly read the fence item and record its `operation_id` and
+   `operation_kind` with the reason for the clear:
+
+   ```sh
+   aws dynamodb get-item --region ap-southeast-1 --table-name aboutme-prod-release-fence \
+     --key '{"id":{"S":"application"}}' --consistent-read
+   ```
+
+5. Remove only the operation attributes, conditioned on the exact `operation_id`
+   read in step 4, so the clear cannot remove a different operation that started
+   in between:
+
+   ```sh
+   aws dynamodb update-item --region ap-southeast-1 \
+     --table-name aboutme-prod-release-fence --key '{"id":{"S":"application"}}' \
+     --update-expression 'REMOVE operation_id, operation_kind, operation_started_at, operation_checked_at' \
+     --condition-expression 'operation_id = :o' \
+     --expression-attribute-values '{":o":{"S":"<operation_id from step 4>"}}'
+   ```
+
+This clear never lowers `minimum_release`. An old `deploy.sh` from a tag before
+this contract, or any script run with the AWS-login or administrator credentials
+directly, bypasses the fence entirely; prove from account and factor state that
+a bypass target is compatible with what already ran, and record the reason,
+before using one.
+
+### Production proofs
+
+GitHub CI cannot observe the deployed fence, the enrollment flag, live identity
+providers, or the production origin. Two manual browser proofs cover what CI
+cannot, each with the owner's standing v0.4.x authorization, a dedicated
+fictional account, one browser profile, and the shared local-check lock and
+memory floor:
+
+- After the flag-off deploy and before activation: sign in with password and
+  every enabled provider without a second factor, confirm enrollment stays
+  hidden, and check existing sessions, connected agents, and health.
+- After activation and the flag-on redeploy, using only the release's named
+  fictional account: enroll a passkey, confirm pending login isolation,
+  recovery, epoch revocation on a factor change, both locales, and remove the
+  account's last factor.
+
+Each proof starts no local product stack. On success, failure, or an unexpected
+exit, remove the fictional account's proof factors, recovery plaintext, and
+sessions before signing out; if cleanup cannot finish in the run, repeat it
+alone before any further release action.
+
 ## Healthy state
 
 - ECS services `aboutme-prod-app` and `aboutme-prod-web` each run one task;
@@ -288,3 +425,5 @@ by hand.
 - The five job schedules in group `aboutme-prod-jobs` are enabled.
 - The `aboutme-prod-site-down` alarm (us-east-1) has actions enabled
   (`site_alarm_enabled = true` in `prod.tfvars`).
+- `aboutme-prod-release-fence`'s `application` item has no `operation_id`
+  between deploys.

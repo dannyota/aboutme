@@ -7,7 +7,61 @@ case "$cmd $args" in
   "git fetch"*) exit 0 ;;
   "git rev-list"*) echo 0123456789abcdef0123456789abcdef01234567 ;;
   "git merge-base"*) exit 0 ;;
-  "gh run list"*) echo success ;;
+  "gh run list"*)
+    if [[ $STUB_CASE == fence_ci_fails ]]; then echo failure; else echo success; fi ;;
+  "aws "*"sts get-caller-identity --query Arn --output text")
+    case "${AWS_PROFILE:-}" in
+      fence-operator)
+        if [[ $STUB_CASE == verify_role_fails ]]; then echo 'arn:aws:iam::1:user/not-a-role'
+        else echo 'arn:aws:sts::1:assumed-role/aboutme-prod-operator/aboutme-deploy-session'; fi ;;
+      fence-deploy) echo 'arn:aws:sts::1:assumed-role/aboutme-prod-deploy/aboutme-deploy-session' ;;
+      *) echo 'arn:aws:iam::1:user/aboutme-operator' ;;
+    esac ;;
+  "aws "*"sts get-caller-identity --query Account --output text") echo 1 ;;
+  "aws "*"dynamodb get-item"*)
+    # The count distinguishes fence_read's own strong read (a run's first
+    # get-item) from fence_lock's later uncertain-acquisition read, for the
+    # cases that need a different answer each time.
+    n=$(($(cat "$STUB_DIR/get-item-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+    echo "$n" >"$STUB_DIR/get-item-count.$STUB_CASE"
+    case $STUB_CASE in
+      fence_lower) echo '{"Item":{"minimum_release":{"N":"5000"},"minimum_tag":{"S":"v0.5.0"}}}' ;;
+      fence_equal | fence_activate) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
+      fence_malformed) echo '{"Item":{"minimum_release":{"N":"abc"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
+      rollback_below_fence) echo '{"Item":{"minimum_release":{"N":"5000"},"minimum_tag":{"S":"v0.5.0"}}}' ;;
+      rollback_equal_fence) echo '{"Item":{"minimum_release":{"N":"9"},"minimum_tag":{"S":"v0.0.9"}}}' ;;
+      restore_below_fence) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
+      fence_uncertain_owned | fence_lock_retry_success)
+        if ((n == 1)); then echo '{}'
+        else printf '{"Item":{"operation_id":{"S":"%s"}}}' "$(cat "$STUB_DIR/lock-oid")"; fi ;;
+      fence_uncertain_foreign)
+        if ((n == 1)); then echo '{}'
+        else echo '{"Item":{"operation_id":{"S":"some-other-operation"}}}'; fi ;;
+      *) echo '{}' ;;
+    esac ;;
+  "aws "*"dynamodb update-item"*"operation_id=:o, operation_kind=:k"*)
+    # Lock acquisition. The generated operation ID is captured so a later
+    # uncertain-read case can prove or disprove this process owns it.
+    oid=$(sed -E 's/.*":o":\{"S":"([^"]+)".*/\1/' <<<"$args")
+    printf '%s' "$oid" >"$STUB_DIR/lock-oid"
+    case $STUB_CASE in
+      fence_locked | fence_lower | fence_lock_retry_success)
+        echo "ConditionalCheckFailedException" >&2; exit 254 ;;
+      fence_uncertain_owned | fence_uncertain_foreign) echo "connection reset" >&2; exit 255 ;;
+      *) exit 0 ;;
+    esac ;;
+  "aws "*"dynamodb update-item"*"minimum_release=:c"*)
+    if [[ $STUB_CASE == fence_raise_race ]]; then echo "ConditionalCheckFailedException" >&2; exit 254; fi
+    exit 0 ;;
+  "aws "*"dynamodb update-item"*"operation_checked_at=:s"*)
+    case $STUB_CASE in
+      fence_checkpoint_fails) echo "ConditionalCheckFailedException" >&2; exit 254 ;;
+      checkpoint_fails_after_maintenance_down)
+        if [[ -e $STUB_DIR/maintenance-scaled-down.$STUB_CASE ]]; then echo "ConditionalCheckFailedException" >&2; exit 254; fi ;;
+      checkpoint_fails_after_migration)
+        if [[ -e $STUB_DIR/migrated.$STUB_CASE ]]; then echo "ConditionalCheckFailedException" >&2; exit 254; fi ;;
+    esac
+    exit 0 ;;
   "curl "*"ghcr.io/token"*) echo '{"token":"stub"}' ;;
   "curl "*"/manifests/"*) printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
   "curl "*"api.cloudflare.com/client/v4/ips"*) echo '{"success":true,"result":{"ipv4_cidrs":["198.51.100.0/24","192.0.2.0/24"]}}' ;;
@@ -20,7 +74,7 @@ case "$cmd $args" in
     fi
     printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\n' ;;
   "curl "*"https://aboutme.vn/healthz"*)
-    if [[ $STUB_CASE == smoke_down ]]; then echo 502; exit 0; fi
+    if [[ $STUB_CASE == smoke_down || $STUB_CASE == signal_during_cleanup ]]; then echo 502; exit 0; fi
     # smoke_flaky: Cloudflare serves one 525 first.
     if [[ $STUB_CASE == smoke_flaky ]] && ! [[ -e $STUB_DIR/healthz.once ]]; then
       : >"$STUB_DIR/healthz.once"
@@ -40,7 +94,29 @@ case "$cmd $args" in
     if [[ $STUB_CASE == origin_open ]]; then exit 0; fi
     exit 28 ;;
   "curl "*) exit 28 ;;
+  "aws "*"ecs describe-task-definition"*"--task-definition arn:"*)
+    # The service's actual running revision (fence_read, task_def_release_number),
+    # distinct from a family's latest registration below.
+    case $STUB_CASE in
+      fence_missing_enrolled)
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"PASSKEY_ENROLLMENT_ENABLED","value":"true"}]}]}' ;;
+      fence_running_revision_differs)
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"PASSKEY_ENROLLMENT_ENABLED","value":"false"},{"name":"DEPLOY_RELEASE_NUMBER","value":"1000"}]}]}' ;;
+      fence_activate | fence_raise_race | fence_lock_retry_success)
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"1000"}]}]}' ;;
+      restore_below_fence)
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"500"}]}]}' ;;
+      fence_first_already_running)
+        # Proves a real prior deploy, not OpenTofu's untouched placeholder.
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_TAG","value":"v0.0.9"}]}]}' ;;
+      *)
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[]}]}' ;;
+    esac ;;
   "aws "*"ecs describe-task-definition"*)
+    if [[ $STUB_CASE == fence_missing_enrolled || $STUB_CASE == fence_running_revision_differs ]]; then
+      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","environment":[{"name":"PASSKEY_ENROLLMENT_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}'
+      exit 0
+    fi
     # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
     echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}' ;;
   "aws "*"ssm describe-parameters"*)
@@ -51,9 +127,31 @@ case "$cmd $args" in
       exit 254
     fi
     echo 'arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12' ;;
+  "aws "*"ecs describe-services"*"--output json"*)
+    # fence_read's fresh-vs-deployed proof and --activate's stability and
+    # release-match check both read this shape: stable is
+    # runningCount == desiredCount > 0.
+    if [[ $STUB_CASE == fence_missing_describe_error ]]; then exit 255; fi
+    case $STUB_CASE in
+      fence_first_already_running)
+        # A real prior deploy scaled the service to zero; OpenTofu's own
+        # placeholder is never registered again once deploy.sh has run.
+        echo '{"services":[{"taskDefinition":"arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3","runningCount":0,"desiredCount":0}]}' ;;
+      *first*)
+        # OpenTofu's own placeholder task definition at desired count 0: a
+        # real, non-null ARN that deploy.sh has never registered.
+        echo '{"services":[{"taskDefinition":"arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app-placeholder:1","runningCount":0,"desiredCount":0}]}' ;;
+      *)
+        echo '{"services":[{"taskDefinition":"arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3","runningCount":1,"desiredCount":1}]}' ;;
+    esac ;;
   "aws "*"ecs describe-services"*"services[0].status"*)
     if [[ $STUB_CASE == maintenance_missing ]]; then echo None; else echo ACTIVE; fi ;;
-  "aws "*"ecs describe-services"*) echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3' ;;
+  "aws "*"ecs describe-services"*)
+    if [[ $STUB_CASE == fence_missing_describe_error ]]; then exit 255; fi
+    if [[ $STUB_CASE == fence_first_already_running ]]; then
+      echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3'
+    elif [[ $STUB_CASE == *first* ]]; then echo None
+    else echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3'; fi ;;
   "aws "*"ecs list-tasks"*)
     if [[ $STUB_CASE == list_running_fails && $args == *"--service-name aboutme-prod-app"* && $args != *"--desired-status STOPPED"* ]]; then
       exit 255
@@ -72,19 +170,24 @@ case "$cmd $args" in
     fi ;;
   "aws "*"ecs register-task-definition"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
-    jq -e '.containerDefinitions and (has("revision") | not)' "$file" >/dev/null || exit 3
+    jq -e '.containerDefinitions and (has("revision") | not)
+      and (.containerDefinitions | all((.environment // []) | any(.name == "DEPLOY_RELEASE_TAG")))' \
+      "$file" >/dev/null || exit 3
     echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/new:4' ;;
   "aws "*"ecs run-task"*)
     by=$(sed -E 's/.*--started-by ([^ ]+).*/\1/' <<<"$args")
+    [[ $by != deploy-migrate ]] || : >"$STUB_DIR/migrated.$STUB_CASE"
     if [[ $STUB_CASE == runtask_fails && $by == deploy-migrate ]]; then
       echo "placement failed" >&2
       exit 255
     fi
     echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/$by" ;;
+  "aws "*"ecs update-service"*"aboutme-prod-maintenance"*"desired-count 0"*)
+    : >"$STUB_DIR/maintenance-scaled-down.$STUB_CASE" ;;
   "aws "*"ecs update-service"*"aboutme-prod-app"*"desired-count 1"*)
     [[ $STUB_CASE != app_start_update_fails ]] || exit 255 ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-web"*)
-    if [[ $STUB_CASE == start_fails ]]; then exit 255; fi ;;
+    if [[ $STUB_CASE == start_fails || $STUB_CASE == restore_below_fence ]]; then exit 255; fi ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-maintenance"*)
     if [[ $STUB_CASE == maint_up_fails ]]; then exit 255; fi
     if [[ $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails ]]; then
@@ -121,6 +224,7 @@ case "$cmd $args" in
     if [[ $STUB_CASE == alerts_site_lost ]]; then exit 255; fi ;;
   "aws "*"cloudwatch enable-alarm-actions"*)
     rm -f "$STUB_DIR/site-disabled"
+    if [[ $STUB_CASE == signal_during_cleanup ]]; then kill -TERM "$PPID"; fi
     [[ $STUB_CASE != alerts_restore_fails ]] || exit 255 ;;
   "aws "*"events describe-rule"*)
     if [[ $STUB_CASE == alerts_initially_disabled ]]; then echo DISABLED

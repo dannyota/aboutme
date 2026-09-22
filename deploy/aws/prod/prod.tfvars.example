@@ -13,3 +13,12 @@ site_alarm_enabled = false
 # Provider login: "" keeps it off; "google" enables Google sign-in and needs
 # /aboutme/prod/oauth/google-client-id and google-client-secret in SSM.
 provider_login_enabled = ""
+
+# Same-account IAM user or role ARN behind the owner's `aws login` session,
+# e.g. arn:aws:iam::<account id>:role/<name>. OpenTofu trusts only this ARN
+# to assume aboutme-prod-operator.
+operator_principal_arn = ""
+
+# false until a healthy v0.4.2 or later release raises the production
+# minimum-release fence.
+passkey_enrollment_enabled = false
