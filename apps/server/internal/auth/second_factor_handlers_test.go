@@ -154,10 +154,11 @@ type sfRequest struct {
 	cookies                                       []*http.Cookie
 }
 
-func sfServe(mux http.Handler, req sfRequest) *httptest.ResponseRecorder {
-	r := httptest.NewRequestWithContext(context.Background(), req.method, req.path, strings.NewReader(req.body))
+func sfServe(t *testing.T, mux http.Handler, req sfRequest) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequestWithContext(t.Context(), req.method, req.path, strings.NewReader(req.body))
 	if req.body == "" {
-		r = httptest.NewRequestWithContext(context.Background(), req.method, req.path, nil)
+		r = httptest.NewRequestWithContext(t.Context(), req.method, req.path, nil)
 	}
 	if req.contentType != "" {
 		r.Header.Set("Content-Type", req.contentType)
@@ -213,8 +214,8 @@ func TestSecondFactorRegistrationOptions_DisabledMatchesUnregisteredRoute(t *tes
 	mux := sfMux(t, service, nil)
 	for _, method := range []string{http.MethodPost, http.MethodGet} {
 		req := sfRequest{method: method, path: auth.SecondFactorPasskeyOptionsPath, body: `{}`, contentType: "application/json", origin: sfOrigin}
-		got := sfServe(mux, req)
-		want := sfServe(api.NotFound(), req)
+		got := sfServe(t, mux, req)
+		want := sfServe(t, api.NotFound(), req)
 		if got.Code != want.Code || got.Body.String() != want.Body.String() || got.Header().Get("Content-Type") != want.Header().Get("Content-Type") {
 			t.Fatalf("%s disabled options = %d %s, want %d %s", method, got.Code, got.Body, want.Code, want.Body)
 		}
@@ -228,8 +229,8 @@ func TestSecondFactorRegistrationComplete_DisabledIsUniformNotFound(t *testing.T
 	service := &sfService{}
 	mux := sfMux(t, service, nil)
 	req := sfRequest{method: http.MethodPost, path: auth.SecondFactorPasskeysPath, body: `{"ok":true}`, contentType: "application/json", origin: sfOrigin}
-	got := sfServe(mux, req)
-	want := sfServe(api.NotFound(), req)
+	got := sfServe(t, mux, req)
+	want := sfServe(t, api.NotFound(), req)
 	if got.Code != http.StatusNotFound || got.Body.String() != want.Body.String() || len(got.Header().Values("Set-Cookie")) != 0 {
 		t.Fatalf("disabled completion without a session = %d %s", got.Code, got.Body)
 	}
@@ -264,7 +265,7 @@ func TestSecondFactorPending_ChecksRunInContractOrder(t *testing.T) {
 		{"status without cookie", sfRequest{method: http.MethodGet, path: auth.SecondFactorPendingPath}, 401, "authentication_required"},
 	}
 	for _, tc := range cases {
-		rec := sfServe(mux, tc.req)
+		rec := sfServe(t, mux, tc.req)
 		if rec.Code != tc.code || sfErrorCode(t, rec) != tc.err {
 			t.Errorf("%s = %d %s, want %d %s", tc.name, rec.Code, rec.Body, tc.code, tc.err)
 		}
@@ -291,7 +292,7 @@ func TestSecondFactorAccountRoutes_RequireASession(t *testing.T) {
 		{method: http.MethodDelete, path: auth.SecondFactorPasskeysPath + "/" + uuid.NewString(), origin: sfOrigin},
 		{method: http.MethodPost, path: auth.SecondFactorRecoveryCodesPath, origin: sfOrigin, cookies: pendingOnly},
 	} {
-		rec := sfServe(mux, req)
+		rec := sfServe(t, mux, req)
 		if rec.Code != http.StatusUnauthorized || sfErrorCode(t, rec) != "authentication_required" {
 			t.Errorf("%s %s without a session = %d %s", req.method, req.path, rec.Code, rec.Body)
 		}
@@ -307,7 +308,7 @@ func TestSecondFactorRoutes_RegisterNoTOTPRoute(t *testing.T) {
 	for _, path := range []string{
 		"/api/v1/auth/second-factor/totp/verify", "/api/v1/me/second-factor/totp/enrollment", "/api/v1/me/second-factor/totp",
 	} {
-		if _, pattern := mux.Handler(httptest.NewRequestWithContext(context.Background(), http.MethodPost, path, nil)); pattern != "" {
+		if _, pattern := mux.Handler(httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, nil)); pattern != "" {
 			t.Errorf("TOTP path %s is routed to %q", path, pattern)
 		}
 	}
