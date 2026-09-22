@@ -11,7 +11,9 @@
  * `app/i18n/auth.ts`.
  *
  * The password form sends closed copy for every failure and never retains
- * the password after a successful login.
+ * the password after a successful login. An account enrolled in a second
+ * factor gets no session from this form: it navigates to the fixed
+ * `/login/second-factor` path instead, which finishes the sign-in.
  */
 import FormField from '@/components/app/FormField.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
@@ -30,6 +32,7 @@ import { useCapabilities } from '../composables/useCapabilities';
 import { pageTitle } from '@/i18n/meta';
 import {
   DEFAULT_RETURN_PATH,
+  isAppRoute,
   validateReturnPath,
 } from '@/utils/returnPath';
 
@@ -89,6 +92,18 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
   }
 }
 
+// A destination outside this app's own pages (for example
+// `/oauth/authorize`, served by the Go backend for a connected-agent
+// consent link) needs a real browser navigation: the client router has no
+// route for it and would otherwise strand the user on a dead page.
+async function goTo(path: string): Promise<void> {
+  if (isAppRoute(path)) {
+    await navigateTo(path);
+  } else {
+    await navigateTo(path, { external: true });
+  }
+}
+
 async function onSubmit() {
   if (!email.value || !password.value) {
     formError.value = 'enterEmailAndPassword';
@@ -97,12 +112,19 @@ async function onSubmit() {
   pending.value = true;
   formError.value = null;
   try {
-    await usePasswordAuth().login({
+    const result = await usePasswordAuth().login({
       email: email.value,
       password: password.value,
+      next: explicitNext.value ?? undefined,
     });
     password.value = '';
-    await navigateTo(loginDestination.value);
+    // An enrolled account gets no session yet: the fixed pending path, never
+    // a computed one, since the server carries the return path instead.
+    await goTo(
+      result.secondFactorRequired
+        ? '/login/second-factor'
+        : loginDestination.value,
+    );
   } catch (failure) {
     formError.value = messageFor(failure as PasswordAuthFailure);
   } finally {

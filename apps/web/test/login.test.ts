@@ -6,7 +6,7 @@ import {
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
-import { setResponseStatus } from 'h3';
+import { readBody, setResponseStatus } from 'h3';
 import LoginPage from '../app/pages/login.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
@@ -307,6 +307,121 @@ describe('login.vue password form', () => {
     expect((passwordInput.element as HTMLInputElement).value).toBe('');
     expect(wrapper.html()).not.toContain('correct horse battery staple');
   });
+
+  it('navigates to the fixed pending path, not /app/resumes, when the '
+    + 'account is enrolled in a second factor', async () => {
+    registerEndpoint('/api/v1/auth/password/login', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 202);
+        return { data: { secondFactorRequired: true } };
+      },
+    });
+    const wrapper = await mountSuspended(LoginPage);
+    await wrapper.get('[autocomplete="email"]')
+      .setValue('ada@example.com');
+    await wrapper.get('[autocomplete="current-password"]')
+      .setValue('correct horse battery staple');
+    await wrapper.get('[data-testid="login-form"]').trigger('submit');
+    await flushPromises();
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login/second-factor');
+    expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith('/app/resumes');
+  });
+
+  it('sends the validated ?next= path on the login request body',
+    async () => {
+      let sentNext: unknown;
+      registerEndpoint('/api/v1/auth/password/login', {
+        method: 'POST',
+        handler: async (event) => {
+          sentNext = (await readBody(event)).next;
+          setResponseStatus(event, 204);
+          return null;
+        },
+      });
+      const next = '/app/new?sample=ats-plain&lng=vi';
+      const wrapper = await mountSuspended(LoginPage, {
+        route: `/login?next=${encodeURIComponent(next)}`,
+      });
+      await wrapper.get('[autocomplete="email"]')
+        .setValue('ada@example.com');
+      await wrapper.get('[autocomplete="current-password"]')
+        .setValue('correct horse battery staple');
+      await wrapper.get('[data-testid="login-form"]').trigger('submit');
+      await flushPromises();
+      expect(sentNext).toBe('/app/new?sample=ats-plain&lng=vi');
+    });
+
+  it('omits next from the login request when there is no valid ?next=',
+    async () => {
+      let body: Record<string, unknown> = {};
+      registerEndpoint('/api/v1/auth/password/login', {
+        method: 'POST',
+        handler: async (event) => {
+          body = await readBody(event);
+          setResponseStatus(event, 204);
+          return null;
+        },
+      });
+      const wrapper = await mountSuspended(LoginPage, {
+        route: '/login?next=//evil.example',
+      });
+      await wrapper.get('[autocomplete="email"]')
+        .setValue('ada@example.com');
+      await wrapper.get('[autocomplete="current-password"]')
+        .setValue('correct horse battery staple');
+      await wrapper.get('[data-testid="login-form"]').trigger('submit');
+      await flushPromises();
+      expect(Object.hasOwn(body, 'next')).toBe(false);
+    });
+
+  it('navigates externally to a next destination outside this app '
+    + '(a server-only route, not a client page)', async () => {
+    registerEndpoint('/api/v1/auth/password/login', {
+      method: 'POST',
+      handler: (event) => {
+        setResponseStatus(event, 204);
+        return null;
+      },
+    });
+    const next = '/oauth/authorize?client_id=abc';
+    const wrapper = await mountSuspended(LoginPage, {
+      route: `/login?next=${encodeURIComponent(next)}`,
+    });
+    await wrapper.get('[autocomplete="email"]')
+      .setValue('ada@example.com');
+    await wrapper.get('[autocomplete="current-password"]')
+      .setValue('correct horse battery staple');
+    await wrapper.get('[data-testid="login-form"]').trigger('submit');
+    await flushPromises();
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(next, {
+      external: true,
+    });
+  });
+
+  it('navigates internally (no external flag) to an in-app next destination',
+    async () => {
+      registerEndpoint('/api/v1/auth/password/login', {
+        method: 'POST',
+        handler: (event) => {
+          setResponseStatus(event, 204);
+          return null;
+        },
+      });
+      const wrapper = await mountSuspended(LoginPage, {
+        route: '/login?next=%2Fapp%2Fnew',
+      });
+      await wrapper.get('[autocomplete="email"]')
+        .setValue('ada@example.com');
+      await wrapper.get('[autocomplete="current-password"]')
+        .setValue('correct horse battery staple');
+      await wrapper.get('[data-testid="login-form"]').trigger('submit');
+      await flushPromises();
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/new');
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith('/app/new', {
+        external: true,
+      });
+    });
 });
 
 describe('login.vue provider gating', () => {

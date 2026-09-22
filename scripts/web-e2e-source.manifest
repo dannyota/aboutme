@@ -294,6 +294,7 @@ apps/web/app/composables/identitySettings.ts
 apps/web/app/composables/passwordSettings.ts
 apps/web/app/composables/privacySettings.ts
 apps/web/app/composables/providerAuthorization.ts
+apps/web/app/composables/secondFactorPending.ts
 apps/web/app/composables/useAuth.ts
 apps/web/app/composables/useCapabilities.ts
 apps/web/app/composables/useFieldDrafts.ts
@@ -356,6 +357,7 @@ apps/web/app/i18n/privacy-settings.ts
 apps/web/app/i18n/publish.ts
 apps/web/app/i18n/resume-create.ts
 apps/web/app/i18n/resume-list.ts
+apps/web/app/i18n/second-factor.ts
 apps/web/app/i18n/settings.ts
 apps/web/app/i18n/shell.ts
 apps/web/app/i18n/templates.ts
@@ -378,6 +380,7 @@ apps/web/app/pages/authorize.vue
 apps/web/app/pages/forgot-password.vue
 apps/web/app/pages/index.vue
 apps/web/app/pages/login.vue
+apps/web/app/pages/login/second-factor.vue
 apps/web/app/pages/privacy.vue
 apps/web/app/pages/register.vue
 apps/web/app/pages/reset-password.vue
@@ -405,6 +408,7 @@ apps/web/app/utils/relativeTime.ts
 apps/web/app/utils/returnPath.ts
 apps/web/app/utils/sanitizeRichText.ts
 apps/web/app/utils/userAgent.ts
+apps/web/app/utils/webauthn.ts
 apps/web/e2e/baselines/academic-dense--vn-full--paged.png
 apps/web/e2e/baselines/classic-serif--vn-full--justify--paged.png
 apps/web/e2e/baselines/classic-serif--vn-full--paged.png
