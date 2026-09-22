@@ -8,10 +8,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// PasswordQueries is the exact data-layer surface Phase PA's password service
-// (T04–T09) consumes. It freezes the row-lock order the design requires —
-// user, credential, reset token, then sessions — and hides every raw-SQL
-// detail behind one transactional contract. Existing provider identity and
+// PasswordQueries is the exact data-layer surface the password service
+// consumes. It freezes the row-lock order (user, credential, reset token,
+// then sessions) behind the user-lock fence in
+// docs/adr/0025-password-authentication-and-identity-linking.md and hides
+// every raw-SQL detail behind one transactional contract. Existing provider identity and
 // session methods remain on *Queries through the broader Querier interface;
 // the password service uses only this surface.
 type PasswordQueries interface {

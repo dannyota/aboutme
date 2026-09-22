@@ -1,16 +1,20 @@
 package auth
 
-// Provider identity resolution follows D5: the callback resolves
-// (provider, subject) first and never fetches or accepts an email claim for a
-// returning identity. Only a new subject obtains a required verified email,
-// which is passed through D1 (accountemail.Canonicalize) before the account
-// plus identity is created atomically. See docs/design/security.md.
+// Provider identity resolution: the callback resolves (provider, subject)
+// first and never fetches or accepts an email claim for a returning identity.
+// Only a new subject obtains a required verified email, which is canonicalized
+// by accountemail.Canonicalize before the account plus identity is created
+// atomically. See docs/design/security.md. An enrolled account receives a
+// pending login instead of a session; see
+// docs/design/second-factor-authentication.md.
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -122,10 +126,39 @@ func (s *Service) createProviderAccountTx(ctx context.Context, qtx *store.Querie
 	return usr, nil
 }
 
-// resolveProviderLogin issues a session for a returning subject in one
+// providerLoginOutcome is a successful primary provider login. An unenrolled
+// account carries its new session token. An enrolled account carries no
+// session: enrolled is true and userID and verifiedAt describe the pending
+// login the caller creates.
+type providerLoginOutcome struct {
+	sessionRaw string
+	enrolled   bool
+	userID     uuid.UUID
+	verifiedAt time.Time
+}
+
+// issueOrDeferProviderLoginTx runs under the user lock taken by the caller. It
+// locks the factor policy and issues a session only when the account is
+// unenrolled.
+func (s *Service) issueOrDeferProviderLoginTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (providerLoginOutcome, error) {
+	policy, err := lockSecondFactorPolicy(ctx, qtx, user.ID)
+	if err != nil {
+		return providerLoginOutcome{}, err
+	}
+	if policy != nil {
+		return providerLoginOutcome{enrolled: true, userID: user.ID, verifiedAt: s.sessionMgr.now()}, nil
+	}
+	issued, err := s.sessions.IssueTx(ctx, qtx, user, ua, ip)
+	if err != nil {
+		return providerLoginOutcome{}, err
+	}
+	return providerLoginOutcome{sessionRaw: issued.RawToken, userID: user.ID}, nil
+}
+
+// resolveProviderLogin completes login for a returning subject in one
 // transaction. found is false when the subject has no identity yet; the caller
 // then obtains a required verified email and calls createProviderLogin.
-func (s *Service) resolveProviderLogin(ctx context.Context, subject ProviderSubject, ua, ip string) (raw string, found bool, err error) {
+func (s *Service) resolveProviderLogin(ctx context.Context, subject ProviderSubject, ua, ip string) (login providerLoginOutcome, found bool, err error) {
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
 		user, ok, resolveErr := s.resolveReturningProviderTx(ctx, qtx, subject)
@@ -135,33 +168,35 @@ func (s *Service) resolveProviderLogin(ctx context.Context, subject ProviderSubj
 		if !ok {
 			return nil
 		}
-		issued, issueErr := s.sessions.IssueTx(ctx, qtx, user, ua, ip)
-		if issueErr != nil {
-			return issueErr
+		var loginErr error
+		login, loginErr = s.issueOrDeferProviderLoginTx(ctx, qtx, user, ua, ip)
+		if loginErr != nil {
+			return loginErr
 		}
-		raw, found = issued.RawToken, true
+		found = true
 		return nil
 	})
 	if err != nil {
-		return "", false, err
+		return providerLoginOutcome{}, false, err
 	}
-	return raw, found, nil
+	return login, found, nil
 }
 
 // createProviderLogin creates the account described by account and issues a
 // session in one transaction, recovering from a concurrent-create race by
-// re-reading (provider, subject) first after the loser rolls back.
-func (s *Service) createProviderLogin(ctx context.Context, account NewProviderAccount, ua, ip string) (raw string, err error) {
-	var issued SessionIssue
+// re-reading (provider, subject) first after the loser rolls back. A new
+// account has no factor policy; the race path may reach an enrolled one.
+func (s *Service) createProviderLogin(ctx context.Context, account NewProviderAccount, ua, ip string) (providerLoginOutcome, error) {
+	var login providerLoginOutcome
 	txErr := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
 		user, createErr := s.createProviderAccountTx(ctx, qtx, account)
 		if createErr != nil {
 			return createErr
 		}
-		var issueErr error
-		issued, issueErr = s.sessions.IssueTx(ctx, qtx, user, ua, ip)
-		return issueErr
+		var loginErr error
+		login, loginErr = s.issueOrDeferProviderLoginTx(ctx, qtx, user, ua, ip)
+		return loginErr
 	})
 	if txErr != nil {
 		var raceErr *providerAccountRaceError
@@ -171,30 +206,30 @@ func (s *Service) createProviderLogin(ctx context.Context, account NewProviderAc
 			// same-subject winner means this login follows the returning path.
 			return s.recoverProviderAccountRace(ctx, account, ua, ip)
 		}
-		return "", txErr
+		return providerLoginOutcome{}, txErr
 	}
-	return issued.RawToken, nil
+	return login, nil
 }
 
 // recoverProviderAccountRace runs after the attempted user transaction rolled
 // back (a unique violation) or reported an owned email. It re-reads
 // (provider, subject) first: if that subject now exists it follows the
-// returning-login path and issues a session for the owning user. Otherwise it
-// re-reads canonical-email ownership and returns the closed
-// email_already_registered outcome.
-func (s *Service) recoverProviderAccountRace(ctx context.Context, account NewProviderAccount, ua, ip string) (raw string, err error) {
-	raw, found, resolveErr := s.resolveProviderLogin(ctx, account.Subject, ua, ip)
+// returning-login path for the owning user. Otherwise it re-reads
+// canonical-email ownership and returns the closed email_already_registered
+// outcome.
+func (s *Service) recoverProviderAccountRace(ctx context.Context, account NewProviderAccount, ua, ip string) (providerLoginOutcome, error) {
+	login, found, resolveErr := s.resolveProviderLogin(ctx, account.Subject, ua, ip)
 	if resolveErr != nil {
-		return "", resolveErr
+		return providerLoginOutcome{}, resolveErr
 	}
 	if found {
-		return raw, nil
+		return login, nil
 	}
 
 	if _, getErr := s.q.GetUserByCanonicalEmail(ctx, account.VerifiedEmail); getErr == nil {
-		return "", errEmailAlreadyRegistered
+		return providerLoginOutcome{}, errEmailAlreadyRegistered
 	} else if !errors.Is(getErr, pgx.ErrNoRows) {
-		return "", fmt.Errorf("auth: create provider login: get user by email after race: %w", getErr)
+		return providerLoginOutcome{}, fmt.Errorf("auth: create provider login: get user by email after race: %w", getErr)
 	}
-	return "", fmt.Errorf("auth: create provider login: unresolved account race")
+	return providerLoginOutcome{}, fmt.Errorf("auth: create provider login: unresolved account race")
 }

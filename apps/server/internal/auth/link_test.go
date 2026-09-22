@@ -61,7 +61,7 @@ func TestStart_PurposeLogin_UnaffectedBySameSiteEnforcement(t *testing.T) {
 		"Origin":         "https://evil.example",
 	})
 	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("purpose=login start with cross-site signals status = %d, want %d (DD-C16 must not apply to purpose=login)", resp.StatusCode, http.StatusFound)
+		t.Fatalf("purpose=login start with cross-site signals status = %d, want %d (cross-site start checks must not apply to purpose=login)", resp.StatusCode, http.StatusFound)
 	}
 	if txc := extractCookie(resp, auth.OAuthTxCookieName); txc == nil {
 		t.Error("purpose=login start did not set __Host-oauth-tx despite succeeding")
@@ -149,7 +149,7 @@ func TestGitHubCallback_LinkPurpose_AttachesUnclaimedIdentityToLinkingUser(t *te
 	}
 	wantLocation := testPublicOrigin + wantSettingsSessionsPath
 	if got := resp.Header.Get("Location"); got != wantLocation {
-		t.Errorf("callback Location = %q, want %q (DD-C15)", got, wantLocation)
+		t.Errorf("callback Location = %q, want %q", got, wantLocation)
 	}
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("callback set a %s cookie (value=%q) on a link success, want none -- the caller already has one", auth.SessionCookieName, sc.Value)
@@ -258,7 +258,7 @@ func TestGoogleCallback_LinkPurpose_RejectedAfterLogoutEverywhere(t *testing.T) 
 	}
 	loc := resp.Header.Get("Location")
 	if got := mustQueryParam(t, loc, "error"); got != "auth_failed" {
-		t.Errorf("error param = %q, want %q (DD-C3 generic no-oracle rejection -- the completing request's session no longer authenticates)", got, "auth_failed")
+		t.Errorf("error param = %q, want %q (generic no-oracle rejection -- the completing request's session no longer authenticates)", got, "auth_failed")
 	}
 	assertRedirectPath(t, loc, wantSettingsSessionsPath)
 

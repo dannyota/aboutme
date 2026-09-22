@@ -68,7 +68,10 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	provider, err := s.unlinkIdentity(ctx, sess.UserID, identityID)
+	provider, err := s.unlinkIdentity(ctx, sess, identityID)
+	if err != nil && writeSensitiveGateError(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, errIdentityNotFound):
 		api.WriteError(w, http.StatusNotFound, notFoundCode, "no such identity")
@@ -88,20 +91,25 @@ func (s *Service) handleUnlinkIdentity(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
-// unlinkIdentity deletes identityID for userID under the user-row lock that
-// password mutations and session issuers also take, so two concurrent unlinks
-// cannot both pass the last-sign-in-method check. The same transaction writes
-// one identity_unlinked lifecycle audit event. It returns the provider of the
-// removed identity.
-func (s *Service) unlinkIdentity(ctx context.Context, userID, identityID uuid.UUID) (string, error) {
+// unlinkIdentity deletes identityID for the caller's account under the
+// user-row lock that password mutations and session issuers also take, so two
+// concurrent unlinks cannot both pass the last-sign-in-method check. Under that
+// lock it rechecks the caller's session, epoch, and recent proofs as
+// docs/design/second-factor-authentication.md requires. The same transaction
+// writes one identity_unlinked lifecycle audit event. It returns the provider
+// of the removed identity.
+func (s *Service) unlinkIdentity(ctx context.Context, sess store.Session, identityID uuid.UUID) (string, error) {
+	userID := sess.UserID
+	now := s.sessionMgr.now()
 	var provider string
 	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		if _, err := qtx.GetUserForUpdate(ctx, userID); err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return errIdentityNotFound
-			}
-			return fmt.Errorf("lock user: %w", err)
+		user, lockErr := lockAccountUser(ctx, qtx, userID)
+		if lockErr != nil {
+			return lockErr
+		}
+		if _, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
+			return gateErr
 		}
 		identities, err := qtx.ListIdentitiesByUserID(ctx, userID)
 		if err != nil {
@@ -134,7 +142,7 @@ func (s *Service) unlinkIdentity(ctx context.Context, userID, identityID uuid.UU
 		if n != 1 {
 			return errIdentityNotFound
 		}
-		if err := qtx.InsertIdentityUnlinkedAuditEvent(ctx, s.sessionMgr.now()); err != nil {
+		if err := qtx.InsertIdentityUnlinkedAuditEvent(ctx, now); err != nil {
 			return fmt.Errorf("insert audit event: %w", err)
 		}
 		return nil

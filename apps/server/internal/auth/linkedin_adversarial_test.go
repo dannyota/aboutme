@@ -152,7 +152,7 @@ func TestLinkedInCallback_PurposeLink_AllowsUnverifiedEmail(t *testing.T) {
 	}
 	wantLocation := testPublicOrigin + "/app/settings/sessions"
 	if got := resp.Header.Get("Location"); got != wantLocation {
-		t.Errorf("callback Location = %q, want %q (DD-C15: a link success redirects to the settings page that initiated it, never the bare origin)", got, wantLocation)
+		t.Errorf("callback Location = %q, want %q (a link success redirects to the settings page that initiated it, never the bare origin)", got, wantLocation)
 	}
 	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
 		t.Errorf("callback set a %s cookie (value=%q) on a link success, want none -- the caller already has one", auth.SessionCookieName, sc.Value)

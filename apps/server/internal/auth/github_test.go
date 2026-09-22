@@ -539,7 +539,7 @@ func assertGitHubRejectedAuthFailed(t *testing.T, resp *http.Response) {
 	t.Helper()
 
 	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("callback status = %d, want %d (DD-C10: a provider-side GitHub REST failure is a rejection, not a 500)", resp.StatusCode, http.StatusFound)
+		t.Fatalf("callback status = %d, want %d (a provider-side GitHub REST failure is a rejection, not a 500)", resp.StatusCode, http.StatusFound)
 	}
 	if got := mustQueryParam(t, resp.Header.Get("Location"), "error"); got != "auth_failed" {
 		t.Errorf("error param = %q, want %q", got, "auth_failed")
@@ -636,5 +636,35 @@ func TestGitHubCallback_RejectionLogsProviderAttribute(t *testing.T) {
 	logged := logBuf.String()
 	if !strings.Contains(logged, `"provider":"github"`) {
 		t.Errorf("log record = %q, want a provider attribute identifying GitHub as the callback that was rejected", logged)
+	}
+}
+
+// TestGitHubCallback_EnrolledLogin_PendingNotSession proves a returning GitHub
+// identity of an enrolled account receives a pending login and no session.
+func TestGitHubCallback_EnrolledLogin_PendingNotSession(t *testing.T) {
+	t.Parallel()
+
+	githubID := uniqueGitHubUserID(t)
+	gh := newGitHubStub(t, withTokenResponse("code-enrolled", "access-token-enrolled"), withUser(githubID, "octocat-enrolled"))
+	handler, q := newTestService(t, withGitHubEndpoint(gh.URL))
+	userID := createTestUser(t, q)
+	if _, err := q.CreateIdentity(t.Context(), store.CreateIdentityParams{
+		UserID: userID, Provider: string(auth.ProviderGitHub), ProviderUserID: strconv.FormatInt(githubID, 10),
+	}); err != nil {
+		t.Fatalf("CreateIdentity() error = %v", err)
+	}
+	enrollForTest(t, q, userID)
+
+	txCookie, state := beginGitHubFlow(t, handler)
+	resp := doGitHubCallback(t, handler, "code-enrolled", state, txCookie) //nolint:bodyclose // doGitHubCallback -> doGet closes the body itself before returning.
+	pending := pendingForCookie(t, q, assertPendingRedirect(t, resp))
+	if pending.UserID != userID || pending.Purpose != auth.PendingAuthenticationPurposeLogin {
+		t.Errorf("pending row = %+v, want a login row for the account", pending)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("enrolled GitHub login created %d sessions, want 0", n)
+	}
+	if n := gh.emailsRequestCount(); n != 0 {
+		t.Errorf("returning enrolled identity fetched /user/emails %d times, want 0", n)
 	}
 }

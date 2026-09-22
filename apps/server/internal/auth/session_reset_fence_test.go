@@ -1,6 +1,6 @@
 package auth_test
 
-// These tests prove the D4 user-lock fence between session issuance/rotation and
+// These tests prove the user-lock fence between session issuance/rotation and
 // password reset's RevokeAllSessions. A reset locks the user row before revoking
 // every session, and every session issuer and rotation successor serializes on
 // that same lock, so a session can never be inserted across a committed reset.
@@ -20,7 +20,8 @@ import (
 )
 
 // resetAllSessions models password reset's session revocation under the user
-// lock (D4 lock order: user, then sessions).
+// lock (lock order user, then sessions, per
+// docs/design/second-factor-authentication.md).
 func resetAllSessions(ctx context.Context, t *testing.T, pool *store.Pool, q *store.Queries, userID uuid.UUID) error {
 	t.Helper()
 	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {

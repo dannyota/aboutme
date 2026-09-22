@@ -3,8 +3,9 @@ package auth
 // PasswordService implements the password-based register, verify, login,
 // forgot, reset, reauth, and change operations, and their transactional
 // fences. It holds the exact dependencies the handlers need: the store
-// pool/queries, the session manager (issue), the password policy and hasher,
-// the encrypted outbox, and the rate policies. It never opens a short
+// pool/queries, the session manager (issue), the pending authentication
+// manager, the password policy and hasher, the encrypted outbox, and the rate
+// policies. It never opens a short
 // transaction around Argon2id hashing or HIBP lookups; those run before the
 // transaction, and only the user/credential/session lock-recheck-commit work
 // runs inside it.
@@ -42,6 +43,9 @@ type PasswordServiceOptions struct {
 	// so it returns the uniform not-found response. Pending registrations
 	// still verify, and every other password route is unchanged.
 	RegistrationDisabled bool
+	// Pending creates the pending authentication an enrolled account gets
+	// after password login or reauthentication. Nil builds one over Pool.
+	Pending *PendingAuthenticationManager
 }
 
 // PasswordService is the password-based HTTP service. See the package
@@ -50,6 +54,7 @@ type PasswordService struct {
 	pool            *store.Pool
 	q               *store.Queries
 	sessions        *SessionManager
+	pending         *PendingAuthenticationManager
 	policy          *password.Policy
 	hasher          *password.Hasher
 	outbox          *authmail.Outbox
@@ -94,10 +99,15 @@ func NewPasswordService(opts PasswordServiceOptions) (*PasswordService, error) {
 	case opts.Entropy == nil:
 		return nil, errors.New("auth: password service: nil entropy")
 	}
+	pending := opts.Pending
+	if pending == nil {
+		pending = NewPendingAuthenticationManager(opts.Pool, opts.Logger)
+	}
 	return &PasswordService{
 		pool:            opts.Pool,
 		q:               opts.Queries,
 		sessions:        opts.Sessions,
+		pending:         pending,
 		policy:          opts.Policy,
 		hasher:          opts.Hasher,
 		outbox:          opts.Outbox,
@@ -169,12 +179,12 @@ var errPasswordRegistrationRace = errors.New("auth: password registration raced"
 
 // recordLoginFailure records one wrong-password failure and returns the 401 or
 // 429 outcome.
-func (s *PasswordService) recordLoginFailure(now time.Time, canonicalEmail string) (string, error) {
+func (s *PasswordService) recordLoginFailure(now time.Time, canonicalEmail string) error {
 	state := s.limits.RecordLoginFailure(now, canonicalEmail)
 	if state.Exhausted {
-		return "", &passwordRateLimitedError{retryAfterSeconds: state.RetryAfterSeconds}
+		return &passwordRateLimitedError{retryAfterSeconds: state.RetryAfterSeconds}
 	}
-	return "", errPasswordAuthFailed
+	return errPasswordAuthFailed
 }
 
 // newEmailPayload builds the outbox plaintext for one email. Link is empty for

@@ -426,3 +426,33 @@ func TestUnlinkIdentity_AuditsOnlyASuccessfulUnlink(t *testing.T) {
 		t.Fatalf("%d identity_unlinked events carry a media job, want none", extra)
 	}
 }
+
+// TestUnlinkIdentity_EnrolledAccountNeedsFactorProof proves unlink rechecks
+// both recent proofs for an enrolled account under the user lock and removes
+// nothing without the factor proof.
+func TestUnlinkIdentity_EnrolledAccountNeedsFactorProof(t *testing.T) {
+	handler, q := newUnlinkTestService(t, allProviders)
+	userID := createTestUser(t, q)
+	addPassword(t, q, userID)
+	google := linkIdentity(t, q, userID, "google")
+	enrollForTest(t, q, userID)
+	raw, sess := issueTestSession(t, q, userID)
+
+	resp, code := unlink(t, handler, sess, raw, google.String())
+	if resp.StatusCode != http.StatusForbidden || code != "reauth_required" {
+		t.Fatalf("enrolled unlink without factor proof = %d %s, want 403 reauth_required", resp.StatusCode, code)
+	}
+	if !identityIDs(t, q, userID)[google] {
+		t.Fatal("identity removed by a rejected unlink")
+	}
+
+	fresh := time.Now()
+	setFactorProofForTest(t, sess.ID, &fresh)
+	resp, code = unlink(t, handler, sess, raw, google.String())
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("enrolled unlink with both proofs = %d %s, want 204", resp.StatusCode, code)
+	}
+	if identityIDs(t, q, userID)[google] {
+		t.Error("identity still linked after 204")
+	}
+}

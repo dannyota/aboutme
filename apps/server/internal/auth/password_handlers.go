@@ -19,6 +19,20 @@ type passwordAcceptedBody struct {
 	Accepted bool `json:"accepted"`
 }
 
+// passwordSecondFactorRequiredBody is the fixed 202 body for an enrolled
+// account's login or reauthentication. See
+// docs/design/passkey-second-factor-contract.md.
+type passwordSecondFactorRequiredBody struct {
+	SecondFactorRequired bool `json:"secondFactorRequired"`
+}
+
+// writePasswordSecondFactorRequired sets the pending cookie and writes the
+// fixed 202. It never writes a session cookie.
+func writePasswordSecondFactorRequired(w http.ResponseWriter, pendingRaw string) {
+	SetPendingAuthenticationCookie(w, pendingRaw)
+	api.WriteData(w, http.StatusAccepted, passwordSecondFactorRequiredBody{SecondFactorRequired: true})
+}
+
 // requirePasswordSession authenticates the session and stores it in context,
 // returning the password 401 (authentication_required) — distinct from the OAuth
 // session routes' session_required — and delivering any rotated cookie.
@@ -122,20 +136,39 @@ func (s *PasswordService) handleVerify(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
+// handleLogin returns 204 and a session for an unenrolled account, or 202 and
+// a pending cookie for an enrolled one. The optional next field is validated
+// like a provider-login return path before it is stored.
 func (s *PasswordService) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req passwordLoginRequest
+	var next string
 	if !s.decodeUnauthenticatedBody(w, r, map[string]*string{
 		"email":    &req.Email,
 		"password": &req.Password,
+		"next":     &next,
 	}) {
 		return
 	}
-	raw, err := s.login(r.Context(), req.Email, req.Password, r.UserAgent(), s.clientIPString(r))
+	out, err := s.loginWithSecondFactor(r.Context(), passwordLoginInput{
+		Email:           req.Email,
+		Password:        req.Password,
+		UA:              r.UserAgent(),
+		ClientIP:        s.clientIPString(r),
+		ReturnPath:      validatedLoginReturnPath(next),
+		PreviousPending: previousPendingToken(r),
+	})
 	if err != nil {
 		writePasswordError(w, err)
 		return
 	}
-	SetSessionCookie(w, raw)
+	if out.PendingRaw != "" {
+		writePasswordSecondFactorRequired(w, out.PendingRaw)
+		return
+	}
+	SetSessionCookie(w, out.SessionRaw)
+	if _, ok := readPendingCookie(r); ok {
+		ClearPendingAuthenticationCookie(w)
+	}
 	writeNoContent(w)
 }
 
@@ -176,8 +209,13 @@ func (s *PasswordService) handleReauth(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeAuthedBody(w, r, map[string]*string{"password": &req.Password}) {
 		return
 	}
-	if err := s.reauth(r.Context(), sess, req.Password, s.clientIPString(r)); err != nil {
+	pendingRaw, err := s.reauthWithSecondFactor(r.Context(), sess, req.Password, s.clientIPString(r), previousPendingToken(r))
+	if err != nil {
 		writePasswordError(w, err)
+		return
+	}
+	if pendingRaw != "" {
+		writePasswordSecondFactorRequired(w, pendingRaw)
 		return
 	}
 	writeNoContent(w)
@@ -193,6 +231,8 @@ func (s *PasswordService) handleChange(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeAuthedBody(w, r, map[string]*string{"password": &req.Password}) {
 		return
 	}
+	// This precheck avoids hashing for a stale primary proof. change rechecks
+	// both proofs under the user lock.
 	if err := RequireRecentReauth(sess, s.clock()); err != nil {
 		writePasswordReauthRequired(w)
 		return

@@ -213,19 +213,19 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Link and reauth use provider identity without fetching email.
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
-		if linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGitHub, providerUserID); linkErr != nil {
+		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGitHub, providerUserID)
+		if linkErr != nil {
 			s.redirectLinkOrReauthError(w, r, ProviderGitHub, tx.Purpose, linkErr)
 			return
 		}
-		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		s.finishLinkOrReauth(w, r, tx, pendingRaw)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
 	ua := r.UserAgent()
 
-	rawSession, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
+	login, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
 		Provider: ProviderGitHub,
 		Subject:  providerUserID,
 	}, ua, clientIP)
@@ -234,9 +234,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		SetSessionCookie(w, rawSession)
-		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		s.finishProviderLogin(w, r, ProviderGitHub, tx, login)
 		return
 	}
 
@@ -257,7 +255,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawSession, err = s.createProviderLogin(ctx, NewProviderAccount{
+	login, err = s.createProviderLogin(ctx, NewProviderAccount{
 		Subject:       ProviderSubject{Provider: ProviderGitHub, Subject: providerUserID},
 		VerifiedEmail: canonicalEmail,
 		Name:          githubDisplayName(user),
@@ -271,7 +269,5 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SetSessionCookie(w, rawSession)
-	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+	s.finishProviderLogin(w, r, ProviderGitHub, tx, login)
 }

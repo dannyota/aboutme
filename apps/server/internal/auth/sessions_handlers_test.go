@@ -4,13 +4,18 @@ package auth_test
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
@@ -285,7 +290,7 @@ func TestLogout_RotatedRequest_RevokesPredecessorToo(t *testing.T) {
 	// Logout must kill the predecessor immediately, not after grace.
 	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if after.StatusCode != http.StatusUnauthorized {
-		t.Errorf("GET %s with the PREDECESSOR's raw token after logout (via the successor) status = %d, want %d (DD-C14: logout must kill the whole lineage)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
+		t.Errorf("GET %s with the PREDECESSOR's raw token after logout (via the successor) status = %d, want %d (logout must kill the whole lineage)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
 	}
 
 	// The presented successor must also be dead.
@@ -339,7 +344,7 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 
 	after := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawOld)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if after.StatusCode != http.StatusUnauthorized {
-		t.Errorf("GET %s with the PREDECESSOR's raw token after revoking the successor via DELETE /sessions/{id} status = %d, want %d (DD-C14)", auth.MePath, after.StatusCode, http.StatusUnauthorized)
+		t.Errorf("GET %s with the PREDECESSOR's raw token after revoking the successor via DELETE /sessions/{id} status = %d, want %d", auth.MePath, after.StatusCode, http.StatusUnauthorized)
 	}
 }
 
@@ -395,15 +400,15 @@ func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t 
 		t.Error("target session A's revoked_at is still NULL, want non-NULL")
 	}
 	if revokedAt := rowRevokedAt(t, bRow.ID); revokedAt == nil {
-		t.Error("B's revoked_at is still NULL after revoking its predecessor A by id, want non-NULL (DD-C14c)")
+		t.Error("B's revoked_at is still NULL after revoking its predecessor A by id, want non-NULL")
 	}
 
 	cleared := extractCookie(resp, auth.SessionCookieName)
 	if cleared == nil || cleared.MaxAge >= 0 {
-		t.Error("__Host-session not cleared even though the caller's own current session (B) died via the lineage sweep on a DIFFERENT named target (DD-C14c item 6)")
+		t.Error("__Host-session not cleared even though the caller's own current session (B) died via the lineage sweep on a DIFFERENT named target")
 	}
 	if got := resp.Header.Get("Clear-Site-Data"); got != `"cookies", "storage"` {
-		t.Errorf("Clear-Site-Data = %q, want %q (DD-C14c item 6)", got, `"cookies", "storage"`)
+		t.Errorf("Clear-Site-Data = %q, want %q", got, `"cookies", "storage"`)
 	}
 }
 
@@ -454,7 +459,7 @@ func TestLogout_RaceLoserPredecessorToken_AlsoRevokesLiveSuccessor(t *testing.T)
 	// longer authenticate either, not just A.
 	afterB := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawB)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if afterB.StatusCode != http.StatusUnauthorized {
-		t.Errorf("GET %s with the SUCCESSOR's raw token after logging out via the predecessor status = %d, want %d (DD-C14b)", auth.MePath, afterB.StatusCode, http.StatusUnauthorized)
+		t.Errorf("GET %s with the SUCCESSOR's raw token after logging out via the predecessor status = %d, want %d", auth.MePath, afterB.StatusCode, http.StatusUnauthorized)
 	}
 }
 
@@ -509,7 +514,7 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 		t.Error("target session A's revoked_at is still NULL, want non-NULL")
 	}
 	if revokedAt := rowRevokedAt(t, bRow.ID); revokedAt == nil {
-		t.Error("A's live successor B's revoked_at is still NULL after revoking A by id, want non-NULL (DD-C14b: the lineage sweep must apply to ANY revoked target, not just the caller's own current session)")
+		t.Error("A's live successor B's revoked_at is still NULL after revoking A by id, want non-NULL (the lineage sweep must apply to ANY revoked target, not just the caller's own current session)")
 	}
 	if revokedAt := rowRevokedAt(t, currentSess.ID); revokedAt != nil {
 		t.Error("the caller's own (unrelated) current session was revoked as a side effect, want it untouched")
@@ -554,7 +559,7 @@ func TestDeleteSession_SameInstantUnrelatedSession_RemainsUntouched(t *testing.T
 		t.Error("target session's revoked_at is still NULL, want non-NULL")
 	}
 	if revokedAt := rowRevokedAt(t, otherSess.ID); revokedAt != nil {
-		t.Error("an UNRELATED session sharing the exact same created_at instant was revoked, want it untouched (DD-C14c blast-radius property)")
+		t.Error("an UNRELATED session sharing the exact same created_at instant was revoked, want it untouched (blast-radius property)")
 	}
 	if revokedAt := rowRevokedAt(t, currentSess.ID); revokedAt != nil {
 		t.Error("the caller's own (also same-instant, also unrelated) current session was revoked, want it untouched")
@@ -1052,5 +1057,308 @@ func TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing(t *testi
 
 	if revokedAt := rowRevokedAt(t, current.ID); revokedAt != nil {
 		t.Error("session row's revoked_at is non-NULL after a CSRF-rejected logout-everywhere, want NULL (never touched)")
+	}
+}
+
+// ---- sensitive-mutation gate and lock-order races ---------------------------
+//
+// Logout everywhere and single-session revocation are sensitive actions in
+// docs/design/second-factor-authentication.md: they lock the user, then lock
+// and recheck the caller's session, epoch, and recent proofs before writing.
+// Every session issuer, rotation successor, and epoch-change replacement takes
+// the same user lock, so none can commit a session a revocation misses.
+
+// raceWait bounds every wait in the lock-order races below.
+const raceWait = 15 * time.Second
+
+// beginUserLockHolder opens a transaction that holds userID's row lock and
+// returns it with its backend process ID. Cleanup rolls it back if the test
+// did not commit it.
+func beginUserLockHolder(t *testing.T, pool *store.Pool, userID uuid.UUID) (pgx.Tx, *store.Queries, int32) {
+	t.Helper()
+	tx, err := pool.Begin(t.Context())
+	if err != nil {
+		t.Fatalf("begin holder: %v", err)
+	}
+	t.Cleanup(func() {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback holder: %v", rollbackErr)
+		}
+	})
+	var pid int32
+	if err = tx.QueryRow(t.Context(), `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
+		t.Fatalf("holder pid: %v", err)
+	}
+	qtx := store.New(pool).WithTx(tx)
+	if _, err = qtx.GetUserForUpdate(t.Context(), userID); err != nil {
+		t.Fatalf("holder lock user: %v", err)
+	}
+	return tx, qtx, pid
+}
+
+// waitBlockedBy returns once another backend waits on a lock held by
+// holderPID, which proves the request under test reached its lock.
+func waitBlockedBy(t *testing.T, holderPID int32) {
+	t.Helper()
+	pool := newRowInspectorPool(t)
+	deadline := time.Now().Add(raceWait)
+	for time.Now().Before(deadline) {
+		var n int
+		if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM pg_stat_activity WHERE $1::integer = ANY(pg_blocking_pids(pid))`, holderPID).Scan(&n); err != nil {
+			t.Fatalf("query blocked backends: %v", err)
+		}
+		if n > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("no request blocked on holder %d within %s", holderPID, raceWait)
+}
+
+// serveAsync serves one mutating session request on its own goroutine and
+// delivers the recorder when the handler returns.
+func serveAsync(ctx context.Context, handler http.Handler, method, path, csrfToken, rawSession string) <-chan *httptest.ResponseRecorder {
+	done := make(chan *httptest.ResponseRecorder, 1)
+	req := httptest.NewRequestWithContext(ctx, method, path, nil)
+	req.Header.Set("Origin", testPublicOrigin)
+	req.Header.Set(auth.CSRFHeaderName, csrfToken)
+	req.AddCookie(sessionRequestCookie(rawSession))
+	go func() {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		done <- rec
+	}()
+	return done
+}
+
+// awaitRecorder waits a bounded time for serveAsync.
+func awaitRecorder(t *testing.T, done <-chan *httptest.ResponseRecorder) *httptest.ResponseRecorder {
+	t.Helper()
+	select {
+	case rec := <-done:
+		return rec
+	case <-time.After(raceWait):
+		t.Fatalf("request did not finish within %s", raceWait)
+		return nil
+	}
+}
+
+// newRevocationRaceService builds the production session routes over one pool
+// and returns that pool for holder transactions.
+func newRevocationRaceService(t *testing.T) (http.Handler, *store.Pool, *store.Queries) {
+	t.Helper()
+	pool := newTestPool(t)
+	svc, err := auth.NewService(testLogger(), config.Config{PublicOrigin: testPublicOrigin}, pool)
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	return api.New(testLogger(), noopPinger{}, api.Options{}, nil, svc.RegisterRoutes), pool, store.New(pool)
+}
+
+// TestRevokeAll_EpochReplacementCommittedFirst proves an epoch-change
+// replacement cannot survive a successful logout everywhere. The replacement
+// holds the user lock when logout everywhere arrives; after it commits, the
+// caller's session is revoked at the old epoch, so logout everywhere fails
+// closed instead of reporting success while the replacement lives.
+func TestRevokeAll_EpochReplacementCommittedFirst(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	_, changer := issueTestSession(t, q, userID)
+	rawCaller, caller := issueTestSession(t, q, userID)
+
+	holder, qtx, pid := beginUserLockHolder(t, pool, userID)
+	if _, err := qtx.AdvanceUserAuthEpoch(t.Context(), userID); err != nil {
+		t.Fatalf("advance epoch: %v", err)
+	}
+	replacement, err := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, changer.ID, nil)
+	if err != nil {
+		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
+	}
+
+	done := serveAsync(t.Context(), handler, http.MethodDelete, auth.SessionsPath, csrfTokenFor(caller), rawCaller)
+	waitBlockedBy(t, pid)
+	if err = holder.Commit(t.Context()); err != nil {
+		t.Fatalf("commit replacement: %v", err)
+	}
+	rec := awaitRecorder(t, done)
+
+	if rec.Code == http.StatusNoContent {
+		if n := unrevokedSessionCount(t, userID); n != 0 {
+			t.Fatalf("logout everywhere returned 204 but %d sessions live, want 0", n)
+		}
+		t.Fatal("logout everywhere with a session revoked by the replacement returned 204, want 401")
+	}
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("logout everywhere status = %d (%s), want 401", rec.Code, rec.Body)
+	}
+	if rowRevokedAt(t, caller.ID) == nil {
+		t.Error("caller session live after the epoch change, want revoked")
+	}
+	if rowRevokedAt(t, replacement.Session.ID) != nil {
+		t.Error("the deliberate replacement was revoked by a failed logout everywhere")
+	}
+}
+
+// TestRevokeAll_LogoutFirstThenReplacementFails proves the other order: once
+// logout everywhere commits, an epoch-change replacement of a revoked session
+// mints nothing.
+func TestRevokeAll_LogoutFirstThenReplacementFails(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	_, changer := issueTestSession(t, q, userID)
+	rawCaller, caller := issueTestSession(t, q, userID)
+
+	resp := doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(caller), "", sessionRequestCookie(rawCaller)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("logout everywhere status = %d, want 204", resp.StatusCode)
+	}
+
+	err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		qtx := q.WithTx(tx)
+		if _, advanceErr := qtx.AdvanceUserAuthEpoch(t.Context(), userID); advanceErr != nil {
+			return advanceErr
+		}
+		_, replaceErr := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, changer.ID, nil)
+		return replaceErr
+	})
+	if !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Fatalf("replacement after logout everywhere error = %v, want ErrSessionInvalid", err)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("live sessions after logout everywhere = %d, want 0", n)
+	}
+}
+
+// TestRevokeAll_RotationSuccessorCommittedFirst proves a rotation successor
+// inserted under the user lock before logout everywhere commits is revoked by
+// it. The holder performs the successor insert that SessionManager rotation
+// performs under the same lock.
+func TestRevokeAll_RotationSuccessorCommittedFirst(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	_, predecessor := issueTestSession(t, q, userID)
+	rawCaller, caller := issueTestSession(t, q, userID)
+
+	holder, qtx, pid := beginUserLockHolder(t, pool, userID)
+	live, err := qtx.GetSessionByIDForUpdate(t.Context(), predecessor.ID)
+	if err != nil {
+		t.Fatalf("lock predecessor: %v", err)
+	}
+	csrf := make([]byte, 32)
+	if _, err = rand.Read(csrf); err != nil {
+		t.Fatalf("csrf secret: %v", err)
+	}
+	now := time.Now()
+	successor, err := qtx.CreateSession(t.Context(), store.CreateSessionParams{
+		UserID: userID, TokenHash: sessionTokenHash(uuid.NewString()), CSRFSecret: csrf,
+		CreatedAt: now, LastSeenAt: now, ReauthenticatedAt: live.ReauthenticatedAt,
+		AbsoluteExpiresAt: live.AbsoluteExpiresAt, RotatedFrom: &live.ID, AuthEpoch: live.AuthEpoch,
+	})
+	if err != nil {
+		t.Fatalf("insert successor: %v", err)
+	}
+
+	done := serveAsync(t.Context(), handler, http.MethodDelete, auth.SessionsPath, csrfTokenFor(caller), rawCaller)
+	waitBlockedBy(t, pid)
+	if err = holder.Commit(t.Context()); err != nil {
+		t.Fatalf("commit successor: %v", err)
+	}
+	rec := awaitRecorder(t, done)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("logout everywhere status = %d (%s), want 204", rec.Code, rec.Body)
+	}
+	if rowRevokedAt(t, successor.ID) == nil {
+		t.Error("rotation successor committed before logout everywhere survived it")
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("live sessions after logout everywhere = %d, want 0", n)
+	}
+}
+
+// TestRevokeAll_LogoutFirstRotationMintsNoSuccessor drives real rotation: the
+// rotation probe runs logout everywhere to completion after rotation admission
+// and before the successor transaction, which then finds its predecessor
+// revoked under the user lock and inserts nothing.
+func TestRevokeAll_LogoutFirstRotationMintsNoSuccessor(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	issuedAt := time.Now().Add(-25 * time.Hour)
+	rawOld, old, err := auth.NewSessionManagerWithPoolForTest(pool, func() time.Time { return issuedAt }).Issue(t.Context(), userID, "ua", "203.0.113.93")
+	if err != nil {
+		t.Fatalf("Issue(aged) error = %v", err)
+	}
+	rawCaller, caller := issueTestSession(t, q, userID)
+
+	rotator := auth.NewSessionManagerWithPoolForTest(pool, time.Now)
+	var once sync.Once
+	var logoutStatus int
+	auth.SetSessionRotationProbeForTest(rotator, func() {
+		once.Do(func() {
+			resp := doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(caller), "", sessionRequestCookie(rawCaller)) //nolint:bodyclose // doJSON closes the body itself before returning.
+			logoutStatus = resp.StatusCode
+		})
+	})
+
+	_, rotated, err := rotator.Authenticate(t.Context(), rawOld)
+	if err != nil {
+		t.Fatalf("Authenticate(aged) error = %v", err)
+	}
+	if logoutStatus != http.StatusNoContent {
+		t.Fatalf("logout everywhere inside the rotation window status = %d, want 204", logoutStatus)
+	}
+	if rotated != "" {
+		t.Error("rotation after logout everywhere returned a successor token, want none")
+	}
+	if _, findErr := q.FindLiveSuccessorSession(t.Context(), &old.ID); !errors.Is(findErr, pgx.ErrNoRows) {
+		t.Errorf("FindLiveSuccessorSession() error = %v, want no live successor", findErr)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("live sessions after logout everywhere = %d, want 0", n)
+	}
+}
+
+// TestSensitiveRevocation_EnrolledAccountNeedsFactorProof proves logout
+// everywhere and single-session revocation require a recent factor proof for
+// an enrolled account and change nothing without it.
+func TestSensitiveRevocation_EnrolledAccountNeedsFactorProof(t *testing.T) {
+	handler, _, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	enrollForTest(t, q, userID)
+	raw, sess := issueTestSession(t, q, userID)
+	_, other := issueTestSession(t, q, userID)
+
+	for name, path := range map[string]string{"revoke one": sessionIDPath(other.ID), "revoke all": auth.SessionsPath} {
+		resp := doJSON(t, handler, http.MethodDelete, path, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
+		if resp.StatusCode != http.StatusForbidden || decodeErrorCode(t, resp) != "reauth_required" {
+			t.Errorf("%s without factor proof = %d, want 403 reauth_required", name, resp.StatusCode)
+		}
+	}
+	if rowRevokedAt(t, other.ID) != nil || rowRevokedAt(t, sess.ID) != nil {
+		t.Fatal("a rejected sensitive revocation revoked a session")
+	}
+
+	stale := time.Now().Add(-20 * time.Minute)
+	setFactorProofForTest(t, sess.ID, &stale)
+	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(other.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("revoke one with stale factor proof = %d, want 403", resp.StatusCode)
+	}
+
+	fresh := time.Now()
+	setFactorProofForTest(t, sess.ID, &fresh)
+	resp = doJSON(t, handler, http.MethodDelete, sessionIDPath(other.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("revoke one with both proofs = %d, want 204", resp.StatusCode)
+	}
+	if rowRevokedAt(t, other.ID) == nil {
+		t.Error("target live after an authorized revocation")
+	}
+	resp = doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("revoke all with both proofs = %d, want 204", resp.StatusCode)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("live sessions after logout everywhere = %d, want 0", n)
 	}
 }

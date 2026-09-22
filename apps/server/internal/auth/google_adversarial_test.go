@@ -119,7 +119,7 @@ func assertRejected(t *testing.T, resp *http.Response) (errorCode string) {
 
 	tx := extractCookie(resp, auth.OAuthTxCookieName)
 	if tx == nil {
-		t.Fatalf("response did not clear the %s cookie on a rejected callback (no Set-Cookie for it at all) -- DD-C4 requires ClearOAuthTxCookie on every failure path", auth.OAuthTxCookieName)
+		t.Fatalf("response did not clear the %s cookie on a rejected callback (no Set-Cookie for it at all) -- every failure path must call ClearOAuthTxCookie", auth.OAuthTxCookieName)
 	}
 	if tx.MaxAge >= 0 {
 		t.Errorf("%s cookie MaxAge = %d on a rejected callback, want negative (cleared, matching auth.ClearOAuthTxCookie)", auth.OAuthTxCookieName, tx.MaxAge)
@@ -479,4 +479,220 @@ func TestGoogleCallback_OIDCFailures_NoOracleAcrossFailureModes(t *testing.T) {
 			}
 		}
 	}
+}
+
+// ==== enrolled accounts ====
+//
+// An enrolled account's provider login and reauthentication create a pending
+// authentication instead of a session or proof update, and linking rechecks
+// both recent proofs under the user lock. See
+// docs/design/second-factor-authentication.md.
+
+// createGoogleIdentityForTest links a fresh Google subject to userID.
+func createGoogleIdentityForTest(t *testing.T, q *store.Queries, userID uuid.UUID) string {
+	t.Helper()
+	subject := uniqueSubject(t)
+	if _, err := q.CreateIdentity(t.Context(), store.CreateIdentityParams{
+		UserID: userID, Provider: string(auth.ProviderGoogle), ProviderUserID: subject,
+	}); err != nil {
+		t.Fatalf("CreateIdentity() error = %v", err)
+	}
+	return subject
+}
+
+// registerGoogleCode registers a single-use code for subject bound to nonce.
+func registerGoogleCode(t *testing.T, p *oidctest.Provider, subject, nonce string) string {
+	t.Helper()
+	code := "code-enrolled-" + uuid.NewString()
+	p.RegisterCode(code, oidctest.Claims{Subject: subject, Email: uniqueEmail(t), EmailVerified: ptrTrue(), Nonce: nonce})
+	return code
+}
+
+// serveGetAsync serves one GET on its own goroutine.
+func serveGetAsync(ctx context.Context, handler http.Handler, path string, cookies ...*http.Cookie) <-chan *httptest.ResponseRecorder {
+	done := make(chan *httptest.ResponseRecorder, 1)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	go func() {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		done <- rec
+	}()
+	return done
+}
+
+func TestGoogleCallback_EnrolledLogin_PendingNotSession(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+	userID := createTestUser(t, q)
+	subject := createGoogleIdentityForTest(t, q, userID)
+	enrollForTest(t, q, userID)
+
+	start := doGet(t, handler, auth.GoogleStartPath+"?next="+url.QueryEscape("/app/settings")) //nolint:bodyclose // doGet closes the body itself before returning.
+	txCookie := extractCookie(start, auth.OAuthTxCookieName)
+	if start.StatusCode != http.StatusFound || txCookie == nil {
+		t.Fatalf("start = %d, tx cookie %v", start.StatusCode, txCookie)
+	}
+	loc := start.Header.Get("Location")
+	state, nonce := mustQueryParam(t, loc, "state"), mustQueryParam(t, loc, "nonce")
+	code := registerGoogleCode(t, p, subject, nonce)
+
+	resp := doCallback(t, handler, code, state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	raw := assertPendingRedirect(t, resp)
+	pending := pendingForCookie(t, q, raw)
+	if pending.UserID != userID || pending.Purpose != auth.PendingAuthenticationPurposeLogin || pending.SessionID != nil {
+		t.Errorf("pending row = %+v, want an unbound login row for the account", pending)
+	}
+	if pending.ReturnPath != "/app/settings" {
+		t.Errorf("pending return path = %q, want the transaction's validated path", pending.ReturnPath)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("enrolled login created %d sessions, want 0", n)
+	}
+
+	// Replaying the consumed callback grants nothing and adds no pending row.
+	replay := doCallback(t, handler, code, state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	if got := assertRejected(t, replay); got != "auth_failed" {
+		t.Errorf("replayed callback error = %q, want auth_failed", got)
+	}
+	if extractCookie(replay, pendingCookieName) != nil {
+		t.Error("replayed callback set a pending cookie")
+	}
+	if n := pendingCountForUser(t, userID); n != 1 {
+		t.Errorf("pending rows after replay = %d, want 1", n)
+	}
+}
+
+func TestGoogleCallback_UnenrolledLogin_ClearsPendingCookie(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+	userID := createTestUser(t, q)
+	subject := createGoogleIdentityForTest(t, q, userID)
+
+	txCookie, state, nonce := beginGoogle(t, handler)
+	code := registerGoogleCode(t, p, subject, nonce)
+	resp := doCallback(t, handler, code, state, txCookie, requestCookie(pendingCookieName, "stale-pending")) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	if resp.StatusCode != http.StatusFound || extractCookie(resp, auth.SessionCookieName) == nil {
+		t.Fatalf("unenrolled login = %d without a session cookie", resp.StatusCode)
+	}
+	if cleared := extractCookie(resp, pendingCookieName); cleared == nil || cleared.MaxAge >= 0 {
+		t.Errorf("unenrolled login pending cookie = %+v, want cleared", cleared)
+	}
+	if n := pendingCountForUser(t, userID); n != 0 {
+		t.Errorf("unenrolled login created %d pending rows, want 0", n)
+	}
+}
+
+func TestGoogleCallback_EnrolledReauth_BindsSessionWithoutProofUpdate(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+	userID := createTestUser(t, q)
+	subject := createGoogleIdentityForTest(t, q, userID)
+	enrollForTest(t, q, userID)
+	raw, sess := issueTestSession(t, q, userID)
+	inspector := newRowInspectorPool(t)
+	before := sessionRowReauthenticatedAt(t.Context(), t, inspector, sess.ID)
+
+	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeReauth, userID)
+	code := registerGoogleCode(t, p, subject, tx.Nonce)
+	resp := doCallback(t, handler, code, tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	pendingRaw := assertPendingRedirect(t, resp)
+
+	pending := pendingForCookie(t, q, pendingRaw)
+	if pending.Purpose != auth.PendingAuthenticationPurposeReauth || pending.SessionID == nil || *pending.SessionID != sess.ID {
+		t.Errorf("pending row = %+v, want reauth bound to session %s", pending, sess.ID)
+	}
+	if pending.ReturnPath != wantSettingsSessionsPath {
+		t.Errorf("pending return path = %q, want %q", pending.ReturnPath, wantSettingsSessionsPath)
+	}
+	if after := sessionRowReauthenticatedAt(t.Context(), t, inspector, sess.ID); !after.Equal(before) {
+		t.Errorf("reauthenticated_at changed before factor completion: %v -> %v", before, after)
+	}
+	row, err := q.GetSessionByID(t.Context(), sess.ID)
+	if err != nil {
+		t.Fatalf("GetSessionByID() error = %v", err)
+	}
+	if row.SecondFactorVerifiedAt != nil || row.RevokedAt != nil {
+		t.Errorf("session after enrolled reauth = %+v, want unchanged and live", row)
+	}
+}
+
+func TestGoogleCallback_EnrolledLink_NeedsFactorProof(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+	userID := createTestUser(t, q)
+	enrollForTest(t, q, userID)
+	raw, sess := issueTestSession(t, q, userID)
+
+	subject := uniqueSubject(t)
+	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeLink, userID)
+	resp := doCallback(t, handler, registerGoogleCode(t, p, subject, tx.Nonce), tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	if resp.StatusCode != http.StatusFound || mustQueryParam(t, resp.Header.Get("Location"), "error") != "auth_failed" {
+		t.Fatalf("enrolled link without factor proof = %d %q, want auth_failed", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	assertNoIdentity(t, q, subject)
+
+	fresh := time.Now()
+	setFactorProofForTest(t, sess.ID, &fresh)
+	txCookie, tx = beginGoogleTransaction(t, q, auth.PurposeLink, userID)
+	resp = doCallback(t, handler, registerGoogleCode(t, p, subject, tx.Nonce), tx.State, txCookie, sessionRequestCookie(raw)) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("enrolled link with both proofs = %d, want 302", resp.StatusCode)
+	}
+	assertRedirectPath(t, resp.Header.Get("Location"), wantSettingsSessionsPath)
+	identity, err := q.GetIdentityByProviderSubject(t.Context(), store.GetIdentityByProviderSubjectParams{Provider: string(auth.ProviderGoogle), ProviderUserID: subject})
+	if err != nil || identity.UserID != userID {
+		t.Fatalf("identity after authorized link = %+v, %v; want owned by the account", identity, err)
+	}
+}
+
+// TestGoogleCallback_LinkRechecksEpochUnderUserLock holds a factor enrollment's
+// epoch change and session replacement under the user lock while a link
+// callback arrives. The callback authenticated its session before the lock,
+// so only the locked recheck can see that the session was replaced; the link
+// must create no identity.
+func TestGoogleCallback_LinkRechecksEpochUnderUserLock(t *testing.T) {
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+	pool := newTestPool(t)
+	userID := createTestUser(t, q)
+	raw, sess := issueTestSession(t, q, userID)
+	subject := uniqueSubject(t)
+	txCookie, tx := beginGoogleTransaction(t, q, auth.PurposeLink, userID)
+	code := registerGoogleCode(t, p, subject, tx.Nonce)
+
+	holder, qtx, pid := beginUserLockHolder(t, pool, userID)
+	if _, err := qtx.AdvanceUserAuthEpoch(t.Context(), userID); err != nil {
+		t.Fatalf("advance epoch: %v", err)
+	}
+	now := time.Now()
+	if _, err := auth.NewSessionManagerWithPool(pool).ReplaceAfterEpochChangeTx(t.Context(), qtx, userID, sess.ID, &now); err != nil {
+		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
+	}
+
+	path := auth.GoogleCallbackPath + "?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(tx.State)
+	done := serveGetAsync(t.Context(), handler, path, txCookie, sessionRequestCookie(raw))
+	waitBlockedBy(t, pid)
+	if err := holder.Commit(t.Context()); err != nil {
+		t.Fatalf("commit epoch change: %v", err)
+	}
+	rec := awaitRecorder(t, done)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("link callback status = %d, want 302", rec.Code)
+	}
+	if got := mustQueryParam(t, rec.Header().Get("Location"), "error"); got != "auth_failed" {
+		t.Errorf("link across an epoch change error = %q, want auth_failed", got)
+	}
+	assertNoIdentity(t, q, subject)
 }

@@ -233,7 +233,7 @@ func TestStartGET_LinkAndReauthPurposesUnavailable(t *testing.T) {
 		name    string
 		headers map[string]string
 	}{
-		{"same-origin (DD-C16 used to admit this)", map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": testPublicOrigin}},
+		{"same-origin", map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": testPublicOrigin}},
 		{"cross-site", map[string]string{"Sec-Fetch-Site": "cross-site"}},
 		{"no fetch metadata, matching Origin", map[string]string{"Origin": testPublicOrigin}},
 		{"no signals at all", map[string]string{}},
@@ -542,5 +542,40 @@ func TestStart_RateLimitRejectionIsLogged(t *testing.T) {
 
 	if logged := logBuf.String(); !strings.Contains(logged, `"reason":"start_rate_limited"`) {
 		t.Errorf("log record = %q, want a start_rate_limited reason attribute", logged)
+	}
+}
+
+// TestStartPOST_Link_EnrolledAccountNeedsFactorProof proves a link start for
+// an enrolled account requires a recent factor proof as well as a recent
+// primary proof, and creates no transaction without it. A reauthentication
+// start stays open because it produces that proof.
+func TestStartPOST_Link_EnrolledAccountNeedsFactorProof(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+	userID := createTestUser(t, q)
+	enrollForTest(t, q, userID)
+	raw, sess := issueTestSession(t, q, userID)
+	inspector := newRowInspectorPool(t)
+
+	resp := doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=link", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusForbidden || decodeErrorCode(t, resp) != "reauth_required" {
+		t.Fatalf("enrolled link start without factor proof = %d, want 403 reauth_required", resp.StatusCode)
+	}
+	if n := oauthTransactionCountForLinkingUser(t.Context(), t, inspector, userID); n != 0 {
+		t.Fatalf("rejected link start created %d transactions, want 0", n)
+	}
+
+	resp = doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=reauth", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("enrolled reauth start = %d, want 200", resp.StatusCode)
+	}
+
+	fresh := time.Now()
+	setFactorProofForTest(t, sess.ID, &fresh)
+	resp = doStartPOST(t, handler, auth.GoogleStartPath+"?purpose=link", sess, raw) //nolint:bodyclose // doStartPOST -> doJSON closes the body itself before returning.
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("enrolled link start with both proofs = %d, want 200", resp.StatusCode)
 	}
 }

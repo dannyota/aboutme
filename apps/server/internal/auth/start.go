@@ -6,6 +6,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -106,8 +107,11 @@ func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request, provi
 }
 
 // handleLinkStart accepts only link or reauth after session and CSRF checks.
-// Link requires recent reauth before a transaction is created; reauth cannot
-// require its own result. See docs/design/security.md.
+// Link requires recent reauth, rechecked under the user lock with the factor
+// proof for an enrolled account, before a transaction is created; reauth
+// cannot require its own result. The callback rechecks link authority again
+// before it writes. See docs/design/security.md and
+// docs/design/second-factor-authentication.md.
 func (s *Service) handleLinkStart(w http.ResponseWriter, r *http.Request, provider Provider, build authorizeURLBuilder) {
 	sess, ok := SessionFromContext(r.Context())
 	if !ok {
@@ -127,9 +131,17 @@ func (s *Service) handleLinkStart(w http.ResponseWriter, r *http.Request, provid
 	}
 
 	if purpose == PurposeLink {
-		if err := RequireRecentReauth(sess, s.sessionMgr.now()); err != nil {
-			markStartRejection(r.Context(), reasonStartReauthRequired)
-			api.WriteError(w, http.StatusForbidden, reauthRequiredCode, "recent reauthentication is required")
+		if err := s.recheckSensitiveSession(r.Context(), sess); err != nil {
+			switch {
+			case errors.Is(err, ErrSessionInvalid):
+				markStartRejection(r.Context(), reasonStartSessionRequired)
+				rejectSession(w)
+			case errors.Is(err, ErrReauthRequired):
+				markStartRejection(r.Context(), reasonStartReauthRequired)
+				api.WriteError(w, http.StatusForbidden, reauthRequiredCode, "recent reauthentication is required")
+			default:
+				s.writeInternalError(w, r, provider, "recheck_link_session", err)
+			}
 			return
 		}
 	}

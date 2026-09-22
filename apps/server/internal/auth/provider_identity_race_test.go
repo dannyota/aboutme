@@ -1,6 +1,6 @@
 package auth_test
 
-// These tests prove the D5 account-creation race rules: an owned email blocks a
+// These tests prove the provider account-creation race rules: an owned email blocks a
 // new subject, a subject-collision rolls the whole attempted user back (no
 // orphan), and concurrent same-subject first logins converge to one user, one
 // identity, and two sessions.

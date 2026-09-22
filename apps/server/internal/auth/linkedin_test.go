@@ -217,3 +217,33 @@ func beginLinkedInTransaction(t *testing.T, q *store.Queries, purpose auth.Purpo
 	}
 	return requestCookie(auth.OAuthTxCookieName, handle), transaction
 }
+
+// TestLinkedInCallback_EnrolledLogin_PendingNotSession proves a returning
+// LinkedIn identity of an enrolled account receives a pending login and no
+// session.
+func TestLinkedInCallback_EnrolledLogin_PendingNotSession(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL))
+	userID := createTestUser(t, q)
+	subject := uniqueLinkedInSubject(t)
+	if _, err := q.CreateIdentity(t.Context(), store.CreateIdentityParams{
+		UserID: userID, Provider: string(auth.ProviderLinkedIn), ProviderUserID: subject,
+	}); err != nil {
+		t.Fatalf("CreateIdentity() error = %v", err)
+	}
+	enrollForTest(t, q, userID)
+
+	txCookie, state, nonce := beginLinkedIn(t, handler)
+	code := "code-enrolled-" + uuid.NewString()
+	p.RegisterCode(code, oidctest.Claims{Subject: subject, Email: uniqueEmail(t), EmailVerified: ptrTrue(), Nonce: nonce})
+	resp := doLinkedInCallback(t, handler, code, state, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
+	pending := pendingForCookie(t, q, assertPendingRedirect(t, resp))
+	if pending.UserID != userID || pending.Purpose != auth.PendingAuthenticationPurposeLogin || pending.ReturnPath != "/app/resumes" {
+		t.Errorf("pending row = %+v, want a default-path login row for the account", pending)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 0 {
+		t.Errorf("enrolled LinkedIn login created %d sessions, want 0", n)
+	}
+}

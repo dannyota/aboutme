@@ -74,6 +74,10 @@ func isUniqueViolation(err error) bool {
 // settingsSessionsPath is the success and error target for privileged callbacks.
 const settingsSessionsPath = "/app/settings/sessions"
 
+// secondFactorPagePath is where an enrolled account completes a pending
+// authentication. See docs/design/passkey-second-factor-contract.md.
+const secondFactorPagePath = "/login/second-factor"
+
 // sessionIssuer is the callback's injectable session-issuance seam. It exposes
 // the transaction-scoped primitive only: the caller already holds the user row
 // lock in the same transaction.
@@ -93,7 +97,10 @@ type Service struct {
 	// authentication.
 	sessions   sessionIssuer
 	sessionMgr *SessionManager
-	logger     *slog.Logger
+	// pending creates the pending authentication an enrolled account gets
+	// instead of a session after provider login or reauthentication.
+	pending *PendingAuthenticationManager
+	logger  *slog.Logger
 
 	publicOrigin            string
 	providerLogin           config.ProviderLogin
@@ -130,7 +137,8 @@ type Service struct {
 // NewService builds a Service without network I/O. Provider discovery is lazy
 // and cached. A nil logger disables auth logging. pool may be nil for callers
 // that only exercise route registration or provider discovery, never the login
-// callback; every callback requires it to open the D4 user-lock transaction.
+// callback; every callback requires it to open the user-lock transaction that
+// docs/design/second-factor-authentication.md orders.
 func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Service, error) {
 	if cfg.PublicOrigin == "" {
 		return nil, fmt.Errorf("auth: NewService: config.PublicOrigin is required")
@@ -143,6 +151,7 @@ func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Serv
 		pool:                    pool,
 		sessions:                sessionMgr,
 		sessionMgr:              sessionMgr,
+		pending:                 NewPendingAuthenticationManager(pool, logger),
 		logger:                  logger,
 		publicOrigin:            cfg.PublicOrigin,
 		providerLogin:           cfg.ProviderLogin,
@@ -429,19 +438,19 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Link and reauth use provider identity without an email check.
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
-		if linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGoogle, idToken.Subject); linkErr != nil {
+		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGoogle, idToken.Subject)
+		if linkErr != nil {
 			s.redirectLinkOrReauthError(w, r, ProviderGoogle, tx.Purpose, linkErr)
 			return
 		}
-		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		s.finishLinkOrReauth(w, r, tx, pendingRaw)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
 	ua := r.UserAgent()
 
-	rawSession, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
+	login, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
 		Provider: ProviderGoogle,
 		Subject:  idToken.Subject,
 	}, ua, clientIP)
@@ -450,9 +459,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if found {
-		SetSessionCookie(w, rawSession)
-		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		s.finishProviderLogin(w, r, ProviderGoogle, tx, login)
 		return
 	}
 
@@ -467,7 +474,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawSession, err = s.createProviderLogin(ctx, NewProviderAccount{
+	login, err = s.createProviderLogin(ctx, NewProviderAccount{
 		Subject:       ProviderSubject{Provider: ProviderGoogle, Subject: idToken.Subject},
 		VerifiedEmail: canonicalEmail,
 		Name:          claims.Name,
@@ -481,9 +488,40 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	SetSessionCookie(w, rawSession)
+	s.finishProviderLogin(w, r, ProviderGoogle, tx, login)
+}
+
+// finishProviderLogin ends a successful provider login. An unenrolled account
+// receives its session, and any stale pending cookie is cleared. An enrolled
+// account receives a pending login and no session, then continues at the
+// factor page. A pending row that cannot be created grants nothing and uses the
+// closed auth_failed outcome. See docs/design/passkey-second-factor-contract.md.
+func (s *Service) finishProviderLogin(w http.ResponseWriter, r *http.Request, provider Provider, tx Transaction, login providerLoginOutcome) {
+	if !login.enrolled {
+		SetSessionCookie(w, login.sessionRaw)
+		if _, ok := readPendingCookie(r); ok {
+			ClearPendingAuthenticationCookie(w)
+		}
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		return
+	}
+	issued, err := s.pending.Create(r.Context(), PendingAuthenticationRequest{
+		UserID:            login.userID,
+		Purpose:           PendingAuthenticationPurposeLogin,
+		PrimaryVerifiedAt: login.verifiedAt,
+		ReturnPath:        validatedLoginReturnPath(tx.ReturnPath),
+		PreviousRawToken:  previousPendingToken(r),
+	})
+	if err != nil {
+		s.logInternalError(r, provider, "create_pending_authentication", err)
+		ClearOAuthTxCookie(w)
+		http.Redirect(w, r, s.callbackErrorRedirectBase(tx.Purpose)+"?error="+url.QueryEscape(authFailedErrorCode), http.StatusFound)
+		return
+	}
+	SetPendingAuthenticationCookie(w, issued.RawToken)
 	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+	http.Redirect(w, r, s.publicOrigin+secondFactorPagePath, http.StatusFound)
 }
 
 // emailLocalPart returns the text before "@", or the input when absent.

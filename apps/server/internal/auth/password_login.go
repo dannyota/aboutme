@@ -1,7 +1,9 @@
 package auth
 
 // Password login: credential verification, the snapshot re-check inside the
-// session-issuing transaction, and the deferred password rehash.
+// session-issuing transaction, the deferred password rehash, and the pending
+// login an enrolled account receives instead of a session. See
+// docs/design/second-factor-authentication.md.
 
 import (
 	"bytes"
@@ -18,19 +20,61 @@ import (
 
 // ---- login ----
 
+// passwordLoginInput is one password login request. ReturnPath is already
+// validated. PreviousPending is the browser's pending cookie, if any.
+type passwordLoginInput struct {
+	Email           string
+	Password        string
+	UA              string
+	ClientIP        string
+	ReturnPath      string
+	PreviousPending string
+}
+
+// passwordLoginOutcome carries exactly one of a session token for an
+// unenrolled account or a pending token for an enrolled account.
+type passwordLoginOutcome struct {
+	SessionRaw string
+	PendingRaw string
+}
+
+// errPasswordSecondFactorPending tells a caller of login that the account is
+// enrolled and received a pending login instead of a session.
+var errPasswordSecondFactorPending = errors.New("auth: password login requires a second factor")
+
+// login returns the session token for an unenrolled account. For an enrolled
+// account it returns errPasswordSecondFactorPending; the HTTP handler uses
+// loginWithSecondFactor to deliver the pending cookie.
 func (s *PasswordService) login(ctx context.Context, email, rawPassword, ua, clientIP string) (string, error) {
+	out, err := s.loginWithSecondFactor(ctx, passwordLoginInput{
+		Email: email, Password: rawPassword, UA: ua, ClientIP: clientIP, ReturnPath: defaultLoginReturnPath,
+	})
+	if err != nil {
+		return "", err
+	}
+	if out.PendingRaw != "" {
+		return "", errPasswordSecondFactorPending
+	}
+	return out.SessionRaw, nil
+}
+
+// loginWithSecondFactor verifies the primary credential. An unenrolled account
+// receives a session. An enrolled account receives a pending login bound to
+// the validated return path and no session.
+func (s *PasswordService) loginWithSecondFactor(ctx context.Context, in passwordLoginInput) (passwordLoginOutcome, error) {
 	now := s.clock()
+	email, rawPassword, ua, clientIP := in.Email, in.Password, in.UA, in.ClientIP
 
 	canonicalEmail, err := accountemail.Canonicalize(email)
 	if err != nil {
-		return "", errPasswordEmailInvalid
+		return passwordLoginOutcome{}, errPasswordEmailInvalid
 	}
 	normalized, err := password.Normalize(rawPassword)
 	if err != nil {
-		return "", errPasswordAuthFailed
+		return passwordLoginOutcome{}, errPasswordAuthFailed
 	}
 	if d := s.limits.AdmitLoginIP(now, clientAddrFromString(clientIP)); !d.Allowed {
-		return "", &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
+		return passwordLoginOutcome{}, &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 
 	// Credential snapshot (or the dummy path for unknown/provider-only accounts).
@@ -39,7 +83,7 @@ func (s *PasswordService) login(ctx context.Context, email, rawPassword, ua, cli
 	var needsRehash bool
 	uerr := s.lookupLoginUser(ctx, canonicalEmail, &user, &snapshotHash)
 	if uerr != nil {
-		return "", uerr
+		return passwordLoginOutcome{}, uerr
 	}
 
 	matched := false
@@ -51,52 +95,65 @@ func (s *PasswordService) login(ctx context.Context, email, rawPassword, ua, cli
 		case errors.Is(verr, password.ErrHashInvalid):
 			_ = s.hasher.VerifyDummy(ctx, normalized) //nolint:errcheck // corrupt hash: pay the cost so no account oracle opens, and the dummy's own error is irrelevant
 		default:
-			return "", errPasswordUnavailable
+			return passwordLoginOutcome{}, errPasswordUnavailable
 		}
 	} else {
 		_ = s.hasher.VerifyDummy(ctx, normalized) //nolint:errcheck // unknown account: pay the same verify cost and ignore the dummy's error to avoid an oracle
 	}
 	if !matched {
-		return s.recordLoginFailure(now, canonicalEmail)
+		return passwordLoginOutcome{}, s.recordLoginFailure(now, canonicalEmail)
 	}
 
 	if s.loginPreTxProbe != nil {
 		s.loginPreTxProbe()
 	}
 
-	issued, err := s.issueLoginSession(ctx, user, snapshotHash, normalized, ua, clientIP, needsRehash, now)
+	issued, enrolled, err := s.issueLoginSession(ctx, user, snapshotHash, normalized, ua, clientIP, needsRehash, now)
 	if err != nil {
 		if errors.Is(err, errPasswordCredentialChanged) {
 			// Re-read and re-verify once, outside the transaction.
 			cred, cerr := s.q.GetPasswordCredential(ctx, user.ID)
 			if cerr != nil {
 				if errors.Is(cerr, pgx.ErrNoRows) {
-					return s.recordLoginFailure(now, canonicalEmail)
+					return passwordLoginOutcome{}, s.recordLoginFailure(now, canonicalEmail)
 				}
-				return "", errPasswordUnavailable
+				return passwordLoginOutcome{}, errPasswordUnavailable
 			}
 			res, verr := s.hasher.Verify(ctx, string(cred.EncodedHash), normalized)
 			if verr != nil {
 				if !errors.Is(verr, password.ErrHashInvalid) {
-					return "", errPasswordUnavailable
+					return passwordLoginOutcome{}, errPasswordUnavailable
 				}
-				return s.recordLoginFailure(now, canonicalEmail)
+				return passwordLoginOutcome{}, s.recordLoginFailure(now, canonicalEmail)
 			}
 			if !res.Match {
-				return s.recordLoginFailure(now, canonicalEmail)
+				return passwordLoginOutcome{}, s.recordLoginFailure(now, canonicalEmail)
 			}
-			issued, err = s.issueLoginSession(ctx, user, cred.EncodedHash, normalized, ua, clientIP, res.NeedsRehash, now)
+			issued, enrolled, err = s.issueLoginSession(ctx, user, cred.EncodedHash, normalized, ua, clientIP, res.NeedsRehash, now)
 		}
 		if err != nil {
 			if errors.Is(err, errPasswordAuthFailed) {
-				return s.recordLoginFailure(now, canonicalEmail)
+				return passwordLoginOutcome{}, s.recordLoginFailure(now, canonicalEmail)
 			}
-			return "", errPasswordUnavailable
+			return passwordLoginOutcome{}, errPasswordUnavailable
 		}
 	}
 
 	s.limits.ClearLoginSuccess(canonicalEmail)
-	return issued.RawToken, nil
+	if !enrolled {
+		return passwordLoginOutcome{SessionRaw: issued.RawToken}, nil
+	}
+	pending, err := s.pending.Create(ctx, PendingAuthenticationRequest{
+		UserID:            user.ID,
+		Purpose:           PendingAuthenticationPurposeLogin,
+		PrimaryVerifiedAt: now,
+		ReturnPath:        in.ReturnPath,
+		PreviousRawToken:  in.PreviousPending,
+	})
+	if err != nil {
+		return passwordLoginOutcome{}, errPasswordUnavailable
+	}
+	return passwordLoginOutcome{PendingRaw: pending.RawToken}, nil
 }
 
 // lookupLoginUser fills user and snapshotHash (nil for unknown/provider-only
@@ -123,16 +180,21 @@ func (s *PasswordService) lookupLoginUser(ctx context.Context, canonicalEmail st
 }
 
 // issueLoginSession locks the user, rechecks the credential against the
-// snapshot, optionally commits a prepared rehash, and issues the session — all
-// in one transaction. It returns errPasswordCredentialChanged when the snapshot
-// no longer matches so the caller re-verifies outside the transaction.
-func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User, snapshotHash []byte, normalized, ua, ip string, needsRehash bool, now time.Time) (SessionIssue, error) {
+// snapshot, optionally commits a prepared rehash, and then either issues the
+// session or, for an enrolled account, reports enrolled without issuing one,
+// all in one transaction. It returns errPasswordCredentialChanged when the
+// snapshot no longer matches so the caller re-verifies outside the
+// transaction.
+func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User, snapshotHash []byte, normalized, ua, ip string, needsRehash bool, now time.Time) (SessionIssue, bool, error) {
 	rehash, err := s.prepareRehash(ctx, normalized, needsRehash)
 	if err != nil {
-		return SessionIssue{}, err
+		return SessionIssue{}, false, err
 	}
 
-	var issued SessionIssue
+	var (
+		issued   SessionIssue
+		enrolled bool
+	)
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
 		if _, lerr := qtx.GetUserForUpdate(ctx, user.ID); lerr != nil {
@@ -143,6 +205,10 @@ func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User
 		}
 		if s.userLockProbe != nil {
 			s.userLockProbe()
+		}
+		policy, perr := lockSecondFactorPolicy(ctx, qtx, user.ID)
+		if perr != nil {
+			return perr
 		}
 		cred, cerr := qtx.GetPasswordCredentialForUpdate(ctx, user.ID)
 		if cerr != nil {
@@ -164,6 +230,10 @@ func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User
 				return uerr
 			}
 		}
+		if policy != nil {
+			enrolled = true
+			return nil
+		}
 		var ierr error
 		issued, ierr = s.sessions.IssueTx(ctx, qtx, user, ua, ip)
 		return ierr
@@ -171,14 +241,14 @@ func (s *PasswordService) issueLoginSession(ctx context.Context, user store.User
 	if err != nil {
 		switch {
 		case errors.Is(err, errPasswordCredentialChanged):
-			return SessionIssue{}, errPasswordCredentialChanged
+			return SessionIssue{}, false, errPasswordCredentialChanged
 		case errors.Is(err, errPasswordAuthFailed):
-			return SessionIssue{}, errPasswordAuthFailed
+			return SessionIssue{}, false, errPasswordAuthFailed
 		default:
-			return SessionIssue{}, errPasswordUnavailable
+			return SessionIssue{}, false, errPasswordUnavailable
 		}
 	}
-	return issued, nil
+	return issued, enrolled, nil
 }
 
 // prepareRehash derives a fresh encoding for normalized only when the verified
