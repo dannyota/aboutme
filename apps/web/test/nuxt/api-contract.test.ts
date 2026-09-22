@@ -126,32 +126,35 @@ describe('generated API surface (consumer wiring)', () => {
     expect(new URL(seen).pathname).toBe('/api/v1/me');
   });
 
-  it('exposes the pending second-factor status read at the versioned path', async () => {
-    // `/login/second-factor` reads pending status through `$fetch`
-    // directly (see secondFactorPending.ts), not through this generated
-    // client. This proves the generated client itself carries the route at
-    // the same versioned path, so a typed caller could use it too.
-    let seen = '';
-    const client = createApiClient({
-      fetch: async (request: Request) => {
-        seen = request.url;
-        return new Response(
-          JSON.stringify({
-            data: {
-              purpose: 'login',
-              methods: ['passkey', 'recovery'],
-              expiresAt: '2026-09-20T09:05:00Z',
-              returnPath: '/app/resumes',
-              csrfToken: '0'.repeat(43),
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      },
-    });
+  it(
+    'exposes the pending second-factor read at the versioned path',
+    async () => {
+      // `/login/second-factor` reads pending status through `$fetch`
+      // directly (see secondFactorPending.ts), not through this generated
+      // client. This proves the generated client itself carries the route at
+      // the same versioned path, so a typed caller could use it too.
+      let seen = '';
+      const client = createApiClient({
+        fetch: async (request: Request) => {
+          seen = request.url;
+          return new Response(
+            JSON.stringify({
+              data: {
+                purpose: 'login',
+                methods: ['passkey', 'recovery'],
+                expiresAt: '2026-09-20T09:05:00Z',
+                returnPath: '/app/resumes',
+                csrfToken: '0'.repeat(43),
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        },
+      });
 
-    await client.GET('/auth/second-factor');
+      await client.GET('/auth/second-factor');
 
-    expect(new URL(seen).pathname).toBe('/api/v1/auth/second-factor');
-  });
+      expect(new URL(seen).pathname).toBe('/api/v1/auth/second-factor');
+    },
+  );
 });
