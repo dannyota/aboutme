@@ -7,6 +7,7 @@ import {
 } from 'vue';
 
 import type { AuthProvider } from './useAuth';
+import type { components } from '../api/generated/openapi';
 import type { Locale } from '@/i18n/locale';
 import { decodeBase64Url, encodeBase64Url } from '../utils/webauthn';
 
@@ -23,11 +24,7 @@ import { decodeBase64Url, encodeBase64Url } from '../utils/webauthn';
  * reading a raw server body.
  */
 
-export interface SecondFactorPasskey {
-  readonly id: string;
-  readonly createdAt: string;
-  readonly lastUsedAt: string | null;
-}
+export type SecondFactorPasskey = components['schemas']['SecondFactorPasskey'];
 
 export type SecondFactorSettingsErrorKind
   = | 'reauth-required'
@@ -50,53 +47,23 @@ export class SecondFactorSettingsFailure extends Error {
   }
 }
 
-export interface RegistrationPublicKeyInput {
-  readonly challenge: string;
-  readonly rp: { readonly name: string; readonly id: string };
-  readonly user: {
-    readonly id: string;
-    readonly name: string;
-    readonly displayName: string;
-  };
-  readonly pubKeyCredParams: ReadonlyArray<{
-    readonly type: 'public-key';
-    readonly alg: number;
-  }>;
-  readonly timeout: number;
-  readonly excludeCredentials: ReadonlyArray<{
-    readonly type: 'public-key';
-    readonly id: string;
-    readonly transports?: readonly string[];
-  }>;
-  readonly authenticatorSelection: {
-    readonly residentKey: string;
-    readonly requireResidentKey: boolean;
-    readonly userVerification: string;
-  };
-  readonly attestation: string;
-}
+// Aliased from the generated client (not hand-written) so a wire-shape
+// change fails typecheck here instead of silently drifting: the request
+// body sent to `navigator.credentials.create` and to
+// `POST /me/second-factor/passkeys` must stay exactly what the server
+// accepts, the same reason `utils/webauthn.ts` aliases its own assertion
+// credential type from `PasskeyAssertionCompletionRequest`.
+export type RegistrationPublicKeyInput
+  = components['schemas']['WebAuthnRegistrationPublicKey'];
 
-export interface PasskeyRegistrationCredential {
-  readonly id: string;
-  readonly rawId: string;
-  readonly type: 'public-key';
-  readonly response: {
-    readonly clientDataJSON: string;
-    readonly attestationObject: string;
-    readonly transports: readonly string[];
-  };
-  readonly clientExtensionResults: Record<string, never>;
-}
+export type PasskeyRegistrationCredential
+  = components['schemas']['PasskeyRegistrationCompletionRequest']['credential'];
 
-export interface RegistrationOptionsResult {
-  readonly ceremonyId: string;
-  readonly publicKey: RegistrationPublicKeyInput;
-}
+export type RegistrationOptionsResult
+  = components['schemas']['SecondFactorRegistrationOptionsResponse']['data'];
 
-export interface RegistrationCompletionResult {
-  readonly passkey: SecondFactorPasskey;
-  readonly recoveryCodes?: readonly string[];
-}
+export type RegistrationCompletionResult
+  = components['schemas']['SecondFactorRegistrationResponse']['data'];
 
 export interface SecondFactorSettingsActions {
   /** Refresh the current session's recent-reauthentication time. */
