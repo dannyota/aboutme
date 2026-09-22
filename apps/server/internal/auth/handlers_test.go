@@ -5,6 +5,7 @@ package auth_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -1012,4 +1013,94 @@ func TestGoogleCallback_LoginIssuesSessionUsingInjectedSessionManagerClock(t *te
 	if !row.CreatedAt.Equal(clk.Now()) {
 		t.Errorf("issued session CreatedAt = %v, want %v (the injected SessionManager's fake clock -- SetSessionManagerForTest must point svc.sessions at it too, not just svc.sessionMgr)", row.CreatedAt, clk.Now())
 	}
+}
+
+// ---- enrolled-account fixtures ----------------------------------------------
+
+// pendingCookieName is the pending authentication cookie defined in
+// docs/design/passkey-second-factor-contract.md.
+const pendingCookieName = "__Host-auth-pending"
+
+// secondFactorPage is the factor page an enrolled provider callback targets.
+const secondFactorPage = "/login/second-factor"
+
+// enrollForTest makes userID an enrolled account. Primary login and sensitive
+// actions read only the factor policy row, so no credential is needed.
+func enrollForTest(t *testing.T, q *store.Queries, userID uuid.UUID) {
+	t.Helper()
+	handle := make([]byte, 32)
+	if _, err := rand.Read(handle); err != nil {
+		t.Fatalf("generate user handle: %v", err)
+	}
+	if _, err := q.CreateSecondFactorPolicy(t.Context(), store.CreateSecondFactorPolicyParams{
+		UserID: userID, WebauthnUserHandle: handle, EnabledAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("CreateSecondFactorPolicy() error = %v", err)
+	}
+}
+
+// setFactorProofForTest sets a session's factor-proof time; nil clears it.
+func setFactorProofForTest(t *testing.T, sessionID uuid.UUID, at *time.Time) {
+	t.Helper()
+	pool := newRowInspectorPool(t)
+	if _, err := pool.Exec(t.Context(), `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, sessionID, at); err != nil {
+		t.Fatalf("set factor proof: %v", err)
+	}
+}
+
+// pendingForCookie loads the pending row named by a raw pending cookie.
+func pendingForCookie(t *testing.T, q *store.Queries, raw string) store.PendingAuthentication {
+	t.Helper()
+	row, err := q.GetPendingAuthenticationByTokenDigest(t.Context(), sessionTokenHash(raw))
+	if err != nil {
+		t.Fatalf("GetPendingAuthenticationByTokenDigest() error = %v", err)
+	}
+	return row
+}
+
+// pendingCountForUser counts every pending row of userID, live or consumed.
+func pendingCountForUser(t *testing.T, userID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := newRowInspectorPool(t).QueryRow(t.Context(), `SELECT count(*) FROM pending_authentications WHERE user_id = $1`, userID).Scan(&n); err != nil {
+		t.Fatalf("count pending rows: %v", err)
+	}
+	return n
+}
+
+// unrevokedSessionCount counts userID's unrevoked session rows.
+func unrevokedSessionCount(t *testing.T, userID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := newRowInspectorPool(t).QueryRow(t.Context(), `SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL`, userID).Scan(&n); err != nil {
+		t.Fatalf("count live sessions: %v", err)
+	}
+	return n
+}
+
+// assertPendingRedirect checks an enrolled provider callback: a 302 to the
+// factor page, a new pending cookie, no session cookie, and a cleared
+// transaction cookie. It returns the pending cookie value.
+func assertPendingRedirect(t *testing.T, resp *http.Response) string {
+	t.Helper()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("callback status = %d, want 302", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Location"); got != testPublicOrigin+secondFactorPage {
+		t.Errorf("callback Location = %q, want %q", got, testPublicOrigin+secondFactorPage)
+	}
+	if sc := extractCookie(resp, auth.SessionCookieName); sc != nil {
+		t.Errorf("enrolled callback set %s (value=%q), want no session", auth.SessionCookieName, sc.Value)
+	}
+	if tx := extractCookie(resp, auth.OAuthTxCookieName); tx == nil || tx.MaxAge >= 0 {
+		t.Errorf("enrolled callback did not clear %s: %+v", auth.OAuthTxCookieName, tx)
+	}
+	pending := extractCookie(resp, pendingCookieName)
+	if pending == nil || pending.Value == "" || pending.MaxAge <= 0 {
+		t.Fatalf("enrolled callback pending cookie = %+v, want a new value", pending)
+	}
+	if !pending.Secure || !pending.HttpOnly || pending.SameSite != http.SameSiteStrictMode {
+		t.Errorf("pending cookie attributes = %+v, want Secure, HttpOnly, SameSite=Strict", pending)
+	}
+	return pending.Value
 }

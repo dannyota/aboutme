@@ -187,19 +187,19 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	// Link and reauth use provider identity without an email check.
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
-		if linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderLinkedIn, idToken.Subject); linkErr != nil {
+		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderLinkedIn, idToken.Subject)
+		if linkErr != nil {
 			s.redirectLinkOrReauthError(w, r, ProviderLinkedIn, tx.Purpose, linkErr)
 			return
 		}
-		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		s.finishLinkOrReauth(w, r, tx, pendingRaw)
 		return
 	}
 
 	clientIP, _ := api.ClientIP(r, s.trustedProxies) // best-effort: IssueTx tolerates an empty ip
 	ua := r.UserAgent()
 
-	rawSession, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
+	login, found, err := s.resolveProviderLogin(ctx, ProviderSubject{
 		Provider: ProviderLinkedIn,
 		Subject:  idToken.Subject,
 	}, ua, clientIP)
@@ -208,9 +208,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if found {
-		SetSessionCookie(w, rawSession)
-		ClearOAuthTxCookie(w)
-		http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+		s.finishProviderLogin(w, r, ProviderLinkedIn, tx, login)
 		return
 	}
 
@@ -228,7 +226,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	rawSession, err = s.createProviderLogin(ctx, NewProviderAccount{
+	login, err = s.createProviderLogin(ctx, NewProviderAccount{
 		Subject:       ProviderSubject{Provider: ProviderLinkedIn, Subject: idToken.Subject},
 		VerifiedEmail: canonicalEmail,
 		Name:          claims.Name,
@@ -242,7 +240,5 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	SetSessionCookie(w, rawSession)
-	ClearOAuthTxCookie(w)
-	http.Redirect(w, r, s.callbackSuccessRedirect(tx), http.StatusFound)
+	s.finishProviderLogin(w, r, ProviderLinkedIn, tx, login)
 }

@@ -1,7 +1,8 @@
-// Phase PA task 1's live-database store tests: cascade behavior, SKIP LOCKED
-// claim disjointness, stale-lease recovery, bounded cleanup, and live key-ID
-// listing — all against the real generated query layer (store.New) so the
-// sqlc contract and the D3 constraints are proven together.
+// Live-database store tests for password authentication: cascade behavior,
+// SKIP LOCKED claim disjointness, stale-lease recovery, bounded cleanup, and
+// live key-ID listing, all against the real generated query layer (store.New)
+// so the sqlc contract and the password table constraints are proven
+// together. See docs/design/security.md.
 package store_test
 
 import (

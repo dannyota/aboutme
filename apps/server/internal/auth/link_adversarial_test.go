@@ -430,7 +430,7 @@ func TestLink_RejectsWithoutRecentReauth(t *testing.T) {
 		t.Fatalf("POST %s?purpose=link with a stale-reauth session status = %d, want %d", auth.GoogleStartPath, resp.StatusCode, http.StatusForbidden)
 	}
 	if got := decodeErrorCode(t, resp); got != "reauth_required" {
-		t.Errorf("error.code = %q, want %q (DD-C11's code, shared with the session-authenticated endpoints)", got, "reauth_required")
+		t.Errorf("error.code = %q, want %q (the reauth code shared with the session-authenticated endpoints)", got, "reauth_required")
 	}
 	if tx := extractCookie(resp, auth.OAuthTxCookieName); tx != nil && tx.MaxAge >= 0 {
 		t.Error("a LIVE __Host-oauth-tx cookie was set despite the reauth rejection, want none -- no transaction may be created before the reauth gate passes")
@@ -486,7 +486,7 @@ func TestLink_RejectsIdentityAlreadyClaimedByAnotherUser(t *testing.T) {
 	resp := doCallback(t, handler, code, tx.State, txCookie, sessionRequestCookie(attackerRaw)) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
 
 	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("link-hijack attempt status = %d, want %d (DD-C15: 302, never a raw JSON 409)", resp.StatusCode, http.StatusFound)
+		t.Fatalf("link-hijack attempt status = %d, want %d (302, never a raw JSON 409)", resp.StatusCode, http.StatusFound)
 	}
 	loc := resp.Header.Get("Location")
 	if got := mustQueryParam(t, loc, "error"); got != "identity_already_linked" {

@@ -2,7 +2,9 @@ package auth
 
 // Session-authenticated password operations: reauthentication (confirming
 // the current password without changing it) and password change (replacing
-// the credential and forcing a fresh session).
+// the credential and forcing a fresh session). Both lock the user, then the
+// caller's session, then the factor policy, as
+// docs/design/second-factor-authentication.md orders.
 
 import (
 	"bytes"
@@ -21,43 +23,66 @@ import (
 
 // ---- reauth ----
 
+// reauth confirms the password for sess. For an enrolled account it creates a
+// pending reauthentication and drops its token; the HTTP handler uses
+// reauthWithSecondFactor to deliver the pending cookie.
 func (s *PasswordService) reauth(ctx context.Context, sess store.Session, rawPassword, clientIP string) error {
+	_, err := s.reauthWithSecondFactor(ctx, sess, rawPassword, clientIP, "")
+	return err
+}
+
+// reauthWithSecondFactor confirms the password for the concrete session sess.
+// For an unenrolled account it refreshes that session's primary proof and
+// returns "". For an enrolled account it changes no session and returns a
+// pending reauthentication token bound to sess, which only factor completion
+// can turn into fresh proofs. previousPending is the browser's pending cookie,
+// if any.
+func (s *PasswordService) reauthWithSecondFactor(ctx context.Context, sess store.Session, rawPassword, clientIP, previousPending string) (string, error) {
 	now := s.clock()
 
 	if d := s.limits.AdmitAccountMutation(now, sess.UserID, clientAddrFromString(clientIP)); !d.Allowed {
-		return &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
+		return "", &passwordRateLimitedError{retryAfterSeconds: d.RetryAfterSeconds}
 	}
 	normalized, err := password.Normalize(rawPassword)
 	if err != nil {
-		return errPasswordReauthFailed
+		return "", errPasswordReauthFailed
 	}
 
 	cred, err := s.q.GetPasswordCredential(ctx, sess.UserID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			_ = s.hasher.VerifyDummy(ctx, normalized) //nolint:errcheck // no credential: pay the same verify cost and ignore the dummy's error to avoid an oracle
-			return errPasswordReauthFailed
+			return "", errPasswordReauthFailed
 		}
-		return errPasswordUnavailable
+		return "", errPasswordUnavailable
 	}
 	res, err := s.hasher.Verify(ctx, string(cred.EncodedHash), normalized)
 	if err != nil {
 		if errors.Is(err, password.ErrHashInvalid) {
-			return errPasswordReauthFailed
+			return "", errPasswordReauthFailed
 		}
-		return errPasswordUnavailable
+		return "", errPasswordUnavailable
 	}
 	if !res.Match {
-		return errPasswordReauthFailed
+		return "", errPasswordReauthFailed
 	}
 
+	var enrolled bool
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		if _, uerr := qtx.GetUserForUpdate(ctx, sess.UserID); uerr != nil {
+		user, uerr := lockAccountUser(ctx, qtx, sess.UserID)
+		if uerr != nil {
 			return uerr
 		}
 		if s.userLockProbe != nil {
 			s.userLockProbe()
+		}
+		if _, serr := lockCallerSession(ctx, qtx, user, sess.ID, now); serr != nil {
+			return serr
+		}
+		policy, perr := lockSecondFactorPolicy(ctx, qtx, user.ID)
+		if perr != nil {
+			return perr
 		}
 		current, cerr := qtx.GetPasswordCredentialForUpdate(ctx, sess.UserID)
 		if cerr != nil {
@@ -69,15 +94,10 @@ func (s *PasswordService) reauth(ctx context.Context, sess store.Session, rawPas
 		if !bytes.Equal(current.EncodedHash, cred.EncodedHash) {
 			return errPasswordReauthFailed
 		}
-		live, serr := qtx.GetSessionByIDForUpdate(ctx, sess.ID)
-		if serr != nil {
-			if errors.Is(serr, pgx.ErrNoRows) {
-				return errPasswordReauthFailed
-			}
-			return serr
-		}
-		if live.RevokedAt != nil {
-			return errPasswordReauthFailed
+		if policy != nil {
+			// Primary proof alone refreshes nothing for an enrolled account.
+			enrolled = true
+			return nil
 		}
 		return qtx.TouchReauthenticatedAt(ctx, store.TouchReauthenticatedAtParams{
 			ID:                sess.ID,
@@ -85,12 +105,29 @@ func (s *PasswordService) reauth(ctx context.Context, sess store.Session, rawPas
 		})
 	})
 	if err != nil {
-		if errors.Is(err, errPasswordReauthFailed) {
-			return errPasswordReauthFailed
+		if errors.Is(err, errPasswordReauthFailed) || errors.Is(err, ErrSessionInvalid) {
+			return "", errPasswordReauthFailed
 		}
-		return errPasswordUnavailable
+		return "", errPasswordUnavailable
 	}
-	return nil
+	if !enrolled {
+		return "", nil
+	}
+	pending, err := s.pending.Create(ctx, PendingAuthenticationRequest{
+		UserID:            sess.UserID,
+		Purpose:           PendingAuthenticationPurposeReauth,
+		PrimaryVerifiedAt: now,
+		ReturnPath:        settingsSessionsPath,
+		SessionID:         &sess.ID,
+		PreviousRawToken:  previousPending,
+	})
+	if err != nil {
+		if errors.Is(err, ErrPendingAuthenticationRequired) {
+			return "", errPasswordReauthFailed
+		}
+		return "", errPasswordUnavailable
+	}
+	return pending.RawToken, nil
 }
 
 // ---- add/change (PUT /me/password) ----
@@ -120,12 +157,19 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 	var newRaw string
 	err = pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		user, uerr := qtx.GetUserForUpdate(ctx, sess.UserID)
+		user, uerr := lockAccountUser(ctx, qtx, sess.UserID)
 		if uerr != nil {
 			return uerr
 		}
 		if s.userLockProbe != nil {
 			s.userLockProbe()
+		}
+		// Add or change is a sensitive action: the concrete session, its
+		// epoch, and both recent proofs of an enrolled account are rechecked
+		// under the user lock before any write.
+		live, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now)
+		if gateErr != nil {
+			return gateErr
 		}
 		current, cerr := qtx.GetPasswordCredentialForUpdate(ctx, sess.UserID)
 		if cerr != nil {
@@ -134,16 +178,6 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 			} else {
 				return cerr
 			}
-		}
-		live, serr := qtx.GetSessionByIDForUpdate(ctx, sess.ID)
-		if serr != nil {
-			if errors.Is(serr, pgx.ErrNoRows) {
-				return errPasswordReauthRequired
-			}
-			return serr
-		}
-		if live.RevokedAt != nil || live.UserID != user.ID || live.AuthEpoch != user.AuthEpoch {
-			return errPasswordReauthRequired
 		}
 		if _, uerr := qtx.UpsertPasswordCredential(ctx, store.UpsertPasswordCredentialParams{
 			UserID:      sess.UserID,
@@ -169,7 +203,7 @@ func (s *PasswordService) change(ctx context.Context, sess store.Session, rawPas
 		})
 	})
 	if err != nil {
-		if errors.Is(err, errPasswordReauthRequired) {
+		if errors.Is(err, errPasswordReauthRequired) || errors.Is(err, ErrSessionInvalid) || errors.Is(err, ErrReauthRequired) {
 			return "", errPasswordReauthRequired
 		}
 		return "", errPasswordUnavailable

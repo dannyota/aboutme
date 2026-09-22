@@ -1,6 +1,6 @@
 package auth_test
 
-// These tests prove the subject-first D5 rule: a returning subject never
+// These tests prove the subject-first provider identity rule: a returning subject never
 // depends on (or even fetches) the provider email, a new subject requires a
 // verified canonical email, and link resolves on subject alone.
 

@@ -129,7 +129,7 @@ func TestGitHubCallback_MixUp_RejectsTransactionFromAnotherProvider(t *testing.T
 
 	errorCode := assertRejected(t, resp)
 	if errorCode != "auth_failed" {
-		t.Errorf("error code = %q, want %q (DD-C3: ErrTransactionInvalid -- including a cross-provider mismatch -- funnels to the generic code, no oracle distinguishing it from any other rejected transaction)", errorCode, "auth_failed")
+		t.Errorf("error code = %q, want %q (ErrTransactionInvalid -- including a cross-provider mismatch -- funnels to the generic code, no oracle distinguishing it from any other rejected transaction)", errorCode, "auth_failed")
 	}
 
 	// Rejection occurs before GitHub establishes an email or provider user ID,
@@ -352,7 +352,7 @@ func TestGitHubCallback_EmailsAPIMalformedJSON_NoLeakedParsingDetails(t *testing
 
 	errorCode := assertRejected(t, resp)
 	if errorCode != "auth_failed" {
-		t.Errorf("error code = %q, want %q (DD-C10: a provider-side GitHub REST failure is a rejection, not a 500)", errorCode, "auth_failed")
+		t.Errorf("error code = %q, want %q (a provider-side GitHub REST failure is a rejection, not a 500)", errorCode, "auth_failed")
 	}
 	assertNoLeakedParsingDetails(t, body)
 	assertNoGitHubIdentity(t, q, strconv.FormatInt(githubID, 10))
