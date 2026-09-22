@@ -1559,22 +1559,17 @@ func (q *Queries) DeleteExpiredOAuthTransactions(ctx context.Context, arg Delete
 const deleteExpiredPendingAuthentications = `-- name: DeleteExpiredPendingAuthentications :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id FROM pending_authentications
-    WHERE expires_at <= $1::timestamptz
+    WHERE expires_at <= CURRENT_TIMESTAMP
     ORDER BY expires_at, id
-    LIMIT LEAST($2::int, 200)
+    LIMIT LEAST($1::int, 200)
     FOR UPDATE SKIP LOCKED
 )
 DELETE FROM pending_authentications AS target USING candidates
 WHERE target.id = candidates.id
 `
 
-type DeleteExpiredPendingAuthenticationsParams struct {
-	Cutoff    time.Time
-	LimitRows int32
-}
-
-func (q *Queries) DeleteExpiredPendingAuthentications(ctx context.Context, arg DeleteExpiredPendingAuthenticationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredPendingAuthentications, arg.Cutoff, arg.LimitRows)
+func (q *Queries) DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredPendingAuthentications, limitRows)
 	if err != nil {
 		return 0, err
 	}
@@ -1584,22 +1579,17 @@ func (q *Queries) DeleteExpiredPendingAuthentications(ctx context.Context, arg D
 const deleteExpiredWebAuthnCeremonies = `-- name: DeleteExpiredWebAuthnCeremonies :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id FROM webauthn_ceremonies
-    WHERE expires_at <= $1::timestamptz
+    WHERE expires_at <= CURRENT_TIMESTAMP
     ORDER BY expires_at, id
-    LIMIT LEAST($2::int, 200)
+    LIMIT LEAST($1::int, 200)
     FOR UPDATE SKIP LOCKED
 )
 DELETE FROM webauthn_ceremonies AS target USING candidates
 WHERE target.id = candidates.id
 `
 
-type DeleteExpiredWebAuthnCeremoniesParams struct {
-	Cutoff    time.Time
-	LimitRows int32
-}
-
-func (q *Queries) DeleteExpiredWebAuthnCeremonies(ctx context.Context, arg DeleteExpiredWebAuthnCeremoniesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredWebAuthnCeremonies, arg.Cutoff, arg.LimitRows)
+func (q *Queries) DeleteExpiredWebAuthnCeremonies(ctx context.Context, limitRows int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredWebAuthnCeremonies, limitRows)
 	if err != nil {
 		return 0, err
 	}
@@ -2437,6 +2427,32 @@ func (q *Queries) GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UU
 	return i, err
 }
 
+const getPendingAuthenticationByTokenDigest = `-- name: GetPendingAuthenticationByTokenDigest :one
+SELECT id, token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id, primary_verified_at, return_path, failed_attempts, created_at, expires_at, consumed_at FROM pending_authentications
+WHERE token_digest = $1
+`
+
+func (q *Queries) GetPendingAuthenticationByTokenDigest(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error) {
+	row := q.db.QueryRow(ctx, getPendingAuthenticationByTokenDigest, tokenDigest)
+	var i PendingAuthentication
+	err := row.Scan(
+		&i.ID,
+		&i.TokenDigest,
+		&i.CSRFSecret,
+		&i.UserID,
+		&i.Purpose,
+		&i.AuthEpoch,
+		&i.SessionID,
+		&i.PrimaryVerifiedAt,
+		&i.ReturnPath,
+		&i.FailedAttempts,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.ConsumedAt,
+	)
+	return i, err
+}
+
 const getPendingAuthenticationByTokenDigestForUpdate = `-- name: GetPendingAuthenticationByTokenDigestForUpdate :one
 SELECT id, token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id, primary_verified_at, return_path, failed_attempts, created_at, expires_at, consumed_at FROM pending_authentications
 WHERE token_digest = $1
@@ -2730,9 +2746,17 @@ func (q *Queries) GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Se
 }
 
 const getSessionByTokenHash = `-- name: GetSessionByTokenHash :one
-SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions WHERE token_hash = $1
+SELECT id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, rotation_grace_until, revoked_at, ua, ip, rotated_from, auth_epoch, second_factor_verified_at FROM sessions
+WHERE token_hash = $1
+  AND EXISTS (
+      SELECT 1 FROM users AS account
+      WHERE account.id = sessions.user_id
+        AND account.auth_epoch = sessions.auth_epoch
+  )
 `
 
+// Returns a session only while its copied authentication epoch equals the
+// account's current epoch, so a stale-epoch credential reads as unknown.
 func (q *Queries) GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error) {
 	row := q.db.QueryRow(ctx, getSessionByTokenHash, tokenHash)
 	var i Session
@@ -2849,9 +2873,9 @@ SELECT id, email, name, avatar_key, created_at, updated_at, auth_epoch FROM user
 `
 
 // ---------------------------------------------------------------------------
-// Phase PA: password credentials, registrations, reset tokens, and email jobs.
-// Lock order (D4) is user -> credential -> reset token -> sessions. These
-// queries expose exactly the row locks that order needs and no others.
+// Password credentials, registrations, reset tokens, and email jobs. Lock
+// order is user -> credential -> reset token -> sessions, per the user-row lock
+// rules in docs/design/security.md; queries expose only the locks it needs.
 // ---------------------------------------------------------------------------
 // The user-row lock every session issuer and password mutation serializes on.
 func (q *Queries) GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error) {

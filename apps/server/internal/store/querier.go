@@ -178,8 +178,8 @@ type Querier interface {
 	// validly consumed (ConsumeOAuthTransaction's own WHERE requires
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
-	DeleteExpiredPendingAuthentications(ctx context.Context, arg DeleteExpiredPendingAuthenticationsParams) (int64, error)
-	DeleteExpiredWebAuthnCeremonies(ctx context.Context, arg DeleteExpiredWebAuthnCeremoniesParams) (int64, error)
+	DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error)
+	DeleteExpiredWebAuthnCeremonies(ctx context.Context, limitRows int32) (int64, error)
 	// Unlinks one identity only when it belongs to the given user. The caller holds
 	// the user-row lock, so the last-sign-in-method check and this delete cannot
 	// interleave with another unlink.
@@ -288,6 +288,7 @@ type Querier interface {
 	GetPasswordResetTokenByDigest(ctx context.Context, tokenDigest []byte) (PasswordResetToken, error)
 	GetPasswordResetTokenByUserForUpdate(ctx context.Context, userID uuid.UUID) (PasswordResetToken, error)
 	GetPasswordResetTokenForUpdate(ctx context.Context, id uuid.UUID) (PasswordResetToken, error)
+	GetPendingAuthenticationByTokenDigest(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error)
 	GetPendingAuthenticationByTokenDigestForUpdate(ctx context.Context, tokenDigest []byte) (PendingAuthentication, error)
 	// The generation and eligible slug set are selected by one PostgreSQL
 	// statement so aggregate discovery admission cannot pair different commits.
@@ -311,6 +312,8 @@ type Querier interface {
 	// Session-row lock for password add/change, which revokes the current session
 	// and every sibling atomically.
 	GetSessionByIDForUpdate(ctx context.Context, id uuid.UUID) (Session, error)
+	// Returns a session only while its copied authentication epoch equals the
+	// account's current epoch, so a stale-epoch credential reads as unknown.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error)
 	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
@@ -322,9 +325,9 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	// ---------------------------------------------------------------------------
-	// Phase PA: password credentials, registrations, reset tokens, and email jobs.
-	// Lock order (D4) is user -> credential -> reset token -> sessions. These
-	// queries expose exactly the row locks that order needs and no others.
+	// Password credentials, registrations, reset tokens, and email jobs. Lock
+	// order is user -> credential -> reset token -> sessions, per the user-row lock
+	// rules in docs/design/security.md; queries expose only the locks it needs.
 	// ---------------------------------------------------------------------------
 	// The user-row lock every session issuer and password mutation serializes on.
 	GetUserForUpdate(ctx context.Context, id uuid.UUID) (User, error)

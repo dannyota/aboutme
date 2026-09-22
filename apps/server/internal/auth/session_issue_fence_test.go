@@ -85,8 +85,8 @@ func TestIssueTx_CreatesExactFreshSessionFields(t *testing.T) {
 }
 
 // TestIssueTx_NonexistentUser_InsertFailsAndRollsBack proves IssueTx does not
-// mint a session for a user row that does not exist (the foreign key rejects
-// it), and the transaction leaves no partial session row.
+// mint a session for a user row that does not exist (its own user-row lock
+// finds no row), and the transaction leaves no partial session row.
 func TestIssueTx_NonexistentUser_InsertFailsAndRollsBack(t *testing.T) {
 	pool := newTestPool(t)
 	q := store.New(pool)
@@ -100,7 +100,7 @@ func TestIssueTx_NonexistentUser_InsertFailsAndRollsBack(t *testing.T) {
 		return issueErr
 	})
 	if err == nil {
-		t.Fatal("IssueTx(nonexistent user) error = nil, want a foreign-key violation")
+		t.Fatal("IssueTx(nonexistent user) error = nil, want the user-row lock to fail")
 	}
 
 	var count int
@@ -109,6 +109,40 @@ func TestIssueTx_NonexistentUser_InsertFailsAndRollsBack(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("sessions rows for a nonexistent user = %d, want 0", count)
+	}
+}
+
+func TestIssueTx_UsesLockedEpochWhenSnapshotIsStale(t *testing.T) {
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	stale, err := q.GetUserByID(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("read user snapshot: %v", err)
+	}
+	if _, execErr := pool.Exec(context.Background(), "UPDATE users SET auth_epoch = auth_epoch + 1 WHERE id = $1", userID); execErr != nil {
+		t.Fatalf("advance auth epoch: %v", execErr)
+	}
+	sm := auth.NewSessionManagerWithPoolForTest(pool, time.Now)
+	var issued auth.SessionIssue
+	err = pgx.BeginFunc(context.Background(), pool, func(tx pgx.Tx) error {
+		qtx := q.WithTx(tx)
+		if _, lockErr := qtx.GetUserForUpdate(context.Background(), userID); lockErr != nil {
+			return lockErr
+		}
+		var issueErr error
+		issued, issueErr = sm.IssueTx(context.Background(), qtx, stale, "ua", "203.0.113.8")
+		return issueErr
+	})
+	if err != nil {
+		t.Fatalf("IssueTx(stale snapshot) error = %v", err)
+	}
+	current, err := q.GetUserByID(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("read current user: %v", err)
+	}
+	if issued.Session.AuthEpoch != current.AuthEpoch || issued.Session.AuthEpoch == stale.AuthEpoch {
+		t.Fatalf("session epoch = %d, current = %d, stale = %d", issued.Session.AuthEpoch, current.AuthEpoch, stale.AuthEpoch)
 	}
 }
 

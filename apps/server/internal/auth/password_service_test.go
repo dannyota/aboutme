@@ -744,6 +744,45 @@ func TestPasswordChange_HappyPath(t *testing.T) {
 	}
 }
 
+// TestPasswordChange_FreshSessionKeepsEpochAndFactorProof proves the forced
+// replacement session after a password change copies the locked account's
+// authentication epoch and the prior factor-proof time. Without the epoch the
+// account would be logged out once its epoch is above zero.
+func TestPasswordChange_FreshSessionKeepsEpochAndFactorProof(t *testing.T) {
+	e := newPasswordEnv(t)
+	userID := e.createUser(t)
+	e.setPassword(t, userID, testPassword)
+	ctx := context.Background()
+	if _, err := e.pool.Exec(ctx, "UPDATE users SET auth_epoch = 2 WHERE id = $1", userID); err != nil {
+		t.Fatalf("set auth epoch: %v", err)
+	}
+	oldRaw, oldSess := e.createSession(t, userID)
+	factorAt := e.clk.Now()
+	if _, err := e.pool.Exec(ctx, "UPDATE sessions SET second_factor_verified_at = $1 WHERE id = $2", factorAt, oldSess.ID); err != nil {
+		t.Fatalf("set factor proof: %v", err)
+	}
+
+	resp, body := e.request(t, http.MethodPut, auth.PasswordMePath, jsonBody(t, map[string]string{"password": "another brand new password"}), //nolint:bodyclose // request closes the body itself before returning.
+		withCookie(sessionRequestCookie(oldRaw)), withCSRF(csrfTokenFor(oldSess)))
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
+	}
+	cookies := resp.Cookies()
+	if len(cookies) != 1 || cookies[0].Name != auth.SessionCookieName {
+		t.Fatalf("change cookies = %+v, want one fresh __Host-session cookie", cookies)
+	}
+	newSess, _, err := auth.NewSessionManagerWithPoolForTest(e.pool, e.clk.Now).Authenticate(ctx, cookies[0].Value)
+	if err != nil {
+		t.Fatalf("fresh session at epoch 2 does not authenticate: %v", err)
+	}
+	if newSess.AuthEpoch != 2 {
+		t.Errorf("fresh session epoch = %d, want 2", newSess.AuthEpoch)
+	}
+	if newSess.SecondFactorVerifiedAt == nil || !newSess.SecondFactorVerifiedAt.Equal(factorAt) {
+		t.Errorf("fresh session factor proof = %v, want %v", newSess.SecondFactorVerifiedAt, factorAt)
+	}
+}
+
 func TestPasswordChange_RequiresRecentReauth(t *testing.T) {
 	e := newPasswordEnv(t)
 	userID := e.createUser(t)

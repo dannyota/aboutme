@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -633,5 +634,227 @@ func TestIssue_AlwaysNewRow_FixationProperty(t *testing.T) {
 	}
 	if _, _, err := m.Authenticate(ctx, raw2); err != nil {
 		t.Errorf("Authenticate(raw2) error = %v, want nil", err)
+	}
+}
+
+// ---- authentication epoch -------------------------------------------------
+
+// liveSessionCountForUser counts unrevoked session rows for userID.
+func liveSessionCountForUser(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(ctx, "SELECT count(*) FROM sessions WHERE user_id = $1 AND revoked_at IS NULL", userID).Scan(&n); err != nil {
+		t.Fatalf("count live sessions: %v", err)
+	}
+	return n
+}
+
+// authResult carries one Authenticate outcome across a goroutine boundary.
+type authResult struct {
+	rotated string
+	err     error
+}
+
+// TestAuthenticate_StaleEpochCannotRotate proves a stale epoch neither rotates
+// nor authenticates, whether the epoch advanced before the request or between
+// the rotation admission update and the successor insert.
+func TestAuthenticate_StaleEpochCannotRotate(t *testing.T) {
+	t.Run("advanced before the request", func(t *testing.T) {
+		ctx := context.Background()
+		pool := newTestPool(t)
+		q := store.New(pool)
+		userID := createTestUser(t, q)
+		clock := testutil.NewClockAtEpoch()
+		sm := auth.NewSessionManagerWithPoolForTest(pool, clock.Now)
+		raw, predecessor, err := sm.Issue(ctx, userID, "ua", "1.2.3.4")
+		if err != nil {
+			t.Fatalf("Issue() error = %v", err)
+		}
+		clock.Advance(rotationAge + time.Hour)
+		if _, execErr := pool.Exec(ctx, "UPDATE users SET auth_epoch = auth_epoch + 1 WHERE id = $1", userID); execErr != nil {
+			t.Fatalf("advance auth epoch: %v", execErr)
+		}
+		if _, rotated, authErr := sm.Authenticate(ctx, raw); !errors.Is(authErr, auth.ErrSessionInvalid) || rotated != "" {
+			t.Fatalf("Authenticate(stale epoch) = (%q, %v), want no token and ErrSessionInvalid", rotated, authErr)
+		}
+		if got := sessionRowCountForUser(ctx, t, pool, userID); got != 1 {
+			t.Fatalf("session rows = %d, want 1 (no successor)", got)
+		}
+		stored, err := q.GetSessionByID(ctx, predecessor.ID)
+		if err != nil {
+			t.Fatalf("read predecessor: %v", err)
+		}
+		if stored.RotationGraceUntil != nil {
+			t.Fatalf("stale predecessor was admitted to rotation, grace until %v", stored.RotationGraceUntil)
+		}
+	})
+
+	t.Run("advanced between admission and insert", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		pool := newTestPool(t)
+		q := store.New(pool)
+		userID := createTestUser(t, q)
+		clock := testutil.NewClockAtEpoch()
+		sm := auth.NewSessionManagerWithPoolForTest(pool, clock.Now)
+		raw, _, err := sm.Issue(ctx, userID, "ua", "1.2.3.4")
+		if err != nil {
+			t.Fatalf("Issue() error = %v", err)
+		}
+		clock.Advance(rotationAge + time.Hour)
+		var probeErr error
+		auth.SetSessionRotationProbeForTest(sm, func() {
+			_, probeErr = pool.Exec(ctx, "UPDATE users SET auth_epoch = auth_epoch + 1 WHERE id = $1", userID)
+		})
+		_, rotated, authErr := sm.Authenticate(ctx, raw)
+		if probeErr != nil {
+			t.Fatalf("advance auth epoch in probe: %v", probeErr)
+		}
+		if !errors.Is(authErr, auth.ErrSessionInvalid) || rotated != "" {
+			t.Fatalf("Authenticate(epoch advanced after admission) = (%q, %v), want no token and ErrSessionInvalid", rotated, authErr)
+		}
+		if got := sessionRowCountForUser(ctx, t, pool, userID); got != 1 {
+			t.Fatalf("session rows = %d, want 1 (no successor past the epoch fence)", got)
+		}
+	})
+}
+
+// TestReplaceAfterEpochChange_RacesRotation runs a deliberate epoch change while
+// a rotation is admitted but has not inserted its successor. The replacement
+// wins, the rotation mints nothing, and only the replacement stays live.
+func TestReplaceAfterEpochChange_RacesRotation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	clock := testutil.NewClockAtEpoch()
+	sm := auth.NewSessionManagerWithPoolForTest(pool, clock.Now)
+	raw, predecessor, err := sm.Issue(ctx, userID, "ua", "1.2.3.4")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+	clock.Advance(rotationAge + time.Hour)
+
+	admitted := make(chan struct{})
+	release := make(chan struct{})
+	auth.SetSessionRotationProbeForTest(sm, func() {
+		close(admitted)
+		<-release
+	})
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
+	done := make(chan authResult, 1)
+	go func() {
+		_, rotated, authErr := sm.Authenticate(ctx, raw)
+		done <- authResult{rotated: rotated, err: authErr}
+	}()
+	select {
+	case <-admitted:
+	case <-ctx.Done():
+		t.Fatal("rotation admission did not happen before the deadline")
+	}
+
+	replacement, replaceErr := advanceEpochAndReplace(ctx, pool, q, sm, userID, predecessor.ID, nil)
+	close(release)
+	var result authResult
+	select {
+	case result = <-done:
+	case <-ctx.Done():
+		t.Fatal("Authenticate() did not finish before the deadline")
+	}
+	if replaceErr != nil {
+		t.Fatalf("ReplaceAfterEpochChangeTx() during rotation error = %v", replaceErr)
+	}
+	if !errors.Is(result.err, auth.ErrSessionInvalid) || result.rotated != "" {
+		t.Fatalf("Authenticate() racing replacement = (%q, %v), want no token and ErrSessionInvalid", result.rotated, result.err)
+	}
+	if got := sessionRowCountForUser(ctx, t, pool, userID); got != 2 {
+		t.Fatalf("session rows = %d, want 2 (predecessor and replacement, no successor)", got)
+	}
+	if got := liveSessionCountForUser(ctx, t, pool, userID); got != 1 {
+		t.Fatalf("live session rows = %d, want only the replacement", got)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, replacement.RawToken); authErr != nil {
+		t.Fatalf("Authenticate(replacement) error = %v", authErr)
+	}
+}
+
+// TestReplaceAfterEpochChange_RacesIssue proves an Issue that queues on the
+// user lock behind an epoch change copies the new epoch, so the change cannot
+// leave a stale-epoch session behind.
+func TestReplaceAfterEpochChange_RacesIssue(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	pool := newTestPool(t)
+	q := store.New(pool)
+	userID := createTestUser(t, q)
+	sm := auth.NewSessionManagerWithPoolForTest(pool, time.Now)
+	oldRaw, current, err := sm.Issue(ctx, userID, "ua", "1.2.3.4")
+	if err != nil {
+		t.Fatalf("Issue() error = %v", err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin replacement: %v", err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback replacement: %v", rollbackErr)
+		}
+	}()
+	qtx := q.WithTx(tx)
+	if _, err = qtx.GetUserForUpdate(ctx, userID); err != nil {
+		t.Fatalf("lock user: %v", err)
+	}
+	advanced, err := qtx.AdvanceUserAuthEpoch(ctx, userID)
+	if err != nil {
+		t.Fatalf("advance epoch: %v", err)
+	}
+	replacement, err := sm.ReplaceAfterEpochChangeTx(ctx, qtx, userID, current.ID, nil)
+	if err != nil {
+		t.Fatalf("ReplaceAfterEpochChangeTx() error = %v", err)
+	}
+
+	type issueResult struct {
+		sess store.Session
+		err  error
+	}
+	issued := make(chan issueResult, 1)
+	go func() {
+		_, sess, issueErr := sm.Issue(ctx, userID, "ua", "5.6.7.8")
+		issued <- issueResult{sess: sess, err: issueErr}
+	}()
+	select {
+	case r := <-issued:
+		t.Fatalf("Issue() finished while the epoch change held the user lock: %+v", r)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatalf("commit replacement: %v", err)
+	}
+	var r issueResult
+	select {
+	case r = <-issued:
+	case <-ctx.Done():
+		t.Fatal("Issue() did not finish before the deadline")
+	}
+	if r.err != nil {
+		t.Fatalf("Issue() after epoch change error = %v", r.err)
+	}
+	if r.sess.AuthEpoch != advanced.AuthEpoch {
+		t.Fatalf("queued Issue() epoch = %d, want new epoch %d", r.sess.AuthEpoch, advanced.AuthEpoch)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, oldRaw); !errors.Is(authErr, auth.ErrSessionInvalid) {
+		t.Fatalf("Authenticate(prior session) error = %v, want ErrSessionInvalid", authErr)
+	}
+	if _, _, authErr := sm.Authenticate(ctx, replacement.RawToken); authErr != nil {
+		t.Fatalf("Authenticate(replacement) error = %v", authErr)
 	}
 }

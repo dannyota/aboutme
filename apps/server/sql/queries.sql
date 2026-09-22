@@ -53,7 +53,15 @@ INSERT INTO sessions (
 ) RETURNING *;
 
 -- name: GetSessionByTokenHash :one
-SELECT * FROM sessions WHERE token_hash = $1;
+-- Returns a session only while its copied authentication epoch equals the
+-- account's current epoch, so a stale-epoch credential reads as unknown.
+SELECT * FROM sessions
+WHERE token_hash = $1
+  AND EXISTS (
+      SELECT 1 FROM users AS account
+      WHERE account.id = sessions.user_id
+        AND account.auth_epoch = sessions.auth_epoch
+  );
 
 -- name: BeginSessionRotation :one
 -- Single-row conditional UPDATE that decides the >24h rotation winner: only
@@ -595,9 +603,9 @@ WHERE id = sqlc.arg(id)::uuid
 RETURNING *;
 
 -- ---------------------------------------------------------------------------
--- Phase PA: password credentials, registrations, reset tokens, and email jobs.
--- Lock order (D4) is user -> credential -> reset token -> sessions. These
--- queries expose exactly the row locks that order needs and no others.
+-- Password credentials, registrations, reset tokens, and email jobs. Lock
+-- order is user -> credential -> reset token -> sessions, per the user-row lock
+-- rules in docs/design/security.md; queries expose only the locks it needs.
 -- ---------------------------------------------------------------------------
 
 -- name: GetUserForUpdate :one
@@ -671,6 +679,10 @@ INSERT INTO pending_authentications (
     token_digest, csrf_secret, user_id, purpose, auth_epoch, session_id,
     primary_verified_at, return_path, created_at, expires_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *;
+
+-- name: GetPendingAuthenticationByTokenDigest :one
+SELECT * FROM pending_authentications
+WHERE token_digest = sqlc.arg(token_digest);
 
 -- name: GetPendingAuthenticationByTokenDigestForUpdate :one
 SELECT * FROM pending_authentications
@@ -763,7 +775,7 @@ RETURNING *;
 -- name: DeleteExpiredPendingAuthentications :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id FROM pending_authentications
-    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    WHERE expires_at <= CURRENT_TIMESTAMP
     ORDER BY expires_at, id
     LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
     FOR UPDATE SKIP LOCKED
@@ -774,7 +786,7 @@ WHERE target.id = candidates.id;
 -- name: DeleteExpiredWebAuthnCeremonies :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id FROM webauthn_ceremonies
-    WHERE expires_at <= sqlc.arg(cutoff)::timestamptz
+    WHERE expires_at <= CURRENT_TIMESTAMP
     ORDER BY expires_at, id
     LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
     FOR UPDATE SKIP LOCKED

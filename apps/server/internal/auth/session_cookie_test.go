@@ -88,3 +88,29 @@ func TestClearSessionCookie_ExpiresWithMatchingAttributes(t *testing.T) {
 		t.Errorf("SameSite = %v, want SameSiteLaxMode (must match SetSessionCookie's)", c.SameSite)
 	}
 }
+
+func TestPendingAuthenticationCookie_UsesStrictHostOnlyAttributes(t *testing.T) {
+	t.Parallel()
+
+	c := setSessionCookie(t, func(w http.ResponseWriter) {
+		auth.SetPendingAuthenticationCookie(w, "pending-token")
+	})
+	if c.Name != "__Host-auth-pending" || c.Value != "pending-token" {
+		t.Fatalf("pending cookie = (%q, %q)", c.Name, c.Value)
+	}
+	if !c.Secure || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || c.Domain != "" {
+		t.Errorf("pending cookie attributes = %+v, want secure HttpOnly Strict host-only path /", c)
+	}
+}
+
+func TestClearPendingAuthenticationCookie_ExpiresWithMatchingAttributes(t *testing.T) {
+	t.Parallel()
+
+	c := setSessionCookie(t, auth.ClearPendingAuthenticationCookie)
+	if c.Name != "__Host-auth-pending" || c.MaxAge >= 0 {
+		t.Errorf("pending deletion cookie = (%q, %d), want pending cookie with negative MaxAge", c.Name, c.MaxAge)
+	}
+	if !c.Secure || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Path != "/" || c.Domain != "" {
+		t.Errorf("pending deletion attributes = %+v, want secure HttpOnly Strict host-only path /", c)
+	}
+}
