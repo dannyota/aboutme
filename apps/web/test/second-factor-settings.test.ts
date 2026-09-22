@@ -10,8 +10,6 @@ import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import {
   createPasskeyCredential,
   downloadRecoveryCodes,
-  isPasskeyCancellation,
-  isWebAuthnSupported,
   mapPasskeyCompletionError,
   mapPasskeyOptionsError,
   mapPasskeyRemovalError,
@@ -19,6 +17,10 @@ import {
   recoveryCodesDownloadText,
   type RegistrationPublicKeyInput,
 } from '../app/composables/secondFactorSettings';
+import {
+  isWebAuthnCancellation,
+  isWebAuthnSupported,
+} from '../app/utils/webauthn';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
@@ -96,19 +98,19 @@ describe('downloadRecoveryCodes', () => {
   });
 });
 
-describe('isPasskeyCancellation', () => {
+describe('isWebAuthnCancellation', () => {
   it('is true for a browser-cancelled or aborted ceremony', () => {
-    expect(isPasskeyCancellation(new DOMException('x', 'NotAllowedError')))
+    expect(isWebAuthnCancellation(new DOMException('x', 'NotAllowedError')))
       .toBe(true);
-    expect(isPasskeyCancellation(new DOMException('x', 'AbortError')))
+    expect(isWebAuthnCancellation(new DOMException('x', 'AbortError')))
       .toBe(true);
   });
 
   it('is false for any other error', () => {
-    expect(isPasskeyCancellation(new DOMException('x', 'SecurityError')))
+    expect(isWebAuthnCancellation(new DOMException('x', 'SecurityError')))
       .toBe(false);
-    expect(isPasskeyCancellation(new Error('network'))).toBe(false);
-    expect(isPasskeyCancellation(null)).toBe(false);
+    expect(isWebAuthnCancellation(new Error('network'))).toBe(false);
+    expect(isWebAuthnCancellation(null)).toBe(false);
   });
 });
 
@@ -437,6 +439,9 @@ function stubWebAuthnSupport(): void {
   vi.stubGlobal('navigator', {
     ...navigator,
     credentials: {
+      // `isWebAuthnSupported` (utils/webauthn.ts) checks `.get`, the
+      // assertion method it uses; only `.create` runs a registration here.
+      get: vi.fn(),
       create: vi.fn(async () =>
         new FakePublicKeyCredential(
           'AQID',
@@ -717,6 +722,7 @@ describe('second-factor settings', () => {
     vi.stubGlobal('navigator', {
       ...navigator,
       credentials: {
+        get: vi.fn(),
         create: vi.fn(async () => {
           throw new DOMException('cancelled', 'NotAllowedError');
         }),

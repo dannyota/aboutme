@@ -2,6 +2,7 @@ import { computed, type ComputedRef, type InjectionKey } from 'vue';
 
 import type { AuthProvider } from './useAuth';
 import type { Locale } from '@/i18n/locale';
+import { decodeBase64Url, encodeBase64Url } from '../utils/webauthn';
 
 /**
  * `secondFactorSettings` — the closed contract behind the account-settings
@@ -302,47 +303,20 @@ export function mapRecoveryRegenerationError(
 }
 
 // --- Browser WebAuthn ceremony -------------------------------------------
-
-/** True only when this browser can attempt a passkey registration. */
-export function isWebAuthnSupported(): boolean {
-  return typeof window !== 'undefined'
-    && typeof window.PublicKeyCredential !== 'undefined'
-    && typeof navigator !== 'undefined'
-    && typeof navigator.credentials?.create === 'function';
-}
-
-/** True for the browser cancelling or aborting the platform ceremony. */
-export function isPasskeyCancellation(error: unknown): boolean {
-  return error instanceof DOMException
-    && (error.name === 'NotAllowedError' || error.name === 'AbortError');
-}
-
-function base64UrlToBytes(value: string): Uint8Array {
-  const converted = value.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = converted.length % 4 === 0 ? 0 : 4 - (converted.length % 4);
-  const binary = atob(converted + '='.repeat(pad));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
-function bytesToBase64Url(bytes: ArrayBuffer | Uint8Array): string {
-  const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  let binary = '';
-  for (let i = 0; i < array.length; i += 1) {
-    binary += String.fromCharCode(array[i]!);
-  }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-}
+//
+// `isWebAuthnSupported`, `isWebAuthnCancellation`, and the base64url codec
+// are shared with `utils/webauthn.ts` (the pending-login page's assertion
+// helpers) and live there; import them from that module rather than from
+// here, so Nuxt's auto-import has exactly one binding per name. This module
+// keeps only what genuinely differs: `createPasskeyCredential` runs
+// `navigator.credentials.create` with `PublicKeyCredentialCreationOptions`,
+// the registration ceremony `utils/webauthn.ts` explicitly never handles.
 
 /**
  * Run the browser registration ceremony from accepted canonical options and
  * serialize the result back to the canonical wire shape
  * (`docs/design/passkey-second-factor-contract.md#webauthn-json`). Throws
- * the raw browser error (see `isPasskeyCancellation`) on cancellation or an
+ * the raw browser error (see `isWebAuthnCancellation`) on cancellation or an
  * unsupported browser; never falls back to a differently-shaped credential.
  */
 export async function createPasskeyCredential(
@@ -350,10 +324,10 @@ export async function createPasskeyCredential(
 ): Promise<PasskeyRegistrationCredential> {
   const created = await navigator.credentials.create({
     publicKey: {
-      challenge: base64UrlToBytes(publicKey.challenge),
+      challenge: decodeBase64Url(publicKey.challenge),
       rp: publicKey.rp,
       user: {
-        id: base64UrlToBytes(publicKey.user.id),
+        id: decodeBase64Url(publicKey.user.id),
         name: publicKey.user.name,
         displayName: publicKey.user.displayName,
       },
@@ -362,7 +336,7 @@ export async function createPasskeyCredential(
       timeout: publicKey.timeout,
       excludeCredentials: publicKey.excludeCredentials.map((credential) => ({
         type: 'public-key' as const,
-        id: base64UrlToBytes(credential.id),
+        id: decodeBase64Url(credential.id),
         transports: credential.transports as AuthenticatorTransport[]
         | undefined,
       })),
@@ -389,11 +363,11 @@ export async function createPasskeyCredential(
     : [];
   return {
     id: created.id,
-    rawId: bytesToBase64Url(created.rawId),
+    rawId: encodeBase64Url(created.rawId),
     type: 'public-key',
     response: {
-      clientDataJSON: bytesToBase64Url(response.clientDataJSON),
-      attestationObject: bytesToBase64Url(response.attestationObject),
+      clientDataJSON: encodeBase64Url(response.clientDataJSON),
+      attestationObject: encodeBase64Url(response.attestationObject),
       transports,
     },
     clientExtensionResults: {},
