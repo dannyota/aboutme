@@ -204,6 +204,10 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create agent access: %w", err)
 	}
+	secondFactorRoutes, err := newSecondFactorRoutes(logger, cfg, pool)
+	if err != nil {
+		return fmt.Errorf("create second factor routes: %w", err)
+	}
 
 	handler := api.New(logger, readiness, api.Options{
 		// TrustedProxyCIDRs is validated by internal/config (required and
@@ -211,7 +215,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
+	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, secondFactorRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -284,6 +288,7 @@ func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
 		Providers:            cfg.ProviderLogin.Names(),
 		PasswordRegistration: !cfg.PasswordRegistrationDisabled,
 		AgentAccess:          cfg.AgentAccess.Enabled,
+		PasskeyEnrollment:    cfg.PasskeyEnrollment,
 	})
 	return func(mux *http.ServeMux) {
 		mux.Handle("/api/v1/capabilities", handler)

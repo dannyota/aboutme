@@ -111,6 +111,13 @@ type Config struct {
 	// (PASSWORD_REGISTRATION_ENABLED=false). Pending registrations still verify,
 	// and every other password route is unchanged.
 	PasswordRegistrationDisabled bool
+	// PasskeyEnrollment reports whether new passkey enrollment is open
+	// (PASSKEY_ENROLLMENT_ENABLED=true). It defaults to false. Verification,
+	// removal, recovery, and state routes are unaffected either way. When
+	// true, Load also requires PublicOrigin to produce a valid WebAuthn
+	// relying party (see passkey.go), so an operator cannot enable enrollment
+	// behind a host WebAuthn ceremonies would reject.
+	PasskeyEnrollment bool
 }
 
 const (
@@ -205,6 +212,16 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	passkeyEnrollment, err := loadPasskeyEnrollmentFlag(getenv("PASSKEY_ENROLLMENT_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
+	if passkeyEnrollment {
+		if err := validatePasskeyRelyingPartyOrigin(publicOrigin); err != nil {
+			return Config{}, err
+		}
+	}
+
 	googleClientID, googleClientSecret, err := loadProviderCredentials("GOOGLE", "Google", getenv, env, providerLogin.Google)
 	if err != nil {
 		return Config{}, err
@@ -270,6 +287,7 @@ func Load(getenv func(string) string) (Config, error) {
 		AgentAccess:                  agentAccess,
 		ProviderLogin:                providerLogin,
 		PasswordRegistrationDisabled: passwordRegistrationDisabled,
+		PasskeyEnrollment:            passkeyEnrollment,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err

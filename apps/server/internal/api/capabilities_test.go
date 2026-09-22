@@ -11,7 +11,7 @@ import (
 
 func TestCapabilitiesHandler_ReflectsFlagsAndRejectsOtherMethods(t *testing.T) {
 	t.Parallel()
-	h := api.CapabilitiesHandler(api.Capabilities{ProviderLogin: true, Providers: []string{"google"}, AgentAccess: false, PasswordRegistration: true})
+	h := api.CapabilitiesHandler(api.Capabilities{ProviderLogin: true, Providers: []string{"google"}, AgentAccess: false, PasswordRegistration: true, PasskeyEnrollment: true})
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/capabilities", nil))
@@ -25,9 +25,9 @@ func TestCapabilitiesHandler_ReflectsFlagsAndRejectsOtherMethods(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	providers, ok := body.Data["providers"].([]any)
-	if !ok || len(body.Data) != 4 || body.Data["providerLogin"] != true || body.Data["agentAccess"] != false ||
-		len(providers) != 1 || providers[0] != "google" || body.Data["passwordRegistration"] != true {
-		t.Fatalf("data = %v, want exactly providerLogin=true providers=[google] agentAccess=false passwordRegistration=true", body.Data)
+	if !ok || len(body.Data) != 5 || body.Data["providerLogin"] != true || body.Data["agentAccess"] != false ||
+		len(providers) != 1 || providers[0] != "google" || body.Data["passwordRegistration"] != true || body.Data["passkeyEnrollment"] != true {
+		t.Fatalf("data = %v, want exactly providerLogin=true providers=[google] agentAccess=false passwordRegistration=true passkeyEnrollment=true", body.Data)
 	}
 
 	for _, method := range []string{http.MethodPost, http.MethodHead, http.MethodPut, http.MethodDelete} {

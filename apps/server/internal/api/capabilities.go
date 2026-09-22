@@ -16,6 +16,10 @@ type Capabilities struct {
 	AgentAccess   bool     `json:"agentAccess"`
 	// PasswordRegistration reports whether email-and-password sign-up is open.
 	PasswordRegistration bool `json:"passwordRegistration"`
+	// PasskeyEnrollment reports whether new passkey enrollment is open
+	// (PASSKEY_ENROLLMENT_ENABLED). It is never derived from any account's
+	// own state: this is a deployment-wide switch, not a per-user flag.
+	PasskeyEnrollment bool `json:"passkeyEnrollment"`
 }
 
 // CapabilitiesHandler serves GET /api/v1/capabilities. The router's default
