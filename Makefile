@@ -381,7 +381,7 @@ native-http-check: ## Run the deterministic native public HTTP capture and retai
 	bash scripts/native-http-capture.sh
 
 test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the `aboutme` test DB and the `aboutme_dev` native-dev DB; 512 MB cap). One DB container total is the rule — never start a second
-	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}')"; then \
+	@if ! running_containers="$$(podman ps --format '{{.Names}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.service"}}')"; then \
 	  echo "test-db-up: cannot inspect running containers; refusing to start Postgres." >&2; \
 	  exit 1; \
 	fi; \
