@@ -217,8 +217,8 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 	if passkeyEnrollment {
-		if err := validatePasskeyRelyingPartyOrigin(publicOrigin); err != nil {
-			return Config{}, err
+		if rpErr := validatePasskeyRelyingPartyOrigin(publicOrigin); rpErr != nil {
+			return Config{}, rpErr
 		}
 	}
 
