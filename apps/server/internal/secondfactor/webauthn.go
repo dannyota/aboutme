@@ -79,7 +79,7 @@ func NewRelyingParty(publicOrigin string) (*RelyingParty, error) {
 	if host != strings.ToLower(host) || net.ParseIP(host) != nil || !validRelyingPartyHost(host) {
 		return nil, errors.New("secondfactor: public origin host is not a valid relying party ID")
 	}
-	if u.Scheme != "https" && !(u.Scheme == "http" && host == "localhost") {
+	if u.Scheme != "https" && (u.Scheme != "http" || host != "localhost") {
 		return nil, errors.New("secondfactor: public origin must use https")
 	}
 	origin := u.Scheme + "://" + u.Host
