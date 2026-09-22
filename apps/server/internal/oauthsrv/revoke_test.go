@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
@@ -160,6 +162,138 @@ func TestRevoke_ValidAccessOrRefreshRevokesGrantAndEveryAuthority(t *testing.T) 
 				t.Fatal("revoked grant code retained token authority")
 			}
 		})
+	}
+}
+
+// This catches an epoch-change sweep missing a live grant or leaving its
+// token family live, and confirms it never touches another account's
+// authority. See docs/design/second-factor-authentication.md.
+func TestRevokeGrantsForEpochChangeTx_RevokesEveryLiveGrantAndTokenFamilyForOneUser(t *testing.T) {
+	now := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
+	ctx := context.Background()
+
+	other, err := f.q.CreateOAuthClient(ctx, store.CreateOAuthClientParams{ClientName: "Second agent", RedirectURIs: json.RawMessage(`["http://127.0.0.1/callback"]`), CreatedAt: now})
+	if err != nil {
+		t.Fatalf("CreateOAuthClient: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, cleanupErr := f.q.DeleteOAuthClient(context.Background(), other.ID); cleanupErr != nil {
+			t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+		}
+	})
+	secondGrant, err := f.q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: f.userID, ClientID: other.ID, Scopes: "resumes:read", CreatedAt: now})
+	if err != nil {
+		t.Fatalf("UpsertOAuthGrant: %v", err)
+	}
+	_, secondDigest, err := NewToken(TokenKindAccess, bytes.NewReader(bytes.Repeat([]byte{5}, 32)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, tokenErr := f.q.CreateOAuthToken(ctx, store.CreateOAuthTokenParams{
+		TokenDigest: secondDigest[:], Kind: "access", FamilyID: uuid.New(), ClientID: other.ID, UserID: f.userID, GrantID: secondGrant.ID,
+		CreatedAt: now, ExpiresAt: now.Add(time.Hour), FamilyExpiresAt: now.Add(refreshFamilyTTL),
+	}); tokenErr != nil {
+		t.Fatal(tokenErr)
+	}
+
+	untouchedUser, err := f.q.CreateUser(ctx, store.CreateUserParams{Email: uuid.NewString() + "@example.test", Name: "Untouched owner"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupTokenTestClientAndUser(t, f.pool, f.clientID, untouchedUser.ID)
+	})
+	untouchedGrant, err := f.q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: untouchedUser.ID, ClientID: f.clientID, Scopes: "resumes:read", CreatedAt: now})
+	if err != nil {
+		t.Fatalf("UpsertOAuthGrant untouched: %v", err)
+	}
+
+	// A real caller advances the epoch under the same user lock, in the same
+	// transaction, before sweeping grants; this mirrors that order.
+	err = pgx.BeginFunc(ctx, f.pool, func(tx pgx.Tx) error {
+		qtx := store.New(tx)
+		if _, lockErr := qtx.GetUserForUpdate(ctx, f.userID); lockErr != nil {
+			return lockErr
+		}
+		if _, epochErr := qtx.AdvanceUserAuthEpoch(ctx, f.userID); epochErr != nil {
+			return epochErr
+		}
+		return RevokeGrantsForEpochChangeTx(ctx, qtx, f.userID, now)
+	})
+	if err != nil {
+		t.Fatalf("RevokeGrantsForEpochChangeTx: %v", err)
+	}
+
+	for _, grantID := range []uuid.UUID{f.grantID, secondGrant.ID} {
+		grant, grantErr := f.q.GetOAuthGrantForUpdate(ctx, grantID)
+		if grantErr != nil || grant.RevokedAt == nil {
+			t.Fatalf("grant %s remained live: %#v, %v", grantID, grant, grantErr)
+		}
+		var live int
+		if liveErr := f.pool.QueryRow(ctx, "SELECT count(*) FROM oauth_tokens WHERE grant_id = $1 AND revoked_at IS NULL", grantID).Scan(&live); liveErr != nil || live != 0 {
+			t.Fatalf("grant %s left a live token: %d, %v", grantID, live, liveErr)
+		}
+	}
+	untouched, err := f.q.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: untouchedUser.ID, ClientID: f.clientID})
+	if err != nil || untouched.ID != untouchedGrant.ID {
+		t.Fatalf("epoch-change sweep touched another account's grant: %#v, %v", untouched, err)
+	}
+
+	// A repeat sweep after the first commits is a no-op, never an error.
+	err = pgx.BeginFunc(ctx, f.pool, func(tx pgx.Tx) error {
+		qtx := store.New(tx)
+		if _, lockErr := qtx.GetUserForUpdate(ctx, f.userID); lockErr != nil {
+			return lockErr
+		}
+		return RevokeGrantsForEpochChangeTx(ctx, qtx, f.userID, now)
+	})
+	if err != nil {
+		t.Fatalf("repeat RevokeGrantsForEpochChangeTx: %v", err)
+	}
+}
+
+// This catches a sweep that is unsafe to invoke twice at once -- for example
+// double-firing a factor-change event -- deadlocking or double-revoking
+// instead of converging on the same idempotent outcome. Two fixed goroutines
+// contend on the user-row lock with no artificial delay; there is no
+// meaningful interleaving to pin because both orderings converge on the same
+// result, so this needs no start-barrier probe.
+func TestRevokeGrantsForEpochChangeTx_ConcurrentSweepsConverge(t *testing.T) {
+	now := time.Date(2026, 9, 10, 13, 0, 0, 0, time.UTC)
+	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
+	ctx := context.Background()
+	sweep := func() <-chan error {
+		result := make(chan error, 1)
+		go func() {
+			result <- pgx.BeginFunc(context.Background(), f.pool, func(tx pgx.Tx) error {
+				qtx := store.New(tx)
+				if _, lockErr := qtx.GetUserForUpdate(context.Background(), f.userID); lockErr != nil {
+					return lockErr
+				}
+				return RevokeGrantsForEpochChangeTx(context.Background(), qtx, f.userID, now)
+			})
+		}()
+		return result
+	}
+	first, second := sweep(), sweep()
+	for i, result := range []<-chan error{first, second} {
+		select {
+		case err := <-result:
+			if err != nil {
+				t.Fatalf("sweep %d: %v", i, err)
+			}
+		case <-time.After(4 * time.Second):
+			t.Fatalf("sweep %d did not finish", i)
+		}
+	}
+	grant, grantErr := f.q.GetOAuthGrantForUpdate(ctx, f.grantID)
+	if grantErr != nil || grant.RevokedAt == nil {
+		t.Fatalf("grant remained live after concurrent sweeps: %#v, %v", grant, grantErr)
+	}
+	var live int
+	if liveErr := f.pool.QueryRow(ctx, "SELECT count(*) FROM oauth_tokens WHERE grant_id = $1 AND revoked_at IS NULL", f.grantID).Scan(&live); liveErr != nil || live != 0 {
+		t.Fatalf("live tokens after concurrent sweeps = %d, %v", live, liveErr)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -24,6 +25,7 @@ func consentQuery(clientID uuid.UUID, scope string) ConsentQuery {
 
 func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
 	request := consentQuery(client.ID, "resumes:read resumes:write")
 
 	view, err := s.ConsentContext(context.Background(), user.ID, request)
@@ -35,7 +37,7 @@ func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 	}
 
 	denyRequest := ConsentDecision{ConsentQuery: request, Decision: "deny"}
-	denied, err := s.ConsentDecision(context.Background(), user.ID, denyRequest)
+	denied, err := s.ConsentDecision(context.Background(), sess, denyRequest)
 	if err != nil {
 		t.Fatalf("deny: %v", err)
 	}
@@ -44,7 +46,7 @@ func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 		t.Fatalf("denial redirect = %q", denied)
 	}
 
-	approved, err := s.ConsentDecision(context.Background(), user.ID, ConsentDecision{ConsentQuery: request, Decision: "approve"})
+	approved, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"})
 	if err != nil {
 		t.Fatalf("approve: %v", err)
 	}
@@ -63,12 +65,69 @@ func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 	if code.ClientID != client.ID || code.UserID != user.ID || code.Scopes != "resumes:read resumes:write" || code.CodeChallenge != strings.Repeat("A", 43) || code.RedirectURI != request.RedirectURI || !code.ExpiresAt.Equal(code.CreatedAt.Add(60*time.Second)) {
 		t.Fatalf("code binding = %#v", code)
 	}
+	grant := mustLiveGrant(t, q, user.ID, client.ID)
+	if code.GrantID != grant.ID || code.AuthEpoch != 0 || grant.AuthEpoch != 0 {
+		t.Fatalf("code = %#v, grant = %#v, want both bound to epoch 0", code, grant)
+	}
 
 	forged := request
 	forged.RedirectURI = "https://evil.example/callback"
-	if _, err := s.ConsentDecision(context.Background(), user.ID, ConsentDecision{ConsentQuery: forged, Decision: "approve"}); !errors.Is(err, ErrConsentInvalid) {
+	if _, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: forged, Decision: "approve"}); !errors.Is(err, ErrConsentInvalid) {
 		t.Fatalf("forged redirect error = %v, want ErrConsentInvalid", err)
 	}
+}
+
+// This catches an approval or silent reuse that skips the recent-reauth gate
+// for an enrolled account, and confirms denial needs no recent proof at all.
+// See docs/design/second-factor-authentication.md.
+func TestConsent_ApprovalRequiresBothRecentProofsForEnrolledAccountDenialDoesNot(t *testing.T) {
+	s, q, client, user := newAuthorizeHarness(t)
+	enrollTestSecondFactor(t, q, user.ID, s.clock())
+	request := consentQuery(client.ID, "resumes:read")
+
+	t.Run("denial needs no recent proof", func(t *testing.T) {
+		stale := s.clock().Add(-time.Hour)
+		sess := issueTestSession(t, s.pool, user.ID, stale, nil)
+		redirect, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "deny"})
+		if err != nil || urlMustParse(t, redirect).Query().Get("error") != "access_denied" {
+			t.Fatalf("denial = %q, %v; want access_denied with no error", redirect, err)
+		}
+	})
+
+	t.Run("missing primary proof is rejected", func(t *testing.T) {
+		now := s.clock()
+		stale := now.Add(-time.Hour)
+		sess := issueTestSession(t, s.pool, user.ID, stale, &now)
+		if _, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"}); !errors.Is(err, auth.ErrReauthRequired) {
+			t.Fatalf("stale primary proof error = %v, want ErrReauthRequired", err)
+		}
+	})
+
+	t.Run("missing second-factor proof is rejected", func(t *testing.T) {
+		now := s.clock()
+		sess := issueTestSession(t, s.pool, user.ID, now, nil)
+		if _, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"}); !errors.Is(err, auth.ErrReauthRequired) {
+			t.Fatalf("missing factor proof error = %v, want ErrReauthRequired", err)
+		}
+	})
+
+	t.Run("stale second-factor proof is rejected", func(t *testing.T) {
+		now := s.clock()
+		stale := now.Add(-time.Hour)
+		sess := issueTestSession(t, s.pool, user.ID, now, &stale)
+		if _, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"}); !errors.Is(err, auth.ErrReauthRequired) {
+			t.Fatalf("stale factor proof error = %v, want ErrReauthRequired", err)
+		}
+	})
+
+	t.Run("both recent proofs approve", func(t *testing.T) {
+		now := s.clock()
+		sess := issueTestSession(t, s.pool, user.ID, now, &now)
+		redirect, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"})
+		if err != nil || urlMustParse(t, redirect).Query().Get("code") == "" {
+			t.Fatalf("approval = %q, %v; want a code", redirect, err)
+		}
+	})
 }
 
 func TestConsent_RefusesEleventhLiveGrant(t *testing.T) {
@@ -88,7 +147,8 @@ func TestConsent_RefusesEleventhLiveGrant(t *testing.T) {
 			t.Fatalf("UpsertOAuthGrant(%d): %v", i, err)
 		}
 	}
-	_, err := s.ConsentDecision(ctx, user.ID, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+	_, err := s.ConsentDecision(ctx, sess, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
 	if !errors.Is(err, ErrGrantLimit) {
 		t.Fatalf("eleventh grant error = %v, want ErrGrantLimit", err)
 	}
@@ -111,7 +171,8 @@ func TestConsent_AllowsTenthLiveGrant(t *testing.T) {
 			t.Fatalf("UpsertOAuthGrant(%d): %v", i, err)
 		}
 	}
-	redirect, err := s.ConsentDecision(ctx, user.ID, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+	redirect, err := s.ConsentDecision(ctx, sess, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
 	if err != nil || urlMustParse(t, redirect).Query().Get("code") == "" {
 		t.Fatalf("tenth grant = %q, %v; want code", redirect, err)
 	}
@@ -126,13 +187,15 @@ func TestConsent_DecisionDetectsClientRowChangeAfterContext(t *testing.T) {
 	if _, err := s.pool.Exec(context.Background(), "UPDATE oauth_clients SET redirect_uris = $2 WHERE id = $1", client.ID, []byte(`["https://agent.example/changed"]`)); err != nil {
 		t.Fatalf("change client redirect: %v", err)
 	}
-	if _, err := s.ConsentDecision(context.Background(), user.ID, ConsentDecision{ConsentQuery: request, Decision: "approve"}); !errors.Is(err, ErrConsentInvalid) {
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+	if _, err := s.ConsentDecision(context.Background(), sess, ConsentDecision{ConsentQuery: request, Decision: "approve"}); !errors.Is(err, ErrConsentInvalid) {
 		t.Fatalf("changed client decision error = %v, want ErrConsentInvalid", err)
 	}
 }
 
 func TestConsent_ConcurrentApprovalsKeepOneGrantAndIssueTwoCodes(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
 	decision := ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"}
 	type result struct {
 		redirect string
@@ -141,7 +204,7 @@ func TestConsent_ConcurrentApprovalsKeepOneGrantAndIssueTwoCodes(t *testing.T) {
 	results := make(chan result, 2)
 	for range 2 {
 		go func() {
-			redirect, err := s.ConsentDecision(context.Background(), user.ID, decision)
+			redirect, err := s.ConsentDecision(context.Background(), sess, decision)
 			results <- result{redirect, err}
 		}()
 	}
@@ -183,6 +246,7 @@ func TestConsent_QueuedRevocationWinsAfterInFlightApproval(t *testing.T) {
 	}); tokenErr != nil {
 		t.Fatalf("seed token: %v", tokenErr)
 	}
+	sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
 	entropy := &blockingEntropy{started: make(chan struct{}), release: make(chan struct{})}
 	s.entropy = entropy
 
@@ -192,10 +256,10 @@ func TestConsent_QueuedRevocationWinsAfterInFlightApproval(t *testing.T) {
 	}
 	approvalDone := make(chan approvalResult, 1)
 	go func() {
-		redirect, approveErr := s.ConsentDecision(ctx, user.ID, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
+		redirect, approveErr := s.ConsentDecision(ctx, sess, ConsentDecision{ConsentQuery: consentQuery(client.ID, "resumes:read"), Decision: "approve"})
 		approvalDone <- approvalResult{redirect, approveErr}
 	}()
-	<-entropy.started // approval has client → user → grant locks and is before code creation.
+	<-entropy.started // approval has client → user → session → grant locks and is before code creation.
 
 	revokeDone := make(chan error, 1)
 	revokePID := make(chan int32, 1)

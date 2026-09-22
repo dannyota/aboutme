@@ -38,6 +38,14 @@ func newOAuthSessionHTTPHarness(t *testing.T) oauthSessionHTTPHarness {
 	if err != nil {
 		t.Fatalf("Issue session: %v", err)
 	}
+	// Pin the session's primary-proof time to the harness's injected clock
+	// rather than the real wall clock Issue used, so the consent decision's
+	// recent-reauthentication check compares against a deterministic value.
+	now := service.clock()
+	if _, err = service.pool.Exec(context.Background(), "UPDATE sessions SET reauthenticated_at = $1 WHERE id = $2", now, session.ID); err != nil {
+		t.Fatalf("pin session reauthenticated_at: %v", err)
+	}
+	session.ReauthenticatedAt = now
 	return oauthSessionHTTPHarness{
 		service: service, queries: queries, client: client, user: user,
 		sessions: auth.NewSessionManager(queries), rawSession: raw, session: session,
@@ -172,6 +180,41 @@ func TestSessionConsentHTTPHandler_EnforcesCSRFMediaTypeAndStrictBody(t *testing
 	redirect, err := url.Parse(response.Data.RedirectTo)
 	if err != nil || redirect.Host != "agent.example" || redirect.Query().Get("error") != "access_denied" || redirect.Query().Get("state") != "opaque<&state" {
 		t.Fatalf("decision redirect = %q, error = %v", response.Data.RedirectTo, err)
+	}
+}
+
+// This catches a consent decision skipping the recent-reauth gate for an
+// enrolled account, and confirms the closed 403 reauth_required response the
+// rest of the API's sensitive actions already use. See
+// docs/design/second-factor-authentication.md.
+func TestSessionConsentHTTPHandler_RequiresSecondFactorProofForEnrolledAccount(t *testing.T) {
+	h := newOAuthSessionHTTPHarness(t)
+	handler := h.service.ConsentHTTPHandler(h.sessions)
+
+	approveBody := consentDecisionBody(h.client.ID, "approve")
+	approve := httptest.NewRecorder()
+	handler.ServeHTTP(approve, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", approveBody, true, true))
+	if approve.Code != http.StatusOK {
+		t.Fatalf("unenrolled approve = %d %q", approve.Code, approve.Body.String())
+	}
+
+	enrollTestSecondFactor(t, h.queries, h.user.ID, h.service.clock())
+	other, err := h.queries.CreateOAuthClient(context.Background(), store.CreateOAuthClientParams{
+		ClientName: "Enrolled agent", RedirectURIs: h.client.RedirectURIs, CreatedAt: h.service.clock(),
+	})
+	if err != nil {
+		t.Fatalf("CreateOAuthClient: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, cleanupErr := h.queries.DeleteOAuthClient(context.Background(), other.ID); cleanupErr != nil {
+			t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+		}
+	})
+	staleBody := consentDecisionBody(other.ID, "approve")
+	stale := httptest.NewRecorder()
+	handler.ServeHTTP(stale, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", staleBody, true, true))
+	if stale.Code != http.StatusForbidden || responseErrorCode(t, stale) != "reauth_required" {
+		t.Fatalf("enrolled approve without factor proof = %d %q", stale.Code, stale.Body.String())
 	}
 }
 

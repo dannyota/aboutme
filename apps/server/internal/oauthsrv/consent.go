@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -81,19 +83,22 @@ func (s *Service) ConsentContext(ctx context.Context, _ uuid.UUID, q ConsentQuer
 }
 
 // ConsentDecision revalidates the complete request. Approval writes the grant
-// and code in one transaction; denial only builds a result URL for the exact
-// registered redirect URI.
-func (s *Service) ConsentDecision(ctx context.Context, userID uuid.UUID, d ConsentDecision) (string, error) {
+// and code in one transaction, after locking the client, the user, and the
+// caller's concrete session in that order and requiring recent primary and
+// second-factor proof for an enrolled account. Denial only builds a result
+// URL for the exact registered redirect URI and needs no recent proof. See
+// docs/design/second-factor-authentication.md.
+func (s *Service) ConsentDecision(ctx context.Context, sess store.Session, d ConsentDecision) (string, error) {
 	if d.Decision != "approve" && d.Decision != "deny" {
 		return "", ErrConsentInvalid
 	}
-	if _, err := s.ConsentContext(ctx, userID, d.ConsentQuery); err != nil {
+	if _, err := s.ConsentContext(ctx, sess.UserID, d.ConsentQuery); err != nil {
 		return "", err
 	}
 	if d.Decision == "deny" {
 		return s.denyConsent(ctx, d.ConsentQuery)
 	}
-	return s.approveConsent(ctx, userID, d.ConsentQuery)
+	return s.approveConsent(ctx, sess, d.ConsentQuery)
 }
 
 func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (redirectTo string, err error) {
@@ -157,7 +162,7 @@ func (q ConsentQuery) values() url.Values {
 	return values
 }
 
-func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request ConsentQuery) (redirectTo string, err error) {
+func (s *Service) approveConsent(ctx context.Context, sess store.Session, request ConsentQuery) (redirectTo string, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin consent transaction: %w", err)
@@ -177,15 +182,20 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 	if validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
-	if _, userErr := qtx.GetUserForUpdate(ctx, userID); userErr != nil {
+	user, userErr := qtx.GetUserForUpdate(ctx, sess.UserID)
+	if userErr != nil {
 		return "", ErrConsentInvalid
 	}
-	grant, hasGrant, err := lockedLiveGrant(ctx, qtx, userID, request.ClientID)
+	now := s.clock()
+	if _, authErr := requireConsentAuthority(ctx, qtx, user, sess.ID, now); authErr != nil {
+		return "", authErr
+	}
+	grant, hasGrant, err := lockedLiveGrant(ctx, qtx, user.ID, request.ClientID)
 	if err != nil {
 		return "", err
 	}
 	if !hasGrant {
-		count, countErr := qtx.CountLiveOAuthGrantsForUser(ctx, userID)
+		count, countErr := qtx.CountLiveOAuthGrantsForUser(ctx, user.ID)
 		if countErr != nil {
 			return "", fmt.Errorf("count live OAuth grants: %w", countErr)
 		}
@@ -198,12 +208,14 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 	if err != nil {
 		return "", fmt.Errorf("new authorization code: %w", err)
 	}
-	now := s.clock()
-	if _, err := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: userID, ClientID: request.ClientID, Scopes: request.Scope, CreatedAt: now}); err != nil {
+	epoch := user.AuthEpoch
+	updatedGrant, err := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: request.ClientID, Scopes: request.Scope, CreatedAt: now, AuthEpoch: epoch})
+	if err != nil {
 		return "", fmt.Errorf("upsert OAuth grant: %w", err)
 	}
 	if _, err := qtx.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{
-		CodeDigest: digest[:], ClientID: request.ClientID, UserID: userID, Scopes: request.Scope, CodeChallenge: request.CodeChallenge, RedirectURI: request.RedirectURI, CreatedAt: now,
+		CodeDigest: digest[:], ClientID: request.ClientID, UserID: user.ID, Scopes: request.Scope, CodeChallenge: request.CodeChallenge, RedirectURI: request.RedirectURI, CreatedAt: now,
+		GrantID: &updatedGrant.ID, AuthEpoch: &epoch,
 	}); err != nil {
 		return "", fmt.Errorf("create authorization code: %w", err)
 	}
@@ -211,6 +223,37 @@ func (s *Service) approveConsent(ctx context.Context, userID uuid.UUID, request 
 		return "", fmt.Errorf("commit consent transaction: %w", err)
 	}
 	return oauthResultURL(request.RedirectURI, rawCode, "", request.State), nil
+}
+
+// requireConsentAuthority locks the caller's concrete session and second-factor
+// policy inside qtx, after the client and user locks the lock order requires
+// (see docs/design/second-factor-authentication.md), and enforces the recent
+// primary and second-factor proof an enrolled account needs before approval or
+// silent grant reuse mints a grant or authorization code. A nil policy
+// preserves the primary-only requirement for an unenrolled account.
+func requireConsentAuthority(ctx context.Context, qtx *store.Queries, user store.User, sessionID uuid.UUID, now time.Time) (store.Session, error) {
+	sess, err := qtx.GetSessionByIDForUpdate(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return store.Session{}, auth.ErrSessionInvalid
+		}
+		return store.Session{}, fmt.Errorf("lock consent session: %w", err)
+	}
+	policy, err := qtx.GetSecondFactorPolicyForUpdate(ctx, user.ID)
+	var policyPtr *store.SecondFactorPolicy
+	switch {
+	case err == nil:
+		policyPtr = &policy
+	case errors.Is(err, pgx.ErrNoRows):
+		// Unenrolled account: RequireRecentSecondFactorReauth checks primary
+		// proof only.
+	default:
+		return store.Session{}, fmt.Errorf("lock consent factor policy: %w", err)
+	}
+	if reauthErr := auth.RequireRecentSecondFactorReauth(user, policyPtr, sess, now); reauthErr != nil {
+		return store.Session{}, reauthErr
+	}
+	return sess, nil
 }
 
 func lockedLiveGrant(ctx context.Context, q *store.Queries, userID, clientID uuid.UUID) (store.OAuthGrant, bool, error) {
@@ -231,11 +274,16 @@ func lockedLiveGrant(ctx context.Context, q *store.Queries, userID, clientID uui
 	return locked, true, nil
 }
 
-func (s *Service) issueCode(ctx context.Context, userID uuid.UUID, request ConsentQuery) (string, error) {
-	return s.approveExistingGrant(ctx, userID, request)
+func (s *Service) issueCode(ctx context.Context, sess store.Session, request ConsentQuery) (string, error) {
+	return s.approveExistingGrant(ctx, sess, request)
 }
 
-func (s *Service) approveExistingGrant(ctx context.Context, userID uuid.UUID, request ConsentQuery) (redirectTo string, err error) {
+// approveExistingGrant is the silent-reuse path HandleAuthorize takes when a
+// live grant already covers the request. It requires the same current session
+// authority and recent proof as an explicit approval, so a browser session
+// left over from before an authentication epoch change cannot mint a fresh
+// code without reproving itself.
+func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, request ConsentQuery) (redirectTo string, err error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin code transaction: %w", err)
@@ -246,10 +294,15 @@ func (s *Service) approveExistingGrant(ctx context.Context, userID uuid.UUID, re
 	if err != nil || !registeredRedirect(client, request.RedirectURI) || validateConsentQuery(request) != nil {
 		return "", ErrConsentInvalid
 	}
-	if _, userErr := qtx.GetUserForUpdate(ctx, userID); userErr != nil {
+	user, userErr := qtx.GetUserForUpdate(ctx, sess.UserID)
+	if userErr != nil {
 		return "", ErrConsentInvalid
 	}
-	grant, live, err := lockedLiveGrant(ctx, qtx, userID, request.ClientID)
+	now := s.clock()
+	if _, authErr := requireConsentAuthority(ctx, qtx, user, sess.ID, now); authErr != nil {
+		return "", authErr
+	}
+	grant, live, err := lockedLiveGrant(ctx, qtx, user.ID, request.ClientID)
 	if err != nil {
 		return "", err
 	}
@@ -261,13 +314,17 @@ func (s *Service) approveExistingGrant(ctx context.Context, userID uuid.UUID, re
 	if err != nil {
 		return "", fmt.Errorf("new authorization code: %w", err)
 	}
-	now := s.clock()
+	epoch := user.AuthEpoch
 	// A single live grant is the token authority. Narrow it atomically with
 	// code issue so the code's requested scope and later token authority agree.
-	if _, err := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: userID, ClientID: request.ClientID, Scopes: request.Scope, CreatedAt: now}); err != nil {
+	updatedGrant, err := qtx.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: request.ClientID, Scopes: request.Scope, CreatedAt: now, AuthEpoch: epoch})
+	if err != nil {
 		return "", fmt.Errorf("narrow OAuth grant for authorization code: %w", err)
 	}
-	if _, err := qtx.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{CodeDigest: digest[:], ClientID: request.ClientID, UserID: userID, Scopes: request.Scope, CodeChallenge: request.CodeChallenge, RedirectURI: request.RedirectURI, CreatedAt: now}); err != nil {
+	if _, err := qtx.CreateOAuthAuthorizationCode(ctx, store.CreateOAuthAuthorizationCodeParams{
+		CodeDigest: digest[:], ClientID: request.ClientID, UserID: user.ID, Scopes: request.Scope, CodeChallenge: request.CodeChallenge, RedirectURI: request.RedirectURI, CreatedAt: now,
+		GrantID: &updatedGrant.ID, AuthEpoch: &epoch,
+	}); err != nil {
 		return "", fmt.Errorf("create authorization code: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -386,6 +386,79 @@ func TestToken_RejectsCodeWhenGrantScopesChangedAfterIssue(t *testing.T) {
 	}
 }
 
+// This catches an exchange that ignores an authentication-epoch change: a
+// code issued before the epoch advanced must not mint tokens after. See
+// docs/design/second-factor-authentication.md.
+func TestToken_RejectsCodeWithStaleAccountEpoch(t *testing.T) {
+	f := newCodeFixture(t, time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC))
+	if _, err := f.q.AdvanceUserAuthEpoch(context.Background(), f.userID); err != nil {
+		t.Fatalf("AdvanceUserAuthEpoch: %v", err)
+	}
+	w := f.exchange(t, f.clientID, "http://127.0.0.1:20090/callback", f.verifier)
+	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+		t.Fatalf("stale-epoch exchange = %d %q", w.Code, w.Body.String())
+	}
+	code, err := f.q.GetOAuthAuthorizationCodeByDigest(context.Background(), f.digest[:])
+	if err != nil || code.ConsumedAt != nil {
+		t.Fatal("stale-epoch exchange consumed the code")
+	}
+	var n int
+	if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE grant_id = $1", f.grantID).Scan(&n); err != nil || n != 0 {
+		t.Fatal("stale-epoch exchange minted a token")
+	}
+}
+
+// This catches an exchange that trusts whichever grant is currently live for
+// (user, client) instead of the exact grant the code names: a code left over
+// from a superseded grant must not inherit a newer grant's authority.
+func TestToken_RejectsCodeBoundToForeignGrant(t *testing.T) {
+	f := newCodeFixture(t, time.Date(2026, 9, 9, 13, 0, 0, 0, time.UTC))
+	if _, err := f.q.RevokeOAuthGrant(context.Background(), store.RevokeOAuthGrantParams{ID: f.grantID, RevokedAt: f.now}); err != nil {
+		t.Fatalf("revoke original grant: %v", err)
+	}
+	replacement, err := f.q.UpsertOAuthGrant(context.Background(), store.UpsertOAuthGrantParams{UserID: f.userID, ClientID: f.clientID, Scopes: "resumes:read", CreatedAt: f.now})
+	if err != nil {
+		t.Fatalf("UpsertOAuthGrant replacement: %v", err)
+	}
+	if replacement.ID == f.grantID {
+		t.Fatal("replacement grant reused the revoked grant's id")
+	}
+	w := f.exchange(t, f.clientID, "http://127.0.0.1:20090/callback", f.verifier)
+	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+		t.Fatalf("foreign-grant exchange = %d %q", w.Code, w.Body.String())
+	}
+	code, err := f.q.GetOAuthAuthorizationCodeByDigest(context.Background(), f.digest[:])
+	if err != nil || code.ConsumedAt != nil {
+		t.Fatal("foreign-grant exchange consumed the code")
+	}
+	var n int
+	if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE grant_id = $1", replacement.ID).Scan(&n); err != nil || n != 0 {
+		t.Fatal("foreign-grant exchange minted a token under the replacement grant")
+	}
+}
+
+// This catches a refresh rotation that ignores an authentication-epoch
+// change on the grant. See docs/design/second-factor-authentication.md.
+func TestToken_RejectsRefreshWithStaleGrantEpoch(t *testing.T) {
+	now := time.Date(2026, 9, 9, 14, 0, 0, 0, time.UTC)
+	f := newRefreshFixture(t, now, now.Add(refreshFamilyTTL))
+	if _, err := f.q.AdvanceUserAuthEpoch(context.Background(), f.userID); err != nil {
+		t.Fatalf("AdvanceUserAuthEpoch: %v", err)
+	}
+	w, _ := f.rotate(t, f.raw)
+	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+		t.Fatalf("stale-epoch rotation = %d %q", w.Code, w.Body.String())
+	}
+	var n int
+	if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE family_id = $1 AND rotated_from IS NOT NULL", f.familyID).Scan(&n); err != nil || n != 0 {
+		t.Fatal("stale-epoch rotation created a successor")
+	}
+	authority, err := f.q.GetOAuthTokenAuthorityByDigest(context.Background(), f.digest[:])
+	if err != nil || authority.OAuthToken.SupersededAt != nil || authority.OAuthToken.RevokedAt != nil {
+		t.Fatal("stale-epoch rotation superseded or revoked the presented token")
+	}
+}
+
 // This catches refresh reuse failing open or a successor leaving its family.
 func TestToken_RefreshRotationChainAndSupersededReuseRevokesFamily(t *testing.T) {
 	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
