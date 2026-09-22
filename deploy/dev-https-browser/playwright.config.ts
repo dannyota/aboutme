@@ -13,6 +13,8 @@ const browserModes = [
   'exports',
   'privacy',
   'sample-start',
+  'second-factor',
+  'second-factor-disabled',
 ] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
@@ -22,9 +24,18 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 }
 
 const mode = requestedMode as BrowserMode;
-const timeout = mode === 'editor' || mode === 'public' || mode === 'password-auth'
-  || mode === 'mcp' || mode === 'publish' || mode === 'exports' || mode === 'privacy'
-  || mode === 'sample-start' ? 120_000 : 30_000;
+// The enabled second-factor journey walks enrollment, four pending sign-ins,
+// the negative cases, and teardown in one test, so it gets its own budget.
+const timeout = mode === 'second-factor' || mode === 'second-factor-disabled'
+  ? 600_000
+  : mode === 'editor' || mode === 'public' || mode === 'password-auth'
+    || mode === 'mcp' || mode === 'publish' || mode === 'exports'
+    || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
+
+// Both second-factor modes run one spec. The server enrollment flag, not the
+// spec file, is what differs between them; the spec selects its own test from
+// ABOUTME_BROWSER_MODE.
+const specName = mode === 'second-factor-disabled' ? 'second-factor' : mode;
 
 for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   if (Object.hasOwn(process.env, name)) {
@@ -42,7 +53,7 @@ export default defineConfig({
   retries: 0,
   navigationTimeout: mode === 'publish' ? 20_000 : 0,
   testDir: import.meta.dirname,
-  testMatch: [`${mode}.spec.ts`],
+  testMatch: [`${specName}.spec.ts`],
   timeout,
   updateSnapshots: 'none',
   use: {

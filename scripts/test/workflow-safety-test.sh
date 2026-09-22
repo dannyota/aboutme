@@ -70,4 +70,52 @@ if grep -Fq -- '--update-snapshots' "$WORKFLOW"; then
   fail "hosted workflow passes a browser baseline update flag"
 fi
 
+PASSKEY_JOB=$(sed -n '/^  passkey-browser-proof:/,/^  web-source-build:/p' "$WORKFLOW")
+[ -n "$PASSKEY_JOB" ] || fail "hosted workflow lacks the passkey-browser-proof job"
+grep -Fq '    timeout-minutes: 45' <<<"$PASSKEY_JOB" ||
+  fail "passkey-browser-proof job lacks a fixed 45-minute timeout"
+grep -Fq -- '- run: make dev-https' <<<"$PASSKEY_JOB" ||
+  fail "passkey-browser-proof job does not start the repository HTTPS harness"
+grep -Fq -- '- run: make dev-https-browser-image' <<<"$PASSKEY_JOB" ||
+  fail "passkey-browser-proof job does not build the pinned browser image"
+grep -Fq -- '- run: make dev-https-passkey-check' <<<"$PASSKEY_JOB" ||
+  fail "passkey-browser-proof job does not run the passkey proof target"
+if grep -Fq 'secrets.' <<<"$PASSKEY_JOB"; then
+  fail "passkey-browser-proof job references a repository secret"
+fi
+
+# Each cleanup step's own if: always() is asserted against its own named
+# block, not a job-wide count, so a check cannot pass by attaching every
+# always() to one step and none to the others.
+step_block() { # step-name
+  awk -v name="      - name: $1" '
+    $0 == name { found = 1; print; next }
+    found && /^      - / { exit }
+    found { print }
+  ' <<<"$PASSKEY_JOB"
+}
+
+UPLOAD_STEP=$(step_block "Upload passkey proof evidence")
+[ -n "$UPLOAD_STEP" ] || fail "passkey-browser-proof job lacks the named upload step"
+grep -Fq 'if: always()' <<<"$UPLOAD_STEP" ||
+  fail "passkey-browser-proof job's upload step does not run on every exit"
+grep -Fq 'path: .dev/native-https/evidence/passkey-*' <<<"$UPLOAD_STEP" ||
+  fail "passkey-browser-proof job does not upload the bounded passkey evidence path"
+grep -Fq 'include-hidden-files: true' <<<"$UPLOAD_STEP" ||
+  fail "passkey-browser-proof job's upload step excludes the hidden .dev evidence path by default"
+
+STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness")
+[ -n "$STOP_HARNESS_STEP" ] || fail "passkey-browser-proof job lacks the named stop-harness step"
+grep -Fq 'if: always()' <<<"$STOP_HARNESS_STEP" ||
+  fail "passkey-browser-proof job's stop-harness step does not run on every exit"
+grep -Fq -- 'run: make dev-https-down' <<<"$STOP_HARNESS_STEP" ||
+  fail "passkey-browser-proof job's stop-harness step does not stop the HTTPS harness"
+
+STOP_DB_STEP=$(step_block "Stop the runner-local database")
+[ -n "$STOP_DB_STEP" ] || fail "passkey-browser-proof job lacks the named stop-database step"
+grep -Fq 'if: always()' <<<"$STOP_DB_STEP" ||
+  fail "passkey-browser-proof job's stop-database step does not run on every exit"
+grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
+  fail "passkey-browser-proof job's stop-database step does not stop the runner-local database"
+
 printf 'hosted workflow safety tests passed\n'

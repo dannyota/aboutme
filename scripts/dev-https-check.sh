@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
-# public, password-auth, MCP, entry, publish, exports, privacy, and
-# sample-start). Stages an immutable per-run copy of the spec sources and
+# public, password-auth, MCP, entry, publish, exports, privacy, sample-start,
+# and passkey). Stages an immutable per-run copy of the spec sources and
 # mounts it into the pinned browser image, so editing a spec
 # never requires an image rebuild; the image manifest gates only the
 # image-side sources (Dockerfile, run.sh, package manifests).
@@ -41,6 +41,7 @@ readonly -a SPEC_SOURCES=(
   exports.spec.ts
   privacy.spec.ts
   sample-start.spec.ts
+  second-factor.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -71,9 +72,15 @@ publish) evidence_prefix=publish ;;
 exports) evidence_prefix=exports ;;
 privacy) evidence_prefix=privacy ;;
 sample-start) evidence_prefix=sample-start ;;
+passkey)
+  # Two bounded phases, one per server enrollment flag. Both evidence
+  # directories start with "passkey-" so the hosted job uploads exactly them.
+  evidence_prefix=passkey-enabled
+  TARGET=dev-https-passkey-check
+  ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|passkey'
   ;;
 esac
 
@@ -150,6 +157,7 @@ fi
 staging=
 password_input=
 mcp_input=
+passkey_input=
 mcp_fixture=
 mcp_client_name=
 mcp_seeded=0
@@ -157,12 +165,50 @@ cleanup() {
   [ -z "$staging" ] || rm -rf -- "$staging"
   [ -z "$password_input" ] || rm -rf -- "$password_input"
   [ -z "$mcp_input" ] || rm -rf -- "$mcp_input"
+  [ -z "$passkey_input" ] || rm -rf -- "$passkey_input"
   if [ "$mcp_seeded" -eq 1 ] && [ -n "$mcp_fixture" ]; then
     "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
       --client-name "$mcp_client_name" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
+
+# new_client_name prints a fresh, uniquely named local OAuth client for a run
+# that registers a connected agent.
+new_client_name() {
+  local run_id
+  run_id=$(</proc/sys/kernel/random/uuid)
+  [[ $run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
+    return 1
+  printf 'aboutme MCP UAT %s' "$run_id"
+}
+
+# assert_server_flag proves the running server environment carries the exact
+# passkey enrollment flag this phase needs.
+assert_server_flag() {
+  local want=$1 env_file=$STATE/run/server.env
+  [ -f "$env_file" ] && [ ! -L "$env_file" ] ||
+    fail 'server environment file is missing'
+  grep -Fqx "PASSKEY_ENROLLMENT_ENABLED=$want" "$env_file" ||
+    fail "server environment does not carry PASSKEY_ENROLLMENT_ENABLED=$want"
+}
+
+# prune_evidence keeps only the newest EVIDENCE_KEEP runs of one prefix.
+prune_evidence() {
+  local prefix=$1 old
+  local -a stale=()
+  mapfile -t stale < <(
+    find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d \
+      -name "$prefix.*" -printf '%T@ %p\n' |
+      sort -rn | awk '{print $2}' | tail -n "+$((EVIDENCE_KEEP + 1))"
+  )
+  for old in "${stale[@]}"; do
+    case $old in
+    "$EVIDENCE_ROOT"/*) rm -rf -- "$old" ;;
+    *) fail 'refusing to prune outside the evidence root' ;;
+    esac
+  done
+}
 
 staging=$(mktemp -d "$STATE/spec-input.XXXXXX")
 chmod 0700 "$staging"
@@ -174,6 +220,78 @@ for path in "${SPEC_SOURCES[@]}"; do
 done
 spec_sha=$(spec_source_hash "$staging") ||
   fail 'cannot hash staged spec sources'
+
+if [ "$MODE" = passkey ]; then
+  # The enabled phase registers a connected agent and reads security mail, so
+  # its input carries the capture token and this run's client name beside the
+  # Caddy root. The disabled phase needs only the root.
+  capture_secret=$STATE/secrets/auth-email-capture-bearer
+  [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
+    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    fail 'invalid capture secret'
+  mcp_client_name=$(new_client_name) || fail 'cannot create a run client name'
+  passkey_input=$(mktemp -d "$STATE/passkey-input.XXXXXX")
+  chmod 0700 "$passkey_input"
+  cp -- "$INPUT/caddy-root.crt" "$passkey_input/caddy-root.crt"
+  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  printf '%s' "$capture_token" >"$passkey_input/mail-capture-token"
+  printf '%s\n' "$mcp_client_name" >"$passkey_input/mcp-client-name"
+  chmod 0600 "$passkey_input/caddy-root.crt" \
+    "$passkey_input/mail-capture-token" "$passkey_input/mcp-client-name"
+
+  install -d -m 0700 "$REPO/.dev/bin"
+  mcp_fixture=$REPO/.dev/bin/mcp-uat-fixture
+  (cd "$REPO/apps/server" &&
+    go build -o "$mcp_fixture" ./cmd/mcp-uat-fixture) ||
+    fail 'MCP fixture build failed'
+  "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"
+  mcp_seeded=1
+  curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
+    "http://127.0.0.1:20444/api/messages" >/dev/null
+
+  status=0
+  assert_server_flag true
+  enabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/passkey-enabled.XXXXXX")
+  [ "$(stat -c %u "$enabled_evidence")" = "$UID_NOW" ] &&
+    [ "$(stat -c %a "$enabled_evidence")" = 700 ] ||
+    fail 'evidence directory ownership or mode mismatch'
+  "$CONTEXT/run.sh" "$image_id" "$passkey_input" "$staging" \
+    "$enabled_evidence" second-factor || status=$?
+
+  disabled_evidence=none
+  if [ "$status" -eq 0 ]; then
+    # The runner-local database keeps its rows across this restart; only the
+    # server enrollment flag changes.
+    bash "$REPO/scripts/dev-https.sh" down ||
+      fail 'cannot stop the harness between passkey phases'
+    DEV_HTTPS_PASSKEY_ENROLLMENT=false bash "$REPO/scripts/dev-https.sh" up ||
+      fail 'cannot restart the harness with passkey enrollment disabled'
+    assert_server_flag false
+    disabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/passkey-disabled.XXXXXX")
+    [ "$(stat -c %u "$disabled_evidence")" = "$UID_NOW" ] &&
+      [ "$(stat -c %a "$disabled_evidence")" = 700 ] ||
+      fail 'evidence directory ownership or mode mismatch'
+    "$CONTEXT/run.sh" "$image_id" "$INPUT" "$staging" \
+      "$disabled_evidence" second-factor-disabled || status=$?
+    # Leave no stack running at an unexpected flag; the operator or the hosted
+    # job starts a fresh one.
+    bash "$REPO/scripts/dev-https.sh" down || status=1
+  fi
+
+  if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"; then
+    mcp_seeded=0
+  else
+    status=1
+  fi
+  prune_evidence passkey-enabled
+  prune_evidence passkey-disabled
+  [ "$status" -eq 0 ] || fail 'browser proof failed'
+  printf '%s evidence: %s and %s (spec sha256 %s)\n' \
+    "$TARGET" "$enabled_evidence" "$disabled_evidence" "$spec_sha"
+  exit 0
+fi
 
 run_input=$INPUT
 if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
@@ -257,17 +375,7 @@ elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   fi
 fi
 # Keep only the newest EVIDENCE_KEEP runs for this mode.
-mapfile -t old_evidence < <(
-  find "$EVIDENCE_ROOT" -mindepth 1 -maxdepth 1 -type d \
-    -name "$evidence_prefix.*" -printf '%T@ %p\n' |
-    sort -rn | awk '{print $2}' | tail -n "+$((EVIDENCE_KEEP + 1))"
-)
-for old in "${old_evidence[@]}"; do
-  case $old in
-  "$EVIDENCE_ROOT"/*) rm -rf -- "$old" ;;
-  *) fail 'refusing to prune outside the evidence root' ;;
-  esac
-done
+prune_evidence "$evidence_prefix"
 
 [ "$status" -eq 0 ] || fail 'browser proof failed'
 
