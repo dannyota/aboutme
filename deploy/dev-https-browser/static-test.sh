@@ -399,7 +399,7 @@ while IFS= read -r template; do
     fail 'second-factor proof line drifted from its fixed template'
 done <<'TEMPLATES'
 `${MODE}-stage:${name}`
-`${MODE}-stage:cleanup`
+`${MODE}-stage:cleanup-after-${recordedStage}`
 `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
 TEMPLATES
 if grep -nE 'console\.log\([^`]*(error|message|url|token|email|password)' \
@@ -410,7 +410,9 @@ fi
   fail 'second-factor proof records its stage from an unexpected source'
 grep -Fq 'let recordedStage = ' "$SECOND_FACTOR_SPEC" ||
   fail 'second-factor proof lost its recorded stage'
-grep -Fq 'if (!tearingDown) recordedStage = name;' "$SECOND_FACTOR_SPEC" ||
+grep -Fq 'if (tearingDown) return;' "$SECOND_FACTOR_SPEC" ||
+  fail 'second-factor teardown can still print over the stuck stage'
+grep -Fq 'recordedStage = name;' "$SECOND_FACTOR_SPEC" ||
   fail 'second-factor proof no longer records the stage name'
 grep -Fq 'if (!tearingDown) recordedStage = landed;' "$SECOND_FACTOR_SPEC" ||
   fail 'second-factor proof no longer records a callback category as a stage'
@@ -423,13 +425,41 @@ if grep -oE "return 'callback-[^']*';" "$SECOND_FACTOR_SPEC" |
   fail 'a second-factor callback category is outside the runner vocabulary'
 fi
 # A step that never settles must fail at its own stage instead of consuming
-# the whole test budget and reporting teardown.
+# the whole test budget and reporting teardown. Playwright declares these two
+# on its test options, so they only take effect inside `use`; at the top level
+# of the config they are read by nobody.
 grep -Fq 'const actionTimeout = secondFactor ? 20_000' \
   "$SOURCE/playwright.config.ts" ||
   fail 'second-factor actions are not bounded'
-grep -Fq 'const navigationTimeout = secondFactor' \
+grep -Fq 'const navigationTimeout = secondFactor ? 60_000' \
   "$SOURCE/playwright.config.ts" ||
   fail 'second-factor navigations are not bounded'
+grep -Fqx '    actionTimeout,' "$SOURCE/playwright.config.ts" ||
+  fail 'the action bound is not applied through use'
+grep -Fqx '    navigationTimeout,' "$SOURCE/playwright.config.ts" ||
+  fail 'the navigation bound is not applied through use'
+if grep -qE '^  (action|navigation)Timeout' "$SOURCE/playwright.config.ts"; then
+  fail 'a browser timeout sits where Playwright ignores it'
+fi
+
+# Response, event, DevTools, and loopback waits are not covered by those two
+# options, so the proof bounds each of them itself.
+navigation_waits=$(grep -c 'page\.waitForURL(' "$SECOND_FACTOR_SPEC")
+navigation_bounds=$(grep -c 'timeout: WAIT_NAVIGATION_MS' "$SECOND_FACTOR_SPEC")
+[ "$navigation_bounds" -ge "$navigation_waits" ] ||
+  fail 'a second-factor navigation wait carries no explicit bound'
+response_waits=$(grep -c 'page\.waitForResponse(' "$SECOND_FACTOR_SPEC")
+response_bounds=$(grep -c 'timeout: WAIT_RESPONSE_MS' "$SECOND_FACTOR_SPEC")
+[ "$response_bounds" -ge "$response_waits" ] ||
+  fail 'a second-factor response wait carries no explicit bound'
+grep -Fq 'signal: AbortSignal.timeout(WAIT_LOOPBACK_MS)' "$SECOND_FACTOR_SPEC" ||
+  fail 'the capture reads are not bounded'
+grep -Fq 'timeout: WAIT_LOOPBACK_MS' "$SECOND_FACTOR_SPEC" ||
+  fail 'the trusted loopback request is not bounded'
+grep -Fq 'function boundedCDPCall' "$SECOND_FACTOR_SPEC" ||
+  fail 'the DevTools round trips are not bounded'
+grep -Fq 'const send = boundedCDP(' "$SECOND_FACTOR_SPEC" ||
+  fail 'a DevTools command can be sent without a bound'
 
 grep -Fq 'certutil -N --empty-password' "$SOURCE/run.sh" ||
   fail 'empty NSS database creation is missing'

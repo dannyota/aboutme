@@ -70,6 +70,17 @@ const PHONE = { height: 844, width: 390 };
 const DESKTOP = { height: 900, width: 1440 };
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
+// Explicit bounds for the waits Playwright's action and navigation options do
+// not cover: response and event waits, DevTools commands, loopback requests
+// from Node, and this spec's own polling. Every one is far above the slowest
+// healthy hosted step, so only a genuinely stuck wait trips it, and a trip
+// fails at its own stage instead of consuming the whole test budget.
+const WAIT_RESPONSE_MS = 30_000;
+const WAIT_NAVIGATION_MS = 60_000;
+const WAIT_CDP_MS = 30_000;
+const WAIT_LOOPBACK_MS = 20_000;
+const WAIT_MAIL_MS = 45_000;
+
 // Every negative status this proof deliberately provokes inside the page,
 // keyed by the exact path that may answer with it. Anything else counts as a
 // console error and fails the run.
@@ -115,7 +126,8 @@ let recordedRole: AccountRole = 'none';
 let tearingDown = false;
 
 function stage(name: string): void {
-  if (!tearingDown) recordedStage = name;
+  if (tearingDown) return;
+  recordedStage = name;
   console.log(`${MODE}-stage:${name}`);
 }
 
@@ -123,10 +135,14 @@ function role(next: AccountRole): void {
   if (!tearingDown) recordedRole = next;
 }
 
-/** Marks the point after which stage and role stop being recorded. */
+/**
+ * Marks the point after which stage and role stop being recorded, and names
+ * the stage the body stopped at. The runner forwards only the last stage line,
+ * so a bare teardown line would hide exactly what a reader needs.
+ */
 function beginTeardown(): void {
   tearingDown = true;
-  console.log(`${MODE}-stage:cleanup`);
+  console.log(`${MODE}-stage:cleanup-after-${recordedStage}`);
 }
 
 // Ordered classifiers. Each maps a Playwright or helper failure to one fixed
@@ -139,7 +155,7 @@ const OUTCOME_PATTERNS: ReadonlyArray<readonly [RegExp, FailureOutcome]> = [
     /credentials\.(get|create)|WebAuthn|NotAllowedError|InvalidStateError|virtual authenticator/u,
     'ceremony',
   ],
-  [/capture (read|reset) failed|message within \d+s/u, 'capture'],
+  [/capture (read|reset) failed|within its capture bound/u, 'capture'],
   [/^(locator|page|frame|elementHandle)\./u, 'locator'],
   [/expect|Timed out \d+ms waiting for/u, 'assertion'],
 ];
@@ -309,6 +325,7 @@ function trustedPost(
         path,
         port: 20443,
         protocol: 'https:',
+        timeout: WAIT_LOOPBACK_MS,
       },
       (response) => {
         const chunks: Buffer[] = [];
@@ -329,6 +346,9 @@ function trustedPost(
         });
       },
     );
+    request.on('timeout', () => {
+      request.destroy(new Error('trusted request exceeded its loopback bound'));
+    });
     request.on('error', reject);
     if (body !== '') request.write(body);
     request.end();
@@ -376,20 +396,27 @@ interface CaptureClient {
 function captureClient(token: string): CaptureClient {
   const headers = { Authorization: `Bearer ${token}` };
   const read = async (): Promise<CapturedMessage[]> => {
-    const response = await fetch(CAPTURE_URL, { headers });
+    const response = await fetch(CAPTURE_URL, {
+      headers,
+      signal: AbortSignal.timeout(WAIT_LOOPBACK_MS),
+    });
     if (!response.ok) throw new Error(`capture read failed: ${response.status}`);
     const body = (await response.json()) as { messages: CapturedMessage[] };
     return body.messages;
   };
   return {
     async reset() {
-      const response = await fetch(CAPTURE_URL, { headers, method: 'DELETE' });
+      const response = await fetch(CAPTURE_URL, {
+        headers,
+        method: 'DELETE',
+        signal: AbortSignal.timeout(WAIT_LOOPBACK_MS),
+      });
       if (!response.ok) {
         throw new Error(`capture reset failed: ${response.status}`);
       }
     },
     async waitForToken(kind, to) {
-      const deadline = Date.now() + 30_000;
+      const deadline = Date.now() + WAIT_MAIL_MS;
       while (Date.now() < deadline) {
         for (const message of await read()) {
           if (message.kind !== kind || message.to !== to) continue;
@@ -398,7 +425,7 @@ function captureClient(token: string): CaptureClient {
         }
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
-      throw new Error(`no ${kind} message within 30s`);
+      throw new Error('no security message within its capture bound');
     },
   };
 }
@@ -410,6 +437,34 @@ type CDPSend = (
   params?: Record<string, unknown>,
 ) => Promise<Record<string, unknown>>;
 
+/**
+ * Bounds one DevTools round trip. Nothing in Playwright's action or
+ * navigation options covers DevTools, so an unanswered command would stall the
+ * whole test. The rejection carries fixed words only.
+ */
+async function boundedCDPCall<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(
+            'virtual authenticator command exceeded its bound',
+          )),
+          WAIT_CDP_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function boundedCDP(send: CDPSend): CDPSend {
+  return (method, params) => boundedCDPCall(send(method, params));
+}
+
 /** A pool of virtual authenticators on one page, one present at a time. */
 class AuthenticatorPool {
   private readonly ids: string[] = [];
@@ -420,8 +475,10 @@ class AuthenticatorPool {
     context: BrowserContext,
     page: Page,
   ): Promise<AuthenticatorPool> {
-    const session = await context.newCDPSession(page);
-    const send = session.send.bind(session) as unknown as CDPSend;
+    const session = await boundedCDPCall(context.newCDPSession(page));
+    const send = boundedCDP(
+      session.send.bind(session) as unknown as CDPSend,
+    );
     await send('WebAuthn.enable', { enableUI: false });
     return new AuthenticatorPool(send);
   }
@@ -546,15 +603,26 @@ async function registerVerified(
   password: string,
   name: string,
 ): Promise<void> {
+  stage('register-open');
   await gotoHydrated(page, '/register');
+  // The form is inert and invisible until the capabilities read resolves, so
+  // this is the first step that depends on the page's own data.
+  stage('register-form-ready');
+  await expect(page.getByTestId('register-form')).toBeVisible();
+  stage('register-fill');
   await page.getByLabel('Name').fill(name);
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByLabel('Confirm password', { exact: true }).fill(password);
+  stage('register-submit');
   await page.getByRole('button', { name: 'Create account' }).click();
+  stage('register-accepted');
   await expect(page.getByTestId('register-success')).toBeVisible();
+  stage('register-await-mail');
   const token = await capture.waitForToken('verify', email);
+  stage('register-verify-open');
   await gotoHydrated(page, `${ORIGIN}/verify-email#token=${token}`);
+  stage('register-verified');
   await expect(page.getByTestId('verify-success')).toBeVisible();
 }
 
@@ -567,30 +635,34 @@ async function passwordSignIn(
   email: string,
   password: string,
 ): Promise<'pending' | 'session'> {
+  stage('sign-in-open');
   await gotoHydrated(page, '/login');
+  stage('sign-in-fill');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password', { exact: true }).fill(password);
   const response = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
     return url.origin === ORIGIN
       && url.pathname === '/api/v1/auth/password/login';
-  });
+  }, { timeout: WAIT_RESPONSE_MS });
+  stage('sign-in-submit');
   await page.getByRole('button', { name: 'Sign in' }).click();
   const status = (await response).status();
+  stage('sign-in-landing');
   if (status === 202) {
-    await page.waitForURL(`${ORIGIN}/login/second-factor`);
+    await page.waitForURL(`${ORIGIN}/login/second-factor`, { timeout: WAIT_NAVIGATION_MS });
     await waitForHydration(page);
     return 'pending';
   }
   expect(status).toBe(204);
-  await page.waitForURL(`${ORIGIN}/app/resumes`);
+  await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
   return 'session';
 }
 
 async function signOut(page: Page): Promise<void> {
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
-  await page.waitForURL(`${ORIGIN}/login`);
+  await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
 }
 
 /** Runs the pending passkey ceremony with the present virtual authenticator. */
@@ -602,8 +674,10 @@ async function clickPasskey(page: Page): Promise<void> {
 /** Completes the open pending authentication with a passkey. */
 async function completeWithPasskey(page: Page): Promise<void> {
   await clickPasskey(page);
-  await page.waitForURL((url) =>
-    url.origin === ORIGIN && url.pathname !== '/login/second-factor');
+  await page.waitForURL(
+    (url) => url.origin === ORIGIN && url.pathname !== '/login/second-factor',
+    { timeout: WAIT_NAVIGATION_MS },
+  );
 }
 
 /** Submits one recovery code by keyboard and returns the response status. */
@@ -612,7 +686,7 @@ async function submitRecoveryCode(page: Page, code: string): Promise<number> {
     const url = new URL(candidate.url());
     return url.origin === ORIGIN
       && url.pathname === '/api/v1/auth/second-factor/recovery/verify';
-  });
+  }, { timeout: WAIT_RESPONSE_MS });
   const input = page.locator(RECOVERY_INPUT);
   await input.click();
   await input.fill(code);
@@ -623,8 +697,10 @@ async function submitRecoveryCode(page: Page, code: string): Promise<number> {
 /** Completes the open pending authentication with one recovery code. */
 async function completeWithRecovery(page: Page, code: string): Promise<void> {
   expect(await submitRecoveryCode(page, code)).toBe(204);
-  await page.waitForURL((url) =>
-    url.origin === ORIGIN && url.pathname !== '/login/second-factor');
+  await page.waitForURL(
+    (url) => url.origin === ORIGIN && url.pathname !== '/login/second-factor',
+    { timeout: WAIT_NAVIGATION_MS },
+  );
 }
 
 /** Answers the settings reauthentication prompt with the account password. */
@@ -716,7 +792,7 @@ async function addPasskey(
     return url.origin === ORIGIN
       && url.pathname === '/api/v1/me/second-factor/passkeys'
       && candidate.request().method() === 'POST';
-  });
+  }, { timeout: WAIT_RESPONSE_MS });
   await page.getByTestId('passkey-add').click();
   expect((await created).status()).toBe(201);
   if (!expectCodes) {
@@ -847,9 +923,11 @@ test('proves the passkey second factor over native HTTPS', async ({
     await expect(linkGoogle).toBeVisible();
     stage('primary-link-authorize');
     await Promise.all([
-      page.waitForURL((url) =>
-        url.origin === ORIGIN
-        && url.pathname === '/__uat/oauth/google/authorize'),
+      page.waitForURL(
+        (url) => url.origin === ORIGIN
+          && url.pathname === '/__uat/oauth/google/authorize',
+        { timeout: WAIT_NAVIGATION_MS },
+      ),
       linkGoogle.click(),
     ]);
     stage('primary-link-select-account');
@@ -860,9 +938,11 @@ test('proves the passkey second factor over native HTTPS', async ({
     // on an error redirect that has already finished loading.
     await watchingCallback(page, async () => {
       await Promise.all([
-        page.waitForURL((url) =>
-          url.origin === ORIGIN
-          && url.pathname === '/app/settings/sessions'),
+        page.waitForURL(
+          (url) => url.origin === ORIGIN
+            && url.pathname === '/app/settings/sessions',
+          { timeout: WAIT_NAVIGATION_MS },
+        ),
         page.getByRole('button', { name: 'Continue with Google' }).click(),
       ]);
       expect(callbackCategory(page.url())).toBe('callback-settings-clean');
@@ -948,7 +1028,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     await closeRevealAndProveCleared(page, primaryCodes);
     steps.recoveryRegenerated = true;
     primaryCleanupCode = primaryCodes[9] as string;
-    await stalePage.reload();
+    await stalePage.reload({ timeout: WAIT_NAVIGATION_MS });
     await waitForHydration(stalePage);
     await expect(stalePage.getByTestId('second-factor-expired')).toBeVisible();
     steps.staleEpochRejected = true;
@@ -1009,13 +1089,13 @@ test('proves the passkey second factor over native HTTPS', async ({
     // A rejected ceremony must not stay outstanding: a second concurrent
     // request would be refused by the browser, not by the server. Reloading
     // discards it before the completion that follows.
-    await page.reload();
+    await page.reload({ timeout: WAIT_NAVIGATION_MS });
     await waitForHydration(page);
     steps.userVerificationRequired = true;
 
     stage('pending-passkey-completion');
     await completeWithPasskey(page);
-    await page.waitForURL(`${ORIGIN}/app/resumes`);
+    await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
     expect(await meStatus(page)).toBe(200);
     steps.passkeyCompletion = true;
 
@@ -1030,7 +1110,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     await page.getByLabel('Current password', { exact: true })
       .fill(primaryPassword);
     await Promise.all([
-      page.waitForURL(`${ORIGIN}/login/second-factor`),
+      page.waitForURL(`${ORIGIN}/login/second-factor`, { timeout: WAIT_NAVIGATION_MS }),
       page.getByTestId('second-factor-reauth-submit').click(),
     ]);
     await waitForHydration(page);
@@ -1051,7 +1131,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(unbound).toEqual({ code: 'authentication_required', status: 401 });
     steps.wrongBindingRejected = true;
     await completeWithRecovery(page, primaryCodes[0] as string);
-    await page.waitForURL(`${ORIGIN}/app/settings/sessions`);
+    await page.waitForURL(`${ORIGIN}/app/settings/sessions`, { timeout: WAIT_NAVIGATION_MS });
 
     // 10. Provider sign-in on the enrolled account also stops at pending.
     stage('provider-pending');
@@ -1105,7 +1185,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       .toBe('pending');
     steps.resetPreservesEnforcement = true;
     await completeWithRecovery(page, primaryCodes[4] as string);
-    await page.waitForURL(`${ORIGIN}/app/resumes`);
+    await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
 
     // 13. Removing the final factor turns second-factor sign-in off.
     stage('final-removal');
@@ -1186,7 +1266,7 @@ test('proves the passkey second factor over native HTTPS', async ({
 
     stage('recovery-completion');
     await completeWithRecovery(page, codes[0] as string);
-    await page.waitForURL(`${ORIGIN}/app/resumes`);
+    await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
     expect(await meStatus(page)).toBe(200);
     steps.recoveryCompletion = true;
 
@@ -1252,7 +1332,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       )).toBe(401);
     }
     expect(await cookieValue(context, PENDING_COOKIE)).toBeNull();
-    await page.reload();
+    await page.reload({ timeout: WAIT_NAVIGATION_MS });
     await waitForHydration(page);
     await expect(page.getByTestId('second-factor-expired')).toBeVisible();
     await expect(page.getByTestId('second-factor-sign-in-again')).toBeVisible();
@@ -1532,7 +1612,7 @@ async function createAgentGrant(
   });
   await gotoHydrated(page, `/oauth/authorize?${query.toString()}`);
   await Promise.all([
-    page.waitForURL(`${REDIRECT_URI}**`),
+    page.waitForURL(`${REDIRECT_URI}**`, { timeout: WAIT_NAVIGATION_MS }),
     page.getByRole('button', { name: 'Approve' }).click(),
   ]);
   expect(callback?.searchParams.get('state')).toBe(state);
@@ -1640,7 +1720,7 @@ async function provePendingLocale(
   expect(await page.evaluate(() =>
     document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await completeWithRecovery(page, options.code);
-  await page.waitForURL(`${ORIGIN}/app/resumes`);
+  await page.waitForURL(`${ORIGIN}/app/resumes`, { timeout: WAIT_NAVIGATION_MS });
 }
 
 interface DisabledProbes {

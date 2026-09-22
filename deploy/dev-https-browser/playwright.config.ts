@@ -49,30 +49,34 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
 // silently consume the whole test budget and report the teardown stage
 // instead. Both waits are bounded well above the slowest observed hosted
 // navigation, so only a genuinely stuck step trips them.
-const actionTimeout = secondFactor ? 20_000 : mode === 'publish' ? 10_000 : 0;
-const navigationTimeout = secondFactor
-  ? 60_000
-  : mode === 'publish' ? 20_000 : 0;
+//
+// These two are `use` options. Playwright declares them on
+// PlaywrightTestOptions only, so a value at the top level of the config is
+// read by nobody and every mode runs unbounded. Bounding another mode's proof
+// needs its own brief, so every mode but this one keeps the unlimited default
+// it runs with today.
+const actionTimeout = secondFactor ? 20_000 : 0;
+const navigationTimeout = secondFactor ? 60_000 : 0;
 
 export default defineConfig({
-  actionTimeout,
   forbidOnly: true,
   fullyParallel: false,
   outputDir: '/tmp/playwright-artifacts',
   preserveOutput: 'never',
   reporter: [['line']],
   retries: 0,
-  navigationTimeout,
   testDir: import.meta.dirname,
   testMatch: [`${specName}.spec.ts`],
   timeout,
   updateSnapshots: 'none',
   use: {
     acceptDownloads: false,
+    actionTimeout,
     baseURL,
     browserName: 'chromium',
     chromiumSandbox: true,
     locale: 'en-US',
+    navigationTimeout,
     screenshot: 'off',
     serviceWorkers: 'block',
     timezoneId: 'UTC',
