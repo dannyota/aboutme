@@ -12,7 +12,7 @@ field.
 
 Registration options and completion both recheck the enrollment flag. If the
 flag is false, options create nothing. Completion consumes a matching ceremony,
-stores no credential, and returns the uniform `404 route_not_found`. Assertion,
+stores no credential, and returns the uniform `404 not_found`. Assertion,
 recovery, removal, regeneration, and state routes ignore the enrollment flag.
 
 `GET /api/v1/me/second-factor` has exactly these data fields:
@@ -33,11 +33,15 @@ recovery, removal, regeneration, and state routes ignore the enrollment flag.
 }
 ```
 
-`passkeys` uses `(created_at, id)` order. An unenrolled account returns false,
-an empty array, and zero. V0.4.2 does not register any TOTP verification,
-enrollment, replacement, or removal route. The state response has no
-`totpEnabled` field, and pending method values never include `totp`. V0.4.3 adds
-those fields and routes as an additive contract change.
+`passkeys` uses `(created_at, id)` order. `enabled` is derived from the active
+factor count in the same read-only snapshot as `passkeys` and
+`recoveryCodesRemaining`, never read from stored state on its own. The invariant
+behind it is that the factor-policy row exists exactly while an active factor
+exists, so all three fields describe one consistent instant. An unenrolled
+account returns false, an empty array, and zero. V0.4.2 does not register any
+TOTP verification, enrollment, replacement, or removal route. The state response
+has no `totpEnabled` field, and pending method values never include `totp`.
+V0.4.3 adds those fields and routes as an additive contract change.
 
 Every response in this file uses `Cache-Control: no-store`. JSON follows the
 standard `{data:...}` or `{error:{code,message}}` envelope. One-time plaintext
@@ -123,8 +127,8 @@ Times are UTC RFC 3339 strings. The CSRF token is the pending row's 32-byte
 secret encoded as 43-character unpadded base64url.
 
 A `401 authentication_required` status or completion response clears the pending
-cookie. A request to a TOTP path reaches the existing uniform
-`404 route_not_found`; no pending route accepts an arbitrary method name.
+cookie. A request to a TOTP path reaches the existing uniform `404 not_found`;
+no pending route accepts an arbitrary method name.
 
 Every pending POST requires `Content-Type: application/json`, exact Origin,
 `X-CSRF-Token`, and the pending cookie. Reauth also requires the bound session
@@ -191,6 +195,14 @@ contains exactly:
   and
 - `attestation`: `"none"`.
 
+The server asks for `attestation: "none"` but does not require it: with no FIDO
+metadata service configured, go-webauthn cryptographically verifies whichever
+format `attestationObject` declares (`packed`, `tpm`, `android-key`,
+`android-safetynet`, `apple`, `fido-u2f`, `compound`) without checking its
+certificate chain against a trusted root, and accepts any self-consistent
+statement. A non-`none` format is therefore verified and accepted, never
+rejected or normalized to `none`. No attestation format or type is stored.
+
 An assertion `publicKey` contains exactly `challenge`, `timeout: 300000`,
 `rpId`, `allowCredentials`, and `userVerification: "required"`.
 `allowCredentials` contains every active passkey and is never empty. When the
@@ -236,9 +248,11 @@ instead:
 ```
 
 `transports` is required on registration and may be empty. `userHandle` is
-required and may be null or at most 64 decoded bytes. `clientExtensionResults`
-is required and must be an empty object because v0.4.2 requests no extensions.
-The field-size and body limits come from [Numeric budgets](budgets.md).
+required and may be null or at most 64 decoded bytes. An empty `userHandle`
+string decodes exactly like `null`: no handle to compare, so it never matches
+the stored one. `clientExtensionResults` is required and must be an empty object
+because v0.4.2 requests no extensions. The field-size and body limits come from
+[Numeric budgets](budgets.md).
 
 ## Management responses and recovery download
 
@@ -263,6 +277,19 @@ the policy already exists and never sends null or an empty array. Passkey
 removal returns `204`; an invalid, missing, foreign, or already removed internal
 ID returns `404 factor_not_found`. Recovery regeneration returns
 `200 {"data":{"recoveryCodes":[...]}}` with ten new codes.
+
+Registration options and registration completion both return
+`409 passkey_limit_reached` once an account already holds five active passkeys,
+the [budgeted](budgets.md) maximum. Options refuses a sixth ceremony before any
+device interaction; completion rechecks the count again at commit, so a race
+between two concurrently started ceremonies cannot create a sixth credential.
+Registration completion returns `400 verification_failed` when WebAuthn
+verification of the submitted credential fails, covering ceremony type, exact
+origin, challenge, RP ID hash, public-key algorithm, user presence and
+verification flags, the backup-eligible/backup-state consistency check, and
+signature validity, and also when the verified credential ID already exists for
+any account. In every `verification_failed` case the claimed ceremony stays
+consumed, so the same ceremony ID cannot be retried.
 
 Passkey removal decides final versus non-final only from the shared count of
 active factors of every type, taken under the user lock as

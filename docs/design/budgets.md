@@ -123,6 +123,7 @@ Callers use these shared policies only after the caller integration that ADR
 | Pending-auth token and CSRF secret              | 32 random bytes each; token stored as SHA-256       | Second-factor authentication                             |
 | Pending-auth lifetime / live rows / failures    | 5 min / 5 per account / 5 per row                   | Second-factor authentication                             |
 | Second-factor attempts                          | 10/15 min per (account, IP); 30/min per IP          | Second-factor rate policies                              |
+| Factor management mutations                     | ≤ 10/hour per (account, IP)                         | Second-factor rate policies                              |
 | Active passkeys per account                     | ≤ 5                                                 | Second-factor store                                      |
 | WebAuthn challenge / ceremony lifetime          | 32 random bytes / 5 min                             | WebAuthn service                                         |
 | WebAuthn ceremony token                         | 32 random bytes; stored as SHA-256                  | WebAuthn service and store                               |
@@ -131,10 +132,13 @@ Callers use these shared policies only after the caller integration that ADR
 | WebAuthn client data / attestation object       | ≤ 4,096 / 16,384 bytes                              | WebAuthn decoder                                         |
 | WebAuthn authenticator data / signature         | ≤ 4,096 / 1,024 bytes                               | WebAuthn decoder                                         |
 | WebAuthn user handle                            | 32 bytes generated; ≤ 64 bytes received             | WebAuthn service                                         |
+| WebAuthn transport hints                        | ≤ 8 hints, ≤ 32 bytes each                          | WebAuthn decoder                                         |
 | WebAuthn and pending cleanup                    | ≤ 200 expired rows per run                          | Second-factor store                                      |
+| Security mail job expiry                        | 24 h after event, rounded to whole seconds          | Second-factor security mail                              |
 | Authentication security-event retention         | 180 days; 1,000/page; 10,000/run                    | Privacy sweep                                            |
 | Recovery-code set / entropy                     | 10 codes / 128 random bits per code                 | Second-factor recovery                                   |
 | Recovery verification request body              | ≤ 4,096 bytes                                       | Second-factor recovery route                             |
+| Recovery code input length                      | ≤ 128 characters before canonicalization            | Second-factor recovery                                   |
 | Local mail capture                              | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | Local mail capture                                       |
 | Capture ports                                   | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | Local mail capture                                       |
 | `/oauth/register` per IP                        | ≤ 5/hour                                            | OAuth and MCP rate policies                              |
@@ -284,7 +288,12 @@ COSE, or signature work. The 32 KiB route body includes base64url expansion and
 JSON overhead. Five credentials bound every options response. Recovery codes
 carry enough random entropy for digest-only storage; display encoding does not
 reduce that entropy. Each admitted pending or ceremony creation runs both
-bounded expiry cleanups. The daily privacy sweep owns security-event retention.
+bounded expiry cleanups. The 10-per-hour factor-management limit, shared by
+passkey registration options, completion, removal, regeneration, and disabled
+completion, is what keeps that cleanup argument true for a registration
+ceremony: because the route is rate-limited by account and IP, each admitted
+request can still delete more expired rows than it adds. The daily privacy sweep
+owns security-event retention.
 
 **Agent access rows.** This table is the enforcement authority for agent access.
 Registration is unauthenticated, so five per hour per IP admits a genuine first

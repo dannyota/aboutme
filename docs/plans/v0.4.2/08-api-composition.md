@@ -42,6 +42,19 @@ generated API client.
 - Capabilities expose only the accepted v0.4.2 fields and never account state.
 - OpenAPI pins request and response bounds, cookies, CSRF, cache headers, status
   codes, error codes, formats, nullable fields, and one-time secret behavior.
+- OpenAPI adds these specific responses, matching
+  `docs/design/passkey-second-factor-contract.md`:
+  - `409 passkey_limit_reached` on passkey registration options and completion,
+    once an account already holds five active passkeys;
+  - `400 verification_failed` on passkey registration completion, for a failed
+    WebAuthn verification or a duplicate credential ID;
+  - `403 reauth_required` on `POST /oauth/consent` (`postOAuthConsentDecision`)
+    for connected-agent consent approval on an enrolled account without a recent
+    second-factor proof (the existing operation's path is `/oauth/consent`, not
+    `/authorize`; denial needs no recent proof); and
+  - `429 rate_limited` plus `Retry-After` on every `/me/second-factor` mutation
+    route, from the shared 10-per-hour-per-(account, IP) factor-management limit
+    in `docs/design/budgets.md`.
 - Compose entropy, clocks, storage, sessions, mail, limiters, and WebAuthn
   configuration through injectable dependencies. Do not log secret inputs.
 
