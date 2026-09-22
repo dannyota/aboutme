@@ -66,11 +66,11 @@ func newAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.OAuthCli
 // real wall clock the session manager's default Issue path would use.
 func issueTestSession(t *testing.T, pool *store.Pool, userID uuid.UUID, now time.Time, factorVerifiedAt *time.Time) store.Session {
 	t.Helper()
-	_, sess, err := auth.NewSessionManagerWithPool(pool).Issue(context.Background(), userID, "oauthsrv-test", "127.0.0.1")
+	_, sess, err := auth.NewSessionManagerWithPool(pool).Issue(t.Context(), userID, "oauthsrv-test", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("issue test session: %v", err)
 	}
-	if _, err = pool.Exec(context.Background(), "UPDATE sessions SET reauthenticated_at = $1, second_factor_verified_at = $2 WHERE id = $3", now, factorVerifiedAt, sess.ID); err != nil {
+	if _, err = pool.Exec(t.Context(), "UPDATE sessions SET reauthenticated_at = $1, second_factor_verified_at = $2 WHERE id = $3", now, factorVerifiedAt, sess.ID); err != nil {
 		t.Fatalf("set test session verification times: %v", err)
 	}
 	sess.ReauthenticatedAt = now
@@ -221,7 +221,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 // epoch. See docs/design/second-factor-authentication.md.
 func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	enrollTestSecondFactor(t, q, user.ID, s.clock())
 	if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: s.clock()}); err != nil {
 		t.Fatalf("seed grant: %v", err)
@@ -229,7 +229,7 @@ func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 
 	t.Run("missing factor proof falls back to interactive consent", func(t *testing.T) {
 		sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
-		req := httptest.NewRequestWithContext(ctx, http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
 		req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
 		rec := httptest.NewRecorder()
 		s.HandleAuthorize(rec, req)
@@ -249,7 +249,7 @@ func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 				t.Errorf("restore user epoch: %v", err)
 			}
 		})
-		req := httptest.NewRequestWithContext(ctx, http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
 		req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
 		rec := httptest.NewRecorder()
 		s.HandleAuthorize(rec, req)
@@ -261,7 +261,7 @@ func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 	t.Run("both recent proofs mint a code bound to the current epoch", func(t *testing.T) {
 		now := s.clock()
 		sess := issueTestSession(t, s.pool, user.ID, now, &now)
-		req := httptest.NewRequestWithContext(ctx, http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
 		req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
 		rec := httptest.NewRecorder()
 		s.HandleAuthorize(rec, req)
@@ -365,7 +365,7 @@ func urlMustParse(t *testing.T, raw string) *url.URL {
 
 func mustLiveGrant(t *testing.T, q *store.Queries, userID, clientID uuid.UUID) store.OAuthGrant {
 	t.Helper()
-	grant, err := q.GetLiveOAuthGrant(context.Background(), store.GetLiveOAuthGrantParams{UserID: userID, ClientID: clientID})
+	grant, err := q.GetLiveOAuthGrant(t.Context(), store.GetLiveOAuthGrantParams{UserID: userID, ClientID: clientID})
 	if err != nil {
 		t.Fatalf("GetLiveOAuthGrant: %v", err)
 	}
