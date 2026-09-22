@@ -1,4 +1,10 @@
-import { computed, type ComputedRef, type InjectionKey } from 'vue';
+import {
+  computed,
+  ref,
+  watch,
+  type ComputedRef,
+  type InjectionKey,
+} from 'vue';
 
 import type { AuthProvider } from './useAuth';
 import type { Locale } from '@/i18n/locale';
@@ -183,12 +189,28 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
       ? value
       : 0;
   });
-  const resolved = computed(
-    () => status.value === 'success'
+  // Sticky: `refresh()` (called after every successful mutation) sends
+  // `status` back through `pending` while the replacement read is in
+  // flight. A plain `status`-derived flag would flip back to unresolved
+  // then, swapping the whole section back to the loading skeleton and
+  // hiding the success banner and passkey list a person is looking at.
+  // Once genuinely resolved once, stay resolved.
+  const resolvedOnce = ref(
+    status.value === 'success'
       || status.value === 'error'
-      // Nuxt 4 leaves `error` undefined, not null, until a request fails.
       || (error.value ?? null) !== null,
   );
+  watch([status, error], () => {
+    if (
+      status.value === 'success'
+      || status.value === 'error'
+      // Nuxt 4 leaves `error` undefined, not null, until a request fails.
+      || (error.value ?? null) !== null
+    ) {
+      resolvedOnce.value = true;
+    }
+  });
+  const resolved = computed(() => resolvedOnce.value);
 
   async function refresh(): Promise<void> {
     await refreshState();

@@ -4,7 +4,7 @@ import {
   mountSuspended,
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises as flushPromisesOnce } from '@vue/test-utils';
 import { readBody, setResponseStatus, type H3Event } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import {
@@ -25,6 +25,19 @@ import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
+
+/**
+ * A single `flushPromises()` drains one microtask queue. A second-factor
+ * mutation chains several: the mock HTTP round trip, `useFetch`'s own
+ * resolution, the emitted `changed` event, then the parent's own `/me` and
+ * `/sessions` refetches — the same reason
+ * `sessions-privileged-start-adversarial.test.ts`'s `settleClick` awaits it
+ * more than once. Every call site in this file goes through here so every
+ * wait is uniformly generous rather than tuned per call site.
+ */
+async function flushPromises(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) await flushPromisesOnce();
+}
 
 // --- Pure helper unit tests -------------------------------------------------
 
@@ -336,6 +349,19 @@ let recoveryCodesRemaining: number;
 let enabled: boolean;
 let passwordReauthResponse: () => unknown;
 
+// Reassigned, never re-registered: `registerEndpoint` replaces this file's
+// only handler for the URL for the rest of the run, not just the current
+// test, so a test that needs a one-off state-read behavior (like a later
+// call failing) must reassign `stateHandler` and let `beforeEach` put the
+// default back, the same pattern `optionsResponse`/`completionResponse`/
+// `regenerateResponse` already use below.
+let stateHandler: (event: H3Event) => unknown;
+
+function defaultStateHandler(_event: H3Event): unknown {
+  if (stateResponse !== undefined) return stateResponse;
+  return { data: { enabled, passkeys, recoveryCodesRemaining } };
+}
+
 function resetFixtures(): void {
   meCalls = 0;
   sessionsCalls = 0;
@@ -348,6 +374,7 @@ function resetFixtures(): void {
   enabled = true;
   stateResponse = undefined;
   passwordReauthResponse = () => null;
+  stateHandler = defaultStateHandler;
 }
 
 resetFixtures();
@@ -376,12 +403,7 @@ registerEndpoint('/api/v1/sessions', () => {
 });
 registerEndpoint('/api/v1/me/second-factor', {
   method: 'GET',
-  handler: (_event) => {
-    if (stateResponse !== undefined) return stateResponse;
-    return {
-      data: { enabled, passkeys, recoveryCodesRemaining },
-    };
-  },
+  handler: (event) => stateHandler(event),
 });
 registerEndpoint('/api/v1/auth/password/reauth', {
   method: 'POST',
@@ -436,6 +458,11 @@ function registerRemoval(
 
 function stubWebAuthnSupport(): void {
   vi.stubGlobal('PublicKeyCredential', FakePublicKeyCredential);
+  // createPasskeyCredential checks `response instanceof
+  // AuthenticatorAttestationResponse`; without this stub that global is
+  // undefined under happy-dom, so the check throws and every completed
+  // ceremony in a test using this helper looks like a failed one.
+  vi.stubGlobal('AuthenticatorAttestationResponse', FakeAttestationResponse);
   vi.stubGlobal('navigator', {
     ...navigator,
     credentials: {
@@ -499,6 +526,11 @@ function clickInDialog(selector: string): void {
 describe('second-factor settings', () => {
   beforeEach(() => {
     setSiteLocale('en');
+    // Every mount in this file re-fetches capabilities and factor state
+    // with fixtures that change per test; without clearing it, Nuxt's
+    // useFetch/useAsyncData payload cache would keep serving the first
+    // mount's response to every later mount in this file.
+    clearNuxtData();
     resetFixtures();
     optionsResponse = () => ({
       data: {
@@ -962,14 +994,14 @@ describe('second-factor settings', () => {
 
   it('keeps a revealed set intact when the refresh fails', async () => {
     let stateCalls = 0;
-    registerEndpoint('/api/v1/me/second-factor', {
-      method: 'GET',
-      handler: (event) => {
-        stateCalls += 1;
-        if (stateCalls > 1) return errorBody(event, 500, 'internal');
-        return { data: { enabled, passkeys, recoveryCodesRemaining } };
-      },
-    });
+    // Reassigns the shared handler rather than re-registering the route:
+    // `registerEndpoint` replaces the file's only handler for this URL for
+    // every later test too, not just this one.
+    stateHandler = (event) => {
+      stateCalls += 1;
+      if (stateCalls > 1) return errorBody(event, 500, 'internal');
+      return defaultStateHandler(event);
+    };
     const wrapper = await mountSettings();
     await wrapper.get('[data-testid="recovery-regenerate"]').trigger('click');
     await flushPromises();

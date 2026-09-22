@@ -10,6 +10,12 @@
  * `/me` at all — the pending cookie is not a session and this module treats
  * it as strictly less than one. See
  * docs/design/passkey-second-factor-contract.md.
+ *
+ * Every call disables `$fetch`'s automatic retry (`retry: false`): ofetch
+ * otherwise retries a `GET` once on 429/500/502/503/504 without the page's
+ * knowledge, which would silently spend part of the account's bounded
+ * attempt and rate-limit budget the design gives the user, not the network
+ * layer. A page-level retry is always the user clicking again.
  */
 import type { components } from '../api/generated/openapi';
 import type { AssertionCredentialJSON } from '../utils/webauthn';
@@ -182,6 +188,7 @@ export function useSecondFactorPending(): UseSecondFactorPending {
           method: 'GET',
           credentials: 'include',
           cache: 'no-store',
+          retry: false,
         });
       } catch (error) {
         throw mapSecondFactorPendingError(error);
@@ -201,6 +208,7 @@ export function useSecondFactorPending(): UseSecondFactorPending {
           body: {},
           credentials: 'include',
           headers: pendingHeaders(csrfToken),
+          retry: false,
         });
       } catch (error) {
         throw mapSecondFactorPendingError(error);
@@ -219,6 +227,7 @@ export function useSecondFactorPending(): UseSecondFactorPending {
           body: { ceremonyId, credential },
           credentials: 'include',
           headers: pendingHeaders(csrfToken),
+          retry: false,
         });
       } catch (error) {
         throw mapSecondFactorPendingError(error);
@@ -232,6 +241,7 @@ export function useSecondFactorPending(): UseSecondFactorPending {
           body: { code },
           credentials: 'include',
           headers: pendingHeaders(csrfToken),
+          retry: false,
         });
       } catch (error) {
         throw mapSecondFactorPendingError(error);
