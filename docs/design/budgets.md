@@ -139,6 +139,23 @@ Callers use these shared policies only after the caller integration that ADR
 | Recovery-code set / entropy                     | 10 codes / 128 random bits per code                 | Second-factor recovery                                   |
 | Recovery verification request body              | ≤ 4,096 bytes                                       | Second-factor recovery route                             |
 | Recovery code input length                      | ≤ 128 characters before canonicalization            | Second-factor recovery                                   |
+| TOTP profile                                    | HMAC-SHA-1; 20-byte secret; 6 digits; 30 s; ±1 step | TOTP service                                             |
+| TOTP credentials / live enrollments             | 1 / 1 per account                                   | TOTP store                                               |
+| TOTP enrollment lifetime / token                | 10 min / 32 random bytes; stored as SHA-256         | TOTP service and store                                   |
+| TOTP request bodies                             | ≤ 4,096 bytes                                       | TOTP routes                                              |
+| TOTP provisioning URI / issuer                  | ≤ 2,048 / 1–253 bytes                               | TOTP provisioning                                        |
+| TOTP management actions                         | 10/h per (account, IP)                              | TOTP rate policies                                       |
+| TOTP cool-down                                  | Group k of 5 failures: 15 min × 2^(k−1), ≤ 24 h     | TOTP credential row                                      |
+| TOTP consecutive-failure counter                | 0–1,000, saturating                                 | TOTP credential row                                      |
+| Attempt-exhaustion mail                         | ≤ 1/h per account                                   | Factor policy row                                        |
+| First-policy handle candidates                  | ≤ 3 per first TOTP completion                       | TOTP service                                             |
+| TOTP key ring / derived key ID                  | 1 active + ≤ 1 previous 32-byte key / 26 bytes      | TOTP key ring                                            |
+| TOTP nonce / ciphertext                         | 12 / 36 bytes                                       | TOTP key ring and store                                  |
+| TOTP stored key-ID check                        | ≤ 3 distinct IDs; at startup and every 5 min        | TOTP key health                                          |
+| TOTP re-encryption                              | ≤ 200 rows/transaction; ≤ 10,000 rows, 30 min/run   | Re-encryption command                                    |
+| TOTP rotation final count                       | ≥ 10 min after the key-switch deploy                | Rotation procedure                                       |
+| TOTP enrollment cleanup                         | ≤ 200 rows per admitted start                       | TOTP store                                               |
+| `totp_unavailable` log line                     | ≤ 1/min per reason per process                      | TOTP key health                                          |
 | Local mail capture                              | ≤ 50 messages, ≤ 256 KiB total, ≤ 16 KiB/message    | Local mail capture                                       |
 | Capture ports                                   | 127.0.0.1:20091 native; 127.0.0.1:20444 HTTPS       | Local mail capture                                       |
 | `/oauth/register` per IP                        | ≤ 5/hour                                            | OAuth and MCP rate policies                              |
@@ -294,6 +311,14 @@ completion, is what keeps that cleanup argument true for a registration
 ceremony: because the route is rate-limited by account and IP, each admitted
 request can still delete more expired rows than it adds. The daily privacy sweep
 owns security-event retention.
+
+**TOTP rows.** Pending rows bound attempts per login, not per account, because
+each valid password login creates one. The TOTP failure budget lives on the
+credential row, so it holds across client IPs and restarts. The cool-down after
+the k-th group of five failures is 15 minutes times 2^(k − 1), at most 24 hours.
+It admits 35 guesses in the first day and 5 a day after that, under 0.6 percent
+success in a year, and never blocks passkey or recovery completion. The
+policy-row mail cap bounds attempt mail to 24 a day per account.
 
 **Agent access rows.** This table is the enforcement authority for agent access.
 Registration is unauthenticated, so five per hour per IP admits a genuine first

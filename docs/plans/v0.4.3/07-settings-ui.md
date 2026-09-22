@@ -5,9 +5,9 @@ Role: frontend. Model: `gpt-5.6-terra`.
 ## Objective and authority
 
 Add localized TOTP enrollment, replacement, and removal to the existing factor
-settings surface. Read `AGENTS.md`, the accepted TOTP and passkey contracts, web
-design, accepted ADR 0049, the generated OpenAPI types, and the verified API
-report.
+settings surface. Read `AGENTS.md`, the accepted TOTP and passkey contracts, the
+key-management design, web design, accepted ADR 0049, the generated OpenAPI
+types, and the verified API report.
 
 ## Owned paths
 
@@ -64,4 +64,6 @@ Definition of done: a user can add, replace, and remove TOTP through local-only
 QR setup without retaining secret material or changing passkey and recovery
 behavior. Report exact files and lockfile lines, dependency source and license,
 checks and results, skipped commands and reason, and open items. Do not perform
-Git operations. Use short plain text with no em dash.
+Git operations. Use short plain text with no em dash. Code, tests, comments, and
+living docs never cite plans, tasks, phases, or review findings; cite the
+design, ADR, or `AC-*` ID instead.

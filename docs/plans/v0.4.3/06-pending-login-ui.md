@@ -5,8 +5,9 @@ Role: frontend. Model: `gpt-5.6-terra`.
 ## Objective and authority
 
 Add authenticator-code completion to the existing bilingual pending page. Read
-`AGENTS.md`, the accepted TOTP and passkey contracts, web design, accepted ADR
-0049, the generated OpenAPI types, and the verified API report.
+`AGENTS.md`, the accepted TOTP and passkey contracts, the key-management design,
+web design, accepted ADR 0049, the generated OpenAPI types, and the verified API
+report.
 
 ## Owned paths
 
@@ -27,9 +28,11 @@ infrastructure, or design.
 - Accept exactly six ASCII digits. Keep the code in component memory only and
   clear it after every submit outcome, navigation, expiry, exhaustion, logout,
   and unmount.
-- Handle invalid and replayed code, rate limits, unavailable service, expired
-  pending state, exhausted attempts, method changes, locale changes, and safe
-  retry through closed localized copy.
+- Handle invalid and replayed code, rate limits including a TOTP cool-down with
+  `Retry-After` up to 24 hours, `503` from a TOTP key failure,
+  `404 factor_not_found`, expired pending state, exhausted attempts, method
+  changes, locale changes, and safe retry through closed localized copy. Offer
+  the other listed methods during a TOTP cool-down or key failure.
 - An older page that sees unknown `totp` and no method it supports must request
   refresh and must not call `/me`, invent a route, or issue authority.
 - Render phishing guidance, labels, errors, loading state, accessible name,
@@ -51,3 +54,5 @@ Definition of done: pending password and provider flows can complete with TOTP
 without changing passkey or recovery behavior or retaining code material. Report
 exact files and hunks, checks and results, skipped commands and reason, and open
 items. Do not perform Git operations. Use short plain text with no em dash.
+Code, tests, comments, and living docs never cite plans, tasks, phases, or
+review findings; cite the design, ADR, or `AC-*` ID instead.

@@ -6,9 +6,9 @@ Role: devops. Model: `gpt-5.6-terra`.
 
 Add the hosted TOTP proof job and document the accepted flag-off deploy, floor
 4003 activation, key rotation, production proof, and failure order. Read
-`AGENTS.md`, the accepted TOTP contract, accepted ADR 0049, the passkey
-release-fence contract, deployment design, production runbook, release plan,
-verified runtime-secret report, and verified QA report.
+`AGENTS.md`, the accepted TOTP contract and key-management design, accepted ADR
+0049, the passkey release-fence contract, deployment design, production runbook,
+release plan, verified runtime-secret report, and verified QA report.
 
 ## Owned paths
 
@@ -42,18 +42,21 @@ local tests, builds, lint, browsers, database writes, or stacks.
   the floor, rejects lower deploy and restoration targets, and preserves the
   higher floor after later failure.
 - Add `deploy/aws/scripts/deploy.sh --totp-key-reencrypt <tag>` as the supported
-  one-shot operator path. It acquires the durable operation lock, requires a
-  v0.4.3-or-later image and floor, runs the dedicated task with app roles, emits
-  only bounded counts and internal row IDs, and never grants scheduled jobs TOTP
-  parameter access.
+  one-shot operator path under the fence contract's `totp_reencrypt` operation.
+  It acquires the durable lock with that kind, requires tag and floor at least
+  4003 and the tag equal to the running app release, runs the conditional check
+  before registration and `RunTask`, runs only `aboutme-prod-totp-reencrypt`,
+  emits only bounded counts and internal row IDs, and releases the exact lock.
 - Document valid-key flag-off deployment, readiness and compatibility proof,
-  floor raise, flag enablement, same-tag redeploy, bounded key re-encryption,
-  previous-key removal, fictional-account proof, cleanup, and forward-fix rule.
-- Include the exact two bounded production browser exceptions from the plan.
-  State the 8 GiB memory floor, nonblocking shared lock, 2 GiB hard memory cap,
-  no swap, 200 percent CPU cap, 60-minute timeout, isolated profile, no local
-  stack, fictional account, owner-only ignored credential file, and cleanup on
-  every exit.
+  floor raise, flag enablement, same-tag redeploy, the seven-step slot rotation
+  from the key-management design, the `aboutme-prod-totp-unavailable` alarm
+  response, fictional-account proof, cleanup, and forward-fix rule.
+- Include the exact two scripted production proof runs from the plan. State that
+  the manager runs them and no one drives the browser by hand, the 8 GiB memory
+  floor, nonblocking shared lock, 2 GiB hard memory cap, no swap, 200 percent
+  CPU cap, 60-minute timeout, isolated profile, no local stack, fictional
+  account, owner-only ignored account file, in-process codes, no secret output,
+  and cleanup on every exit.
 
 ## Hosted checks and report
 
@@ -73,3 +76,5 @@ the runbook gives one safe release, supported one-shot rotation, rollback, and
 production-proof order. Report exact files and hunks, checks and results or
 awaiting CI, artifact path or none, skipped commands and reason, and open items.
 Do not perform Git or external writes. Use short plain text with no em dash.
+Code, tests, comments, and living docs never cite plans, tasks, phases, or
+review findings; cite the design, ADR, or `AC-*` ID instead.
