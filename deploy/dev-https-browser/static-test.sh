@@ -387,6 +387,50 @@ if grep -rnE --exclude='static-test.sh' --exclude-dir='node_modules' \
   fail 'secret-like literal found'
 fi
 
+# The runner prints only the last stage line and withholds every other byte,
+# so the second-factor proof puts its whole diagnosis on that one line. Keep
+# it assembled from fixed words: no message, URL, body, or account value, and
+# nothing outside the vocabulary the runner's own grep accepts.
+readonly SECOND_FACTOR_SPEC=$SOURCE/second-factor.spec.ts
+[ "$(grep -c 'console\.log(' "$SECOND_FACTOR_SPEC")" = 3 ] ||
+  fail 'second-factor proof does not print exactly its three fixed lines'
+while IFS= read -r template; do
+  grep -Fq "$template" "$SECOND_FACTOR_SPEC" ||
+    fail 'second-factor proof line drifted from its fixed template'
+done <<'TEMPLATES'
+`${MODE}-stage:${name}`
+`${MODE}-stage:cleanup`
+`${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
+TEMPLATES
+if grep -nE 'console\.log\([^`]*(error|message|url|token|email|password)' \
+  "$SECOND_FACTOR_SPEC"; then
+  fail 'second-factor proof logs a value instead of a fixed word'
+fi
+[ "$(grep -c 'recordedStage = ' "$SECOND_FACTOR_SPEC")" = 3 ] ||
+  fail 'second-factor proof records its stage from an unexpected source'
+grep -Fq 'let recordedStage = ' "$SECOND_FACTOR_SPEC" ||
+  fail 'second-factor proof lost its recorded stage'
+grep -Fq 'if (!tearingDown) recordedStage = name;' "$SECOND_FACTOR_SPEC" ||
+  fail 'second-factor proof no longer records the stage name'
+grep -Fq 'if (!tearingDown) recordedStage = landed;' "$SECOND_FACTOR_SPEC" ||
+  fail 'second-factor proof no longer records a callback category as a stage'
+if grep -oE "stage\('[^']*'\)" "$SECOND_FACTOR_SPEC" |
+  grep -vqE "^stage\('[a-z0-9-]+'\)$"; then
+  fail 'a second-factor stage name is outside the runner vocabulary'
+fi
+if grep -oE "return 'callback-[^']*';" "$SECOND_FACTOR_SPEC" |
+  grep -vqE "^return 'callback-[a-z0-9-]+';$"; then
+  fail 'a second-factor callback category is outside the runner vocabulary'
+fi
+# A step that never settles must fail at its own stage instead of consuming
+# the whole test budget and reporting teardown.
+grep -Fq 'const actionTimeout = secondFactor ? 20_000' \
+  "$SOURCE/playwright.config.ts" ||
+  fail 'second-factor actions are not bounded'
+grep -Fq 'const navigationTimeout = secondFactor' \
+  "$SOURCE/playwright.config.ts" ||
+  fail 'second-factor navigations are not bounded'
+
 grep -Fq 'certutil -N --empty-password' "$SOURCE/run.sh" ||
   fail 'empty NSS database creation is missing'
 grep -Fq 'certutil -A' "$SOURCE/run.sh" || fail 'CA import is missing'
