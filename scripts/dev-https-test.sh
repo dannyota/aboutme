@@ -409,6 +409,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_BEARER='
   assert_contains "$server_env" 'MCP_ENABLED=true'
   assert_contains "$server_env" 'PROVIDER_LOGIN_ENABLED=true'
+  assert_contains "$server_env" 'PASSKEY_ENROLLMENT_ENABLED=true'
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)
@@ -1188,6 +1189,30 @@ run_secret_mode_check() (
   [ ! -s "$FAKE_MUTATIONS" ] || fail 'unsafe secret mode performed a mutation'
 )
 
+# The passkey browser proof runs one phase with enrollment open and one with
+# it closed, so the server environment flag must follow
+# DEV_HTTPS_PASSKEY_ENROLLMENT exactly and reject anything but true or false.
+run_passkey_enrollment_flag_check() (
+  local value
+  # shellcheck source=lib/dev-https-lifecycle.sh
+  source "$SOURCE_LIB_DIR/dev-https-lifecycle.sh"
+  value=$(DEV_HTTPS_PASSKEY_ENROLLMENT= passkey_enrollment_flag) ||
+    fail 'empty passkey enrollment selector was rejected'
+  [ "$value" = true ] || fail "default passkey enrollment flag is $value, want true"
+  value=$(DEV_HTTPS_PASSKEY_ENROLLMENT=true passkey_enrollment_flag) ||
+    fail 'explicit true passkey enrollment selector was rejected'
+  [ "$value" = true ] || fail "explicit true flag is $value, want true"
+  value=$(DEV_HTTPS_PASSKEY_ENROLLMENT=false passkey_enrollment_flag) ||
+    fail 'explicit false passkey enrollment selector was rejected'
+  [ "$value" = false ] || fail "explicit false flag is $value, want false"
+  for value in TRUE 1 yes ' ' 'true false'; do
+    if DEV_HTTPS_PASSKEY_ENROLLMENT=$value passkey_enrollment_flag >/dev/null
+    then
+      fail "passkey enrollment selector accepted '$value'"
+    fi
+  done
+)
+
 run_missing_tool_check() (
   local fixture output
   fixture=$(new_fixture)
@@ -1231,6 +1256,7 @@ main() {
   mail-capture-group-drain) run_mail_capture_group_drain_check; return ;;
   secret-reuse) run_secret_reuse_check; return ;;
   secret-mode) run_secret_mode_check; return ;;
+  passkey-flag) run_passkey_enrollment_flag_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
@@ -1263,6 +1289,7 @@ main() {
   run_mail_capture_group_drain_check
   run_secret_reuse_check
   run_secret_mode_check
+  run_passkey_enrollment_flag_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
 }

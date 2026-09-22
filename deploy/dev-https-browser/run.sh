@@ -23,6 +23,7 @@ readonly -a SPEC_SOURCES=(
   exports.spec.ts
   privacy.spec.ts
   sample-start.spec.ts
+  second-factor.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -62,6 +63,56 @@ validate_mcp_client_name_file() {
     fail 'MCP client name must contain a lowercase UUIDv4'
 }
 
+validate_capture_token_file() {
+  local path=$1 uid=$2
+  [ -f "$path" ] && [ ! -L "$path" ] ||
+    fail 'capture token is not a regular file'
+  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'capture token owner mismatch'
+  [ "$(stat -c %a "$path")" = 600 ] || fail 'capture token mode must be 0600'
+}
+
+# mode_input_entries prints the sorted CA input filenames a mode requires.
+mode_input_entries() {
+  case $1 in
+  password-auth | sample-start) printf 'caddy-root.crt\nmail-capture-token' ;;
+  mcp | privacy) printf 'caddy-root.crt\nmcp-client-name' ;;
+  second-factor) printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name' ;;
+  *) printf 'caddy-root.crt' ;;
+  esac
+}
+
+# mode_input_diagnostic prints the rejection text for a wrong CA input set.
+mode_input_diagnostic() {
+  case $1 in
+  password-auth | sample-start)
+    printf 'CA input must contain the Caddy root and the capture token'
+    ;;
+  mcp | privacy)
+    printf 'MCP input must contain the Caddy root and the run client name'
+    ;;
+  second-factor)
+    printf 'CA input must contain the Caddy root, the capture token, and the run client name'
+    ;;
+  *) printf 'CA input must contain one root' ;;
+  esac
+}
+
+# validate_mode_input_files checks the extra per-mode input files after the
+# entry set already matched.
+validate_mode_input_files() {
+  local mode=$1 dir=$2 uid=$3
+  case $mode in
+  password-auth | sample-start | second-factor)
+    validate_capture_token_file "$dir/mail-capture-token" "$uid"
+    ;;
+  esac
+  case $mode in
+  mcp | privacy | second-factor)
+    validate_mcp_client_name_file "$dir/mcp-client-name" "$uid"
+    ;;
+  esac
+}
+
 mount_has_option() {
   local options=$1 expected=$2
   case ",$options," in
@@ -74,8 +125,8 @@ inside_container() {
   [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
   local mode=${1:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, or sample-start' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' ;;
   esac
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
@@ -124,31 +175,15 @@ inside_container() {
   [ -w /evidence ] || fail 'evidence output is not writable'
 
   input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
-    [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
-      fail 'CA input must contain the Caddy root and the capture token'
-  elif [ "$mode" = mcp ] || [ "$mode" = privacy ]; then
-    [ "$input_entries" = $'caddy-root.crt\nmcp-client-name' ] ||
-      fail 'MCP input must contain the Caddy root and the run client name'
-  else
-    [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
-  fi
+  [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
+    fail "$(mode_input_diagnostic "$mode")"
   [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
     fail 'Caddy root is not a regular file'
   [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
     fail 'Caddy root owner mismatch'
   [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
     fail 'Caddy root mode must be 0600'
-  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
-    [ -f /uat-input/mail-capture-token ] && [ ! -L /uat-input/mail-capture-token ] ||
-      fail 'capture token is not a regular file'
-    [ "$(stat -c %u /uat-input/mail-capture-token)" = "$uid" ] ||
-      fail 'capture token owner mismatch'
-    [ "$(stat -c %a /uat-input/mail-capture-token)" = 600 ] ||
-      fail 'capture token mode must be 0600'
-  elif [ "$mode" = mcp ] || [ "$mode" = privacy ]; then
-    validate_mcp_client_name_file /uat-input/mcp-client-name "$uid"
-  fi
+  validate_mode_input_files "$mode" /uat-input "$uid"
   evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
 
@@ -234,6 +269,18 @@ inside_container() {
     proof_name='register and start a resume from a sample'
     spec=sample-start.spec.ts
     ;;
+  second-factor)
+    evidence_name=passkey-second-factor-proof.json
+    evidence_limit=8192
+    proof_name='passkey second factor'
+    spec=second-factor.spec.ts
+    ;;
+  second-factor-disabled)
+    evidence_name=passkey-enrollment-disabled-proof.json
+    evidence_limit=8192
+    proof_name='disabled passkey enrollment'
+    spec=second-factor.spec.ts
+    ;;
   esac
   # Stage the mounted specs beside a node_modules symlink so module
   # resolution finds the image's pinned dependencies. The image package.json
@@ -258,7 +305,8 @@ inside_container() {
   if [ "$status" -ne 0 ]; then
     if [ "$mode" = public ] || [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
       [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ] ||
-      [ "$mode" = sample-start ]; then
+      [ "$mode" = sample-start ] || [ "$mode" = second-factor ] ||
+      [ "$mode" = second-factor-disabled ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
@@ -436,6 +484,59 @@ const expected = mode === 'auth' ? {
     signOut: true,
     signedInShell: true,
   },
+} : mode === 'second-factor' ? {
+  ...common,
+  scenario: 'passkey-second-factor',
+  schemaVersion: 1,
+  steps: {
+    agentGranted: true,
+    agentRevoked: true,
+    attemptsExhausted: true,
+    ceremonyReplayRejected: true,
+    cleanup: true,
+    concurrentCompletion: true,
+    enrolled: true,
+    finalRemoved: true,
+    locales: true,
+    oneRemoved: true,
+    otherSessionRevoked: true,
+    otherSessionStarted: true,
+    passkeyCompletion: true,
+    passwordPending: true,
+    providerAccount: true,
+    providerPending: true,
+    reauthPending: true,
+    reauthRequired: true,
+    recoveryCompletion: true,
+    recoveryRegenerated: true,
+    recoveryRevealedOnce: true,
+    recoveryReuseRejected: true,
+    resetPreservesEnforcement: true,
+    secondPasskeyAdded: true,
+    staleEpochRejected: true,
+    userVerificationRequired: true,
+    viewports: true,
+    wrongBindingRejected: true,
+    wrongOriginRejected: true,
+  },
+} : mode === 'second-factor-disabled' ? {
+  ...common,
+  scenario: 'passkey-enrollment-disabled',
+  schemaVersion: 1,
+  steps: {
+    assertionRouteRegistered: true,
+    capabilityClosed: true,
+    cleanup: true,
+    completionNotFound: true,
+    enrollmentHidden: true,
+    locales: true,
+    optionsNotFound: true,
+    recoveryRouteRegistered: true,
+    removalRouteRegistered: true,
+    stateAvailable: true,
+    unregisteredRouteMatches: true,
+    viewports: true,
+  },
 } : mode === 'sample-start' ? {
   ...common,
   scenario: 'sample-start',
@@ -482,11 +583,11 @@ VERIFY_EVIDENCE
 
 host_run() {
   [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start]'
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|second-factor|second-factor-disabled]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, or sample-start' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' ;;
   esac
   local uid gid input_entries evidence_entries
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
@@ -515,31 +616,15 @@ host_run() {
   [ -w "$evidence" ] || fail 'evidence output is not writable'
 
   input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
-    [ "$input_entries" = $'caddy-root.crt\nmail-capture-token' ] ||
-      fail 'CA input must contain the Caddy root and the capture token'
-  elif [ "$mode" = mcp ] || [ "$mode" = privacy ]; then
-    [ "$input_entries" = $'caddy-root.crt\nmcp-client-name' ] ||
-      fail 'MCP input must contain the Caddy root and the run client name'
-  else
-    [ "$input_entries" = caddy-root.crt ] || fail 'CA input must contain one root'
-  fi
+  [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
+    fail "$(mode_input_diagnostic "$mode")"
   [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
     fail 'Caddy root is not a regular file'
   [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
     fail 'Caddy root owner mismatch'
   [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
     fail 'Caddy root mode must be 0600'
-  if [ "$mode" = password-auth ] || [ "$mode" = sample-start ]; then
-    [ -f "$input/mail-capture-token" ] && [ ! -L "$input/mail-capture-token" ] ||
-      fail 'capture token is not a regular file'
-    [ "$(stat -c %u "$input/mail-capture-token")" = "$uid" ] ||
-      fail 'capture token owner mismatch'
-    [ "$(stat -c %a "$input/mail-capture-token")" = 600 ] ||
-      fail 'capture token mode must be 0600'
-  elif [ "$mode" = mcp ] || [ "$mode" = privacy ]; then
-    validate_mcp_client_name_file "$input/mcp-client-name" "$uid"
-  fi
+  validate_mode_input_files "$mode" "$input" "$uid"
   evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
   validate_spec_dir "$spec_input" "$uid"

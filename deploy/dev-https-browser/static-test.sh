@@ -26,6 +26,7 @@ readonly -a SPEC_FILES=(
   exports.spec.ts
   privacy.spec.ts
   sample-start.spec.ts
+  second-factor.spec.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -160,7 +161,7 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start)
+  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -366,7 +367,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, or sample-start' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -394,7 +395,7 @@ grep -Fq '/uat-input/caddy-root.crt' "$SOURCE/run.sh" ||
   fail 'runner does not use the closed CA path'
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
-for heavy_mode in editor public password-auth mcp publish; do
+for heavy_mode in editor public password-auth mcp publish second-factor second-factor-disabled; do
   grep -Eq "mode === ['\"]${heavy_mode}['\"]" "$SOURCE/playwright.config.ts" ||
     fail "$heavy_mode timeout is not explicitly bounded"
 done
@@ -618,6 +619,29 @@ if grep -Fq 'proves trusted local Google authentication and CSRF boundaries' \
   fail 'privacy mode listed the auth proof'
 fi
 
+# Both second-factor modes run one spec file; the server enrollment flag, not
+# the spec, is what differs. Each mode must compile and list exactly the two
+# passkey proofs and no other.
+for passkey_mode in second-factor second-factor-disabled; do
+  passkey_list=$(ABOUTME_BROWSER_MODE=$passkey_mode \
+    "$SOURCE/node_modules/.bin/playwright" test --list \
+    --config "$CONTEXT/playwright.config.ts")
+  grep -Fq 'proves the passkey second factor over native HTTPS' \
+    <<<"$passkey_list" ||
+    fail "Playwright could not compile and list the $passkey_mode proof"
+  grep -Fq 'proves disabled passkey enrollment answers as an unregistered route' \
+    <<<"$passkey_list" ||
+    fail "$passkey_mode mode did not list the disabled-enrollment proof"
+  for unrelated in \
+    'proves trusted local Google authentication and CSRF boundaries' \
+    'proves password authentication over native HTTPS' \
+    'proves account export, reauthentication, and deletion'; do
+    if grep -Fq "$unrelated" <<<"$passkey_list"; then
+      fail "$passkey_mode mode listed an unrelated proof"
+    fi
+  done
+done
+
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
 readonly INSIDE_SPEC=$INSIDE_ROOT/uat-spec
@@ -742,6 +766,12 @@ malformed)
   *' entry.spec.ts '*) evidence=entry-proof.json ;;
   *' publish.spec.ts '*) evidence=publish-proof.json ;;
   *' privacy.spec.ts '*) evidence=privacy-proof.json ;;
+  *' second-factor.spec.ts '*)
+    case ${ABOUTME_BROWSER_MODE:-} in
+    second-factor-disabled) evidence=passkey-enrollment-disabled-proof.json ;;
+    *) evidence=passkey-second-factor-proof.json ;;
+    esac
+    ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -755,6 +785,12 @@ oversized)
   *' entry.spec.ts '*) evidence=entry-proof.json ;;
   *' publish.spec.ts '*) evidence=publish-proof.json ;;
   *' privacy.spec.ts '*) evidence=privacy-proof.json ;;
+  *' second-factor.spec.ts '*)
+    case ${ABOUTME_BROWSER_MODE:-} in
+    second-factor-disabled) evidence=passkey-enrollment-disabled-proof.json ;;
+    *) evidence=passkey-second-factor-proof.json ;;
+    esac
+    ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -826,6 +862,32 @@ JSON
   "steps": {"auth": true, "export": true, "cancel": true, "reauth": true, "explicitConfirmation": true, "deletion": true, "sessionRevoked": true, "grantRevoked": true, "publicRevoked": true, "tombstone": true, "cleanup": true}
 }
 JSON
+    ;;
+  *' second-factor.spec.ts '*)
+    case ${ABOUTME_BROWSER_MODE:-} in
+    second-factor-disabled)
+      cat >"$FAKE_INSIDE_EVIDENCE/passkey-enrollment-disabled-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "passkey-enrollment-disabled",
+  "schemaVersion": 1,
+  "steps": {"assertionRouteRegistered": true, "capabilityClosed": true, "cleanup": true, "completionNotFound": true, "enrollmentHidden": true, "locales": true, "optionsNotFound": true, "recoveryRouteRegistered": true, "removalRouteRegistered": true, "stateAvailable": true, "unregisteredRouteMatches": true, "viewports": true}
+}
+JSON
+      ;;
+    *)
+      cat >"$FAKE_INSIDE_EVIDENCE/passkey-second-factor-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "passkey-second-factor",
+  "schemaVersion": 1,
+  "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "ceremonyReplayRejected": true, "cleanup": true, "concurrentCompletion": true, "enrolled": true, "finalRemoved": true, "locales": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCompletion": true, "passwordPending": true, "providerAccount": true, "providerPending": true, "reauthPending": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRegenerated": true, "recoveryRevealedOnce": true, "recoveryReuseRejected": true, "resetPreservesEnforcement": true, "secondPasskeyAdded": true, "staleEpochRejected": true, "userVerificationRequired": true, "viewports": true, "wrongBindingRejected": true, "wrongOriginRejected": true}
+}
+JSON
+      ;;
+    esac
     ;;
   *' publish.spec.ts '*)
     cat >"$FAKE_INSIDE_EVIDENCE/publish-proof.json" <<'JSON'
@@ -928,7 +990,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, or sample-start' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -1280,5 +1342,69 @@ if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" || fail 'oversized privacy evidence returned the wrong diagnostic'
 rm -- "$INSIDE_INPUT/mcp-client-name"
+
+reset_inside
+printf '%s\n' 'static-test-capture-token' >"$INSIDE_INPUT/mail-capture-token"
+printf '%s\n' 'aboutme MCP UAT 61000000-0000-4000-8000-000000000042' \
+  >"$INSIDE_INPUT/mcp-client-name"
+chmod 0600 "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+readonly SECOND_FACTOR_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good \
+  run_inside second-factor)
+grep -Fq 'dev-https-browser passkey second factor proof: PASS' \
+  <<<"$SECOND_FACTOR_INSIDE_OUTPUT" ||
+  fail 'inside-container second-factor success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts second-factor.spec.ts' \
+  "$BROWSER_LOG" || fail 'focused second-factor invocation drifted'
+grep -Fxq 'MODE=second-factor' "$BROWSER_LOG" ||
+  fail 'second-factor mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/passkey-second-factor-proof.json" ] ||
+  fail 'second-factor evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/passkey-second-factor-proof.json")" = 600 ] ||
+  fail 'second-factor evidence mode drifted'
+if grep -Eiq '"(code|codes|cookie|credential|csrfToken|password|privateKey|recoveryCodes|token)"[[:blank:]]*:' \
+  "$INSIDE_EVIDENCE/passkey-second-factor-proof.json"; then
+  fail 'second-factor evidence contains secret-bearing fields'
+fi
+if grep -Fq 'amr_' "$INSIDE_EVIDENCE/passkey-second-factor-proof.json"; then
+  fail 'second-factor evidence contains recovery-code plaintext'
+fi
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside second-factor 2>&1); then
+  fail 'malformed second-factor evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed second-factor evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside second-factor 2>&1); then
+  fail 'oversized second-factor evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized second-factor evidence returned the wrong diagnostic'
+rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+
+reset_inside
+readonly DISABLED_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good \
+  run_inside second-factor-disabled)
+grep -Fq 'dev-https-browser disabled passkey enrollment proof: PASS' \
+  <<<"$DISABLED_INSIDE_OUTPUT" ||
+  fail 'inside-container second-factor-disabled success did not complete'
+grep -Fxq 'MODE=second-factor-disabled' "$BROWSER_LOG" ||
+  fail 'second-factor-disabled mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/passkey-enrollment-disabled-proof.json" ] ||
+  fail 'second-factor-disabled evidence filename drifted'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside second-factor 2>&1); then
+  fail 'second-factor accepted a single-file CA input'
+fi
+grep -Fq 'CA input must contain the Caddy root, the capture token, and the run client name' \
+  <<<"$output" ||
+  fail 'second-factor single-file input returned the wrong diagnostic'
+[ ! -s "$BROWSER_LOG" ] || fail 'second-factor wrong input reached the browser'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'
