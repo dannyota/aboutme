@@ -293,12 +293,23 @@ func TestPasswordSecretLeak_AbsentFromResponses(t *testing.T) {
 // keep factor enforcement. See docs/design/second-factor-authentication.md.
 
 // newRealClockPasswordEnv runs the password service on the wall clock, which
-// the pending authentication manager also uses.
+// the pending authentication manager also uses. The outbox shares that clock:
+// it rejects a mail expiry more than 24 hours after its own clock.
 func newRealClockPasswordEnv(t *testing.T) *passwordEnv {
 	t.Helper()
+	var key [32]byte
+	ring, err := authmail.NewKeyRing("k1", map[string][32]byte{"k1": key}, rand.Reader)
+	if err != nil {
+		t.Fatalf("NewKeyRing error = %v", err)
+	}
+	outbox, err := authmail.NewOutbox(ring, time.Now)
+	if err != nil {
+		t.Fatalf("NewOutbox error = %v", err)
+	}
 	return newPasswordEnvWith(t, func(o *auth.PasswordServiceOptions) {
 		o.Clock = time.Now
 		o.Sessions = auth.NewSessionManagerWithPool(o.Pool)
+		o.Outbox = outbox
 	})
 }
 
