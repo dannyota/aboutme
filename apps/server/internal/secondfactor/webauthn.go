@@ -278,7 +278,7 @@ func decodeRegistration(body []byte) (*passkeyRegistration, error) {
 }
 
 // decodeAssertion strictly decodes an assertion completion body under the same
-// rules as decodeRegistration. userHandle is required and may be null.
+// rules as decodeRegistration. userHandle is required and may be null or empty.
 func decodeAssertion(body []byte) (*passkeyAssertion, error) {
 	top, err := strictObject(body, "ceremonyId", "credential")
 	if err != nil {
@@ -308,10 +308,15 @@ func decodeAssertion(body []byte) (*passkeyAssertion, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An empty user handle means absent in WebAuthn, exactly like null, so it
+	// decodes to no handle and never matches the stored one.
 	var userHandle []byte
 	if !bytes.Equal(bytes.TrimSpace(fields["userHandle"]), []byte("null")) {
-		if userHandle, err = base64Member(fields["userHandle"], 1, maxUserHandleBytes); err != nil {
+		if userHandle, err = base64Member(fields["userHandle"], 0, maxUserHandleBytes); err != nil {
 			return nil, err
+		}
+		if len(userHandle) == 0 {
+			userHandle = nil
 		}
 	}
 	a := &passkeyAssertion{ceremonyDigest: digest, rawID: rawID}

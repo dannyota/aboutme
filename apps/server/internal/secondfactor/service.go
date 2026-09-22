@@ -3,8 +3,6 @@ package secondfactor
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -41,8 +39,8 @@ const (
 
 var errDuplicateCredential = errors.New("secondfactor: credential already registered")
 
-// FactorCounter counts one factor type's active credentials for a user whose
-// row the caller has locked.
+// FactorCounter counts one factor type's active credentials. It must be a
+// plain read with no row lock; ActiveFactorCount supplies the user lock.
 type FactorCounter func(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (int, error)
 
 // PasskeyCounter counts active passkeys.
@@ -138,6 +136,12 @@ func (s *Service) ActiveFactorCount(ctx context.Context, qtx *store.Queries, use
 	if _, err := qtx.GetUserForUpdate(ctx, userID); err != nil {
 		return 0, fmt.Errorf("lock user: %w", err)
 	}
+	return s.countActiveFactors(ctx, qtx, userID)
+}
+
+// countActiveFactors sums every registered counter. Counters are plain reads,
+// so this also runs inside a read-only snapshot.
+func (s *Service) countActiveFactors(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (int, error) {
 	total := 0
 	for _, count := range s.counters {
 		n, err := count(ctx, qtx, userID)
@@ -171,13 +175,17 @@ func (s *Service) PendingMethods(ctx context.Context, userID uuid.UUID) ([]strin
 }
 
 // State reads enforcement, passkeys in (created_at, id) order, and the
-// remaining recovery-code count. It locks only the policy row and waits on no
-// other lock, so it cannot join a lock cycle with a factor mutation.
+// remaining recovery-code count from one read-only REPEATABLE READ snapshot
+// that takes no row lock. Enforcement is derived from the active-factor
+// counters and the code count in that snapshot: the policy row exists exactly
+// while an active factor exists, and codes exist only under a policy, so the
+// view is never torn by a concurrent enrollment or removal.
 func (s *Service) State(ctx context.Context, userID uuid.UUID) (auth.SecondFactorState, error) {
 	var state auth.SecondFactorState
-	err := pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+	options := pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly}
+	err := pgx.BeginTxFunc(ctx, s.pool, options, func(tx pgx.Tx) error {
 		qtx := s.q.WithTx(tx)
-		policy, err := lockPolicy(ctx, qtx, userID)
+		factors, err := s.countActiveFactors(ctx, qtx, userID)
 		if err != nil {
 			return err
 		}
@@ -189,7 +197,7 @@ func (s *Service) State(ctx context.Context, userID uuid.UUID) (auth.SecondFacto
 		if err != nil {
 			return fmt.Errorf("count recovery codes: %w", err)
 		}
-		state = auth.SecondFactorState{Enabled: policy != nil, Passkeys: passkeyViews(credentials), RecoveryCodesRemaining: int(codes)}
+		state = auth.SecondFactorState{Enabled: factors > 0 || codes > 0, Passkeys: passkeyViews(credentials), RecoveryCodesRemaining: int(codes)}
 		return nil
 	})
 	if err != nil {
@@ -559,130 +567,24 @@ func (s *Service) RemovePasskey(ctx context.Context, current store.Session, pass
 	return issue, nil
 }
 
-// commitFactorChange advances the epoch, revokes every live agent grant and
-// its token families, replaces the current session and revokes every other
-// one, and enqueues the notification, all in the caller's transaction.
+// commitFactorChange advances the epoch, replaces the current session and
+// revokes every other one, then revokes every live agent grant and its token
+// families, and enqueues the notification, all in the caller's transaction
+// under the user lock. Sessions come before grants, as the lock order in
+// docs/design/second-factor-authentication.md requires.
 func (s *Service) commitFactorChange(ctx context.Context, qtx *store.Queries, user store.User, sess store.Session, factorProof *time.Time, kind authmail.Kind, now time.Time) (auth.SessionIssue, error) {
 	if _, err := qtx.AdvanceUserAuthEpoch(ctx, user.ID); err != nil {
 		return auth.SessionIssue{}, fmt.Errorf("advance epoch: %w", err)
 	}
-	if err := oauthsrv.RevokeGrantsForEpochChangeTx(ctx, qtx, user.ID, now); err != nil {
-		return auth.SessionIssue{}, err
-	}
 	issue, err := s.sessions.ReplaceAfterEpochChangeTx(ctx, qtx, user.ID, sess.ID, factorProof)
 	if err != nil {
+		return auth.SessionIssue{}, err
+	}
+	if err = oauthsrv.RevokeGrantsForEpochChangeTx(ctx, qtx, user.ID, now); err != nil {
 		return auth.SessionIssue{}, err
 	}
 	if err = s.enqueueSecurityMail(ctx, qtx, user, kind, now, nil); err != nil {
 		return auth.SessionIssue{}, err
 	}
 	return issue, nil
-}
-
-// lockAccount locks the user, then the concrete caller session, then the
-// factor policy, and rechecks that the session is live, owned, and current.
-func lockAccount(ctx context.Context, qtx *store.Queries, current store.Session, now time.Time) (store.User, store.Session, *store.SecondFactorPolicy, error) {
-	user, err := qtx.GetUserForUpdate(ctx, current.UserID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
-		}
-		return store.User{}, store.Session{}, nil, fmt.Errorf("lock user: %w", err)
-	}
-	sess, err := qtx.GetSessionByIDForUpdate(ctx, current.ID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
-		}
-		return store.User{}, store.Session{}, nil, fmt.Errorf("lock session: %w", err)
-	}
-	if sess.UserID != user.ID || sess.AuthEpoch != user.AuthEpoch || auth.RequireLiveSession(sess, now) != nil {
-		return store.User{}, store.Session{}, nil, auth.ErrSessionInvalid
-	}
-	policy, err := lockPolicy(ctx, qtx, user.ID)
-	if err != nil {
-		return store.User{}, store.Session{}, nil, err
-	}
-	return user, sess, policy, nil
-}
-
-func lockPolicy(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (*store.SecondFactorPolicy, error) {
-	policy, err := qtx.GetSecondFactorPolicyForUpdate(ctx, userID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("lock policy: %w", err)
-	}
-	return &policy, nil
-}
-
-func lockPolicyBeforePending(ctx context.Context, qtx *store.Queries, user store.User, _ *store.Session) error {
-	_, err := lockPolicy(ctx, qtx, user.ID)
-	return err
-}
-
-// claimCeremony locks the ceremony and consumes it only when it is live and
-// bound to this user, purpose, epoch, and binding. Unknown, foreign, expired,
-// consumed, and wrong-purpose ceremonies are left unchanged.
-func claimCeremony(ctx context.Context, qtx *store.Queries, digest []byte, user store.User, purpose string, sessionID, pendingID *uuid.UUID, now time.Time) (store.WebauthnCeremony, error) {
-	ceremony, err := qtx.GetWebAuthnCeremonyByTokenDigestForUpdate(ctx, digest)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return store.WebauthnCeremony{}, auth.ErrSecondFactorChallengeInvalid
-	}
-	if err != nil {
-		return store.WebauthnCeremony{}, fmt.Errorf("lock ceremony: %w", err)
-	}
-	if ceremony.UserID != user.ID || ceremony.Purpose != purpose || ceremony.AuthEpoch != user.AuthEpoch ||
-		!sameID(ceremony.SessionID, sessionID) || !sameID(ceremony.PendingAuthenticationID, pendingID) ||
-		ceremony.ConsumedAt != nil || !ceremony.ExpiresAt.After(now) {
-		return store.WebauthnCeremony{}, auth.ErrSecondFactorChallengeInvalid
-	}
-	claimed, err := qtx.ClaimWebAuthnCeremony(ctx, store.ClaimWebAuthnCeremonyParams{ConsumedAt: now, TokenDigest: digest})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return store.WebauthnCeremony{}, auth.ErrSecondFactorChallengeInvalid
-	}
-	if err != nil {
-		return store.WebauthnCeremony{}, fmt.Errorf("claim ceremony: %w", err)
-	}
-	return claimed, nil
-}
-
-// createCeremony consumes the binding's prior live ceremony and inserts a new
-// one. It returns the ceremony ID and the raw challenge; only digests are
-// stored.
-func (s *Service) createCeremony(ctx context.Context, qtx *store.Queries, user store.User, purpose string, sessionID, pendingID *uuid.UUID, proposed []byte, now time.Time) (string, []byte, error) {
-	if _, err := qtx.ConsumeLiveWebAuthnCeremoniesForBinding(ctx, store.ConsumeLiveWebAuthnCeremoniesForBindingParams{
-		ConsumedAt: now, UserID: user.ID, Purpose: purpose, SessionID: sessionID, PendingAuthenticationID: pendingID,
-	}); err != nil {
-		return "", nil, fmt.Errorf("consume prior ceremony: %w", err)
-	}
-	token, err := s.random(ceremonyTokenBytes)
-	if err != nil {
-		return "", nil, err
-	}
-	challenge, err := s.random(challengeBytes)
-	if err != nil {
-		return "", nil, err
-	}
-	tokenDigest, challengeDigest := sha256.Sum256(token), sha256.Sum256(challenge)
-	if _, err = qtx.CreateWebAuthnCeremony(ctx, store.CreateWebAuthnCeremonyParams{
-		TokenDigest: tokenDigest[:], ChallengeDigest: challengeDigest[:], UserID: user.ID, Purpose: purpose,
-		AuthEpoch: user.AuthEpoch, SessionID: sessionID, PendingAuthenticationID: pendingID,
-		ProposedUserHandle: proposed, CreatedAt: now, ExpiresAt: now.Add(ceremonyLifetime),
-	}); err != nil {
-		return "", nil, fmt.Errorf("create ceremony: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(token), challenge, nil
-}
-
-// cleanup makes the bounded best-effort expiry calls before a ceremony is
-// created. A failure writes one fixed warning and never fails the request.
-func (s *Service) cleanup(ctx context.Context) {
-	if _, err := s.q.DeleteExpiredPendingAuthentications(ctx, cleanupLimit); err != nil && s.logger != nil {
-		s.logger.Warn("pending authentication cleanup failed")
-	}
-	if _, err := s.q.DeleteExpiredWebAuthnCeremonies(ctx, cleanupLimit); err != nil && s.logger != nil {
-		s.logger.Warn("webauthn ceremony cleanup failed")
-	}
 }

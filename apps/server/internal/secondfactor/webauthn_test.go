@@ -151,6 +151,7 @@ type assertionSpec struct {
 	flags      byte
 	counter    uint32
 	userHandle []byte
+	emptyUser  bool
 	badSig     bool
 	key        *ecdsa.PrivateKey
 }
@@ -177,6 +178,9 @@ func (a *testAuthenticator) assertionBody(ceremonyID string, challenge []byte, c
 	var userHandle any
 	if spec.userHandle != nil {
 		userHandle = b64.EncodeToString(spec.userHandle)
+	}
+	if spec.emptyUser {
+		userHandle = ""
 	}
 	id := b64.EncodeToString(a.credentialID)
 	return mustJSON(a.t, map[string]any{
@@ -331,7 +335,6 @@ func TestDecodeAssertion_HostileCorpus(t *testing.T) {
 	}
 	corpus := map[string]string{
 		"missing user handle":  strings.Replace(valid, `"userHandle":null`, `"x":null`, 1),
-		"empty user handle":    strings.Replace(valid, `"userHandle":null`, `"userHandle":""`, 1),
 		"long user handle":     strings.Replace(valid, `"userHandle":null`, `"userHandle":"`+b64.EncodeToString(make([]byte, 65))+`"`, 1),
 		"numeric user handle":  strings.Replace(valid, `"userHandle":null`, `"userHandle":1`, 1),
 		"null signature":       regexpReplaceValue(valid, "signature", "null"),
@@ -480,5 +483,36 @@ func TestVerifyAssertion_ZeroCountersStayZero(t *testing.T) {
 	got, err := rp.verifyAssertion(assertion, challengeDigestOf(challenge), handle, []store.WebauthnCredential{target}, target)
 	if err != nil || got.counterRegressed || got.received != 0 {
 		t.Fatalf("verifyAssertion(zero counters) = %+v, %v", got, err)
+	}
+}
+
+// TestAssertion_EmptyUserHandleIsAbsent treats an empty user handle exactly
+// like null: it decodes to no handle and verification never compares it.
+func TestAssertion_EmptyUserHandleIsAbsent(t *testing.T) {
+	rp := testRelyingParty(t)
+	a := newTestAuthenticator(t)
+	ceremonyID, _ := testCeremonyID()
+	challenge := bytes.Repeat([]byte{4}, challengeBytes)
+	handle := bytes.Repeat([]byte{5}, userHandleBytes)
+	target := store.WebauthnCredential{ID: uuid.New(), CredentialID: a.credentialID, PublicKey: a.coseKey()}
+	active := []store.WebauthnCredential{target}
+	for name, mutate := range map[string]func(*assertionSpec){
+		"null":  nil,
+		"empty": func(s *assertionSpec) { s.emptyUser = true },
+	} {
+		body := a.assertionBody(ceremonyID, challenge, 1, mutate)
+		assertion, err := decodeAssertion(body)
+		if err != nil {
+			t.Fatalf("decodeAssertion(%s user handle) error = %v", name, err)
+		}
+		if assertion.response.AssertionResponse.UserHandle != nil {
+			t.Fatalf("%s user handle decoded to %x, want absent", name, assertion.response.AssertionResponse.UserHandle)
+		}
+		if _, err = rp.verifyAssertion(assertion, challengeDigestOf(challenge), handle, active, target); err != nil {
+			t.Fatalf("verifyAssertion(%s user handle) error = %v", name, err)
+		}
+	}
+	if !strings.Contains(string(a.assertionBody(ceremonyID, challenge, 1, func(s *assertionSpec) { s.emptyUser = true })), `"userHandle":""`) {
+		t.Fatal("the empty user handle case does not send an empty string")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func (failingReader) Read([]byte) (int, error) { return 0, io.ErrUnexpectedEOF }
 func newHarness(t *testing.T, mutate func(*Options)) *harness {
 	t.Helper()
 	dsn := testutil.RequireMigratedTestDatabaseURL(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	pool, err := store.NewPool(ctx, dsn)
 	if err != nil {
@@ -91,7 +92,7 @@ func newTestRing(t *testing.T, nonce io.Reader) *authmail.KeyRing {
 
 func testContext(t *testing.T) context.Context {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	t.Cleanup(cancel)
 	return ctx
 }
@@ -415,6 +416,11 @@ func TestDisabledEnrollment_OptionsCreateNothingAndCompletionConsumes(t *testing
 	}
 	if n := h.count("SELECT count(*) FROM webauthn_ceremonies WHERE user_id = $1", acct.user.ID); n != 1 {
 		t.Fatalf("ceremonies after disabled options = %d, want only the enabled one", n)
+	}
+	// A stale primary proof must not keep a disabled completion from
+	// consuming its ceremony.
+	if _, err := h.pool.Exec(testContext(t), "UPDATE sessions SET reauthenticated_at = reauthenticated_at - interval '16 minutes' WHERE id = $1", acct.sess.ID); err != nil {
+		t.Fatalf("age session: %v", err)
 	}
 	if _, err := disabled.CompletePasskeyRegistration(testContext(t), acct.sess, credential); !errors.Is(err, auth.ErrSecondFactorEnrollmentDisabled) {
 		t.Fatalf("disabled completion error = %v, want ErrSecondFactorEnrollmentDisabled", err)
@@ -781,5 +787,47 @@ func TestActiveFactorCount_SumsEveryCounter(t *testing.T) {
 	n, err := h.svc.ActiveFactorCount(testContext(t), h.q, acct.user.ID)
 	if err != nil || n != 2 {
 		t.Fatalf("ActiveFactorCount() = %d, %v; want 2", n, err)
+	}
+}
+
+// TestState_NeverTornDuringFirstEnrollment reads the state while a first
+// enrollment commits and requires every read to be one consistent snapshot:
+// never disabled while a passkey or recovery code is visible.
+func TestState_NeverTornDuringFirstEnrollment(t *testing.T) {
+	h := newHarness(t, nil)
+	acct := h.newAccount()
+	credential := h.registrationCredential(acct.sess, newTestAuthenticator(t), nil)
+	var enrolled atomic.Bool
+	const maxReads = 500
+	results := runConcurrently(t,
+		func() error {
+			defer enrolled.Store(true)
+			_, err := h.svc.CompletePasskeyRegistration(testContext(t), acct.sess, credential)
+			return err
+		},
+		func() error {
+			for i := 0; i < maxReads && !enrolled.Load(); i++ {
+				state, err := h.svc.State(testContext(t), acct.user.ID)
+				if err != nil {
+					return err
+				}
+				if !state.Enabled && (len(state.Passkeys) > 0 || state.RecoveryCodesRemaining > 0) {
+					return errors.New("state read was torn: disabled with a visible factor")
+				}
+				if state.Enabled && (len(state.Passkeys) != 1 || state.RecoveryCodesRemaining != recoveryCodeCount) {
+					return errors.New("state read was torn: enabled without the whole enrollment")
+				}
+			}
+			return nil
+		},
+	)
+	for _, err := range results {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	state, err := h.svc.State(testContext(t), acct.user.ID)
+	if err != nil || !state.Enabled || len(state.Passkeys) != 1 || state.RecoveryCodesRemaining != recoveryCodeCount {
+		t.Fatalf("State() after enrollment = %+v, %v", state, err)
 	}
 }
