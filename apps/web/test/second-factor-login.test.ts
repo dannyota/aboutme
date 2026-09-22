@@ -124,9 +124,9 @@ function registerVerify(
         return respond();
       }
       : (event) => {
-        setResponseStatus(event, result.status);
-        return respond();
-      },
+          setResponseStatus(event, result.status);
+          return respond();
+        },
   });
 }
 

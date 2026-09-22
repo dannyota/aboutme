@@ -197,8 +197,8 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
   // Once genuinely resolved once, stay resolved.
   const resolvedOnce = ref(
     status.value === 'success'
-      || status.value === 'error'
-      || (error.value ?? null) !== null,
+    || status.value === 'error'
+    || (error.value ?? null) !== null,
   );
   watch([status, error], () => {
     if (
