@@ -53,6 +53,23 @@ OpenAPI, web, migration, or infrastructure files. Do not implement TOTP.
 - Enrollment, addition, regeneration, removal, and final disablement advance the
   epoch, revoke other sessions and connected-agent authority, rotate the current
   session, and enqueue the accepted mail in the same transaction.
+- Implement one service function that counts active factors of every type under
+  the user lock. It takes an injected list of per-type counters; this release
+  registers only the passkey counter. Passkey removal, its mail kind, its
+  factor-proof result, and policy deletion use only that count. Handlers never
+  count passkeys directly. Test with a fake second counter that final passkey
+  removal keeps the policy, recovery codes, factor proof, and `passkey_removed`
+  mail while another factor type remains. A later factor type then registers its
+  counter without changing a passkey route or handler.
+- Registration completion decides first versus later from factor policy
+  existence, not passkey count. With a policy already present, it reuses the
+  stored user handle, creates no recovery codes, and enqueues `passkey_added`.
+  Once a policy exists, a registration ceremony that carries a proposed user
+  handle fails as `400 challenge_invalid`, consumes the ceremony, and stores
+  nothing.
+- Pending assertion options for an account with no active passkey return
+  `404 factor_not_found`, create no ceremony, and leave the pending row and
+  failure count unchanged. `allowCredentials` is never empty.
 - Registration options return the accepted disabled response while the flag is
   off. Disabled registration completion atomically consumes its matching
   ceremony, stores no credential, and returns the same uniform 404. State,

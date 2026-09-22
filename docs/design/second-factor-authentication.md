@@ -17,8 +17,11 @@ recovery codes. Notification detects the event but cannot restore access.
 
 ## Assurance boundary
 
-An account has second-factor enforcement when it has at least one active passkey
-or TOTP credential. Enforcement has four rules:
+An active factor is an active passkey or an active TOTP credential. An account
+has second-factor enforcement while it has at least one active factor of any
+type. The final active factor is the last one across all types, so removing a
+passkey while TOTP remains, or TOTP while a passkey remains, is never final.
+Enforcement has four rules:
 
 1. Primary authentication creates a pending authentication, not a session, for
    an enrolled account.
@@ -140,16 +143,13 @@ enabled passkey-enrollment flag. Changing the canonical host makes existing
 passkeys unusable, so a self-hosted operator must preserve the host or ensure
 users have TOTP or recovery codes before a planned origin change.
 
-Registration uses these fixed options:
-
-- a server-generated 32-byte random challenge;
-- a stable random 32-byte user handle with no email or other personal data;
-- `userVerification: "required"`;
-- `residentKey: "required"` and no authenticator-attachment restriction;
-- `attestation: "none"`;
-- COSE algorithms ES256 (`-7`) and RS256 (`-257`), in that order;
-- a five-minute browser timeout and server expiry; and
-- every active credential ID in `excludeCredentials`.
+Registration uses a 32-byte random challenge, a stable random 32-byte user
+handle with no personal data, required user verification and resident key, no
+authenticator-attachment restriction, `attestation: "none"`, ES256 then RS256, a
+five-minute timeout and expiry, and every active credential in
+`excludeCredentials`. The
+[passkey contract](passkey-second-factor-contract.md#webauthn-json) fixes the
+exact options.
 
 The policy admits platform, roaming, and synced passkeys. Local verification
 stays inside the authenticator; the server receives no biometric data. The
@@ -190,24 +190,19 @@ completion fail closed. Cleanup removes at most 200 expired rows per run.
 ## TOTP
 
 TOTP uses the interoperable RFC 6238 profile: HMAC-SHA-1, a 20-byte random
-secret, six decimal digits, a 30-second period, and `T0=0`. Enrollment presents
-an `otpauth://totp/` URI with issuer `aboutme.vn` and the account email as its
-label in production. Other deployments use their canonical origin host as the
-issuer. The response also gives the secret as grouped Base32 text. The web app
-renders the QR code locally and sends no provisioning URI to another service.
+secret, six decimal digits, a 30-second period, and `T0=0`. Enrollment returns
+an `otpauth://totp/` URI whose issuer is the canonical origin host and whose
+label holds the account email, plus the secret as grouped Base32 text. The web
+app renders the QR code locally.
 
-Verification accepts the current, previous, or next 30-second step to tolerate
-one step of device clock skew. It tests the three candidates in constant time
-and chooses the greatest matching step. It accepts only a matched step greater
-than the credential's stored `last_used_step`. The transaction locks the
-credential before advancing that value, so one code has one winner across login,
-reauth, and concurrent requests. Enrollment stores its proof step as the initial
-`last_used_step`. The server never logs a code, secret, candidate, or matched
-step.
-
+Verification tests the previous, current, and next step in constant time,
+chooses the greatest match, and accepts it only when it is greater than the
+stored `last_used_step`. The credential lock makes one code single-use across
+login, reauth, and concurrent requests. Enrollment stores its proof step. The
+server never logs a code, secret, candidate, or matched step.
 [RFC 6238](https://www.rfc-editor.org/rfc/rfc6238.html#section-5.2) recommends
-30-second steps and one transmission-delay step. Single-use tracking and five
-attempts bound the symmetric skew window. Secrets follow the 160-bit
+this step and skew. Single-use steps, per-row attempts, and a per-account
+failure budget bound guessing. Secrets follow the 160-bit
 [RFC 4226 recommendation](https://www.rfc-editor.org/rfc/rfc4226.html#section-4).
 
 An account holds at most one active TOTP credential and one live enrollment.
@@ -217,22 +212,22 @@ valid code. Successful replacement atomically installs the new secret and
 advances the epoch. An incomplete enrollment expires after ten minutes and has
 no effect on enforcement.
 
-TOTP secrets must remain recoverable for verification, so PostgreSQL stores
-authenticated ciphertext rather than a hash. AES-256-GCM uses a random 96-bit
-nonce and associated data containing the account ID, credential ID, and format
-version. Runtime configuration provides one active 32-byte key and at most one
-previous key, each with a printable identifier. New and replaced credentials use
-the active key. Successful verification lazily re-encrypts a credential that
-uses the previous key. Startup fails closed on a missing or malformed key ring.
-It also checks the indexed set of stored key identifiers and fails readiness if
-any identifier is unavailable. Removing a previous key is allowed only after a
-bounded check proves that no credential or live enrollment names it.
+TOTP secrets must remain recoverable, so PostgreSQL stores AES-256-GCM
+ciphertext bound to its account, row, record kind, format, and key identifier.
+Runtime holds one active 32-byte key and at most one previous key. Each key
+identifier is derived from its key value, so a stored identifier names exactly
+one key. New writes use the active key. Successful verification lazily
+re-encrypts a previous-key row, and a bounded command re-encrypts the rest
+before the previous key is removed.
 
-The key values come from the existing runtime secret path and never enter
-source, state output, logs, metrics, documentation, or command output. A key
-outage makes TOTP unavailable and readiness fail. It never falls back to
-accepting a code without verification. Passkey and recovery verification do not
-depend on the TOTP key ring.
+A missing or malformed key ring fails startup. A stored identifier outside the
+ring or an authenticated-decryption failure makes TOTP unavailable, not the
+service. TOTP work that needs a secret fails closed with
+`503 authentication_unavailable`. `/readyz`, passkeys, recovery codes, and
+accounts without TOTP are unaffected. The server emits a fixed secret-free log
+signal that a production alarm watches. Key values come from the runtime secret
+path and never enter source, state output, logs, metrics, documentation, or
+command output. No failure accepts a code without verification.
 
 ## Recovery codes
 
@@ -286,9 +281,12 @@ enforcement and deletes the recovery-code set.
 
 The factor-policy row and the first credential plus recovery-code set are
 created in one transaction. The policy row cannot exist without an active
-credential. Removing the final credential deletes the policy row in the same
-transaction. Service checks under the user lock preserve this cross-table
-invariant.
+factor. Removing the final active factor deletes the policy row in the same
+transaction. Every removal path decides final versus non-final from one shared
+count of active factors of every type, taken under the user lock. Enrollment
+decides first versus later from policy existence, not from its own factor type.
+The passkey release implements both rules, so a later factor type joins the
+count without changing a passkey route.
 
 The account may use the credential being removed to satisfy the preceding recent
 factor proof. This permits deliberate final-factor removal without an email or
@@ -332,17 +330,13 @@ release adds only `passkeyEnrollment`; the TOTP release adds `totpEnrollment`.
 
 ## Storage and bounds
 
-The passkey release adds these relations and columns:
-
-- `users.auth_epoch`, default `0`;
-- `sessions.auth_epoch` and nullable `second_factor_verified_at`;
-- `oauth_grants.auth_epoch`;
-- `oauth_authorization_codes.grant_id` and `auth_epoch`;
-- `second_factor_policies` with user ID, random user handle, and enabled time;
-- `webauthn_credentials`;
-- `second_factor_recovery_codes`;
-- `pending_authentications`; and
-- `webauthn_ceremonies`.
+The passkey release adds `auth_epoch`, default `0`, to users, sessions, and
+OAuth grants, plus nullable `sessions.second_factor_verified_at`. Authorization
+codes gain `grant_id` and `auth_epoch` with no default. Both end `NOT NULL`, and
+an insert trigger fills either one when an insert omits it. Its new relations
+are `second_factor_policies` with user ID, random user handle, and enabled time;
+`webauthn_credentials`; `second_factor_recovery_codes`;
+`pending_authentications`; and `webauthn_ceremonies`.
 
 The TOTP release adds `totp_credentials` and `totp_enrollments`. Every relation
 uses an account foreign key with `ON DELETE CASCADE`. Account deletion therefore
@@ -384,7 +378,9 @@ therefore always records its notification job.
 
 `/login/second-factor` offers the pending account's methods. It handles missing
 WebAuthn support, cancellation, expiry, exhausted attempts, and return paths
-without treating the pending cookie as a session. Recovery needs no WebAuthn.
+without treating the pending cookie as a session. Recovery needs no WebAuthn. A
+method value the page does not know shows a refresh prompt, calls no guessed
+route, and grants nothing.
 
 Account security controls live on `/app/settings/sessions` beside password,
 linked identity, session, and connected-agent controls. The UI lists passkeys by
@@ -437,12 +433,11 @@ A rollback before flag enablement may use the previous image and leave additive
 storage in place. After enablement, rollback means a forward fix or an image at
 or above the fence. An image that ignores an enrolled factor is invalid.
 
-Each release runs schema, API, server, database, Nuxt, authenticated HTTPS,
-review, CI, and production gates. Tests cover enrollment races, challenge
-replay, origin, RP, user verification and counter failures, TOTP skew and reuse,
-recovery races, password and provider bypass, stale authority, factor loss,
-flags, rollback fences, notifications, and both locales.
+Tests cover enrollment and recovery races, challenge replay, origin, RP, user
+verification, counters, TOTP skew and reuse, primary-login bypass, stale
+authority, factor loss, flags, fences, notifications, and both locales.
 
 The passkey release adds shared pending, recovery, state, passkey, and
-capability routes. The TOTP release adds its routes and capability without
-changing any passkey route or stored credential.
+capability routes. The TOTP release adds its routes and capability and joins the
+shared active-factor count without changing any passkey route or stored
+credential.

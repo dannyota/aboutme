@@ -139,15 +139,18 @@ pending authentication, Origin and CSRF, rate admission, then method work.
 | Absent, expired, consumed, wrong-epoch, or wrong-session pending row | `401 authentication_required`         |
 | Wrong Origin or pending CSRF                                         | `403 csrf_rejected`                   |
 | Unknown, expired, consumed, foreign, or wrong-purpose ceremony       | `400 challenge_invalid`               |
+| Assertion options for an account with no active passkey              | `404 factor_not_found`                |
 | Well-formed but invalid assertion or recovery code                   | `401 verification_failed`             |
 | Rate rejection                                                       | `429 rate_limited` plus `Retry-After` |
 | Dependency or corrupt method state                                   | `503 authentication_unavailable`      |
 
 The fifth failed completion returns `401 verification_failed`, atomically
-consumes the pending row, records its notification, and clears the cookie. Later
-use returns `401 authentication_required`. Every successful completion returns
-`204`, consumes the pending row, and clears the cookie. Login completion sets
-the session cookie; reauth completion never issues a different session.
+consumes the pending row, records its notification, and clears the cookie. From
+v0.4.3, that notification obeys a per-account cap of one attempt mail per hour;
+a suppressed mail never suppresses the state change. Later use returns
+`401 authentication_required`. Every successful completion returns `204`,
+consumes the pending row, and clears the cookie. Login completion sets the
+session cookie; reauth completion never issues a different session.
 
 Creating a pending row or WebAuthn ceremony first makes one best-effort cleanup
 call for each table. Each call deletes at most 200 expired rows in
@@ -190,7 +193,10 @@ contains exactly:
 
 An assertion `publicKey` contains exactly `challenge`, `timeout: 300000`,
 `rpId`, `allowCredentials`, and `userVerification: "required"`.
-`allowCredentials` contains every active passkey and is never empty.
+`allowCredentials` contains every active passkey and is never empty. When the
+pending account has no active passkey, for example when another factor type
+enforces it, assertion options return `404 factor_not_found`. That response
+creates no ceremony and leaves the pending row and its failure count unchanged.
 
 A credential descriptor has required `type: "public-key"` and `id` fields.
 `transports` is omitted when no hint is stored, never null, and otherwise is a
@@ -251,20 +257,26 @@ First passkey completion returns `201`:
 }
 ```
 
-The real array has ten codes. Later passkey completion omits `recoveryCodes`. It
-never sends null or an empty array. Passkey removal returns `204`; an invalid,
-missing, foreign, or already removed internal ID returns `404 factor_not_found`.
-Recovery regeneration returns `200 {"data":{"recoveryCodes":[...]}}` with ten
-new codes.
+The real array has ten codes. Completion decides first versus later from factor
+policy existence, not from passkey count. Completion omits `recoveryCodes` when
+the policy already exists and never sends null or an empty array. Passkey
+removal returns `204`; an invalid, missing, foreign, or already removed internal
+ID returns `404 factor_not_found`. Recovery regeneration returns
+`200 {"data":{"recoveryCodes":[...]}}` with ten new codes.
+
+Passkey removal decides final versus non-final only from the shared count of
+active factors of every type, taken under the user lock as
+[Second-factor authentication](second-factor-authentication.md#enrollment-and-management)
+defines. A handler never counts passkeys alone.
 
 Every successful passkey add or removal and recovery regeneration delivers the
 replacement `__Host-session` cookie. First enrollment preserves the prior
 primary-proof time and sets factor proof to completion. Later add and
 regeneration preserve both proof times. Removal preserves both while another
-passkey remains; final removal clears factor proof. Every replacement preserves
-the prior session creation time, absolute expiry, and device metadata. The web
-refreshes `/me` for the replacement CSRF token before enabling another session
-mutation.
+active factor of any type remains. Removal of the final active factor clears
+factor proof. Every replacement preserves the prior session creation time,
+absolute expiry, and device metadata. The web refreshes `/me` for the
+replacement CSRF token before enabling another session mutation.
 
 Pending passkey verification uses the assertion completion body. Pending
 recovery verification uses exactly `{"code":"<recovery-code>"}`. Management
@@ -299,13 +311,14 @@ enters browser persistence.
 
 V0.4.2 adds these closed `auth_email_jobs.kind` values:
 
-- `second_factor_enabled` for first-passkey completion;
+- `second_factor_enabled` when passkey completion creates the factor policy;
 - `passkey_added` when enforcement already exists;
-- `passkey_removed` when another passkey remains;
-- `second_factor_disabled` when the final passkey is removed;
+- `passkey_removed` when another active factor of any type remains;
+- `second_factor_disabled` when the removed passkey was the final active factor;
 - `recovery_codes_regenerated`;
 - `recovery_code_used`; and
-- `second_factor_attempts_exhausted` on the fifth failed completion.
+- `second_factor_attempts_exhausted` on the fifth failed completion, at most one
+  per account per hour from v0.4.3.
 
 Each uses `user_id`, no registration or reset scope, no token digest, and an
 expiry exactly 24 hours after the event. The encrypted strict JSON payload is:
