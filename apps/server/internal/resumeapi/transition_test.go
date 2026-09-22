@@ -664,8 +664,8 @@ func TestPublishRenameRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	enrollResumeAPISecondFactor(h.ctx, t, h.queries, h.userID, now)
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = NULL WHERE id = $1`, h.session.ID, now); err != nil {
-		t.Fatal(err)
+	if _, execErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = NULL WHERE id = $1`, h.session.ID, now); execErr != nil {
+		t.Fatal(execErr)
 	}
 
 	newSlug := "factor-new-" + uuid.NewString()[:8]
@@ -679,8 +679,8 @@ func TestPublishRenameRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 		t.Fatalf("unverified rename changed stored state = %+v, want unchanged slug %q at revision %d", stored, oldSlug, created.Revision+1)
 	}
 
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, h.session.ID, now); err != nil {
-		t.Fatal(err)
+	if _, execErr := h.pool.Exec(h.ctx, `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, h.session.ID, now); execErr != nil {
+		t.Fatal(execErr)
 	}
 	verified := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision+1, uuid.NewString())
 	if verified.status != http.StatusOK {
@@ -704,8 +704,8 @@ func TestDeleteResumeRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	enrollResumeAPISecondFactor(h.ctx, t, h.queries, h.userID, now)
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = NULL WHERE id = $1`, h.session.ID, now); err != nil {
-		t.Fatal(err)
+	if _, execErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = NULL WHERE id = $1`, h.session.ID, now); execErr != nil {
+		t.Fatal(execErr)
 	}
 
 	unverified := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, uuid.NewString())
@@ -714,8 +714,8 @@ func TestDeleteResumeRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
 		t.Fatalf("unverified delete removed the resume: %v", err)
 	}
 
-	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, h.session.ID, now); err != nil {
-		t.Fatal(err)
+	if _, execErr := h.pool.Exec(h.ctx, `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, h.session.ID, now); execErr != nil {
+		t.Fatal(execErr)
 	}
 	verified := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, uuid.NewString())
 	if verified.status != http.StatusNoContent {
