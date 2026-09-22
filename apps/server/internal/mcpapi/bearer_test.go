@@ -158,6 +158,16 @@ func TestBearer_RejectsEveryInvalidAuthorityWithOneClosedResponse(t *testing.T) 
 				t.Fatalf("revoke grant: %v", err)
 			}
 		}},
+		{"account epoch advanced", func(access, _, _ string) []string { return []string{"Bearer " + access} }, func(t *testing.T, h *bearerHarness, _ store.OAuthToken) {
+			t.Helper()
+			// The grant keeps its epoch from when it was granted; only the
+			// account epoch advances, as a factor change would leave it before
+			// RevokeGrantsForEpochChangeTx revokes the grant. See
+			// docs/design/second-factor-authentication.md.
+			if _, err := h.pool.Exec(context.Background(), "UPDATE users SET auth_epoch = auth_epoch + 1 WHERE id = $1", h.user.ID); err != nil {
+				t.Fatalf("advance user epoch: %v", err)
+			}
+		}},
 		{"stored access digest marked refresh", func(access, _, _ string) []string { return []string{"Bearer " + access} }, func(t *testing.T, h *bearerHarness, token store.OAuthToken) {
 			t.Helper()
 			if _, err := h.pool.Exec(context.Background(), "UPDATE oauth_tokens SET kind = 'refresh' WHERE id = $1", token.ID); err != nil {

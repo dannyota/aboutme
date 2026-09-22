@@ -209,7 +209,8 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 		}
 		return tokenResponse{}, err
 	}
-	if _, err = q.GetUserForUpdate(ctx, preCode.UserID); err != nil {
+	user, err := q.GetUserForUpdate(ctx, preCode.UserID)
+	if err != nil {
 		return tokenResponse{}, err
 	}
 	grant, err := q.GetLiveOAuthGrant(ctx, store.GetLiveOAuthGrantParams{UserID: preCode.UserID, ClientID: preCode.ClientID})
@@ -219,6 +220,12 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	grant, err = q.GetOAuthGrantForUpdate(ctx, grant.ID)
 	if err != nil {
 		return tokenResponse{}, err
+	}
+	// A grant revoked between the unlocked read above and this lock -- by a
+	// concurrent RFC 7009 revoke or an authentication-epoch change -- must
+	// still close the exchange rather than mint authority from a dead row.
+	if grant.RevokedAt != nil {
+		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	code, err := q.GetOAuthAuthorizationCodeByDigestForUpdate(ctx, digest[:])
 	if err != nil {
@@ -239,7 +246,12 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 		}
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
-	if code.Scopes != grant.Scopes || code.ExpiresAt.Compare(now) <= 0 {
+	// The code must still name the exact grant it was issued for and the
+	// account's current authentication epoch: a foreign grant (narrowed or
+	// replaced since issue) and a stale epoch (an intervening factor change)
+	// both close the exchange without consuming the code. See
+	// docs/design/second-factor-authentication.md.
+	if code.GrantID != grant.ID || code.AuthEpoch != user.AuthEpoch || code.Scopes != grant.Scopes || code.ExpiresAt.Compare(now) <= 0 {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	familyID := uuid.New()
@@ -301,7 +313,8 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response 
 	if _, err = q.GetOAuthClientForUpdate(ctx, authority.OAuthToken.ClientID); err != nil {
 		return tokenResponse{}, err
 	}
-	if _, err = q.GetUserForUpdate(ctx, authority.OAuthToken.UserID); err != nil {
+	user, err := q.GetUserForUpdate(ctx, authority.OAuthToken.UserID)
+	if err != nil {
 		return tokenResponse{}, err
 	}
 	grant, err := q.GetOAuthGrantForUpdate(ctx, authority.OAuthToken.GrantID)
@@ -314,7 +327,12 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response 
 	}
 	now := s.clock()
 	token := authority.OAuthToken
-	if grant.RevokedAt != nil || token.RevokedAt != nil || token.ExpiresAt.Compare(now) <= 0 || token.FamilyExpiresAt.Compare(now) <= 0 {
+	// The refresh token's grant must still be live, belong to this account,
+	// and carry the account's current authentication epoch. A stale epoch --
+	// an intervening factor change -- rejects rotation exactly like a revoked
+	// grant. See docs/design/second-factor-authentication.md.
+	if grant.RevokedAt != nil || token.RevokedAt != nil || token.ExpiresAt.Compare(now) <= 0 || token.FamilyExpiresAt.Compare(now) <= 0 ||
+		token.UserID != user.ID || token.GrantID != grant.ID || grant.AuthEpoch != user.AuthEpoch {
 		return tokenResponse{}, errOAuthInvalidGrant
 	}
 	if token.SupersededAt != nil {

@@ -126,7 +126,7 @@ func (s *Service) handleConsentDecision(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return
 	}
-	redirectTo, err := s.ConsentDecision(r.Context(), session.UserID, decision)
+	redirectTo, err := s.ConsentDecision(r.Context(), session, decision)
 	if err != nil {
 		writeConsentSessionError(w, err)
 		return
@@ -315,10 +315,18 @@ func (s *Service) revokeAgentGrant(ctx context.Context, userID, grantID uuid.UUI
 	return tx.Commit(ctx)
 }
 
+// reauthRequiredCode is the closed error code for the recent second-factor
+// reauthentication gate, matching every other sensitive-action route.
+const reauthRequiredCode = "reauth_required"
+
 func writeConsentSessionError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrConsentNotFound):
 		api.WriteError(w, http.StatusNotFound, "not_found", "no such authorization client")
+	case errors.Is(err, auth.ErrSessionInvalid):
+		writeSessionRequired(w)
+	case errors.Is(err, auth.ErrReauthRequired):
+		api.WriteError(w, http.StatusForbidden, reauthRequiredCode, "recent reauthentication is required")
 	case errors.Is(err, ErrConsentInvalid), errors.Is(err, ErrScopeInvalid), errors.Is(err, ErrGrantLimit):
 		writeConsentInvalid(w)
 	default:

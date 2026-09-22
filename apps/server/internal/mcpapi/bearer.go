@@ -70,9 +70,15 @@ func (b *Bearer) Authenticate(r *http.Request) (Principal, error) {
 	now := b.clock()
 	token := authority.OAuthToken
 	grant := authority.OAuthGrant
+	// The grant's authentication epoch must still match the account's
+	// current one: a factor change that advanced the epoch revokes live
+	// grants, but a stale-epoch row observed before that revocation commits
+	// must still authenticate nothing. See
+	// docs/design/second-factor-authentication.md.
 	if token.Kind != string(oauthsrv.TokenKindAccess) || token.RevokedAt != nil || token.SupersededAt != nil || grant.RevokedAt != nil ||
 		!token.ExpiresAt.After(now) || !token.FamilyExpiresAt.After(now) ||
-		token.UserID != authority.User.ID || token.UserID != grant.UserID || token.ClientID != grant.ClientID || token.GrantID != grant.ID {
+		token.UserID != authority.User.ID || token.UserID != grant.UserID || token.ClientID != grant.ClientID || token.GrantID != grant.ID ||
+		grant.AuthEpoch != authority.User.AuthEpoch {
 		return Principal{}, b.unauthorized()
 	}
 	scopes, err := oauthsrv.ParseScopes(grant.Scopes)

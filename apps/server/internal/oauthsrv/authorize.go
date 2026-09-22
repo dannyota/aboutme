@@ -49,9 +49,17 @@ func (s *Service) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 	}
 	grant, err := s.queries.GetLiveOAuthGrant(r.Context(), store.GetLiveOAuthGrantParams{UserID: session.UserID, ClientID: client.ID})
 	if err == nil && grantAllows(grant.Scopes, query.Scopes) {
-		redirectTo, issueErr := s.issueCode(r.Context(), session.UserID, query)
+		redirectTo, issueErr := s.issueCode(r.Context(), session, query)
 		if issueErr == nil {
 			redirectIssuedCode(w, client, query, redirectTo)
+			return
+		}
+		// A stale session or a missing recent second-factor proof cannot mint
+		// silent authority; fall back to the interactive consent page instead
+		// of a hard failure, mirroring the "no live grant" branch below. See
+		// docs/design/second-factor-authentication.md.
+		if errors.Is(issueErr, auth.ErrSessionInvalid) || errors.Is(issueErr, auth.ErrReauthRequired) {
+			redirectInternal(w, consentPath+"?"+query.values().Encode())
 			return
 		}
 		if errors.Is(issueErr, ErrConsentInvalid) {

@@ -3,6 +3,7 @@ package oauthsrv
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -56,6 +57,41 @@ func newAuthorizeHarness(t *testing.T) (*Service, *store.Queries, store.OAuthCli
 		t.Fatalf("NewService: %v", err)
 	}
 	return s, q, client, user
+}
+
+// issueTestSession issues a real database-backed session for userID and pins
+// its primary and, when factorVerifiedAt is non-nil, second-factor
+// verification timestamps to deterministic values, so a reauthentication-
+// window check compares against the fixture's injected clock rather than the
+// real wall clock the session manager's default Issue path would use.
+func issueTestSession(t *testing.T, pool *store.Pool, userID uuid.UUID, now time.Time, factorVerifiedAt *time.Time) store.Session {
+	t.Helper()
+	_, sess, err := auth.NewSessionManagerWithPool(pool).Issue(context.Background(), userID, "oauthsrv-test", "127.0.0.1")
+	if err != nil {
+		t.Fatalf("issue test session: %v", err)
+	}
+	if _, err = pool.Exec(context.Background(), "UPDATE sessions SET reauthenticated_at = $1, second_factor_verified_at = $2 WHERE id = $3", now, factorVerifiedAt, sess.ID); err != nil {
+		t.Fatalf("set test session verification times: %v", err)
+	}
+	sess.ReauthenticatedAt = now
+	sess.SecondFactorVerifiedAt = factorVerifiedAt
+	return sess
+}
+
+// enrollTestSecondFactor gives userID a second-factor policy so the recent
+// reauthentication gate requires both primary and factor proof. The random
+// handle carries no meaning beyond the required-unique 32-byte shape.
+func enrollTestSecondFactor(t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) {
+	t.Helper()
+	handle := make([]byte, 32)
+	if _, err := rand.Read(handle); err != nil {
+		t.Fatalf("generate test factor handle: %v", err)
+	}
+	if _, err := q.CreateSecondFactorPolicy(context.Background(), store.CreateSecondFactorPolicyParams{
+		UserID: userID, WebauthnUserHandle: handle, EnabledAt: now,
+	}); err != nil {
+		t.Fatalf("CreateSecondFactorPolicy: %v", err)
+	}
 }
 
 func testEntropy(bytesNeeded int) *bytes.Reader {
@@ -144,8 +180,9 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 			if _, err := q.UpsertOAuthGrant(context.Background(), store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: tc.grantScope, CreatedAt: time.Now().UTC()}); err != nil {
 				t.Fatalf("seed grant: %v", err)
 			}
+			sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, authorizeURL(client.ID, tc.request), nil)
-			req = req.WithContext(auth.ContextWithSession(req.Context(), store.Session{UserID: user.ID}))
+			req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
 			rec := httptest.NewRecorder()
 			s.HandleAuthorize(rec, req)
 			if rec.Code != http.StatusFound {
@@ -176,6 +213,78 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 			}
 		})
 	}
+}
+
+// This catches the silent-reuse path minting a code from a live grant without
+// the recent second-factor proof an enrolled account needs, and pins the
+// grant and code it does issue to the account's current authentication
+// epoch. See docs/design/second-factor-authentication.md.
+func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
+	s, q, client, user := newAuthorizeHarness(t)
+	ctx := context.Background()
+	enrollTestSecondFactor(t, q, user.ID, s.clock())
+	if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: s.clock()}); err != nil {
+		t.Fatalf("seed grant: %v", err)
+	}
+
+	t.Run("missing factor proof falls back to interactive consent", func(t *testing.T) {
+		sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+		req := httptest.NewRequestWithContext(ctx, http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+		rec := httptest.NewRecorder()
+		s.HandleAuthorize(rec, req)
+		if rec.Code != http.StatusFound || !strings.HasPrefix(rec.Header().Get("Location"), "/authorize?") {
+			t.Fatalf("response = %d %q, want interactive consent redirect", rec.Code, rec.Header().Get("Location"))
+		}
+	})
+
+	t.Run("stale account epoch falls back to interactive consent", func(t *testing.T) {
+		now := s.clock()
+		sess := issueTestSession(t, s.pool, user.ID, now, &now)
+		if _, err := q.AdvanceUserAuthEpoch(ctx, user.ID); err != nil {
+			t.Fatalf("AdvanceUserAuthEpoch: %v", err)
+		}
+		t.Cleanup(func() {
+			if _, err := s.pool.Exec(ctx, "UPDATE users SET auth_epoch = 0 WHERE id = $1", user.ID); err != nil {
+				t.Errorf("restore user epoch: %v", err)
+			}
+		})
+		req := httptest.NewRequestWithContext(ctx, http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+		rec := httptest.NewRecorder()
+		s.HandleAuthorize(rec, req)
+		if rec.Code != http.StatusFound || !strings.HasPrefix(rec.Header().Get("Location"), "/authorize?") {
+			t.Fatalf("response = %d %q, want interactive consent redirect", rec.Code, rec.Header().Get("Location"))
+		}
+	})
+
+	t.Run("both recent proofs mint a code bound to the current epoch", func(t *testing.T) {
+		now := s.clock()
+		sess := issueTestSession(t, s.pool, user.ID, now, &now)
+		req := httptest.NewRequestWithContext(ctx, http.MethodGet, authorizeURL(client.ID, "resumes:read"), nil)
+		req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+		rec := httptest.NewRecorder()
+		s.HandleAuthorize(rec, req)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("status = %d, want 302; body=%q", rec.Code, rec.Body.String())
+		}
+		codeRaw := urlMustParse(t, rec.Header().Get("Location")).Query().Get("code")
+		if codeRaw == "" {
+			t.Fatalf("redirect = %q, want code", rec.Header().Get("Location"))
+		}
+		digest, err := ParseCode(codeRaw)
+		if err != nil {
+			t.Fatalf("ParseCode: %v", err)
+		}
+		code, err := q.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
+		if err != nil {
+			t.Fatalf("issued code lookup: %v", err)
+		}
+		grant := mustLiveGrant(t, q, user.ID, client.ID)
+		if code.GrantID != grant.ID || code.AuthEpoch != 0 || grant.AuthEpoch != 0 {
+			t.Fatalf("code = %#v, grant = %#v, want both bound to epoch 0", code, grant)
+		}
+	})
 }
 
 func TestAuthorizeInternalRedirectRejectsExternalTarget(t *testing.T) {
