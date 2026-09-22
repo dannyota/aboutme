@@ -154,6 +154,7 @@ apps/web/app/components/resume/useResumeStyles.ts
 apps/web/app/components/settings/ConnectedAgents.vue
 apps/web/app/components/settings/LinkedIdentities.vue
 apps/web/app/components/settings/PrivacySettings.vue
+apps/web/app/components/settings/SecondFactorSettings.vue
 apps/web/app/components/templates/SheetThumbnail.vue
 apps/web/app/components/templates/TemplateCard.vue
 apps/web/app/components/ui/alert-dialog/AlertDialog.vue
@@ -295,6 +296,7 @@ apps/web/app/composables/passwordSettings.ts
 apps/web/app/composables/privacySettings.ts
 apps/web/app/composables/providerAuthorization.ts
 apps/web/app/composables/secondFactorPending.ts
+apps/web/app/composables/secondFactorSettings.ts
 apps/web/app/composables/useAuth.ts
 apps/web/app/composables/useCapabilities.ts
 apps/web/app/composables/useFieldDrafts.ts
@@ -357,6 +359,7 @@ apps/web/app/i18n/privacy-settings.ts
 apps/web/app/i18n/publish.ts
 apps/web/app/i18n/resume-create.ts
 apps/web/app/i18n/resume-list.ts
+apps/web/app/i18n/second-factor-settings.ts
 apps/web/app/i18n/second-factor.ts
 apps/web/app/i18n/settings.ts
 apps/web/app/i18n/shell.ts

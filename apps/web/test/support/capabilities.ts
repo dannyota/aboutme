@@ -7,6 +7,8 @@ export interface CapabilityFlags {
   providers?: readonly string[];
   /** Defaults to true, the server's value while sign-up is open. */
   passwordRegistration?: boolean;
+  /** Defaults to false, the server's value while enrollment is closed. */
+  passkeyEnrollment?: boolean;
 }
 
 /** Registers GET /api/v1/capabilities; null makes it fail with 500. */
@@ -27,6 +29,7 @@ export function registerCapabilities(
         ...flags,
         providers,
         passwordRegistration: flags.passwordRegistration ?? true,
+        passkeyEnrollment: flags.passkeyEnrollment ?? false,
       },
     };
   });

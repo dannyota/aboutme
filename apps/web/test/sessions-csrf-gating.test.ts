@@ -44,6 +44,12 @@ registerEndpoint('/api/v1/sessions', () => ({
     },
   ],
 }));
+// Second-factor state is read regardless of the enrollment capability, so
+// every mount of this page needs a registered response; the second-factor
+// section's own controls are covered in test/second-factor-settings.test.ts.
+registerEndpoint('/api/v1/me/second-factor', () => ({
+  data: { enabled: false, passkeys: [], recoveryCodesRemaining: 0 },
+}));
 
 describe('sessions.vue CSRF gating', () => {
   it(

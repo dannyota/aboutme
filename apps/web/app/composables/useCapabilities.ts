@@ -25,6 +25,8 @@ export interface UseCapabilitiesReturn {
   /** Providers whose sign-in button renders, in display order. */
   loginProviders: ComputedRef<readonly LoginProvider[]>;
   agentAccess: ComputedRef<boolean>;
+  /** New passkey enrollment is open; anything else keeps it closed. */
+  passkeyEnrollment: ComputedRef<boolean>;
   resolved: ComputedRef<boolean>;
 }
 
@@ -51,6 +53,9 @@ export function useCapabilities(): UseCapabilitiesReturn {
       : [];
   });
   const agentAccess = computed(() => data.value?.data?.agentAccess === true);
+  const passkeyEnrollment = computed(
+    () => data.value?.data?.passkeyEnrollment === true,
+  );
   // Only an explicit false closes sign-up, so an older server that lacks the
   // field keeps the form.
   const passwordRegistration = computed(
@@ -67,6 +72,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
     passwordRegistration,
     loginProviders,
     agentAccess,
+    passkeyEnrollment,
     resolved,
   };
 }

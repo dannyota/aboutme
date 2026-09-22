@@ -7,11 +7,13 @@ import { registerCapabilities } from './support/capabilities';
 
 const Probe = defineComponent({
   setup() {
-    const { providerLogin, agentAccess, resolved } = useCapabilities();
+    const { providerLogin, agentAccess, passkeyEnrollment, resolved }
+      = useCapabilities();
     return () =>
       h('div', {
         'data-provider': String(providerLogin.value),
         'data-agent': String(agentAccess.value),
+        'data-passkey-enrollment': String(passkeyEnrollment.value),
         'data-resolved': String(resolved.value),
       });
   },
@@ -27,6 +29,7 @@ async function probe(): Promise<Record<string, string | undefined>> {
   return {
     provider: el.attributes('data-provider'),
     agent: el.attributes('data-agent'),
+    passkeyEnrollment: el.attributes('data-passkey-enrollment'),
     resolved: el.attributes('data-resolved'),
   };
 }
@@ -41,6 +44,21 @@ describe('useCapabilities', () => {
     expect(await probe()).toEqual({
       provider: 'true',
       agent: 'false',
+      passkeyEnrollment: 'false',
+      resolved: 'true',
+    });
+  });
+
+  it('reflects an open passkey-enrollment flag', async () => {
+    registerCapabilities({
+      providerLogin: false,
+      agentAccess: false,
+      passkeyEnrollment: true,
+    });
+    expect(await probe()).toEqual({
+      provider: 'false',
+      agent: 'false',
+      passkeyEnrollment: 'true',
       resolved: 'true',
     });
   });
@@ -57,6 +75,7 @@ describe('useCapabilities', () => {
     expect(await probe()).toEqual({
       provider: 'false',
       agent: 'false',
+      passkeyEnrollment: 'false',
       resolved: 'true',
     });
   });
@@ -65,10 +84,12 @@ describe('useCapabilities', () => {
     registerCapabilities({
       providerLogin: 'yes' as unknown as boolean,
       agentAccess: 1 as unknown as boolean,
+      passkeyEnrollment: 'true' as unknown as boolean,
     });
     expect(await probe()).toEqual({
       provider: 'false',
       agent: 'false',
+      passkeyEnrollment: 'false',
       resolved: 'true',
     });
   });
@@ -81,6 +102,7 @@ describe('useCapabilities', () => {
     expect(await probe()).toEqual({
       provider: 'false',
       agent: 'false',
+      passkeyEnrollment: 'false',
       resolved: 'true',
     });
   });

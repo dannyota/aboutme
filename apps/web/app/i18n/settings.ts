@@ -27,6 +27,7 @@ export type SettingsCopy = {
   readonly signOutOtherDevices: string;
   readonly addProvider: string;
   readonly linkProvider: (provider: string) => string;
+  readonly secondFactorEndsOtherSessions: string;
 };
 
 export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
@@ -59,6 +60,9 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     signOutOtherDevices: 'Đăng xuất các thiết bị khác',
     addProvider: 'Thêm phương thức đăng nhập khác',
     linkProvider: (provider) => `Liên kết ${provider}`,
+    secondFactorEndsOtherSessions:
+      'Thêm, xoá passkey hoặc tạo lại mã khôi phục sẽ đăng xuất mọi thiết bị '
+      + 'và tác nhân đã kết nối khác. Thiết bị này vẫn giữ đăng nhập.',
   },
   en: {
     title: 'Settings',
@@ -89,5 +93,9 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     signOutOtherDevices: 'Sign out other devices',
     addProvider: 'Add another sign-in provider',
     linkProvider: (provider) => `Link ${provider}`,
+    secondFactorEndsOtherSessions:
+      'Adding or removing a passkey, or regenerating recovery codes, signs '
+      + 'out every other device and connected agent. This device stays '
+      + 'signed in.',
   },
 };

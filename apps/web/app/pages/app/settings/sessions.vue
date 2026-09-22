@@ -4,6 +4,7 @@ import PasswordSettings from '../../../components/auth/PasswordSettings.vue';
 import ConnectedAgents from '../../../components/settings/ConnectedAgents.vue';
 import LinkedIdentities from '@/components/settings/LinkedIdentities.vue';
 import PrivacySettings from '../../../components/settings/PrivacySettings.vue';
+import SecondFactorSettings from '../../../components/settings/SecondFactorSettings.vue';
 import StatusBanner from '../../../components/app/StatusBanner.vue';
 import { Button } from '../../../components/ui/button';
 import {
@@ -23,6 +24,13 @@ import {
   type LinkedIdentityActions,
   mapUnlinkError,
 } from '../../../composables/identitySettings';
+import {
+  type PasskeyRegistrationCredential,
+  type RegistrationCompletionResult,
+  type RegistrationOptionsResult,
+  type SecondFactorSettingsActions,
+  SecondFactorSettingsActionsKey,
+} from '../../../composables/secondFactorSettings';
 import {
   providerNames,
   useCapabilities,
@@ -75,7 +83,7 @@ const {
 } = useAuth();
 // Only providers the server enables (ADR 0039) get link or reauth controls;
 // a disabled provider's start route answers not found.
-const { loginProviders, agentAccess } = useCapabilities();
+const { loginProviders, agentAccess, passkeyEnrollment } = useCapabilities();
 const enabledIdentities = computed(() =>
   identities.value.filter((identity) =>
     loginProviders.value.includes(identity.provider)));
@@ -247,14 +255,25 @@ async function startOAuth(
   }
 }
 
+interface PasswordReauthEnvelope {
+  data?: { secondFactorRequired?: boolean };
+}
+
 async function reauthenticatePassword(password: string): Promise<void> {
+  let response: PasswordReauthEnvelope | undefined;
   try {
-    await mutate('/api/v1/auth/password/reauth', {
-      method: 'POST',
-      body: { password },
-    });
+    response = await mutate<PasswordReauthEnvelope>(
+      '/api/v1/auth/password/reauth',
+      { method: 'POST', body: { password } },
+    );
   } catch (error) {
     throw mapReauthError(error);
+  }
+  // An enrolled account's primary reauthentication is accepted but not
+  // complete: the pending second factor lives on its own page, whose return
+  // path for this purpose is fixed back to these settings.
+  if (response?.data?.secondFactorRequired === true) {
+    await navigateTo('/login/second-factor');
   }
 }
 
@@ -328,6 +347,43 @@ const privacyActions: PrivacySettingsActions = {
 
 provide(PrivacySettingsActionsKey, privacyActions);
 
+const secondFactorActions: SecondFactorSettingsActions = {
+  reauthenticate: reauthenticatePassword,
+  startProviderReauth,
+  async registrationOptions() {
+    const response = await mutate<{ data: RegistrationOptionsResult }>(
+      '/api/v1/me/second-factor/passkeys/options',
+      { method: 'POST', body: {} },
+    );
+    return response.data;
+  },
+  async completeRegistration(
+    ceremonyId: string,
+    credential: PasskeyRegistrationCredential,
+  ) {
+    const response = await mutate<{ data: RegistrationCompletionResult }>(
+      '/api/v1/me/second-factor/passkeys',
+      { method: 'POST', body: { ceremonyId, credential } },
+    );
+    return response.data;
+  },
+  async removePasskey(id: string) {
+    await mutate(
+      `/api/v1/me/second-factor/passkeys/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    );
+  },
+  async regenerateRecoveryCodes() {
+    const response = await mutate<{ data: { recoveryCodes: string[] } }>(
+      '/api/v1/me/second-factor/recovery-codes',
+      { method: 'POST', body: {} },
+    );
+    return response.data.recoveryCodes;
+  },
+};
+
+provide(SecondFactorSettingsActionsKey, secondFactorActions);
+
 function onAccountDeleted(): void {
   // A top-level navigation discards every in-memory account projection before
   // the now-anonymous login page starts.
@@ -337,6 +393,14 @@ function onAccountDeleted(): void {
 async function onPasswordUpdated(): Promise<void> {
   // A successful add/change replaces the current session: refetch /me (to
   // flip hasPassword) and the device list (every other session is gone).
+  await refreshMe();
+  await refreshSessions();
+}
+
+async function onSecondFactorChanged(): Promise<void> {
+  // A passkey add/remove or recovery-code regeneration rotates the epoch:
+  // refetch /me for the replacement CSRF token and the device list, since
+  // every other session and connected-agent grant is now revoked.
   await refreshMe();
   await refreshSessions();
 }
@@ -448,6 +512,19 @@ const linkErrorMessage = computed(() => {
         :has-password="user?.hasPassword ?? false"
         :providers="passwordProviders"
         @updated="onPasswordUpdated"
+      />
+    </section>
+
+    <section
+      aria-labelledby="second-factor-title"
+      class="border-t py-8"
+    >
+      <SecondFactorSettings
+        :enrollment-open="passkeyEnrollment"
+        :has-password="user?.hasPassword ?? false"
+        :providers="passwordProviders"
+        :sessions-notice="copy.secondFactorEndsOtherSessions"
+        @changed="onSecondFactorChanged"
       />
     </section>
 
