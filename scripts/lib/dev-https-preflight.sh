@@ -42,7 +42,7 @@ normal_native_active() {
 
 compose_http_active() {
   local containers
-  containers=$(podman ps --format '{{.Names}}|{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.service"}}' 2>/dev/null) || \
+  containers=$(podman ps --format '{{.Names}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.service"}}' 2>/dev/null) || \
     die "could not inspect running Podman containers"
   awk -F '|' '$2 == "aboutme" && $3 != "postgres" { found=1 } END { exit !found }' <<<"$containers"
 }
