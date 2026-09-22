@@ -54,8 +54,14 @@ export function encodeBase64Url(bytes: ArrayBuffer | Uint8Array): string {
 /**
  * Decodes canonical unpadded base64url. Throws `WebAuthnDataInvalid` for
  * anything else — wrong type, empty, padded, or out-of-alphabet characters.
+ *
+ * Returns `Uint8Array<ArrayBuffer>`, not the bare `Uint8Array` (which
+ * widens to `Uint8Array<ArrayBufferLike>`): the result always feeds a WebAuthn
+ * `BufferSource` field (`PublicKeyCredentialDescriptor.id`,
+ * `PublicKeyCredentialRequestOptions.challenge`), and only the
+ * `ArrayBuffer`-backed form satisfies that DOM type.
  */
-export function decodeBase64Url(value: unknown): Uint8Array {
+export function decodeBase64Url(value: unknown): Uint8Array<ArrayBuffer> {
   if (typeof value !== 'string' || !BASE64URL_PATTERN.test(value)) {
     throw new WebAuthnDataInvalid();
   }

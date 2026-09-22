@@ -35,8 +35,6 @@ import {
   type SecondFactorSettingsFailure,
   createPasskeyCredential,
   downloadRecoveryCodes,
-  isPasskeyCancellation,
-  isWebAuthnSupported,
   mapPasskeyCompletionError,
   mapPasskeyOptionsError,
   mapPasskeyRemovalError,
@@ -46,6 +44,10 @@ import {
   type SecondFactorPasskey,
 } from '../../composables/secondFactorSettings';
 import { providerNames } from '../../composables/useCapabilities';
+import {
+  isWebAuthnCancellation,
+  isWebAuthnSupported,
+} from '../../utils/webauthn';
 import {
   secondFactorSettingsCopy,
   type SecondFactorSettingsMessage,
@@ -167,7 +169,7 @@ async function startAddPasskey(): Promise<void> {
     credential = await createPasskeyCredential(options.publicKey);
   } catch (ceremonyError) {
     addPending.value = false;
-    addError.value = isPasskeyCancellation(ceremonyError)
+    addError.value = isWebAuthnCancellation(ceremonyError)
       ? 'cancelled'
       : 'unavailable';
     return;
