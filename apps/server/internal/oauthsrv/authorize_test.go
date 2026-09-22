@@ -221,9 +221,8 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 // epoch. See docs/design/second-factor-authentication.md.
 func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
-	ctx := t.Context()
 	enrollTestSecondFactor(t, q, user.ID, s.clock())
-	if _, err := q.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: s.clock()}); err != nil {
+	if _, err := q.UpsertOAuthGrant(t.Context(), store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: s.clock()}); err != nil {
 		t.Fatalf("seed grant: %v", err)
 	}
 
@@ -241,11 +240,11 @@ func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 	t.Run("stale account epoch falls back to interactive consent", func(t *testing.T) {
 		now := s.clock()
 		sess := issueTestSession(t, s.pool, user.ID, now, &now)
-		if _, err := q.AdvanceUserAuthEpoch(ctx, user.ID); err != nil {
+		if _, err := q.AdvanceUserAuthEpoch(t.Context(), user.ID); err != nil {
 			t.Fatalf("AdvanceUserAuthEpoch: %v", err)
 		}
 		t.Cleanup(func() {
-			if _, err := s.pool.Exec(ctx, "UPDATE users SET auth_epoch = 0 WHERE id = $1", user.ID); err != nil {
+			if _, err := s.pool.Exec(context.Background(), "UPDATE users SET auth_epoch = 0 WHERE id = $1", user.ID); err != nil {
 				t.Errorf("restore user epoch: %v", err)
 			}
 		})
@@ -276,7 +275,7 @@ func TestAuthorize_SilentReuseRequiresRecentSecondFactorProof(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ParseCode: %v", err)
 		}
-		code, err := q.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
+		code, err := q.GetOAuthAuthorizationCodeByDigest(t.Context(), digest[:])
 		if err != nil {
 			t.Fatalf("issued code lookup: %v", err)
 		}
