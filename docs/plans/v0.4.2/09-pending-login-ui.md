@@ -40,6 +40,11 @@ manifest, browser specs, backend, design, or infrastructure. Do not add TOTP UI.
 - Support passkey assertion, recovery fallback, expiry, attempt exhaustion,
   unsupported WebAuthn, user cancellation, rate limits, unavailable methods,
   safe retry, and validated return navigation.
+- Treat any `methods` value this page does not know as unsupported. Show a
+  localized refresh prompt beside the supported methods, or alone when none
+  remain. Never call a route for an unknown method, call `/me`, or treat the
+  pending cookie as a session. Test an unknown value alone and beside
+  `recovery`.
 - Render every label, error, loading state, warning, title, accessible name, and
   live announcement in Vietnamese and English.
 - Keep recovery input and credential response data out of browser storage,

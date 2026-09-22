@@ -26,8 +26,9 @@ otherwise blocks all deployment mutation.
 
 Every normal deploy, rollback, failed-deploy restoration, and fence activation
 uses one nonexpiring lock on the application item. A 32-byte random base64url
-`operation_id`, closed `operation_kind` of `deploy`, `rollback`, or `activate`,
-and UTC `operation_started_at` name the owner. There is no time-based takeover.
+`operation_id`, closed `operation_kind` of `deploy`, `rollback`, or `activate`
+(extended below for key re-encryption), and UTC `operation_started_at` name the
+owner. There is no time-based takeover.
 
 After assuming the deploy role, the current deployer acquires the lock with one
 conditional `UpdateItem`. The update initializes a missing minimum to numeric
@@ -84,10 +85,11 @@ host, migration, database, and scheduler roles have no fence access.
 
 Deployment permissions are limited to describing ECS state; registering task
 definitions; updating the three production services; running the migrate,
-database setup, and jobs task families; listing and updating schedules in
-`aboutme-prod-jobs`; creating, tagging, and describing release snapshots;
-describing referenced SSM parameters and Secrets Manager secrets; and passing
-only the production task and execution roles to ECS.
+database setup, and jobs task families, plus the re-encryption family below;
+listing and updating schedules in `aboutme-prod-jobs`; creating, tagging, and
+describing release snapshots; describing referenced SSM parameters and Secrets
+Manager secrets; and passing only the production task and execution roles to
+ECS.
 
 The deploy role also has `cloudwatch:DescribeAlarms`,
 `cloudwatch:DisableAlarmActions`, and `cloudwatch:EnableAlarmActions` on
@@ -113,7 +115,7 @@ maintenance already serves, it stays serving rather than start an unproved
 image. Every exit path restores alarm actions and the task-stopped notification
 rule before it releases the operation lock.
 
-## Activation, rollback, and bypass
+## Activation and rollback
 
 After a healthy flag-off v0.4.2 deploy and production proof, an activation
 operation raises the fence to 4002 while holding the lock. Only after the raise
@@ -127,6 +129,26 @@ Once the raise commits, a lower target cannot acquire the operation lock. Normal
 deploy, explicit rollback, and automatic restoration use this contract. They
 never run the target release's copy of the script. Rollback below the fence is a
 forward fix or privileged administration, not a supported deploy.
+
+## Authenticator-app key re-encryption
+
+The TOTP release adds one supported one-shot operation. It extends the closed
+`operation_kind` set with `totp_reencrypt` and adds the
+`aboutme-prod-totp-reencrypt` task family to the families the deploy role may
+run. That family uses the existing production app execution and task roles, so
+the deploy role's pass-role scope does not grow. The scheduler and jobs roles
+gain nothing.
+
+`deploy.sh --totp-key-reencrypt <tag>` acquires the same operation lock with
+kind `totp_reencrypt`. It requires the tag and the stored minimum to be at least
+v0.4.3 (numeric 4003), and the tag to equal the running app release. It runs the
+conditional `operation_checked_at` update before registering the one-shot task
+definition and before `RunTask`. It waits for the task to stop, then releases
+the exact owned lock. It updates no service and changes no schedule, alarm, or
+rule. An older deployer that finds this lock held fails like any other held
+lock.
+
+## Privileged bypass
 
 OpenTofu, direct use of the AWS-login credentials, and account administration
 remain privileged bypasses. DynamoDB and IAM do not make an old script safe when
