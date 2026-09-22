@@ -205,7 +205,22 @@ func TestServer_MutatingToolSchemasRequireIdempotencyKey(t *testing.T) {
 func TestServer_MutatingToolsForwardIdempotencyKey(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
-	executor := &recordingAgentExecutor{}
+	// Mutation tools reject a response without a revision, so each mutating
+	// operation returns a canonical resume state.
+	canonical := resumeapi.AgentResponse{
+		Status: http.StatusOK, Header: make(http.Header),
+		Body: []byte(`{"data":{"id":"01890f47-7e8a-7b2a-8d70-9a1f2c3d4e5f","revision":"2","document":{}}}`),
+	}
+	responses := make(map[resumeapi.AgentOperation]resumeapi.AgentResponse)
+	for _, op := range []resumeapi.AgentOperation{
+		resumeapi.AgentCreateResume, resumeapi.AgentUpdateResumeMetadata, resumeapi.AgentUpsertEntry,
+		resumeapi.AgentDeleteEntry, resumeapi.AgentUpdateSection, resumeapi.AgentUpdateStructure,
+		resumeapi.AgentUpdatePersonalDetails, resumeapi.AgentUpdateCustomization, resumeapi.AgentUploadPhoto,
+		resumeapi.AgentUpdatePhotoCrop, resumeapi.AgentDeletePhoto,
+	} {
+		responses[op] = canonical
+	}
+	executor := &recordingAgentExecutor{responses: responses}
 	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: executor, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
@@ -237,9 +252,9 @@ func TestServer_MutatingToolsForwardIdempotencyKey(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			before := len(executor.snapshotCalls())
-			result, callErr := session.CallTool(context.Background(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
+			result, callErr := session.CallTool(t.Context(), &mcp.CallToolParams{Name: tc.name, Arguments: tc.args})
 			if callErr != nil || result.IsError {
-				t.Fatalf("CallTool = %#v, error = %v", result, callErr)
+				t.Fatalf("CallTool = %#v, content = %q, error = %v", result, toolErrorText(result), callErr)
 			}
 			calls := executor.snapshotCalls()[before:]
 			var found *resumeapi.AgentCall
@@ -324,27 +339,28 @@ func TestServer_WriteScopeDeniedBeforeResumeStateAndCookieCannotAuthenticate(t *
 	t.Cleanup(httpServer.Close)
 	session := connectMCPClient(t, httpServer.URL, raw, "__Host-session=ignored")
 
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "create_resume", Arguments: map[string]any{"title": "forbidden"},
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{
+		Name: "create_resume", Arguments: map[string]any{"idempotency_key": uuid.NewString(), "title": "forbidden"},
 	})
 	if err != nil || !result.IsError || len(result.Content) != 1 {
 		t.Fatalf("write result = %#v, error = %v", result, err)
 	}
 	text, ok := result.Content[0].(*mcp.TextContent)
 	if !ok || text.Text != "scope_denied" {
-		t.Fatalf("write error content = %#v", result.Content)
+		t.Fatalf("write error content = %q", toolErrorText(result))
 	}
 	if calls := executor.snapshotCalls(); len(calls) != 0 {
 		t.Fatalf("scope-denied write reached executor: %#v", calls)
 	}
 	oversizedPhoto := base64.StdEncoding.EncodeToString(make([]byte, maxDecodedPhotoBytes+1))
-	photoResult, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+	photoResult, err := session.CallTool(t.Context(), &mcp.CallToolParams{
 		Name: "upload_photo", Arguments: map[string]any{
-			"resume_id": uuid.NewString(), "revision": "1", "data_base64": oversizedPhoto,
+			"idempotency_key": uuid.NewString(), "resume_id": uuid.NewString(), "revision": "1",
+			"data_base64": oversizedPhoto,
 		},
 	})
 	if err != nil || !photoResult.IsError || toolErrorText(photoResult) != "scope_denied" {
-		t.Fatalf("read-only oversized photo = %#v, error = %v", photoResult, err)
+		t.Fatalf("read-only oversized photo content = %q, error = %v", toolErrorText(photoResult), err)
 	}
 
 	body := bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`)
@@ -784,14 +800,14 @@ func TestServer_UploadPhotoRejectsDecodedBytesOverExistingCeiling(t *testing.T) 
 	t.Cleanup(httpServer.Close)
 	session := connectMCPClient(t, httpServer.URL, raw, "")
 
-	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
+	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{
 		Name: "upload_photo", Arguments: map[string]any{
-			"resume_id": uuid.NewString(), "revision": "1",
+			"idempotency_key": uuid.NewString(), "resume_id": uuid.NewString(), "revision": "1",
 			"data_base64": base64.StdEncoding.EncodeToString(make([]byte, maxDecodedPhotoBytes+1)),
 		},
 	})
 	if err != nil || !result.IsError || toolErrorText(result) != "payload_too_large" {
-		t.Fatalf("oversized decoded photo = %#v, error = %v", result, err)
+		t.Fatalf("oversized decoded photo content = %q, error = %v", toolErrorText(result), err)
 	}
 	if calls := executor.snapshotCalls(); len(calls) != 0 {
 		t.Fatalf("oversized decoded photo reached executor: %#v", calls)

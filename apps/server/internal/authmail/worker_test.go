@@ -424,8 +424,9 @@ func TestWorkerRunOnceSendsAndMarksSent(t *testing.T) {
 		t.Fatalf("sends = %d, want 1", sender.count())
 	}
 	msg := sender.calls[0]
-	if msg.To != "alice@example.com" || msg.Subject != "Verify your email" {
-		t.Fatalf("message = %+v", msg)
+	if msg.Kind != KindVerify || msg.To != "alice@example.com" ||
+		msg.Subject != "Xác minh email aboutme / Verify your aboutme email" {
+		t.Fatalf("message kind=%q to=%q subject=%q, want the verify template for alice@example.com", msg.Kind, msg.To, msg.Subject)
 	}
 	state, leased := jobState(ctx, t, sp, jobID)
 	if state != "sent" {

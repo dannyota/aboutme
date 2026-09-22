@@ -639,7 +639,7 @@ func TestOutboxEnqueueCommitsEncryptedJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open stored row: %v", err)
 	}
-	if got != validVerifyPayload() {
+	if !payloadSemanticallyEqual(got, validVerifyPayload()) {
 		t.Fatalf("opened payload = %+v, want %+v", got, validVerifyPayload())
 	}
 }

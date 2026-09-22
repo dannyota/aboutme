@@ -90,8 +90,8 @@ run_case() {
     fail "$target did not pass the expected live-DB environment to Go"
   fi
   if [ "$target" = server-test-db ] && ! grep -Fxq \
-    'server-test-db|go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... -p=1 -race -count=1 -v|dsn=exact|require=1' "$calls"; then
-    fail "$target did not run the serialized privacy packages with live-DB checks"
+    'server-test-db|go test ./internal/accountapi/... ./internal/mediacleanup/... ./internal/privacyretention/... ./internal/secondfactor/... ./internal/oauthsrv/... ./internal/mcpapi/... ./internal/accountemail/... ./internal/authmail/... -p=1 -race -count=1 -v|dsn=exact|require=1' "$calls"; then
+    fail "$target did not run the serialized privacy, auth, OAuth, MCP, and mail packages with live-DB checks"
   fi
 
   if [ "$failures" -ne "$failures_before" ]; then
