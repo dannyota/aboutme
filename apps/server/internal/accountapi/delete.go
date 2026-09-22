@@ -301,10 +301,18 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 		}
 		return fmt.Errorf("accountapi: lock session: %w", err)
 	}
-	if err := auth.RequireLiveSession(liveSession, s.now()); err != nil {
-		return err
+	policy, err := qtx.GetSecondFactorPolicyForUpdate(ctx, lockedUser.ID)
+	var policyPtr *store.SecondFactorPolicy
+	switch {
+	case err == nil:
+		policyPtr = &policy
+	case errors.Is(err, pgx.ErrNoRows):
+		// Unenrolled account: RequireRecentSecondFactorReauth checks primary
+		// proof only.
+	default:
+		return fmt.Errorf("accountapi: lock factor policy: %w", err)
 	}
-	if err := auth.RequireRecentReauth(liveSession, s.now()); err != nil {
+	if err := auth.RequireRecentSecondFactorReauth(lockedUser, policyPtr, liveSession, s.now()); err != nil {
 		return err
 	}
 

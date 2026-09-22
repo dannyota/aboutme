@@ -605,16 +605,188 @@ func TestTransitionTransactionOrderReadsResumeBeforeSessionForRenameAndSlugDelet
 	assertOrder("initial claim", []string{"slug", "public_state", "resume", "session", "tombstone", "claim"}, func() testHTTPResponse {
 		return h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+oldSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
 	})
-	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); updateErr != nil {
+	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now(), second_factor_verified_at = NULL WHERE id = $1`, h.session.ID); updateErr != nil {
 		t.Fatal(updateErr)
 	}
 	newSlug := "order-new-" + uuid.NewString()[:8]
-	assertOrder("rename", []string{"slug", "public_state", "resume", "session", "tombstone", "claim"}, func() testHTTPResponse {
+	assertOrder("rename", []string{"slug", "public_state", "resume", "session", "user", "session", "policy", "tombstone", "claim"}, func() testHTTPResponse {
 		return h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision+1, uuid.NewString())
 	})
-	assertOrder("slug delete", []string{"slug", "public_state", "resume", "session"}, func() testHTTPResponse {
+	assertOrder("slug delete", []string{"slug", "public_state", "resume", "session", "user", "session", "policy"}, func() testHTTPResponse {
 		return h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+2, uuid.NewString())
 	})
+}
+
+// enrollResumeAPISecondFactor creates a second-factor policy and one active
+// passkey credential for userID, mirroring the storage shape
+// docs/design/second-factor-authentication.md describes, without depending on
+// the auth or secondfactor packages under concurrent edit.
+func enrollResumeAPISecondFactor(ctx context.Context, t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) {
+	t.Helper()
+	handle := make([]byte, 0, 32)
+	credentialID := make([]byte, 0, 32)
+	for len(handle) < 32 {
+		id := uuid.New()
+		handle = append(handle, id[:]...)
+	}
+	for len(credentialID) < 32 {
+		id := uuid.New()
+		credentialID = append(credentialID, id[:]...)
+	}
+	if _, err := q.CreateSecondFactorPolicy(ctx, store.CreateSecondFactorPolicyParams{
+		UserID: userID, WebauthnUserHandle: handle[:32], EnabledAt: now,
+	}); err != nil {
+		t.Fatalf("CreateSecondFactorPolicy: %v", err)
+	}
+	if _, err := q.CreateWebAuthnCredential(ctx, store.CreateWebAuthnCredentialParams{
+		UserID: userID, CredentialID: credentialID[:32], PublicKey: credentialID[:32],
+		SignCount: 0, BackupEligible: true, BackupState: false, Transports: []string{"internal"}, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("CreateWebAuthnCredential: %v", err)
+	}
+}
+
+// TestPublishRenameRequiresFreshFactorProofWhenEnrolled proves a slug rename
+// on an enrolled account needs both a recent primary and a recent
+// second-factor proof, and that a stale factor proof neither changes the slug
+// nor advances the revision. See
+// docs/design/second-factor-authentication.md#assurance-boundary.
+func TestPublishRenameRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Factor rename", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSlug := "factor-old-" + uuid.NewString()[:8]
+	claim := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+oldSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
+	if claim.status != http.StatusOK {
+		t.Fatalf("initial claim = %d %s", claim.status, claim.body)
+	}
+	now := time.Now().UTC()
+	enrollResumeAPISecondFactor(h.ctx, t, h.queries, h.userID, now)
+	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = NULL WHERE id = $1`, h.session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	newSlug := "factor-new-" + uuid.NewString()[:8]
+	unverified := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision+1, uuid.NewString())
+	assertRouteError(t, unverified, http.StatusForbidden, "reauth_required")
+	stored, err := h.resumes.Get(h.ctx, h.userID, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Slug == nil || *stored.Slug != oldSlug || stored.Revision != created.Revision+1 {
+		t.Fatalf("unverified rename changed stored state = %+v, want unchanged slug %q at revision %d", stored, oldSlug, created.Revision+1)
+	}
+
+	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, h.session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	verified := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision+1, uuid.NewString())
+	if verified.status != http.StatusOK {
+		t.Fatalf("verified rename = %d %s, want 200", verified.status, verified.body)
+	}
+}
+
+// TestDeleteResumeRequiresFreshFactorProofWhenEnrolled proves a slug-owning
+// whole-resume delete on an enrolled account needs a recent factor proof, and
+// that rejection leaves the resume and its slug claim untouched.
+func TestDeleteResumeRequiresFreshFactorProofWhenEnrolled(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Factor delete", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := "factor-delete-" + uuid.NewString()[:8]
+	claim := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+slug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
+	if claim.status != http.StatusOK {
+		t.Fatalf("initial claim = %d %s", claim.status, claim.body)
+	}
+	now := time.Now().UTC()
+	enrollResumeAPISecondFactor(h.ctx, t, h.queries, h.userID, now)
+	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = $2, second_factor_verified_at = NULL WHERE id = $1`, h.session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+
+	unverified := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, uuid.NewString())
+	assertRouteError(t, unverified, http.StatusForbidden, "reauth_required")
+	if _, err := h.resumes.Get(h.ctx, h.userID, created.ID); err != nil {
+		t.Fatalf("unverified delete removed the resume: %v", err)
+	}
+
+	if _, err := h.pool.Exec(h.ctx, `UPDATE sessions SET second_factor_verified_at = $2 WHERE id = $1`, h.session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	verified := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, uuid.NewString())
+	if verified.status != http.StatusNoContent {
+		t.Fatalf("verified delete = %d %s, want 204", verified.status, verified.body)
+	}
+}
+
+// TestConcurrentSlugReleasingDeletesSerializeWithoutDeadlock proves the new
+// user, session, and factor-policy locks two concurrent slug-releasing
+// deletes for the same account take do not deadlock against each other or
+// against the public-state lock the deletion transition already takes.
+func TestConcurrentSlugReleasingDeletesSerializeWithoutDeadlock(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	first, err := h.resumes.Create(h.ctx, h.userID, "Concurrent A", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := h.resumes.Create(h.ctx, h.userID, "Concurrent B", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	targets := map[uuid.UUID]int64{}
+	for _, seed := range []struct {
+		row  resume.Resume
+		slug string
+	}{
+		{first, "concurrent-a-" + uuid.NewString()[:8]},
+		{second, "concurrent-b-" + uuid.NewString()[:8]},
+	} {
+		claim := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+seed.row.ID.String()+"/publish",
+			strings.NewReader(`{"slug":"`+seed.slug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`),
+			seed.row.Revision, uuid.NewString())
+		if claim.status != http.StatusOK {
+			t.Fatalf("claim %s = %d %s", seed.slug, claim.status, claim.body)
+		}
+		targets[seed.row.ID] = seed.row.Revision + 1
+	}
+
+	start := make(chan struct{})
+	results := make(chan testHTTPResponse, len(targets))
+	for id, revision := range targets {
+		id, revision := id, revision
+		go func() {
+			<-start
+			results <- h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+id.String(), nil, revision, uuid.NewString())
+		}()
+	}
+	close(start)
+
+	timeout := time.After(10 * time.Second)
+	successes := 0
+	for range targets {
+		select {
+		case response := <-results:
+			if response.status == http.StatusNoContent {
+				successes++
+			} else {
+				t.Errorf("concurrent delete status = %d %s, want 204", response.status, response.body)
+			}
+		case <-timeout:
+			t.Fatal("concurrent slug-releasing deletes did not complete: possible deadlock")
+		}
+	}
+	if successes != len(targets) {
+		t.Fatalf("concurrent deletes succeeded = %d, want %d", successes, len(targets))
+	}
+	for id := range targets {
+		if _, err := h.resumes.Get(h.ctx, h.userID, id); err == nil {
+			t.Fatalf("resume %s survived concurrent delete", id)
+		}
+	}
 }
 
 func TestPublishSlugPreflightRejectsUnavailableWithoutClosingLeaseAndAllowsExactTombstoneBoundary(t *testing.T) {

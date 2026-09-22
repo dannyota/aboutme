@@ -91,6 +91,17 @@ func TestDeleteHandlerAuthCSRFAndRequestMatrix(t *testing.T) {
 				t.Fatalf("expire reauth: %v", err)
 			}
 		}},
+		{name: "second factor unverified", status: 403, code: "reauth_required", mutate: func(env deletionEnvironment, r *http.Request) {
+			enrollSecondFactor(r.Context(), t, env.queries, env.user.ID, time.Now().UTC())
+		}},
+		{name: "second factor expired", status: 403, code: "reauth_required", mutate: func(env deletionEnvironment, r *http.Request) {
+			now := time.Now().UTC()
+			enrollSecondFactor(r.Context(), t, env.queries, env.user.ID, now)
+			stale := now.Add(-16 * time.Minute)
+			if _, err := env.service.pool.Exec(r.Context(), `UPDATE sessions SET second_factor_verified_at=$2 WHERE id=$1`, env.session.ID, stale); err != nil {
+				t.Fatalf("expire factor proof: %v", err)
+			}
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -126,6 +137,82 @@ func TestDeleteHandlerHasIndependentFivePerMinuteLimit(t *testing.T) {
 			t.Fatalf("attempt %d status = %d body=%s, want %d", attempt, recorder.Code, recorder.Body.String(), want)
 		}
 	}
+}
+
+func TestDeleteHandlerSucceedsWithFreshSecondFactorProof(t *testing.T) {
+	env := newDeletionEnvironment(t)
+	now := time.Now().UTC()
+	enrollSecondFactor(env.ctx, t, env.queries, env.user.ID, now)
+	if _, err := env.service.pool.Exec(env.ctx, `UPDATE sessions SET second_factor_verified_at=$2 WHERE id=$1`, env.session.ID, now); err != nil {
+		t.Fatalf("set factor proof: %v", err)
+	}
+	recorder := httptest.NewRecorder()
+	env.service.DeleteHandler().ServeHTTP(recorder, authenticatedDeleteRequest(env))
+	if recorder.Code != http.StatusNoContent || recorder.Body.Len() != 0 {
+		t.Fatalf("DELETE /me with fresh factor proof = (%d, %q), want bodyless 204", recorder.Code, recorder.Body.String())
+	}
+	if _, err := env.queries.GetUserByID(env.ctx, env.user.ID); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("enrolled account survived deletion with fresh proofs: %v", err)
+	}
+}
+
+// enrollSecondFactor creates a second-factor policy, one active passkey
+// credential, and one recovery code for userID, mirroring the storage shape
+// docs/design/second-factor-authentication.md describes, without depending on
+// the auth package's enrollment handlers.
+func enrollSecondFactor(ctx context.Context, t *testing.T, q *store.Queries, userID uuid.UUID, now time.Time) store.SecondFactorPolicy {
+	t.Helper()
+	policy, err := q.CreateSecondFactorPolicy(ctx, store.CreateSecondFactorPolicyParams{
+		UserID: userID, WebauthnUserHandle: secondFactorTestBytes(32), EnabledAt: now,
+	})
+	if err != nil {
+		t.Fatalf("CreateSecondFactorPolicy: %v", err)
+	}
+	if _, err := q.CreateWebAuthnCredential(ctx, store.CreateWebAuthnCredentialParams{
+		UserID: userID, CredentialID: secondFactorTestBytes(32), PublicKey: secondFactorTestBytes(64),
+		SignCount: 0, BackupEligible: true, BackupState: false, Transports: []string{"internal"}, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("CreateWebAuthnCredential: %v", err)
+	}
+	if _, err := q.CreateSecondFactorRecoveryCode(ctx, store.CreateSecondFactorRecoveryCodeParams{
+		UserID: userID, CodeDigest: secondFactorTestBytes(32), CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("CreateSecondFactorRecoveryCode: %v", err)
+	}
+	return policy
+}
+
+// seedPendingAndCeremony creates one live login pending authentication and one
+// live registration ceremony bound to sessionID, exercising the two remaining
+// second-factor tables enrollSecondFactor does not cover.
+func seedPendingAndCeremony(ctx context.Context, t *testing.T, q *store.Queries, userID, sessionID uuid.UUID, now time.Time) {
+	t.Helper()
+	if _, err := q.CreatePendingAuthentication(ctx, store.CreatePendingAuthenticationParams{
+		TokenDigest: secondFactorTestBytes(32), CSRFSecret: secondFactorTestBytes(32), UserID: userID,
+		Purpose: "login", AuthEpoch: 0, PrimaryVerifiedAt: now, ReturnPath: "/app/resumes",
+		CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute),
+	}); err != nil {
+		t.Fatalf("CreatePendingAuthentication: %v", err)
+	}
+	if _, err := q.CreateWebAuthnCeremony(ctx, store.CreateWebAuthnCeremonyParams{
+		TokenDigest: secondFactorTestBytes(32), ChallengeDigest: secondFactorTestBytes(32), UserID: userID,
+		Purpose: "registration", AuthEpoch: 0, SessionID: &sessionID, ProposedUserHandle: secondFactorTestBytes(32),
+		CreatedAt: now, ExpiresAt: now.Add(5 * time.Minute),
+	}); err != nil {
+		t.Fatalf("CreateWebAuthnCeremony: %v", err)
+	}
+}
+
+// secondFactorTestBytes returns n bytes built from fresh random UUIDs, long
+// enough and unique enough for every second-factor column's length and
+// uniqueness constraints in migrations/00004_passkey_second_factor.sql.
+func secondFactorTestBytes(n int) []byte {
+	out := make([]byte, 0, n)
+	for len(out) < n {
+		id := uuid.New()
+		out = append(out, id[:]...)
+	}
+	return out[:n]
 }
 
 func authenticatedDeleteRequest(env deletionEnvironment) *http.Request {
@@ -632,6 +719,92 @@ func TestDeleteAccountRechecksConcreteSessionAfterDrain(t *testing.T) {
 			t.Fatalf("user deleted with stale reauth: %v", err)
 		}
 	})
+
+	t.Run("second factor expired between prepare and drain", func(t *testing.T) {
+		env := newDeletionEnvironment(t)
+		now := time.Now().UTC()
+		enrollSecondFactor(env.ctx, t, env.queries, env.user.ID, now)
+		if _, err := env.service.pool.Exec(env.ctx, `UPDATE sessions SET second_factor_verified_at=$2 WHERE id=$1`, env.session.ID, now); err != nil {
+			t.Fatalf("set factor proof: %v", err)
+		}
+		env.service.afterClose = func() {
+			env.service.afterClose = nil
+			stale := now.Add(-16 * time.Minute)
+			if _, err := env.service.pool.Exec(env.ctx, `UPDATE sessions SET second_factor_verified_at=$2 WHERE id=$1`, env.session.ID, stale); err != nil {
+				t.Fatalf("expire factor proof: %v", err)
+			}
+		}
+		if err := env.service.deleteAccount(env.ctx, env.session); !errors.Is(err, auth.ErrReauthRequired) {
+			t.Fatalf("deleteAccount error = %v, want reauth required", err)
+		}
+		if _, err := env.queries.GetUserByID(env.ctx, env.user.ID); err != nil {
+			t.Fatalf("user deleted with stale factor proof: %v", err)
+		}
+	})
+
+	t.Run("account epoch advanced between prepare and drain", func(t *testing.T) {
+		env := newDeletionEnvironment(t)
+		env.service.afterClose = func() {
+			env.service.afterClose = nil
+			if _, err := env.queries.AdvanceUserAuthEpoch(env.ctx, env.user.ID); err != nil {
+				t.Fatalf("advance epoch: %v", err)
+			}
+		}
+		if err := env.service.deleteAccount(env.ctx, env.session); !errors.Is(err, auth.ErrSessionInvalid) {
+			t.Fatalf("deleteAccount error = %v, want invalid session", err)
+		}
+		if _, err := env.queries.GetUserByID(env.ctx, env.user.ID); err != nil {
+			t.Fatalf("user deleted with a stale account epoch: %v", err)
+		}
+	})
+}
+
+// TestDeleteAccountCascadesSecondFactorRows proves deletion removes every
+// policy, credential, recovery, pending, and ceremony row for the deleted
+// account while leaving a foreign account's rows untouched. See
+// docs/design/passkey-second-factor-contract.md#postgresql-shape.
+func TestDeleteAccountCascadesSecondFactorRows(t *testing.T) {
+	env := newDeletionEnvironment(t)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	enrollSecondFactor(env.ctx, t, env.queries, env.user.ID, now)
+	seedPendingAndCeremony(env.ctx, t, env.queries, env.user.ID, env.session.ID, now)
+	if _, err := env.service.pool.Exec(env.ctx, `UPDATE sessions SET second_factor_verified_at=$2 WHERE id=$1`, env.session.ID, now); err != nil {
+		t.Fatalf("set factor proof: %v", err)
+	}
+
+	foreign, err := env.queries.CreateUser(env.ctx, store.CreateUserParams{Email: uuid.NewString() + "@example.com", Name: "Keep second factor"})
+	if err != nil {
+		t.Fatalf("CreateUser(foreign): %v", err)
+	}
+	_, foreignSession, err := auth.NewSessionManagerWithPool(env.service.pool).Issue(env.ctx, foreign.ID, "ua", "203.0.113.9")
+	if err != nil {
+		t.Fatalf("issue foreign session: %v", err)
+	}
+	enrollSecondFactor(env.ctx, t, env.queries, foreign.ID, now)
+	seedPendingAndCeremony(env.ctx, t, env.queries, foreign.ID, foreignSession.ID, now)
+
+	if err := env.service.deleteAccount(env.ctx, env.session); err != nil {
+		t.Fatalf("deleteAccount: %v", err)
+	}
+
+	for _, table := range []string{
+		"second_factor_policies", "webauthn_credentials", "second_factor_recovery_codes",
+		"pending_authentications", "webauthn_ceremonies",
+	} {
+		var deletedCount, foreignCount int
+		if err := env.service.pool.QueryRow(env.ctx, "SELECT count(*) FROM "+table+" WHERE user_id = $1", env.user.ID).Scan(&deletedCount); err != nil {
+			t.Fatalf("count %s for deleted account: %v", table, err)
+		}
+		if deletedCount != 0 {
+			t.Errorf("%s rows for deleted account = %d, want 0", table, deletedCount)
+		}
+		if err := env.service.pool.QueryRow(env.ctx, "SELECT count(*) FROM "+table+" WHERE user_id = $1", foreign.ID).Scan(&foreignCount); err != nil {
+			t.Fatalf("count %s for foreign account: %v", table, err)
+		}
+		if foreignCount == 0 {
+			t.Errorf("%s rows for foreign account = 0, want retained rows", table)
+		}
+	}
 }
 
 func TestDeleteAccountDrainTimeoutReopensUnchangedAdmission(t *testing.T) {

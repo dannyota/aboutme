@@ -74,6 +74,45 @@ func (s *Service) transactionMutation(ctx context.Context, qtx *store.Queries, m
 	return mutation, nil
 }
 
+// requireSensitiveResumeAuthority locks the user, then the concrete caller
+// session, then the second-factor policy -- the lock order in
+// docs/design/second-factor-authentication.md -- and requires a fresh primary
+// and, for an enrolled account, factor proof before a slug-releasing resume
+// mutation (a rename or a delete) commits. Only a cookie-session mutation
+// reaches this check; an agent write authenticates through its OAuth grant
+// and token in transactionMutation instead.
+func (s *Service) requireSensitiveResumeAuthority(ctx context.Context, qtx *store.Queries, mutation mutationContext, now time.Time) error {
+	user, err := qtx.GetUserForUpdate(ctx, mutation.UserID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return auth.ErrSessionInvalid
+		}
+		return fmt.Errorf("resumeapi: lock sensitive mutation user: %w", err)
+	}
+	s.recordTransactionOrder("user")
+	sess, err := qtx.GetSessionByIDForUpdate(ctx, mutation.SessionID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return auth.ErrSessionInvalid
+		}
+		return fmt.Errorf("resumeapi: lock sensitive mutation session: %w", err)
+	}
+	s.recordTransactionOrder("session")
+	policy, err := qtx.GetSecondFactorPolicyForUpdate(ctx, user.ID)
+	var policyPtr *store.SecondFactorPolicy
+	switch {
+	case err == nil:
+		policyPtr = &policy
+	case errors.Is(err, pgx.ErrNoRows):
+		// Unenrolled account: RequireRecentSecondFactorReauth checks primary
+		// proof only.
+	default:
+		return fmt.Errorf("resumeapi: lock sensitive mutation factor policy: %w", err)
+	}
+	s.recordTransactionOrder("policy")
+	return auth.RequireRecentSecondFactorReauth(user, policyPtr, sess, now)
+}
+
 func (s *Service) recordTransactionOrder(step string) {
 	if s.transactionOrderHook != nil {
 		s.transactionOrderHook(step)

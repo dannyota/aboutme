@@ -236,6 +236,83 @@ func TestDeleteAccountOAuthGrantRace(t *testing.T) {
 	})
 }
 
+// TestDeleteAccountSecondFactorPolicyRace proves account deletion and a
+// concurrent second-factor enrollment -- both of which lock the user row
+// before the factor policy row, per docs/design/second-factor-authentication.md
+// -- serialize on the user lock rather than deadlocking, and that the loser
+// gets a correct, non-oracle outcome either way.
+func TestDeleteAccountSecondFactorPolicyRace(t *testing.T) {
+	t.Run("enrollment wins then epoch blocks deletion", func(t *testing.T) {
+		env := newDeletionEnvironment(t)
+		now := time.Now().UTC().Truncate(time.Microsecond)
+		holder, err := env.service.pool.Begin(env.ctx)
+		if err != nil {
+			t.Fatalf("begin enrollment: %v", err)
+		}
+		defer rollbackUnlessClosed(t, holder)()
+		qtx := env.queries.WithTx(holder)
+		if _, err := qtx.GetUserForUpdate(env.ctx, env.user.ID); err != nil {
+			t.Fatalf("enrollment lock user: %v", err)
+		}
+		if _, err := qtx.CreateSecondFactorPolicy(env.ctx, store.CreateSecondFactorPolicyParams{
+			UserID: env.user.ID, WebauthnUserHandle: secondFactorTestBytes(32), EnabledAt: now,
+		}); err != nil {
+			t.Fatalf("enrollment create policy: %v", err)
+		}
+		if _, err := qtx.AdvanceUserAuthEpoch(env.ctx, env.user.ID); err != nil {
+			t.Fatalf("enrollment advance epoch: %v", err)
+		}
+
+		deleteDone := make(chan error, 1)
+		go func() { deleteDone <- env.service.deleteAccount(context.Background(), env.session) }()
+		assertStillBlocked(t, deleteDone, "deletion bypassed the enrollment's user lock")
+		if err := holder.Commit(env.ctx); err != nil {
+			t.Fatalf("commit enrollment: %v", err)
+		}
+		if err := <-deleteDone; !errors.Is(err, auth.ErrSessionInvalid) {
+			t.Fatalf("deletion after concurrent enrollment error = %v, want invalid session", err)
+		}
+		if _, err := env.queries.GetUserByID(env.ctx, env.user.ID); err != nil {
+			t.Fatalf("deletion removed the account despite the epoch race: %v", err)
+		}
+		var policyCount int
+		if err := env.service.pool.QueryRow(env.ctx, `SELECT count(*) FROM second_factor_policies WHERE user_id=$1`, env.user.ID).Scan(&policyCount); err != nil || policyCount != 1 {
+			t.Fatalf("second_factor_policies rows = %d, error=%v, want 1", policyCount, err)
+		}
+	})
+
+	t.Run("delete wins", func(t *testing.T) {
+		env := newDeletionEnvironment(t)
+		locked, release := holdDeletionAfterUserLock(env)
+		deleteDone := make(chan error, 1)
+		go func() { deleteDone <- env.service.deleteAccount(context.Background(), env.session) }()
+		<-locked
+
+		enrollDone := make(chan error, 1)
+		go func() {
+			enrollDone <- pgx.BeginFunc(context.Background(), env.service.pool, func(tx pgx.Tx) error {
+				qtx := env.queries.WithTx(tx)
+				if _, lockErr := qtx.GetUserForUpdate(context.Background(), env.user.ID); lockErr != nil {
+					return lockErr
+				}
+				now := time.Now().UTC().Truncate(time.Microsecond)
+				_, createErr := qtx.CreateSecondFactorPolicy(context.Background(), store.CreateSecondFactorPolicyParams{
+					UserID: env.user.ID, WebauthnUserHandle: secondFactorTestBytes(32), EnabledAt: now,
+				})
+				return createErr
+			})
+		}()
+		assertStillBlocked(t, enrollDone, "enrollment bypassed deletion's user lock")
+		close(release)
+		if err := <-deleteDone; err != nil {
+			t.Fatalf("deletion: %v", err)
+		}
+		if err := <-enrollDone; !errors.Is(err, pgx.ErrNoRows) {
+			t.Fatalf("enrollment after deletion error = %v, want no rows", err)
+		}
+	})
+}
+
 func assertOAuthGrantCount(t *testing.T, env deletionEnvironment, want int) {
 	t.Helper()
 	var count int
