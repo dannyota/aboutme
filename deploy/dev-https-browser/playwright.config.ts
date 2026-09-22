@@ -26,13 +26,18 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 const mode = requestedMode as BrowserMode;
 const secondFactor = mode === 'second-factor'
   || mode === 'second-factor-disabled';
-// The enabled second-factor journey walks enrollment, four pending sign-ins,
-// the negative cases, and teardown in one test, so it gets its own budget.
-const timeout = secondFactor
-  ? 900_000
-  : mode === 'editor' || mode === 'public' || mode === 'password-auth'
-    || mode === 'mcp' || mode === 'publish' || mode === 'exports'
-    || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
+// The enabled second-factor journey warms every page it uses, then walks
+// enrollment, four pending sign-ins, the negative cases, and teardown in one
+// test, so it gets its own budget. The disabled journey opens three pages and
+// makes a handful of calls, so it gets a much smaller one. Together with the
+// stack restart between them, both fit inside the hosted job's own limit.
+const timeout = mode === 'second-factor'
+  ? 1_200_000
+  : mode === 'second-factor-disabled'
+    ? 420_000
+    : mode === 'editor' || mode === 'public' || mode === 'password-auth'
+      || mode === 'mcp' || mode === 'publish' || mode === 'exports'
+      || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
 
 // Both second-factor modes run one spec. The server enrollment flag, not the
 // spec file, is what differs between them; the spec selects its own test from
