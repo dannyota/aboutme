@@ -1001,22 +1001,30 @@ func TestWorkerCancellationLeavesRecoverableLease(t *testing.T) {
 
 func TestWorkerClaimOrderAndBatch(t *testing.T) {
 	ctx, sp, q := newWorkerPool(t)
-	clock := testutil.NewClockAtEpoch()
-	ring := testRing(t, 3)
+	// A clock before every other fixture keeps rows left by other suites in the
+	// shared database from being due at this claim's now.
+	clock := testutil.NewClock(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC))
+	total := claimBatchSize + 1
+	ring := testRing(t, total)
 
-	// Create three jobs with distinct next_attempt_at, then advance the clock so
-	// all are due; claim must return them in (next_attempt_at, created_at, id).
-	order := make([]uuid.UUID, 0, 3)
-	for i := 0; i < 3; i++ {
+	// Insert one more due job than a claim takes, with next_attempt_at running
+	// opposite to insert order, so physical order cannot pass for due order.
+	// The claim must take the earliest due jobs and leave the latest pending.
+	// PostgreSQL does not order UPDATE ... RETURNING rows, so the claimed batch
+	// is compared as a set.
+	inserted := make([]uuid.UUID, 0, total)
+	for i := 0; i < total; i++ {
+		offset := time.Duration(total-i) * time.Minute
 		regID, digest := newWorkerRegistration(ctx, t, sp, clock.Now())
 		tx := beginWorkerTx(ctx, t, sp)
-		jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, func() time.Time { return clock.Now().Add(time.Duration(i+1) * time.Minute) }, regID, digest)
+		jobID := enqueueVerifyJob(ctx, t, q.WithTx(tx), ring, func() time.Time { return clock.Now().Add(offset) }, regID, digest)
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			t.Fatalf("Commit: %v", commitErr)
 		}
-		order = append(order, jobID)
+		inserted = append(inserted, jobID)
 	}
-	clock.Advance(5 * time.Minute)
+	latest := inserted[0]
+	clock.Advance(time.Duration(total+1) * time.Minute)
 
 	sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
 	w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
@@ -1024,12 +1032,23 @@ func TestWorkerClaimOrderAndBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim: %v", err)
 	}
-	if len(claimed) != 3 {
-		t.Fatalf("claimed = %d, want 3", len(claimed))
+	if len(claimed) != claimBatchSize {
+		t.Fatalf("claimed = %d, want %d", len(claimed), claimBatchSize)
 	}
-	for i, j := range claimed {
-		if j.ID != order[i] {
-			t.Errorf("claim[%d] = %s, want %s (next_attempt_at order)", i, j.ID, order[i])
+	want := make(map[uuid.UUID]bool, claimBatchSize)
+	for _, id := range inserted[1:] {
+		want[id] = true
+	}
+	for _, j := range claimed {
+		if !want[j.ID] {
+			t.Errorf("claimed %s, which is not among the %d earliest due jobs", j.ID, claimBatchSize)
 		}
+		delete(want, j.ID)
+	}
+	if len(want) != 0 {
+		t.Errorf("earliest due jobs left unclaimed: %v", want)
+	}
+	if state, leasedTo := jobState(ctx, t, sp, latest); state != "pending" || leasedTo != "" {
+		t.Errorf("latest due job state = %q lease = %q, want pending and unleased", state, leasedTo)
 	}
 }
