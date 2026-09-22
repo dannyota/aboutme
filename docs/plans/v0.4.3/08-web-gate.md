@@ -5,8 +5,9 @@ Role: frontend. Model: `gpt-5.6-terra`.
 ## Objective and authority
 
 Regenerate the web source manifest and pin generated-client TOTP shapes after
-both UI tasks are accepted. Read `AGENTS.md`, the accepted TOTP contract,
-accepted ADR 0049, both frontend reports, and the source-manifest scripts.
+both UI tasks are accepted. Read `AGENTS.md`, the accepted TOTP contract and
+key-management design, accepted ADR 0049, both frontend reports, and the
+source-manifest scripts.
 
 ## Owned paths
 
@@ -37,4 +38,6 @@ Do not update pixel baselines because TOTP does not change public rendering.
 Definition of done: the manifest includes every new source, generated types stay
 pinned by a focused test, and hosted Nuxt gates pass. Report exact manifest
 lines, checks and results, skipped commands and reason, and open items. Do not
-perform Git operations. Use short plain text with no em dash.
+perform Git operations. Use short plain text with no em dash. Code, tests,
+comments, and living docs never cite plans, tasks, phases, or review findings;
+cite the design, ADR, or `AC-*` ID instead.

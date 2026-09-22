@@ -43,19 +43,25 @@ enrollment reuses that exact value.
 
 **Recovery stays shared and explicit.** First TOTP enrollment on an unenrolled
 account creates the existing ten single-use recovery codes. Adding or replacing
-TOTP preserves an existing set. Removing the final factor deletes it. Password,
-provider, email, support, and operators do not recover a lost factor.
+TOTP preserves an existing set. Removing the final active factor, counted across
+passkeys and TOTP, deletes it. Password, provider, email, support, and operators
+do not recover a lost factor.
 
 **Secrets use a separate authenticated key ring.** AES-256-GCM binds ciphertext
-to its account, row, record kind, format, and key identifier. Runtime holds one
-active key and at most one previous key. New writes use active. Successful use
-rotates lazily, and a bounded command rotates dormant rows before the previous
-key may be removed. Key values remain in the runtime secret path. Only the app
-ECS execution role reads the exact TOTP parameter ARNs. A dedicated one-shot
-task uses the same app roles and key injection. Scheduled jobs receive no TOTP
-key access. An authenticated-decryption failure latches the instance unhealthy
-until one bounded validation succeeds, the row is deleted, or repaired state is
-validated after restart.
+to its account, row, record kind, format, and key identifier. Each key ID is
+derived from its key value. Runtime holds one active key and at most one
+previous key, chosen from two production parameter slots by nonsecret OpenTofu
+variables. New writes use active. Successful use rotates lazily, and a bounded
+one-shot task in its own family rotates dormant rows before the previous key is
+removed. Only the app ECS execution role reads the exact TOTP parameter ARNs.
+Scheduled jobs receive no TOTP key access. An unknown key ID or
+authenticated-decryption failure fails closed for that TOTP row only, keeps
+`/readyz` green, and raises a dedicated alarm.
+
+**Guessing has a per-account bound.** Each TOTP credential carries a
+consecutive-failure count and a cool-down that grows from 15 minutes to 24
+hours. It is independent of client IP and never blocks passkeys or recovery
+codes. Attempt mail is capped at one per account per hour.
 
 **The browser renders provisioning locally.** The server returns one canonical
 `otpauth` URI and a grouped Base32 secret once. The issuer is the canonical
@@ -67,9 +73,10 @@ off and valid keys. After flag-off proof, the serialized production operation
 raises the existing durable floor from v0.4.2 to v0.4.3. Only then may the flag
 turn on. Disabling enrollment later does not lower the floor or verification.
 
-The exact API, storage, encryption, mail, mixed-version, bounds, and release
-rules live in the
-[authenticator-app contract](../design/totp-second-factor-contract.md).
+The exact API, storage, mail, mixed-version, bounds, and release rules live in
+the [authenticator-app contract](../design/totp-second-factor-contract.md). The
+[key-management design](../design/totp-key-management.md) owns sealing, the key
+ring, rotation, and key failures.
 
 ## Alternatives
 
@@ -116,16 +123,19 @@ later, or a forward fix.
   remain the recommended phishing-resistant method.
 - Losing every factor and recovery code still causes permanent application-level
   account loss.
-- Unknown key identifiers, malformed rings, and a latched authenticated-
-  decryption failure make readiness and TOTP verification fail closed without
-  scanning every credential.
+- A malformed ring fails startup. An unknown key ID or authenticated-decryption
+  failure fails closed for the affected TOTP row, raises a dedicated alarm, and
+  leaves readiness, passkeys, and recovery available.
 - Every TOTP mutation sends bilingual, secret-free security mail in the same
   transaction.
 - TOTP state never enters account export, public surfaces, MCP, logs, metrics,
   traces, CI evidence, or production proof evidence.
 - Key rotation needs a bounded re-encryption run before old-key removal.
+- A password holder gets at most 35 TOTP guesses in the first day and 5 a day
+  after that, from any number of client IPs.
 
 ## Approval
 
-The owner must approve the seven marked choices in the contract before this ADR
-can become Accepted and before any implementation brief starts.
+The owner approved all seven product choices in the contract on 2026-09-22. This
+ADR becomes Accepted after the fresh design review closes. Implementation starts
+only after that acceptance.

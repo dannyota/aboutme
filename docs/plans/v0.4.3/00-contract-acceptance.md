@@ -12,11 +12,17 @@ v0.4.2 factor authorities, `docs/design/totp-second-factor-contract.md`, ADR
 
 ## Owned paths
 
-- Modify `docs/design/totp-second-factor-contract.md` only to record accepted
-  choices or the owner's exact revisions.
+- Modify `docs/design/totp-second-factor-contract.md` and
+  `docs/design/totp-key-management.md` only to record accepted choices or the
+  owner's exact revisions.
 - Modify `docs/adr/0049-totp-second-factor-authentication.md` and
   `docs/adr/README.md`.
-- Modify `docs/design/README.md`, `docs/design/decisions.md`,
+- Own `docs/design/passkey-second-factor-contract.md` for the v0.4.3 note that
+  the one-per-hour attempt-mail cap also governs passkey and recovery exhaustion
+  mail. The v0.4.2 branch carries the note; after rebase, confirm it and edit
+  that file only for this note.
+- Modify `docs/design/README.md` (including an entry for the key-management
+  design), `docs/design/decisions.md`,
   `docs/design/second-factor-authentication.md`, `docs/design/security.md`,
   `docs/design/data.md`, `docs/design/api.md`, `docs/design/budgets.md`, and
   `docs/design/deployment.md`.
@@ -31,12 +37,17 @@ accepted.
 
 ## Required contract
 
-- Resolve every `OWNER APPROVAL REQUIRED` marker from the recorded decision.
+- The owner approved all seven contract choices on 2026-09-22. Keep that record
+  and leave no approval marker.
 - Add every count, byte, lifetime, skew, key, batch, body, URI, and cleanup
   limit to the budget table.
 - Make API and security design name the new fields, methods, routes, key ring,
-  cache groups, readiness latch, mail events, older-client behavior, and v0.4.3
-  floor without weakening v0.4.2.
+  cache groups, per-row key failure and its alarm signal, per-account failure
+  budget, attempt-mail cap, mail events, older-client behavior, and v0.4.3 floor
+  without weakening v0.4.2. Keep `/readyz` free of TOTP state.
+- Keep every Markdown file at or under 450 lines. Put TOTP detail in the TOTP
+  contract or key-management design, not in
+  `docs/design/second-factor-authentication.md`.
 - Add exact data relations, cascades, indexes, export absence, rotation, and
   migration-loss rules, including both closed mail constraints.
 - Record the canonical lock order, bounded first-policy handle creation and

@@ -6,9 +6,9 @@ Role: reviewer. Model: `gpt-5.6-sol`.
 
 Review the complete v0.4.3 release once after the manager verifies every author
 report and before the candidate leaves the local repository. Read `AGENTS.md`,
-the accepted TOTP and passkey contracts, release-fence contract, ADRs 0048 and
-0049, affected design and budget sources, OpenAPI, traceability, runbook, this
-release plan, and every task report.
+the accepted TOTP and passkey contracts, the key-management design,
+release-fence contract, ADRs 0048 and 0049, affected design and budget sources,
+OpenAPI, traceability, runbook, this release plan, and every task report.
 
 You are read-only. Own no files. Do not edit, stage, commit, push, tag, deploy,
 change keys, run rotation, change the fence or flag, or retry a failed check.
@@ -29,9 +29,15 @@ Review only the exact integrated diff from recorded base through candidate.
   label, URI, strict JSON, cookies, CSRF, Origin, rate, body, lifetime, count,
   cleanup, error, and cache behavior.
 - Adversarially review ciphertext bounds, associated data, nonce use, active and
-  previous keys, lazy and proactive rotation, bounded startup key-ID query,
-  readiness latch set and clear, bounded count, secret paths, app execution role
-  access, one-shot task, and previous-key removal order.
+  previous keys, derived key IDs, row-ID sealing, lazy and proactive rotation,
+  bounded key-ID query, per-row key failure with green `/readyz`, the alarm
+  signal, bounded count, slot rotation order across restarts, secret paths, app
+  execution role access, the `totp_reencrypt` operation, and local-stack key
+  redaction.
+- Confirm the per-account failure budget, cool-down bounds, attempt-mail cap,
+  and that no cool-down blocks passkey or recovery completion.
+- Confirm the final active factor counts every type and that passkey routes and
+  handlers are unchanged.
 - Confirm first-policy handle entropy, three-candidate collision bound,
   persistence, later passkey reuse, and all-or-nothing failure.
 - Confirm migration 00005 replaces and tests both mail constraints while factor
@@ -55,4 +61,5 @@ List reports and hosted evidence inspected, checks not run with reason, exact
 candidate SHA, and open items. Findings return to the original owner. The same
 reviewer confirms fixes against the corrected diff. Do not launch a local test,
 build, linter, browser, database, stack, or network command. Use short plain
-text with no em dash.
+text with no em dash. Code, tests, comments, and living docs never cite plans,
+tasks, phases, or review findings; cite the design, ADR, or `AC-*` ID instead.

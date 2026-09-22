@@ -5,8 +5,8 @@ Role: backend. Model: `gpt-5.6-terra`.
 ## Objective and authority
 
 Add the bilingual, secret-free notification vocabulary for TOTP mutations. Read
-`AGENTS.md`, the accepted TOTP contract, accepted ADR 0049, the auth-mail
-design, and the verified v0.4.2 mail report.
+`AGENTS.md`, the accepted TOTP contract and key-management design, accepted ADR
+0049, the auth-mail design, and the verified v0.4.2 mail report.
 
 ## Owned paths
 
@@ -53,3 +53,5 @@ Definition of done: every TOTP event has both locales, stays bounded, carries no
 factor material, and follows existing transactional delivery behavior. Report
 exact files and hunks, checks and results, skipped commands and reason, and open
 items. Do not perform Git operations. Use short plain text with no em dash.
+Code, tests, comments, and living docs never cite plans, tasks, phases, or
+review findings; cite the design, ADR, or `AC-*` ID instead.

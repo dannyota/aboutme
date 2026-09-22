@@ -32,15 +32,18 @@ cryptography only.
 - Build the exact issuer, label, percent encoding, query order, and 2,048-byte
   provisioning URI.
 - Seal and open only exact 20-byte secrets with AES-256-GCM, fresh 12-byte
-  nonces, the accepted domain-separated associated data, strict key IDs, one
-  active key, and at most one previous key.
-- Return a typed authenticated-decryption failure that lifecycle code can latch
-  without exposing a key, record, or ciphertext value.
+  nonces, the accepted domain-separated associated data, one active key, and at
+  most one previous key. Seal takes the caller's row ID; it never creates one.
+- Derive each 26-byte `tk1_` key ID from its key value exactly as the
+  key-management design states. Reject a ring whose two keys derive one ID.
+- Return typed unknown-key and authenticated-decryption failures that lifecycle
+  code maps to a per-row 503 without exposing a key, record, or ciphertext
+  value.
 - Prove RFC 6238 SHA-1 vectors, six-digit leading zeroes, step boundaries,
   duplicate matches, negative time, malformed code and secret input, URI
   encoding, nonce failure, tamper, truncation, row and account swaps,
-  record-kind swaps, version swaps, unknown keys, and active versus previous
-  behavior.
+  record-kind swaps, version swaps, unknown keys, key-ID derivation vectors,
+  equal active and previous keys, and active versus previous behavior.
 
 ## Hosted checks and report
 
@@ -57,4 +60,6 @@ make server-build server-vet server-test
 Definition of done: pure TOTP, provisioning, and encryption APIs enforce every
 accepted bound and expose no database or HTTP policy. Report exact files, checks
 and results, skipped commands and reason, vector evidence, and open items. Do
-not perform Git operations. Use short plain text with no em dash.
+not perform Git operations. Use short plain text with no em dash. Code, tests,
+comments, and living docs never cite plans, tasks, phases, or review findings;
+cite the design, ADR, or `AC-*` ID instead.

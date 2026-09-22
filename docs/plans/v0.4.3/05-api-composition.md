@@ -5,9 +5,10 @@ Role: backend. Model: `gpt-5.6-terra`.
 ## Objective and authority
 
 Expose the verified TOTP lifecycle through configuration, capabilities, route
-composition, OpenAPI, generated web types, readiness, and the bounded key
-rotation command. Read `AGENTS.md`, the accepted TOTP contract, accepted ADR
-0049, the API and budget designs, and every verified backend report.
+composition, OpenAPI, generated web types, the TOTP key-health signal, and the
+bounded key rotation command. Read `AGENTS.md`, the accepted TOTP contract and
+key-management design, accepted ADR 0049, the API and budget designs, and every
+verified backend report.
 
 ## Owned paths
 
@@ -35,9 +36,10 @@ client.
 ## Required behavior
 
 - Parse `TOTP_ENROLLMENT_ENABLED` with default false and closed Boolean syntax.
-- Require exact active key configuration and accept either no previous fields or
-  a complete distinct previous pair. Decode each value as exactly 32 bytes from
-  canonical unpadded base64url without exposing it in errors.
+- Require `TOTP_ACTIVE_KEY` and accept an absent or present `TOTP_PREVIOUS_KEY`.
+  Decode each as exactly 32 bytes from canonical unpadded base64url without
+  exposing it in errors. Fail startup when both derive the same key ID. Accept
+  no key-ID variables.
 - Register exact verification, start, completion, and removal routes. Add
   required capability, state, and pending method fields without changing passkey
   routes.
@@ -47,9 +49,10 @@ client.
   reauthentication, every v0.4.2 factor route, TOTP verification, removal, and
   state. Use exact `no-store, no-transform` only on TOTP enrollment start and
   completion.
-- At startup, read at most three distinct stored key IDs without decrypting all
-  rows. Make readiness report the fixed unavailable result while the lifecycle
-  latch is set. Wire bounded validate-and-clear behavior through composition.
+- Wire the lifecycle key-health check at startup and every five minutes. Do not
+  edit `apps/server/internal/publicstate/readiness.go` or add a TOTP input to
+  `/readyz`. Add a `cmd/server` test that `/readyz` stays ready while a stored
+  key ID is unknown and TOTP verification returns 503.
 - Add `/usr/local/bin/server totp-key-reencrypt` for manager-run bounded
   re-encryption and count. It reports only counts and internal row IDs and obeys
   the 200-row, 10,000-row, and 30-minute limits.
@@ -58,10 +61,11 @@ client.
 
 ## Hosted checks and report
 
-Write failing config, exact-cache, capability, route, composition, readiness
-lifecycle, command, and API contract tests first. Regenerate the client only
-from OpenAPI. Do not run local tests, builds, lint, installs, database writes,
-browsers, or stacks. Report these as unrun pending exact-candidate GitHub CI:
+Write failing config, exact-cache, capability, route, composition, key-health,
+green-readiness, command, and API contract tests first. Regenerate the client
+only from OpenAPI. Do not run local tests, builds, lint, installs, database
+writes, browsers, or stacks. Report these as unrun pending exact-candidate
+GitHub CI:
 
 ```bash
 make api-check
@@ -71,7 +75,9 @@ make server-build server-vet server-test
 ```
 
 Definition of done: server, OpenAPI, and generated client expose one matching
-strict contract, startup and readiness fail closed, and enrollment defaults off.
-Report exact files, generated diff, checks and results, skipped commands and
-reason, and open items. Do not perform Git operations. Use short plain text with
-no em dash.
+strict contract, a malformed ring fails startup, a key failure stays confined to
+TOTP, and enrollment defaults off. Report exact files, generated diff, checks
+and results, skipped commands and reason, and open items. Do not perform Git
+operations. Use short plain text with no em dash. Code, tests, comments, and
+living docs never cite plans, tasks, phases, or review findings; cite the
+design, ADR, or `AC-*` ID instead.
