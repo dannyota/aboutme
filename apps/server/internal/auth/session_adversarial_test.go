@@ -738,8 +738,9 @@ func TestReplaceAfterEpochChange_RacesRotation(t *testing.T) {
 
 	admitted := make(chan struct{})
 	release := make(chan struct{})
+	var admitOnce sync.Once
 	auth.SetSessionRotationProbeForTest(sm, func() {
-		close(admitted)
+		admitOnce.Do(func() { close(admitted) })
 		<-release
 	})
 	defer func() {
