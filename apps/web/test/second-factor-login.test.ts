@@ -5,11 +5,26 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { getHeader, readBody, setResponseStatus } from 'h3';
+import { readBody, setResponseStatus } from 'h3';
 import SecondFactorPage from '../app/pages/login/second-factor.vue';
 import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
+
+// h3's `getHeader` does not resolve against `registerEndpoint`'s mocked
+// event in this Nuxt test environment; read the raw Node request headers
+// instead, the same way test/useAuth-csrf-rotation.test.ts does.
+interface MockEvent {
+  node?: { req?: { headers?: Record<string, string> } };
+}
+
+function requestHeader(event: MockEvent, name: string): string | undefined {
+  const headers = event.node?.req?.headers ?? {};
+  const key = Object.keys(headers).find(
+    (k) => k.toLowerCase() === name.toLowerCase(),
+  );
+  return key ? headers[key] : undefined;
+}
 
 const CSRF_TOKEN = 'A'.repeat(43);
 const DEFAULT_EXPIRES_AT = '2026-09-20T09:05:00Z';
@@ -76,23 +91,55 @@ interface VerifyResult {
   errorCode?: string;
 }
 
+/**
+ * Registers a pending verify POST. When a test does not need the request
+ * body or headers, the handler stays synchronous (no `await readBody`):
+ * `registerEndpoint`'s mock handler hangs the client's `$fetch` forever for
+ * an `async` handler that both awaits and answers with a non-2xx status —
+ * reproduced directly against this exact combination, and never against a
+ * synchronous handler (`registerStatus` below sets 401/503 the same way,
+ * synchronously, and works) or an `async` handler that answers 2xx. Every
+ * currently-passing inspection call already only checks the 2xx path, so
+ * this keeps those on the working `async` shape and only the error-status
+ * registrations move to the working synchronous shape.
+ */
+function registerVerify(
+  path: string,
+  result: VerifyResult,
+  onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
+): void {
+  const respond = (): unknown => {
+    if (result.status >= 400) {
+      return { error: { code: result.errorCode, message: 'x' } };
+    }
+    return null;
+  };
+  registerEndpoint(path, {
+    method: 'POST',
+    handler: onRequest
+      ? async (event) => {
+        const body = await readBody(event);
+        onRequest({ csrfToken: requestHeader(event, 'x-csrf-token') }, body);
+        setResponseStatus(event, result.status);
+        return respond();
+      }
+      : (event) => {
+        setResponseStatus(event, result.status);
+        return respond();
+      },
+  });
+}
+
 /** Registers `POST /api/v1/auth/second-factor/passkey/verify`. */
 function registerPasskeyVerify(
   result: VerifyResult,
   onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
 ): void {
-  registerEndpoint('/api/v1/auth/second-factor/passkey/verify', {
-    method: 'POST',
-    handler: async (event) => {
-      const body = await readBody(event);
-      onRequest?.({ csrfToken: getHeader(event, 'x-csrf-token') }, body);
-      setResponseStatus(event, result.status);
-      if (result.status >= 400) {
-        return { error: { code: result.errorCode, message: 'x' } };
-      }
-      return null;
-    },
-  });
+  registerVerify(
+    '/api/v1/auth/second-factor/passkey/verify',
+    result,
+    onRequest,
+  );
 }
 
 /** Registers `POST /api/v1/auth/second-factor/recovery/verify`. */
@@ -100,18 +147,11 @@ function registerRecoveryVerify(
   result: VerifyResult,
   onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
 ): void {
-  registerEndpoint('/api/v1/auth/second-factor/recovery/verify', {
-    method: 'POST',
-    handler: async (event) => {
-      const body = await readBody(event);
-      onRequest?.({ csrfToken: getHeader(event, 'x-csrf-token') }, body);
-      setResponseStatus(event, result.status);
-      if (result.status >= 400) {
-        return { error: { code: result.errorCode, message: 'x' } };
-      }
-      return null;
-    },
-  });
+  registerVerify(
+    '/api/v1/auth/second-factor/recovery/verify',
+    result,
+    onRequest,
+  );
 }
 
 function mockAssertionCredential(): unknown {
@@ -176,6 +216,11 @@ describe('second-factor.vue loading and method rendering', () => {
         csrfToken: CSRF_TOKEN,
       },
     });
+    // The mocked fetch resolves through a real round trip, so the pending
+    // status's own resolution needs an extra macrotask tick beyond the
+    // first flush — the same double-flush test/connected-agents.test.ts
+    // uses for its own delayed mock response.
+    await flushPromises();
     await flushPromises();
     expect(wrapper.find('[data-testid="second-factor-loading"]').exists())
       .toBe(false);
@@ -366,6 +411,10 @@ describe('second-factor.vue passkey completion', () => {
     await flushPromises();
     await wrapper.get('[data-testid="second-factor-passkey-button"]')
       .trigger('click');
+    // The passkey ceremony chains an options fetch, the mocked credential
+    // ceremony, and the verify fetch; a non-2xx verify response needs an
+    // extra macrotask tick beyond the first flush to finish propagating.
+    await flushPromises();
     await flushPromises();
     expect(wrapper.get('[data-testid="second-factor-passkey-error"]').text())
       .toContain('Verification failed');
@@ -446,6 +495,7 @@ describe('second-factor.vue passkey completion', () => {
     await wrapper.get('[data-testid="second-factor-passkey-button"]')
       .trigger('click');
     await flushPromises();
+    await flushPromises();
     expect(wrapper.get('[data-testid="second-factor-passkey-error"]').text())
       .toContain('Too many attempts');
   });
@@ -520,6 +570,7 @@ describe('second-factor.vue never treats the pending cookie as a session',
         await wrapper.get('[data-testid="second-factor-passkey-button"]')
           .trigger('click');
         await flushPromises();
+        await flushPromises();
         expect(wrapper.get('[data-testid="second-factor-expired"]').exists())
           .toBe(true);
         expect(meCalled).toBe(false);
@@ -547,6 +598,7 @@ describe('second-factor.vue locales', () => {
     await flushPromises();
     await wrapper.get('[data-testid="second-factor-passkey-button"]')
       .trigger('click');
+    await flushPromises();
     await flushPromises();
     expect(wrapper.get('[data-testid="second-factor-passkey-error"]').text())
       .toContain('Verification failed');
