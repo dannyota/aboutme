@@ -37,10 +37,16 @@ import {
 } from '@/utils/returnPath';
 
 const route = useRoute();
+// `app/pages/login/second-factor.vue` makes this page the parent route of
+// `/login/second-factor`, so the child has nowhere to render unless this page
+// renders it. The sign-in form and its head title belong to `/login` alone.
+const onChildRoute = computed(() => route.matched.length > 1);
 const { loginProviders, resolved } = useCapabilities();
 const { locale } = useLocale();
 const copy = computed(() => authCopy[locale.value]);
-useHead(computed(() => ({ title: pageTitle(copy.value.signIn) })));
+useHead(computed(() => (onChildRoute.value
+  ? {}
+  : { title: pageTitle(copy.value.signIn) })));
 
 const explicitNext = computed(() => validateReturnPath(route.query.next));
 const loginDestination = computed(
@@ -134,7 +140,9 @@ async function onSubmit() {
 </script>
 
 <template>
+  <NuxtPage v-if="onChildRoute" />
   <main
+    v-else
     class="mx-auto w-full max-w-[26rem] px-6 py-16"
     data-testid="login-page"
   >
