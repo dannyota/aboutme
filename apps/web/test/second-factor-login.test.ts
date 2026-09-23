@@ -852,7 +852,7 @@ describe('second-factor.vue locales', () => {
     await flushPromises();
     const section = wrapper.get('[data-testid="second-factor-totp"]');
     expect(section.text()).toContain('Ứng dụng xác thực');
-    expect(section.text()).toContain('Xác thực mã');
+    expect(section.text()).toContain('Xác thực mã ứng dụng');
   });
 
   it('updates a shown error to the new language without losing the error '

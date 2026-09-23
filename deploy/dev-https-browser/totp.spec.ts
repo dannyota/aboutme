@@ -1319,9 +1319,11 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-reauth-password'))
       .toBeVisible();
     await reauthenticateWithPassword(page, primaryPassword);
-    await expect(page.getByTestId('totp-replace-notice')).toBeVisible();
+    // The replace notice lives in the setup dialog, which opens only after
+    // the retried start succeeds.
     const oldSecret = secret;
     secret = await startTotpSetup(page);
+    await expect(page.getByTestId('totp-replace-notice')).toBeVisible();
     expect(secret).not.toBe(oldSecret);
     expect(await submitSetupCode(page, await freshCode(page, secret)))
       .toBe(200);

@@ -95,7 +95,7 @@ export const secondFactorCopy: Record<Locale, SecondFactorCopy> = {
         'Chỉ nhập mã này trên aboutme.vn. Không chia sẻ mã với bất kỳ ai, '
         + 'kể cả đội ngũ hỗ trợ.',
       label: 'Mã xác thực',
-      button: 'Xác thực mã',
+      button: 'Xác thực mã ứng dụng',
       pending: 'Đang xác thực…',
       cooldown: (seconds) => {
         const clamped = Math.max(1, Math.ceil(seconds));
@@ -159,7 +159,7 @@ export const secondFactorCopy: Record<Locale, SecondFactorCopy> = {
         'Only enter this code on aboutme.vn. Never share it with anyone, '
         + 'including support.',
       label: 'Authenticator code',
-      button: 'Verify code',
+      button: 'Verify authenticator code',
       pending: 'Verifying…',
       cooldown: (seconds) => {
         const clamped = Math.max(1, Math.ceil(seconds));
