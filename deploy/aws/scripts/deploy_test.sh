@@ -464,9 +464,15 @@ grep -qF "could not read the running app service" "$work/fence_missing_describe_
   { echo "fence_missing_describe_error: no read-failure message" >&2; exit 1; }
 
 # fence_read checks the service's actual running revision, not a family's
-# latest: a newer, not-yet-deployed registration with enrollment on must not
-# block a deploy while the service itself still proves enrollment off.
-run_case fence_running_revision_differs 0 v0.1.0
+# latest, so the running app proves enrollment off. The revision this deploy
+# would register still carries enrollment on below the fence, so it stops
+# before the lock or any registration.
+run_case fence_running_revision_differs fail v0.1.0
+f=$work/fence_running_revision_differs.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs register-task-definition"
+grep -qF "run --activate first" "$work/fence_running_revision_differs.out" ||
+  { echo "fence_running_revision_differs: no enrollment message" >&2; exit 1; }
 
 # An existing operation fails lock acquisition before any other mutation.
 run_case fence_locked fail v0.1.0
