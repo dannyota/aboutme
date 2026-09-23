@@ -207,6 +207,26 @@ locals {
       dims      = { ScheduleGroup = aws_scheduler_schedule_group.jobs.name }
       op        = "GreaterThanOrEqualToThreshold", threshold = 1, period = 300, periods = 1
     }
+    totp-unavailable = {
+      namespace = "${var.name}/totp", metric = "Unavailable", stat = "Sum"
+      dims      = {}
+      op        = "GreaterThanOrEqualToThreshold", threshold = 1, period = 300, periods = 1
+    }
+  }
+}
+
+# A TOTP key failure logs this fixed JSON message and fails closed for that
+# row only; it never changes /readyz. See docs/design/totp-key-management.md,
+# "Key failures".
+resource "aws_cloudwatch_log_metric_filter" "totp_unavailable" {
+  name           = "${var.name}-totp-unavailable"
+  log_group_name = "/aboutme/prod"
+  pattern        = "{ $.msg = \"totp_unavailable\" }"
+
+  metric_transformation {
+    name      = "Unavailable"
+    namespace = "${var.name}/totp"
+    value     = "1"
   }
 }
 

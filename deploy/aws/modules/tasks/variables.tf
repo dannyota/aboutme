@@ -44,6 +44,41 @@ variable "passkey_enrollment_enabled" {
   description = "PASSKEY_ENROLLMENT_ENABLED for the server"
 }
 
+# Off until a healthy v0.4.7 or later release raises the production
+# minimum-release fence to numeric 4007. See
+# docs/design/passkey-release-fence.md, "Authenticator-app key
+# re-encryption".
+variable "totp_enrollment_enabled" {
+  type        = bool
+  description = "TOTP_ENROLLMENT_ENABLED for the server"
+}
+
+# Chooses which protected totp/key-<slot> parameter supplies
+# TOTP_ACTIVE_KEY. See docs/design/totp-key-management.md, "Key ring".
+variable "totp_active_key_slot" {
+  type        = string
+  description = "Which totp/key-<slot> parameter supplies TOTP_ACTIVE_KEY: \"a\" or \"b\""
+  validation {
+    condition     = contains(["a", "b"], var.totp_active_key_slot)
+    error_message = "totp_active_key_slot must be \"a\" or \"b\"."
+  }
+}
+
+# Empty keeps TOTP_PREVIOUS_KEY unset, so the task definition names no
+# parameter for it and ECS never fails on a missing one.
+variable "totp_previous_key_slot" {
+  type        = string
+  description = "Which totp/key-<slot> parameter supplies TOTP_PREVIOUS_KEY: \"\", \"a\", or \"b\""
+  validation {
+    condition     = contains(["", "a", "b"], var.totp_previous_key_slot)
+    error_message = "totp_previous_key_slot must be \"\", \"a\", or \"b\"."
+  }
+  validation {
+    condition     = var.totp_previous_key_slot == "" || var.totp_previous_key_slot != var.totp_active_key_slot
+    error_message = "totp_previous_key_slot must differ from totp_active_key_slot."
+  }
+}
+
 # Only Google's credentials are wired, so only Google may be enabled here.
 variable "provider_login_enabled" {
   type        = string

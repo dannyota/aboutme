@@ -13,3 +13,7 @@ output "maintenance_task_definition_arn" {
 output "jobs_task_family_arn" {
   value = aws_ecs_task_definition.jobs.arn_without_revision
 }
+
+output "totp_reencrypt_task_family_arn" {
+  value = aws_ecs_task_definition.totp_reencrypt.arn_without_revision
+}
