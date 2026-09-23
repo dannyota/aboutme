@@ -43,10 +43,12 @@ const (
 	secondFactorManagementWindow     = time.Hour
 )
 
-// SecondFactorHandlerOptions is the handler dependency set; Logger and
-// TrustedProxies may be nil.
+// SecondFactorHandlerOptions is the handler dependency set; Logger,
+// TrustedProxies, and TOTP may be nil. A nil TOTP makes every TOTP route
+// answer as an unregistered route.
 type SecondFactorHandlerOptions struct {
 	Service        SecondFactorService
+	TOTP           TOTPSecondFactorService
 	Pending        *PendingAuthenticationManager
 	Sessions       *SessionManager
 	Limits         *SecondFactorRatePolicies
@@ -56,10 +58,11 @@ type SecondFactorHandlerOptions struct {
 	Logger         *slog.Logger
 }
 
-// SecondFactorHandlers serves the pending, state, passkey, and recovery-code
-// routes.
+// SecondFactorHandlers serves the pending, state, passkey, recovery-code,
+// and TOTP routes.
 type SecondFactorHandlers struct {
 	service        SecondFactorService
+	totp           TOTPSecondFactorService
 	pending        *PendingAuthenticationManager
 	sessions       *SessionManager
 	limits         *SecondFactorRatePolicies
@@ -69,22 +72,24 @@ type SecondFactorHandlers struct {
 	logger         *slog.Logger
 }
 
-// NewSecondFactorHandlers rejects a nil dependency or an empty origin.
+// NewSecondFactorHandlers rejects a nil dependency or an empty origin. TOTP
+// is optional.
 func NewSecondFactorHandlers(opts SecondFactorHandlerOptions) (*SecondFactorHandlers, error) {
 	if opts.Service == nil || opts.Pending == nil || opts.Sessions == nil ||
 		opts.Limits == nil || opts.Clock == nil || opts.PublicOrigin == "" {
 		return nil, errors.New("auth: second factor handlers: missing dependency")
 	}
 	return &SecondFactorHandlers{
-		service: opts.Service, pending: opts.Pending, sessions: opts.Sessions,
+		service: opts.Service, totp: opts.TOTP, pending: opts.Pending, sessions: opts.Sessions,
 		limits: opts.Limits, publicOrigin: opts.PublicOrigin, trustedProxies: opts.TrustedProxies,
 		clock: opts.Clock, logger: opts.Logger,
 	}, nil
 }
 
-// RegisterRoutes attaches every passkey and recovery route. No TOTP route is
-// registered. Registration options answer as an unregistered route while
-// enrollment is disabled; every other route ignores the flag.
+// RegisterRoutes attaches every passkey, recovery, and TOTP route. Passkey
+// registration options and TOTP enrollment start answer as an unregistered
+// route while their flag is off; every other route ignores it. A nil TOTP
+// dependency makes every TOTP route answer as unregistered too.
 func (h *SecondFactorHandlers) RegisterRoutes(mux *http.ServeMux) {
 	noStore := api.NoStoreCache()
 	mux.Handle(SecondFactorPendingPath, noStore(route(http.MethodGet, h.handlePendingStatus)))
@@ -96,6 +101,7 @@ func (h *SecondFactorHandlers) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle(SecondFactorPasskeysPath, noStore(route(http.MethodPost, h.handleRegistrationComplete)))
 	mux.Handle(SecondFactorPasskeysPath+"/{id}", noStore(route(http.MethodDelete, h.handleRemovePasskey)))
 	mux.Handle(SecondFactorRecoveryCodesPath, noStore(route(http.MethodPost, h.handleRegenerate)))
+	h.registerTOTPRoutes(mux, noStore)
 }
 
 type secondFactorPendingStatusBody struct {
@@ -218,15 +224,21 @@ func (h *SecondFactorHandlers) completePending(w http.ResponseWriter, r *http.Re
 }
 
 // writePendingError maps pending-route outcomes. Only authentication_required
-// and the exhausting failure clear the pending cookie.
+// and the exhausting failure clear the pending cookie. A live TOTP cool-down
+// is 429 rate_limited with a bounded Retry-After
+// ("Per-account TOTP failure budget"); it changes no row, so nothing else
+// here applies.
 func (h *SecondFactorHandlers) writePendingError(w http.ResponseWriter, err error) {
 	var failure *PendingVerificationFailure
+	var cooling *totpCoolingDown
 	switch {
 	case errors.As(err, &failure):
 		if failure.Exhausted {
 			ClearPendingAuthenticationCookie(w)
 		}
 		api.WriteError(w, http.StatusUnauthorized, "verification_failed", "verification failed")
+	case errors.As(err, &cooling):
+		writePasswordRateLimited(w, cooling.retryAfterSeconds)
 	case errors.Is(err, ErrPendingAuthenticationRequired):
 		writeSecondFactorPendingRequired(w)
 	case errors.Is(err, ErrSecondFactorChallengeInvalid):
@@ -248,6 +260,7 @@ type (
 	secondFactorStateBody struct {
 		Enabled                bool                      `json:"enabled"`
 		Passkeys               []secondFactorPasskeyBody `json:"passkeys"`
+		TOTPEnabled            bool                      `json:"totpEnabled"`
 		RecoveryCodesRemaining int                       `json:"recoveryCodesRemaining"`
 	}
 	secondFactorRegistrationBody struct {
@@ -273,6 +286,12 @@ func (h *SecondFactorHandlers) handleState(w http.ResponseWriter, r *http.Reques
 	for _, passkey := range state.Passkeys {
 		body.Passkeys = append(body.Passkeys, passkeyBody(passkey))
 	}
+	if h.totp != nil {
+		if body.TOTPEnabled, err = h.totp.TOTPState(r.Context(), sess.UserID); err != nil {
+			h.writeAccountError(w, err)
+			return
+		}
+	}
 	api.WriteData(w, http.StatusOK, body)
 }
 
@@ -287,7 +306,7 @@ func (h *SecondFactorHandlers) handleRegistrationOptions(w http.ResponseWriter, 
 }
 
 func (h *SecondFactorHandlers) startRegistration(w http.ResponseWriter, r *http.Request) {
-	sess, _, ok := h.admitAccountMutation(w, r, decodeEmptyObject, true)
+	sess, _, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, decodeEmptyObject, true)
 	if !ok {
 		return
 	}
@@ -306,7 +325,7 @@ func (h *SecondFactorHandlers) handleRegistrationComplete(w http.ResponseWriter,
 		h.discardRegistration(w, r)
 		return
 	}
-	sess, credential, ok := h.admitAccountMutation(w, r, h.service.DecodePasskeyRegistration, true)
+	sess, credential, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, h.service.DecodePasskeyRegistration, true)
 	if !ok {
 		return
 	}
@@ -356,7 +375,7 @@ func (h *SecondFactorHandlers) discardRegistration(w http.ResponseWriter, r *htt
 }
 
 func (h *SecondFactorHandlers) handleRemovePasskey(w http.ResponseWriter, r *http.Request) {
-	sess, _, ok := h.admitAccountMutation(w, r, nil, false)
+	sess, _, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, nil, false)
 	if !ok {
 		return
 	}
@@ -375,7 +394,7 @@ func (h *SecondFactorHandlers) handleRemovePasskey(w http.ResponseWriter, r *htt
 }
 
 func (h *SecondFactorHandlers) handleRegenerate(w http.ResponseWriter, r *http.Request) {
-	sess, _, ok := h.admitAccountMutation(w, r, decodeEmptyObject, false)
+	sess, _, ok := h.admitAccountMutation(w, r, secondFactorWebAuthnBodyBytes, decodeEmptyObject, false)
 	if !ok {
 		return
 	}
@@ -389,11 +408,11 @@ func (h *SecondFactorHandlers) handleRegenerate(w http.ResponseWriter, r *http.R
 }
 
 // admitAccountMutation authenticates the session, checks Origin and CSRF,
-// then the media type, bounded body, and strict JSON, then rate admission. It
-// returns the decoded body. decode may be nil for a bodiless route. When
-// requireBody is false an absent body is accepted; a present body must still
-// decode.
-func (h *SecondFactorHandlers) admitAccountMutation(w http.ResponseWriter, r *http.Request, decode func([]byte) (SecondFactorCredential, error), requireBody bool) (store.Session, SecondFactorCredential, bool) {
+// then the media type, a body bounded to bodyLimit, and strict JSON, then
+// rate admission. It returns the decoded body. decode may be nil for a
+// bodiless route. When requireBody is false an absent body is accepted; a
+// present body must still decode.
+func (h *SecondFactorHandlers) admitAccountMutation(w http.ResponseWriter, r *http.Request, bodyLimit int64, decode func([]byte) (SecondFactorCredential, error), requireBody bool) (store.Session, SecondFactorCredential, bool) {
 	sess, ok := h.requireSession(w, r)
 	if !ok {
 		return store.Session{}, nil, false
@@ -408,13 +427,13 @@ func (h *SecondFactorHandlers) admitAccountMutation(w http.ResponseWriter, r *ht
 			writePasswordRequestInvalid(w)
 			return store.Session{}, nil, false
 		}
-		body, err := readSecondFactorBody(w, r, secondFactorWebAuthnBodyBytes, false)
+		body, err := readSecondFactorBody(w, r, bodyLimit, false)
 		if err != nil {
 			writeSecondFactorBodyError(w, err)
 			return store.Session{}, nil, false
 		}
 		if credential, err = decode(body); err != nil {
-			writePasswordRequestInvalid(w)
+			writeSecondFactorDecodeError(w, err)
 			return store.Session{}, nil, false
 		}
 	}
@@ -423,6 +442,19 @@ func (h *SecondFactorHandlers) admitAccountMutation(w http.ResponseWriter, r *ht
 		return store.Session{}, nil, false
 	}
 	return sess, credential, true
+}
+
+// writeSecondFactorDecodeError maps a decode failure to its status code.
+// Every existing decode function returns exactly ErrSecondFactorRequestInvalid,
+// so this preserves prior behavior for passkey and recovery routes while
+// giving TOTP's enrollment-ID shape check its own enrollment_invalid code
+// ("Enrollment and replacement API").
+func writeSecondFactorDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrTOTPEnrollmentInvalid) {
+		api.WriteError(w, http.StatusBadRequest, "enrollment_invalid", "the enrollment is invalid or expired")
+		return
+	}
+	writePasswordRequestInvalid(w)
 }
 
 // checkSessionCSRF applies exact Origin and the session synchronizer token.

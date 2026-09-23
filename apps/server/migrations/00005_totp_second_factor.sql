@@ -9,6 +9,7 @@ CREATE TABLE totp_credentials (
     last_used_step bigint NOT NULL,
     failed_attempts integer NOT NULL DEFAULT 0,
     cooldown_until timestamptz NULL,
+    last_failed_at timestamptz NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL,
     CONSTRAINT totp_credentials_key_id_check CHECK (

@@ -37,7 +37,8 @@ INSERT INTO totp_credentials (
 -- name: ReplaceTOTPCredential :one
 -- Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
 -- existing id and created_at, reseals under a fresh nonce, and resets the
--- failure budget because a fresh secret cannot inherit a stale cool-down.
+-- failure budget, including last_failed_at, because a fresh secret cannot
+-- inherit a stale cool-down.
 UPDATE totp_credentials
 SET key_id = sqlc.arg(key_id)::text,
     nonce = sqlc.arg(nonce)::bytea,
@@ -46,6 +47,7 @@ SET key_id = sqlc.arg(key_id)::text,
     last_used_step = sqlc.arg(last_used_step)::bigint,
     failed_attempts = 0,
     cooldown_until = NULL,
+    last_failed_at = NULL,
     updated_at = sqlc.arg(updated_at)::timestamptz
 WHERE user_id = sqlc.arg(user_id)::uuid
 RETURNING *;
@@ -68,7 +70,8 @@ RETURNING *;
 -- at most 24 hours (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
 -- The WHERE guard repeats the cool-down check GetTOTPCredentialForUpdate
 -- already made, so this only ever applies to a row not currently cooling
--- down.
+-- down. Every counted failure also sets last_failed_at, which gates whether a
+-- later valid code may reset the budget.
 UPDATE totp_credentials
 SET failed_attempts = LEAST(failed_attempts + 1, 1000),
     cooldown_until = CASE
@@ -79,6 +82,7 @@ SET failed_attempts = LEAST(failed_attempts + 1, 1000),
         )
         ELSE cooldown_until
     END,
+    last_failed_at = sqlc.arg(now)::timestamptz,
     updated_at = sqlc.arg(now)::timestamptz
 WHERE user_id = sqlc.arg(user_id)::uuid
   AND (cooldown_until IS NULL OR cooldown_until <= sqlc.arg(now)::timestamptz)
@@ -86,11 +90,15 @@ RETURNING *;
 
 -- name: ResetTOTPCredentialFailureBudget :one
 -- Generic reset to the zero failure budget. Callers decide when this runs
--- (a successful code, a completed password reset); storage only guarantees
--- it always clears both fields together.
+-- (a successful code at least 24 hours past the last failure, a replacement,
+-- or a removal); storage only guarantees it always clears all three fields
+-- together (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
+-- A completed password reset never calls this: it leaves the budget
+-- unchanged.
 UPDATE totp_credentials
 SET failed_attempts = 0,
     cooldown_until = NULL,
+    last_failed_at = NULL,
     updated_at = sqlc.arg(now)::timestamptz
 WHERE user_id = sqlc.arg(user_id)::uuid
 RETURNING *;
@@ -102,10 +110,14 @@ DELETE FROM totp_credentials WHERE user_id = sqlc.arg(user_id)::uuid RETURNING *
 
 -- name: ListTOTPCredentialsOffActiveKey :many
 -- Bounded re-encryption batch: at most 200 rows off the active key, in id
--- order, skipping any row a live factor transaction already holds
--- (docs/design/totp-key-management.md#rotation).
+-- order after after_id, skipping any row a live factor transaction already
+-- holds (docs/design/totp-key-management.md#rotation). The after_id cursor
+-- lets the caller page past a row it already visited in an earlier batch of
+-- the same run (for example one that failed to decrypt and so stays off
+-- the active key), instead of reselecting it until the row budget is spent.
 SELECT * FROM totp_credentials
 WHERE key_id <> sqlc.arg(active_key_id)::text
+  AND id > sqlc.arg(after_id)::uuid
 ORDER BY id
 LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
 FOR UPDATE SKIP LOCKED;
@@ -173,11 +185,13 @@ DELETE FROM totp_enrollments AS target USING candidates
 WHERE target.id = candidates.id;
 
 -- name: ListTOTPEnrollmentsOffActiveKey :many
--- Bounded re-encryption batch for enrollments, same shape as
--- ListTOTPCredentialsOffActiveKey. The caller deletes an expired row here
--- outright instead of decrypting it (docs/design/totp-key-management.md#rotation).
+-- Bounded re-encryption batch for enrollments, same shape and after_id
+-- paging cursor as ListTOTPCredentialsOffActiveKey. The caller deletes an
+-- expired row here outright instead of decrypting it
+-- (docs/design/totp-key-management.md#rotation).
 SELECT * FROM totp_enrollments
 WHERE key_id <> sqlc.arg(active_key_id)::text
+  AND id > sqlc.arg(after_id)::uuid
 ORDER BY id
 LIMIT LEAST(sqlc.arg(limit_rows)::int, 200)
 FOR UPDATE SKIP LOCKED;

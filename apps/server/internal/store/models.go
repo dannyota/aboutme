@@ -279,6 +279,7 @@ type TotpCredential struct {
 	LastUsedStep   int64
 	FailedAttempts int32
 	CooldownUntil  *time.Time
+	LastFailedAt   *time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

@@ -56,6 +56,9 @@ func installTOTPCredential(ctx context.Context, t *testing.T, q *store.Queries, 
 	if err != nil {
 		t.Fatalf("InstallTOTPCredential: %v", err)
 	}
+	if cred.LastFailedAt != nil {
+		t.Fatalf("installed credential last_failed_at = %v, want null", cred.LastFailedAt)
+	}
 	return cred
 }
 
@@ -359,15 +362,22 @@ func TestTOTPStore_FailureBudgetDoublesEveryFifthFailureAndSaturates(t *testing.
 
 	var cred store.TotpCredential
 	for i := 1; i <= 4; i++ {
-		cred = fail(totpStoreNow.Add(time.Duration(i) * time.Second))
+		at := totpStoreNow.Add(time.Duration(i) * time.Second)
+		cred = fail(at)
 		if cred.FailedAttempts != int32(i) || cred.CooldownUntil != nil {
 			t.Fatalf("failure %d = %+v, want no cool-down yet", i, cred)
+		}
+		if cred.LastFailedAt == nil || !cred.LastFailedAt.Equal(at) {
+			t.Fatalf("failure %d last_failed_at = %v, want %v", i, cred.LastFailedAt, at)
 		}
 	}
 	fifthAt := totpStoreNow.Add(5 * time.Second)
 	cred = fail(fifthAt)
 	if cred.FailedAttempts != 5 || cred.CooldownUntil == nil || !cred.CooldownUntil.Equal(fifthAt.Add(15*time.Minute)) {
 		t.Fatalf("fifth failure = %+v, want failed_attempts 5 and a 15-minute cool-down", cred)
+	}
+	if cred.LastFailedAt == nil || !cred.LastFailedAt.Equal(fifthAt) {
+		t.Fatalf("fifth failure last_failed_at = %v, want %v", cred.LastFailedAt, fifthAt)
 	}
 
 	// The cool-down guard blocks a sixth failure recorded before it elapses.
@@ -390,6 +400,9 @@ func TestTOTPStore_FailureBudgetDoublesEveryFifthFailureAndSaturates(t *testing.
 	cred = fail(tenthAt)
 	if cred.FailedAttempts != 10 || cred.CooldownUntil == nil || !cred.CooldownUntil.Equal(tenthAt.Add(30*time.Minute)) {
 		t.Fatalf("tenth failure = %+v, want failed_attempts 10 and a 30-minute cool-down", cred)
+	}
+	if cred.LastFailedAt == nil || !cred.LastFailedAt.Equal(tenthAt) {
+		t.Fatalf("tenth failure last_failed_at = %v, want %v", cred.LastFailedAt, tenthAt)
 	}
 }
 
@@ -414,6 +427,9 @@ func TestTOTPStore_FailureBudgetCapsCooldownAtTwentyFourHours(t *testing.T) {
 	}
 	if cred.FailedAttempts != 1000 || cred.CooldownUntil == nil || !cred.CooldownUntil.Equal(at.Add(24*time.Hour)) {
 		t.Fatalf("1000th failure = %+v, want failed_attempts 1000 and a 24-hour cool-down", cred)
+	}
+	if cred.LastFailedAt == nil || !cred.LastFailedAt.Equal(at) {
+		t.Fatalf("1000th failure last_failed_at = %v, want %v", cred.LastFailedAt, at)
 	}
 
 	// At the ceiling, the counter cannot exceed 1,000 and every further
@@ -445,8 +461,8 @@ func TestTOTPStore_ResetClearsFailureBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResetTOTPCredentialFailureBudget: %v", err)
 	}
-	if reset.FailedAttempts != 0 || reset.CooldownUntil != nil {
-		t.Errorf("reset credential = %+v, want zero failure budget", reset)
+	if reset.FailedAttempts != 0 || reset.CooldownUntil != nil || reset.LastFailedAt != nil {
+		t.Errorf("reset credential = %+v, want zero failure budget and null last_failed_at", reset)
 	}
 }
 
@@ -475,8 +491,8 @@ func TestTOTPStore_ReplacementPreservesIdentityAndResetsFailureBudget(t *testing
 	if replaced.KeyID != totpKeyID('b') || replaced.LastUsedStep != 0 {
 		t.Errorf("replaced key material = %+v, want the new key and reset step", replaced)
 	}
-	if replaced.FailedAttempts != 0 || replaced.CooldownUntil != nil {
-		t.Errorf("replaced failure budget = %+v, want zero", replaced)
+	if replaced.FailedAttempts != 0 || replaced.CooldownUntil != nil || replaced.LastFailedAt != nil {
+		t.Errorf("replaced failure budget = %+v, want zero and null last_failed_at", replaced)
 	}
 }
 
