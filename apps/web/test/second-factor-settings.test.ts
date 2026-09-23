@@ -4,7 +4,10 @@ import {
   mountSuspended,
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
-import { flushPromises as flushPromisesOnce } from '@vue/test-utils';
+import {
+  DOMWrapper,
+  flushPromises as flushPromisesOnce,
+} from '@vue/test-utils';
 import { readBody, setResponseStatus, type H3Event } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import {
@@ -17,6 +20,12 @@ import {
   recoveryCodesDownloadText,
   type RegistrationPublicKeyInput,
 } from '../app/composables/secondFactorSettings';
+import {
+  mapTotpEnrollmentCompleteError,
+  mapTotpEnrollmentStartError,
+  mapTotpRemovalError,
+  renderTotpQr,
+} from '../app/composables/totpSettings';
 import {
   isWebAuthnCancellation,
   isWebAuthnSupported,
@@ -321,6 +330,94 @@ describe('error mapping', () => {
   });
 });
 
+// --- TOTP: pure-function unit tests -----------------------------------------
+
+describe('mapTotpEnrollmentStartError', () => {
+  it.each([
+    [403, 'reauth_required', 'reauth-required'],
+    [404, 'not_found', 'closed'],
+    [429, 'rate_limited', 'rate-limited'],
+    [500, 'internal', 'unavailable'],
+  ] as const)('maps start %s/%s to %s', (status, code, expected) => {
+    expect(
+      mapTotpEnrollmentStartError({
+        statusCode: status,
+        data: { error: { code } },
+      }).kind,
+    ).toBe(expected);
+  });
+});
+
+describe('mapTotpEnrollmentCompleteError', () => {
+  it.each([
+    [403, 'reauth_required', 'reauth-required'],
+    [404, 'not_found', 'closed'],
+    // Expired, foreign, or superseded enrollment: setup can't continue.
+    [400, 'enrollment_invalid', 'expired'],
+    // Wrong or replayed proof: the same QR/secret stays usable.
+    [401, 'verification_failed', 'invalid-code'],
+    [429, 'rate_limited', 'rate-limited'],
+    [503, 'authentication_unavailable', 'unavailable'],
+  ] as const)('maps completion %s/%s to %s', (status, code, expected) => {
+    expect(
+      mapTotpEnrollmentCompleteError({
+        statusCode: status,
+        data: { error: { code } },
+      }).kind,
+    ).toBe(expected);
+  });
+});
+
+describe('mapTotpRemovalError', () => {
+  it.each([
+    [403, 'reauth_required', 'reauth-required'],
+    [404, 'factor_not_found', 'not-found'],
+    [429, 'rate_limited', 'rate-limited'],
+    [500, 'internal', 'unavailable'],
+  ] as const)('maps removal %s/%s to %s', (status, code, expected) => {
+    expect(
+      mapTotpRemovalError({ statusCode: status, data: { error: { code } } })
+        .kind,
+    ).toBe(expected);
+  });
+});
+
+describe('renderTotpQr', () => {
+  const uri = 'otpauth://totp/aboutme.vn:demo%40example.com?secret='
+    + 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn&algorithm=SHA1'
+    + '&digits=6&period=30';
+
+  it('returns a stable nonempty path for a known URI', () => {
+    const qr = renderTotpQr(uri);
+    expect(qr.path.length).toBeGreaterThan(0);
+    expect(qr).toEqual(renderTotpQr(uri));
+  });
+
+  it('sizes the viewBox to the module grid, quiet zone included', () => {
+    const qr = renderTotpQr(uri);
+    expect(Number.isInteger(qr.size)).toBe(true);
+    expect(qr.size).toBeGreaterThan(0);
+    // `uqr`'s default one-module border is already folded into `size`
+    // (renderTotpQr's own doc comment); the component's `viewBox` is
+    // `0 0 ${qr.size} ${qr.size}`, so this covers the rendered size too.
+    const path = qr.path;
+    const xs = [...path.matchAll(/M(\d+) \d+/g)].map((m) => Number(m[1]!));
+    expect(Math.max(...xs)).toBeLessThan(qr.size);
+  });
+
+  it('never embeds markup or the URI text in the path', () => {
+    const qr = renderTotpQr(uri);
+    // The QR encoder only ever emits numeric module coordinates
+    // (docs/design/totp-second-factor-contract.md "Provisioning data"):
+    // no HTML, and never the literal URI or secret text.
+    expect(qr.path).toMatch(/^(M\d+ \d+h1v1h-1z)*$/);
+    expect(qr.path).not.toContain('<');
+    expect(qr.path).not.toContain('>');
+    expect(qr.path).not.toContain(uri);
+    expect(qr.path).not.toContain('ABCDEFGHIJKLMNOPQRSTUVWXYZ234567');
+  });
+});
+
 // --- Integrated settings-page tests -----------------------------------------
 
 interface PasskeyFixture {
@@ -347,6 +444,7 @@ let stateResponse: unknown;
 let passkeys: PasskeyFixture[];
 let recoveryCodesRemaining: number;
 let enabled: boolean;
+let totpEnabled: boolean;
 let passwordReauthResponse: () => unknown;
 
 // Reassigned, never re-registered: `registerEndpoint` replaces this file's
@@ -359,7 +457,7 @@ let stateHandler: (event: H3Event) => unknown;
 
 function defaultStateHandler(_event: H3Event): unknown {
   if (stateResponse !== undefined) return stateResponse;
-  return { data: { enabled, passkeys, recoveryCodesRemaining } };
+  return { data: { enabled, passkeys, totpEnabled, recoveryCodesRemaining } };
 }
 
 function resetFixtures(): void {
@@ -372,6 +470,7 @@ function resetFixtures(): void {
   ];
   recoveryCodesRemaining = 10;
   enabled = true;
+  totpEnabled = false;
   stateResponse = undefined;
   passwordReauthResponse = () => null;
   stateHandler = defaultStateHandler;
@@ -456,6 +555,48 @@ function registerRemoval(
   });
 }
 
+// --- TOTP endpoint fixtures ------------------------------------------------
+
+const totpProvisioningUri = 'otpauth://totp/aboutme.vn:demo%40example.com'
+  + '?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn'
+  + '&algorithm=SHA1&digits=6&period=30';
+
+let totpStartResponse: (event: H3Event) => unknown;
+let totpCompleteResponse: (event: H3Event, body: unknown) => unknown;
+let totpRemovalResponse: (event: H3Event) => unknown;
+
+function defaultTotpStartResponse(): unknown {
+  return {
+    data: {
+      enrollmentId: 'A'.repeat(43),
+      secret: 'ABCD EFGH IJKL MNOP QRST UVWX YZ23 4567',
+      provisioningUri: totpProvisioningUri,
+      expiresAt: '2026-09-20T09:10:00Z',
+    },
+  };
+}
+
+function defaultTotpCompleteResponse(): unknown {
+  // Mirrors `registerRemoval` mutating `passkeys`: a completion actually
+  // installs the credential, so a later state refetch in the same test
+  // sees it as enabled too.
+  totpEnabled = true;
+  return { data: { totpEnabled: true } };
+}
+
+registerEndpoint('/api/v1/me/second-factor/totp/enrollment', {
+  method: 'POST',
+  handler: (event) => totpStartResponse(event),
+});
+registerEndpoint('/api/v1/me/second-factor/totp/enrollment', {
+  method: 'PUT',
+  handler: async (event) => totpCompleteResponse(event, await readBody(event)),
+});
+registerEndpoint('/api/v1/me/second-factor/totp', {
+  method: 'DELETE',
+  handler: (event) => totpRemovalResponse(event),
+});
+
 function stubWebAuthnSupport(): void {
   vi.stubGlobal('PublicKeyCredential', FakePublicKeyCredential);
   // createPasskeyCredential checks `response instanceof
@@ -493,7 +634,10 @@ let currentWrapper: Awaited<ReturnType<typeof mountSuspended>> | null = null;
  * `document.activeElement` only tracks a connected element's real focus.
  */
 async function mountSettings(
-  capabilities: { passkeyEnrollment?: boolean } = {},
+  capabilities: {
+    passkeyEnrollment?: boolean;
+    totpEnrollment?: boolean;
+  } = {},
 ) {
   registerCapabilities({
     providerLogin: true,
@@ -521,6 +665,22 @@ function clickInDialog(selector: string): void {
   const button = document.body.querySelector<HTMLButtonElement>(selector);
   expect(button, `missing ${selector} in document.body`).not.toBeNull();
   button!.click();
+}
+
+/**
+ * `wrapper.get`/`find` cannot reach teleported dialog content (see
+ * `mountSettings`'s doc comment); this is their `document.body` equivalent
+ * for the TOTP setup dialog, which needs `.setValue()`/`.trigger()`, not
+ * just a click.
+ */
+function dialogGet(selector: string): DOMWrapper<Element> {
+  const element = document.body.querySelector(selector);
+  expect(element, `missing ${selector} in document.body`).not.toBeNull();
+  return new DOMWrapper(element!);
+}
+
+function dialogExists(selector: string): boolean {
+  return document.body.querySelector(selector) !== null;
 }
 
 describe('second-factor settings', () => {
@@ -577,6 +737,12 @@ describe('second-factor settings', () => {
         ),
       },
     });
+    totpStartResponse = defaultTotpStartResponse;
+    totpCompleteResponse = defaultTotpCompleteResponse;
+    totpRemovalResponse = () => {
+      totpEnabled = false;
+      return null;
+    };
     vi.mocked(navigateTo).mockReset();
     vi.mocked(navigateTo).mockResolvedValue(undefined);
   });
@@ -1100,9 +1266,457 @@ describe('second-factor settings', () => {
     expect(
       wrapper.get('[data-testid="second-factor-sessions-notice"]').text(),
     ).toBe(
-      'Adding or removing a passkey, or regenerating recovery codes, signs '
-      + 'out every other device and connected agent. This device stays '
-      + 'signed in.',
+      'Adding, replacing, or removing a passkey or authenticator app, or '
+      + 'regenerating recovery codes, signs out every other device and '
+      + 'connected agent. This device stays signed in.',
     );
+  });
+
+  // --- TOTP: capability --------------------------------------------------
+
+  it('hides TOTP setup when its enrollment capability is closed', async () => {
+    const wrapper = await mountSettings({ totpEnrollment: false });
+    expect(wrapper.find('[data-testid="totp-setup-start"]').exists())
+      .toBe(false);
+    expect(wrapper.find('[data-testid="totp-setup-replace"]').exists())
+      .toBe(false);
+    expect(wrapper.get('[data-testid="totp-status"]').text())
+      .toBe('Not set up.');
+  });
+
+  it('shows the TOTP setup button once its capability is open', async () => {
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    expect(wrapper.get('[data-testid="totp-setup-start"]').text())
+      .toBe('Set up authenticator app');
+  });
+
+  it('treats a malformed totpEnrollment flag as closed', async () => {
+    registerEndpoint('/api/v1/capabilities', () => ({
+      data: {
+        providerLogin: true,
+        providers: ['google'],
+        agentAccess: false,
+        passwordRegistration: true,
+        passkeyEnrollment: false,
+        totpEnrollment: 'yes',
+      },
+    }));
+    const wrapper = await mountSuspended(SessionsPage, {
+      route: '/app/settings/sessions',
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="totp-setup-start"]').exists())
+      .toBe(false);
+  });
+
+  it(
+    'still shows status and remove when enrollment is closed but TOTP is '
+    + 'already enabled',
+    async () => {
+      totpEnabled = true;
+      const wrapper = await mountSettings({ totpEnrollment: false });
+      expect(wrapper.get('[data-testid="totp-status"]').text())
+        .toBe('Enabled.');
+      expect(wrapper.get('[data-testid="totp-remove"]').text())
+        .toBe('Remove');
+      expect(wrapper.find('[data-testid="totp-setup-replace"]').exists())
+        .toBe(false);
+    },
+  );
+
+  // --- TOTP: setup and local-QR --------------------------------------------
+
+  it(
+    'opens setup with a locally rendered QR and the grouped secret',
+    async () => {
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+      await flushPromises();
+
+      const qr = dialogGet('[data-testid="totp-qr"]');
+      expect(qr.element.tagName.toLowerCase()).toBe('svg');
+      expect(qr.attributes('role')).toBe('img');
+      expect(qr.attributes('aria-label'))
+        .toBe('Authenticator app setup QR code');
+      expect(qr.attributes('viewBox')).toMatch(/^0 0 \d+ \d+$/);
+      expect(qr.element.querySelector('path')?.getAttribute('d')?.length)
+        .toBeGreaterThan(0);
+      expect(dialogGet('[data-testid="totp-secret"]').text())
+        .toBe('ABCD EFGH IJKL MNOP QRST UVWX YZ23 4567');
+    },
+  );
+
+  it(
+    'proving a code on first enrollment reveals ten recovery codes',
+    async () => {
+      passkeys = [];
+      enabled = false;
+      recoveryCodesRemaining = 0;
+      totpCompleteResponse = () => {
+        totpEnabled = true;
+        return {
+          data: {
+            totpEnabled: true,
+            recoveryCodes: Array.from(
+              { length: 10 },
+              (_, i) => `amr_totp-${i}0000-00000-00000-00000-0`,
+            ),
+          },
+        };
+      };
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      const sessionsCallsBefore = sessionsCalls;
+
+      await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+      await flushPromises();
+      await dialogGet('[data-testid="totp-code-input"]').setValue('123456');
+      await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+      await flushPromises();
+
+      expect(
+        document.body
+          .querySelector('[data-testid="recovery-codes-list"]')
+          ?.querySelectorAll('li'),
+      ).toHaveLength(10);
+      expect(wrapper.get('[data-testid="totp-added-success"]').text())
+        .toBe('Authenticator app added.');
+      expect(sessionsCalls).toBeGreaterThan(sessionsCallsBefore);
+      expect(dialogExists('[data-testid="totp-qr"]')).toBe(false);
+    },
+  );
+
+  it('adding a later factor shows success without a reveal', async () => {
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    await dialogGet('[data-testid="totp-code-input"]').setValue('123456');
+    await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(document.body.querySelector('[data-testid="recovery-reveal"]'))
+      .toBeNull();
+    expect(wrapper.get('[data-testid="totp-added-success"]').text())
+      .toBe('Authenticator app added.');
+  });
+
+  it('rejects a locally malformed code before any request', async () => {
+    let completeCalls = 0;
+    totpCompleteResponse = () => {
+      completeCalls += 1;
+      return defaultTotpCompleteResponse();
+    };
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    await dialogGet('[data-testid="totp-code-input"]').setValue('12a45');
+    await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(completeCalls).toBe(0);
+    expect(dialogGet('[data-testid="totp-code-form"]').text())
+      .toContain('Enter all 6 digits.');
+    // The QR and secret stay put for a corrected retry.
+    expect(dialogExists('[data-testid="totp-qr"]')).toBe(true);
+  });
+
+  it('cancelling setup makes no completion request', async () => {
+    let completeCalls = 0;
+    totpCompleteResponse = () => {
+      completeCalls += 1;
+      return defaultTotpCompleteResponse();
+    };
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    await dialogGet('[data-testid="totp-code-input"]').setValue('654321');
+
+    clickInDialog('[data-testid="totp-setup-cancel"]');
+    await flushPromises();
+
+    expect(completeCalls).toBe(0);
+    expect(document.body.querySelector('[data-testid="totp-qr"]'))
+      .toBeNull();
+    expect(document.body.querySelector('[data-testid="totp-secret"]'))
+      .toBeNull();
+  });
+
+  it('maps enrollment closed mid-flow to the closed TOTP error', async () => {
+    totpStartResponse = (event) => errorBody(event, 404, 'not_found');
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="totp-start-error"]').text())
+      .toBe('Setting up an authenticator app is turned off right now.');
+  });
+
+  // --- TOTP: invalid code, replay, rate limit, and expiry -----------------
+
+  it(
+    'keeps the QR and secret for a retry after an invalid or replayed code',
+    async () => {
+      totpCompleteResponse = (event) =>
+        errorBody(event, 401, 'verification_failed');
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+      await flushPromises();
+      await dialogGet('[data-testid="totp-code-input"]').setValue('000000');
+      await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+      await flushPromises();
+
+      expect(dialogGet('[data-testid="totp-setup-error"]').text())
+        .toBe('That code could not be verified. Try again.');
+      expect(dialogExists('[data-testid="totp-qr"]')).toBe(true);
+    },
+  );
+
+  it('ends setup and asks to start again once enrollment expires', async () => {
+    totpCompleteResponse = (event) =>
+      errorBody(event, 400, 'enrollment_invalid');
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    await dialogGet('[data-testid="totp-code-input"]').setValue('123456');
+    await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+    await flushPromises();
+
+    expect(document.body.querySelector('[data-testid="totp-qr"]'))
+      .toBeNull();
+    expect(wrapper.get('[data-testid="totp-start-error"]').text())
+      .toBe('That setup request expired. Start again.');
+  });
+
+  it(
+    'surfaces a rate limit on completion without discarding setup',
+    async () => {
+      totpCompleteResponse = (event) =>
+        errorBody(event, 429, 'rate_limited');
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      await wrapper.get('[data-testid="totp-setup-start"]')
+        .trigger('click');
+      await flushPromises();
+      await dialogGet('[data-testid="totp-code-input"]')
+        .setValue('123456');
+      await dialogGet('[data-testid="totp-code-submit"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(dialogGet('[data-testid="totp-setup-error"]').text())
+        .toBe('Too many attempts. Try again later.');
+      expect(dialogExists('[data-testid="totp-qr"]')).toBe(true);
+    },
+  );
+
+  it(
+    'maps an unavailable key service to a generic retry message',
+    async () => {
+      totpCompleteResponse = (event) =>
+        errorBody(event, 503, 'authentication_unavailable');
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      await wrapper.get('[data-testid="totp-setup-start"]')
+        .trigger('click');
+      await flushPromises();
+      await dialogGet('[data-testid="totp-code-input"]')
+        .setValue('123456');
+      await dialogGet('[data-testid="totp-code-submit"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(dialogGet('[data-testid="totp-setup-error"]').text())
+        .toBe('Something went wrong. Please try again.');
+    },
+  );
+
+  // --- TOTP: replacement ---------------------------------------------------
+
+  it(
+    'replacing shows the current credential stays active, then replaces it',
+    async () => {
+      totpEnabled = true;
+      const wrapper = await mountSettings({ totpEnrollment: true });
+
+      await wrapper.get('[data-testid="totp-setup-replace"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(dialogGet('[data-testid="totp-replace-notice"]').text())
+        .toBe(
+          'Your current authenticator app code keeps working until you '
+          + 'finish this step.',
+        );
+
+      await dialogGet('[data-testid="totp-code-input"]').setValue('123456');
+      await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="totp-replaced-success"]').text())
+        .toBe('Authenticator app replaced.');
+      expect(document.body.querySelector('[data-testid="recovery-reveal"]'))
+        .toBeNull();
+    },
+  );
+
+  // --- TOTP: removal and mixed passkey state -------------------------------
+
+  it(
+    'asks a non-final confirmation when a passkey remains active',
+    async () => {
+      totpEnabled = true;
+      passkeys = [
+        { id: 'pk-1', createdAt: '2026-09-01T00:00:00Z', lastUsedAt: null },
+      ];
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      const sessionsCallsBefore = sessionsCalls;
+
+      await wrapper.get('[data-testid="totp-remove"]').trigger('click');
+      await flushPromises();
+      expect(dialogBody().textContent).toContain(
+        'Remove this authenticator app? Every other device and connected '
+        + 'agent will be signed out.',
+      );
+
+      clickInDialog('[data-action="totp-remove-confirm"]');
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="totp-removed-success"]').text())
+        .toBe('Authenticator app removed.');
+      expect(sessionsCalls).toBeGreaterThan(sessionsCallsBefore);
+    },
+  );
+
+  it('warns final TOTP removal disables two-factor sign-in', async () => {
+    totpEnabled = true;
+    passkeys = [];
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-remove"]').trigger('click');
+    await flushPromises();
+    expect(dialogBody().textContent).toContain(
+      'This is your last second factor. Removing it turns off two-factor '
+      + 'sign-in and deletes your recovery codes.',
+    );
+  });
+
+  it('maps a missing TOTP credential on removal to not-found', async () => {
+    totpEnabled = true;
+    totpRemovalResponse = (event) =>
+      errorBody(event, 404, 'factor_not_found');
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-remove"]').trigger('click');
+    await flushPromises();
+    clickInDialog('[data-action="totp-remove-confirm"]');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="totp-remove-error"]').text())
+      .toBe('No authenticator app was found.');
+  });
+
+  // --- TOTP: recent reauthentication (forwarded to the shared flow) -------
+
+  it(
+    'forwards a reauth-required start failure to the shared flow',
+    async () => {
+      totpStartResponse = (event) =>
+        errorBody(event, 403, 'reauth_required');
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      await wrapper.get('[data-testid="totp-setup-start"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(
+        wrapper.find('[data-testid="second-factor-reauth-password"]')
+          .exists(),
+      ).toBe(true);
+      expect(wrapper.find('[data-testid="totp-settings"]').exists())
+        .toBe(false);
+    },
+  );
+
+  it(
+    'forwards a reauth-required removal failure to the shared flow',
+    async () => {
+      totpEnabled = true;
+      totpRemovalResponse = (event) =>
+        errorBody(event, 403, 'reauth_required');
+      const wrapper = await mountSettings({ totpEnrollment: true });
+      await wrapper.get('[data-testid="totp-remove"]').trigger('click');
+      await flushPromises();
+      clickInDialog('[data-action="totp-remove-confirm"]');
+      await flushPromises();
+
+      expect(
+        wrapper.find('[data-testid="second-factor-reauth-password"]')
+          .exists(),
+      ).toBe(true);
+    },
+  );
+
+  // --- TOTP: cleanup ---------------------------------------------------
+
+  it('clears the QR, secret, and code on unmount', async () => {
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="totp-secret"]'))
+      .not.toBeNull();
+
+    wrapper.unmount();
+    currentWrapper = null;
+    expect(document.body.querySelector('[data-testid="totp-secret"]'))
+      .toBeNull();
+    expect(document.body.querySelector('[data-testid="totp-qr"]'))
+      .toBeNull();
+  });
+
+  // --- TOTP: locale --------------------------------------------------------
+
+  it('clears an open setup dialog on a locale change', async () => {
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    expect(document.body.querySelector('[data-testid="totp-qr"]'))
+      .not.toBeNull();
+
+    const locale = useState<'vi' | 'en'>('aboutme-locale');
+    locale.value = 'vi';
+    await wrapper.vm.$nextTick();
+    await flushPromises();
+
+    expect(document.body.querySelector('[data-testid="totp-qr"]'))
+      .toBeNull();
+    expect(document.body.querySelector('[data-testid="totp-secret"]'))
+      .toBeNull();
+  });
+
+  it('renders the authenticator-app section in Vietnamese', async () => {
+    setSiteLocale('vi');
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    expect(wrapper.get('[data-testid="totp-status"]').text())
+      .toBe('Chưa thiết lập.');
+    expect(wrapper.get('[data-testid="totp-setup-start"]').text())
+      .toBe('Thiết lập ứng dụng xác thực');
+  });
+
+  // --- TOTP: accessibility -------------------------------------------------
+
+  it('focuses the setup error banner when the code is rejected', async () => {
+    totpCompleteResponse = (event) =>
+      errorBody(event, 401, 'verification_failed');
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    await wrapper.get('[data-testid="totp-setup-start"]').trigger('click');
+    await flushPromises();
+    await dialogGet('[data-testid="totp-code-input"]').setValue('000000');
+    await dialogGet('[data-testid="totp-code-submit"]').trigger('click');
+    await flushPromises();
+
+    const banner = dialogGet('[data-testid="totp-setup-error"]');
+    expect(banner.attributes('role')).toBe('alert');
+    expect(banner.element).toBe(document.activeElement);
+  });
+
+  it('recommends a passkey alongside the phishing warning', async () => {
+    stubWebAuthnSupport();
+    const wrapper = await mountSettings({ totpEnrollment: true });
+    expect(wrapper.get('[data-testid="totp-passkey-recommendation"]').text())
+      .toBe(
+        'This browser supports passkeys, a more phishing-resistant choice.',
+      );
   });
 });

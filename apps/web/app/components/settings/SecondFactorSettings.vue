@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * `SecondFactorSettings` — passkey and recovery-code controls for
- * `/app/settings/sessions`
+ * `SecondFactorSettings`: passkey, authenticator-app (`TotpSettings`), and
+ * recovery-code controls for `/app/settings/sessions`
  * (`docs/design/second-factor-authentication.md#enrollment-and-management`).
  *
  * Presentational: it receives `enrollmentOpen`, `hasPassword`, and
@@ -20,6 +20,7 @@ import EmptyState from '../app/EmptyState.vue';
 import LoadingState from '../app/LoadingState.vue';
 import StatusBanner from '../app/StatusBanner.vue';
 import PasswordField from '../auth/PasswordField.vue';
+import TotpSettings from './TotpSettings.vue';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -67,8 +68,9 @@ const actions = inject(SecondFactorSettingsActionsKey, null);
 const { locale } = useLocale();
 const copy = computed(() => secondFactorSettingsCopy[locale.value]);
 
-const { enabled, passkeys, recoveryCodesRemaining, resolved, refresh }
-  = useSecondFactorState();
+const {
+  enabled, passkeys, totpEnabled, recoveryCodesRemaining, resolved, refresh,
+} = useSecondFactorState();
 
 const webAuthnSupported = ref(false);
 onMounted(() => {
@@ -93,11 +95,11 @@ const removeTarget = ref<SecondFactorPasskey | null>(null);
 const removePending = ref(false);
 const removeError = ref<SecondFactorSettingsMessage | null>(null);
 const removedNotice = ref(false);
-// V0.4.2 has no other active-factor type, so the shared active-factor count
-// the server decides finality from (second-factor-authentication.md
-// "Enrollment and management") reduces to the passkey count alone here.
+// Matches the server's shared active-factor count (totp-second-factor
+// -contract.md "Removal, recovery, and races"): passkeys plus TOTP.
 const removeIsFinal = computed(
-  () => removeTarget.value !== null && passkeys.value.length <= 1,
+  () => removeTarget.value !== null && passkeys.value.length <= 1
+    && !totpEnabled.value,
 );
 
 const regenerateConfirmOpen = ref(false);
@@ -149,6 +151,16 @@ async function afterMutationSuccess(): Promise<void> {
     // Ignored; the next visit re-reads current state.
   }
   emit('changed');
+}
+
+function totpReauthRequired(): void {
+  reauthMode.value = props.hasPassword ? 'password' : 'provider';
+}
+
+async function onTotpChanged(codes: readonly string[] | null): Promise<void> {
+  if (codes) revealKind.value = 'enrolled';
+  if (codes) revealedCodes.value = codes;
+  await afterMutationSuccess();
 }
 
 async function startAddPasskey(): Promise<void> {
@@ -556,7 +568,12 @@ function formatTimestamp(value: string): string {
       >
         {{ copy.errors[removeError] }}
       </StatusBanner>
-
+      <TotpSettings
+        :has-other-active-factor="passkeys.length > 0"
+        :totp-enabled="totpEnabled"
+        @changed="onTotpChanged"
+        @reauth-required="totpReauthRequired"
+      />
       <div
         v-if="enabled"
         class="grid gap-2 border-t pt-4"

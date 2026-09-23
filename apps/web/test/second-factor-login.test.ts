@@ -5,7 +5,12 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { readBody, setResponseStatus } from 'h3';
+import {
+  type H3Event,
+  readBody,
+  setResponseHeader,
+  setResponseStatus,
+} from 'h3';
 import SecondFactorPage from '../app/pages/login/second-factor.vue';
 import { setSiteLocale } from './support/locale';
 
@@ -89,6 +94,10 @@ function registerPasskeyOptions(
 interface VerifyResult {
   status: number;
   errorCode?: string;
+  /** Sets the `Retry-After` response header (whole seconds) when present,
+   * for a 429 cool-down (docs/design/totp-second-factor-contract.md
+   * "Per-account TOTP failure budget"). */
+  retryAfterSeconds?: number;
 }
 
 /**
@@ -108,7 +117,10 @@ function registerVerify(
   result: VerifyResult,
   onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
 ): void {
-  const respond = (): unknown => {
+  const respond = (event: H3Event): unknown => {
+    if (result.retryAfterSeconds !== undefined) {
+      setResponseHeader(event, 'Retry-After', String(result.retryAfterSeconds));
+    }
     if (result.status >= 400) {
       return { error: { code: result.errorCode, message: 'x' } };
     }
@@ -121,11 +133,11 @@ function registerVerify(
         const body = await readBody(event);
         onRequest({ csrfToken: requestHeader(event, 'x-csrf-token') }, body);
         setResponseStatus(event, result.status);
-        return respond();
+        return respond(event);
       }
       : (event) => {
           setResponseStatus(event, result.status);
-          return respond();
+          return respond(event);
         },
   });
 }
@@ -137,6 +149,18 @@ function registerPasskeyVerify(
 ): void {
   registerVerify(
     '/api/v1/auth/second-factor/passkey/verify',
+    result,
+    onRequest,
+  );
+}
+
+/** Registers `POST /api/v1/auth/second-factor/totp/verify`. */
+function registerTotpVerify(
+  result: VerifyResult,
+  onRequest?: (headers: Record<string, unknown>, body: unknown) => void,
+): void {
+  registerVerify(
+    '/api/v1/auth/second-factor/totp/verify',
     result,
     onRequest,
   );
@@ -251,12 +275,16 @@ describe('second-factor.vue loading and method rendering', () => {
     });
 
   it('shows a refresh prompt alone for an unknown method', async () => {
-    registerStatus({ methods: ['totp'] });
+    // A future method value this build has never heard of, distinct from
+    // 'totp' now that this page recognizes it (AC-AUTH-028).
+    registerStatus({ methods: ['sms'] });
     const wrapper = await mountSuspended(SecondFactorPage);
     await flushPromises();
     expect(wrapper.get('[data-testid="second-factor-refresh-prompt"]').text())
       .toContain('Refresh');
     expect(wrapper.find('[data-testid="second-factor-passkey"]').exists())
+      .toBe(false);
+    expect(wrapper.find('[data-testid="second-factor-totp"]').exists())
       .toBe(false);
     expect(wrapper.find('[data-testid="second-factor-recovery"]').exists())
       .toBe(false);
@@ -264,7 +292,7 @@ describe('second-factor.vue loading and method rendering', () => {
 
   it('shows a refresh prompt beside recovery for an unknown method',
     async () => {
-      registerStatus({ methods: ['totp', 'recovery'] });
+      registerStatus({ methods: ['sms', 'recovery'] });
       const wrapper = await mountSuspended(SecondFactorPage);
       await flushPromises();
       expect(
@@ -274,6 +302,43 @@ describe('second-factor.vue loading and method rendering', () => {
         .toBe(true);
       expect(wrapper.find('[data-testid="second-factor-passkey"]').exists())
         .toBe(false);
+      expect(wrapper.find('[data-testid="second-factor-totp"]').exists())
+        .toBe(false);
+    });
+
+  it('renders totp between passkey and recovery when all three methods '
+    + 'are available', async () => {
+    registerStatus({ methods: ['passkey', 'totp', 'recovery'] });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    const passkey = wrapper.get('[data-testid="second-factor-passkey"]');
+    const totp = wrapper.get('[data-testid="second-factor-totp"]');
+    const recovery = wrapper.get('[data-testid="second-factor-recovery"]');
+    expect(
+      (passkey.element.compareDocumentPosition(totp.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
+    expect(
+      (totp.element.compareDocumentPosition(recovery.element)
+        & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    ).toBe(true);
+    expect(wrapper.find('[data-testid="second-factor-refresh-prompt"]')
+      .exists()).toBe(false);
+  });
+
+  it('renders only totp when the account has only an authenticator app',
+    async () => {
+      registerStatus({ methods: ['totp'] });
+      const wrapper = await mountSuspended(SecondFactorPage);
+      await flushPromises();
+      expect(wrapper.get('[data-testid="second-factor-totp"]').exists())
+        .toBe(true);
+      expect(wrapper.find('[data-testid="second-factor-passkey"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-testid="second-factor-recovery"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-testid="second-factor-refresh-prompt"]')
+        .exists()).toBe(false);
     });
 });
 
@@ -550,6 +615,197 @@ describe('second-factor.vue recovery completion', () => {
   });
 });
 
+describe('second-factor.vue totp completion', () => {
+  it('completes an authenticator code and navigates to the validated '
+    + 'return path', async () => {
+    registerStatus({ methods: ['totp'], returnPath: '/app/resumes' });
+    let sentBody: unknown;
+    let sentCsrfToken: unknown;
+    registerTotpVerify({ status: 204 }, (headers, body) => {
+      sentCsrfToken = headers.csrfToken;
+      sentBody = body;
+    });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    expect(sentCsrfToken).toBe(CSRF_TOKEN);
+    expect(sentBody).toEqual({ code: '123456' });
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/resumes');
+  });
+
+  it('clears the authenticator code input the instant it is submitted',
+    async () => {
+      registerStatus({ methods: ['totp'] });
+      let release: (body: unknown) => void = () => {};
+      registerEndpoint('/api/v1/auth/second-factor/totp/verify', {
+        method: 'POST',
+        handler: () => new Promise((resolve) => {
+          release = resolve;
+        }),
+      });
+      const wrapper = await mountSuspended(SecondFactorPage);
+      await flushPromises();
+      const input = wrapper.get('#second-factor-totp-code');
+      await input.setValue('123456');
+      await wrapper.get('[data-testid="second-factor-totp-form"]')
+        .trigger('submit');
+      // Cleared synchronously, before the in-flight request resolves —
+      // stricter than the recovery code, which clears only in `finally`.
+      expect((input.element as HTMLInputElement).value).toBe('');
+      release(null);
+      await flushPromises();
+    });
+
+  it('requires a well-shaped six-digit code before sending a request',
+    async () => {
+      registerStatus({ methods: ['totp'] });
+      let requestSent = false;
+      registerEndpoint('/api/v1/auth/second-factor/totp/verify', {
+        method: 'POST',
+        handler: () => {
+          requestSent = true;
+          return null;
+        },
+      });
+      const wrapper = await mountSuspended(SecondFactorPage);
+      await flushPromises();
+      await wrapper.get('#second-factor-totp-code').setValue('12a456');
+      await wrapper.get('[data-testid="second-factor-totp-form"]')
+        .trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+        .toContain('Enter the 6-digit code');
+      expect(requestSent).toBe(false);
+    });
+
+  it('shows a verification-failed message for an invalid or replayed '
+    + 'code, keeping the other methods visible', async () => {
+    registerStatus({ methods: ['passkey', 'totp', 'recovery'] });
+    registerTotpVerify({ status: 401, errorCode: 'verification_failed' });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+      .toContain('Verification failed');
+    expect(wrapper.find('[data-testid="second-factor-passkey"]').exists())
+      .toBe(true);
+    expect(wrapper.find('[data-testid="second-factor-recovery"]').exists())
+      .toBe(true);
+  });
+
+  it('shows a not-found message when the account no longer has an '
+    + 'authenticator app', async () => {
+    registerStatus({ methods: ['totp', 'recovery'] });
+    registerTotpVerify({ status: 404, errorCode: 'factor_not_found' });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+      .toContain('no longer has an authenticator app');
+    expect(wrapper.get('[data-testid="second-factor-recovery"]').exists())
+      .toBe(true);
+  });
+
+  it('shows an unavailable message and keeps the other methods usable on '
+    + 'a TOTP key failure', async () => {
+    registerStatus({ methods: ['totp', 'recovery'] });
+    registerTotpVerify({
+      status: 503,
+      errorCode: 'authentication_unavailable',
+    });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+      .toContain('Something went wrong');
+    expect(wrapper.get('[data-testid="second-factor-recovery"]').exists())
+      .toBe(true);
+  });
+
+  it('shows a cool-down message with the remaining time and keeps the '
+    + 'other methods usable', async () => {
+    registerStatus({ methods: ['passkey', 'totp', 'recovery'] });
+    registerTotpVerify({
+      status: 429,
+      errorCode: 'rate_limited',
+      retryAfterSeconds: 7200,
+    });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+      .toContain('2 hours');
+    expect(wrapper.get('[data-testid="second-factor-passkey"]').exists())
+      .toBe(true);
+    expect(wrapper.get('[data-testid="second-factor-recovery"]').exists())
+      .toBe(true);
+  });
+
+  it('moves to the focused expired state on an exhausted or expired '
+    + 'pending row', async () => {
+    registerStatus({ methods: ['totp'] });
+    registerTotpVerify({
+      status: 401,
+      errorCode: 'authentication_required',
+    });
+    // Attach to the live document: happy-dom's `focus()` is a no-op on a
+    // detached tree, and this test asserts the expired banner gets focus.
+    const wrapper = await mountSuspended(SecondFactorPage, {
+      attachTo: document.body,
+    });
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    await flushPromises();
+    const banner = wrapper.get('[data-testid="second-factor-expired"]');
+    expect(banner.exists()).toBe(true);
+    expect(banner.element).toBe(document.activeElement);
+  });
+});
+
+describe('second-factor.vue totp accessibility', () => {
+  it('associates the authenticator code input with its accessible label',
+    async () => {
+      registerStatus({ methods: ['totp'] });
+      const wrapper = await mountSuspended(SecondFactorPage);
+      await flushPromises();
+      const label = wrapper.get('label[for="second-factor-totp-code"]');
+      expect(label.text()).toBe('Authenticator code');
+    });
+
+  it('announces the authenticator error as a live alert', async () => {
+    registerStatus({ methods: ['totp'] });
+    registerTotpVerify({ status: 401, errorCode: 'verification_failed' });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    await wrapper.get('#second-factor-totp-code').setValue('123456');
+    await wrapper.get('[data-testid="second-factor-totp-form"]')
+      .trigger('submit');
+    await flushPromises();
+    expect(
+      wrapper.get('[data-testid="second-factor-totp-error"]')
+        .attributes('role'),
+    ).toBe('alert');
+  });
+});
+
 describe('second-factor.vue never treats the pending cookie as a session',
   () => {
     it('never calls /me across a full completion and an expired attempt',
@@ -585,8 +841,18 @@ describe('second-factor.vue locales', () => {
     await flushPromises();
     expect(wrapper.get('[data-page-title]').text()).toBe('Xác thực hai bước');
     expect(wrapper.text()).toContain(
-      'Hoàn tất đăng nhập bằng passkey hoặc mã khôi phục.',
+      'Hoàn tất đăng nhập bằng passkey, ứng dụng xác thực hoặc mã khôi phục.',
     );
+  });
+
+  it('renders the authenticator app section in Vietnamese', async () => {
+    setSiteLocale('vi');
+    registerStatus({ methods: ['totp'] });
+    const wrapper = await mountSuspended(SecondFactorPage);
+    await flushPromises();
+    const section = wrapper.get('[data-testid="second-factor-totp"]');
+    expect(section.text()).toContain('Ứng dụng xác thực');
+    expect(section.text()).toContain('Xác thực mã');
   });
 
   it('updates a shown error to the new language without losing the error '
@@ -609,4 +875,28 @@ describe('second-factor.vue locales', () => {
     expect(wrapper.get('[data-testid="second-factor-passkey-error"]').text())
       .toBe('Xác thực không thành công. Hãy thử lại.');
   });
+
+  it('updates a shown authenticator cool-down message to the new language',
+    async () => {
+      registerStatus({ methods: ['totp'] });
+      registerTotpVerify({
+        status: 429,
+        errorCode: 'rate_limited',
+        retryAfterSeconds: 7200,
+      });
+      const wrapper = await mountSuspended(SecondFactorPage);
+      await flushPromises();
+      await wrapper.get('#second-factor-totp-code').setValue('123456');
+      await wrapper.get('[data-testid="second-factor-totp-form"]')
+        .trigger('submit');
+      await flushPromises();
+      expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+        .toContain('2 hours');
+
+      useLocale().setLocale('vi');
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="second-factor-totp-error"]').text())
+        .toBe('Hãy thử lại sau khoảng 2 giờ.');
+    });
 });

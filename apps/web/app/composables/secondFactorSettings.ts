@@ -115,6 +115,7 @@ function isPasskey(value: unknown): value is SecondFactorPasskey {
 export interface UseSecondFactorStateReturn {
   enabled: ComputedRef<boolean>;
   passkeys: ComputedRef<readonly SecondFactorPasskey[]>;
+  totpEnabled: ComputedRef<boolean>;
   recoveryCodesRemaining: ComputedRef<number>;
   resolved: ComputedRef<boolean>;
   refresh: () => Promise<void>;
@@ -141,6 +142,7 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
       ? (value as {
           enabled?: unknown;
           passkeys?: unknown;
+          totpEnabled?: unknown;
           recoveryCodesRemaining?: unknown;
         })
       : null;
@@ -150,6 +152,11 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
     const list = envelope.value?.passkeys;
     return Array.isArray(list) ? list.filter(isPasskey) : [];
   });
+  // Read regardless of `totpEnrollment` (enrollment can be closed while
+  // verification, removal, and state stay available); absent or malformed
+  // is false, matching mixed-version compatibility (totp-second-factor
+  // -contract.md "Migration, mixed versions, and loss").
+  const totpEnabled = computed(() => envelope.value?.totpEnabled === true);
   const recoveryCodesRemaining = computed(() => {
     const value = envelope.value?.recoveryCodesRemaining;
     return typeof value === 'number' && Number.isInteger(value) && value >= 0
@@ -183,7 +190,14 @@ export function useSecondFactorState(): UseSecondFactorStateReturn {
     await refreshState();
   }
 
-  return { enabled, passkeys, recoveryCodesRemaining, resolved, refresh };
+  return {
+    enabled,
+    passkeys,
+    totpEnabled,
+    recoveryCodesRemaining,
+    resolved,
+    refresh,
+  };
 }
 
 // --- Error mapping -------------------------------------------------------

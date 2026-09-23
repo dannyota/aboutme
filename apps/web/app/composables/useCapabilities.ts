@@ -27,6 +27,12 @@ export interface UseCapabilitiesReturn {
   agentAccess: ComputedRef<boolean>;
   /** New passkey enrollment is open; anything else keeps it closed. */
   passkeyEnrollment: ComputedRef<boolean>;
+  /**
+   * New TOTP enrollment and replacement may start and complete; anything
+   * else keeps it closed. Verification, removal, recovery, and state reads
+   * ignore this flag (totp-second-factor-contract.md "Release surface").
+   */
+  totpEnrollment: ComputedRef<boolean>;
   resolved: ComputedRef<boolean>;
 }
 
@@ -56,6 +62,9 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const passkeyEnrollment = computed(
     () => data.value?.data?.passkeyEnrollment === true,
   );
+  const totpEnrollment = computed(
+    () => data.value?.data?.totpEnrollment === true,
+  );
   // Only an explicit false closes sign-up, so an older server that lacks the
   // field keeps the form.
   const passwordRegistration = computed(
@@ -73,6 +82,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
     loginProviders,
     agentAccess,
     passkeyEnrollment,
+    totpEnrollment,
     resolved,
   };
 }
