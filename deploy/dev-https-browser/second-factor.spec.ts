@@ -388,8 +388,13 @@ function canonicalRecovery(value: string): string {
 /** A canonical recovery-code shape that is none of the issued codes. */
 function fabricatedRecoveryCode(issued: readonly string[]): string {
   for (;;) {
+    // 26 characters carry 130 bits for a 128-bit code, so the first one keeps
+    // its two high bits zero; any other first character is a malformed code
+    // (400), not a wrong one (401).
     let body = '';
-    for (const byte of randomBytes(26)) body += CROCKFORD[byte % 32];
+    for (const [index, byte] of [...randomBytes(26)].entries()) {
+      body += CROCKFORD[byte % (index === 0 ? 8 : 32)];
+    }
     const code = `amr_${body}`;
     const wanted = canonicalRecovery(code);
     if (!issued.some((value) => canonicalRecovery(value) === wanted)) {
