@@ -98,4 +98,5 @@ renderer, public page, PDF, or MCP tool schema.
 - Turning enrollment off stops new credentials but preserves verification,
   removal, state reads, and recovery.
 - After production enrollment is possible, rollback below v0.4.2 is invalid.
-- V0.4.5 may add TOTP without changing stored passkeys or the pending boundary.
+- The authenticator-app release may add TOTP without changing stored passkeys or
+  the pending boundary.

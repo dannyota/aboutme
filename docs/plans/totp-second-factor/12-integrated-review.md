@@ -4,7 +4,7 @@ Role: reviewer. Model: Opus (Codex: `gpt-5.6-sol`).
 
 ## Objective and authority
 
-Review the complete v0.4.5 release once after the manager verifies every author
+Review the complete v0.4.6 release once after the manager verifies every author
 report and before the candidate leaves the local repository. Read `AGENTS.md`,
 the accepted TOTP and passkey contracts, the key-management design,
 release-fence contract, ADRs 0048 and 0049, affected design and budget sources,
@@ -44,7 +44,7 @@ Review only the exact integrated diff from recorded base through candidate.
   mutation and mail insertion stay in one transaction.
 - Confirm every v0.4.2 and TOTP route keeps exact
   `Cache-Control: no-store, no-transform`.
-- Confirm flags, mixed versions, older-client failure, floor 4005, lower-target
+- Confirm flags, mixed versions, older-client failure, floor 4006, lower-target
   denial, activation and restoration, privileged bypass, and forward-fix rule.
 - Inspect mail, export, logs, metrics, traces, evidence, QR rendering, client
   state, dependency review, both locales, viewports, focus, keyboard behavior,

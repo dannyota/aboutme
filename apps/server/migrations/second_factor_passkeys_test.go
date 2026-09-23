@@ -31,7 +31,7 @@ func TestPasskeySecondFactorMigrationDefinesRequiredRelations(t *testing.T) {
 		}
 	}
 	if strings.Contains(string(contents), "totp") || strings.Contains(string(contents), "second_factor_recovery_codes_used_at") {
-		t.Error("passkey migration contains a v0.4.5 or consumed-recovery field")
+		t.Error("passkey migration contains a TOTP or consumed-recovery field")
 	}
 }
 

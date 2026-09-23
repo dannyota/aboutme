@@ -219,11 +219,11 @@ serialized operation lock in the
 principal assumes the dedicated operator role, then the dedicated deploy role;
 application and other runtime roles cannot read or write the fence.
 
-Production TOTP enrollment uses the same fence and lock with floor v0.4.5,
-numeric release 4005. Before taking the lock, `deploy.sh` refuses to register an
+Production TOTP enrollment uses the same fence and lock with floor v0.4.6,
+numeric release 4006. Before taking the lock, `deploy.sh` refuses to register an
 app revision that turns passkey enrollment on below 4002 or TOTP enrollment on
-while the fence item is missing or below 4005, and `fence.sh` blocks every mode
-while a running app has TOTP enrollment on below 4005. The
+while the fence item is missing or below 4006, and `fence.sh` blocks every mode
+while a running app has TOTP enrollment on below 4006. The
 [fence contract](passkey-release-fence.md#authenticator-app-key-re-encryption)
 also defines the one-shot `totp_reencrypt` operation.
 
