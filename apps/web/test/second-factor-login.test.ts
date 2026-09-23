@@ -8,7 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { readBody, setResponseStatus } from 'h3';
 import SecondFactorPage from '../app/pages/login/second-factor.vue';
 import { setSiteLocale } from './support/locale';
-import { landedOn } from './support/routing';
+import { landedFrom } from './support/routing';
 
 // Only a return path outside this app's own pages goes through `navigateTo`,
 // which would be a real browser navigation; stub it so that case can assert
@@ -375,7 +375,7 @@ describe('second-factor.vue passkey completion', () => {
         .trigger('click');
       await flushPromises();
       expect(sentCsrfToken).toBe(CSRF_TOKEN);
-      expect(await landedOn('/app/resumes')).toBe('/app/resumes');
+      expect(await landedFrom('/login/second-factor')).toBe('/app/resumes');
     });
 
   it('navigates externally when the return path is a server-only route, '
@@ -409,7 +409,7 @@ describe('second-factor.vue passkey completion', () => {
     await wrapper.get('[data-testid="second-factor-passkey-button"]')
       .trigger('click');
     await flushPromises();
-    expect(await landedOn('/app/resumes')).toBe('/app/resumes');
+    expect(await landedFrom('/login/second-factor')).toBe('/app/resumes');
   });
 
   it('shows a retryable error and keeps the button enabled on a failed '
@@ -532,7 +532,7 @@ describe('second-factor.vue recovery completion', () => {
       await flushPromises();
       expect(sentCsrfToken).toBe(CSRF_TOKEN);
       expect(sentBody).toEqual({ code: 'amr_00000-00000-00000-00000-00000-0' });
-      expect(await landedOn('/app/resumes')).toBe('/app/resumes');
+      expect(await landedFrom('/login/second-factor')).toBe('/app/resumes');
     });
 
   it('clears the recovery code input after a failed attempt', async () => {

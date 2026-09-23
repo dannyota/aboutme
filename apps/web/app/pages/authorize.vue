@@ -11,7 +11,6 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
 import { consentCopy } from '@/i18n/consent';
 import { workspaceTitles } from '@/i18n/meta';
-import { goToPath } from '@/utils/navigate';
 
 const { locale } = useLocale();
 const copy = computed(() => consentCopy[locale.value]);
@@ -72,7 +71,7 @@ function parseQuery(): OAuthConsentRequest | null {
 const authorizeQuery = parseQuery();
 
 function loginForSession(): void {
-  void goToPath(`/login?next=${encodeURIComponent(route.fullPath)}`);
+  void navigateTo(`/login?next=${encodeURIComponent(route.fullPath)}`);
 }
 
 async function focusError(): Promise<void> {

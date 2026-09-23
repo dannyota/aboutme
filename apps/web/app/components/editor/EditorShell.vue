@@ -10,7 +10,6 @@ import {
 } from '@lucide/vue';
 import { computed, nextTick, ref } from 'vue';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { goToPath } from '@/utils/navigate';
 import {
   Collapsible,
   CollapsibleContent,
@@ -193,7 +192,7 @@ function openInspector(
 
 async function discardAndSignIn(): Promise<void> {
   props.actions.discard();
-  await goToPath('/login');
+  await navigateTo('/login');
 }
 </script>
 
