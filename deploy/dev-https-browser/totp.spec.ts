@@ -753,6 +753,32 @@ async function submitPendingTotpCode(page: Page, code: string): Promise<number> 
 }
 
 /** Completes the open pending authentication with a valid TOTP code. */
+/**
+ * Answers the settings reauthentication on an enrolled account. The password
+ * opens a pending reauthentication, and a fresh code from the current secret
+ * completes it (second-factor-authentication.md, "Enrollment and
+ * management": primary and an active factor must both be recent). The page
+ * then returns to settings.
+ */
+async function reauthenticateEnrolled(
+  page: Page,
+  password: string,
+  secret: string,
+): Promise<void> {
+  await page.getByTestId('second-factor-reauth-password').waitFor();
+  await page.getByLabel('Current password', { exact: true }).fill(password);
+  await Promise.all([
+    page.waitForURL(`${ORIGIN}/login/second-factor`,
+      { timeout: WAIT_NAVIGATION_MS }),
+    page.getByTestId('second-factor-reauth-submit').click(),
+  ]);
+  await hydrated(page, WAIT_HYDRATE_MS);
+  await completeWithTotp(page, await freshCode(page, secret));
+  await page.waitForURL(`${ORIGIN}/app/settings/sessions`,
+    { timeout: WAIT_NAVIGATION_MS });
+  await hydrated(page, WAIT_HYDRATE_MS);
+}
+
 async function completeWithTotp(page: Page, code: string): Promise<void> {
   expect(await submitPendingTotpCode(page, code)).toBe(204);
   await landedAfter(page, '/login/second-factor');
@@ -1372,7 +1398,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-reauth-password'))
       .toBeVisible();
     stage('replace-reauth-submit');
-    await reauthenticateWithPassword(page, primaryPassword);
+    await reauthenticateEnrolled(page, primaryPassword, secret);
     // The replace notice lives in the setup dialog, which opens only after
     // the retried start succeeds.
     stage('replace-start');
@@ -1432,7 +1458,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await gotoHydrated(page, '/app/settings/sessions');
     await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
     await page.getByTestId('totp-setup-replace').click();
-    await reauthenticateWithPassword(page, primaryPassword);
+    await reauthenticateEnrolled(page, primaryPassword, secret);
     const bumpSecret = await startTotpSetup(page);
     expect(await submitSetupCode(page, await freshCode(page, bumpSecret)))
       .toBe(200);
@@ -1506,7 +1532,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await page.locator('[data-action="totp-remove-confirm"]').click();
     await expect(page.getByTestId('second-factor-reauth-password'))
       .toBeVisible();
-    await reauthenticateWithPassword(page, resetPassword);
+    await reauthenticateEnrolled(page, resetPassword, secret);
     await page.getByTestId('totp-remove').click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.locator('[data-action="totp-remove-confirm"]').click();

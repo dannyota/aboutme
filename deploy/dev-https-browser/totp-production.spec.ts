@@ -291,6 +291,32 @@ async function submitPendingTotpCode(page: Page, code: string): Promise<number> 
   return (await response).status();
 }
 
+/**
+ * Answers the settings reauthentication on an enrolled account. The password
+ * opens a pending reauthentication, and a fresh code from the current secret
+ * completes it (second-factor-authentication.md, "Enrollment and
+ * management": primary and an active factor must both be recent). The page
+ * then returns to settings.
+ */
+async function reauthenticateEnrolled(
+  page: Page,
+  password: string,
+  secret: string,
+): Promise<void> {
+  await page.getByTestId('second-factor-reauth-password').waitFor();
+  await page.getByLabel('Current password', { exact: true }).fill(password);
+  await Promise.all([
+    page.waitForURL(`${ORIGIN}/login/second-factor`,
+      { timeout: WAIT_NAVIGATION_MS }),
+    page.getByTestId('second-factor-reauth-submit').click(),
+  ]);
+  await hydrated(page, WAIT_HYDRATE_MS);
+  await completeWithTotp(page, await freshCode(page, secret));
+  await page.waitForURL(`${ORIGIN}/app/settings/sessions`,
+    { timeout: WAIT_NAVIGATION_MS });
+  await hydrated(page, WAIT_HYDRATE_MS);
+}
+
 async function completeWithTotp(page: Page, code: string): Promise<void> {
   if (await submitPendingTotpCode(page, code) !== 204) {
     throw new Error('TOTP completion was rejected');
@@ -557,7 +583,7 @@ test('proves the activated production authenticator-app journey', async ({
       await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
       await page.getByTestId('totp-setup-replace').click();
       await expect(page.getByTestId('second-factor-reauth-password')).toBeVisible();
-      await reauthenticateWithPassword(page, account.password);
+      await reauthenticateEnrolled(page, account.password, secret);
       const oldSecret = secret;
       secret = await startTotpSetup(page);
       if (await submitSetupCode(page, await freshCode(page, secret)) !== 200) {
@@ -638,7 +664,7 @@ test('proves the activated production authenticator-app journey', async ({
       await expect(page.getByRole('alertdialog')).toBeVisible();
       await page.locator('[data-action="totp-remove-confirm"]').click();
       await expect(page.getByTestId('second-factor-reauth-password')).toBeVisible();
-      await reauthenticateWithPassword(page, account.password);
+      await reauthenticateEnrolled(page, account.password, secret);
       await page.getByTestId('totp-remove').click();
       await expect(page.getByRole('alertdialog')).toBeVisible();
       await page.locator('[data-action="totp-remove-confirm"]').click();
