@@ -130,16 +130,30 @@ resource "aws_sns_topic_policy" "alerts" {
 
 # Every stopped app, web or job task sends mail: a crash, a failed job, or a
 # deploy. The event carries the stop reason and exit codes.
+# Any stopped service task alerts. A scheduled job task alerts only when it
+# failed: a container exited non-zero, or the task stopped for another reason
+# than its essential container finishing (for example it never started).
+# Hourly jobs that succeed stop cleanly every run and stay quiet.
 resource "aws_cloudwatch_event_rule" "task_stopped" {
   name        = "${var.name}-task-stopped"
-  description = "aboutme-prod ECS task stopped"
+  description = "aboutme-prod ECS service task stopped or scheduled job failed"
   event_pattern = jsonencode({
     source      = ["aws.ecs"]
     detail-type = ["ECS Task State Change"]
     detail = {
       clusterArn = [var.cluster_arn]
       lastStatus = ["STOPPED"]
-      group      = [{ prefix = "service:${var.name}-" }, "family:${var.name}-jobs"]
+      "$or" = [
+        { group = [{ prefix = "service:${var.name}-" }] },
+        {
+          group      = ["family:${var.name}-jobs"]
+          containers = { exitCode = [{ anything-but = 0 }] }
+        },
+        {
+          group    = ["family:${var.name}-jobs"]
+          stopCode = [{ anything-but = "EssentialContainerExited" }]
+        },
+      ]
     }
   })
 }
