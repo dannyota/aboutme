@@ -16,7 +16,14 @@ locals {
     { name = "GOOGLE_CLIENT_SECRET", valueFrom = "${local.param}/oauth/google-client-secret" },
   ] : []
 
-  logs = { for c in ["server", "caddy", "web", "migrate", "admin", "jobs"] : c => {
+  # The previous key names no parameter when unset, so an absent slot never
+  # makes ECS fail on a missing SSM parameter. See
+  # docs/design/totp-key-management.md, "Key ring".
+  totp_previous_secret = var.totp_previous_key_slot == "" ? [] : [
+    { name = "TOTP_PREVIOUS_KEY", valueFrom = "${local.param}/totp/key-${var.totp_previous_key_slot}" },
+  ]
+
+  logs = { for c in ["server", "caddy", "web", "migrate", "admin", "jobs", "totp-reencrypt"] : c => {
     logDriver = "awslogs"
     options = {
       awslogs-group         = var.log_group_name
@@ -49,6 +56,7 @@ locals {
     { name = "PROVIDER_LOGIN_ENABLED", value = local.google_login ? "google" : "false" },
     { name = "PASSWORD_REGISTRATION_ENABLED", value = var.password_registration_enabled ? "true" : "false" },
     { name = "PASSKEY_ENROLLMENT_ENABLED", value = var.passkey_enrollment_enabled ? "true" : "false" },
+    { name = "TOTP_ENROLLMENT_ENABLED", value = var.totp_enrollment_enabled ? "true" : "false" },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
   ])
@@ -87,7 +95,8 @@ resource "aws_ecs_task_definition" "app" {
         { name = "AUTH_EMAIL_ACTIVE_KEY_ID", valueFrom = "${local.param}/auth-email/active-key-id" },
         { name = "AUTH_EMAIL_ACTIVE_KEY", valueFrom = "${local.param}/auth-email/active-key" },
         { name = "PASSWORD_RATE_HMAC_KEY", valueFrom = "${local.param}/password-rate-hmac-key" },
-      ], local.google_secrets)
+        { name = "TOTP_ACTIVE_KEY", valueFrom = "${local.param}/totp/key-${var.totp_active_key_slot}" },
+      ], local.google_secrets, local.totp_previous_secret)
       # SYS_ADMIN lets Docker's seccomp profile allow the user namespaces that
       # Chromium's sandbox needs. The image runs as a non-root user, so the
       # process gains no effective capability.
@@ -237,5 +246,35 @@ resource "aws_ecs_task_definition" "jobs" {
     ])
     secrets          = [{ name = "PGPASSWORD", valueFrom = "${local.param}/db/app-password" }]
     logConfiguration = local.logs["jobs"]
+  }])
+}
+
+# One-shot key rotation task, run through deploy.sh --totp-key-reencrypt, never
+# scheduled. It reuses the app execution and task roles rather than new ones,
+# so the deploy role's pass-role scope does not grow. See
+# docs/design/totp-key-management.md, "Rotation", and
+# docs/design/passkey-release-fence.md, "Authenticator-app key
+# re-encryption".
+resource "aws_ecs_task_definition" "totp_reencrypt" {
+  family                   = "${var.name}-totp-reencrypt"
+  network_mode             = "bridge"
+  requires_compatibilities = ["EC2"]
+  execution_role_arn       = var.exec_role_arns["app"]
+  task_role_arn            = var.app_task_role_arn
+  container_definitions = jsonencode([{
+    name       = "totp-reencrypt"
+    image      = var.image_server
+    memory     = 256
+    essential  = true
+    entryPoint = ["/usr/local/bin/server"]
+    command    = ["totp-key-reencrypt"]
+    environment = concat(local.media_env, [
+      { name = "DATABASE_URL", value = format(local.db_url, "aboutme_app", "aboutme") },
+    ])
+    secrets = concat([
+      { name = "PGPASSWORD", valueFrom = "${local.param}/db/app-password" },
+      { name = "TOTP_ACTIVE_KEY", valueFrom = "${local.param}/totp/key-${var.totp_active_key_slot}" },
+    ], local.totp_previous_secret)
+    logConfiguration = local.logs["totp-reencrypt"]
   }])
 }

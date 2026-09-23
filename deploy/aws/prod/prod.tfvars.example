@@ -22,3 +22,14 @@ operator_principal_arn = ""
 # false until a healthy v0.4.2 or later release raises the production
 # minimum-release fence.
 passkey_enrollment_enabled = false
+
+# false until a healthy v0.4.7 or later release raises the production
+# minimum-release fence to numeric 4007.
+totp_enrollment_enabled = false
+
+# Chooses which of the two totp/key-<slot> SSM parameters is active; the
+# other slot may hold the previous key during rotation. Both must exist in
+# SSM before the first apply that references them; see
+# docs/design/totp-key-management.md, "Rotation".
+totp_active_key_slot   = "a"
+totp_previous_key_slot = ""

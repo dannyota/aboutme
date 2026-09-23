@@ -83,3 +83,28 @@ variable "passkey_enrollment_enabled" {
   default     = false
   description = "PASSKEY_ENROLLMENT_ENABLED for the server"
 }
+
+# Off until a healthy v0.4.7 or later release raises the production
+# minimum-release fence to numeric 4007; see
+# docs/design/passkey-release-fence.md, "Authenticator-app key
+# re-encryption".
+variable "totp_enrollment_enabled" {
+  type        = bool
+  default     = false
+  description = "TOTP_ENROLLMENT_ENABLED for the server"
+}
+
+# Chooses which protected totp/key-<slot> SSM parameter is TOTP_ACTIVE_KEY;
+# see docs/design/totp-key-management.md, "Key ring" and "Rotation".
+variable "totp_active_key_slot" {
+  type        = string
+  default     = "a"
+  description = "Which totp/key-<slot> parameter supplies TOTP_ACTIVE_KEY: \"a\" or \"b\""
+}
+
+# Empty until a rotation is in progress; must differ from the active slot.
+variable "totp_previous_key_slot" {
+  type        = string
+  default     = ""
+  description = "Which totp/key-<slot> parameter supplies TOTP_PREVIOUS_KEY: \"\", \"a\", or \"b\""
+}

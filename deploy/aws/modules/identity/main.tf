@@ -16,7 +16,7 @@ locals {
   # parameters: it cannot reuse the app role, which also needs the server
   # container's secrets.
   exec_params = {
-    app         = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "oauth/google-client-id", "oauth/google-client-secret"]
+    app         = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "oauth/google-client-id", "oauth/google-client-secret", "totp/key-a", "totp/key-b"]
     web         = []
     maintenance = ["tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca"]
     migrate     = ["db/migrator-password"]
@@ -202,8 +202,11 @@ locals {
     for svc in ["app", "web", "maintenance"] :
     "arn:aws:ecs:ap-southeast-1:${var.account_id}:service/${var.name}/${var.name}-${svc}"
   ]
+  # totp-reencrypt uses the same execution and task roles as app, so it adds
+  # no pass-role scope; see docs/design/passkey-release-fence.md,
+  # "Authenticator-app key re-encryption".
   run_task_family_arns = [
-    for fam in ["migrate", "db-setup", "jobs"] :
+    for fam in ["migrate", "db-setup", "jobs", "totp-reencrypt"] :
     "arn:aws:ecs:ap-southeast-1:${var.account_id}:task-definition/${var.name}-${fam}:*"
   ]
   deploy_pass_role_arns = concat(
