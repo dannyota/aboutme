@@ -13,6 +13,11 @@ import (
 
 type Querier interface {
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
+	// Compare-and-advance on a valid code: the WHERE guard is the single-use
+	// rule, so a replayed step (equal, not greater) affects zero rows and the
+	// caller sees pgx.ErrNoRows. Requires the row already locked by
+	// GetTOTPCredentialForUpdate in this transaction.
+	AdvanceTOTPCredentialStep(ctx context.Context, arg AdvanceTOTPCredentialStepParams) (TotpCredential, error)
 	AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error)
 	// This system backfill intentionally does not change revision or updated_at:
 	// it persists the same projected document already served to readers. It is
@@ -40,10 +45,20 @@ type Querier interface {
 	// the ownership authority; media_deletion_jobs is only durable cleanup work.
 	ClaimMediaDeletionJobs(ctx context.Context, arg ClaimMediaDeletionJobsParams) ([]MediaDeletionJob, error)
 	ClaimPendingAuthentication(ctx context.Context, arg ClaimPendingAuthenticationParams) (PendingAuthentication, error)
+	// Conditional claim for the one-per-hour second_factor_attempts_exhausted
+	// mail cap, under the policy lock. Zero rows means the window has not
+	// elapsed and the caller must suppress the mail; the state change that
+	// triggered the attempt still applies regardless
+	// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
+	ClaimSecondFactorAttemptMailWindow(ctx context.Context, arg ClaimSecondFactorAttemptMailWindowParams) (SecondFactorPolicy, error)
 	ClaimWebAuthnCeremony(ctx context.Context, arg ClaimWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	ClassifyMediaObject(ctx context.Context, objectKey string) (ClassifyMediaObjectRow, error)
 	CleanupExpiredPasswordRegistrations(ctx context.Context, arg CleanupExpiredPasswordRegistrationsParams) (int64, error)
 	CleanupExpiredPasswordResetTokens(ctx context.Context, arg CleanupExpiredPasswordResetTokensParams) (int64, error)
+	// Bounded expiry cleanup, at most 200 rows per admitted enrollment start
+	// (docs/design/budgets.md), skipping rows a concurrent claim or rotation run
+	// already holds.
+	CleanupExpiredTOTPEnrollments(ctx context.Context, limitRows int32) (int64, error)
 	// Sent/terminal jobs are retained for seven days of audit, then removed in a
 	// bounded page, oldest outcome first.
 	CleanupFinishedAuthEmailJobs(ctx context.Context, arg CleanupFinishedAuthEmailJobsParams) (int64, error)
@@ -77,6 +92,14 @@ type Querier interface {
 	CountLiveOAuthGrantsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountResumesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountSecondFactorRecoveryCodes(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Unlocked existence count (0 or 1) for the shared active-factor counter;
+	// one active TOTP credential per account.
+	CountTOTPCredentialsForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Rotation gate: the count a rotation run must see at zero before the key
+	// switch proceeds.
+	CountTOTPCredentialsOffActiveKey(ctx context.Context, activeKeyID string) (int64, error)
+	// Rotation gate for enrollments, paired with CountTOTPCredentialsOffActiveKey.
+	CountTOTPEnrollmentsOffActiveKey(ctx context.Context, activeKeyID string) (int64, error)
 	CreateAndClaimOrphanMediaDeletion(ctx context.Context, arg CreateAndClaimOrphanMediaDeletionParams) (MediaDeletionJob, error)
 	// New jobs always start pending with attempts 0 (DEFAULT). The caller provides
 	// the job id (a UUIDv7 it generated) so the outbox AAD binds to the stored row's
@@ -133,6 +156,10 @@ type Querier interface {
 	// for a rotated successor. The partial unique index makes this an exact,
 	// one-successor lineage link.
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	// Starts one enrollment under the user lock, after DeleteTOTPEnrollmentForUser
+	// has removed any prior row in the same transaction: the atomic supersession
+	// (docs/design/totp-second-factor-contract.md#enrollment-and-replacement-api).
+	CreateTOTPEnrollment(ctx context.Context, arg CreateTOTPEnrollmentParams) (TotpEnrollment, error)
 	// Hand-written, sqlc-annotated queries (`-- name: X :one/:many/:exec`) that
 	// become type-safe Go methods in internal/store via `make generate`.
 	// Relational schema changes belong in apps/server/migrations; see
@@ -203,6 +230,17 @@ type Querier interface {
 	DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePublicCASParams) (Resume, error)
 	DeleteSecondFactorPolicyForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	DeleteSecondFactorRecoveryCodesForUser(ctx context.Context, userID uuid.UUID) (int64, error)
+	// Removal. Returns pgx.ErrNoRows when no credential exists, which the
+	// caller maps to 404 factor_not_found.
+	DeleteTOTPCredentialForUser(ctx context.Context, userID uuid.UUID) (TotpCredential, error)
+	// Claim by delete: totp_enrollments has no consumed_at column, so deleting
+	// the row already locked by GetTOTPEnrollmentForUpdate is the only exit for
+	// a successful completion or a disabled-flag completion attempt.
+	DeleteTOTPEnrollmentByID(ctx context.Context, id uuid.UUID) (int64, error)
+	// Deletes any existing enrollment row for the account, expired or not: the
+	// first half of atomic supersession on start, and the unconditional
+	// enrollment cleanup on removal.
+	DeleteTOTPEnrollmentForUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Bounded token cleanup. An access token leaves as soon as it has expired or
 	// been revoked: it carries no replay-detection role. A refresh token is kept
 	// until its whole family has expired, because a superseded or revoked refresh
@@ -318,6 +356,27 @@ type Querier interface {
 	GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error)
 	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
 	GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error)
+	// Authenticator-app (TOTP) second-factor queries. Every TOTP transaction
+	// takes locks in the order fixed by
+	// docs/design/totp-second-factor-contract.md#removal-recovery-and-races:
+	// user, current session when present, policy, credential, enrollment, then
+	// pending authentication when applicable. GetUserForUpdate,
+	// GetSessionByIDForUpdate, and GetSecondFactorPolicyForUpdate already exist
+	// in queries.sql; this file adds the credential and enrollment steps.
+	//
+	// Every mutation below that reads a value it also writes (the failure
+	// counter, the doubling cool-down, the monotonic step) must run inside the
+	// same transaction as a prior GetTOTPCredentialForUpdate, so the row stays
+	// locked from the first read through the write and no concurrent
+	// transaction can observe or apply a stale value in between.
+	// The credential-row lock. Callers read cooldown_until here, before any
+	// decryption, so a live cool-down short-circuits with no decrypt attempt and
+	// no failure counted (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
+	GetTOTPCredentialForUpdate(ctx context.Context, userID uuid.UUID) (TotpCredential, error)
+	// The enrollment-row lock, keyed by the enrollment token's digest. The
+	// caller checks user, session, epoch, and expiry against the returned row
+	// and collapses any mismatch to 400 enrollment_invalid.
+	GetTOTPEnrollmentForUpdate(ctx context.Context, tokenDigest []byte) (TotpEnrollment, error)
 	// Ownership read before a new-account insert. The caller passes the canonical
 	// lowercase form; users.email is citext so the comparison is already
 	// case-insensitive, and the unique constraint arbitrates the actual insert.
@@ -346,6 +405,9 @@ type Querier interface {
 	// mint at most one successor even under concurrent rotations.
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
+	// First install under the user lock. The caller generates id as a UUIDv7 and
+	// seals the secret with it before this insert (docs/design/totp-key-management.md#sealing).
+	InstallTOTPCredential(ctx context.Context, arg InstallTOTPCredentialParams) (TotpCredential, error)
 	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
 	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]Resume, error)
@@ -398,6 +460,19 @@ type Querier interface {
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
+	// Bounded key-ring health check across both tables without decrypting. A
+	// healthy ring holds at most two distinct IDs (one active, at most one
+	// previous); reading up to three is enough to prove a third, unknown ID
+	// exists (docs/design/totp-key-management.md#key-failures).
+	ListTOTPActiveKeyIDs(ctx context.Context, now time.Time) ([]string, error)
+	// Bounded re-encryption batch: at most 200 rows off the active key, in id
+	// order, skipping any row a live factor transaction already holds
+	// (docs/design/totp-key-management.md#rotation).
+	ListTOTPCredentialsOffActiveKey(ctx context.Context, arg ListTOTPCredentialsOffActiveKeyParams) ([]TotpCredential, error)
+	// Bounded re-encryption batch for enrollments, same shape as
+	// ListTOTPCredentialsOffActiveKey. The caller deletes an expired row here
+	// outright instead of decrypting it (docs/design/totp-key-management.md#rotation).
+	ListTOTPEnrollmentsOffActiveKey(ctx context.Context, arg ListTOTPEnrollmentsOffActiveKeyParams) ([]TotpEnrollment, error)
 	ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
 	// Account deletion owns the global lock order documented in
 	// docs/design/operations.md. The caller takes slug advisory locks and
@@ -422,12 +497,29 @@ type Querier interface {
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
 	RecordPendingAuthenticationFailure(ctx context.Context, arg RecordPendingAuthenticationFailureParams) (PendingAuthentication, error)
+	// Increments the consecutive-failure counter, saturating at 1,000, and on
+	// every fifth consecutive failure sets a cool-down of 15 minutes doubling to
+	// at most 24 hours (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
+	// The WHERE guard repeats the cool-down check GetTOTPCredentialForUpdate
+	// already made, so this only ever applies to a row not currently cooling
+	// down.
+	RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOTPCredentialFailureParams) (TotpCredential, error)
 	RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error)
+	// Key-ID compare-before-update: the WHERE clause only applies the rewrite
+	// when the row is still sealed under the exact key the caller decrypted, so
+	// a row already rewritten by a concurrent run is left alone.
+	ReencryptTOTPCredential(ctx context.Context, arg ReencryptTOTPCredentialParams) (int64, error)
+	// Key-ID compare-before-update for an unexpired enrollment row.
+	ReencryptTOTPEnrollment(ctx context.Context, arg ReencryptTOTPEnrollmentParams) (int64, error)
 	// Releases exactly the counters of physically deleted records, in the same
 	// transaction as their deletion. The migration's purge-then-backfill order
 	// plus transactional maintenance guarantee this can never underflow the
 	// non-negative checks.
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
+	// Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
+	// existing id and created_at, reseals under a fresh nonce, and resets the
+	// failure budget because a fresh secret cannot inherit a stale cool-down.
+	ReplaceTOTPCredential(ctx context.Context, arg ReplaceTOTPCredentialParams) (TotpCredential, error)
 	// A temporary failure releases the lease back to pending with the next attempt
 	// time, retaining ciphertext and the already-incremented attempt count. The
 	// caller never requeues at attempts = 8 (that path marks terminal instead).
@@ -438,6 +530,10 @@ type Querier interface {
 	// never happened) and re-dueing immediately. Ordered so repeated calls make
 	// monotonic progress.
 	RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error)
+	// Generic reset to the zero failure budget. Callers decide when this runs
+	// (a successful code, a completed password reset); storage only guarantees
+	// it always clears both fields together.
+	ResetTOTPCredentialFailureBudget(ctx context.Context, arg ResetTOTPCredentialFailureBudgetParams) (TotpCredential, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.
 	RevokeAllSessions(ctx context.Context, arg RevokeAllSessionsParams) (int64, error)

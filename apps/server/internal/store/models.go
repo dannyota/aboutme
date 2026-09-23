@@ -234,6 +234,7 @@ type SecondFactorPolicy struct {
 	UserID             uuid.UUID
 	WebauthnUserHandle []byte
 	EnabledAt          time.Time
+	AttemptMailAt      *time.Time
 }
 
 type SecondFactorRecoveryCode struct {
@@ -266,6 +267,35 @@ type SlugTombstone struct {
 	Slug             string
 	ReleasedByUserID *uuid.UUID
 	ReleasedAt       time.Time
+}
+
+type TotpCredential struct {
+	ID             uuid.UUID
+	UserID         uuid.UUID
+	KeyID          string
+	Nonce          []byte
+	Ciphertext     []byte
+	FormatVersion  int16
+	LastUsedStep   int64
+	FailedAttempts int32
+	CooldownUntil  *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type TotpEnrollment struct {
+	ID            uuid.UUID
+	TokenDigest   []byte
+	UserID        uuid.UUID
+	SessionID     uuid.UUID
+	AuthEpoch     int64
+	Issuer        string
+	KeyID         string
+	Nonce         []byte
+	Ciphertext    []byte
+	FormatVersion int16
+	CreatedAt     time.Time
+	ExpiresAt     time.Time
 }
 
 type User struct {
