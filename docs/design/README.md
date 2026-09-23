@@ -1,7 +1,7 @@
 # aboutme design
 
 Status: **Approved v4** (2026-08-12), approved by the design owner's delegated
-review, with owner-approved amendments through ADR 0048 (2026-09-20). Changed
+review, with owner-approved amendments through ADR 0049 (2026-09-23). Changed
 decisions from here on need a new ADR or a v5 revision.
 
 This directory defines the intended v1 product and architecture. Current
@@ -73,7 +73,7 @@ The design has five cross-cutting rules:
 
 ## Approval rule
 
-V4 and its accepted amendments through ADR 0048 are approved and implementable.
+V4 and its accepted amendments through ADR 0049 are approved and implementable.
 A changed decision needs a new ADR; a structural rewrite needs a v5 revision.
 Neither silently rewrites approved text.
 

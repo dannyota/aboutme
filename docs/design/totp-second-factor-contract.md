@@ -1,7 +1,7 @@
 # Authenticator-app second-factor contract
 
-Status: Proposed for the authenticator-app release. The owner approved all seven
-product choices below on 2026-09-22.
+Status: Accepted for the authenticator-app release. The owner approved all seven
+product choices below on 2026-09-22 and the failure-budget rules on 2026-09-23.
 
 This contract adds time-based one-time password (TOTP) verification to the
 v0.4.2 pending, recovery, session, and authentication-epoch boundary without
@@ -29,9 +29,9 @@ The owner approved these product choices on 2026-09-22:
    deletes the set and disables second-factor enforcement.
 6. Approved: Send bilingual security mail after TOTP addition, replacement,
    removal, and final disablement. Starting or abandoning setup sends no mail.
-7. Approved: Raise the production minimum-release fence to v0.4.6 before TOTP
+7. Approved: Raise the production minimum-release fence to v0.4.7 before TOTP
    enrollment is enabled. Once TOTP enrollment can succeed, a supported rollback
-   below v0.4.6 is forbidden.
+   below v0.4.7 is forbidden.
 
 ## Release surface
 
@@ -252,7 +252,7 @@ second-factor rate limits apply across methods.
 
 Each valid primary login creates a new pending row, so the TOTP credential
 carries an IP-independent budget in PostgreSQL: `failed_attempts`, from 0
-through 1,000, and nullable `cooldown_until`.
+through 1,000, nullable `cooldown_until`, and nullable `last_failed_at`.
 
 Verification locks the credential in the canonical order. When `cooldown_until`
 is later than the transaction time, it returns `429 rate_limited` with
@@ -263,8 +263,9 @@ one and 1,000. When the new value is a multiple of five, `cooldown_until`
 becomes the transaction time plus 15 minutes times
 `2^min(failed_attempts/5 - 1, 7)`, capped at 24 hours, and the exhaustion mail
 is enqueued subject to the cap. At the 1,000 ceiling every further failure keeps
-the value at 1,000 and sets a 24-hour cool-down. A valid code, replacement, or
-removal resets both fields.
+the value at 1,000 and sets a 24-hour cool-down. Each failure sets
+`last_failed_at`. A valid code resets all three fields only when it is null or
+24 hours old; replacement and removal always reset them.
 
 A password holder with any number of client IPs thus gets at most 35 guesses in
 the first day and 5 per day after that, under 0.6 percent success in a year. The
@@ -321,7 +322,7 @@ Migration `00005_totp_second_factor.sql` adds these relations:
 - `totp_credentials`: application-generated UUIDv7 `id`, unique `user_id`, key
   identifier, 12-byte nonce, 36-byte ciphertext, format version 1, nonnegative
   `last_used_step`, `failed_attempts` from 0 through 1,000, nullable
-  `cooldown_until`, `created_at`, and `updated_at`;
+  `cooldown_until`, nullable `last_failed_at`, `created_at`, and `updated_at`;
 - `totp_enrollments`: application-generated UUIDv7 `id`, unique 32-byte token
   digest, `user_id`, concrete `session_id`, authentication epoch, issuer, key
   identifier, 12-byte nonce, 36-byte ciphertext, format version 1, and creation
@@ -411,17 +412,17 @@ nullable policy column, which changes no row value. It changes no passkey,
 policy, recovery, pending, session, grant, authorization-code, token, or mail
 row and deletes no data. Rollback leaves the empty or populated tables in place.
 
-Before enrollment enablement, v0.4.2 and v0.4.6 application tasks may overlap
-because no TOTP row can exist. The v0.4.6 web treats absent or malformed new
+Before enrollment enablement, v0.4.2 and v0.4.7 application tasks may overlap
+because no TOTP row can exist. The v0.4.7 web treats absent or malformed new
 capability and state fields as false during that window. The flag stays false
 until every running server and web asset supports TOTP.
 
 After TOTP enrollment can succeed, an older server cannot provide every active
 method or manage a TOTP-only account. A v0.4.2 passkey removal counts only
 passkeys, so it could delete the policy and recovery codes while TOTP stays
-active. The durable production floor must therefore be v0.4.6, numeric release
-4006, before the flag turns on. `deploy.sh` and `fence.sh` refuse any app
-revision with TOTP enrollment on while the fence item is missing or below 4006,
+active. The durable production floor must therefore be v0.4.7, numeric release
+4007, before the flag turns on. `deploy.sh` and `fence.sh` refuse any app
+revision with TOTP enrollment on while the fence item is missing or below 4007,
 as the
 [release fence](passkey-release-fence.md#authenticator-app-key-re-encryption)
 defines. Older browser assets fail closed: primary login still creates no
@@ -432,7 +433,7 @@ still work, but compatibility does not depend on it.
 Turning `TOTP_ENROLLMENT_ENABLED` off stops new setup and replacement. It never
 lowers the floor, removes a credential, disables TOTP verification, changes
 recovery, or permits primary-only login. After enablement, rollback means a
-forward fix or an image at or above the v0.4.6 fence.
+forward fix or an image at or above the v0.4.7 fence.
 
 The only intentional loss is ephemeral: starting a new enrollment deletes the
 prior incomplete enrollment, and cleanup removes expired enrollment rows. Active
@@ -443,7 +444,7 @@ deliberate removal.
 
 GitHub CI owns every build, test, lint, database, migration, browser,
 infrastructure, Semgrep, and gitleaks gate. Production deploys valid keys with
-enrollment off, proves compatibility, raises the serialized floor to v0.4.6,
+enrollment off, proves compatibility, raises the serialized floor to v0.4.7,
 enables enrollment, and proves the flow with the authorized fictional account.
 The scripted production proof keeps every secret, URI, and code in process
 memory and prints only fixed step outcomes.

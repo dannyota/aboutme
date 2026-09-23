@@ -1,7 +1,7 @@
 # 0049: Authenticator-app second-factor authentication
 
-Status: Proposed. The owner approved its product choices on 2026-09-22; a fresh
-review is pending.
+Status: Accepted (2026-09-23). The owner approved its product choices on
+2026-09-22 and the failure-budget rules on 2026-09-23 after a fresh review.
 
 ## Context
 
@@ -61,8 +61,8 @@ authenticated-decryption failure fails closed for that TOTP row only, keeps
 **Guessing has a per-account bound.** Each TOTP credential carries a
 consecutive-failure count and a cool-down that grows from 15 minutes to 24
 hours. It is independent of client IP and never blocks passkeys or recovery
-codes. A password reset does not clear it. Attempt mail is capped at one per
-account per hour.
+codes. A password reset does not clear it, and a valid code clears it only after
+24 hours without a failure. Attempt mail is capped at one per account per hour.
 
 **The browser renders provisioning locally.** The server returns one canonical
 `otpauth` URI and a grouped Base32 secret once. The issuer is the canonical
@@ -71,7 +71,7 @@ QR or provisioning service receives either value.
 
 **The release floor advances before enrollment.** The authenticator-app release
 deploys with enrollment off and valid keys. After flag-off proof, the serialized
-production operation raises the existing durable floor from v0.4.2 to v0.4.6.
+production operation raises the existing durable floor from v0.4.2 to v0.4.7.
 Only then may the flag turn on. Disabling enrollment later does not lower the
 floor or verification.
 
@@ -109,13 +109,13 @@ events. Existing accounts, passkeys, recovery codes, pending rows, sessions,
 grants, resumes, and mail stay unchanged. The release deletes no durable data.
 Superseded, expired, and consumed enrollments are the only automatic loss.
 
-Mixed v0.4.2 and v0.4.6 tasks are safe only while TOTP enrollment is false and
+Mixed v0.4.2 and v0.4.7 tasks are safe only while TOTP enrollment is false and
 no TOTP credential exists. New clients treat absent new fields as false. Older
 clients cannot bypass pending authentication, but they may require a refresh to
 use a TOTP-only account.
 
-After the floor reaches numeric release 4006, supported deploy, rollback, and
-restoration paths reject lower images. A post-enablement rollback uses v0.4.6 or
+After the floor reaches numeric release 4007, supported deploy, rollback, and
+restoration paths reject lower images. A post-enablement rollback uses v0.4.7 or
 later, or a forward fix.
 
 ## Security and operational consequences

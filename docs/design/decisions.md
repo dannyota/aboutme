@@ -1,8 +1,8 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. Records 0001–0048
-are accepted; ADR 0049 is proposed.
+supersession record; these pages state the resulting design. Records 0001–0049
+are accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                     |
 | -------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -54,7 +54,7 @@ are accepted; ADR 0049 is proposed.
 | [0046](../adr/0046-github-ci-delivery-gate.md)                       | Accepted | Narrow local checks and per-commit gitleaks; one fresh review before push; exact green GitHub CI commit before release |
 | [0047](../adr/0047-bilingual-resume-workspace.md)                    | Accepted | Vietnamese and English resume workspace; interface toggles never change resume data or resume language                 |
 | [0048](../adr/0048-passkey-second-factor-authentication.md)          | Accepted | Optional passkey second factor, recovery codes, authority epoch, exact wire contract, and release fence                |
-| [0049](../adr/0049-totp-second-factor-authentication.md)             | Proposed | Optional authenticator-app second factor, sealed secrets with a derived-ID key ring, shared recovery, and floor v0.4.6 |
+| [0049](../adr/0049-totp-second-factor-authentication.md)             | Accepted | Optional authenticator-app second factor, sealed secrets with a derived-ID key ring, shared recovery, and floor v0.4.7 |
 
 ## Remaining gates
 

@@ -4,14 +4,14 @@ Status: proposed. The owner approved every marked choice in
 `docs/design/totp-second-factor-contract.md` on 2026-09-22. Implementation is
 blocked until ADR 0049 is accepted.
 
-**Goal:** Ship v0.4.6 with optional authenticator-app enrollment, verification,
+**Goal:** Ship v0.4.7 with optional authenticator-app enrollment, verification,
 safe replacement and removal, shared recovery, bilingual mail and web flows,
-encrypted secret rotation, and a v0.4.6 rollback floor.
+encrypted secret rotation, and a v0.4.7 rollback floor.
 
 **Architecture:** TOTP extends the v0.4.2 pending-authentication and
 authentication-epoch boundary. PostgreSQL owns one encrypted credential and one
 short-lived enrollment per account. The existing durable release fence rises to
-v0.4.6 before the enrollment flag turns on.
+v0.4.7 before the enrollment flag turns on.
 
 **Tech stack:** Go standard-library cryptography, PostgreSQL, sqlc, OpenAPI,
 Nuxt 4, Vue 3, TypeScript, a pinned local QR encoder, OpenTofu, ECS, Vitest, and
@@ -32,7 +32,7 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 - ADR 0049 and the TOTP contract pass one fresh Sol review before product code
   starts.
 - V0.4.2 is integrated. Its pending, factor, recovery, epoch, mail, web, fence,
-  and hosted-browser contracts are green on the v0.4.6 base. Its factor service
+  and hosted-browser contracts are green on the v0.4.7 base. Its factor service
   counts active factors of every type through registered counters, decides first
   enrollment from policy existence, and answers passkey options without a
   passkey with `404 factor_not_found`. Its pending page shows a refresh prompt
@@ -46,7 +46,7 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 
 ## Global constraints
 
-- V0.4.6 adds TOTP to the existing passkey boundary. It does not change
+- V0.4.7 adds TOTP to the existing passkey boundary. It does not change
   passkeys, recovery-code format, resume documents, public pages, PDFs, or MCP
   tools and scopes.
 - The exact TOTP profile is HMAC-SHA-1, 20 secret bytes, six digits, a 30-second
@@ -75,7 +75,7 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 - `TOTP_ENROLLMENT_ENABLED` defaults false. It gates start and completion only.
   Disabled completion consumes its matching enrollment and stores nothing.
 - The first production deploy has valid keys and enrollment false. The fence
-  rises to numeric release 4006 before enablement.
+  rises to numeric release 4007 before enablement.
 - Migration 00005 replaces both closed auth-mail constraints for all three TOTP
   mail kinds. Mail insertion remains in the factor transaction.
 - Only the app ECS execution role reads exact TOTP parameter ARNs. The
@@ -118,8 +118,8 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 - Trace password, every provider, passkey, TOTP, recovery, reset, consent,
   grants, authorization codes, refresh, bearer authentication, and every
   sensitive action across an epoch change.
-- Prove flag-off enrollment, older-client behavior, mixed v0.4.2 and v0.4.6
-  startup, floor 4006, same-tag activation, rollback, and restoration.
+- Prove flag-off enrollment, older-client behavior, mixed v0.4.2 and v0.4.7
+  startup, floor 4007, same-tag activation, rollback, and restoration.
 - Prove exact cache headers on every TOTP route, per-row key failure with green
   `/readyz`, the alarm signal, app-execution-role-only key reads, derived key
   IDs, slot rotation order, and the dedicated one-shot rotation task.
@@ -192,25 +192,25 @@ database. The manager verifies the job SHA and artifact before release.
 
 The top manager owns this sequence:
 
-1. Integrate one exact v0.4.6 file set and obtain the fresh integrated review.
+1. Integrate one exact v0.4.7 file set and obtain the fresh integrated review.
 2. Push the release commit alone to `main` and wait for green CI on that commit.
-3. Tag `v0.4.6`, wait for release images, and inspect the reviewed production
+3. Tag `v0.4.7`, wait for release images, and inspect the reviewed production
    OpenTofu plan. Stop on unexpected destroy, fence replacement, or secret
    output.
-4. Apply the reviewed secret and task changes. Deploy v0.4.6 with TOTP
+4. Apply the reviewed secret and task changes. Deploy v0.4.7 with TOTP
    enrollment false.
 5. Run the first bounded production proof. Prove health, existing unenrolled,
    passkey and recovery login, existing sessions and grants, and disabled TOTP
    enrollment.
 6. Acquire the durable production operation lock and raise the release fence
-   conditionally to numeric 4006 and tag v0.4.6. Never lower it on failure.
+   conditionally to numeric 4007 and tag v0.4.7. Never lower it on failure.
 7. Enable TOTP enrollment through the reviewed OpenTofu apply. Redeploy the same
    tag through a new serialized operation.
 8. Run the second bounded production proof with only the named fictional
    account. Prove first TOTP enrollment, pending login, replacement, shared
    recovery, passkey coexistence, both locales, and removal.
 9. Remove the proof factor, recovery plaintext, sessions, and browser profile.
-   Record bounded redacted evidence. Fix forward at v0.4.6 or later on failure.
+   Record bounded redacted evidence. Fix forward at v0.4.7 or later on failure.
 
 GitHub CI cannot observe the deployed flag, release fence, live providers, or
 production origin. Steps 5 and 8 are the only local runtime exceptions. The top
@@ -219,7 +219,7 @@ run mode `totp-prod-flag-off` for step 5 and `totp-prod-enabled` for step 8. No
 one drives the browser by hand. The run uses the pinned browser image from
 `deploy/dev-https-browser/Dockerfile` (Playwright 1.62.1 and its bundled
 Chromium), not a host install. It reads the fictional account from the
-owner-only ignored file `.dev/v0.4.6/production-input/account.env`, mounted
+owner-only ignored file `.dev/v0.4.7/production-input/account.env`, mounted
 read-only. It reads the setup secret and recovery codes from the page into
 process memory, computes codes in that process, and creates any passkey with a
 Chrome DevTools virtual authenticator inside the run.
@@ -255,9 +255,9 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 flock -o -n "$common_dir/aboutme-local-check.lock" \
   timeout --signal=TERM 60m \
   deploy/dev-https-browser/run.sh "$image_id" \
-    "$PWD/.dev/v0.4.6/production-input" \
+    "$PWD/.dev/v0.4.7/production-input" \
     "$PWD/deploy/dev-https-browser" \
-    "$PWD/.dev/v0.4.6/production-evidence" totp-prod-enabled
+    "$PWD/.dev/v0.4.7/production-evidence" totp-prod-enabled
 ```
 
 The proof starts no local product stack. The browser profile lives on the

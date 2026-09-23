@@ -35,8 +35,17 @@ cryptography, and mail reports.
   `apps/server/internal/accountapi/delete_test.go` only for TOTP absence and
   cascade cases.
 
+- Modify `apps/server/migrations/00005_totp_second_factor.sql`,
+  `apps/server/migrations/second_factor_totp_test.go`,
+  `apps/server/sql/second_factor_totp.sql`, the regenerated
+  `apps/server/internal/store/{models,querier,second_factor_totp.sql}.go`, and
+  `apps/server/internal/store/totp_store_test.go` only to add nullable
+  `totp_credentials.last_failed_at`, set it in the failure query, and clear it
+  in the reset and replace queries. Migration 00005 is not yet released, so edit
+  it in place.
+
 Do not edit config, composition, OpenAPI, generated clients, login providers,
-OAuth, mail files, SQL, migrations, web, infrastructure, or design.
+OAuth, mail files, other SQL or migrations, web, infrastructure, or design.
 
 ## Required behavior
 
@@ -55,9 +64,12 @@ OAuth, mail files, SQL, migrations, web, infrastructure, or design.
   count dependency, decryption, or clock failures.
 - Enforce the per-account failure budget on the credential row: the cool-down
   check before decryption, `429` with bounded `Retry-After`, the doubling
-  cool-down every fifth consecutive failure, and reset on success, replacement,
-  or removal. Prove passkey and recovery completion stay available during a TOTP
-  cool-down.
+  cool-down every fifth consecutive failure, and `last_failed_at` on every
+  counted failure. A valid code resets the count, cool-down, and
+  `last_failed_at` only when `last_failed_at` is null or at least 24 hours old;
+  otherwise they stay. Replacement and removal always reset them. Prove a valid
+  code within 24 hours of a failure keeps the escalation, and prove passkey and
+  recovery completion stay available during a TOTP cool-down.
 - Apply the one-per-hour `attempt_mail_at` cap under the policy lock to every
   `second_factor_attempts_exhausted` job, including passkey and recovery
   exhaustion and TOTP cool-down start. The shared exhaustion hook is
@@ -65,8 +77,8 @@ OAuth, mail files, SQL, migrations, web, infrastructure, or design.
   Lock the policy row (and TOTP credential) in the `WithLivePending`
   `beforePending` callback, before the pending row, in the canonical order. A
   suppressed mail keeps the state change.
-- A completed password reset leaves `cooldown_until` and `failed_attempts`
-  unchanged. Prove an active cool-down survives a reset.
+- A completed password reset leaves `cooldown_until`, `failed_attempts`, and
+  `last_failed_at` unchanged. Prove an active cool-down survives a reset.
 - Register the TOTP counter with the shared active-factor count in `service.go`.
   TOTP removal and passkey removal decide final versus non-final only from that
   count. Do not change passkey handler functions or passkey routes. Prove final

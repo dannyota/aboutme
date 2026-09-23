@@ -1,6 +1,6 @@
 # Authenticator-app key management
 
-Status: Proposed for the authenticator-app release with the
+Status: Accepted for the authenticator-app release with the
 [authenticator-app contract](totp-second-factor-contract.md), which owns every
 other TOTP rule.
 
