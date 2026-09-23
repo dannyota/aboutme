@@ -265,8 +265,135 @@ func TestSecondFactorAccountMutations_SessionCSRFAndResponses(t *testing.T) {
 
 	service.state = auth.SecondFactorState{}
 	rec = sfServe(t, e.mux, sfRequest{method: http.MethodGet, path: auth.SecondFactorStatePath, cookies: sessionCookie})
-	if rec.Code != http.StatusOK || rec.Body.String() != `{"data":{"enabled":false,"passkeys":[],"recoveryCodesRemaining":0}}`+"\n" {
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"data":{"enabled":false,"passkeys":[],"totpEnabled":false,"recoveryCodesRemaining":0}}`+"\n" {
 		t.Fatalf("unenrolled state = %d %q", rec.Code, rec.Body)
+	}
+}
+
+// TestSecondFactorTOTPEnrollment_WiredHappyPathAndErrorMapping drives the
+// enrollment start and completion routes against a wired fake over a live
+// session, covering the success bodies and the enrollment_invalid and
+// verification_failed status codes the contract adds
+// (docs/design/totp-second-factor-contract.md#enrollment-and-replacement-api).
+func TestSecondFactorTOTPEnrollment_WiredHappyPathAndErrorMapping(t *testing.T) {
+	pool := newTestPool(t)
+	userID := createTestUser(t, store.New(pool))
+	sessions := auth.NewSessionManagerWithPool(pool)
+	raw, sess, err := sessions.Issue(t.Context(), userID, "test-agent", "203.0.113.7")
+	if err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+	totp := &sfTOTPService{
+		enabled: true,
+		start: auth.TOTPEnrollmentStart{
+			EnrollmentID: "enroll-id", Secret: "ABCD EFGH", ProvisioningURI: "otpauth://totp/x",
+			ExpiresAt: time.Date(2026, 9, 20, 9, 10, 0, 0, time.UTC),
+		},
+		completion: auth.TOTPEnrollmentComplete{RecoveryCodes: []string{"amr_new"}, Session: auth.SessionIssue{RawToken: "totp-session"}},
+	}
+	mux := sfMuxWithTOTP(t, &sfService{}, totp, pool)
+	sessionCookie := []*http.Cookie{{Name: "__Host-session", Value: raw}}
+	csrf := base64.RawURLEncoding.EncodeToString(sess.CSRFSecret)
+
+	start := sfRequest{method: http.MethodPost, path: auth.SecondFactorTOTPEnrollmentPath, body: `{}`, contentType: "application/json", origin: sfOrigin, csrf: csrf, cookies: sessionCookie}
+	rec := sfServe(t, mux, start)
+	var startBody struct {
+		Data struct {
+			EnrollmentID    string `json:"enrollmentId"`
+			Secret          string `json:"secret"`
+			ProvisioningURI string `json:"provisioningUri"`
+			ExpiresAt       string `json:"expiresAt"`
+		} `json:"data"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &startBody) != nil {
+		t.Fatalf("start = %d %s", rec.Code, rec.Body)
+	}
+	if startBody.Data.EnrollmentID != "enroll-id" || startBody.Data.Secret != "ABCD EFGH" || startBody.Data.ProvisioningURI != "otpauth://totp/x" || startBody.Data.ExpiresAt != "2026-09-20T09:10:00Z" {
+		t.Fatalf("start body = %+v", startBody.Data)
+	}
+
+	complete := sfRequest{method: http.MethodPut, path: auth.SecondFactorTOTPEnrollmentPath, body: `{"enrollmentId":"enroll-id","code":"123456"}`, contentType: "application/json", origin: sfOrigin, csrf: csrf, cookies: sessionCookie}
+	rec = sfServe(t, mux, complete)
+	if rec.Code != http.StatusOK || !sfSetsCookie(rec, "__Host-session", "totp-session") {
+		t.Fatalf("complete = %d %s, cookies %v", rec.Code, rec.Body, rec.Header().Values("Set-Cookie"))
+	}
+	if want := `{"data":{"totpEnabled":true,"recoveryCodes":["amr_new"]}}` + "\n"; rec.Body.String() != want {
+		t.Fatalf("complete body = %q, want %q", rec.Body, want)
+	}
+
+	badEnrollment := sfRequest{method: http.MethodPut, path: auth.SecondFactorTOTPEnrollmentPath, body: `{"enrollmentId":"bad-enrollment-shape","code":"123456"}`, contentType: "application/json", origin: sfOrigin, csrf: csrf, cookies: sessionCookie}
+	if rec = sfServe(t, mux, badEnrollment); rec.Code != http.StatusBadRequest || sfErrorCode(t, rec) != "enrollment_invalid" {
+		t.Fatalf("malformed enrollment id = %d %s, want 400 enrollment_invalid", rec.Code, rec.Body)
+	}
+
+	totp.err = auth.ErrSecondFactorVerificationFailed
+	if rec = sfServe(t, mux, complete); rec.Code != http.StatusUnauthorized || sfErrorCode(t, rec) != "verification_failed" {
+		t.Fatalf("wrong code = %d %s, want 401 verification_failed", rec.Code, rec.Body)
+	}
+
+	totp.err = auth.ErrTOTPEnrollmentInvalid
+	if rec = sfServe(t, mux, complete); rec.Code != http.StatusBadRequest || sfErrorCode(t, rec) != "enrollment_invalid" {
+		t.Fatalf("expired or foreign enrollment = %d %s, want 400 enrollment_invalid", rec.Code, rec.Body)
+	}
+}
+
+// TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound proves DELETE
+// requires a session before reporting whether TOTP is wired, then maps
+// ErrSecondFactorNotFound to 404 factor_not_found; an unwired TOTP
+// dependency answers the same 404 once a session is present
+// ("Removal, recovery, and races").
+func TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound(t *testing.T) {
+	pool := newTestPool(t)
+	userID := createTestUser(t, store.New(pool))
+	sessions := auth.NewSessionManagerWithPool(pool)
+	raw, sess, err := sessions.Issue(t.Context(), userID, "test-agent", "203.0.113.7")
+	if err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+	totp := &sfTOTPService{replacement: auth.SessionIssue{RawToken: "after-removal"}}
+	mux := sfMuxWithTOTP(t, &sfService{}, totp, pool)
+	sessionCookie := []*http.Cookie{{Name: "__Host-session", Value: raw}}
+	req := sfRequest{method: http.MethodDelete, path: auth.SecondFactorTOTPPath, origin: sfOrigin, csrf: base64.RawURLEncoding.EncodeToString(sess.CSRFSecret), cookies: sessionCookie}
+
+	rec := sfServe(t, mux, req)
+	if rec.Code != http.StatusNoContent || !sfSetsCookie(rec, "__Host-session", "after-removal") {
+		t.Fatalf("removal = %d, cookies %v", rec.Code, rec.Header().Values("Set-Cookie"))
+	}
+
+	totp.err = auth.ErrSecondFactorNotFound
+	if rec = sfServe(t, mux, req); rec.Code != http.StatusNotFound || sfErrorCode(t, rec) != "factor_not_found" {
+		t.Fatalf("missing credential = %d %s, want 404 factor_not_found", rec.Code, rec.Body)
+	}
+
+	unwired := sfMux(t, &sfService{}, pool)
+	if rec = sfServe(t, unwired, req); rec.Code != http.StatusNotFound || sfErrorCode(t, rec) != "factor_not_found" {
+		t.Fatalf("unwired removal with a session = %d %s, want 404 factor_not_found", rec.Code, rec.Body)
+	}
+}
+
+// TestSecondFactorState_MergesTOTPEnabled proves the state route adds
+// totpEnabled from the TOTP dependency, defaulting to false when it is
+// unwired ("Release surface").
+func TestSecondFactorState_MergesTOTPEnabled(t *testing.T) {
+	pool := newTestPool(t)
+	userID := createTestUser(t, store.New(pool))
+	raw, _, err := auth.NewSessionManagerWithPool(pool).Issue(t.Context(), userID, "test-agent", "203.0.113.7")
+	if err != nil {
+		t.Fatalf("issue session: %v", err)
+	}
+	service := &sfService{state: auth.SecondFactorState{}}
+	totp := &sfTOTPService{state: true}
+	mux := sfMuxWithTOTP(t, service, totp, pool)
+	req := sfRequest{method: http.MethodGet, path: auth.SecondFactorStatePath, cookies: []*http.Cookie{{Name: "__Host-session", Value: raw}}}
+	rec := sfServe(t, mux, req)
+	if want := `{"data":{"enabled":false,"passkeys":[],"totpEnabled":true,"recoveryCodesRemaining":0}}` + "\n"; rec.Code != http.StatusOK || rec.Body.String() != want {
+		t.Fatalf("wired state = %d %q, want %q", rec.Code, rec.Body, want)
+	}
+
+	unwired := sfMux(t, service, pool)
+	rec = sfServe(t, unwired, req)
+	if want := `{"data":{"enabled":false,"passkeys":[],"totpEnabled":false,"recoveryCodesRemaining":0}}` + "\n"; rec.Code != http.StatusOK || rec.Body.String() != want {
+		t.Fatalf("unwired state = %d %q, want %q", rec.Code, rec.Body, want)
 	}
 }
 

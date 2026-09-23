@@ -466,12 +466,16 @@ type Querier interface {
 	// exists (docs/design/totp-key-management.md#key-failures).
 	ListTOTPActiveKeyIDs(ctx context.Context, now time.Time) ([]string, error)
 	// Bounded re-encryption batch: at most 200 rows off the active key, in id
-	// order, skipping any row a live factor transaction already holds
-	// (docs/design/totp-key-management.md#rotation).
+	// order after after_id, skipping any row a live factor transaction already
+	// holds (docs/design/totp-key-management.md#rotation). The after_id cursor
+	// lets the caller page past a row it already visited in an earlier batch of
+	// the same run (for example one that failed to decrypt and so stays off
+	// the active key), instead of reselecting it until the row budget is spent.
 	ListTOTPCredentialsOffActiveKey(ctx context.Context, arg ListTOTPCredentialsOffActiveKeyParams) ([]TotpCredential, error)
-	// Bounded re-encryption batch for enrollments, same shape as
-	// ListTOTPCredentialsOffActiveKey. The caller deletes an expired row here
-	// outright instead of decrypting it (docs/design/totp-key-management.md#rotation).
+	// Bounded re-encryption batch for enrollments, same shape and after_id
+	// paging cursor as ListTOTPCredentialsOffActiveKey. The caller deletes an
+	// expired row here outright instead of decrypting it
+	// (docs/design/totp-key-management.md#rotation).
 	ListTOTPEnrollmentsOffActiveKey(ctx context.Context, arg ListTOTPEnrollmentsOffActiveKeyParams) ([]TotpEnrollment, error)
 	ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
 	// Account deletion owns the global lock order documented in
@@ -502,7 +506,8 @@ type Querier interface {
 	// at most 24 hours (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
 	// The WHERE guard repeats the cool-down check GetTOTPCredentialForUpdate
 	// already made, so this only ever applies to a row not currently cooling
-	// down.
+	// down. Every counted failure also sets last_failed_at, which gates whether a
+	// later valid code may reset the budget.
 	RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOTPCredentialFailureParams) (TotpCredential, error)
 	RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error)
 	// Key-ID compare-before-update: the WHERE clause only applies the rewrite
@@ -518,7 +523,8 @@ type Querier interface {
 	ReleaseIdempotencyUsage(ctx context.Context, arg ReleaseIdempotencyUsageParams) (int64, error)
 	// Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
 	// existing id and created_at, reseals under a fresh nonce, and resets the
-	// failure budget because a fresh secret cannot inherit a stale cool-down.
+	// failure budget, including last_failed_at, because a fresh secret cannot
+	// inherit a stale cool-down.
 	ReplaceTOTPCredential(ctx context.Context, arg ReplaceTOTPCredentialParams) (TotpCredential, error)
 	// A temporary failure releases the lease back to pending with the next attempt
 	// time, retaining ciphertext and the already-incremented attempt count. The
@@ -531,8 +537,11 @@ type Querier interface {
 	// monotonic progress.
 	RequeueExpiredAuthEmailLeases(ctx context.Context, arg RequeueExpiredAuthEmailLeasesParams) (int64, error)
 	// Generic reset to the zero failure budget. Callers decide when this runs
-	// (a successful code, a completed password reset); storage only guarantees
-	// it always clears both fields together.
+	// (a successful code at least 24 hours past the last failure, a replacement,
+	// or a removal); storage only guarantees it always clears all three fields
+	// together (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
+	// A completed password reset never calls this: it leaves the budget
+	// unchanged.
 	ResetTOTPCredentialFailureBudget(ctx context.Context, arg ResetTOTPCredentialFailureBudgetParams) (TotpCredential, error)
 	// Logout-everywhere: revokes every one of the user's not-already-revoked
 	// sessions and reports how many rows that affected.

@@ -657,6 +657,78 @@ func TestPasswordReset_HappyPath(t *testing.T) {
 	_ = raw
 }
 
+// totpBudgetSnapshot reads the non-secret failure-budget columns directly,
+// since no store query exposes them outside a row lock.
+type totpBudgetSnapshot struct {
+	failedAttempts int32
+	cooldownUntil  *time.Time
+	lastFailedAt   *time.Time
+}
+
+func (e *passwordEnv) totpBudget(t *testing.T, userID uuid.UUID) totpBudgetSnapshot {
+	t.Helper()
+	var snap totpBudgetSnapshot
+	err := e.pool.QueryRow(context.Background(),
+		"SELECT failed_attempts, cooldown_until, last_failed_at FROM totp_credentials WHERE user_id = $1", userID,
+	).Scan(&snap.failedAttempts, &snap.cooldownUntil, &snap.lastFailedAt)
+	if err != nil {
+		t.Fatalf("read totp budget: %v", err)
+	}
+	return snap
+}
+
+func totpTimePtrEqual(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
+}
+
+// TestPasswordReset_PreservesTOTPCooldownAndFailureCount proves a completed
+// password reset leaves cooldown_until, failed_attempts, and last_failed_at
+// unchanged: the reset transaction never touches totp_credentials
+// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
+// AC-AUTH-028).
+func TestPasswordReset_PreservesTOTPCooldownAndFailureCount(t *testing.T) {
+	e := newPasswordEnv(t)
+	userID := e.createUser(t)
+	e.setPassword(t, userID, testPassword)
+	token := e.createResetToken(t, userID)
+
+	now := e.clk.Now()
+	if _, err := e.q.InstallTOTPCredential(context.Background(), store.InstallTOTPCredentialParams{
+		ID: uuid.Must(uuid.NewV7()), UserID: userID, KeyID: "tk1_" + strings.Repeat("a", 22),
+		Nonce: bytes.Repeat([]byte{1}, 12), Ciphertext: bytes.Repeat([]byte{2}, 36), LastUsedStep: 0, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("InstallTOTPCredential: %v", err)
+	}
+	for i := 1; i <= 5; i++ {
+		if _, err := e.q.RecordTOTPCredentialFailure(context.Background(), store.RecordTOTPCredentialFailureParams{
+			UserID: userID, Now: now.Add(time.Duration(i) * time.Second),
+		}); err != nil {
+			t.Fatalf("RecordTOTPCredentialFailure(%d): %v", i, err)
+		}
+	}
+	before := e.totpBudget(t, userID)
+	if before.failedAttempts != 5 || before.cooldownUntil == nil || before.lastFailedAt == nil {
+		t.Fatalf("primed totp budget = %+v, want an active cool-down", before)
+	}
+
+	newPassword := "a completely different password for totp preservation"
+	resp, body := e.request(t, http.MethodPost, auth.PasswordResetPath, jsonBody(t, map[string]string{ //nolint:bodyclose // request closes the body itself before returning.
+		"token": token.Raw, "password": newPassword,
+	}))
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204 (body=%s)", resp.StatusCode, body)
+	}
+
+	after := e.totpBudget(t, userID)
+	if after.failedAttempts != before.failedAttempts ||
+		!totpTimePtrEqual(after.cooldownUntil, before.cooldownUntil) || !totpTimePtrEqual(after.lastFailedAt, before.lastFailedAt) {
+		t.Fatalf("totp budget after password reset = %+v, want unchanged from %+v", after, before)
+	}
+}
+
 // ---- reauth happy path ----
 
 func TestPasswordReauth_HappyPath(t *testing.T) {

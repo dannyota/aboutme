@@ -119,6 +119,27 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 		t.Fatalf("seed recovery code: %v", err)
 	}
 
+	// TOTP credential and enrollment ciphertext, nonce, and token digest must
+	// also never cross the export boundary
+	// (docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds).
+	totpNonceSentinel := exportTOTPSentinel("sftotpnonce1", 12)
+	totpCiphertextSentinel := exportTOTPSentinel("sftotpciphertext-sentinel", 36)
+	totpTokenDigestSentinel := exportSecondFactorSentinel("sftotpenrolltok")
+	totpKeyID := "tk1_" + "sftotpkeyidsentinel001"
+	if _, err := h.q.InstallTOTPCredential(h.ctx, store.InstallTOTPCredentialParams{
+		ID: uuid.Must(uuid.NewV7()), UserID: h.user.ID, KeyID: totpKeyID,
+		Nonce: totpNonceSentinel, Ciphertext: totpCiphertextSentinel, LastUsedStep: 0, CreatedAt: factorNow,
+	}); err != nil {
+		t.Fatalf("seed totp credential: %v", err)
+	}
+	if _, err := h.q.CreateTOTPEnrollment(h.ctx, store.CreateTOTPEnrollmentParams{
+		ID: uuid.Must(uuid.NewV7()), TokenDigest: totpTokenDigestSentinel, UserID: h.user.ID, SessionID: h.session.ID,
+		AuthEpoch: 0, Issuer: "aboutme.test", KeyID: totpKeyID, Nonce: totpNonceSentinel, Ciphertext: totpCiphertextSentinel,
+		CreatedAt: factorNow, ExpiresAt: factorNow.Add(10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("seed totp enrollment: %v", err)
+	}
+
 	photoBytes := exportTestPNG(t)
 	photo := h.insertResume(t, "", true, photoBytes)
 	h.insertResume(t, "draft one", false, nil)
@@ -186,6 +207,10 @@ func TestExportRouteProducesPortableFrozenAttachment(t *testing.T) {
 		base64.StdEncoding.EncodeToString(credentialIDSentinel),
 		base64.StdEncoding.EncodeToString(publicKeySentinel),
 		base64.StdEncoding.EncodeToString(recoveryDigestSentinel),
+		"sftotpnonce1", "sftotpciphertext-sentinel", "sftotpenrolltok", "sftotpkeyidsentinel001",
+		base64.StdEncoding.EncodeToString(totpNonceSentinel),
+		base64.StdEncoding.EncodeToString(totpCiphertextSentinel),
+		base64.StdEncoding.EncodeToString(totpTokenDigestSentinel),
 	}
 	for _, sentinel := range sentinels {
 		if bytes.Contains(response.Body.Bytes(), []byte(sentinel)) || strings.Contains(h.logs.String(), sentinel) {
@@ -447,6 +472,7 @@ type exportTestHarness struct {
 	q       *store.Queries
 	user    store.User
 	token   string
+	session store.Session
 	media   media.Backend
 	mux     *http.ServeMux
 	logs    *bytes.Buffer
@@ -488,13 +514,13 @@ func newExportTestHarness(t *testing.T) *exportTestHarness {
 	if err != nil {
 		t.Fatalf("new service: %v", err)
 	}
-	token, _, err := auth.NewSessionManager(q).Issue(ctx, user.ID, "", "127.0.0.1")
+	token, session, err := auth.NewSessionManager(q).Issue(ctx, user.ID, "", "127.0.0.1")
 	if err != nil {
 		t.Fatalf("issue session: %v", err)
 	}
 	mux := http.NewServeMux()
 	service.RegisterRoutes(mux)
-	return &exportTestHarness{ctx: ctx, pool: pool, q: q, user: user, token: token, media: backend, mux: mux, logs: logs, service: service}
+	return &exportTestHarness{ctx: ctx, pool: pool, q: q, user: user, token: token, session: session, media: backend, mux: mux, logs: logs, service: service}
 }
 
 func (h *exportTestHarness) request(t *testing.T, method, path string, body io.Reader) *httptest.ResponseRecorder {
@@ -630,6 +656,15 @@ func exportSecondFactorSentinel(marker string) []byte {
 	copy(out, marker)
 	unique := uuid.New()
 	copy(out[16:], unique[:])
+	return out
+}
+
+// exportTOTPSentinel returns exactly n bytes with marker at the front, for
+// the fixed-length nonce and ciphertext columns a TOTP row's check
+// constraints require.
+func exportTOTPSentinel(marker string, n int) []byte {
+	out := make([]byte, n)
+	copy(out, marker)
 	return out
 }
 

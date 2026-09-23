@@ -215,6 +215,33 @@ func secondFactorTestBytes(n int) []byte {
 	return out[:n]
 }
 
+// totpTestKeyID returns a fixed key ID matching the migration's tk1_ shape
+// check, since a TOTP key ID is not free-form bytes like the other
+// second-factor sentinels.
+func totpTestKeyID() string {
+	return "tk1_" + "aaaaaaaaaaaaaaaaaaaaaa"
+}
+
+// enrollTOTP inserts one active TOTP credential and one live enrollment for
+// userID, bound to sessionID, mirroring migrations/00005_totp_second_factor.sql
+// without depending on the secondfactor package's lifecycle service.
+func enrollTOTP(ctx context.Context, t *testing.T, q *store.Queries, userID, sessionID uuid.UUID, now time.Time) {
+	t.Helper()
+	if _, err := q.InstallTOTPCredential(ctx, store.InstallTOTPCredentialParams{
+		ID: uuid.Must(uuid.NewV7()), UserID: userID, KeyID: totpTestKeyID(),
+		Nonce: secondFactorTestBytes(12), Ciphertext: secondFactorTestBytes(36), LastUsedStep: 0, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("InstallTOTPCredential: %v", err)
+	}
+	if _, err := q.CreateTOTPEnrollment(ctx, store.CreateTOTPEnrollmentParams{
+		ID: uuid.Must(uuid.NewV7()), TokenDigest: secondFactorTestBytes(32), UserID: userID, SessionID: sessionID,
+		AuthEpoch: 0, Issuer: "aboutme.vn", KeyID: totpTestKeyID(), Nonce: secondFactorTestBytes(12),
+		Ciphertext: secondFactorTestBytes(36), CreatedAt: now, ExpiresAt: now.Add(10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("CreateTOTPEnrollment: %v", err)
+	}
+}
+
 func authenticatedDeleteRequest(env deletionEnvironment) *http.Request {
 	req := httptest.NewRequestWithContext(env.ctx, http.MethodDelete, "https://aboutme.example/api/v1/me", nil)
 	req.RemoteAddr = "203.0.113.2:12345"
@@ -760,13 +787,15 @@ func TestDeleteAccountRechecksConcreteSessionAfterDrain(t *testing.T) {
 }
 
 // TestDeleteAccountCascadesSecondFactorRows proves deletion removes every
-// policy, credential, recovery, pending, and ceremony row for the deleted
-// account while leaving a foreign account's rows untouched. See
-// docs/design/passkey-second-factor-contract.md#postgresql-shape.
+// policy, credential, recovery, pending, ceremony, TOTP credential, and TOTP
+// enrollment row for the deleted account while leaving a foreign account's
+// rows untouched. See docs/design/passkey-second-factor-contract.md#postgresql-shape
+// and docs/design/totp-second-factor-contract.md#postgresql-shape-and-bounds.
 func TestDeleteAccountCascadesSecondFactorRows(t *testing.T) {
 	env := newDeletionEnvironment(t)
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	enrollSecondFactor(env.ctx, t, env.queries, env.user.ID, now)
+	enrollTOTP(env.ctx, t, env.queries, env.user.ID, env.session.ID, now)
 	seedPendingAndCeremony(env.ctx, t, env.queries, env.user.ID, env.session.ID, now)
 	if _, err := env.service.pool.Exec(env.ctx, `UPDATE sessions SET second_factor_verified_at=$2 WHERE id=$1`, env.session.ID, now); err != nil {
 		t.Fatalf("set factor proof: %v", err)
@@ -781,6 +810,7 @@ func TestDeleteAccountCascadesSecondFactorRows(t *testing.T) {
 		t.Fatalf("issue foreign session: %v", err)
 	}
 	enrollSecondFactor(env.ctx, t, env.queries, foreign.ID, now)
+	enrollTOTP(env.ctx, t, env.queries, foreign.ID, foreignSession.ID, now)
 	seedPendingAndCeremony(env.ctx, t, env.queries, foreign.ID, foreignSession.ID, now)
 
 	if err := env.service.deleteAccount(env.ctx, env.session); err != nil {
@@ -789,7 +819,7 @@ func TestDeleteAccountCascadesSecondFactorRows(t *testing.T) {
 
 	for _, table := range []string{
 		"second_factor_policies", "webauthn_credentials", "second_factor_recovery_codes",
-		"pending_authentications", "webauthn_ceremonies",
+		"pending_authentications", "webauthn_ceremonies", "totp_credentials", "totp_enrollments",
 	} {
 		var deletedCount, foreignCount int
 		if err := env.service.pool.QueryRow(env.ctx, "SELECT count(*) FROM "+table+" WHERE user_id = $1", env.user.ID).Scan(&deletedCount); err != nil {

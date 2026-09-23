@@ -274,12 +274,34 @@ func (s *Service) finishPending(ctx context.Context, qtx *store.Queries, locked 
 }
 
 // failAttempt reports one failed verification. The fifth failure enqueues the
-// exhaustion notification in the same transaction.
+// exhaustion notification, subject to the shared one-per-account-per-hour
+// cap, in the same transaction. TOTP's own cool-down-start mail shares the
+// same capped path, so both sources of one event can never send two mails
+// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
+// AC-AUTH-028).
 func (s *Service) failAttempt(user store.User) error {
 	return auth.FailPendingVerification(auth.ErrSecondFactorVerificationFailed,
 		func(ctx context.Context, qtx *store.Queries, _ store.PendingAuthentication) error {
-			return s.enqueueSecurityMail(ctx, qtx, user, authmail.KindSecondFactorAttemptsExhausted, s.now(), nil)
+			return s.enqueueCappedAttemptMail(ctx, qtx, user, s.now())
 		})
+}
+
+// enqueueCappedAttemptMail enqueues the second_factor_attempts_exhausted
+// notification only when the account's attempt-mail window is null or at
+// least one hour old, atomically claiming that window under the policy lock
+// in the same transaction. A window still open suppresses the mail but never
+// the state change that triggered it
+// (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget;
+// AC-AUTH-028).
+func (s *Service) enqueueCappedAttemptMail(ctx context.Context, qtx *store.Queries, user store.User, now time.Time) error {
+	_, err := qtx.ClaimSecondFactorAttemptMailWindow(ctx, store.ClaimSecondFactorAttemptMailWindowParams{UserID: user.ID, Now: now})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("claim attempt mail window: %w", err)
+	}
+	return s.enqueueSecurityMail(ctx, qtx, user, authmail.KindSecondFactorAttemptsExhausted, now, nil)
 }
 
 // enqueueSecurityMail records one version 2 security notification that

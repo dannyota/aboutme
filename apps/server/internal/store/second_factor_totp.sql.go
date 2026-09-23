@@ -18,7 +18,7 @@ SET last_used_step = $1::bigint,
     updated_at = $2::timestamptz
 WHERE user_id = $3::uuid
   AND $1::bigint > last_used_step
-RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at
+RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at
 `
 
 type AdvanceTOTPCredentialStepParams struct {
@@ -44,6 +44,7 @@ func (q *Queries) AdvanceTOTPCredentialStep(ctx context.Context, arg AdvanceTOTP
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -203,7 +204,7 @@ func (q *Queries) CreateTOTPEnrollment(ctx context.Context, arg CreateTOTPEnroll
 }
 
 const deleteTOTPCredentialForUser = `-- name: DeleteTOTPCredentialForUser :one
-DELETE FROM totp_credentials WHERE user_id = $1::uuid RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at
+DELETE FROM totp_credentials WHERE user_id = $1::uuid RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at
 `
 
 // Removal. Returns pgx.ErrNoRows when no credential exists, which the
@@ -221,6 +222,7 @@ func (q *Queries) DeleteTOTPCredentialForUser(ctx context.Context, userID uuid.U
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -259,7 +261,7 @@ func (q *Queries) DeleteTOTPEnrollmentForUser(ctx context.Context, userID uuid.U
 
 const getTOTPCredentialForUpdate = `-- name: GetTOTPCredentialForUpdate :one
 
-SELECT id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at FROM totp_credentials WHERE user_id = $1::uuid FOR UPDATE
+SELECT id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at FROM totp_credentials WHERE user_id = $1::uuid FOR UPDATE
 `
 
 // Authenticator-app (TOTP) second-factor queries. Every TOTP transaction
@@ -291,6 +293,7 @@ func (q *Queries) GetTOTPCredentialForUpdate(ctx context.Context, userID uuid.UU
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -331,7 +334,7 @@ INSERT INTO totp_credentials (
     $1::uuid, $2::uuid, $3::text, $4::bytea,
     $5::bytea, 1, $6::bigint,
     $7::timestamptz, $7::timestamptz
-) RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at
+) RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at
 `
 
 type InstallTOTPCredentialParams struct {
@@ -367,6 +370,7 @@ func (q *Queries) InstallTOTPCredential(ctx context.Context, arg InstallTOTPCred
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -405,23 +409,28 @@ func (q *Queries) ListTOTPActiveKeyIDs(ctx context.Context, now time.Time) ([]st
 }
 
 const listTOTPCredentialsOffActiveKey = `-- name: ListTOTPCredentialsOffActiveKey :many
-SELECT id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at FROM totp_credentials
+SELECT id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at FROM totp_credentials
 WHERE key_id <> $1::text
+  AND id > $2::uuid
 ORDER BY id
-LIMIT LEAST($2::int, 200)
+LIMIT LEAST($3::int, 200)
 FOR UPDATE SKIP LOCKED
 `
 
 type ListTOTPCredentialsOffActiveKeyParams struct {
 	ActiveKeyID string
+	AfterID     uuid.UUID
 	LimitRows   int32
 }
 
 // Bounded re-encryption batch: at most 200 rows off the active key, in id
-// order, skipping any row a live factor transaction already holds
-// (docs/design/totp-key-management.md#rotation).
+// order after after_id, skipping any row a live factor transaction already
+// holds (docs/design/totp-key-management.md#rotation). The after_id cursor
+// lets the caller page past a row it already visited in an earlier batch of
+// the same run (for example one that failed to decrypt and so stays off
+// the active key), instead of reselecting it until the row budget is spent.
 func (q *Queries) ListTOTPCredentialsOffActiveKey(ctx context.Context, arg ListTOTPCredentialsOffActiveKeyParams) ([]TotpCredential, error) {
-	rows, err := q.db.Query(ctx, listTOTPCredentialsOffActiveKey, arg.ActiveKeyID, arg.LimitRows)
+	rows, err := q.db.Query(ctx, listTOTPCredentialsOffActiveKey, arg.ActiveKeyID, arg.AfterID, arg.LimitRows)
 	if err != nil {
 		return nil, err
 	}
@@ -439,6 +448,7 @@ func (q *Queries) ListTOTPCredentialsOffActiveKey(ctx context.Context, arg ListT
 			&i.LastUsedStep,
 			&i.FailedAttempts,
 			&i.CooldownUntil,
+			&i.LastFailedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -455,21 +465,24 @@ func (q *Queries) ListTOTPCredentialsOffActiveKey(ctx context.Context, arg ListT
 const listTOTPEnrollmentsOffActiveKey = `-- name: ListTOTPEnrollmentsOffActiveKey :many
 SELECT id, token_digest, user_id, session_id, auth_epoch, issuer, key_id, nonce, ciphertext, format_version, created_at, expires_at FROM totp_enrollments
 WHERE key_id <> $1::text
+  AND id > $2::uuid
 ORDER BY id
-LIMIT LEAST($2::int, 200)
+LIMIT LEAST($3::int, 200)
 FOR UPDATE SKIP LOCKED
 `
 
 type ListTOTPEnrollmentsOffActiveKeyParams struct {
 	ActiveKeyID string
+	AfterID     uuid.UUID
 	LimitRows   int32
 }
 
-// Bounded re-encryption batch for enrollments, same shape as
-// ListTOTPCredentialsOffActiveKey. The caller deletes an expired row here
-// outright instead of decrypting it (docs/design/totp-key-management.md#rotation).
+// Bounded re-encryption batch for enrollments, same shape and after_id
+// paging cursor as ListTOTPCredentialsOffActiveKey. The caller deletes an
+// expired row here outright instead of decrypting it
+// (docs/design/totp-key-management.md#rotation).
 func (q *Queries) ListTOTPEnrollmentsOffActiveKey(ctx context.Context, arg ListTOTPEnrollmentsOffActiveKeyParams) ([]TotpEnrollment, error) {
-	rows, err := q.db.Query(ctx, listTOTPEnrollmentsOffActiveKey, arg.ActiveKeyID, arg.LimitRows)
+	rows, err := q.db.Query(ctx, listTOTPEnrollmentsOffActiveKey, arg.ActiveKeyID, arg.AfterID, arg.LimitRows)
 	if err != nil {
 		return nil, err
 	}
@@ -512,10 +525,11 @@ SET failed_attempts = LEAST(failed_attempts + 1, 1000),
         )
         ELSE cooldown_until
     END,
+    last_failed_at = $1::timestamptz,
     updated_at = $1::timestamptz
 WHERE user_id = $2::uuid
   AND (cooldown_until IS NULL OR cooldown_until <= $1::timestamptz)
-RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at
+RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at
 `
 
 type RecordTOTPCredentialFailureParams struct {
@@ -528,7 +542,8 @@ type RecordTOTPCredentialFailureParams struct {
 // at most 24 hours (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
 // The WHERE guard repeats the cool-down check GetTOTPCredentialForUpdate
 // already made, so this only ever applies to a row not currently cooling
-// down.
+// down. Every counted failure also sets last_failed_at, which gates whether a
+// later valid code may reset the budget.
 func (q *Queries) RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOTPCredentialFailureParams) (TotpCredential, error) {
 	row := q.db.QueryRow(ctx, recordTOTPCredentialFailure, arg.Now, arg.UserID)
 	var i TotpCredential
@@ -542,6 +557,7 @@ func (q *Queries) RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOT
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -624,9 +640,10 @@ SET key_id = $1::text,
     last_used_step = $4::bigint,
     failed_attempts = 0,
     cooldown_until = NULL,
+    last_failed_at = NULL,
     updated_at = $5::timestamptz
 WHERE user_id = $6::uuid
-RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at
+RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at
 `
 
 type ReplaceTOTPCredentialParams struct {
@@ -640,7 +657,8 @@ type ReplaceTOTPCredentialParams struct {
 
 // Replacement under the row lock from GetTOTPCredentialForUpdate: keeps the
 // existing id and created_at, reseals under a fresh nonce, and resets the
-// failure budget because a fresh secret cannot inherit a stale cool-down.
+// failure budget, including last_failed_at, because a fresh secret cannot
+// inherit a stale cool-down.
 func (q *Queries) ReplaceTOTPCredential(ctx context.Context, arg ReplaceTOTPCredentialParams) (TotpCredential, error) {
 	row := q.db.QueryRow(ctx, replaceTOTPCredential,
 		arg.KeyID,
@@ -661,6 +679,7 @@ func (q *Queries) ReplaceTOTPCredential(ctx context.Context, arg ReplaceTOTPCred
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -671,9 +690,10 @@ const resetTOTPCredentialFailureBudget = `-- name: ResetTOTPCredentialFailureBud
 UPDATE totp_credentials
 SET failed_attempts = 0,
     cooldown_until = NULL,
+    last_failed_at = NULL,
     updated_at = $1::timestamptz
 WHERE user_id = $2::uuid
-RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, created_at, updated_at
+RETURNING id, user_id, key_id, nonce, ciphertext, format_version, last_used_step, failed_attempts, cooldown_until, last_failed_at, created_at, updated_at
 `
 
 type ResetTOTPCredentialFailureBudgetParams struct {
@@ -682,8 +702,11 @@ type ResetTOTPCredentialFailureBudgetParams struct {
 }
 
 // Generic reset to the zero failure budget. Callers decide when this runs
-// (a successful code, a completed password reset); storage only guarantees
-// it always clears both fields together.
+// (a successful code at least 24 hours past the last failure, a replacement,
+// or a removal); storage only guarantees it always clears all three fields
+// together (docs/design/totp-second-factor-contract.md#per-account-totp-failure-budget).
+// A completed password reset never calls this: it leaves the budget
+// unchanged.
 func (q *Queries) ResetTOTPCredentialFailureBudget(ctx context.Context, arg ResetTOTPCredentialFailureBudgetParams) (TotpCredential, error) {
 	row := q.db.QueryRow(ctx, resetTOTPCredentialFailureBudget, arg.Now, arg.UserID)
 	var i TotpCredential
@@ -697,6 +720,7 @@ func (q *Queries) ResetTOTPCredentialFailureBudget(ctx context.Context, arg Rese
 		&i.LastUsedStep,
 		&i.FailedAttempts,
 		&i.CooldownUntil,
+		&i.LastFailedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

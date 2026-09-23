@@ -28,6 +28,7 @@ func TestTOTPMigrationDefinesRequiredRelations(t *testing.T) {
 	for _, fragment := range []string{
 		"CREATE TABLE totp_credentials",
 		"CREATE TABLE totp_enrollments",
+		"last_failed_at timestamptz NULL",
 		"ALTER TABLE second_factor_policies ADD COLUMN attempt_mail_at timestamptz NULL",
 		"CREATE INDEX totp_credentials_key_id_idx ON totp_credentials (key_id)",
 		"CREATE INDEX totp_enrollments_key_id_idx ON totp_enrollments (key_id)",
@@ -332,6 +333,16 @@ func TestTOTPMigrationLiveUpDownRoundTrip(t *testing.T) {
 		VALUES ($1, $2, $3, $4, $5, 1, 0, $6, $6)
 	`, credentialID, userID, totpMigrationValidKeyID(), bytesOf(12, 'n'), bytesOf(36, 'c'), now); err != nil {
 		t.Fatalf("insert totp_credentials row: %v", err)
+	}
+	if !columnExists(ctx, t, db, "totp_credentials", "last_failed_at") {
+		t.Error("totp_credentials.last_failed_at is missing after UpTo(5)")
+	}
+	var lastFailedAtNull bool
+	if err := db.QueryRowContext(ctx, `SELECT last_failed_at IS NULL FROM totp_credentials WHERE id = $1`, credentialID).Scan(&lastFailedAtNull); err != nil {
+		t.Fatalf("read last_failed_at: %v", err)
+	}
+	if !lastFailedAtNull {
+		t.Error("a freshly inserted totp_credentials row has a non-null last_failed_at, want null")
 	}
 
 	if _, err := provider.DownTo(ctx, 4); err == nil {

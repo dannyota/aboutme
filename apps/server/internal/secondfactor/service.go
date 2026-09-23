@@ -53,35 +53,46 @@ func PasskeyCounter(ctx context.Context, qtx *store.Queries, userID uuid.UUID) (
 }
 
 // Options is the service dependency set. Counters lists one counter per
-// factor type; nil registers only PasskeyCounter. Logger may be nil.
+// factor type; nil registers PasskeyCounter and TOTPCounter. Logger may be
+// nil. TOTPKeyRing, TOTPIssuer, and TOTPSignal are required only when
+// TOTPEnrollmentEnabled is true; a nil TOTPSignal defaults to a silent one
+// (docs/design/totp-key-management.md).
 type Options struct {
-	Pool              *store.Pool
-	Pending           *auth.PendingAuthenticationManager
-	Sessions          *auth.SessionManager
-	Outbox            *authmail.Outbox
-	RelyingParty      *RelyingParty
-	EnrollmentEnabled bool
-	Counters          []FactorCounter
-	Clock             func() time.Time
-	Entropy           io.Reader
-	Logger            *slog.Logger
+	Pool                  *store.Pool
+	Pending               *auth.PendingAuthenticationManager
+	Sessions              *auth.SessionManager
+	Outbox                *authmail.Outbox
+	RelyingParty          *RelyingParty
+	EnrollmentEnabled     bool
+	TOTPKeyRing           *TOTPKeyRing
+	TOTPEnrollmentEnabled bool
+	TOTPIssuer            string
+	TOTPSignal            *TOTPUnavailableSignal
+	Counters              []FactorCounter
+	Clock                 func() time.Time
+	Entropy               io.Reader
+	Logger                *slog.Logger
 }
 
 // Service implements auth.SecondFactorService for passkeys and recovery
 // codes. Every mutation follows the lock order in
 // docs/design/second-factor-authentication.md.
 type Service struct {
-	pool     *store.Pool
-	q        *store.Queries
-	pending  *auth.PendingAuthenticationManager
-	sessions *auth.SessionManager
-	outbox   *authmail.Outbox
-	rp       *RelyingParty
-	enabled  bool
-	counters []FactorCounter
-	now      func() time.Time
-	entropy  io.Reader
-	logger   *slog.Logger
+	pool        *store.Pool
+	q           *store.Queries
+	pending     *auth.PendingAuthenticationManager
+	sessions    *auth.SessionManager
+	outbox      *authmail.Outbox
+	rp          *RelyingParty
+	enabled     bool
+	totpRing    *TOTPKeyRing
+	totpEnabled bool
+	totpIssuer  string
+	totpSignal  *TOTPUnavailableSignal
+	counters    []FactorCounter
+	now         func() time.Time
+	entropy     io.Reader
+	logger      *slog.Logger
 
 	// counterEventProbe is nil in production. Rollback tests set it to fail
 	// the counter security-event write.
@@ -89,20 +100,37 @@ type Service struct {
 }
 
 var _ auth.SecondFactorService = (*Service)(nil)
+var _ auth.TOTPSecondFactorService = (*Service)(nil)
 
-// New validates every dependency and returns the service.
+// New validates every dependency and returns the service. Enabling TOTP
+// enrollment without a key ring or a valid issuer fails construction closed,
+// the same way a malformed key ring fails startup
+// (docs/design/totp-key-management.md#key-ring).
 func New(opts Options) (*Service, error) {
 	if opts.Pool == nil || opts.Pending == nil || opts.Sessions == nil || opts.Outbox == nil ||
 		opts.RelyingParty == nil || opts.Clock == nil || opts.Entropy == nil {
 		return nil, errors.New("secondfactor: missing dependency")
 	}
+	if opts.TOTPEnrollmentEnabled {
+		if opts.TOTPKeyRing == nil {
+			return nil, errors.New("secondfactor: totp enrollment enabled without a key ring")
+		}
+		if err := ValidateTOTPIssuer(opts.TOTPIssuer); err != nil {
+			return nil, fmt.Errorf("secondfactor: totp issuer: %w", err)
+		}
+	}
 	counters := opts.Counters
 	if counters == nil {
-		counters = []FactorCounter{PasskeyCounter}
+		counters = []FactorCounter{PasskeyCounter, TOTPCounter}
+	}
+	signal := opts.TOTPSignal
+	if signal == nil {
+		signal = NewTOTPUnavailableSignal(opts.Clock, nil)
 	}
 	return &Service{
 		pool: opts.Pool, q: store.New(opts.Pool), pending: opts.Pending, sessions: opts.Sessions,
 		outbox: opts.Outbox, rp: opts.RelyingParty, enabled: opts.EnrollmentEnabled, counters: counters,
+		totpRing: opts.TOTPKeyRing, totpEnabled: opts.TOTPEnrollmentEnabled, totpIssuer: opts.TOTPIssuer, totpSignal: signal,
 		now: opts.Clock, entropy: opts.Entropy, logger: opts.Logger,
 	}, nil
 }
@@ -160,13 +188,23 @@ func (s *Service) PendingMethods(ctx context.Context, userID uuid.UUID) ([]strin
 	if err != nil {
 		return nil, fmt.Errorf("secondfactor: list passkeys: %w", err)
 	}
+	totpCount, err := s.q.CountTOTPCredentialsForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("secondfactor: count totp credentials: %w", err)
+	}
 	codes, err := s.q.CountSecondFactorRecoveryCodes(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("secondfactor: count recovery codes: %w", err)
 	}
-	methods := make([]string, 0, 2)
+	// Fixed order passkey, totp, then recovery
+	// ("Release surface"; AC-AUTH-028). A cool-down or key failure still
+	// lists totp: PendingMethods only reports existence, not availability.
+	methods := make([]string, 0, 3)
 	if len(credentials) > 0 {
 		methods = append(methods, auth.SecondFactorMethodPasskey)
+	}
+	if totpCount > 0 {
+		methods = append(methods, auth.SecondFactorMethodTOTP)
 	}
 	if codes > 0 {
 		methods = append(methods, auth.SecondFactorMethodRecovery)
@@ -422,6 +460,8 @@ func (s *Service) CompletePending(ctx context.Context, pendingToken string, sess
 		return s.completeAssertion(ctx, pendingToken, sessionID, c, client)
 	case *recoveryCredential:
 		return s.completeRecovery(ctx, pendingToken, sessionID, c, client)
+	case *totpCredential:
+		return s.completeTOTPPending(ctx, pendingToken, sessionID, c, client)
 	default:
 		return nil, auth.ErrSecondFactorRequestInvalid
 	}

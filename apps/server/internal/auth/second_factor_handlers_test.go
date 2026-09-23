@@ -127,9 +127,16 @@ func (s *sfService) RegenerateRecoveryCodes(context.Context, store.Session) (aut
 	return auth.SecondFactorRecoveryCodes{Codes: []string{"amr_new"}, Session: s.replacement}, s.err
 }
 
-// sfMux builds the routes over service. pool may be nil for tests that fail
-// before any database work.
+// sfMux builds the routes over service with no TOTP dependency wired. pool
+// may be nil for tests that fail before any database work.
 func sfMux(t *testing.T, service *sfService, pool *store.Pool) *http.ServeMux {
+	t.Helper()
+	return sfMuxWithTOTP(t, service, nil, pool)
+}
+
+// sfMuxWithTOTP builds the routes over service and totp. A nil totp matches
+// sfMux: every TOTP route then answers as unregistered.
+func sfMuxWithTOTP(t *testing.T, service *sfService, totp auth.TOTPSecondFactorService, pool *store.Pool) *http.ServeMux {
 	t.Helper()
 	sessions := auth.NewSessionManager(store.New(nil))
 	pending := auth.NewPendingAuthenticationManager(nil, nil)
@@ -138,7 +145,7 @@ func sfMux(t *testing.T, service *sfService, pool *store.Pool) *http.ServeMux {
 		pending = auth.NewPendingAuthenticationManager(pool, nil)
 	}
 	handlers, err := auth.NewSecondFactorHandlers(auth.SecondFactorHandlerOptions{
-		Service: service, Pending: pending, Sessions: sessions, Limits: auth.NewSecondFactorRatePolicies(),
+		Service: service, TOTP: totp, Pending: pending, Sessions: sessions, Limits: auth.NewSecondFactorRatePolicies(),
 		PublicOrigin: sfOrigin, Clock: time.Now,
 	})
 	if err != nil {
@@ -147,6 +154,88 @@ func sfMux(t *testing.T, service *sfService, pool *store.Pool) *http.ServeMux {
 	mux := http.NewServeMux()
 	handlers.RegisterRoutes(mux)
 	return mux
+}
+
+// sfTOTPService is a scripted TOTPSecondFactorService that records every
+// call, mirroring sfService's shape.
+type sfTOTPService struct {
+	mu          sync.Mutex
+	enabled     bool
+	calls       []string
+	state       bool
+	start       auth.TOTPEnrollmentStart
+	completion  auth.TOTPEnrollmentComplete
+	replacement auth.SessionIssue
+	err         error
+}
+
+func (s *sfTOTPService) record(call string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = append(s.calls, call)
+}
+
+func (s *sfTOTPService) workCalls() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for _, call := range s.calls {
+		if !strings.HasPrefix(call, "decode") && call != "enabled" {
+			out = append(out, call)
+		}
+	}
+	return out
+}
+
+func (s *sfTOTPService) TOTPEnrollmentEnabled() bool { s.record("enabled"); return s.enabled }
+
+func (s *sfTOTPService) DecodeTOTPCode(body []byte) (auth.SecondFactorCredential, error) {
+	s.record("decode")
+	var payload struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(body, &payload) != nil || payload.Code != "123456" {
+		return nil, auth.ErrSecondFactorRequestInvalid
+	}
+	return sfCredential{method: auth.SecondFactorMethodTOTP}, nil
+}
+
+func (s *sfTOTPService) DecodeTOTPEnrollmentCompletion(body []byte) (auth.SecondFactorCredential, error) {
+	s.record("decode")
+	var payload struct {
+		EnrollmentID string `json:"enrollmentId"`
+		Code         string `json:"code"`
+	}
+	if json.Unmarshal(body, &payload) != nil {
+		return nil, auth.ErrSecondFactorRequestInvalid
+	}
+	if payload.EnrollmentID == "bad-enrollment-shape" {
+		return nil, auth.ErrTOTPEnrollmentInvalid
+	}
+	if payload.Code != "123456" {
+		return nil, auth.ErrSecondFactorRequestInvalid
+	}
+	return sfCredential{method: auth.SecondFactorMethodTOTP}, nil
+}
+
+func (s *sfTOTPService) TOTPState(context.Context, uuid.UUID) (bool, error) {
+	s.record("totp_state")
+	return s.state, s.err
+}
+
+func (s *sfTOTPService) StartTOTPEnrollment(context.Context, store.Session) (auth.TOTPEnrollmentStart, error) {
+	s.record("start_totp_enrollment")
+	return s.start, s.err
+}
+
+func (s *sfTOTPService) CompleteTOTPEnrollment(context.Context, store.Session, auth.SecondFactorCredential) (auth.TOTPEnrollmentComplete, error) {
+	s.record("complete_totp_enrollment")
+	return s.completion, s.err
+}
+
+func (s *sfTOTPService) RemoveTOTP(context.Context, store.Session) (auth.SessionIssue, error) {
+	s.record("remove_totp")
+	return s.replacement, s.err
 }
 
 type sfRequest struct {
@@ -302,15 +391,71 @@ func TestSecondFactorAccountRoutes_RequireASession(t *testing.T) {
 	}
 }
 
-func TestSecondFactorRoutes_RegisterNoTOTPRoute(t *testing.T) {
+// TestSecondFactorTOTPRoutes_UnwiredMatchesUnregisteredRoute proves every
+// TOTP route is registered on the mux (a real pattern, not method_not_allowed
+// from a miss) but answers byte-identical to an unregistered route while no
+// TOTP dependency is wired, the same shape passkey registration options uses
+// while its flag is off.
+func TestSecondFactorTOTPRoutes_UnwiredMatchesUnregisteredRoute(t *testing.T) {
 	service := &sfService{enabled: true}
 	mux := sfMux(t, service, nil)
-	for _, path := range []string{
-		"/api/v1/auth/second-factor/totp/verify", "/api/v1/me/second-factor/totp/enrollment", "/api/v1/me/second-factor/totp",
+	for _, req := range []sfRequest{
+		{method: http.MethodPost, path: auth.SecondFactorPendingTOTPPath, body: `{"code":"123456"}`, contentType: "application/json"},
+		{method: http.MethodPost, path: auth.SecondFactorTOTPEnrollmentPath, body: `{}`, contentType: "application/json", origin: sfOrigin},
+		{method: http.MethodPut, path: auth.SecondFactorTOTPEnrollmentPath, body: `{"enrollmentId":"x","code":"123456"}`, contentType: "application/json", origin: sfOrigin},
 	} {
-		if _, pattern := mux.Handler(httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, nil)); pattern != "" {
-			t.Errorf("TOTP path %s is routed to %q", path, pattern)
+		_, pattern := mux.Handler(httptest.NewRequestWithContext(t.Context(), req.method, req.path, nil))
+		if pattern == "" {
+			t.Errorf("%s %s is not routed at all, want a registered but unwired pattern", req.method, req.path)
 		}
+		got := sfServe(t, mux, req)
+		want := sfServe(t, api.NotFound(), req)
+		if got.Code != http.StatusNotFound || got.Body.String() != want.Body.String() {
+			t.Errorf("%s %s unwired = %d %s, want the unregistered-route body", req.method, req.path, got.Code, got.Body)
+		}
+	}
+	if calls := service.workCalls(); len(calls) != 0 {
+		t.Fatalf("unwired TOTP requests reached the passkey and recovery service: %v", calls)
+	}
+}
+
+// TestSecondFactorTOTPEnrollmentStart_DisabledMatchesUnregisteredRoute
+// mirrors TestSecondFactorRegistrationOptions_DisabledMatchesUnregisteredRoute
+// for TOTP: the flag is rechecked before any session or database work.
+func TestSecondFactorTOTPEnrollmentStart_DisabledMatchesUnregisteredRoute(t *testing.T) {
+	totp := &sfTOTPService{}
+	mux := sfMuxWithTOTP(t, &sfService{}, totp, nil)
+	req := sfRequest{method: http.MethodPost, path: auth.SecondFactorTOTPEnrollmentPath, body: `{}`, contentType: "application/json", origin: sfOrigin}
+	got := sfServe(t, mux, req)
+	want := sfServe(t, api.NotFound(), req)
+	if got.Code != http.StatusNotFound || got.Body.String() != want.Body.String() {
+		t.Fatalf("disabled start = %d %s, want the unregistered-route body", got.Code, got.Body)
+	}
+	if calls := totp.workCalls(); len(calls) != 0 {
+		t.Fatalf("disabled start reached service work: %v", calls)
+	}
+}
+
+// TestSecondFactorTOTPEnrollmentComplete_DisabledIsUniformNotFound mirrors
+// TestSecondFactorRegistrationComplete_DisabledIsUniformNotFound: a disabled
+// completion attempt without a session cannot reach the service at all.
+func TestSecondFactorTOTPEnrollmentComplete_DisabledIsUniformNotFound(t *testing.T) {
+	totp := &sfTOTPService{}
+	mux := sfMuxWithTOTP(t, &sfService{}, totp, nil)
+	req := sfRequest{method: http.MethodPut, path: auth.SecondFactorTOTPEnrollmentPath, body: `{"enrollmentId":"x","code":"123456"}`, contentType: "application/json", origin: sfOrigin}
+	got := sfServe(t, mux, req)
+	want := sfServe(t, api.NotFound(), req)
+	if got.Code != http.StatusNotFound || got.Body.String() != want.Body.String() || len(got.Header().Values("Set-Cookie")) != 0 {
+		t.Fatalf("disabled completion without a session = %d %s", got.Code, got.Body)
+	}
+}
+
+func TestSecondFactorTOTPEnrollment_MethodNotAllowed(t *testing.T) {
+	totp := &sfTOTPService{enabled: true}
+	mux := sfMuxWithTOTP(t, &sfService{}, totp, nil)
+	rec := sfServe(t, mux, sfRequest{method: http.MethodDelete, path: auth.SecondFactorTOTPEnrollmentPath})
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("DELETE on the enrollment path = %d, want 405", rec.Code)
 	}
 }
 
