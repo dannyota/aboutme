@@ -70,7 +70,7 @@ if grep -Fq -- '--update-snapshots' "$WORKFLOW"; then
   fail "hosted workflow passes a browser baseline update flag"
 fi
 
-PASSKEY_JOB=$(sed -n '/^  passkey-browser-proof:/,/^  web-source-build:/p' "$WORKFLOW")
+PASSKEY_JOB=$(sed -n '/^  passkey-browser-proof:/,/^  totp-browser-proof:/p' "$WORKFLOW")
 [ -n "$PASSKEY_JOB" ] || fail "hosted workflow lacks the passkey-browser-proof job"
 grep -Fq '    timeout-minutes: 45' <<<"$PASSKEY_JOB" ||
   fail "passkey-browser-proof job lacks a fixed 45-minute timeout"
@@ -87,15 +87,15 @@ fi
 # Each cleanup step's own if: always() is asserted against its own named
 # block, not a job-wide count, so a check cannot pass by attaching every
 # always() to one step and none to the others.
-step_block() { # step-name
+step_block() { # step-name job-body
   awk -v name="      - name: $1" '
     $0 == name { found = 1; print; next }
     found && /^      - / { exit }
     found { print }
-  ' <<<"$PASSKEY_JOB"
+  ' <<<"$2"
 }
 
-UPLOAD_STEP=$(step_block "Upload passkey proof evidence")
+UPLOAD_STEP=$(step_block "Upload passkey proof evidence" "$PASSKEY_JOB")
 [ -n "$UPLOAD_STEP" ] || fail "passkey-browser-proof job lacks the named upload step"
 grep -Fq 'if: always()' <<<"$UPLOAD_STEP" ||
   fail "passkey-browser-proof job's upload step does not run on every exit"
@@ -104,19 +104,61 @@ grep -Fq 'path: .dev/native-https/evidence/passkey-*' <<<"$UPLOAD_STEP" ||
 grep -Fq 'include-hidden-files: true' <<<"$UPLOAD_STEP" ||
   fail "passkey-browser-proof job's upload step excludes the hidden .dev evidence path by default"
 
-STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness")
+STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness" "$PASSKEY_JOB")
 [ -n "$STOP_HARNESS_STEP" ] || fail "passkey-browser-proof job lacks the named stop-harness step"
 grep -Fq 'if: always()' <<<"$STOP_HARNESS_STEP" ||
   fail "passkey-browser-proof job's stop-harness step does not run on every exit"
 grep -Fq -- 'run: make dev-https-down' <<<"$STOP_HARNESS_STEP" ||
   fail "passkey-browser-proof job's stop-harness step does not stop the HTTPS harness"
 
-STOP_DB_STEP=$(step_block "Stop the runner-local database")
+STOP_DB_STEP=$(step_block "Stop the runner-local database" "$PASSKEY_JOB")
 [ -n "$STOP_DB_STEP" ] || fail "passkey-browser-proof job lacks the named stop-database step"
 grep -Fq 'if: always()' <<<"$STOP_DB_STEP" ||
   fail "passkey-browser-proof job's stop-database step does not run on every exit"
 grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
   fail "passkey-browser-proof job's stop-database step does not stop the runner-local database"
+
+# The TOTP proof mirrors the passkey job's shape, with TOTP enrollment ships
+# off: continue-on-error keeps it from blocking the flag-off release while it
+# still must pass before the flag turns on.
+TOTP_JOB=$(sed -n '/^  totp-browser-proof:/,/^  web-source-build:/p' "$WORKFLOW")
+[ -n "$TOTP_JOB" ] || fail "hosted workflow lacks the totp-browser-proof job"
+grep -Fq '    timeout-minutes: 45' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job lacks a fixed 45-minute timeout"
+grep -Fq '    continue-on-error: true' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job does not report without blocking the flag-off release"
+grep -Fq -- '- run: make dev-https' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job does not start the repository HTTPS harness"
+grep -Fq -- '- run: make dev-https-browser-image' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job does not build the pinned browser image"
+grep -Fq -- '- run: make dev-https-totp-check' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job does not run the TOTP proof target"
+if grep -Fq 'secrets.' <<<"$TOTP_JOB"; then
+  fail "totp-browser-proof job references a repository secret"
+fi
+
+TOTP_UPLOAD_STEP=$(step_block "Upload TOTP proof evidence" "$TOTP_JOB")
+[ -n "$TOTP_UPLOAD_STEP" ] || fail "totp-browser-proof job lacks the named upload step"
+grep -Fq 'if: always()' <<<"$TOTP_UPLOAD_STEP" ||
+  fail "totp-browser-proof job's upload step does not run on every exit"
+grep -Fq 'path: .dev/native-https/evidence/totp-*' <<<"$TOTP_UPLOAD_STEP" ||
+  fail "totp-browser-proof job does not upload the bounded TOTP evidence path"
+grep -Fq 'include-hidden-files: true' <<<"$TOTP_UPLOAD_STEP" ||
+  fail "totp-browser-proof job's upload step excludes the hidden .dev evidence path by default"
+
+TOTP_STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness" "$TOTP_JOB")
+[ -n "$TOTP_STOP_HARNESS_STEP" ] || fail "totp-browser-proof job lacks the named stop-harness step"
+grep -Fq 'if: always()' <<<"$TOTP_STOP_HARNESS_STEP" ||
+  fail "totp-browser-proof job's stop-harness step does not run on every exit"
+grep -Fq -- 'run: make dev-https-down' <<<"$TOTP_STOP_HARNESS_STEP" ||
+  fail "totp-browser-proof job's stop-harness step does not stop the HTTPS harness"
+
+TOTP_STOP_DB_STEP=$(step_block "Stop the runner-local database" "$TOTP_JOB")
+[ -n "$TOTP_STOP_DB_STEP" ] || fail "totp-browser-proof job lacks the named stop-database step"
+grep -Fq 'if: always()' <<<"$TOTP_STOP_DB_STEP" ||
+  fail "totp-browser-proof job's stop-database step does not run on every exit"
+grep -Fq -- 'run: make test-db-down' <<<"$TOTP_STOP_DB_STEP" ||
+  fail "totp-browser-proof job's stop-database step does not stop the runner-local database"
 
 grep -Fq '  mcp-proofs:' "$WORKFLOW" ||
   fail "hosted workflow lacks the MCP proofs job"

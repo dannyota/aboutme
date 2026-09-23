@@ -244,6 +244,64 @@ jobs:
         if: always()
         run: make test-db-down
 
+  # Runs the synthetic TOTP enrollment, verification, and recovery journey
+  # against the exact candidate through the repository HTTPS harness. This is
+  # the only hosted observation of that flow: GitHub CI cannot see the
+  # deployed release fence, the enrollment flag, or the production origin, so
+  # a compile-only or Playwright-list result never substitutes for this job.
+  # Uploaded evidence covers only fictional accounts.
+  totp-browser-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # TOTP enrollment ships off. This proof must pass before
+    # TOTP_ENROLLMENT_ENABLED is turned on; until then it reports without
+    # blocking the release of the flag-off code.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      # A go-installed caddy reports version "unknown", which the dev-https
+      # tool check rejects, so this job uses the official release binary.
+      - name: Install the pinned caddy (2.11.4)
+        run: |
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
+          mkdir -p "$RUNNER_TEMP/caddy"
+          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
+          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      # The harness preflight requires the pinned Chromium on the host.
+      - name: Install web dependencies and the pinned Chromium
+        run: npm ci && npx playwright install chromium
+        working-directory: apps/web
+      - run: make dev-https
+      - run: make dev-https-browser-image
+      - run: make dev-https-totp-check
+      - name: Upload TOTP proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: totp-browser-proof-evidence
+          path: .dev/native-https/evidence/totp-*
+          if-no-files-found: ignore
+          retention-days: 14
+          # .dev is a dot-directory; the upload action excludes those by
+          # default and would silently archive nothing without this.
+          include-hidden-files: true
+      - name: Stop the HTTPS harness
+        if: always()
+        run: make dev-https-down
+      - name: Stop the runner-local database
+        if: always()
+        run: make test-db-down
+
   # The browser-free half of web-e2e: build the Nuxt app from exactly the files
   # the source manifest lists. A stale manifest fails here quickly and in
   # parallel, instead of inside the Playwright image (and without being masked

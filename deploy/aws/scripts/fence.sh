@@ -10,6 +10,10 @@ operator_role=aboutme-prod-operator
 deploy_role=aboutme-prod-deploy
 # v0.4.2's own numeric release: the first fence-aware, passkey-capable tag.
 fence_epoch=4002
+# v0.4.7's own numeric release: the first TOTP-capable tag. See
+# docs/design/passkey-release-fence.md, "Authenticator-app key
+# re-encryption".
+fence_epoch_totp=4007
 
 # 0. The base identity assumes aboutme-prod-operator, which chains to
 # aboutme-prod-deploy for every mutation below. The profile chain is built
@@ -86,7 +90,7 @@ task_def_release_number() { # task-definition ARN, family, or family:revision
 # enrollment off; a read error fails closed rather than open. Below the v0.4.2
 # floor, an app somehow already running enrollment true also fails closed.
 fence_read() {
-  local item item_present release tag_ service running running_count desired_count deployed=1 enrolled
+  local item item_present release tag_ service running running_count desired_count deployed=1 enrolled totp_enrolled def
   item=$(aws_op_ dynamodb get-item --table-name "$fence_table" \
     --key '{"id":{"S":"application"}}' --consistent-read --output json) ||
     { say "could not read the release fence"; return 1; }
@@ -118,18 +122,28 @@ fence_read() {
       { say "--first-deploy but aboutme-prod-app already runs a deployed revision ($running)"; return 1; }
     return 0
   fi
-  enrolled=""
+  enrolled="" totp_enrolled=""
   if ((deployed)); then
-    enrolled=$(describe_task_def "$running" | jq -r '.containerDefinitions[] | select(.name == "server")
-      | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' 2>/dev/null) ||
-      { say "could not read the running app task definition"; return 1; }
+    def=$(describe_task_def "$running") || { say "could not read the running app task definition"; return 1; }
+    enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
+      | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null)
+    totp_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
+      | .environment[]? | select(.name == "TOTP_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null)
   fi
   if [[ -z $item_present && -n $enrolled && $enrolled != false ]]; then
     say "the release fence is missing and the running app does not prove passkey enrollment off"
     return 1
   fi
+  if [[ -z $item_present && -n $totp_enrolled && $totp_enrolled != false ]]; then
+    say "the release fence is missing and the running app does not prove TOTP enrollment off"
+    return 1
+  fi
   if ((fence_min < fence_epoch)) && [[ $enrolled == true ]]; then
     say "the release fence is below v0.4.2 but the running app has passkey enrollment on"
+    return 1
+  fi
+  if ((fence_min < fence_epoch_totp)) && [[ $totp_enrolled == true ]]; then
+    say "the release fence is below v0.4.7 but the running app has TOTP enrollment on"
     return 1
   fi
 }

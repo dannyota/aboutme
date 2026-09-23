@@ -553,6 +553,77 @@ absent "$f" "SET operation_id=:o, operation_kind=:k"
 grep -qF "not the activation candidate" "$work/fence_activate_not_running.out" ||
   { echo "fence_activate_not_running: no release-mismatch message" >&2; exit 1; }
 
+# The generic serialized activation accepts the real v0.4.7 floor once v0.4.2
+# already raised it, and never lowers the stored minimum.
+run_case fence_activate_4002_then_4007 0 --activate v0.4.7
+f=$work/fence_activate_4002_then_4007.calls
+grep -qF "raised the release fence to v0.4.7" "$work/fence_activate_4002_then_4007.out" ||
+  { echo "fence_activate_4002_then_4007: no raise message" >&2; exit 1; }
+grep -qF ':c":{"N":"4007"}' "$f" || { echo "fence_activate_4002_then_4007: raise did not use 4007" >&2; exit 1; }
+
+# A revision that turns TOTP enrollment on is refused below the v0.4.7 floor,
+# the same way passkey enrollment is refused below v0.4.2.
+run_case fence_missing_totp_enrolled fail v0.1.0
+absent "$work/fence_missing_totp_enrolled.calls" "ecs register-task-definition"
+grep -qF "does not prove TOTP enrollment off" "$work/fence_missing_totp_enrolled.out" ||
+  { echo "fence_missing_totp_enrolled: no TOTP enrollment message" >&2; exit 1; }
+
+run_case fence_new_revision_totp_enrolled fail v0.1.0
+f=$work/fence_new_revision_totp_enrolled.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs register-task-definition"
+grep -qF "TOTP enrollment on while the release fence is below v0.4.7" \
+  "$work/fence_new_revision_totp_enrolled.out" ||
+  { echo "fence_new_revision_totp_enrolled: no TOTP enrollment message" >&2; exit 1; }
+
+# --totp-key-reencrypt runs only the re-encryption family, with no image,
+# service, snapshot, or schedule mutation, and requires the running app to be
+# the exact tag requested.
+run_case totp_reencrypt_ok 0 --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_ok.calls
+absent "$f" "ecs register-task-definition"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+absent "$f" "ecs update-service"
+grep -qF -- "--task-definition aboutme-prod-totp-reencrypt --started-by deploy-totp-reencrypt" "$f" ||
+  { echo "totp_reencrypt_ok: did not run the re-encryption family" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "totp_reencrypt_ok: lock was not released" >&2; exit 1; }
+grep -qF "totp-key-reencrypt done for v0.4.7" "$work/totp_reencrypt_ok.out" ||
+  { echo "totp_reencrypt_ok: no completion message" >&2; exit 1; }
+
+# The stored minimum must itself already be at v0.4.7; a lower stored
+# minimum refuses the one-shot before the lock, even though a normal deploy
+# floor check alone would accept this candidate.
+run_case totp_reencrypt_below_floor fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_below_floor.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs run-task"
+grep -qF "release fence is below v0.4.7" "$work/totp_reencrypt_below_floor.out" ||
+  { echo "totp_reencrypt_below_floor: no floor message" >&2; exit 1; }
+
+# The requested tag must equal the running app's exact release: the same-tag
+# rule the rotation runbook step relies on.
+run_case totp_reencrypt_tag_mismatch fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_tag_mismatch.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs run-task"
+grep -qF "is release 4006, not v0.4.7" "$work/totp_reencrypt_tag_mismatch.out" ||
+  { echo "totp_reencrypt_tag_mismatch: no release-mismatch message" >&2; exit 1; }
+
+run_case totp_reencrypt_runtask_fails fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_runtask_fails.calls
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "totp_reencrypt_runtask_fails: lock was not released" >&2; exit 1; }
+grep -qF "totp-key-reencrypt did not start" "$work/totp_reencrypt_runtask_fails.out" ||
+  { echo "totp_reencrypt_runtask_fails: no start-failure message" >&2; exit 1; }
+
+run_case totp_reencrypt_task_fails fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_task_fails.calls
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "totp_reencrypt_task_fails: lock was not released" >&2; exit 1; }
+grep -qF "totp-key-reencrypt exited with 1" "$work/totp_reencrypt_task_fails.out" ||
+  { echo "totp_reencrypt_task_fails: no exit-code message" >&2; exit 1; }
+
 # A candidate that never reaches the fence (CI is not green) never acquires
 # or releases the lock: a crash before the lock exists leaves nothing to
 # clear, unlike a crash after acquisition, which the runbook's manual clear
