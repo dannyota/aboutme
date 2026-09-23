@@ -160,6 +160,18 @@ the exact owned lock. It updates no service and changes no schedule, alarm, or
 rule. An older deployer that finds this lock held fails like any other held
 lock.
 
+The TOTP release applies each passkey enrollment check in `fence.sh` and
+`deploy.sh` to `TOTP_ENROLLMENT_ENABLED` with floor v0.4.3 (numeric 4003). A
+missing item means zero only while the running app task definition proves both
+enrollment flags false. A running app with TOTP enrollment on blocks every mode
+while the item is missing or below 4003. Before acquiring the lock, `deploy.sh`
+refuses to register an app revision that turns TOTP enrollment on while the item
+is missing or below 4003, as it refuses passkey enrollment below 4002. Applying
+the flag before activation therefore cannot start TOTP enrollment at 4002, where
+a v0.4.2 rollback could remove the last passkey and delete the policy and
+recovery codes while TOTP stays active. Activation for v0.4.3 raises the fence
+to 4003 under the same lock before the flag turns on.
+
 ## Privileged bypass
 
 OpenTofu, direct use of the AWS-login credentials, and account administration

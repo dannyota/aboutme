@@ -43,9 +43,9 @@ TOTP verification, enrollment, replacement, or removal route. The state response
 has no `totpEnabled` field, and pending method values never include `totp`.
 V0.4.3 adds those fields and routes as an additive contract change.
 
-Every response in this file uses `Cache-Control: no-store`. JSON follows the
-standard `{data:...}` or `{error:{code,message}}` envelope. One-time plaintext
-appears only in the response that creates it.
+Every response in this file uses `Cache-Control: no-store, no-transform`. JSON
+follows the standard `{data:...}` or `{error:{code,message}}` envelope. One-time
+plaintext appears only in the response that creates it.
 
 ## Primary authentication
 

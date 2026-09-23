@@ -1,6 +1,6 @@
 # TOTP lifecycle brief
 
-Role: backend. Model: `gpt-5.6-terra`.
+Role: backend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
@@ -18,8 +18,14 @@ cryptography, and mail reports.
   `apps/server/internal/secondfactor/totp_rotation_test.go`.
 - Create `apps/server/internal/secondfactor/totp_health.go` and
   `apps/server/internal/secondfactor/totp_health_test.go`.
-- Modify `apps/server/internal/secondfactor/service.go` and
-  `apps/server/internal/secondfactor/service_test.go`.
+- Modify `apps/server/internal/secondfactor/service.go`,
+  `apps/server/internal/secondfactor/service_test.go`,
+  `apps/server/internal/secondfactor/recovery.go`, and
+  `apps/server/internal/secondfactor/recovery_test.go`.
+- Modify `apps/server/internal/auth/pending_authentication.go` and
+  `apps/server/internal/auth/pending_authentication_test.go` only if the
+  `WithLivePending` `beforePending` callback cannot hold the policy and
+  credential locks; report each hunk.
 - Modify `apps/server/internal/auth/second_factor_handlers.go`,
   `apps/server/internal/auth/second_factor_handlers_test.go`, and
   `apps/server/internal/auth/second_factor_adversarial_test.go`.
@@ -55,9 +61,11 @@ OAuth, mail files, SQL, migrations, web, infrastructure, or design.
   cool-down.
 - Apply the one-per-hour `attempt_mail_at` cap under the policy lock to every
   `second_factor_attempts_exhausted` job, including passkey and recovery
-  exhaustion and TOTP cool-down start. Every method's exhaustion hook lives in
-  `service.go` and locks the policy row before the pending row, in the canonical
-  order. A suppressed mail keeps the state change.
+  exhaustion and TOTP cool-down start. The shared exhaustion hook is
+  `failAttempt` in `recovery.go`, run through `auth.FailPendingVerification`.
+  Lock the policy row (and TOTP credential) in the `WithLivePending`
+  `beforePending` callback, before the pending row, in the canonical order. A
+  suppressed mail keeps the state change.
 - Clear `cooldown_until` and `failed_attempts` in the password-reset completion
   transaction. Prove a reset ends an active cool-down.
 - Register the TOTP counter with the shared active-factor count in `service.go`.

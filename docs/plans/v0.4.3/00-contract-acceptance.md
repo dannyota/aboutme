@@ -1,6 +1,6 @@
 # TOTP contract acceptance brief
 
-Role: architect. Model: `gpt-5.6-sol`.
+Role: architect. Model: Opus (Codex: `gpt-5.6-sol`).
 
 ## Objective and authority
 
@@ -19,8 +19,8 @@ v0.4.2 factor authorities, `docs/design/totp-second-factor-contract.md`, ADR
   `docs/adr/README.md`.
 - Own `docs/design/passkey-second-factor-contract.md` for the v0.4.3 note that
   the one-per-hour attempt-mail cap also governs passkey and recovery exhaustion
-  mail. The v0.4.2 branch carries the note; after rebase, confirm it and edit
-  that file only for this note.
+  mail. Main already carries the note (the attempt-mail paragraph and the budget
+  list). Confirm it and edit that file only if the note is wrong.
 - Modify `docs/design/README.md` (including an entry for the key-management
   design), `docs/design/decisions.md`,
   `docs/design/second-factor-authentication.md`, `docs/design/security.md`,
@@ -42,7 +42,7 @@ accepted.
 - Add every count, byte, lifetime, skew, key, batch, body, URI, and cleanup
   limit to the budget table.
 - Make API and security design name the new fields, methods, routes, key ring,
-  cache groups, per-row key failure and its alarm signal, per-account failure
+  cache rule, per-row key failure and its alarm signal, per-account failure
   budget, attempt-mail cap, mail events, older-client behavior, and v0.4.3 floor
   without weakening v0.4.2. Keep `/readyz` free of TOTP state.
 - Keep every Markdown file at or under 450 lines. Put TOTP detail in the TOTP
@@ -69,9 +69,13 @@ scripts/check-lengths.sh <exact-touched-markdown-files>
 git diff --check -- <exact-touched-markdown-files>
 ```
 
-Do not install a missing tool. Definition of done: no owner choice remains and
-no implementer must invent a wire, storage, security, budget, migration, or
-release rule. Obtain a fresh Sol review. Report exact files, checks and results,
-skipped checks with exact reason, owner decisions, review findings and
-confirmation, and open items. Do not perform Git operations. Use short plain
-text with no em dash.
+The worktree has no `node_modules`; use
+`/home/danny/src/aboutme/node_modules/.bin/prettier` and
+`/home/danny/src/aboutme/node_modules/.bin/markdownlint-cli2` from the main
+checkout. Do not install a missing tool. Definition of done: no owner choice
+remains and no implementer must invent a wire, storage, security, budget,
+migration, or release rule. The manager dispatches the fresh review of ADR 0049
+and the TOTP contract in parallel; answer its findings when the manager forwards
+them. Report exact files, checks and results, skipped checks with exact reason,
+owner decisions, review findings and confirmation, and open items. Do not
+perform Git operations. Use short plain text with no em dash.

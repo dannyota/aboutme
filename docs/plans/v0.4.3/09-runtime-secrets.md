@@ -1,14 +1,16 @@
 # TOTP runtime secrets brief
 
-Role: devops. Model: `gpt-5.6-terra`.
+Role: devops. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
 Provision TOTP key references and disabled-by-default enrollment without
 exposing key values. Read `AGENTS.md`, the accepted TOTP contract and
 key-management design, accepted ADR 0049, the deployment design, ADRs 0033
-through 0039 and 0048, the release-fence contract, production runbook, and
-verified v0.4.2 infrastructure report.
+through 0039 and 0048, the release-fence contract, production runbook, and the
+v0.4.2 passkey wiring on main (`PASSKEY_ENROLLMENT_ENABLED` in
+`deploy/aws/modules/tasks` and `deploy/aws/prod`, and the fence resources in
+`deploy/aws/modules/data` and `deploy/aws/modules/identity`).
 
 ## Owned paths
 

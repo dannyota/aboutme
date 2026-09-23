@@ -16,25 +16,27 @@ corrected.
 
 ## Sections
 
-| Section | File                                                  | Purpose                                                  |
-| ------- | ----------------------------------------------------- | -------------------------------------------------------- |
-| 1       | [Product](product.md)                                 | Users, core journeys, v1 scope, and public states        |
-| 2       | [System](system.md)                                   | Components, route ownership, and failure boundaries      |
-| 3       | [Data](data.md)                                       | Relational model, resume document, and versioning        |
-| 4       | [API](api.md)                                         | HTTP conventions, endpoints, and write safety            |
-| 5       | [Web and rendering](web.md)                           | Editor, renderer, templates, fonts, and sanitizing       |
-| 5a      | [Resume localization](editor-localization.md)         | Interface and resume-language separation                 |
-| 5b      | [Second-factor auth](second-factor-authentication.md) | Passkey, recovery, TOTP, and authority rules             |
-| 5c      | [Passkey contract](passkey-second-factor-contract.md) | V0.4.2 wire, storage, mail, and migration                |
-| 5d      | [Passkey release fence](passkey-release-fence.md)     | V0.4.2 deployment serialization, IAM, and rollback       |
-| 6       | [Deployment](deployment.md)                           | Environments, network trust, storage, and backups        |
-| 6a      | [Single-host production](single-host-production.md)   | First-release production host, edge, database and deploy |
-| 7       | [Repository boundaries](repository.md)                | Sources of truth and dependency direction                |
-| 8       | [Realtime](realtime.md)                               | Autosave, Server-Sent Events, and fallback behavior      |
-| 9       | [Operations](operations.md)                           | Privacy lifecycle, monitoring, and launch evidence       |
-| 10      | [Decision status](decisions.md)                       | Integrated ADRs, open gates, and approval rules          |
-| Other   | [Font catalog](fonts.md)                              | License gate, v2 choices, coverage, and provenance       |
-| Other   | [Numeric budgets](budgets.md)                         | Hard limits, rate policies, SLOs, and benchmarks         |
+| Section | File                                                  | Purpose                                                     |
+| ------- | ----------------------------------------------------- | ----------------------------------------------------------- |
+| 1       | [Product](product.md)                                 | Users, core journeys, v1 scope, and public states           |
+| 2       | [System](system.md)                                   | Components, route ownership, and failure boundaries         |
+| 3       | [Data](data.md)                                       | Relational model, resume document, and versioning           |
+| 4       | [API](api.md)                                         | HTTP conventions, endpoints, and write safety               |
+| 5       | [Web and rendering](web.md)                           | Editor, renderer, templates, fonts, and sanitizing          |
+| 5a      | [Resume localization](editor-localization.md)         | Interface and resume-language separation                    |
+| 5b      | [Second-factor auth](second-factor-authentication.md) | Passkey, recovery, TOTP, and authority rules                |
+| 5c      | [Passkey contract](passkey-second-factor-contract.md) | V0.4.2 wire, storage, mail, and migration                   |
+| 5d      | [Passkey release fence](passkey-release-fence.md)     | Deployment serialization, IAM, rollback, and TOTP floor     |
+| 5e      | [TOTP contract](totp-second-factor-contract.md)       | V0.4.3 authenticator-app wire, storage, mail, and migration |
+| 5f      | [TOTP key management](totp-key-management.md)         | TOTP sealing, key ring, rotation, and key failures          |
+| 6       | [Deployment](deployment.md)                           | Environments, network trust, storage, and backups           |
+| 6a      | [Single-host production](single-host-production.md)   | First-release production host, edge, database and deploy    |
+| 7       | [Repository boundaries](repository.md)                | Sources of truth and dependency direction                   |
+| 8       | [Realtime](realtime.md)                               | Autosave, Server-Sent Events, and fallback behavior         |
+| 9       | [Operations](operations.md)                           | Privacy lifecycle, monitoring, and launch evidence          |
+| 10      | [Decision status](decisions.md)                       | Integrated ADRs, open gates, and approval rules             |
+| Other   | [Font catalog](fonts.md)                              | License gate, v2 choices, coverage, and provenance          |
+| Other   | [Numeric budgets](budgets.md)                         | Hard limits, rate policies, SLOs, and benchmarks            |
 
 The [template system](templates/README.md) is the detailed contract for preset
 data, rendering tokens, and print behavior. The

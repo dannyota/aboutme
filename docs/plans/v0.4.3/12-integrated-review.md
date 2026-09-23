@@ -1,6 +1,6 @@
 # Integrated TOTP release review brief
 
-Role: reviewer. Model: `gpt-5.6-sol`.
+Role: reviewer. Model: Opus (Codex: `gpt-5.6-sol`).
 
 ## Objective and authority
 
@@ -42,8 +42,8 @@ Review only the exact integrated diff from recorded base through candidate.
   persistence, later passkey reuse, and all-or-nothing failure.
 - Confirm migration 00005 replaces and tests both mail constraints while factor
   mutation and mail insertion stay in one transaction.
-- Confirm shared routes keep exact `no-store` and only secret-bearing TOTP
-  enrollment responses use exact `no-store, no-transform`.
+- Confirm every v0.4.2 and TOTP route keeps exact
+  `Cache-Control: no-store, no-transform`.
 - Confirm flags, mixed versions, older-client failure, floor 4003, lower-target
   denial, activation and restoration, privileged bypass, and forward-fix rule.
 - Inspect mail, export, logs, metrics, traces, evidence, QR rendering, client
