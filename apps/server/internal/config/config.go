@@ -118,6 +118,21 @@ type Config struct {
 	// relying party (see passkey.go), so an operator cannot enable enrollment
 	// behind a host WebAuthn ceremonies would reject.
 	PasskeyEnrollment bool
+	// TOTPEnrollment reports whether new authenticator-app enrollment and
+	// replacement are open (TOTP_ENROLLMENT_ENABLED=true). It defaults to
+	// false. Verification, removal, recovery, and state routes are
+	// unaffected either way (docs/design/totp-second-factor-contract.md
+	// "Enrollment and replacement API").
+	TOTPEnrollment bool
+	// TOTPActiveKey and TOTPPreviousKey are the canonical 43-character
+	// unpadded base64url TOTP sealing keys from TOTP_ACTIVE_KEY and the
+	// optional TOTP_PREVIOUS_KEY. TOTPActiveKey is always required, whether
+	// or not TOTPEnrollment is set, because verification of an existing
+	// credential must keep working when enrollment is off. TOTPPreviousKey
+	// is empty when no previous key is configured
+	// (docs/design/totp-key-management.md "Key ring").
+	TOTPActiveKey   string
+	TOTPPreviousKey string
 }
 
 const (
@@ -222,6 +237,15 @@ func Load(getenv func(string) string) (Config, error) {
 		}
 	}
 
+	totpEnrollment, err := loadTOTPEnrollmentFlag(getenv("TOTP_ENROLLMENT_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
+	totpActiveKey, totpPreviousKey, err := loadTOTPKeyRing(getenv("TOTP_ACTIVE_KEY"), getenv("TOTP_PREVIOUS_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	googleClientID, googleClientSecret, err := loadProviderCredentials("GOOGLE", "Google", getenv, env, providerLogin.Google)
 	if err != nil {
 		return Config{}, err
@@ -288,6 +312,9 @@ func Load(getenv func(string) string) (Config, error) {
 		ProviderLogin:                providerLogin,
 		PasswordRegistrationDisabled: passwordRegistrationDisabled,
 		PasskeyEnrollment:            passkeyEnrollment,
+		TOTPEnrollment:               totpEnrollment,
+		TOTPActiveKey:                totpActiveKey,
+		TOTPPreviousKey:              totpPreviousKey,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err

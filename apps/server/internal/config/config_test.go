@@ -57,6 +57,12 @@ func env(vars map[string]string) func(string) string {
 			return "aboutme"
 		case "AWS_REGION":
 			return "ap-southeast-1"
+		// TOTP_ACTIVE_KEY is required startup configuration regardless of
+		// TOTP_ENROLLMENT_ENABLED (see internal/config/totp.go); the totp
+		// tests override it, including with an empty or malformed value when
+		// proving a rejection.
+		case "TOTP_ACTIVE_KEY":
+			return testBase64URL32
 		}
 		return vars[key]
 	}

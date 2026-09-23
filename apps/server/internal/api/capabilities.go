@@ -20,6 +20,12 @@ type Capabilities struct {
 	// (PASSKEY_ENROLLMENT_ENABLED). It is never derived from any account's
 	// own state: this is a deployment-wide switch, not a per-user flag.
 	PasskeyEnrollment bool `json:"passkeyEnrollment"`
+	// TotpEnrollment reports whether new authenticator-app enrollment and
+	// replacement are open (TOTP_ENROLLMENT_ENABLED). Verification, removal,
+	// recovery, and state routes are always registered and unaffected by
+	// this flag; it is never derived from any account's own state
+	// (docs/design/totp-second-factor-contract.md "Release surface").
+	TotpEnrollment bool `json:"totpEnrollment"`
 }
 
 // CapabilitiesHandler serves GET /api/v1/capabilities. The router's default

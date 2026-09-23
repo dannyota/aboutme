@@ -1,6 +1,7 @@
-// Contract tests for the v0.4.2 passkey second factor:
-// docs/design/second-factor-authentication.md and
-// docs/design/passkey-second-factor-contract.md. openapi.test.ts owns
+// Contract tests for passkey, recovery, and TOTP second-factor routes:
+// docs/design/second-factor-authentication.md,
+// docs/design/passkey-second-factor-contract.md, and
+// docs/design/totp-second-factor-contract.md. openapi.test.ts owns
 // cross-cutting, whole-document invariants; this file owns the second-factor
 // surface specifically.
 import { readFileSync } from "node:fs";
@@ -14,30 +15,154 @@ const secondFactorPaths = [
   "/auth/second-factor/passkey/options",
   "/auth/second-factor/passkey/verify",
   "/auth/second-factor/recovery/verify",
+  "/auth/second-factor/totp/verify",
   "/me/second-factor",
   "/me/second-factor/passkeys/options",
   "/me/second-factor/passkeys",
   "/me/second-factor/passkeys/{id}",
   "/me/second-factor/recovery-codes",
+  "/me/second-factor/totp/enrollment",
+  "/me/second-factor/totp",
 ] as const;
 
-describe("second-factor contract (v0.4.2 passkeys)", () => {
-  it("registers every v0.4.2 route and no TOTP route or field", () => {
+describe("second-factor contract (passkeys, recovery, TOTP)", () => {
+  it("registers every passkey, recovery, and TOTP route", () => {
     for (const path of secondFactorPaths) {
       expect(path in doc.paths, path).toBe(true);
     }
-    const totpPaths = Object.keys(doc.paths).filter((p) =>
-      p.toLowerCase().includes("totp"),
-    );
-    expect(totpPaths).toEqual([]);
-    expect(JSON.stringify(doc)).not.toMatch(/totpEnabled|totpEnrollment/);
+    expect(doc.paths["/auth/second-factor/totp/verify"].post).toBeTruthy();
+    expect(doc.paths["/me/second-factor/totp/enrollment"].post).toBeTruthy();
+    expect(doc.paths["/me/second-factor/totp/enrollment"].put).toBeTruthy();
+    expect(doc.paths["/me/second-factor/totp"].delete).toBeTruthy();
   });
 
-  it("exposes passkeyEnrollment on capabilities, never account state", () => {
+  it("exposes passkeyEnrollment and totpEnrollment on capabilities, never account state", () => {
     const capabilities = doc.components.schemas.Capabilities;
     expect(capabilities.required).toContain("passkeyEnrollment");
+    expect(capabilities.required).toContain("totpEnrollment");
     expect(capabilities.properties.passkeyEnrollment.type).toBe("boolean");
+    expect(capabilities.properties.totpEnrollment.type).toBe("boolean");
     expect(capabilities.additionalProperties).toBe(false);
+  });
+
+  it("accepts exactly a six-digit code on the TOTP pending verify and enrollment completion routes", () => {
+    const verifyCode =
+      doc.components.schemas.TOTPVerifyRequest.properties.code;
+    expect(verifyCode.pattern).toBe("^[0-9]{6}$");
+    expect(doc.components.schemas.TOTPVerifyRequest.required).toEqual([
+      "code",
+    ]);
+    expect(doc.components.schemas.TOTPVerifyRequest.additionalProperties).toBe(
+      false,
+    );
+
+    const completeCode =
+      doc.components.schemas.TOTPEnrollmentCompleteRequest.properties.code;
+    expect(completeCode.pattern).toBe("^[0-9]{6}$");
+    expect(
+      doc.components.schemas.TOTPEnrollmentCompleteRequest.required,
+    ).toEqual(["enrollmentId", "code"]);
+  });
+
+  it("gates TOTP enrollment start and completion behind TOTP_ENROLLMENT_ENABLED with the uniform 404", () => {
+    for (const method of ["post", "put"] as const) {
+      const op = doc.paths["/me/second-factor/totp/enrollment"][method];
+      const description = JSON.stringify(op.responses["404"]);
+      expect(description, method).toContain("TOTP_ENROLLMENT_ENABLED");
+      expect(description, method).toContain("not_found");
+    }
+    // Verification, removal, and state ignore the flag: no 404 on those
+    // routes documents it as a gate.
+    expect(
+      JSON.stringify(
+        doc.paths["/auth/second-factor/totp/verify"].post.responses,
+      ),
+    ).not.toContain("TOTP_ENROLLMENT_ENABLED");
+    expect(
+      JSON.stringify(doc.paths["/me/second-factor/totp"].delete.responses),
+    ).not.toContain("TOTP_ENROLLMENT_ENABLED");
+  });
+
+  it("shares the 4,096-byte password body cap on every TOTP route, not the WebAuthn cap", () => {
+    const totpRoutes: Array<[string, "post" | "put"]> = [
+      ["/auth/second-factor/totp/verify", "post"],
+      ["/me/second-factor/totp/enrollment", "post"],
+      ["/me/second-factor/totp/enrollment", "put"],
+    ];
+    for (const [path, method] of totpRoutes) {
+      const ref = doc.paths[path][method].responses["413"].$ref;
+      expect(ref, `${method.toUpperCase()} ${path}`).toBe(
+        "#/components/responses/PasswordBodyTooLarge",
+      );
+    }
+  });
+
+  it("pins the per-account TOTP cool-down and shared attempt-budget rate shape on verify", () => {
+    const ref =
+      doc.paths["/auth/second-factor/totp/verify"].post.responses["429"].$ref;
+    expect(ref).toBe(
+      "#/components/responses/SecondFactorTOTPVerifyRateLimited",
+    );
+    const rateLimited = doc.components.responses.SecondFactorTOTPVerifyRateLimited;
+    expect(rateLimited.headers["Retry-After"].schema.maximum).toBe(86400);
+    expect(rateLimited.description).toContain("cool-down");
+    expect(rateLimited.content["application/json"].example.error.code).toBe(
+      "rate_limited",
+    );
+  });
+
+  it("pins TOTP enrollment start and removal to the shared management limiter, and completion to both limiters", () => {
+    expect(
+      doc.paths["/me/second-factor/totp/enrollment"].post.responses["429"]
+        .$ref,
+    ).toBe("#/components/responses/SecondFactorManagementRateLimited");
+    expect(doc.paths["/me/second-factor/totp"].delete.responses["429"].$ref).toBe(
+      "#/components/responses/SecondFactorManagementRateLimited",
+    );
+    expect(
+      doc.paths["/me/second-factor/totp/enrollment"].put.responses["429"]
+        .$ref,
+    ).toBe("#/components/responses/SecondFactorTOTPCompletionRateLimited");
+  });
+
+  it("reuses factor_not_found for TOTP pending verify and removal on an unenrolled account", () => {
+    for (const [path, method] of [
+      ["/auth/second-factor/totp/verify", "post"],
+      ["/me/second-factor/totp", "delete"],
+    ] as const) {
+      expect(doc.paths[path][method].responses["404"].$ref, path).toBe(
+        "#/components/responses/SecondFactorNotFound",
+      );
+    }
+  });
+
+  it("returns the TOTP secret and provisioning URI only once, never accepted back from the browser", () => {
+    const start = doc.components.schemas.TOTPEnrollmentStartResponse;
+    expect(start.properties.data.required).toEqual([
+      "enrollmentId",
+      "secret",
+      "provisioningUri",
+      "expiresAt",
+    ]);
+    expect(start.properties.data.properties.secret.pattern).toBe(
+      "^[A-Z2-7]{4}( [A-Z2-7]{4}){7}$",
+    );
+    // No TOTP request body (verify or enrollment completion) accepts a
+    // secret or provisioning URI back: only enrollmentId and code.
+    expect(
+      Object.keys(doc.components.schemas.TOTPVerifyRequest.properties),
+    ).toEqual(["code"]);
+    expect(
+      Object.keys(
+        doc.components.schemas.TOTPEnrollmentCompleteRequest.properties,
+      ),
+    ).toEqual(["enrollmentId", "code"]);
+  });
+
+  it("omits recoveryCodes on TOTP replacement, requiring only totpEnabled", () => {
+    const complete = doc.components.schemas.TOTPEnrollmentCompleteResponse;
+    expect(complete.properties.data.required).toEqual(["totpEnabled"]);
+    expect(complete.properties.data.properties.totpEnabled.const).toBe(true);
   });
 
   it("accepts an optional same-origin next field on password login", () => {
@@ -227,10 +352,13 @@ describe("second-factor contract (v0.4.2 passkeys)", () => {
     expect(state.properties.data.required).toEqual([
       "enabled",
       "passkeys",
+      "totpEnabled",
       "recoveryCodesRemaining",
     ]);
     const methods = doc.components.schemas.SecondFactorPendingMethod;
-    expect(methods.enum).toEqual(["passkey", "recovery"]);
+    expect(methods.enum).toEqual(["passkey", "totp", "recovery"]);
+    const pendingStatus = doc.components.schemas.SecondFactorPendingStatusResponse;
+    expect(pendingStatus.properties.data.properties.methods.maxItems).toBe(3);
   });
 
   it("pins the fixed WebAuthn registration and assertion option shapes", () => {

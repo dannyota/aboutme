@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -13,12 +15,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
+	"github.com/dannyota/aboutme/apps/server/internal/api"
+	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
+	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"github.com/dannyota/aboutme/apps/server/internal/secondfactor"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
 func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {
@@ -28,18 +38,20 @@ func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {
 		login             config.ProviderLogin
 		registerOff       bool
 		passkeyEnrollment bool
+		totpEnrollment    bool
 		want              string
 	}{
-		{"password only", config.ProviderLogin{}, false, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false}}` + "\n"},
-		{"google only", config.ProviderLogin{Google: true}, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false}}` + "\n"},
-		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}, false, false,
-			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false}}` + "\n"},
-		{"google sign-up only", config.ProviderLogin{Google: true}, true, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":false,"passkeyEnrollment":false}}` + "\n"},
-		{"passkey enrollment open", config.ProviderLogin{}, false, true, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":true}}` + "\n"},
+		{"password only", config.ProviderLogin{}, false, false, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
+		{"google only", config.ProviderLogin{Google: true}, false, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
+		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}, false, false, false,
+			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
+		{"google sign-up only", config.ProviderLogin{Google: true}, true, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":false,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
+		{"passkey enrollment open", config.ProviderLogin{}, false, true, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":true,"totpEnrollment":false}}` + "\n"},
+		{"totp enrollment open", config.ProviderLogin{}, false, false, true, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":true}}` + "\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := config.Config{ProviderLogin: tc.login, PasswordRegistrationDisabled: tc.registerOff, PasskeyEnrollment: tc.passkeyEnrollment}
+			cfg := config.Config{ProviderLogin: tc.login, PasswordRegistrationDisabled: tc.registerOff, PasskeyEnrollment: tc.passkeyEnrollment, TOTPEnrollment: tc.totpEnrollment}
 			cfg.AgentAccess.Enabled = false
 			mux := http.NewServeMux()
 			capabilitiesRegistrar(cfg)(mux)
@@ -354,5 +366,116 @@ func TestServe_DrainsInFlightMCPRequestBeforeReturning(t *testing.T) {
 	}
 	if err := <-reqDone; err != nil {
 		t.Errorf("client request error: %v", err)
+	}
+}
+
+// noPublicRoutes is a minimal api.PublicRoutes that recognizes nothing, for
+// tests that exercise only /readyz and the wired second-factor routes.
+type noPublicRoutes struct{}
+
+func (noPublicRoutes) Recognizes(string) bool { return false }
+func (noPublicRoutes) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	http.NotFound(w, r)
+}
+
+// TestReadyzStaysReadyWhileTOTPVerificationFailsClosedOnAnUnknownKeyID is the
+// end-to-end regression for docs/design/totp-key-management.md "Key
+// failures": a TOTP row sealed under a key ID outside the configured ring
+// fails verification with 503 authentication_unavailable, counts no pending
+// failure, and never touches readiness — internal/publicstate/readiness.go
+// takes no TOTP input, so /readyz stays 200 throughout.
+func TestReadyzStaysReadyWhileTOTPVerificationFailsClosedOnAnUnknownKeyID(t *testing.T) {
+	t.Parallel()
+	dsn := testutil.RequireMigratedTestDatabaseURL(t)
+	ctx := context.Background()
+	pool, err := store.NewPool(ctx, dsn)
+	if err != nil {
+		t.Fatalf("open pool: %v", err)
+	}
+	t.Cleanup(func() { pool.Close(context.Background()) })
+	q := store.New(pool)
+
+	cfg := validSecondFactorConfig("https://aboutme.example", false)
+	runtime, err := newSecondFactorRoutes(discardLogger(), cfg, pool)
+	if err != nil {
+		t.Fatalf("newSecondFactorRoutes() error = %v", err)
+	}
+
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+	if err != nil {
+		t.Fatalf("publicstate.NewCoordinator() error = %v", err)
+	}
+	readiness := publicstate.NewReadiness(coordinator, publicstate.ReadinessDependencies{
+		PingDatabase:  pool.Ping,
+		ProbeRenderer: func(context.Context) error { return nil },
+	})
+	handler := api.New(discardLogger(), readiness, api.Options{}, noPublicRoutes{}, runtime.RegisterRoutes)
+
+	// Install a TOTP credential sealed under a key that is valid-shaped but
+	// not in cfg.TOTPActiveKey's ring: the ring's Open call fails with
+	// ErrTOTPUnknownKey before any code comparison.
+	now := time.Now().UTC()
+	user, err := q.CreateUser(ctx, store.CreateUserParams{Email: uuid.NewString() + "@example.com", Name: "Ready TOTP Test"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	handle := make([]byte, 32)
+	if _, err = rand.Read(handle); err != nil {
+		t.Fatalf("random handle: %v", err)
+	}
+	if _, err = q.CreateSecondFactorPolicy(ctx, store.CreateSecondFactorPolicyParams{UserID: user.ID, WebauthnUserHandle: handle, EnabledAt: now}); err != nil {
+		t.Fatalf("CreateSecondFactorPolicy: %v", err)
+	}
+	const foreignKeyText = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+	foreignRing, err := secondfactor.NewTOTPKeyRing(foreignKeyText, "", rand.Reader)
+	if err != nil {
+		t.Fatalf("NewTOTPKeyRing(foreign) error = %v", err)
+	}
+	secret, err := secondfactor.GenerateTOTPSecret(rand.Reader)
+	if err != nil {
+		t.Fatalf("GenerateTOTPSecret() error = %v", err)
+	}
+	credentialID := uuid.Must(uuid.NewV7())
+	sealed, err := foreignRing.Seal(secondfactor.TOTPRecordKindCredential, user.ID, credentialID, secret)
+	if err != nil {
+		t.Fatalf("Seal() error = %v", err)
+	}
+	if _, err = q.InstallTOTPCredential(ctx, store.InstallTOTPCredentialParams{
+		ID: credentialID, UserID: user.ID, KeyID: sealed.KeyID, Nonce: sealed.Nonce[:], Ciphertext: sealed.Ciphertext,
+		LastUsedStep: 0, CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("InstallTOTPCredential: %v", err)
+	}
+
+	pending := auth.NewPendingAuthenticationManager(pool, discardLogger())
+	issue, err := pending.Create(ctx, auth.PendingAuthenticationRequest{
+		UserID: user.ID, Purpose: auth.PendingAuthenticationPurposeLogin, PrimaryVerifiedAt: now, ReturnPath: "/app/resumes",
+	})
+	if err != nil {
+		t.Fatalf("pending.Create() error = %v", err)
+	}
+
+	cookieRec := httptest.NewRecorder()
+	auth.SetPendingAuthenticationCookie(cookieRec, issue.RawToken)
+	pendingCookies := cookieRec.Result().Cookies()
+	if len(pendingCookies) != 1 {
+		t.Fatalf("SetPendingAuthenticationCookie set %d cookies, want 1", len(pendingCookies))
+	}
+
+	verifyReq := httptest.NewRequestWithContext(ctx, http.MethodPost, auth.SecondFactorPendingTOTPPath, bytes.NewBufferString(`{"code":"000000"}`))
+	verifyReq.Header.Set("Content-Type", "application/json")
+	verifyReq.Header.Set("Origin", cfg.PublicOrigin)
+	verifyReq.Header.Set(auth.CSRFHeaderName, base64.RawURLEncoding.EncodeToString(issue.Pending.CSRFSecret))
+	verifyReq.AddCookie(pendingCookies[0])
+	verifyRec := httptest.NewRecorder()
+	handler.ServeHTTP(verifyRec, verifyReq)
+	if verifyRec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("totp verify status = %d, body = %s, want 503", verifyRec.Code, verifyRec.Body.String())
+	}
+
+	readyRec := httptest.NewRecorder()
+	handler.ServeHTTP(readyRec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/readyz", nil))
+	if readyRec.Code != http.StatusOK {
+		t.Fatalf("/readyz status = %d, body = %s, want 200 even with a totp row off the configured key ring", readyRec.Code, readyRec.Body.String())
 	}
 }
