@@ -107,8 +107,8 @@ listed between `passkey` and `recovery`. TOTP bodies are strict JSON of at most
 treats an absent or malformed `totpEnrollment` or `totpEnabled` field as false.
 An older web client that receives the `totp` method shows a refresh prompt and
 calls no route for it, so it cannot bypass pending authentication. Once
-enrollment is enabled, production runs only v0.4.3 or later, numeric release
-4003, under the [release fence](passkey-release-fence.md).
+enrollment is enabled, production runs only v0.4.5 or later, numeric release
+4005, under the [release fence](passkey-release-fence.md).
 
 ### Photo intake
 

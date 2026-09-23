@@ -29,9 +29,8 @@ cryptography, and mail reports.
 - Modify `apps/server/internal/auth/second_factor_handlers.go`,
   `apps/server/internal/auth/second_factor_handlers_test.go`, and
   `apps/server/internal/auth/second_factor_adversarial_test.go`.
-- Modify `apps/server/internal/auth/password_reset.go` and
-  `apps/server/internal/auth/password_service_test.go` only to clear the TOTP
-  cool-down on reset completion.
+- Modify `apps/server/internal/auth/password_service_test.go` only to prove a
+  completed password reset keeps the TOTP cool-down and failure count.
 - Modify `apps/server/internal/accountapi/export_test.go` and
   `apps/server/internal/accountapi/delete_test.go` only for TOTP absence and
   cascade cases.
@@ -66,8 +65,8 @@ OAuth, mail files, SQL, migrations, web, infrastructure, or design.
   Lock the policy row (and TOTP credential) in the `WithLivePending`
   `beforePending` callback, before the pending row, in the canonical order. A
   suppressed mail keeps the state change.
-- Clear `cooldown_until` and `failed_attempts` in the password-reset completion
-  transaction. Prove a reset ends an active cool-down.
+- A completed password reset leaves `cooldown_until` and `failed_attempts`
+  unchanged. Prove an active cool-down survives a reset.
 - Register the TOTP counter with the shared active-factor count in `service.go`.
   TOTP removal and passkey removal decide final versus non-final only from that
   count. Do not change passkey handler functions or passkey routes. Prove final

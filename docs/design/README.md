@@ -27,7 +27,7 @@ corrected.
 | 5b      | [Second-factor auth](second-factor-authentication.md) | Passkey, recovery, TOTP, and authority rules                |
 | 5c      | [Passkey contract](passkey-second-factor-contract.md) | V0.4.2 wire, storage, mail, and migration                   |
 | 5d      | [Passkey release fence](passkey-release-fence.md)     | Deployment serialization, IAM, rollback, and TOTP floor     |
-| 5e      | [TOTP contract](totp-second-factor-contract.md)       | V0.4.3 authenticator-app wire, storage, mail, and migration |
+| 5e      | [TOTP contract](totp-second-factor-contract.md)       | V0.4.5 authenticator-app wire, storage, mail, and migration |
 | 5f      | [TOTP key management](totp-key-management.md)         | TOTP sealing, key ring, rotation, and key failures          |
 | 6       | [Deployment](deployment.md)                           | Environments, network trust, storage, and backups           |
 | 6a      | [Single-host production](single-host-production.md)   | First-release production host, edge, database and deploy    |

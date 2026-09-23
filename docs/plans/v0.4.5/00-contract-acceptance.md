@@ -17,7 +17,7 @@ v0.4.2 factor authorities, `docs/design/totp-second-factor-contract.md`, ADR
   owner's exact revisions.
 - Modify `docs/adr/0049-totp-second-factor-authentication.md` and
   `docs/adr/README.md`.
-- Own `docs/design/passkey-second-factor-contract.md` for the v0.4.3 note that
+- Own `docs/design/passkey-second-factor-contract.md` for the v0.4.5 note that
   the one-per-hour attempt-mail cap also governs passkey and recovery exhaustion
   mail. Main already carries the note (the attempt-mail paragraph and the budget
   list). Confirm it and edit that file only if the note is wrong.
@@ -28,7 +28,7 @@ v0.4.2 factor authorities, `docs/design/totp-second-factor-contract.md`, ADR
   `docs/design/deployment.md`.
 - Modify `docs/plans/traceability/README.md`,
   `docs/plans/traceability/ac-auth.md`, and `docs/plans/traceability/ac-sec.md`.
-- Modify `docs/plans/v0.4.3-totp.md` only to mark its contract prerequisite
+- Modify `docs/plans/v0.4.5-totp.md` only to mark its contract prerequisite
   satisfied and record the accepted base commit.
 
 Do not edit product code, OpenAPI, migrations, generated files, infrastructure,
@@ -43,7 +43,7 @@ accepted.
   limit to the budget table.
 - Make API and security design name the new fields, methods, routes, key ring,
   cache rule, per-row key failure and its alarm signal, per-account failure
-  budget, attempt-mail cap, mail events, older-client behavior, and v0.4.3 floor
+  budget, attempt-mail cap, mail events, older-client behavior, and v0.4.5 floor
   without weakening v0.4.2. Keep `/readyz` free of TOTP state.
 - Keep every Markdown file at or under 450 lines. Put TOTP detail in the TOTP
   contract or key-management design, not in
@@ -55,7 +55,7 @@ accepted.
   path.
 - Add acceptance rows for TOTP profile and replay, encrypted storage and
   rotation, lifecycle races, pending and recovery composition, flags and mixed
-  versions, bilingual UI and mail, and floor 4003.
+  versions, bilingual UI and mail, and floor 4005.
 - Keep current-state design text free of plan and task IDs.
 
 ## Checks and report

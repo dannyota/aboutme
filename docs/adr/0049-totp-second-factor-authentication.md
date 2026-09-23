@@ -61,16 +61,17 @@ authenticated-decryption failure fails closed for that TOTP row only, keeps
 **Guessing has a per-account bound.** Each TOTP credential carries a
 consecutive-failure count and a cool-down that grows from 15 minutes to 24
 hours. It is independent of client IP and never blocks passkeys or recovery
-codes. Attempt mail is capped at one per account per hour.
+codes. A password reset does not clear it. Attempt mail is capped at one per
+account per hour.
 
 **The browser renders provisioning locally.** The server returns one canonical
 `otpauth` URI and a grouped Base32 secret once. The issuer is the canonical
 origin hostname and the label includes the canonical account email. No external
 QR or provisioning service receives either value.
 
-**The release floor advances before enrollment.** V0.4.3 deploys with enrollment
+**The release floor advances before enrollment.** V0.4.5 deploys with enrollment
 off and valid keys. After flag-off proof, the serialized production operation
-raises the existing durable floor from v0.4.2 to v0.4.3. Only then may the flag
+raises the existing durable floor from v0.4.2 to v0.4.5. Only then may the flag
 turn on. Disabling enrollment later does not lower the floor or verification.
 
 The exact API, storage, mail, mixed-version, bounds, and release rules live in
@@ -88,7 +89,7 @@ with single-use step storage.
 
 Multiple named TOTP credentials would support several devices but would add
 credential naming, listing, per-device removal, and more recovery ambiguity.
-V0.4.3 keeps one active credential and safe replacement.
+V0.4.5 keeps one active credential and safe replacement.
 
 Hashing the secret would prevent verification. Application-layer authenticated
 encryption keeps database backups alone insufficient and supports controlled key
@@ -107,13 +108,13 @@ events. Existing accounts, passkeys, recovery codes, pending rows, sessions,
 grants, resumes, and mail stay unchanged. The release deletes no durable data.
 Superseded, expired, and consumed enrollments are the only automatic loss.
 
-Mixed v0.4.2 and v0.4.3 tasks are safe only while TOTP enrollment is false and
+Mixed v0.4.2 and v0.4.5 tasks are safe only while TOTP enrollment is false and
 no TOTP credential exists. New clients treat absent new fields as false. Older
 clients cannot bypass pending authentication, but they may require a refresh to
 use a TOTP-only account.
 
-After the floor reaches numeric release 4003, supported deploy, rollback, and
-restoration paths reject lower images. A post-enablement rollback uses v0.4.3 or
+After the floor reaches numeric release 4005, supported deploy, rollback, and
+restoration paths reject lower images. A post-enablement rollback uses v0.4.5 or
 later, or a forward fix.
 
 ## Security and operational consequences
