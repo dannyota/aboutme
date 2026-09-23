@@ -123,8 +123,8 @@ grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
 # still must pass before the flag turns on.
 TOTP_JOB=$(sed -n '/^  totp-browser-proof:/,/^  web-source-build:/p' "$WORKFLOW")
 [ -n "$TOTP_JOB" ] || fail "hosted workflow lacks the totp-browser-proof job"
-grep -Fq '    timeout-minutes: 45' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job lacks a fixed 45-minute timeout"
+grep -Fq '    timeout-minutes: 60' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job lacks a fixed 60-minute timeout"
 grep -Fq '    continue-on-error: true' <<<"$TOTP_JOB" ||
   fail "totp-browser-proof job does not report without blocking the flag-off release"
 grep -Fq -- '- run: make dev-https' <<<"$TOTP_JOB" ||

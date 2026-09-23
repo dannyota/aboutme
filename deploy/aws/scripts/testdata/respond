@@ -28,7 +28,8 @@ case "$cmd $args" in
       fence_lower) echo '{"Item":{"minimum_release":{"N":"5000"},"minimum_tag":{"S":"v0.5.0"}}}' ;;
       fence_equal | fence_activate) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
       fence_activate_4002_then_4007) echo '{"Item":{"minimum_release":{"N":"4002"},"minimum_tag":{"S":"v0.4.2"}}}' ;;
-      totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | totp_reencrypt_tag_mismatch)
+      totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | totp_reencrypt_tag_mismatch | \
+      totp_reencrypt_register_fails | totp_reencrypt_slot_mismatch | totp_reencrypt_wait_timeout)
         echo '{"Item":{"minimum_release":{"N":"4007"},"minimum_tag":{"S":"v0.4.7"}}}' ;;
       totp_reencrypt_below_floor) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
       fence_malformed) echo '{"Item":{"minimum_release":{"N":"abc"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
@@ -115,8 +116,13 @@ case "$cmd $args" in
         # stored fence minimum (still 4002 from the v0.4.2 activation) has not
         # caught up yet.
         echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"4007"}]}]}' ;;
-      totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails)
-        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"4007"}]}]}' ;;
+      totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | \
+      totp_reencrypt_register_fails | totp_reencrypt_wait_timeout)
+        # The running app's TOTP_ACTIVE_KEY/TOTP_PREVIOUS_KEY slots the new
+        # totp-reencrypt revision (below) must match before it is registered.
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"4007"}],"secrets":[{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"},{"name":"TOTP_PREVIOUS_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-b"}]}]}' ;;
+      totp_reencrypt_slot_mismatch)
+        echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"4007"}],"secrets":[{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"},{"name":"TOTP_PREVIOUS_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-b"}]}]}' ;;
       totp_reencrypt_tag_mismatch)
         echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"4006"}]}]}' ;;
       restore_below_fence)
@@ -124,6 +130,10 @@ case "$cmd $args" in
       fence_first_already_running)
         # Proves a real prior deploy, not OpenTofu's untouched placeholder.
         echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_TAG","value":"v0.0.9"}]}]}' ;;
+      fence_running_def_malformed)
+        # Not JSON: the enrollment jq extractions must fail closed, not read
+        # an empty value from this as if it proved enrollment off.
+        echo 'not json' ;;
       *)
         echo '{"family":"f","containerDefinitions":[{"name":"server","environment":[]}]}' ;;
     esac ;;
@@ -136,8 +146,25 @@ case "$cmd $args" in
       echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","environment":[{"name":"TOTP_ENROLLMENT_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}'
       exit 0
     fi
+    case $STUB_CASE in
+      totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | \
+      totp_reencrypt_register_fails | totp_reencrypt_wait_timeout)
+        # current_def totp-reencrypt: key slots match the running app's, above.
+        echo '{"family":"aboutme-prod-totp-reencrypt","networkMode":"bridge","requiresCompatibilities":["EC2"],"containerDefinitions":[{"name":"totp-reencrypt","image":"x","environment":[],"secrets":[{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"},{"name":"TOTP_PREVIOUS_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-b"}]}]}'
+        exit 0 ;;
+      totp_reencrypt_slot_mismatch)
+        # Only the active slot, and it differs from the running app's above:
+        # an un-applied OpenTofu change to the key slots.
+        echo '{"family":"aboutme-prod-totp-reencrypt","networkMode":"bridge","requiresCompatibilities":["EC2"],"containerDefinitions":[{"name":"totp-reencrypt","image":"x","environment":[],"secrets":[{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-c"}]}]}'
+        exit 0 ;;
+    esac
+    if [[ $STUB_CASE == totp_key_secret_missing ]]; then
+      # No TOTP_ACTIVE_KEY: OpenTofu has not been applied for the TOTP key yet.
+      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      exit 0
+    fi
     # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
-    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}' ;;
+    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"}]}]}' ;;
   "aws "*"ssm describe-parameters"*)
     if [[ $STUB_CASE == secret_missing && $args == *google-client-id* ]]; then echo 0; else echo 1; fi ;;
   "aws "*"secretsmanager describe-secret"*)
@@ -189,6 +216,11 @@ case "$cmd $args" in
     fi ;;
   "aws "*"ecs register-task-definition"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
+    cp "$file" "$STUB_DIR/last-registered.json"
+    if [[ $STUB_CASE == totp_reencrypt_register_fails ]]; then
+      echo "conflict" >&2
+      exit 255
+    fi
     jq -e '.containerDefinitions and (has("revision") | not)
       and (.containerDefinitions | all((.environment // []) | any(.name == "DEPLOY_RELEASE_TAG")))' \
       "$file" >/dev/null || exit 3
@@ -230,9 +262,10 @@ case "$cmd $args" in
       : >"$STUB_DIR/app-wait.once"
     fi ;;
   "aws "*"ecs wait tasks-stopped"*)
-    if [[ $STUB_CASE == wait_timeout && $args == *deploy-migrate* ]]; then exit 255; fi ;;
+    if [[ $STUB_CASE == wait_timeout && $args == *deploy-migrate* ]]; then exit 255; fi
+    if [[ $STUB_CASE == totp_reencrypt_wait_timeout && $args == *deploy-totp-reencrypt* ]]; then exit 255; fi ;;
   "aws "*"ecs describe-tasks"*"lastStatus"*)
-    if [[ $STUB_CASE == wait_timeout ]]; then echo RUNNING; else echo STOPPED; fi ;;
+    if [[ $STUB_CASE == wait_timeout || $STUB_CASE == totp_reencrypt_wait_timeout ]]; then echo RUNNING; else echo STOPPED; fi ;;
   "aws "*"ecs describe-tasks"*)
     if [[ $STUB_CASE == *migrate_fails && $args == *deploy-migrate* ]]; then echo 1;
     elif [[ $STUB_CASE == *db_setup_fails && $args == *deploy-db-setup* ]]; then echo 1;

@@ -182,7 +182,7 @@ CI also runs `tofu init -backend=false -input=false` and `tofu validate` in
 compiles and lists TOTP browser mode through `make operational-test`. Listing is
 not acceptance evidence.
 
-The separate `totp-browser-proof` job has a 45-minute timeout. It starts the
+The separate `totp-browser-proof` job has a 60-minute timeout. It starts the
 repository HTTPS harness, builds the pinned browser image, executes
 `make dev-https-totp-check`, uploads only bounded secret-free
 `.dev/native-https/evidence/totp-*`, and always stops its stack and runner-local

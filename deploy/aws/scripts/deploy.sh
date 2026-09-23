@@ -81,6 +81,8 @@ trap 'rm -rf "$work"' EXIT
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=fence.sh
 source "$script_dir/fence.sh"
+# shellcheck source=totp-reencrypt.sh
+source "$script_dir/totp-reencrypt.sh"
 
 # Shared by the mid-deploy maintenance-page check and the final smoke checks.
 smoke_attempts=5
@@ -319,35 +321,9 @@ fi
 
 # --totp-key-reencrypt runs the one-shot key re-encryption task under the
 # totp_reencrypt operation kind (docs/design/passkey-release-fence.md,
-# "Authenticator-app key re-encryption"). OpenTofu registers the
-# aboutme-prod-totp-reencrypt task definition itself, from the same active and
-# previous key slots the app uses; this only checkpoints and runs it. No
-# image, service, snapshot, or schedule mutation. It prints no key, secret, or
-# ciphertext; the task's own bounded counts and row IDs go to its log stream.
+# "Authenticator-app key re-encryption"; see totp-reencrypt.sh).
 if ((totp_reencrypt)); then
-  ((fence_min >= fence_epoch_totp)) ||
-    { say "the release fence is below v0.4.7; run --activate first"; exit 1; }
-  service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
-    { say "could not read the running app service"; exit 1; }
-  service_td=$(jq -r '.services[0].taskDefinition // empty' <<<"$service")
-  running_count=$(jq -r '.services[0].runningCount // 0' <<<"$service")
-  desired_count=$(jq -r '.services[0].desiredCount // 0' <<<"$service")
-  [[ -n $service_td ]] && ((running_count > 0)) && ((running_count == desired_count)) ||
-    { say "the running app service is not stable; TOTP key re-encryption requires a healthy running app"; exit 1; }
-  service_release=$(task_def_release_number "$service_td") || { say "could not verify the running app's release"; exit 1; }
-  [[ $service_release == "$candidate" ]] ||
-    { say "the running app is release $service_release, not $tag"; exit 1; }
-  fence_lock || exit 1
-  fence_checkpoint || exit 1
-  task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
-    --task-definition aboutme-prod-totp-reencrypt --started-by deploy-totp-reencrypt \
-    --query 'tasks[0].taskArn' --output text) || { say "totp-key-reencrypt did not start"; exit 1; }
-  [[ $task == arn:* ]] || { say "totp-key-reencrypt did not start"; exit 1; }
-  aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
-  code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$task" \
-    --query 'tasks[0].containers[0].exitCode' --output text)
-  [[ $code == 0 ]] || { say "totp-key-reencrypt exited with $code"; exit 1; }
-  say "totp-key-reencrypt done for $tag; counts are in the aboutme-prod-totp-reencrypt log stream"
+  totp_reencrypt_run
   exit 0
 fi
 
@@ -445,6 +421,16 @@ new_totp_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
 if ((fence_min < fence_epoch_totp)) && [[ $new_totp_enrolled == true ]]; then
   say "the new app turns TOTP enrollment on while the release fence is below v0.4.7; run --activate first"
   exit 1
+fi
+
+# A release at or above v0.4.7 needs the TOTP key OpenTofu provisions
+# (docs/design/totp-key-management.md, "Bootstrap"); an app revision missing
+# it would start, then fail at TOTP use, sending the deploy through a
+# maintenance and restore cycle for a problem tofu apply would have caught.
+if ((candidate >= fence_epoch_totp)); then
+  jq -e '.containerDefinitions[] | select(.name == "server") | (.secrets // [])[] | select(.name == "TOTP_ACTIVE_KEY")' \
+    "$work/app.json" >/dev/null 2>&1 ||
+    { say "run tofu apply for the TOTP key before deploying this release"; exit 1; }
 fi
 
 fence_lock || exit 1
