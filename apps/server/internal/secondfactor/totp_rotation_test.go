@@ -84,6 +84,17 @@ func newTOTPRotationSession(ctx context.Context, t *testing.T, q *store.Queries,
 	return sess.ID
 }
 
+// totpRotationNow anchors a rotation test's own rows and its runner's clock
+// at the real wall clock rather than a fixed past instant. The runner's
+// off-active-key scan has no per-test scoping and can pick up rows earlier
+// runs left in the shared test database under the same previous key text; a
+// fixed instant older than one of those rows would make the runner rewrite
+// updated_at to a time before that row's own created_at, violating
+// totp_credentials_updated_order_check and totp_enrollments' equivalent.
+func totpRotationNow() time.Time {
+	return time.Now().UTC()
+}
+
 func totpRotationRandomBytes(t *testing.T, n int) []byte {
 	t.Helper()
 	b := make([]byte, n)
@@ -151,7 +162,7 @@ func TestTOTPRotationRunner_ReencryptsCredentialUnderFreshNonceSameID(t *testing
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
 	q := store.New(pool)
-	now := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	now := totpRotationNow()
 
 	oldRing, ring := newTOTPRotationRings(t)
 	userID := newTOTPRotationUser(ctx, t, q)
@@ -173,9 +184,7 @@ func TestTOTPRotationRunner_ReencryptsCredentialUnderFreshNonceSameID(t *testing
 
 	runner := newTOTPRotationRunner(t, pool, ring, func() time.Time { return now })
 	result, err := runner.Run(ctx)
-	if err != nil {
-		t.Fatalf("Run() error = %v, want nil", err)
-	}
+	requireOwnTOTPRowRotated(t, result, err, TOTPRecordKindCredential, rowID)
 	if result.CredentialsReencrypted < 1 {
 		t.Errorf("CredentialsReencrypted = %d, want at least 1", result.CredentialsReencrypted)
 	}
@@ -211,7 +220,7 @@ func TestTOTPRotationRunner_ReencryptsUnexpiredEnrollment(t *testing.T) {
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
 	q := store.New(pool)
-	now := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	now := totpRotationNow()
 
 	oldRing, ring := newTOTPRotationRings(t)
 	userID := newTOTPRotationUser(ctx, t, q)
@@ -236,9 +245,7 @@ func TestTOTPRotationRunner_ReencryptsUnexpiredEnrollment(t *testing.T) {
 
 	runner := newTOTPRotationRunner(t, pool, ring, func() time.Time { return now })
 	result, err := runner.Run(ctx)
-	if err != nil {
-		t.Fatalf("Run() error = %v, want nil", err)
-	}
+	requireOwnTOTPRowRotated(t, result, err, TOTPRecordKindEnrollment, rowID)
 	if result.EnrollmentsReencrypted < 1 {
 		t.Errorf("EnrollmentsReencrypted = %d, want at least 1", result.EnrollmentsReencrypted)
 	}
@@ -280,7 +287,7 @@ func TestTOTPRotationRunner_DeletesExpiredEnrollmentWithoutDecrypting(t *testing
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
 	q := store.New(pool)
-	now := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	now := totpRotationNow()
 	created := now.Add(-11 * time.Minute) // expires_at must equal created_at + 10m and already be <= now.
 
 	_, ring := newTOTPRotationRings(t)
@@ -299,9 +306,7 @@ func TestTOTPRotationRunner_DeletesExpiredEnrollmentWithoutDecrypting(t *testing
 
 	runner := newTOTPRotationRunner(t, pool, ring, func() time.Time { return now })
 	result, err := runner.Run(ctx)
-	if err != nil {
-		t.Fatalf("Run() error = %v, want nil", err)
-	}
+	requireOwnTOTPRowRotated(t, result, err, TOTPRecordKindEnrollment, rowID)
 	if result.EnrollmentsExpiredDeleted < 1 {
 		t.Errorf("EnrollmentsExpiredDeleted = %d, want at least 1", result.EnrollmentsExpiredDeleted)
 	}
@@ -328,7 +333,7 @@ func TestTOTPRotationRunner_DecryptFailureIsCountedRunContinuesButFails(t *testi
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
 	q := store.New(pool)
-	now := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	now := totpRotationNow()
 
 	oldRing, ring := newTOTPRotationRings(t)
 
@@ -402,7 +407,7 @@ func TestTOTPRotationRunner_PagesPastDecryptFailuresWithoutRepeats(t *testing.T)
 	pool := newTOTPRotationPool(t)
 	ctx := totpRotationContext(t)
 	q := store.New(pool)
-	now := time.Date(2026, 9, 23, 0, 0, 0, 0, time.UTC)
+	now := totpRotationNow()
 
 	oldRing, ring := newTOTPRotationRings(t)
 
@@ -545,5 +550,18 @@ func TestTOTPRotationRunner_TimeBudgetStopsEarlyAndReportsLimitReached(t *testin
 	}
 	if row.KeyID != sealed.KeyID {
 		t.Errorf("row was rewritten despite the exhausted time budget: KeyID = %s, want unchanged %s", row.KeyID, sealed.KeyID)
+	}
+}
+
+// requireOwnTOTPRowRotated accepts a run that failed only on rows other
+// suites left in the shared test database under keys this ring cannot open,
+// and fails when this test's own row failed to decrypt.
+func requireOwnTOTPRowRotated(t *testing.T, result TOTPReencryptResult, err error, kind TOTPRecordKind, rowID uuid.UUID) {
+	t.Helper()
+	if err != nil && !errors.Is(err, ErrTOTPReencryptFailed) {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if containsTOTPReencryptFailure(result.DecryptFailures, kind, rowID) {
+		t.Fatalf("Run() could not decrypt this test's %s row", kind)
 	}
 }

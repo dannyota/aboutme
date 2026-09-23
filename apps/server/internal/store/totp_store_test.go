@@ -62,6 +62,22 @@ func installTOTPCredential(ctx context.Context, t *testing.T, q *store.Queries, 
 	return cred
 }
 
+// truncateTOTPTables clears totp_credentials and totp_enrollments inside the
+// test's own rolled-back transaction. ListTOTPCredentialsOffActiveKey,
+// CountTOTPCredentialsOffActiveKey, their enrollment equivalents, and
+// ListTOTPActiveKeyIDs scan both tables with no per-test scoping, by design:
+// production rotation must see every row (docs/design/totp-key-management.md
+// "Rotation"). A test that asserts an exact count or membership against one
+// of those queries needs a table with nothing in it but its own fixture, so
+// it truncates first; the truncate itself rolls back with everything else in
+// t.Cleanup, so it never touches rows outside this transaction.
+func truncateTOTPTables(ctx context.Context, t *testing.T, tx pgx.Tx) {
+	t.Helper()
+	if _, err := tx.Exec(ctx, "TRUNCATE TABLE totp_credentials, totp_enrollments"); err != nil {
+		t.Fatalf("truncate totp tables: %v", err)
+	}
+}
+
 func createTOTPEnrollment(ctx context.Context, t *testing.T, q *store.Queries, userID, sessionID uuid.UUID, keyID string, now time.Time) store.TotpEnrollment {
 	t.Helper()
 	enrollment, err := q.CreateTOTPEnrollment(ctx, store.CreateTOTPEnrollmentParams{
@@ -541,7 +557,8 @@ func TestTOTPStore_CleanupExpiredEnrollmentsIsBoundedAndSkipsLiveRows(t *testing
 }
 
 func TestTOTPStore_ReencryptionBatchIsBoundedAndCompareBeforeUpdate(t *testing.T) {
-	ctx, _, _, q := newOAuthStoreTx(t)
+	ctx, _, tx, q := newOAuthStoreTx(t)
+	truncateTOTPTables(ctx, t, tx)
 	staleA := installTOTPCredential(ctx, t, q, newOAuthStoreUser(ctx, t, q), totpKeyID('o'), 0, totpStoreNow)
 	installTOTPCredential(ctx, t, q, newOAuthStoreUser(ctx, t, q), totpKeyID('o'), 0, totpStoreNow)
 	installTOTPCredential(ctx, t, q, newOAuthStoreUser(ctx, t, q), totpKeyID('n'), 0, totpStoreNow)
@@ -598,7 +615,8 @@ func TestTOTPStore_ReencryptionBatchIsBoundedAndCompareBeforeUpdate(t *testing.T
 }
 
 func TestTOTPStore_EnrollmentReencryptionBatchAndCompareBeforeUpdate(t *testing.T) {
-	ctx, _, _, q := newOAuthStoreTx(t)
+	ctx, _, tx, q := newOAuthStoreTx(t)
+	truncateTOTPTables(ctx, t, tx)
 	staleUser := newOAuthStoreUser(ctx, t, q)
 	staleSession := newTOTPSession(ctx, t, q, staleUser, totpStoreNow)
 	stale := createTOTPEnrollment(ctx, t, q, staleUser, staleSession.ID, totpKeyID('o'), totpStoreNow)
@@ -650,7 +668,8 @@ func TestTOTPStore_EnrollmentReencryptionBatchAndCompareBeforeUpdate(t *testing.
 }
 
 func TestTOTPStore_KeyHealthListsAtMostThreeDistinctIDs(t *testing.T) {
-	ctx, _, _, q := newOAuthStoreTx(t)
+	ctx, _, tx, q := newOAuthStoreTx(t)
+	truncateTOTPTables(ctx, t, tx)
 
 	userA := newOAuthStoreUser(ctx, t, q)
 	installTOTPCredential(ctx, t, q, userA, totpKeyID('a'), 0, totpStoreNow)
