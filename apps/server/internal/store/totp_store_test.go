@@ -481,16 +481,19 @@ func TestTOTPStore_ReplacementPreservesIdentityAndResetsFailureBudget(t *testing
 }
 
 func TestTOTPStore_CleanupExpiredEnrollmentsIsBoundedAndSkipsLiveRows(t *testing.T) {
+	// Cleanup compares against the database clock, so these rows are placed
+	// relative to the real clock rather than the fixed test instant.
 	ctx, _, _, q := newOAuthStoreTx(t)
+	realNow := time.Now().UTC()
 	liveUser := newOAuthStoreUser(ctx, t, q)
-	liveSession := newTOTPSession(ctx, t, q, liveUser, totpStoreNow)
-	live := createTOTPEnrollment(ctx, t, q, liveUser, liveSession.ID, totpKeyID('a'), totpStoreNow.Add(9*time.Minute))
+	liveSession := newTOTPSession(ctx, t, q, liveUser, realNow)
+	live := createTOTPEnrollment(ctx, t, q, liveUser, liveSession.ID, totpKeyID('a'), realNow)
 
 	var expired []store.TotpEnrollment
 	for i := 0; i < 2; i++ {
 		expiredUser := newOAuthStoreUser(ctx, t, q)
-		expiredSession := newTOTPSession(ctx, t, q, expiredUser, totpStoreNow.Add(-time.Hour))
-		expired = append(expired, createTOTPEnrollment(ctx, t, q, expiredUser, expiredSession.ID, totpKeyID('a'), totpStoreNow.Add(-time.Hour)))
+		expiredSession := newTOTPSession(ctx, t, q, expiredUser, realNow.Add(-time.Hour))
+		expired = append(expired, createTOTPEnrollment(ctx, t, q, expiredUser, expiredSession.ID, totpKeyID('a'), realNow.Add(-time.Hour)))
 	}
 
 	deleted, err := q.CleanupExpiredTOTPEnrollments(ctx, 1)
@@ -505,8 +508,10 @@ func TestTOTPStore_CleanupExpiredEnrollmentsIsBoundedAndSkipsLiveRows(t *testing
 	if err != nil {
 		t.Fatalf("CleanupExpiredTOTPEnrollments(200): %v", err)
 	}
-	if deleted != 1 {
-		t.Fatalf("CleanupExpiredTOTPEnrollments(200) remaining rows = %d, want 1", deleted)
+	// Other suites share the database, so the second sweep may also remove
+	// their expired rows. The lookups below check this test's rows exactly.
+	if deleted < 1 {
+		t.Fatalf("CleanupExpiredTOTPEnrollments(200) remaining rows = %d, want at least 1", deleted)
 	}
 
 	for _, row := range expired {
