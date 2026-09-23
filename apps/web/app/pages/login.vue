@@ -37,6 +37,7 @@ import {
 } from '@/utils/returnPath';
 
 const route = useRoute();
+const router = useRouter();
 // `app/pages/login/second-factor.vue` makes this page the parent route of
 // `/login/second-factor`, so the child has nowhere to render unless this page
 // renders it. The sign-in form and its head title belong to `/login` alone.
@@ -98,16 +99,23 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
   }
 }
 
-// A destination outside this app's own pages (for example
-// `/oauth/authorize`, served by the Go backend for a connected-agent
-// consent link) needs a real browser navigation: the client router has no
-// route for it and would otherwise strand the user on a dead page.
+// An in-app destination moves the client router directly. `navigateTo`
+// declines to move it while another navigation is still settling: it returns
+// the path unchanged and does nothing, which would leave a completed sign-in
+// on this page with no error to show. `router.push` supersedes that
+// navigation instead, so a sign-in always lands.
+//
+// A destination outside this app's own pages (for example `/oauth/authorize`,
+// served by the Go backend for a connected-agent consent link) needs a real
+// browser navigation: the client router has no route for it and would
+// otherwise strand the user on a dead page. That branch keeps `navigateTo`,
+// whose in-flight rule covers client-side navigation only.
 async function goTo(path: string): Promise<void> {
   if (isAppRoute(path)) {
-    await navigateTo(path);
-  } else {
-    await navigateTo(path, { external: true });
+    await router.push(path);
+    return;
   }
+  await navigateTo(path, { external: true });
 }
 
 async function onSubmit() {

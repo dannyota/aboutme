@@ -10,14 +10,18 @@ import { readBody, setResponseStatus } from 'h3';
 import LoginPage from '../app/pages/login.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
+import { landedFrom } from './support/routing';
 
 // These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
 
 registerCapabilities();
 
-// login() navigates to /app/resumes on success — stub it so tests can assert
-// the target without a real page transition tearing the mounted wrapper down.
+// Only a destination outside this app's own pages goes through `navigateTo`,
+// which would be a real browser navigation; stub it so those cases can assert
+// the target. An in-app destination moves the client router instead, so these
+// tests read the router itself: test/auth-landing.test.ts explains why
+// asserting the helper cannot see whether the page actually left.
 mockNuxtImport('navigateTo', () => vi.fn());
 
 describe('login.vue', () => {
@@ -208,14 +212,14 @@ describe('login.vue password form', () => {
         return null;
       },
     });
-    const wrapper = await mountSuspended(LoginPage);
+    const wrapper = await mountSuspended(LoginPage, { route: '/login' });
     await wrapper.get('[autocomplete="email"]')
       .setValue('ada@example.com');
     await wrapper.get('[autocomplete="current-password"]')
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/resumes');
+    expect(await landedFrom('/login')).toBe('/app/resumes');
   });
 
   it('shows closed copy and does not navigate on authentication-failed',
@@ -227,7 +231,7 @@ describe('login.vue password form', () => {
           return { error: { code: 'authentication_failed', message: 'x' } };
         },
       });
-      const wrapper = await mountSuspended(LoginPage);
+      const wrapper = await mountSuspended(LoginPage, { route: '/login' });
       await wrapper.get('[autocomplete="email"]')
         .setValue('ada@example.com');
       await wrapper.get('[autocomplete="current-password"]')
@@ -237,6 +241,7 @@ describe('login.vue password form', () => {
       expect(wrapper.get('[data-testid="login-form-error"]').text())
         .toContain('Invalid email or password');
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(useRouter().currentRoute.value.fullPath).toBe('/login');
     });
 
   it('shows closed copy when the service is unavailable', async () => {
@@ -317,15 +322,14 @@ describe('login.vue password form', () => {
         return { data: { secondFactorRequired: true } };
       },
     });
-    const wrapper = await mountSuspended(LoginPage);
+    const wrapper = await mountSuspended(LoginPage, { route: '/login' });
     await wrapper.get('[autocomplete="email"]')
       .setValue('ada@example.com');
     await wrapper.get('[autocomplete="current-password"]')
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login/second-factor');
-    expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith('/app/resumes');
+    expect(await landedFrom('/login')).toBe('/login/second-factor');
   });
 
   it('sends the validated ?next= path on the login request body',
@@ -417,10 +421,9 @@ describe('login.vue password form', () => {
         .setValue('correct horse battery staple');
       await wrapper.get('[data-testid="login-form"]').trigger('submit');
       await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/app/new');
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith('/app/new', {
-        external: true,
-      });
+      expect(await landedFrom('/login')).toBe('/app/new');
+      // An in-app destination never reaches the browser-navigation helper.
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
 });
 

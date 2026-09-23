@@ -45,6 +45,7 @@ import {
   useSecondFactorPending,
 } from '../../composables/secondFactorPending';
 
+const router = useRouter();
 const { locale } = useLocale();
 const copy = computed(() => secondFactorCopy[locale.value]);
 useHead(computed(() => ({ title: pageTitle(copy.value.title) })));
@@ -119,17 +120,18 @@ onMounted(load);
 
 /** Navigates to the pending row's own validated return path, re-validated
  * client-side the same way login.vue treats `?next=` — defense in depth,
- * never trusting a stored string as a safe navigation target outright. A
- * destination outside this app's own pages (for example `/oauth/authorize`)
- * needs a real browser navigation, matching login.vue's own rule. */
+ * never trusting a stored string as a safe navigation target outright. An
+ * in-app destination moves the client router directly, and one outside this
+ * app's own pages (for example `/oauth/authorize`) needs a real browser
+ * navigation; both match login.vue's own rule and the reason for it. */
 async function afterSuccess(): Promise<void> {
   const target = validateReturnPath(status.value?.returnPath)
     ?? DEFAULT_RETURN_PATH;
   if (isAppRoute(target)) {
-    await navigateTo(target);
-  } else {
-    await navigateTo(target, { external: true });
+    await router.push(target);
+    return;
   }
+  await navigateTo(target, { external: true });
 }
 
 function refreshPage(): void {
