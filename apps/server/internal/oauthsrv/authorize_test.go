@@ -138,7 +138,7 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse redirect: %v", err)
 		}
-		if got.String() == "https://agent.example/callback?fixed=yes" || got.Query().Get("error") != "invalid_request" || got.Query().Get("state") != "opaque<&state" {
+		if got.String() == "https://agent.example/callback?fixed=yes" || got.Query().Get("error") != "invalid_request" || got.Query().Get("state") != "opaque<&state" || got.Query().Get("iss") != "https://aboutme.example" || got.Query().Get("fixed") != "yes" {
 			t.Fatalf("trusted error redirect = %q", got.String())
 		}
 	})
@@ -188,8 +188,11 @@ func TestAuthorize_ValidationAndSessionBranches(t *testing.T) {
 			if rec.Code != http.StatusFound {
 				t.Fatalf("status = %d, want 302; body=%q location=%q", rec.Code, rec.Body.String(), rec.Header().Get("Location"))
 			}
-			if tc.wantCode && urlMustParse(t, rec.Header().Get("Location")).Query().Get("code") == "" {
-				t.Fatalf("redirect = %q, want code", rec.Header().Get("Location"))
+			if tc.wantCode {
+				redirect := urlMustParse(t, rec.Header().Get("Location"))
+				if redirect.Query().Get("code") == "" || redirect.Query().Get("iss") != "https://aboutme.example" || redirect.Query().Get("fixed") != "yes" {
+					t.Fatalf("redirect = %q, want code, canonical issuer, and registered query", rec.Header().Get("Location"))
+				}
 			}
 			if tc.name == "wider grant skips consent" {
 				codeRaw := urlMustParse(t, rec.Header().Get("Location")).Query().Get("code")
@@ -345,9 +348,58 @@ func TestAuthorize_TrustedAndUntrustedValidationMatrix(t *testing.T) {
 				if tc.name == "state over bound" {
 					wantState = ""
 				}
-				if redirect.Query().Get("error") != tc.wantError || redirect.Query().Get("state") != wantState {
+				if redirect.Query().Get("error") != tc.wantError || redirect.Query().Get("state") != wantState || redirect.Query().Get("iss") != "https://aboutme.example" || redirect.Query().Get("fixed") != "yes" {
 					t.Fatalf("redirect = %q, want %s with state", redirect, tc.wantError)
 				}
+			}
+		})
+	}
+}
+
+func TestAuthorize_ResourceCompatibility(t *testing.T) {
+	s, q, client, user := newAuthorizeHarness(t)
+	base := urlMustParse(t, authorizeURL(client.ID, "resumes:read"))
+	if _, err := q.UpsertOAuthGrant(context.Background(), store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: time.Now().UTC()}); err != nil {
+		t.Fatalf("seed grant: %v", err)
+	}
+	for _, tc := range []struct {
+		name  string
+		raw   string
+		valid bool
+	}{
+		{"missing", base.String(), true},
+		{"canonical", base.String() + "&resource=https%3A%2F%2Faboutme.example", true},
+		{"empty", base.String() + "&resource=", false},
+		{"duplicate", base.String() + "&resource=https%3A%2F%2Faboutme.example&resource=https%3A%2F%2Faboutme.example", false},
+		{"encoded", base.String() + "&resource=https%3A%2F%2Faboutme%2Eexample", false},
+		{"path", base.String() + "&resource=https%3A%2F%2Faboutme.example%2Fmcp", false},
+		{"other origin", base.String() + "&resource=https%3A%2F%2Fagent.example", false},
+		{"malformed only", base.String() + "&resource=%ZZ", false},
+		{"canonical and malformed duplicate", base.String() + "&resource=https%3A%2F%2Faboutme.example&resource=%ZZ", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var before int
+			if err := s.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_authorization_codes WHERE client_id = $1", client.ID).Scan(&before); err != nil {
+				t.Fatalf("count codes before: %v", err)
+			}
+			sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, tc.raw, nil)
+			req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
+			rec := httptest.NewRecorder()
+			s.HandleAuthorize(rec, req)
+			if tc.valid {
+				if rec.Code != http.StatusFound || urlMustParse(t, rec.Header().Get("Location")).Query().Get("code") == "" {
+					t.Fatalf("valid resource response = %d %q", rec.Code, rec.Header().Get("Location"))
+				}
+			} else if rec.Code != http.StatusFound || urlMustParse(t, rec.Header().Get("Location")).Query().Get("error") != "invalid_request" {
+				t.Fatalf("invalid resource response = %d %q", rec.Code, rec.Header().Get("Location"))
+			}
+			var after int
+			if err := s.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_authorization_codes WHERE client_id = $1", client.ID).Scan(&after); err != nil {
+				t.Fatalf("count codes after: %v", err)
+			}
+			if !tc.valid && after != before {
+				t.Fatalf("invalid resource issued %d codes", after-before)
 			}
 		})
 	}

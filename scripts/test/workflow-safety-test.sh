@@ -118,4 +118,35 @@ grep -Fq 'if: always()' <<<"$STOP_DB_STEP" ||
 grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
   fail "passkey-browser-proof job's stop-database step does not stop the runner-local database"
 
+grep -Fq '  mcp-proofs:' "$WORKFLOW" ||
+  fail "hosted workflow lacks the MCP proofs job"
+grep -Fq '    runs-on: ubuntu-24.04' "$WORKFLOW" ||
+  fail "MCP proofs job does not pin a runner with Podman"
+grep -Fq '    timeout-minutes: 40' "$WORKFLOW" ||
+  fail "MCP proofs job lacks a bounded timeout"
+grep -Fxq '      - run: make test-db-up' "$WORKFLOW" ||
+  fail "MCP proofs job does not start the shared database container"
+grep -Fq '        run: make test-db-down' "$WORKFLOW" ||
+  fail "MCP proofs job does not remove its database container"
+grep -Fxq '      - run: make dev-https' "$WORKFLOW" ||
+  fail "MCP proofs job does not start the native HTTPS harness"
+grep -Fq '      - run: make dev-https-browser-image' "$WORKFLOW" ||
+  fail "MCP proofs job does not build the pinned browser image"
+grep -Fq '      - run: make dev-https-mcp-check' "$WORKFLOW" ||
+  fail "MCP proofs job does not run the raw JSON-RPC MCP proof"
+grep -Fq '      - run: make dev-https-mcp-sdk-check' "$WORKFLOW" ||
+  fail "MCP proofs job does not run the SDK owner workflow proof"
+grep -Fq '        run: make dev-https-down' "$WORKFLOW" ||
+  fail "MCP proofs job does not tear down its native HTTPS harness"
+mcp_proofs_body=$(awk '/^  mcp-proofs:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
+[ -n "$mcp_proofs_body" ] || fail "MCP proofs job body is missing"
+printf '%s\n' "$mcp_proofs_body" | grep -Fq 'if: always()' ||
+  fail "MCP proofs job does not always tear down the stack"
+if printf '%s\n' "$mcp_proofs_body" | grep -Fq '    services:'; then
+  fail "MCP proofs job must not add a second database service beside dev-https"
+fi
+if printf '%s\n' "$mcp_proofs_body" | grep -Eq 'upload-artifact|ABOUTME_RELEASE_APP_IMAGE|ABOUTME_RELEASE_WEB_IMAGE|owner-test\.env'; then
+  fail "MCP proofs job leaks an artifact, release image, or owner credential input"
+fi
+
 printf 'hosted workflow safety tests passed\n'

@@ -20,13 +20,13 @@ func TestMetadata_StableConfiguredDocuments(t *testing.T) {
 			name:    "authorization server",
 			handler: s.HandleMetadata,
 			path:    "/.well-known/oauth-authorization-server",
-			want:    `{"issuer":"https://aboutme.example","authorization_endpoint":"https://aboutme.example/oauth/authorize","token_endpoint":"https://aboutme.example/oauth/token","registration_endpoint":"https://aboutme.example/oauth/register","revocation_endpoint":"https://aboutme.example/oauth/revoke","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"],"scopes_supported":["resumes:read","resumes:write"]}`,
+			want:    `{"issuer":"https://aboutme.example","authorization_response_iss_parameter_supported":true,"authorization_endpoint":"https://aboutme.example/oauth/authorize","token_endpoint":"https://aboutme.example/oauth/token","registration_endpoint":"https://aboutme.example/oauth/register","revocation_endpoint":"https://aboutme.example/oauth/revoke","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"],"scopes_supported":["resumes:read","resumes:write"]}`,
 		},
 		{
 			name:    "protected resource",
 			handler: s.HandleProtectedResourceMetadata,
 			path:    "/.well-known/oauth-protected-resource",
-			want:    `{"resource":"https://aboutme.example","authorization_servers":["https://aboutme.example"],"bearer_methods_supported":["header"]}`,
+			want:    `{"resource":"https://aboutme.example","authorization_servers":["https://aboutme.example"],"scopes_supported":["resumes:read","resumes:write"],"bearer_methods_supported":["header"]}`,
 		},
 	}
 	for _, tc := range tests {

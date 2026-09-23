@@ -532,6 +532,66 @@ jobs:
         env:
           CADDY_BIN: caddy
 
+  # Runs the native HTTPS stack for real and proves both MCP paths against it:
+  # the raw JSON-RPC client (mcp) and the official SDK owner workflow (mcp-sdk,
+  # synthetic local data only). No owner credential, release tag, or release
+  # image digests are present, so the SDK proof's attestation write is skipped
+  # (see scripts/mcp-owner-workflow.sh write_attestation). Fixed stage names
+  # only; no screenshot, trace, video, or artifact upload.
+  mcp-proofs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
+      # A go-installed caddy reports version "unknown", which the dev-https
+      # tool check rejects, so this job uses the official release binary.
+      - name: Install the pinned caddy (2.11.4)
+        run: |
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
+          mkdir -p "$RUNNER_TEMP/caddy"
+          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
+          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      - name: Install web dependencies and the pinned Chromium
+        run: npm ci && npx playwright install chromium
+        working-directory: apps/web
+      # dev-https starts the one shared database container itself, so the
+      # job has no service container. Start it first to set up its roles.
+      - run: make test-db-up
+      - name: Initialize database roles
+        run: make db-setup
+        env:
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable
+      - run: make dev-https
+      - run: make dev-https-browser-image
+      - run: make dev-https-mcp-check
+      - run: make dev-https-mcp-sdk-check
+      - if: always()
+        run: make dev-https-down
+      - if: always()
+        run: make test-db-down
+
   # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
   # migrations/ is the only declared source for BOTH goose and sqlc's generated
   # data layer. Fails on any drift, including untracked generated files — which

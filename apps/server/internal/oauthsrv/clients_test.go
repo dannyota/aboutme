@@ -131,6 +131,57 @@ func TestRegister_CreatesCanonicalClient(t *testing.T) {
 	}
 }
 
+func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
+	const legacy = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"token_endpoint_auth_method":"none"}`
+	const native = `{"client_name":"aboutme MCP owner workflow","redirect_uris":["http://127.0.0.1:20090/callback"],"token_endpoint_auth_method":"none","application_type":"native"}`
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"legacy request", legacy, `"token_endpoint_auth_method":"none"}`},
+		{"SDK native loopback request", native, `"application_type":"native"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &registrationQueries{id: uuid.New()}
+			s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+			rec := httptest.NewRecorder()
+			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", tc.body))
+			if rec.Code != http.StatusCreated || !strings.Contains(rec.Body.String(), tc.want) {
+				t.Fatalf("response = %d %q", rec.Code, rec.Body.String())
+			}
+			if len(q.created) != 1 {
+				t.Fatalf("created = %d, want 1", len(q.created))
+			}
+		})
+	}
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"non-string", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":true}`},
+		{"empty", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":""}`},
+		{"duplicate", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"native","application_type":"native"}`},
+		{"other type", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"web"}`},
+		{"unsupported SDK metadata", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"native","client_uri":"https://agent.example"}`},
+		{"empty redirect", `{"client_name":"Agent","redirect_uris":[""],"application_type":"native"}`},
+		{"non-loopback redirect", `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"application_type":"native"}`},
+		{"mixed redirects", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback","https://agent.example/callback"],"application_type":"native"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &registrationQueries{id: uuid.New()}
+			s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+			rec := httptest.NewRecorder()
+			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", tc.body))
+			if rec.Code != http.StatusBadRequest || len(q.created) != 0 {
+				t.Fatalf("response = %d created = %d", rec.Code, len(q.created))
+			}
+		})
+	}
+}
+
 func TestRegister_RejectsRouteAndJSONMatrixWithClosedBody(t *testing.T) {
 	valid := `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"]}`
 	withinLimit := valid + strings.Repeat(" ", 4096-len(valid))

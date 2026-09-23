@@ -25,6 +25,7 @@ readonly -a IMAGE_SOURCES=(
   deploy/dev-https-browser/package.json
   deploy/dev-https-browser/package-lock.json
   deploy/dev-https-browser/run.sh
+  deploy/dev-https-browser/verify-evidence.mjs
 )
 
 # Spec-side sources: staged per run, never gated on the image manifest.
@@ -36,6 +37,7 @@ readonly -a SPEC_SOURCES=(
   public.spec.ts
   password-auth.spec.ts
   mcp.spec.ts
+  mcp-sdk.spec.ts
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
