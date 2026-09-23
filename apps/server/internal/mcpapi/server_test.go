@@ -918,3 +918,39 @@ func TestServer_UpdateSectionDescribesDrawableIconKeys(t *testing.T) {
 	}
 	t.Fatal("update_section tool not listed")
 }
+
+// The production server listens on loopback behind the reverse proxy, so every
+// request arrives on a loopback address with the public Host.
+func TestServer_AcceptsPublicHostOnLoopbackListener(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read resumes:write")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, httpServer.URL,
+		bytes.NewBufferString(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"host-test","version":"1"}}}`))
+	if err != nil {
+		t.Fatalf("build public-host request: %v", err)
+	}
+	request.Host = "aboutme.vn"
+	request.Header.Set("Authorization", "Bearer "+raw)
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("perform public-host request: %v", err)
+	}
+	if _, copyErr := io.Copy(io.Discard, response.Body); copyErr != nil {
+		t.Fatalf("discard public-host response: %v", copyErr)
+	}
+	if closeErr := response.Body.Close(); closeErr != nil {
+		t.Fatalf("close public-host response: %v", closeErr)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("public Host on a loopback listener status = %d, want 200", response.StatusCode)
+	}
+}

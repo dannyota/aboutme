@@ -55,6 +55,11 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 		Stateless:           true,
 		JSONResponse:        true,
 		MaxRequestBodyBytes: dependencies.MaxRequestBodyBytes,
+		// The server listens on loopback behind the public reverse proxy, so
+		// the SDK's localhost DNS-rebinding guard would refuse every public
+		// Host with 403. That guard protects unauthenticated local servers;
+		// this handler admits nothing without a valid bearer token.
+		DisableLocalhostProtection: true,
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, err := dependencies.Bearer.Authenticate(r)
