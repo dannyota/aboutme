@@ -66,6 +66,28 @@ func runOwnerWorkflow(ctx context.Context, config workflowConfig, deps workflowD
 	if grantErr := owner.captureGrant(ctx); grantErr != nil {
 		return grantErr
 	}
+	// A failure between here and complete leaves no revocation journal, so
+	// nothing else would ever revoke this grant; complete owns revocation
+	// once the run reaches it. A live create intent means a mutation may
+	// still be pending server side, and a restart needs this same grant to
+	// reconcile it, so the revoke waits for that intent to clear first. The
+	// call is best effort and never touches err, so the runner still reports
+	// the one closed word its original failure named. See
+	// docs/design/mcp-owner-workflow.md#privacy-revocation-and-evidence.
+	defer func() {
+		if err == nil || revoked {
+			return
+		}
+		if present, existsErr := config.Control.exists(createIntentName); existsErr != nil || present {
+			return
+		}
+		if revokeErr := deps.Revocation.Revoke(context.WithoutCancel(ctx), owner.grant.refreshToken); revokeErr != nil {
+			// Best effort: a failed cleanup revoke still leaves err (and the
+			// closed word it reports) untouched, and a later run or the
+			// grant's own 30-day expiry still closes it eventually.
+			return
+		}
+	}()
 	if intentPresent {
 		err = owner.reconcile(ctx, intent)
 	} else {

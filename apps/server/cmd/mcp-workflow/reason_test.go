@@ -17,7 +17,7 @@ func packageFailures() map[string]error {
 		"arguments": errArguments, "control root": errControlRoot, "run root": errRunRoot,
 		"run entries": errRunEntries, "unsafe file": errUnsafeFile, "workflow blocked": errWorkflowBlocked,
 		"workflow contract": errWorkflowContract, "connect": errConnect, "runtime": errRuntime,
-		"tls roots": errTLSRoots, "browser timeout": errBrowserTimeout, "browser failed": errBrowserFailed,
+		"tls roots": errTLSRoots, "tls override": errTLSOverride, "browser timeout": errBrowserTimeout, "browser failed": errBrowserFailed,
 		"second factor required": errSecondFactorRequired,
 		"invalid callback":       errInvalidCallback, "reauthorization disabled": errReauthorizationDisabled,
 		"reauthorization unproved": errReauthorizationUnproved, "tool registry": errToolRegistry,

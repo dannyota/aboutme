@@ -127,6 +127,47 @@ func TestRecoveryRuntimeDepsWireEveryBoundaryWithoutNetwork(t *testing.T) {
 	}
 }
 
+// x509.SystemCertPool honors SSL_CERT_FILE and SSL_CERT_DIR, so a production
+// run must refuse rather than silently trust whatever root those name, for
+// example a local-mode override inherited from the launcher's environment.
+func TestRecoveryProductionRefusesAnInheritedTLSOverride(t *testing.T) {
+	mainRoot, _ := testRepository(t)
+	run, browser := launcherLayout(t, mainRoot, ".dev", "mcp-workflow")
+	config, err := parseRunnerArgsFrom([]string{modeProduction, run, browser}, mainRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, key, value string
+	}{
+		{"SSL_CERT_FILE", "SSL_CERT_FILE", "/dev/null"},
+		{"SSL_CERT_DIR", "SSL_CERT_DIR", "/dev/null"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.key, tc.value)
+			if _, depsErr := newRuntimeDeps(config); !errors.Is(depsErr, errTLSOverride) {
+				t.Fatalf("newRuntimeDeps error = %v, want %v", depsErr, errTLSOverride)
+			}
+		})
+	}
+}
+
+// The same override is the local runner's intended way to trust the exported
+// development root, so it must not trip the production-only refusal.
+func TestRecoveryLocalKeepsAnExplicitTLSOverride(t *testing.T) {
+	mainRoot, _ := testRepository(t)
+	run, browser := launcherLayout(t, mainRoot, ".dev", "mcp-workflow-local")
+	config, err := parseRunnerArgsFrom([]string{modeLocal, run, browser}, mainRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SSL_CERT_FILE", "/dev/null")
+	t.Setenv("SSL_CERT_DIR", "/dev/null")
+	if _, depsErr := newRuntimeDeps(config); errors.Is(depsErr, errTLSOverride) {
+		t.Fatal("local mode refused its own intended trust override")
+	}
+}
+
 func TestRecoveryMainRejectsInvalidArgumentsBeforeAnyWork(t *testing.T) {
 	var report strings.Builder
 	if status := execute([]string{modeProduction}, &report); status != 2 {

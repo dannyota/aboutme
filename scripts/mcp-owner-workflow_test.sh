@@ -605,7 +605,9 @@ check 'production ends with the completed stage' [ "$(tail -n 1 "$CTL/out")" = '
 check 'production output is fixed stage lines only' fixed_output
 check 'production uses the main checkout control root' [ "$(dirname "$PROD_RUN")" = "$CONTROL" ]
 check 'container receives the exact production mounts' [ "$(container_args)" = "$(printf '%s\n' \
-  "$IMAGE" "$STATE/input" STAGING EVIDENCE mcp-sdk production "$PROD_RUN/browser" "$OWNER_CREDENTIAL" NAME)" ]
+  "$IMAGE" "" STAGING EVIDENCE mcp-sdk production "$PROD_RUN/browser" "$OWNER_CREDENTIAL" NAME)" ]
+check 'production never receives a CA input directory' \
+  [ "$(sed -n 2p "$CTL/container.args")" = "" ]
 check 'production never reads the owner credential into the shell' no_secret_in "$CTL/trace"
 check 'production keeps secrets out of output and arguments' no_secret_in "$CTL/out"
 check 'production builds no fixture' not_called 'password-auth-fixture'

@@ -278,9 +278,16 @@ grep -Fxq -- '--cap-add=SYS_CHROOT' "$READABLE_LOG" ||
   fail 'Chromium sandbox capability is missing'
 [ "$(grep -Ec '^--cap-add=' "$READABLE_LOG")" -eq 1 ] ||
   fail 'runtime has an extra added capability'
-grep -Fxq -- '--memory=2g' "$READABLE_LOG" || fail 'memory cap is missing'
-grep -Fxq -- '--memory-swap=2g' "$READABLE_LOG" || fail 'memory swap cap is missing'
-grep -Fxq -- '--cpus=2' "$READABLE_LOG" || fail 'CPU cap is missing'
+# Only mcp-sdk mode runs the browser beside a second local process (the Go
+# runner) under its own resource bound, so only that mode caps the
+# container; a long, many-page journey such as second-factor stays
+# unbounded, matching every mode's behavior before mcp-sdk existed.
+if grep -Fq -- '--memory=' "$READABLE_LOG"; then
+  fail 'auth mode runtime has an unexpected memory cap'
+fi
+if grep -Fq -- '--cpus=' "$READABLE_LOG"; then
+  fail 'auth mode runtime has an unexpected CPU cap'
+fi
 grep -Fxq -- "--mount=type=bind,src=$INPUT,dst=/uat-input,ro=true" "$READABLE_LOG" ||
   fail 'closed CA input mount is missing'
 grep -Fxq -- "--mount=type=bind,src=$SPEC_INPUT,dst=/uat-spec,ro=true" "$READABLE_LOG" ||
@@ -384,6 +391,32 @@ grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_BROWSER,dst=/mcp-browser,rw=true" \
   "$READABLE_LOG" || fail 'closed MCP browser mount is missing'
 [ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 5 ] ||
   fail 'mcp-sdk runtime has an unexpected bind mount count'
+grep -Fxq -- '--memory=2g' "$READABLE_LOG" || fail 'mcp-sdk memory cap is missing'
+grep -Fxq -- '--memory-swap=2g' "$READABLE_LOG" || fail 'mcp-sdk memory swap cap is missing'
+grep -Fxq -- '--cpus=2' "$READABLE_LOG" || fail 'mcp-sdk CPU cap is missing'
+
+# Production browses the real public origin, so it must not mount or trust
+# the local Caddy root: host_run takes no CA input directory in production,
+# and neither run.sh side ever imports one into the browser's NSS database.
+readonly MCP_SDK_PRODUCTION_EVIDENCE=$WORK/mcp-sdk-production-evidence
+install -d -m 0700 "$MCP_SDK_PRODUCTION_EVIDENCE"
+readonly MCP_SDK_PRODUCTION_NAME=aboutme-mcp-sdk-22222222222222222222222222222222
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" "$IMAGE_ID" '' "$SPEC_INPUT" \
+  "$MCP_SDK_PRODUCTION_EVIDENCE" mcp-sdk production "$MCP_SDK_BROWSER" "$MCP_SDK_CREDENTIAL" \
+  "$MCP_SDK_PRODUCTION_NAME"
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fq 'dst=/uat-input' "$READABLE_LOG" &&
+  fail 'production mcp-sdk mode mounted a CA input directory'
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 4 ] ||
+  fail 'production mcp-sdk runtime has an unexpected bind mount count'
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_PRODUCTION_EVIDENCE" mcp-sdk production \
+  "$MCP_SDK_BROWSER" "$MCP_SDK_CREDENTIAL" "$MCP_SDK_PRODUCTION_NAME" 2>&1); then
+  fail 'production mcp-sdk mode accepted a CA input directory'
+fi
+grep -Fq 'production mcp-sdk mode does not take a CA input directory' <<<"$output" ||
+  fail 'production CA-input diagnostic drifted'
 
 readonly MCP_SDK_MISSING_ARGS_EVIDENCE=$WORK/mcp-sdk-missing-args-evidence
 install -d -m 0700 "$MCP_SDK_MISSING_ARGS_EVIDENCE"
@@ -441,7 +474,7 @@ readonly MCP_SDK_NONEMPTY_BROWSER=$WORK/mcp-sdk-nonempty-browser
 install -d -m 0700 "$MCP_SDK_NONEMPTY_BROWSER"
 printf '%s\n' stale >"$MCP_SDK_NONEMPTY_BROWSER/stale"
 if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
-  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk production \
+  "$IMAGE_ID" '' "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk production \
   "$MCP_SDK_NONEMPTY_BROWSER" "$MCP_SDK_CREDENTIAL" "$MCP_SDK_NAME" 2>&1); then
   fail 'mcp-sdk accepted a non-empty browser directory'
 fi

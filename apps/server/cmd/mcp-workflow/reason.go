@@ -135,6 +135,7 @@ var sentinelReasons = []struct {
 	{errUnsafeFile, reasonArtifact},
 	{errWorkflowContract, reasonContract},
 	{errTLSRoots, reasonTLS},
+	{errTLSOverride, reasonTLS},
 }
 
 // genericReasons are the broad wrappers. They are consulted only after the
