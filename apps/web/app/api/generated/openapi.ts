@@ -412,7 +412,7 @@ export interface paths {
         };
         /**
          * Which optional sign-in and agent surfaces this deployment enables
-         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`), and `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
+         * @description Unauthenticated read of the configuration the web needs before it renders a sign-in or settings page: `providerLogin` and `providers` (`PROVIDER_LOGIN_ENABLED`), `agentAccess` (`MCP_ENABLED`), `passwordRegistration` (`PASSWORD_REGISTRATION_ENABLED`), `passkeyEnrollment` (`PASSKEY_ENROLLMENT_ENABLED`), and `totpEnrollment` (`TOTP_ENROLLMENT_ENABLED`). The response is `Cache-Control: no-store` so a configuration change is visible on the next request. It reveals no other configuration.
          */
         get: operations["getCapabilities"];
         put?: never;
@@ -1098,7 +1098,7 @@ export interface paths {
         };
         /**
          * Read a pending login or reauthentication
-         * @description Authenticates only the `__Host-auth-pending` cookie. A `reauth` row also requires its bound `__Host-session` cookie to remain live, current-epoch, and owned by the same account. Returns the available completion methods in fixed order (`passkey` then `recovery`), the pending row's expiry, its validated return path, and the pending CSRF token every pending POST requires.
+         * @description Authenticates only the `__Host-auth-pending` cookie. A `reauth` row also requires its bound `__Host-session` cookie to remain live, current-epoch, and owned by the same account. Returns the available completion methods in fixed order (`passkey`, `totp`, then `recovery`), the pending row's expiry, its validated return path, and the pending CSRF token every pending POST requires.
          */
         get: operations["getAuthSecondFactor"];
         put?: never;
@@ -1163,6 +1163,26 @@ export interface paths {
          * @description Verifies the submitted recovery code and, on success, deletes it and completes the pending authentication exactly like `POST .../passkey/verify`. Concurrent use of the same code has one winner. Recovery needs no WebAuthn ceremony, so this operation never returns `challenge_invalid`.
          */
         post: operations["postAuthSecondFactorRecoveryVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/second-factor/totp/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete a pending authentication with an authenticator code
+         * @description Verifies the submitted six-digit code against the pending account's active TOTP credential and, on success, completes the pending authentication exactly like `POST .../passkey/verify`. Login completion issues a fresh `__Host-session` cookie; reauth completion refreshes the bound session in place. Checked in this order: media type, the 4,096-byte body cap, strict JSON, pending authentication, Origin and CSRF, then rate admission. A valid code that is not strictly greater than the credential's stored step (including the code that completed enrollment) is a replay and fails identically to an unrecognized code. TOTP has no ceremony, so this operation never returns `challenge_invalid`.
+         */
+        post: operations["postAuthSecondFactorTotpVerify"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1264,6 +1284,50 @@ export interface paths {
          */
         post: operations["postMeSecondFactorRecoveryCodes"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor/totp/enrollment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Prove and install the proposed authenticator-app secret
+         * @description Proves the six-digit code against the enrollment's proposed secret and, on success, installs or replaces the active TOTP credential. The proof step becomes the credential's initial `last_used_step`, so it cannot also complete a pending login. First completion (no existing factor-policy row) creates the account's factor policy, TOTP credential, and ten recovery codes in one transaction and returns them once; a later or replacing completion omits `recoveryCodes`. While `TOTP_ENROLLMENT_ENABLED` is off, every outcome — including a rate rejection — is the same uniform `404`: a matching enrollment is still consumed so it cannot be retried once enrollment reopens, but nothing is installed. Every successful completion delivers the replacement `__Host-session` cookie.
+         */
+        put: operations["putMeSecondFactorTotpEnrollment"];
+        /**
+         * Start authenticator-app enrollment or replacement
+         * @description Registered only while `TOTP_ENROLLMENT_ENABLED=true`; otherwise this path returns the uniform not-found response before any session, CSRF, or state check. Requires a live current-epoch session and a recent reauthentication — primary alone for the first factor, or primary plus an active factor or recovery code once already enrolled. Accepts exactly `{}`. Under the user lock, deletes any existing enrollment row, expired or not, before creating the new one, so abandoning a prior setup or replacement cannot lock the account out. The secret and provisioning URI are returned once and never stored in plaintext.
+         */
+        post: operations["postMeSecondFactorTotpEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/second-factor/totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove the active authenticator-app credential
+         * @description Removes the active TOTP credential and any live enrollment. Final versus non-final removal is decided only from the shared count of active factors of every type, taken under the user lock — never from TOTP alone. Removing the final active factor deletes the recovery-code set and clears the factor-proof time; removing TOTP while a passkey remains preserves both. Every successful removal delivers the replacement `__Host-session` cookie. Ignores `TOTP_ENROLLMENT_ENABLED`. No request body.
+         */
+        delete: operations["deleteMeSecondFactorTotp"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1422,6 +1486,8 @@ export interface components {
             passwordRegistration: boolean;
             /** @description New passkey enrollment is open (`PASSKEY_ENROLLMENT_ENABLED`). Verification, removal, recovery, and state routes are always registered and are unaffected by this flag. Never derived from any account's own state — this is a deployment-wide switch. See `docs/design/passkey-second-factor-contract.md`. */
             passkeyEnrollment: boolean;
+            /** @description New authenticator-app enrollment and replacement are open (`TOTP_ENROLLMENT_ENABLED`). Verification, removal, recovery, and state routes are always registered and are unaffected by this flag. Never derived from any account's own state — this is a deployment-wide switch. See `docs/design/totp-second-factor-contract.md`. */
+            totpEnrollment: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes the link's own id, its provider, and when it was linked — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client. `id` is the value `DELETE /me/identities/{identityId}` takes.
@@ -2112,13 +2178,14 @@ export interface components {
          * @description A method that can complete a pending authentication.
          * @enum {string}
          */
-        SecondFactorPendingMethod: "passkey" | "recovery";
+        SecondFactorPendingMethod: "passkey" | "totp" | "recovery";
         /**
          * @example {
          *       "data": {
          *         "purpose": "login",
          *         "methods": [
          *           "passkey",
+         *           "totp",
          *           "recovery"
          *         ],
          *         "expiresAt": "2026-09-20T09:05:00Z",
@@ -2131,7 +2198,7 @@ export interface components {
             data: {
                 /** @enum {string} */
                 purpose: "login" | "reauth";
-                /** @description Fixed order `passkey` then `recovery`. Passkey is present when the account has an active passkey; recovery is present only while a code remains. An enrolled v0.4.2 account with no available method is corrupt state and this operation returns `503 authentication_unavailable` instead of this response. */
+                /** @description Fixed order `passkey`, `totp`, then `recovery`. Passkey is present when the account has an active passkey; totp is present when it has an active TOTP credential and stays listed during a TOTP cool-down or key failure, since this field reports existence, not availability; recovery is present only while a code remains. An enrolled account with no available method is corrupt state and this operation returns `503 authentication_unavailable` instead of this response. */
                 methods: components["schemas"]["SecondFactorPendingMethod"][];
                 /** Format: date-time */
                 expiresAt: string;
@@ -2278,6 +2345,13 @@ export interface components {
              */
             code: string;
         };
+        TOTPVerifyRequest: {
+            /**
+             * @description Exactly six ASCII digits. Spaces, hyphens, Unicode digits, signs, or any other length fail as `request_invalid` before cryptographic or database work (docs/design/totp-second-factor-contract.md "TOTP profile and code verification").
+             * @example 123456
+             */
+            code: string;
+        };
         SecondFactorPasskey: {
             /** Format: uuid */
             id: string;
@@ -2297,16 +2371,19 @@ export interface components {
          *             "lastUsedAt": null
          *           }
          *         ],
+         *         "totpEnabled": true,
          *         "recoveryCodesRemaining": 10
          *       }
          *     }
          */
         SecondFactorStateResponse: {
             data: {
-                /** @description Derived from the active-factor count in the same read-only snapshot as `passkeys` and `recoveryCodesRemaining` — never read from stored state on its own. `false`, an empty `passkeys` array, and `0` together for an unenrolled account. */
+                /** @description Derived from the active-factor count in the same read-only snapshot as `passkeys`, `totpEnabled`, and `recoveryCodesRemaining` — never read from stored state on its own. `false`, an empty `passkeys` array, `false`, and `0` together for an unenrolled account. */
                 enabled: boolean;
                 /** @description Ordered by `(created_at, id)`. */
                 passkeys: components["schemas"]["SecondFactorPasskey"][];
+                /** @description Whether the account has an active TOTP credential. No credential ID, secret, ciphertext, key ID, nonce, last-used step, or provisioning URI is ever returned (docs/design/totp-second-factor-contract.md "Release surface"). */
+                totpEnabled: boolean;
                 recoveryCodesRemaining: number;
             };
         };
@@ -2349,6 +2426,76 @@ export interface components {
             data: {
                 /** @description Ten new codes, replacing every prior digest. Shown once. */
                 recoveryCodes: components["schemas"]["SecondFactorRecoveryCode"][];
+            };
+        };
+        /**
+         * @description 32 random bytes, unpadded base64url. PostgreSQL stores only its SHA-256 digest (docs/design/totp-second-factor-contract.md "Enrollment and replacement API").
+         * @example AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+         */
+        TOTPEnrollmentID: string;
+        /**
+         * @example {
+         *       "data": {
+         *         "enrollmentId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+         *         "secret": "ABCD EFGH IJKL MNOP QRST UVWX YZ23 4567",
+         *         "provisioningUri": "otpauth://totp/aboutme.vn:user%40example.com?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30",
+         *         "expiresAt": "2026-09-20T09:10:00Z"
+         *       }
+         *     }
+         */
+        TOTPEnrollmentStartResponse: {
+            data: {
+                enrollmentId: components["schemas"]["TOTPEnrollmentID"];
+                /**
+                 * @description The 32 uppercase unpadded RFC 4648 Base32 secret characters, grouped into eight groups of four separated by one ASCII space. Shown once; never accepted back from the browser.
+                 * @example ABCD EFGH IJKL MNOP QRST UVWX YZ23 4567
+                 */
+                secret: string;
+                /**
+                 * @description The `otpauth://totp/...` URI the browser renders as a QR code locally; no external QR or provisioning service receives it (docs/design/totp-second-factor-contract.md "Provisioning data").
+                 * @example otpauth://totp/aboutme.vn:user%40example.com?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30
+                 */
+                provisioningUri: string;
+                /**
+                 * Format: date-time
+                 * @description Ten minutes after creation.
+                 */
+                expiresAt: string;
+            };
+        };
+        TOTPEnrollmentCompleteRequest: {
+            enrollmentId: components["schemas"]["TOTPEnrollmentID"];
+            /**
+             * @description The proof code computed from the proposed secret.
+             * @example 123456
+             */
+            code: string;
+        };
+        /**
+         * @example {
+         *       "data": {
+         *         "totpEnabled": true,
+         *         "recoveryCodes": [
+         *           "amr_00000-00000-00000-00000-00000-0",
+         *           "amr_00000-00000-00000-00000-00000-1",
+         *           "amr_00000-00000-00000-00000-00000-2",
+         *           "amr_00000-00000-00000-00000-00000-3",
+         *           "amr_00000-00000-00000-00000-00000-4",
+         *           "amr_00000-00000-00000-00000-00000-5",
+         *           "amr_00000-00000-00000-00000-00000-6",
+         *           "amr_00000-00000-00000-00000-00000-7",
+         *           "amr_00000-00000-00000-00000-00000-8",
+         *           "amr_00000-00000-00000-00000-00000-9"
+         *         ]
+         *       }
+         *     }
+         */
+        TOTPEnrollmentCompleteResponse: {
+            data: {
+                /** @constant */
+                totpEnabled: true;
+                /** @description Present with exactly ten codes only when this completion created the account's first active factor. Omitted, never `null` or an empty array, on TOTP replacement or when a passkey already enabled enforcement. */
+                recoveryCodes?: components["schemas"]["SecondFactorRecoveryCode"][];
             };
         };
     };
@@ -3710,7 +3857,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `factor_not_found`: the pending account has no active passkey (assertion options), or the passkey ID is malformed, missing, foreign, or already removed (passkey removal). Creates no ceremony and leaves the pending row and its failure count unchanged. */
+        /** @description `factor_not_found`: the pending account has no active passkey (assertion options) or no active TOTP credential (TOTP pending verify), the passkey ID is malformed, missing, foreign, or already removed (passkey removal), or the account has no active TOTP credential (TOTP removal). A pending-route match creates no ceremony and leaves the pending row and its failure count unchanged. */
         SecondFactorNotFound: {
             headers: {
                 [name: string]: unknown;
@@ -3814,8 +3961,46 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `rate_limited`: the shared 10-per-hour-per-(account, client IP) factor-management limit rejected the request. The same limiter is checked by passkey registration options, completion, removal, and recovery-code regeneration; a disabled-enrollment completion enforces it internally but always answers `404 not_found` instead of `429`, matching every other outcome while enrollment is off. Carries `Retry-After` in whole seconds. */
+        /** @description `rate_limited`: the shared 10-per-hour-per-(account, client IP) factor-management limit rejected the request. The same limiter is checked by passkey registration options, completion, removal, TOTP enrollment start and removal, and recovery-code regeneration; a disabled-enrollment completion enforces it internally but always answers `404 not_found` instead of `429`, matching every other outcome while enrollment is off. Carries `Retry-After` in whole seconds. */
         SecondFactorManagementRateLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: either the shared second-factor attempt budget (10 per 15 minutes per (account, client IP), and 30 per minute per client IP, the outer IP bucket checked first), or the credential's own per-account cool-down, whichever rejects first. The cool-down starts at 15 minutes on the fifth consecutive invalid or replayed code and doubles on every later multiple of five, capped at 24 hours; it is independent of client IP and never blocks passkey or recovery verification (docs/design/totp-second-factor-contract.md "Per-account TOTP failure budget"). Carries `Retry-After` in whole seconds, at most 86,400 for the cool-down. */
+        SecondFactorTOTPVerifyRateLimited: {
+            headers: {
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: enrollment completion checks both the shared 10-per-hour-per-(account, client IP) factor-management limit (see `SecondFactorManagementRateLimited`) and the shared second-factor code limits of 10 per 15 minutes per (account, client IP) plus 30 per minute per client IP (see `SecondFactorTOTPVerifyRateLimited`). Either rejects the same `rate_limited` shape with `Retry-After` in whole seconds. */
+        SecondFactorTOTPCompletionRateLimited: {
             headers: {
                 /** @description Whole seconds to wait before retrying. */
                 "Retry-After"?: number;
@@ -5163,7 +5348,8 @@ export interface operations {
                      *         ],
                      *         "agentAccess": false,
                      *         "passwordRegistration": true,
-                     *         "passkeyEnrollment": false
+                     *         "passkeyEnrollment": false,
+                     *         "totpEnrollment": false
                      *       }
                      *     }
                      */
@@ -7445,6 +7631,46 @@ export interface operations {
             503: components["responses"]["PasswordUnavailable"];
         };
     };
+    postAuthSecondFactorTotpVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TOTPVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed. No body. Login completion sets `__Host-session`; reauth completion sets no session cookie. Clears `__Host-auth-pending` either way. */
+            204: {
+                headers: {
+                    /** @description `__Host-session=<token>...` on login completion only; the cleared `__Host-auth-pending` cookie either way. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            /** @description `authentication_required` (see `SecondFactorPendingRequired`), or `verification_failed` for a well-formed but invalid or replayed code — see `SecondFactorPendingVerificationFailed`. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            403: components["responses"]["PasswordCsrfRejected"];
+            404: components["responses"]["SecondFactorNotFound"];
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorTOTPVerifyRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
     getMeSecondFactor: {
         parameters: {
             query?: never;
@@ -7668,6 +7894,169 @@ export interface operations {
             404: components["responses"]["SecondFactorNotFound"];
             413: components["responses"]["SecondFactorWebAuthnBodyTooLarge"];
             415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorManagementRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    putMeSecondFactorTotpEnrollment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TOTPEnrollmentCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticator-app credential installed or replaced. */
+            200: {
+                headers: {
+                    /** @description Replacement `__Host-session` cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TOTPEnrollmentCompleteResponse"];
+                };
+            };
+            /** @description `request_invalid` for a malformed code, or `enrollment_invalid` for an unknown, malformed, foreign, expired, deleted, wrong-session, or wrong-epoch enrollment ID. Both outcomes are indistinguishable from each other beyond their error code; no variant discloses which enrollment ID shape failed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `authentication_required` (see `PasswordAuthenticationRequired`), or `verification_failed` for a well-formed but invalid or replayed proof code. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `csrf_rejected`, or `reauth_required` (see `POST .../totp/enrollment`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description TOTP enrollment is turned off (`TOTP_ENROLLMENT_ENABLED` is not `true`); the path is not registered. A matching enrollment is still consumed. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "not found"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorTOTPCompletionRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    postMeSecondFactorTotpEnrollment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SecondFactorEmptyBody"];
+            };
+        };
+        responses: {
+            /** @description One-time enrollment secret and provisioning data. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TOTPEnrollmentStartResponse"];
+                };
+            };
+            400: components["responses"]["PasswordRequestInvalid"];
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            /** @description `csrf_rejected` (CSRF/exact-Origin validation failed), OR `reauth_required` (the recent-reauthentication window is not satisfied). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description TOTP enrollment is turned off (`TOTP_ENROLLMENT_ENABLED` is not `true`); the path is not registered. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "not_found",
+                     *         "message": "not found"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PasswordBodyTooLarge"];
+            415: components["responses"]["PasswordMediaTypeUnsupported"];
+            429: components["responses"]["SecondFactorManagementRateLimited"];
+            503: components["responses"]["PasswordUnavailable"];
+        };
+    };
+    deleteMeSecondFactorTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description TOTP credential removed. No body. */
+            204: {
+                headers: {
+                    /** @description Replacement `__Host-session` cookie. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["PasswordAuthenticationRequired"];
+            /** @description `csrf_rejected`, or `reauth_required` (see `POST .../totp/enrollment`). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            404: components["responses"]["SecondFactorNotFound"];
             429: components["responses"]["SecondFactorManagementRateLimited"];
             503: components["responses"]["PasswordUnavailable"];
         };

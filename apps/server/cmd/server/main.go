@@ -54,10 +54,20 @@ type publicRuntime struct {
 }
 
 func main() {
-	if err := runCommand(os.Args[1:]); err != nil {
+	if err := dispatch(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// dispatch routes the totp-key-reencrypt command to its own entry point and
+// leaves every other invocation, including the bare server, to runCommand
+// (privacy_command.go, privacy_jobs.go) unchanged.
+func dispatch(args []string) error {
+	if len(args) > 0 && args[0] == totpKeyReencryptCommandName {
+		return runTOTPKeyReencrypt(args[1:])
+	}
+	return runCommand(args)
 }
 
 func run() error {
@@ -204,7 +214,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create agent access: %w", err)
 	}
-	secondFactorRoutes, err := newSecondFactorRoutes(logger, cfg, pool)
+	secondFactor, err := newSecondFactorRoutes(logger, cfg, pool)
 	if err != nil {
 		return fmt.Errorf("create second factor routes: %w", err)
 	}
@@ -215,7 +225,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, secondFactorRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
+	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, secondFactor.RegisterRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -258,12 +268,25 @@ func run() error {
 			logger.Error("authmail worker stopped unexpectedly", "err", "worker stopped")
 		}
 	}()
+	// A startup query failure only means the bounded three-ID key-ring read
+	// itself could not run; it is not one of the closed totp_unavailable
+	// reasons, so it is logged and never fails startup
+	// (docs/design/totp-key-management.md "Key failures").
+	if healthErr := secondFactor.TOTPHealth.Check(ctx); healthErr != nil {
+		logger.Error("totp key health check failed at startup", "err", "query failed")
+	}
+	totpHealthDone := make(chan struct{})
+	go func() {
+		defer close(totpHealthDone)
+		runTOTPHealthTicker(workerCtx, logger, secondFactor.TOTPHealth)
+	}()
 
 	logger.Info("starting", "env", cfg.Env)
 	err = servePair(ctx, logger, ln, handler, printListener, printHandler, closePrintQueue)
 	cancelWorker()
 	<-workerDone
 	<-listenerDone
+	<-totpHealthDone
 	return err
 }
 
@@ -289,6 +312,7 @@ func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
 		PasswordRegistration: !cfg.PasswordRegistrationDisabled,
 		AgentAccess:          cfg.AgentAccess.Enabled,
 		PasskeyEnrollment:    cfg.PasskeyEnrollment,
+		TotpEnrollment:       cfg.TOTPEnrollment,
 	})
 	return func(mux *http.ServeMux) {
 		mux.Handle("/api/v1/capabilities", handler)
