@@ -30,6 +30,7 @@ var businessTables = []string{
 	"lifecycle_audit_events", "privacy_sweep_state",
 	"second_factor_policies", "webauthn_credentials", "second_factor_recovery_codes",
 	"pending_authentications", "webauthn_ceremonies", "authentication_security_events",
+	"totp_credentials", "totp_enrollments",
 }
 
 func TestBusinessTableSetMatchesPublicSchema(t *testing.T) {

@@ -1116,7 +1116,7 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 
 const createSecondFactorPolicy = `-- name: CreateSecondFactorPolicy :one
 INSERT INTO second_factor_policies (user_id, webauthn_user_handle, enabled_at)
-VALUES ($1, $2, $3) RETURNING user_id, webauthn_user_handle, enabled_at
+VALUES ($1, $2, $3) RETURNING user_id, webauthn_user_handle, enabled_at, attempt_mail_at
 `
 
 type CreateSecondFactorPolicyParams struct {
@@ -1128,7 +1128,12 @@ type CreateSecondFactorPolicyParams struct {
 func (q *Queries) CreateSecondFactorPolicy(ctx context.Context, arg CreateSecondFactorPolicyParams) (SecondFactorPolicy, error) {
 	row := q.db.QueryRow(ctx, createSecondFactorPolicy, arg.UserID, arg.WebauthnUserHandle, arg.EnabledAt)
 	var i SecondFactorPolicy
-	err := row.Scan(&i.UserID, &i.WebauthnUserHandle, &i.EnabledAt)
+	err := row.Scan(
+		&i.UserID,
+		&i.WebauthnUserHandle,
+		&i.EnabledAt,
+		&i.AttemptMailAt,
+	)
 	return i, err
 }
 
@@ -2676,13 +2681,18 @@ func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserPara
 }
 
 const getSecondFactorPolicyForUpdate = `-- name: GetSecondFactorPolicyForUpdate :one
-SELECT user_id, webauthn_user_handle, enabled_at FROM second_factor_policies WHERE user_id = $1 FOR UPDATE
+SELECT user_id, webauthn_user_handle, enabled_at, attempt_mail_at FROM second_factor_policies WHERE user_id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error) {
 	row := q.db.QueryRow(ctx, getSecondFactorPolicyForUpdate, userID)
 	var i SecondFactorPolicy
-	err := row.Scan(&i.UserID, &i.WebauthnUserHandle, &i.EnabledAt)
+	err := row.Scan(
+		&i.UserID,
+		&i.WebauthnUserHandle,
+		&i.EnabledAt,
+		&i.AttemptMailAt,
+	)
 	return i, err
 }
 
