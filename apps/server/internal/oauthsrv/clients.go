@@ -285,9 +285,20 @@ type registerResponse struct {
 	ApplicationType         string   `json:"application_type,omitempty"`
 }
 
+// nativeLoopbackHosts is the closed set application_type native redirects may
+// use, narrower than the general M1 loopbackRedirectHosts. RFC 8252 section
+// 8.3 requires an IP literal, not "localhost": an attacker who controls the
+// resolver or the loopback interface's own name resolution (for example a
+// poisoned hosts file) can bind "localhost" to a listener of their own, which
+// an IP literal is not exposed to.
+var nativeLoopbackHosts = map[string]bool{
+	"127.0.0.1": true,
+	"::1":       true,
+}
+
 func nativeLoopbackRedirect(raw string) bool {
 	u, err := url.Parse(raw)
-	return err == nil && u.Scheme == "http" && loopbackRedirectHosts[strings.ToLower(u.Hostname())]
+	return err == nil && u.Scheme == "http" && nativeLoopbackHosts[strings.ToLower(u.Hostname())]
 }
 
 func exactJSONContentType(header http.Header) bool {

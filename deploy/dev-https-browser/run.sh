@@ -155,6 +155,13 @@ inside_container() {
     [ -z "$workflow_mode" ] || fail 'workflow mode is only accepted for mcp-sdk mode'
   fi
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
+  # Production browses the real public origin, which the image's own system
+  # trust store already validates. Trusting the local harness's Caddy root
+  # there would let the browser accept a self-signed certificate for a
+  # session that must rely on nothing but the public CA chain, so production
+  # mounts no CA input and the container never imports one.
+  local production_sdk=0
+  [ "$mode" = mcp-sdk ] && [ "$workflow_mode" = production ] && production_sdk=1
 
   local root_target root_options input_target input_options
   local evidence_target evidence_options uid input_entries evidence_entries
@@ -166,13 +173,18 @@ inside_container() {
   [ "$root_target" = / ] || fail 'unexpected root filesystem target'
   mount_has_option "$root_options" ro || fail 'root filesystem is not read-only'
 
-  input_target=$(findmnt -n -o TARGET --target /uat-input) ||
-    fail 'CA input is not mounted'
-  input_options=$(findmnt -n -o OPTIONS --target /uat-input) ||
-    fail 'cannot inspect CA input options'
-  [ "$input_target" = /uat-input ] || fail 'CA input is not a dedicated mount'
-  mount_has_option "$input_options" ro || fail 'CA input is not read-only'
-  mount_has_option "$input_options" rw && fail 'CA input is writable'
+  if [ "$production_sdk" -eq 1 ]; then
+    ! findmnt -n --target /uat-input >/dev/null 2>&1 ||
+      fail 'production mcp-sdk mode must not mount a CA input'
+  else
+    input_target=$(findmnt -n -o TARGET --target /uat-input) ||
+      fail 'CA input is not mounted'
+    input_options=$(findmnt -n -o OPTIONS --target /uat-input) ||
+      fail 'cannot inspect CA input options'
+    [ "$input_target" = /uat-input ] || fail 'CA input is not a dedicated mount'
+    mount_has_option "$input_options" ro || fail 'CA input is not read-only'
+    mount_has_option "$input_options" rw && fail 'CA input is writable'
+  fi
 
   local spec_target spec_options
   spec_target=$(findmnt -n -o TARGET --target /uat-spec) ||
@@ -183,9 +195,11 @@ inside_container() {
   mount_has_option "$spec_options" ro || fail 'spec input is not read-only'
   mount_has_option "$spec_options" rw && fail 'spec input is writable'
 
-  [ -d /uat-input ] && [ ! -L /uat-input ] || fail 'invalid CA input directory'
-  [ "$(stat -c %u /uat-input)" = "$uid" ] || fail 'CA input owner mismatch'
-  [ "$(stat -c %a /uat-input)" = 700 ] || fail 'CA input mode must be 0700'
+  if [ "$production_sdk" -ne 1 ]; then
+    [ -d /uat-input ] && [ ! -L /uat-input ] || fail 'invalid CA input directory'
+    [ "$(stat -c %u /uat-input)" = "$uid" ] || fail 'CA input owner mismatch'
+    [ "$(stat -c %a /uat-input)" = 700 ] || fail 'CA input mode must be 0700'
+  fi
 
   evidence_target=$(findmnt -n -o TARGET --target /evidence) ||
     fail 'evidence output is not mounted'
@@ -225,16 +239,18 @@ inside_container() {
     validate_mcp_browser_dir /mcp-browser "$uid"
   fi
 
-  input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
-    fail "$(mode_input_diagnostic "$mode")"
-  [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
-    fail 'Caddy root is not a regular file'
-  [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
-    fail 'Caddy root owner mismatch'
-  [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
-    fail 'Caddy root mode must be 0600'
-  validate_mode_input_files "$mode" /uat-input "$uid"
+  if [ "$production_sdk" -ne 1 ]; then
+    input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
+      fail "$(mode_input_diagnostic "$mode")"
+    [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
+      fail 'Caddy root is not a regular file'
+    [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
+      fail 'Caddy root owner mismatch'
+    [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
+      fail 'Caddy root mode must be 0600'
+    validate_mode_input_files "$mode" /uat-input "$uid"
+  fi
 
   validate_spec_dir /uat-spec "$uid"
 
@@ -245,10 +261,12 @@ inside_container() {
     "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
   certutil -N --empty-password -d "sql:$HOME/.pki/nssdb" >/dev/null ||
     fail 'cannot initialize the isolated NSS database'
-  certutil -A -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root \
-    -t 'C,,' -i /uat-input/caddy-root.crt || fail 'cannot import the Caddy root'
-  certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null ||
-    fail 'cannot verify the imported Caddy root'
+  if [ "$production_sdk" -ne 1 ]; then
+    certutil -A -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root \
+      -t 'C,,' -i /uat-input/caddy-root.crt || fail 'cannot import the Caddy root'
+    certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null ||
+      fail 'cannot verify the imported Caddy root'
+  fi
 
   local evidence_name evidence_limit proof_name spec
   case $mode in
@@ -423,9 +441,18 @@ host_run() {
       [ -z "$container_name" ] ||
       fail 'workflow mode, MCP browser directory, MCP credential file, and MCP container name are only accepted for mcp-sdk mode'
   fi
+  # See inside_container for why production mode takes no CA input.
+  local production_sdk=0
+  [ "$mode" = mcp-sdk ] && [ "$workflow_mode" = production ] && production_sdk=1
+  if [ "$production_sdk" -eq 1 ]; then
+    [ -z "$input" ] || fail 'production mcp-sdk mode does not take a CA input directory'
+  else
+    [ -n "$input" ] || fail 'CA input directory is required'
+  fi
   local uid gid input_entries evidence_entries i j
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
-  local -a dir_paths=("$input" "$spec_input" "$evidence")
+  local -a dir_paths=("$spec_input" "$evidence")
+  [ "$production_sdk" -eq 1 ] || dir_paths+=("$input")
   [ "$mode" = mcp-sdk ] && dir_paths+=("$browser_dir")
   [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] ||
     fail 'image must be an immutable sha256 ID'
@@ -440,11 +467,13 @@ host_run() {
     [[ $credential != *$'\n'* && $credential != *$'\r'* && $credential != *$'\t'* ]] ||
       fail 'mount paths contain control characters'
   fi
-  input=$(realpath -e -- "$input") || fail 'cannot resolve CA input directory'
+  [ "$production_sdk" -eq 1 ] ||
+    input=$(realpath -e -- "$input") || fail 'cannot resolve CA input directory'
   spec_input=$(realpath -e -- "$spec_input") ||
     fail 'cannot resolve spec input directory'
   evidence=$(realpath -e -- "$evidence") || fail 'cannot resolve evidence directory'
-  dir_paths=("$input" "$spec_input" "$evidence")
+  dir_paths=("$spec_input" "$evidence")
+  [ "$production_sdk" -eq 1 ] || dir_paths+=("$input")
   if [ "$mode" = mcp-sdk ]; then
     browser_dir=$(realpath -e -- "$browser_dir") ||
       fail 'cannot resolve MCP browser directory'
@@ -461,8 +490,10 @@ host_run() {
   uid=$(id -u)
   gid=$(id -g)
   [ "$uid" -ne 0 ] && [ "$gid" -ne 0 ] || fail 'host runner must be non-root'
-  [ "$(stat -c %u "$input")" = "$uid" ] || fail 'CA input owner mismatch'
-  [ "$(stat -c %a "$input")" = 700 ] || fail 'CA input mode must be 0700'
+  if [ "$production_sdk" -ne 1 ]; then
+    [ "$(stat -c %u "$input")" = "$uid" ] || fail 'CA input owner mismatch'
+    [ "$(stat -c %a "$input")" = 700 ] || fail 'CA input mode must be 0700'
+  fi
   [ "$(stat -c %u "$evidence")" = "$uid" ] || fail 'evidence owner mismatch'
   [ "$(stat -c %a "$evidence")" = 700 ] || fail 'evidence mode must be 0700'
   [ -w "$evidence" ] || fail 'evidence output is not writable'
@@ -471,16 +502,18 @@ host_run() {
     validate_mcp_credential_file "$credential" "$uid"
   fi
 
-  input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
-    fail "$(mode_input_diagnostic "$mode")"
-  [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
-    fail 'Caddy root is not a regular file'
-  [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
-    fail 'Caddy root owner mismatch'
-  [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
-    fail 'Caddy root mode must be 0600'
-  validate_mode_input_files "$mode" "$input" "$uid"
+  if [ "$production_sdk" -ne 1 ]; then
+    input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
+      fail "$(mode_input_diagnostic "$mode")"
+    [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
+      fail 'Caddy root is not a regular file'
+    [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
+      fail 'Caddy root owner mismatch'
+    [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
+      fail 'Caddy root mode must be 0600'
+    validate_mode_input_files "$mode" "$input" "$uid"
+  fi
   evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
   validate_spec_dir "$spec_input" "$uid"
@@ -509,10 +542,11 @@ host_run() {
   [ "$mode" = auth ] || mode_args=("$mode")
   [ "$mode" = mcp-sdk ] && mode_args+=("$workflow_mode")
   local -a mount_args=(
-    "--mount=type=bind,src=$input,dst=/uat-input,ro=true"
     "--mount=type=bind,src=$spec_input,dst=/uat-spec,ro=true"
     "--mount=type=bind,src=$evidence,dst=/evidence,rw=true"
   )
+  [ "$production_sdk" -eq 1 ] ||
+    mount_args+=("--mount=type=bind,src=$input,dst=/uat-input,ro=true")
   if [ "$mode" = mcp-sdk ]; then
     mount_args+=(
       "--mount=type=bind,src=$credential,dst=/mcp-credentials/login.env,ro=true"
@@ -521,6 +555,15 @@ host_run() {
   fi
   local -a name_args=()
   [ "$mode" = mcp-sdk ] && name_args=("--name=$container_name")
+  # Only mcp-sdk mode runs the browser beside a second local process (the Go
+  # runner) under run_joined's own bound in scripts/mcp-owner-workflow.sh, so
+  # only that mode caps the container. The other modes' own long, many-page
+  # journeys (for example second-factor) are unbounded on main and stay that
+  # way here: a 2 GiB, 2-CPU ceiling on a shared hosted runner already busy
+  # with the server, web, Caddy, and Postgres processes can starve Chromium
+  # into an uncleanly killed run instead of a classified test failure.
+  local -a resource_args=()
+  [ "$mode" = mcp-sdk ] && resource_args=(--memory=2g --memory-swap=2g --cpus=2)
   exec podman run \
     --rm \
     --init \
@@ -533,9 +576,7 @@ host_run() {
     --security-opt=no-new-privileges \
     --cap-drop=all \
     --cap-add=SYS_CHROOT \
-    --memory=2g \
-    --memory-swap=2g \
-    --cpus=2 \
+    "${resource_args[@]}" \
     --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
     "${name_args[@]}" \
     "${mount_args[@]}" \

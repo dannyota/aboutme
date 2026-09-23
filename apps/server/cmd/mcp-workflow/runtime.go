@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -24,7 +25,13 @@ var (
 	// carries the SDK discovery, registration, or authorization failure so the
 	// one-word report can name the stage.
 	errTLSRoots = fmt.Errorf("%w: tls roots", errRuntime)
-	errConnect  = fmt.Errorf("%w: connect", errWorkflowBlocked)
+	// errTLSOverride names a production run whose environment names an
+	// SSL_CERT_FILE or SSL_CERT_DIR override. x509.SystemCertPool honors
+	// both, so an inherited local-mode override (or one set by any other
+	// caller) would make production silently trust a non-system root instead
+	// of refusing outright.
+	errTLSOverride = fmt.Errorf("%w: tls override", errRuntime)
+	errConnect     = fmt.Errorf("%w: connect", errWorkflowBlocked)
 	// errCallbackBind names a loopback listener that could not bind.
 	errCallbackBind = fmt.Errorf("%w: callback listener", errConnect)
 )
@@ -219,6 +226,10 @@ func newBaseTransport() (http.RoundTripper, error) {
 // session behind the one-shot OAuth gate, all HTTP through one restricted
 // same-origin client, and server time taken only from observed responses.
 func newRuntimeDeps(config workflowConfig) (workflowDeps, error) {
+	if config.Mode == modeProduction &&
+		(os.Getenv("SSL_CERT_FILE") != "" || os.Getenv("SSL_CERT_DIR") != "") {
+		return workflowDeps{}, errTLSOverride
+	}
 	origin, err := parseOrigin(config.Origin)
 	if err != nil {
 		return workflowDeps{}, errRuntime

@@ -399,9 +399,11 @@ language, source and target status, count delta, create reconciliation,
 revocation, and post-revocation `401` status.
 
 `/oauth/revoke` invalidates the access and refresh families but leaves the
-private resume. A failure before create leaves the account unchanged. A
-confirmed or unknown create followed by failure leaves the target or intent for
-safe reconciliation. Production never performs compensating deletion. Local
+private resume. A failure before any create intent exists also best-effort
+revokes the captured grant in a deferred call, never changing the reported
+failure word, so it does not idle for its full lifetime. A confirmed or unknown
+create followed by failure keeps the grant live and leaves the target or intent
+for safe reconciliation. Production never performs compensating deletion. Local
 synthetic data may be deleted after proof.
 
 ## Compatibility, loss, and size
@@ -409,11 +411,10 @@ synthetic data may be deleted after proof.
 The change needs no migration, schema change, OpenAPI change, MCP tool change,
 or dependency. OAuth gains optional canonical `resource` and native loopback DCR
 handling. Older clients that omit both retain behavior. Deployments without the
-fixes fail the SDK proof before owner data is read.
-
-Removing the runner removes only verification tooling. It leaves both resumes
-unchanged. The owner can edit or delete the new private resume normally. No
-format conversion or downgrade occurs.
+fixes fail the SDK proof before owner data is read. Removing the runner removes
+only verification tooling. It leaves both resumes unchanged. The owner can edit
+or delete the new private resume normally. No format conversion or downgrade
+occurs.
 
 Existing limits stand: MCP body below 4 MiB, current schema and aggregate
 bounds, decoded photo at most 2,097,152 bytes, and base64 photo request within

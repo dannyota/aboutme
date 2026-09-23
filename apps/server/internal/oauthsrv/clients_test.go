@@ -20,6 +20,34 @@ import (
 
 var registerTestNow = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
+// TestNativeLoopbackRedirect needs no database: nativeLoopbackRedirect is a
+// pure function. RFC 8252 section 8.3 requires the loopback IP literal for a
+// native redirect; "localhost" is excluded because its resolution can be
+// hijacked to a listener the caller does not control.
+func TestNativeLoopbackRedirect(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"IPv4 loopback", "http://127.0.0.1:20090/callback", true},
+		{"IPv6 loopback", "http://[::1]:20090/callback", true},
+		{"loopback with path only", "http://127.0.0.1/callback", true},
+		{"localhost", "http://localhost:20090/callback", false},
+		{"localhost no port", "http://localhost/callback", false},
+		{"loopback-looking prefix", "http://localhost.evil.example/callback", false},
+		{"https loopback", "https://127.0.0.1:20090/callback", false},
+		{"non-loopback host", "http://agent.example/callback", false},
+		{"malformed", "http://[::1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := nativeLoopbackRedirect(tc.raw); got != tc.want {
+				t.Errorf("nativeLoopbackRedirect(%q) = %v, want %v", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
 type registrationQueries struct {
 	store.OAuthQueries
 	beforeCreate func()
@@ -134,6 +162,7 @@ func TestRegister_CreatesCanonicalClient(t *testing.T) {
 func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 	const legacy = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"token_endpoint_auth_method":"none"}`
 	const native = `{"client_name":"aboutme MCP owner workflow","redirect_uris":["http://127.0.0.1:20090/callback"],"token_endpoint_auth_method":"none","application_type":"native"}`
+	const nativeIPv6 = `{"client_name":"Agent","redirect_uris":["http://[::1]:20090/callback"],"application_type":"native"}`
 
 	for _, tc := range []struct {
 		name string
@@ -142,6 +171,7 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 	}{
 		{"legacy request", legacy, `"token_endpoint_auth_method":"none"}`},
 		{"SDK native loopback request", native, `"application_type":"native"`},
+		{"native IPv6 loopback request", nativeIPv6, `"application_type":"native"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			q := &registrationQueries{id: uuid.New()}
@@ -169,6 +199,11 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 		{"empty redirect", `{"client_name":"Agent","redirect_uris":[""],"application_type":"native"}`},
 		{"non-loopback redirect", `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"application_type":"native"}`},
 		{"mixed redirects", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback","https://agent.example/callback"],"application_type":"native"}`},
+		// RFC 8252 section 8.3: a native redirect names the loopback IP
+		// literal, never "localhost", which resolution can be hijacked
+		// (for example a poisoned hosts file) to a listener the caller does
+		// not control.
+		{"native localhost redirect", `{"client_name":"Agent","redirect_uris":["http://localhost/callback"],"application_type":"native"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			q := &registrationQueries{id: uuid.New()}

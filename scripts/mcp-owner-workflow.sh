@@ -358,8 +358,7 @@ write_synthetic_login() {
 }
 
 # api sends one same-origin request to the local stack and requires the exact
-# status. Secrets travel in private header and body files, never in curl
-# arguments.
+# status. Secrets travel in private header and body files, never curl arguments.
 api() {
   local want=$1 label=$2 method=$3 path=$4 body=${5-} headers=${6-} form=${7-} status
   local -a args=(-sS --proto '=https' --cacert "$CA_INPUT/caddy-root.crt" --max-time 30
@@ -486,15 +485,16 @@ run_joined() {
   local supplied=0 deadline=$((SECONDS + RUN_LIMIT_SECONDS)) runner_done_at=
   RUNNER_STATUS= BROWSER_STATUS= BROWSER_STOPPED=0 BROWSER_SIGNALLED=0 OUTCOME=
   stage run
-  # Caddy serves the local origin from its own CA and never installs it in a
-  # system store, so the local runner trusts exactly the exported root.
-  # Production keeps the system store and drops any inherited override.
+  # Caddy's local CA is never installed in a system store, so only local
+  # mode trusts it; production keeps the system store, runner and browser.
   local -a trust=(env -u SSL_CERT_FILE -u SSL_CERT_DIR)
   [ "$MODE" != local ] || trust=(env "SSL_CERT_FILE=$CA_INPUT/caddy-root.crt" "SSL_CERT_DIR=$CA_INPUT")
   (cd "$REPO" && exec "${trust[@]}" "$RUNNER" "$MODE" "$RUN" "$RUN/browser") \
     </dev/null >/dev/null 2>"$RUNNER_LOG" {ERR_FD}>&- &
   RUNNER_PID=$!
-  "$CONTEXT/run.sh" "$BROWSER_IMAGE" "$CA_INPUT" "$STAGING" "$BROWSER_EVIDENCE" mcp-sdk \
+  local browser_ca_input=$CA_INPUT # run.sh refuses a CA input in production
+  [ "$MODE" != production ] || browser_ca_input=
+  "$CONTEXT/run.sh" "$BROWSER_IMAGE" "$browser_ca_input" "$STAGING" "$BROWSER_EVIDENCE" mcp-sdk \
     "$MODE" "$RUN/browser" "$CREDENTIAL" "$CONTAINER_NAME" </dev/null >"$BROWSER_LOG" 2>&1 \
     {ERR_FD}>&- {LOCK_FD}>&- &
   BROWSER_PID=$!

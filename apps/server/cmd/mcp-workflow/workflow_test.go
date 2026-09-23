@@ -523,6 +523,25 @@ func TestSourceExistingVietnameseTargetBlocksFreshProductionRun(t *testing.T) {
 	}
 }
 
+// A failure after captureGrant but before complete leaves no revocation
+// journal, so nothing else would ever revoke the grant; the best-effort
+// revoke in runOwnerWorkflow's defer is what closes it. See
+// docs/design/mcp-owner-workflow.md#privacy-revocation-and-evidence.
+func TestFailureAfterGrantCaptureRevokesBestEffort(t *testing.T) {
+	h := newWorkflowHarness(t, modeProduction, false)
+	h.fake.addOther("fr")
+	h.fake.resumes[fakeOtherID].summary.Lng = "vi"
+	h.translate = func(map[string]any) { t.Fatal("candidate requested with an existing target") }
+	_, runErr := h.run()
+	if !errors.Is(runErr, errSourceSelection) {
+		t.Fatalf("err = %v, want %v", runErr, errSourceSelection)
+	}
+	if h.fake.revokeCalls != 1 || !h.fake.revoked {
+		t.Fatalf("revokeCalls = %d, revoked = %v, want one revoke of the captured grant",
+			h.fake.revokeCalls, h.fake.revoked)
+	}
+}
+
 func TestCreateIntentGrantIsValidatedBeforeAnyCreate(t *testing.T) {
 	for name, setup := range map[string]func(h *workflowHarness, deps *workflowDeps){
 		"missing token date": func(h *workflowHarness, _ *workflowDeps) { h.fake.noTokenDate = true },
