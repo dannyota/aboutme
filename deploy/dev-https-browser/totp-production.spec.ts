@@ -285,7 +285,9 @@ async function submitPendingTotpCode(page: Page, code: string): Promise<number> 
   const input = page.locator(TOTP_LOGIN_INPUT);
   await input.click();
   await input.fill(code);
-  await page.getByRole('button', { name: 'Verify code' }).click();
+  // The recovery form's button has the same name, so scope to the TOTP form.
+  await page.getByTestId('second-factor-totp-form')
+    .locator('button[type="submit"]').click();
   return (await response).status();
 }
 

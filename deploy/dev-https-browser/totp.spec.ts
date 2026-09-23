@@ -154,8 +154,15 @@ test.afterEach(({}, testInfo) => {
     testInfo.status ?? 'unknown',
     testInfo.error?.message ?? '',
   );
+  // run.sh prints only the last stage line, so the closed diagnostic rides
+  // on the failure line itself.
+  const message = testInfo.error?.message ?? '';
+  const errorKind = /strict mode violation/u.test(message) ? 'strict'
+    : /waitForResponse/u.test(message) ? 'response-wait'
+      : /toBe/u.test(message) ? 'status-mismatch' : 'other';
   console.log(
-    `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`,
+    `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
+      + `-verify-${verifyTrace}-error-${errorKind}`,
   );
 });
 
@@ -669,16 +676,35 @@ async function signOut(page: Page): Promise<void> {
 }
 
 /** Submits one TOTP code on the pending login page and returns the status. */
+/**
+ * A closed, secret-free trace of the last pending TOTP submission, printed
+ * with a failure so a hosted run shows how far the request got.
+ */
+let verifyTrace = 'none';
+const TOTP_VERIFY_PATH = '/api/v1/auth/second-factor/totp/verify';
+
 async function submitPendingTotpCode(page: Page, code: string): Promise<number> {
+  verifyTrace = 'filled';
+  const onRequest = (request: { url(): string }): void => {
+    if (new URL(request.url()).pathname === TOTP_VERIFY_PATH) {
+      verifyTrace = 'requested';
+    }
+  };
+  page.on('request', onRequest);
   const response = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
     return url.origin === ORIGIN
       && url.pathname === '/api/v1/auth/second-factor/totp/verify';
-  }, { timeout: WAIT_RESPONSE_MS });
+  }, { timeout: WAIT_RESPONSE_MS }).then((answer) => {
+    verifyTrace = `status-${answer.status()}`;
+    return answer;
+  }).finally(() => page.off('request', onRequest));
   const input = page.locator(TOTP_LOGIN_INPUT);
   await input.click();
   await input.fill(code);
-  await page.getByRole('button', { name: 'Verify code' }).click();
+  // The recovery form's button has the same name, so scope to the TOTP form.
+  await page.getByTestId('second-factor-totp-form')
+    .locator('button[type="submit"]').click();
   return (await response).status();
 }
 
