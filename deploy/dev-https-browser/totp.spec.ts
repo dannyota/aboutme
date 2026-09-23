@@ -87,11 +87,12 @@ const WAIT_MAIL_MS = 45_000;
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me', [401]],
   ['/api/v1/me/second-factor', [401]],
-  ['/api/v1/me/second-factor/totp', [404]],
-  ['/api/v1/me/second-factor/totp/enrollment', [400, 401, 404]],
+  ['/api/v1/me/second-factor/passkeys/options', [403]],
+  ['/api/v1/me/second-factor/totp', [403, 404]],
+  ['/api/v1/me/second-factor/totp/enrollment', [403, 404]],
   ['/api/v1/me/second-factor/unregistered/enrollment', [404]],
   ['/api/v1/auth/second-factor', [401]],
-  ['/api/v1/auth/second-factor/totp/verify', [400, 401, 429]],
+  ['/api/v1/auth/second-factor/totp/verify', [401]],
   ['/api/v1/auth/second-factor/recovery/verify', [401]],
   ['/api/v1/auth/password/login', [401]],
   ['/api/v1/auth/password/reauth', [401]],
@@ -320,21 +321,49 @@ async function watchingCallback(
   }
 }
 
+/**
+ * Closed words for each unexpected console error: the index of a known path
+ * in EXPECTED_PAGE_FAILURES (or `other`, `offorigin`, `nonhttp`) plus the
+ * status. No URL, query, or body text is kept.
+ */
+const unexpectedConsole: string[] = [];
+
 function isUnexpectedTotpConsole(message: ConsoleMessage): boolean {
+  const unexpected = classifyTotpConsole(message);
+  if (unexpected !== null) unexpectedConsole.push(unexpected);
+  return unexpected !== null;
+}
+
+function classifyTotpConsole(message: ConsoleMessage): string | null {
   const text = message.text();
   const location = message.location().url;
-  if (isExpectedNegativeHTTPConsole(text, location)) return false;
+  if (isExpectedNegativeHTTPConsole(text, location)) return null;
   const status = httpFailureStatus(text);
-  if (status === null) return true;
+  if (status === null) return 'nonhttp';
   let url: URL;
   try {
     url = new URL(location);
   } catch {
-    return true;
+    return 'nonhttp';
   }
-  if (url.origin !== ORIGIN) return true;
+  if (url.origin !== ORIGIN) return `offorigin-${status}`;
   const allowed = EXPECTED_PAGE_FAILURES.get(url.pathname);
-  return allowed === undefined || !allowed.includes(status);
+  if (allowed !== undefined && allowed.includes(status)) return null;
+  const index = [...EXPECTED_PAGE_FAILURES.keys()].indexOf(url.pathname);
+  return `${index < 0 ? 'other' : `path${index}`}-${status}`;
+}
+
+/**
+ * Fails a completed journey whose page logged an unexpected error, naming
+ * the first few in closed words so the hosted log shows them.
+ */
+function failOnUnexpectedConsole(journeyDone: boolean): void {
+  if (!journeyDone || unexpectedConsole.length === 0) return;
+  // Teardown has begun, so stage() is silent; record the words directly.
+  recordedStage
+    = `console-unexpected-${unexpectedConsole.slice(0, 4).join('-')}`;
+  console.log(`${MODE}-stage:${recordedStage}`);
+  throw new Error('the page logged unexpected console errors');
 }
 
 // --- Fictional run identity --------------------------------------------
@@ -1862,6 +1891,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
+    failOnUnexpectedConsole(steps.attemptsExhausted);
   }
 });
 
@@ -1990,6 +2020,7 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
         }, null, 2)}\n`,
         { flag: 'wx', mode: 0o600 },
       );
+      failOnUnexpectedConsole(steps.locales);
     }
   });
 
