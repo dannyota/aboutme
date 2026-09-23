@@ -10,7 +10,7 @@ import { readBody, setResponseStatus } from 'h3';
 import LoginPage from '../app/pages/login.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
-import { landedFrom } from './support/routing';
+import { landedOn } from './support/routing';
 
 // These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
@@ -219,7 +219,7 @@ describe('login.vue password form', () => {
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
-    expect(await landedFrom('/login')).toBe('/app/resumes');
+    expect(await landedOn('/app/resumes')).toBe('/app/resumes');
   });
 
   it('shows closed copy and does not navigate on authentication-failed',
@@ -329,7 +329,7 @@ describe('login.vue password form', () => {
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
-    expect(await landedFrom('/login')).toBe('/login/second-factor');
+    expect(await landedOn('/login/second-factor')).toBe('/login/second-factor');
   });
 
   it('sends the validated ?next= path on the login request body',
@@ -421,7 +421,7 @@ describe('login.vue password form', () => {
         .setValue('correct horse battery staple');
       await wrapper.get('[data-testid="login-form"]').trigger('submit');
       await flushPromises();
-      expect(await landedFrom('/login')).toBe('/app/new');
+      expect(await landedOn('/app/new')).toBe('/app/new');
       // An in-app destination never reaches the browser-navigation helper.
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });

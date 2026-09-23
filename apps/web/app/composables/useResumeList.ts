@@ -20,6 +20,7 @@ import {
   createResumeEditorActions,
   type ResumeEditorActions,
 } from './useResumeEditor';
+import { goToPath } from '../utils/navigate';
 import { useAuth, type AuthState } from './useAuth';
 
 export type ResumeListView
@@ -166,7 +167,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     }
     if (state === 'anonymous') {
       const path = wasAuthenticated ? '/login' : (deps.loginPath ?? '/login');
-      void navigateTo(path);
+      void goToPath(path);
       return;
     }
     view.value = { kind: 'unavailable' };
@@ -201,7 +202,7 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
     };
     creating = coordinator.createResume(intent).then(async (result) => {
       if (result.kind === 'created') {
-        await navigateTo(
+        await goToPath(
           `/app/resumes/${encodeURIComponent(result.resume.metadata.id)}`,
         );
       } else if (result.kind === 'opaque-create') {

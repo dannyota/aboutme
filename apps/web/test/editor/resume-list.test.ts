@@ -7,6 +7,7 @@ import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 // eslint-disable-next-line max-len -- dialog component import.
 import CreateResumeDialog from '../../app/components/editor/list/CreateResumeDialog.vue';
 import { setSiteLocale } from '../support/locale';
+import { currentPath, landedOn } from '../support/routing';
 // eslint-disable-next-line max-len -- dialog component import.
 import DeleteResumeDialog from '../../app/components/editor/list/DeleteResumeDialog.vue';
 // eslint-disable-next-line max-len -- dialog component import.
@@ -95,12 +96,12 @@ describe('useResumeList', () => {
       api: { list: vi.fn() } as never,
       authState: authState as never,
     });
-    expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    expect(currentPath()).toBe('/');
 
     authState.value = 'anonymous';
     await nextTick();
 
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+    expect(await landedOn('/login')).toBe('/login');
   });
 
   it('redirects to a caller-chosen path instead of the default', async () => {
@@ -114,9 +115,8 @@ describe('useResumeList', () => {
     authState.value = 'anonymous';
     await nextTick();
 
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-      '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain',
-    );
+    const chosen = '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain';
+    expect(await landedOn(chosen)).toBe(chosen);
   });
 
   it('uses login after an authenticated session ends', async () => {
@@ -134,7 +134,7 @@ describe('useResumeList', () => {
     authState.value = 'anonymous';
     await nextTick();
 
-    expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith('/login');
+    expect(await landedOn('/login')).toBe('/login');
   });
 
   it.each([
@@ -283,9 +283,8 @@ describe('useResumeList', () => {
 
     await list.create('Title', undefined);
 
-    expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(
-      '/app/resumes/server-id',
-    );
+    expect(await landedOn('/app/resumes/server-id'))
+      .toBe('/app/resumes/server-id');
   });
 
   it('refreshes opaque summaries without claiming a create', async () => {
@@ -334,9 +333,7 @@ describe('useResumeList', () => {
     await list.refreshCreate(intent.id);
 
     expect(list.items.value).toEqual(refreshed);
-    expect(vi.mocked(navigateTo)).not.toHaveBeenLastCalledWith(
-      `/app/resumes/${refreshed[0]!.id}`,
-    );
+    expect(currentPath()).not.toBe(`/app/resumes/${refreshed[0]!.id}`);
   });
 
   it('maps create results to semantic notices', () => {

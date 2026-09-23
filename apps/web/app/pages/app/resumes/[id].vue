@@ -41,6 +41,7 @@ import {
   createFieldDrafts,
   FieldDraftsKey,
 } from '../../../composables/useFieldDrafts';
+import { goToPath } from '@/utils/navigate';
 import { pageTitle, workspaceTitles } from '@/i18n/meta';
 import { editorShellCopy } from '@/i18n/editor-shell';
 
@@ -92,7 +93,7 @@ async function load(): Promise<void> {
       loadState.value = 'unavailable';
       break;
     case 'session-lost':
-      await navigateTo('/login');
+      await goToPath('/login');
       break;
     case 'rate-limited':
     case 'failed':
@@ -202,7 +203,7 @@ onMounted(() => {
           loadState.value = 'ready';
           return;
         }
-        await navigateTo('/login');
+        await goToPath('/login');
       }
       if (state === 'error') loadState.value = 'failed';
     },

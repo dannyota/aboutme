@@ -1,22 +1,27 @@
 import { flushPromises } from '@vue/test-utils';
 
 /**
- * The client router's full path once it stops moving away from the page at
- * `from`, which is a path without its query. Resolving a route's component is
- * real asynchronous work, so this polls instead of flushing microtasks, and it
- * answers as soon as the page changes.
+ * Waits for the client router to reach `path`, then answers with where it
+ * actually is, so a case that never arrives fails on the difference rather
+ * than on a timeout. Resolving a route's component is real asynchronous work,
+ * so this polls instead of flushing microtasks.
  */
-export async function landedFrom(
-  from: string,
+export async function landedOn(
+  path: string,
   timeoutMs = 2000,
 ): Promise<string> {
   const router = useRouter();
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline && router.currentRoute.value.path === from) {
+  while (Date.now() < deadline && router.currentRoute.value.fullPath !== path) {
     await new Promise((resolve) => setTimeout(resolve, 10));
     await flushPromises();
   }
   return router.currentRoute.value.fullPath;
+}
+
+/** Where the client router is now, for a case that must not navigate. */
+export function currentPath(): string {
+  return useRouter().currentRoute.value.fullPath;
 }
 
 /**

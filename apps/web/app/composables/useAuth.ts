@@ -1,4 +1,5 @@
 import { nextTick, type ComputedRef } from 'vue';
+import { goToPath } from '../utils/navigate';
 
 /**
  * `useAuth` — session/identity state backed by `GET /api/v1/me`.
@@ -178,7 +179,7 @@ export function useAuth(): UseAuthReturn {
     // Logout destroys the current session server-side (and sends
     // Clear-Site-Data) — there is no session left to refetch. Leave this
     // now-signed-out page for the login screen instead.
-    await navigateTo('/login');
+    await goToPath('/login');
   }
 
   return { user, csrfToken, identities, authState, refresh, logout, mutate };

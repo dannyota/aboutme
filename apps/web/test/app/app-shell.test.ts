@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import AppShell from '../../app/components/app/AppShell.vue';
 import { setSiteLocale } from '../support/locale';
+import { landedOn } from '../support/routing';
 
 const me = {
   data: {
@@ -178,9 +179,8 @@ describe('AppShell', () => {
       .querySelector<HTMLElement>('[data-testid="account-menu-settings"]')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPromises();
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-      '/app/settings/sessions',
-    );
+    expect(await landedOn('/app/settings/sessions'))
+      .toBe('/app/settings/sessions');
 
     await wrapper.get('[data-testid="account-menu"]').trigger('click');
     await flushPromises();
@@ -188,7 +188,7 @@ describe('AppShell', () => {
       .querySelector<HTMLElement>('[data-testid="account-menu-logout"]')
       ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPromises();
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+    expect(await landedOn('/login')).toBe('/login');
   });
   it('moves signed-in theme control into the account menu', async () => {
     meStatus = 200;

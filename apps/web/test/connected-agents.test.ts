@@ -11,6 +11,7 @@ import ConnectedAgents from '../app/components/settings/ConnectedAgents.vue';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
+import { landedOn } from './support/routing';
 
 registerCapabilities();
 
@@ -179,7 +180,7 @@ describe('ConnectedAgents', () => {
       });
       await mountSuspended(ConnectedAgents);
       await flushPromises();
-      expect(navigateTo).toHaveBeenCalledWith('/login');
+      expect(await landedOn('/login')).toBe('/login');
     },
   );
 
@@ -415,9 +416,8 @@ describe('ConnectedAgents', () => {
       .querySelector<HTMLButtonElement>('[data-action="agent-revoke-confirm"]')!
       .click();
     await flushPromises();
-    await vi.waitFor(() => {
-      expect(navigateTo).toHaveBeenCalledWith('/login');
-    });
+    // `landedOn` polls, so it replaces the retry wrapper this used to need.
+    expect(await landedOn('/login')).toBe('/login');
   });
 
   it(
@@ -445,9 +445,7 @@ describe('ConnectedAgents', () => {
       await flushPromises();
       expect(deletes).toBe(1);
       expect(agentRequests).toBe(2);
-      await vi.waitFor(() => {
-        expect(navigateTo).toHaveBeenCalledWith('/login');
-      });
+      expect(await landedOn('/login')).toBe('/login');
     },
   );
 
