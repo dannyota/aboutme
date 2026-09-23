@@ -328,6 +328,17 @@ export default defineNuxtConfig({
         'class-variance-authority',
         'clsx',
         'dompurify',
+        // The rich-text editor is the first thing on the editor route
+        // (/app/resumes/**, client-only) to import these; the same
+        // first-visit reload the comment above describes for sign-in also
+        // interrupts the editor's first hydration.
+        'prosemirror-commands',
+        'prosemirror-history',
+        'prosemirror-keymap',
+        'prosemirror-model',
+        'prosemirror-schema-list',
+        'prosemirror-state',
+        'prosemirror-view',
         'reka-ui',
         'tailwind-merge',
       ],
