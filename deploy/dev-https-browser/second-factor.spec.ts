@@ -112,6 +112,8 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/auth/second-factor/recovery/verify', [401]],
   ['/api/v1/auth/password/login', [401]],
   ['/api/v1/auth/password/reauth', [401]],
+  // The revoked agent grant's tool call.
+  ['/mcp', [401]],
 ]);
 const REMOVAL_PATH = /^\/api\/v1\/me\/second-factor\/passkeys\/[^/]+$/u;
 
