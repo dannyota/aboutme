@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
         class="mx-auto w-fit"
       >
         <div
-          class="relative rounded-[var(--radius-sheet)] bg-white
+          class="preview-sheet relative rounded-[var(--radius-sheet)] bg-white
             shadow-[var(--shadow-paper)]"
           :data-scaled-width="scaledWidth.toFixed(2)"
           :data-sheet-zoom="sheetZoom.toFixed(4)"
@@ -206,3 +206,18 @@ onBeforeUnmount(() => {
     </div>
   </section>
 </template>
+
+<style>
+/* A paged preview shows each A4 page as its own sheet. Without this, the
+   pages share one white card and a page break reads as unexplained blank
+   space inside the resume. */
+.preview-sheet:has(> .paged-resume) {
+  background: transparent;
+  box-shadow: none;
+}
+
+.preview-sheet > .paged-resume > .resume-page {
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-paper);
+}
+</style>
