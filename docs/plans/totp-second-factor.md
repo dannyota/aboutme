@@ -4,14 +4,14 @@ Status: proposed. The owner approved every marked choice in
 `docs/design/totp-second-factor-contract.md` on 2026-09-22. Implementation is
 blocked until ADR 0049 is accepted.
 
-**Goal:** Ship v0.4.5 with optional authenticator-app enrollment, verification,
+**Goal:** Ship v0.4.6 with optional authenticator-app enrollment, verification,
 safe replacement and removal, shared recovery, bilingual mail and web flows,
-encrypted secret rotation, and a v0.4.5 rollback floor.
+encrypted secret rotation, and a v0.4.6 rollback floor.
 
 **Architecture:** TOTP extends the v0.4.2 pending-authentication and
 authentication-epoch boundary. PostgreSQL owns one encrypted credential and one
 short-lived enrollment per account. The existing durable release fence rises to
-v0.4.5 before the enrollment flag turns on.
+v0.4.6 before the enrollment flag turns on.
 
 **Tech stack:** Go standard-library cryptography, PostgreSQL, sqlc, OpenAPI,
 Nuxt 4, Vue 3, TypeScript, a pinned local QR encoder, OpenTofu, ECS, Vitest, and
@@ -32,7 +32,7 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 - ADR 0049 and the TOTP contract pass one fresh Sol review before product code
   starts.
 - V0.4.2 is integrated. Its pending, factor, recovery, epoch, mail, web, fence,
-  and hosted-browser contracts are green on the v0.4.5 base. Its factor service
+  and hosted-browser contracts are green on the v0.4.6 base. Its factor service
   counts active factors of every type through registered counters, decides first
   enrollment from policy existence, and answers passkey options without a
   passkey with `404 factor_not_found`. Its pending page shows a refresh prompt
@@ -46,7 +46,7 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 
 ## Global constraints
 
-- V0.4.5 adds TOTP to the existing passkey boundary. It does not change
+- V0.4.6 adds TOTP to the existing passkey boundary. It does not change
   passkeys, recovery-code format, resume documents, public pages, PDFs, or MCP
   tools and scopes.
 - The exact TOTP profile is HMAC-SHA-1, 20 secret bytes, six digits, a 30-second
@@ -75,7 +75,7 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 - `TOTP_ENROLLMENT_ENABLED` defaults false. It gates start and completion only.
   Disabled completion consumes its matching enrollment and stores nothing.
 - The first production deploy has valid keys and enrollment false. The fence
-  rises to numeric release 4005 before enablement.
+  rises to numeric release 4006 before enablement.
 - Migration 00005 replaces both closed auth-mail constraints for all three TOTP
   mail kinds. Mail insertion remains in the factor transaction.
 - Only the app ECS execution role reads exact TOTP parameter ARNs. The
@@ -118,8 +118,8 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 - Trace password, every provider, passkey, TOTP, recovery, reset, consent,
   grants, authorization codes, refresh, bearer authentication, and every
   sensitive action across an epoch change.
-- Prove flag-off enrollment, older-client behavior, mixed v0.4.2 and v0.4.5
-  startup, floor 4005, same-tag activation, rollback, and restoration.
+- Prove flag-off enrollment, older-client behavior, mixed v0.4.2 and v0.4.6
+  startup, floor 4006, same-tag activation, rollback, and restoration.
 - Prove exact cache headers on every TOTP route, per-row key failure with green
   `/readyz`, the alarm signal, app-execution-role-only key reads, derived key
   IDs, slot rotation order, and the dedicated one-shot rotation task.
@@ -131,21 +131,21 @@ the accepted TOTP `AC-AUTH-*` and `AC-SEC-*` rows.
 
 ## Dispatch order and ownership
 
-| Order | Role      | Model           | Brief                                                   | Dependency                               |
-| ----- | --------- | --------------- | ------------------------------------------------------- | ---------------------------------------- |
-| 0     | architect | `gpt-5.6-sol`   | [Contract acceptance](v0.4.5/00-contract-acceptance.md) | Owner decisions and fresh design review  |
-| 1     | backend   | `gpt-5.6-terra` | [Storage foundation](v0.4.5/01-storage-foundation.md)   | Accepted contracts                       |
-| 1     | backend   | `gpt-5.6-terra` | [TOTP cryptography](v0.4.5/02-totp-cryptography.md)     | Accepted contracts                       |
-| 1     | backend   | `gpt-5.6-terra` | [Security mail](v0.4.5/03-security-mail.md)             | Accepted contracts                       |
-| 1     | devops    | `gpt-5.6-terra` | [Runtime secrets](v0.4.5/09-runtime-secrets.md)         | Accepted contracts and v0.4.2 fence      |
-| 2     | backend   | `gpt-5.6-terra` | [TOTP lifecycle](v0.4.5/04-totp-lifecycle.md)           | Storage, cryptography, and mail verified |
-| 3     | backend   | `gpt-5.6-terra` | [API and composition](v0.4.5/05-api-composition.md)     | Lifecycle and runtime-secret reports     |
-| 4     | frontend  | `gpt-5.6-terra` | [Pending login UI](v0.4.5/06-pending-login-ui.md)       | OpenAPI client generated                 |
-| 4     | frontend  | `gpt-5.6-terra` | [Settings UI](v0.4.5/07-settings-ui.md)                 | OpenAPI client generated                 |
-| 5     | frontend  | `gpt-5.6-terra` | [Web source gate](v0.4.5/08-web-gate.md)                | Both frontend reports verified           |
-| 6     | qa        | `gpt-5.6-terra` | [Hosted browser proof](v0.4.5/10-browser-proof.md)      | Backend and web integrated               |
-| 7     | devops    | `gpt-5.6-terra` | [Release path](v0.4.5/11-release-path.md)               | QA harness and runtime secrets verified  |
-| 8     | reviewer  | `gpt-5.6-sol`   | [Integrated review](v0.4.5/12-integrated-review.md)     | Every author report verified             |
+| Order | Role      | Model           | Brief                                                               | Dependency                               |
+| ----- | --------- | --------------- | ------------------------------------------------------------------- | ---------------------------------------- |
+| 0     | architect | `gpt-5.6-sol`   | [Contract acceptance](totp-second-factor/00-contract-acceptance.md) | Owner decisions and fresh design review  |
+| 1     | backend   | `gpt-5.6-terra` | [Storage foundation](totp-second-factor/01-storage-foundation.md)   | Accepted contracts                       |
+| 1     | backend   | `gpt-5.6-terra` | [TOTP cryptography](totp-second-factor/02-totp-cryptography.md)     | Accepted contracts                       |
+| 1     | backend   | `gpt-5.6-terra` | [Security mail](totp-second-factor/03-security-mail.md)             | Accepted contracts                       |
+| 1     | devops    | `gpt-5.6-terra` | [Runtime secrets](totp-second-factor/09-runtime-secrets.md)         | Accepted contracts and v0.4.2 fence      |
+| 2     | backend   | `gpt-5.6-terra` | [TOTP lifecycle](totp-second-factor/04-totp-lifecycle.md)           | Storage, cryptography, and mail verified |
+| 3     | backend   | `gpt-5.6-terra` | [API and composition](totp-second-factor/05-api-composition.md)     | Lifecycle and runtime-secret reports     |
+| 4     | frontend  | `gpt-5.6-terra` | [Pending login UI](totp-second-factor/06-pending-login-ui.md)       | OpenAPI client generated                 |
+| 4     | frontend  | `gpt-5.6-terra` | [Settings UI](totp-second-factor/07-settings-ui.md)                 | OpenAPI client generated                 |
+| 5     | frontend  | `gpt-5.6-terra` | [Web source gate](totp-second-factor/08-web-gate.md)                | Both frontend reports verified           |
+| 6     | qa        | `gpt-5.6-terra` | [Hosted browser proof](totp-second-factor/10-browser-proof.md)      | Backend and web integrated               |
+| 7     | devops    | `gpt-5.6-terra` | [Release path](totp-second-factor/11-release-path.md)               | QA harness and runtime secrets verified  |
+| 8     | reviewer  | `gpt-5.6-sol`   | [Integrated review](totp-second-factor/12-integrated-review.md)     | Every author report verified             |
 
 Order 1 uses all four global worker slots. Later same-order tasks may run
 together only while no other manager has consumed a slot. Migrations,
@@ -192,25 +192,25 @@ database. The manager verifies the job SHA and artifact before release.
 
 The top manager owns this sequence:
 
-1. Integrate one exact v0.4.5 file set and obtain the fresh integrated review.
+1. Integrate one exact v0.4.6 file set and obtain the fresh integrated review.
 2. Push the release commit alone to `main` and wait for green CI on that commit.
-3. Tag `v0.4.5`, wait for release images, and inspect the reviewed production
+3. Tag `v0.4.6`, wait for release images, and inspect the reviewed production
    OpenTofu plan. Stop on unexpected destroy, fence replacement, or secret
    output.
-4. Apply the reviewed secret and task changes. Deploy v0.4.5 with TOTP
+4. Apply the reviewed secret and task changes. Deploy v0.4.6 with TOTP
    enrollment false.
 5. Run the first bounded production proof. Prove health, existing unenrolled,
    passkey and recovery login, existing sessions and grants, and disabled TOTP
    enrollment.
 6. Acquire the durable production operation lock and raise the release fence
-   conditionally to numeric 4005 and tag v0.4.5. Never lower it on failure.
+   conditionally to numeric 4006 and tag v0.4.6. Never lower it on failure.
 7. Enable TOTP enrollment through the reviewed OpenTofu apply. Redeploy the same
    tag through a new serialized operation.
 8. Run the second bounded production proof with only the named fictional
    account. Prove first TOTP enrollment, pending login, replacement, shared
    recovery, passkey coexistence, both locales, and removal.
 9. Remove the proof factor, recovery plaintext, sessions, and browser profile.
-   Record bounded redacted evidence. Fix forward at v0.4.5 or later on failure.
+   Record bounded redacted evidence. Fix forward at v0.4.6 or later on failure.
 
 GitHub CI cannot observe the deployed flag, release fence, live providers, or
 production origin. Steps 5 and 8 are the only local runtime exceptions. The top
@@ -219,7 +219,7 @@ run mode `totp-prod-flag-off` for step 5 and `totp-prod-enabled` for step 8. No
 one drives the browser by hand. The run uses the pinned browser image from
 `deploy/dev-https-browser/Dockerfile` (Playwright 1.62.1 and its bundled
 Chromium), not a host install. It reads the fictional account from the
-owner-only ignored file `.dev/v0.4.5/production-input/account.env`, mounted
+owner-only ignored file `.dev/v0.4.6/production-input/account.env`, mounted
 read-only. It reads the setup secret and recovery codes from the page into
 process memory, computes codes in that process, and creates any passkey with a
 Chrome DevTools virtual authenticator inside the run.
@@ -255,9 +255,9 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 flock -o -n "$common_dir/aboutme-local-check.lock" \
   timeout --signal=TERM 60m \
   deploy/dev-https-browser/run.sh "$image_id" \
-    "$PWD/.dev/v0.4.5/production-input" \
+    "$PWD/.dev/v0.4.6/production-input" \
     "$PWD/deploy/dev-https-browser" \
-    "$PWD/.dev/v0.4.5/production-evidence" totp-prod-enabled
+    "$PWD/.dev/v0.4.6/production-evidence" totp-prod-enabled
 ```
 
 The proof starts no local product stack. The browser profile lives on the

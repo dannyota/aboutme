@@ -1,13 +1,14 @@
 # Second-factor authentication
 
-Status: Approved for v0.4.2; proposed for v0.4.5.
+Status: Approved for v0.4.2; proposed for the authenticator-app release.
 
 Accounts may add a passkey or an authenticator-app code as an optional second
 factor. A primary password or linked provider remains required. A passkey is not
 a password replacement, and the service does not offer usernameless login.
 
-Passkeys ship in v0.4.2 and time-based one-time passwords (TOTP) in v0.4.5. Both
-cover enrollment, sign-in, step-up, recovery, notifications, and both locales.
+Passkeys ship in v0.4.2 and time-based one-time passwords (TOTP) in the
+authenticator-app release. Both cover enrollment, sign-in, step-up, recovery,
+notifications, and both locales.
 
 The owner selected optional passkeys, TOTP, local user verification, and
 single-use recovery codes, and rejected password, provider, email, support, or

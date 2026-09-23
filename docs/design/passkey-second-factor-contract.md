@@ -40,8 +40,9 @@ behind it is that the factor-policy row exists exactly while an active factor
 exists, so all three fields describe one consistent instant. An unenrolled
 account returns false, an empty array, and zero. V0.4.2 does not register any
 TOTP verification, enrollment, replacement, or removal route. The state response
-has no `totpEnabled` field, and pending method values never include `totp`.
-V0.4.5 adds those fields and routes as an additive contract change.
+has no `totpEnabled` field, and pending method values never include `totp`. The
+authenticator-app release adds those fields and routes as an additive contract
+change.
 
 Every response in this file uses `Cache-Control: no-store, no-transform`. JSON
 follows the standard `{data:...}` or `{error:{code,message}}` envelope. One-time
@@ -150,11 +151,11 @@ pending authentication, Origin and CSRF, rate admission, then method work.
 
 The fifth failed completion returns `401 verification_failed`, atomically
 consumes the pending row, records its notification, and clears the cookie. From
-v0.4.5, that notification obeys a per-account cap of one attempt mail per hour;
-a suppressed mail never suppresses the state change. Later use returns
-`401 authentication_required`. Every successful completion returns `204`,
-consumes the pending row, and clears the cookie. Login completion sets the
-session cookie; reauth completion never issues a different session.
+the authenticator-app release, that notification obeys a per-account cap of one
+attempt mail per hour; a suppressed mail never suppresses the state change.
+Later use returns `401 authentication_required`. Every successful completion
+returns `204`, consumes the pending row, and clears the cookie. Login completion
+sets the session cookie; reauth completion never issues a different session.
 
 Creating a pending row or WebAuthn ceremony first makes one best-effort cleanup
 call for each table. Each call deletes at most 200 expired rows in
@@ -345,7 +346,7 @@ V0.4.2 adds these closed `auth_email_jobs.kind` values:
 - `recovery_codes_regenerated`;
 - `recovery_code_used`; and
 - `second_factor_attempts_exhausted` on the fifth failed completion, at most one
-  per account per hour from v0.4.5.
+  per account per hour from the authenticator-app release.
 
 Each uses `user_id`, no registration or reset scope, no token digest, and an
 expiry exactly 24 hours after the event. The encrypted strict JSON payload is:
