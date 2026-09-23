@@ -109,7 +109,17 @@ type FailureOutcome
     | 'assertion'
     | 'unknown';
 
-type AccountRole = 'none' | 'primary' | 'recovery' | 'attempts' | 'disabled';
+type AccountRole =
+  | 'none'
+  | 'primary'
+  | 'replay'
+  | 'concurrent'
+  | 'replace'
+  | 'epoch'
+  | 'locale'
+  | 'recovery'
+  | 'attempts'
+  | 'disabled';
 
 let recordedStage = 'start';
 let recordedRole: AccountRole = 'none';
@@ -764,6 +774,7 @@ async function reauthenticateEnrolled(
   page: Page,
   password: string,
   secret: string,
+  tracker: StepTracker,
 ): Promise<void> {
   await page.getByTestId('second-factor-reauth-password').waitFor();
   await page.getByLabel('Current password', { exact: true }).fill(password);
@@ -773,7 +784,7 @@ async function reauthenticateEnrolled(
     page.getByTestId('second-factor-reauth-submit').click(),
   ]);
   await hydrated(page, WAIT_HYDRATE_MS);
-  await completeWithTotp(page, await freshCode(page, secret));
+  await completeWithTotp(page, await freshCode(page, secret, tracker));
   await page.waitForURL(`${ORIGIN}/app/settings/sessions`,
     { timeout: WAIT_NAVIGATION_MS });
   await hydrated(page, WAIT_HYDRATE_MS);
@@ -905,17 +916,26 @@ async function proveQrIsLocal(
 }
 
 /**
- * The newest step any accepted code for the primary account has used. The
- * server accepts only a step greater than the credential's last used step,
- * so every later accepted code must come from a newer step.
+ * The newest step one account's accepted codes have used. The server accepts
+ * only a step greater than the credential's last used step, so every later
+ * accepted code must come from a newer step. Each fictional account gets its
+ * own tracker because last_used_step is per credential.
  */
-let lastUsedStep = -1;
+interface StepTracker { last: number }
 
-/** Returns a current-step code newer than every step already accepted. */
-async function freshCode(page: Page, secret: string): Promise<string> {
-  await waitForStepAtLeast(page, lastUsedStep + 1);
+function newStepTracker(): StepTracker {
+  return { last: -1 };
+}
+
+/** Returns a current-step code newer than every step the tracker has used. */
+async function freshCode(
+  page: Page,
+  secret: string,
+  tracker: StepTracker,
+): Promise<string> {
+  await waitForStepAtLeast(page, tracker.last + 1);
   const step = stepAt(systemClock().nowSeconds());
-  lastUsedStep = step;
+  tracker.last = step;
   return codeForStep(secret, step);
 }
 
@@ -987,6 +1007,7 @@ async function startTotpSetup(page: Page): Promise<string> {
 async function enrollFirstTotp(
   page: Page,
   password: string,
+  tracker: StepTracker,
 ): Promise<{ codes: string[]; secret: string }> {
   await gotoHydrated(page, '/app/settings/sessions');
   await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
@@ -995,7 +1016,7 @@ async function enrollFirstTotp(
   await expect(page.getByTestId('second-factor-reauth-password')).toBeVisible();
   await reauthenticateWithPassword(page, password);
   const secret = await startTotpSetup(page);
-  const code = codeNow(secret, systemClock());
+  const code = await freshCode(page, secret, tracker);
   expect(await submitSetupCode(page, code)).toBe(200);
   const codes = await readRevealedCodes(page);
   await closeRevealAndProveCleared(page, codes);
@@ -1068,13 +1089,37 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
 
   const primaryEmail = runEmail('primary');
   const primaryPassword = runPassword();
+  const replayEmail = runEmail('replay');
+  const replayPassword = runPassword();
+  const concurrentEmail = runEmail('concurrent');
+  const concurrentPassword = runPassword();
+  const replaceEmail = runEmail('replace');
+  const replacePassword = runPassword();
+  const epochEmail = runEmail('epoch');
+  const epochPassword = runPassword();
+  const localeEmail = runEmail('locale');
+  const localePassword = runPassword();
   const recoveryEmail = runEmail('recovery');
   const recoveryPassword = runPassword();
   const attemptsEmail = runEmail('attempts');
   const attemptsPassword = runPassword();
 
-  let primaryFinalPassword = primaryPassword;
+  const primaryTracker = newStepTracker();
+  const replayTracker = newStepTracker();
+  const concurrentTracker = newStepTracker();
+  const replaceTracker = newStepTracker();
+  const epochTracker = newStepTracker();
+  const localeTracker = newStepTracker();
+  const recoveryTracker = newStepTracker();
+  const attemptsTracker = newStepTracker();
+
   let primaryCleanupCode = '';
+  let replayCleanupCode = '';
+  let concurrentCleanupCode = '';
+  let replaceCleanupCode = '';
+  let epochCleanupCode = '';
+  let localeFinalPassword = localePassword;
+  let localeCleanupCode = '';
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
@@ -1151,6 +1196,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
 
     // 2. First enrollment demands recent reauthentication, renders the QR
     //    with no external request, and issues the one-time recovery set.
+    //    Primary spends 2 admitted attempts here: the superseded-enrollment
+    //    completion and the accepted completion.
     stage('enroll-first-totp');
     await gotoHydrated(page, '/app/settings/sessions');
     await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
@@ -1199,6 +1246,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     // Non-ASCII digits never leave the settings form, and the server
     // rejects them as a malformed request when sent directly
     // (totp-second-factor-contract.md, "TOTP profile and code verification").
+    // The decode failure spends no admitted attempt.
     stage('unicode-digits-rejected');
     const unicodeCode = toFullwidthDigits(codeNow(secret, systemClock()));
     const setupInput = page.locator(TOTP_SETUP_INPUT);
@@ -1225,7 +1273,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.unicodeDigitsRejected = true;
 
     stage('enroll-complete');
-    expect(await submitSetupCode(page, await freshCode(page, secret)))
+    expect(await submitSetupCode(page, await freshCode(page, secret, primaryTracker)))
       .toBe(200);
     const firstCodes = await readRevealedCodes(page);
     await closeRevealAndProveCleared(page, firstCodes);
@@ -1248,7 +1296,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(state.recoveryRemaining).toBe(10);
 
     // 5. A passkey enrolled alongside TOTP adds no recovery codes and the
-    //    pending page lists passkey before TOTP before recovery.
+    //    pending page lists passkey before TOTP before recovery. Account
+    //    mutation, not a pending completion, so it spends nothing.
     stage('passkey-coexistence');
     const pool = await AuthenticatorPool.attach(context, page);
     const authPrimary = await pool.add();
@@ -1265,7 +1314,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.passkeyCoexistence = true;
 
     // 6. Password sign-in stops at the pending page; the fixed method order
-    //    is passkey, then authenticator app, then recovery code.
+    //    is passkey, then authenticator app, then recovery code. A pending
+    //    status read, not a completion, so it spends nothing.
     stage('password-pending');
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
@@ -1285,7 +1335,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.passwordPending = true;
 
     // 7. Wrong-session HTTP fixture: the pending verify route bound to one
-    //    session rejects a foreign pending cookie.
+    //    session rejects a foreign pending cookie. Pending authentication
+    //    fails before admission, so it spends nothing.
     stage('wrong-session');
     const foreignSessionResult = await trustedPost(
       ca,
@@ -1303,12 +1354,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
 
     // 8. Previous, current, and next step each complete one pending login,
     //    each on a fresh sign-in because a step only accepts a code greater
-    //    than the credential's last used step.
+    //    than the credential's last used step. Three admitted attempts.
     //    Earlier stages used steps up to the current one, so wait until the
     //    previous step is newer than any of them.
     stage('previous-step');
-    await waitForStepAtLeast(page, lastUsedStep + 2);
-    lastUsedStep = stepAt(systemClock().nowSeconds()) - 1;
+    await waitForStepAtLeast(page, primaryTracker.last + 2);
+    primaryTracker.last = stepAt(systemClock().nowSeconds()) - 1;
     await completeWithTotp(page, codePreviousStep(secret, systemClock()));
     await expectSignedInApp(page);
     steps.previousStepAccepted = true;
@@ -1317,7 +1368,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
-    await completeWithTotp(page, await freshCode(page, secret));
+    await completeWithTotp(page, await freshCode(page, secret, primaryTracker));
     await expectSignedInApp(page);
     steps.currentStepAccepted = true;
 
@@ -1325,107 +1376,14 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
-    await waitForStepAtLeast(page, lastUsedStep);
-    lastUsedStep = stepAt(systemClock().nowSeconds()) + 1;
+    await waitForStepAtLeast(page, primaryTracker.last);
+    primaryTracker.last = stepAt(systemClock().nowSeconds()) + 1;
     await completeWithTotp(page, codeNextStep(secret, systemClock()));
     await expectSignedInApp(page);
     steps.nextStepAccepted = true;
 
-    // 9. A replayed code and an invalid code are both rejected as failed
-    //    verification, then a valid code still completes the same pending row.
-    stage('same-step-replay');
-    await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    const usedCode = await freshCode(page, secret);
-    expect(await submitPendingTotpCode(page, usedCode)).toBe(204);
-    await landedAfter(page, '/login/second-factor');
-    await expectSignedInApp(page);
-    await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    // The already-consumed step is no longer greater than last_used_step.
-    expect(await submitPendingTotpCode(page, usedCode)).toBe(401);
-    steps.sameStepReplayRejected = true;
-
-    stage('invalid-code');
-    expect(await submitPendingTotpCode(page, mismatchedCode(usedCode)))
-      .toBe(401);
-    await expect(page.getByTestId('second-factor-totp-error')).toBeVisible();
-    expect(await meStatus(page)).toBe(401);
-    steps.invalidCodeRejected = true;
-    await completeWithTotp(page, await freshCode(page, secret));
-    await expectSignedInApp(page);
-
-    // 10. Concurrent submission of one code has exactly one winner.
-    stage('concurrent-use');
-    await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    const concurrentHeaders = {
-      'Content-Type': 'application/json',
-      'Cookie': await pendingCookieHeader(context),
-      'Origin': ORIGIN,
-      'X-CSRF-Token': await pendingCSRFToken(page),
-    };
-    const concurrentBody = JSON.stringify({
-      code: await freshCode(page, secret),
-    });
-    const race = await Promise.all([
-      trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
-        concurrentHeaders, concurrentBody),
-      trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
-        concurrentHeaders, concurrentBody),
-    ]);
-    expect(race.filter((result) => result.status === 204)).toHaveLength(1);
-    expect(race.filter((result) => result.status === 401)).toHaveLength(1);
-    steps.concurrentUseRejected = true;
-    // The race winner's session went to this test's own HTTP client, not the
-    // browser, so the browser signs in again before it opens settings.
-    stage('concurrent-browser-sign-in');
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    await completeWithTotp(page, await freshCode(page, secret));
-    await expectSignedInApp(page);
-
-    // 11. Replacement issues a new secret; the old secret's codes then fail.
-    stage('replace-settings');
-    await gotoHydrated(page, '/app/settings/sessions');
-    stage('replace-click');
-    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
-    await page.getByTestId('totp-setup-replace').click();
-    stage('replace-reauth-open');
-    await expect(page.getByTestId('second-factor-reauth-password'))
-      .toBeVisible();
-    stage('replace-reauth-submit');
-    await reauthenticateEnrolled(page, primaryPassword, secret);
-    // The replace notice lives in the setup dialog, which opens only after
-    // the retried start succeeds.
-    stage('replace-start');
-    const oldSecret = secret;
-    secret = await startTotpSetup(page);
-    stage('replace-notice');
-    await expect(page.getByTestId('totp-replace-notice')).toBeVisible();
-    expect(secret).not.toBe(oldSecret);
-    stage('replace-code');
-    expect(await submitSetupCode(page, await freshCode(page, secret)))
-      .toBe(200);
-    stage('replace-complete');
-    await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
-    await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
-    steps.replaced = true;
-
-    stage('replace-old-secret-rejected');
-    await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    expect(await submitPendingTotpCode(page, codeNow(oldSecret, systemClock())))
-      .toBe(401);
-    stage('replace-new-secret-login');
-    await completeWithTotp(page, await freshCode(page, secret));
-    await expectSignedInApp(page);
-
-    // 12. Provider sign-in on the enrolled account also stops at pending.
+    // 9. Provider sign-in on the enrolled account also stops at pending, then
+    //    completes with one admitted attempt.
     stage('provider-pending');
     await signOut(page);
     await watchingCallback(page, () => signInWithGoogle(page, {
@@ -1437,93 +1395,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(401);
     await expect(page.getByTestId('second-factor-totp')).toBeVisible();
     steps.providerPending = true;
-    await completeWithTotp(page, await freshCode(page, secret));
+    await completeWithTotp(page, await freshCode(page, secret, primaryTracker));
     await expectSignedInApp(page);
 
-    // 13. Wrong-epoch HTTP fixture: a pending row frozen before a
-    //     replacement's epoch bump is rejected after that bump lands.
-    stage('wrong-epoch-setup');
-    const staleContext = await browser.newContext();
-    extraContexts.push(staleContext);
-    await setLocale(staleContext, 'en');
-    await installExternalRequestFirewall(staleContext, counters);
-    const stalePage = await staleContext.newPage();
-    attach(stalePage);
-    expect(await passwordSignIn(stalePage, primaryEmail, primaryPassword))
-      .toBe('pending');
-    const staleCookie = await pendingCookieHeader(staleContext);
-    const staleCsrf = await pendingCSRFToken(stalePage);
-
-    stage('wrong-epoch-bump');
-    await gotoHydrated(page, '/app/settings/sessions');
-    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
-    await page.getByTestId('totp-setup-replace').click();
-    await reauthenticateEnrolled(page, primaryPassword, secret);
-    const bumpSecret = await startTotpSetup(page);
-    expect(await submitSetupCode(page, await freshCode(page, bumpSecret)))
-      .toBe(200);
-    await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
-    secret = bumpSecret;
-
-    stage('wrong-epoch-assert');
-    const staleAttempt = await trustedPost(
-      ca,
-      '/api/v1/auth/second-factor/totp/verify',
-      {
-        'Content-Type': 'application/json',
-        'Cookie': staleCookie,
-        'Origin': ORIGIN,
-        'X-CSRF-Token': staleCsrf,
-      },
-      JSON.stringify({ code: codeNow(secret, systemClock()) }),
-    );
-    expect(staleAttempt.status).toBe(401);
-    steps.wrongEpochRejected = true;
-    await staleContext.close();
-
-    // 14. Both locales at both proof widths on the pending page.
-    stage('locales');
-    await signOut(page);
-    await provePendingLocale(page, context, {
-      code: await freshCode(page, secret),
-      email: primaryEmail,
-      locale: 'vi',
-      password: primaryPassword,
-      viewport: PHONE,
-    });
-    await provePendingLocale(page, context, {
-      code: await freshCode(page, secret),
-      email: primaryEmail,
-      locale: 'en',
-      password: primaryPassword,
-      viewport: DESKTOP,
-    });
-    steps.locales = true;
-    steps.viewports = true;
-
-    // 15. A password reset revokes sessions but preserves enforcement.
-    stage('password-reset');
-    const resetPassword = runPassword();
-    await gotoHydrated(page, '/forgot-password');
-    await page.getByLabel('Email').fill(primaryEmail);
-    await page.getByRole('button', { name: 'Send reset link' }).click();
-    await expect(page.getByTestId('forgot-success')).toBeVisible();
-    const resetToken = await capture.waitForToken('reset', primaryEmail);
-    await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToken}`);
-    await page.getByLabel('New password', { exact: true }).fill(resetPassword);
-    await page.getByLabel('Confirm password', { exact: true })
-      .fill(resetPassword);
-    await page.getByRole('button', { name: 'Reset password' }).click();
-    await expect(page.getByTestId('reset-success')).toBeVisible();
-    primaryFinalPassword = resetPassword;
-    expect(await passwordSignIn(page, primaryEmail, resetPassword))
-      .toBe('pending');
-    steps.resetPreservesEnforcement = true;
-    await completeWithTotp(page, await freshCode(page, secret));
-    await expectSignedInApp(page);
-
-    // 16. Removing TOTP while a passkey remains is non-final; removing the
-    //     remaining passkey then turns enforcement off.
+    // 10. Removing TOTP while a passkey remains is non-final (one admitted
+    //     reauthentication attempt); removing the remaining passkey then
+    //     turns enforcement off.
     stage('remove-totp');
     await gotoHydrated(page, '/app/settings/sessions');
     await forceReauthOnce(page, '/api/v1/me/second-factor/totp');
@@ -1532,7 +1409,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await page.locator('[data-action="totp-remove-confirm"]').click();
     await expect(page.getByTestId('second-factor-reauth-password'))
       .toBeVisible();
-    await reauthenticateEnrolled(page, resetPassword, secret);
+    await reauthenticateEnrolled(page, primaryPassword, secret, primaryTracker);
     await page.getByTestId('totp-remove').click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
     await page.locator('[data-action="totp-remove-confirm"]').click();
@@ -1556,13 +1433,302 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       totpEnabled: false,
     });
     await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, resetPassword))
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('session');
     primaryCleanupCode = '';
     steps.finalRemoved = true;
+    // Primary's admitted attempts: 2 (enrollment) + 3 (skew) + 1 (provider
+    // pending) + 1 (remove-totp reauth) = 7.
 
-    // 17. A second fictional account carries the recovery-completion case,
-    //     which needs a still-enrolled TOTP credential to remain.
+    // 11. A second fictional account carries the same-step replay and
+    //     invalid-code cases against its own enrollment.
+    role('replay');
+    stage('replay-account');
+    await signOut(page);
+    await registerVerified(
+      page,
+      capture,
+      replayEmail,
+      replayPassword,
+      'TOTP Replay Proof',
+    );
+    expect(await passwordSignIn(page, replayEmail, replayPassword))
+      .toBe('session');
+    const replayEnrolled = await enrollFirstTotp(
+      page, replayPassword, replayTracker,
+    );
+    let replaySecret = replayEnrolled.secret;
+    replayCleanupCode = replayEnrolled.codes[9] as string;
+
+    // 12. A replayed code and an invalid code are both rejected as failed
+    //     verification, then a valid code still completes the same pending
+    //     row. Replay's admitted attempts: 1 (enrollment) + 2 (same-step
+    //     replay) + 2 (invalid code) = 5.
+    stage('same-step-replay');
+    expect(await passwordSignIn(page, replayEmail, replayPassword))
+      .toBe('pending');
+    const usedCode = await freshCode(page, replaySecret, replayTracker);
+    expect(await submitPendingTotpCode(page, usedCode)).toBe(204);
+    await landedAfter(page, '/login/second-factor');
+    await expectSignedInApp(page);
+    await signOut(page);
+    expect(await passwordSignIn(page, replayEmail, replayPassword))
+      .toBe('pending');
+    // The already-consumed step is no longer greater than last_used_step.
+    expect(await submitPendingTotpCode(page, usedCode)).toBe(401);
+    steps.sameStepReplayRejected = true;
+
+    stage('invalid-code');
+    expect(await submitPendingTotpCode(page, mismatchedCode(usedCode)))
+      .toBe(401);
+    await expect(page.getByTestId('second-factor-totp-error')).toBeVisible();
+    expect(await meStatus(page)).toBe(401);
+    steps.invalidCodeRejected = true;
+    await completeWithTotp(page, await freshCode(page, replaySecret, replayTracker));
+    await expectSignedInApp(page);
+
+    // 13. A third fictional account carries the concurrent-submission case
+    //     against its own enrollment. Concurrent's admitted attempts: 1
+    //     (enrollment) + 2 (race) + 1 (browser resume) = 4.
+    role('concurrent');
+    stage('concurrent-account');
+    await signOut(page);
+    await registerVerified(
+      page,
+      capture,
+      concurrentEmail,
+      concurrentPassword,
+      'TOTP Concurrent Proof',
+    );
+    expect(await passwordSignIn(page, concurrentEmail, concurrentPassword))
+      .toBe('session');
+    const concurrentEnrolled = await enrollFirstTotp(
+      page, concurrentPassword, concurrentTracker,
+    );
+    const concurrentSecret = concurrentEnrolled.secret;
+    concurrentCleanupCode = concurrentEnrolled.codes[9] as string;
+
+    stage('concurrent-use');
+    expect(await passwordSignIn(page, concurrentEmail, concurrentPassword))
+      .toBe('pending');
+    const concurrentHeaders = {
+      'Content-Type': 'application/json',
+      'Cookie': await pendingCookieHeader(context),
+      'Origin': ORIGIN,
+      'X-CSRF-Token': await pendingCSRFToken(page),
+    };
+    const concurrentBody = JSON.stringify({
+      code: await freshCode(page, concurrentSecret, concurrentTracker),
+    });
+    const race = await Promise.all([
+      trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
+        concurrentHeaders, concurrentBody),
+      trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
+        concurrentHeaders, concurrentBody),
+    ]);
+    expect(race.filter((result) => result.status === 204)).toHaveLength(1);
+    expect(race.filter((result) => result.status === 401)).toHaveLength(1);
+    steps.concurrentUseRejected = true;
+    // The race winner's session went to this test's own HTTP client, not the
+    // browser, so the browser signs in again before it opens settings.
+    stage('concurrent-browser-sign-in');
+    expect(await passwordSignIn(page, concurrentEmail, concurrentPassword))
+      .toBe('pending');
+    await completeWithTotp(
+      page, await freshCode(page, concurrentSecret, concurrentTracker),
+    );
+    await expectSignedInApp(page);
+
+    // 14. A fourth fictional account carries replacement against its own
+    //     enrollment. Replace's admitted attempts: 1 (enrollment) + 1
+    //     (reauth) + 1 (replacement completion) + 1 (old-secret rejection)
+    //     + 1 (new-secret login) = 5.
+    role('replace');
+    stage('replace-account');
+    await signOut(page);
+    await registerVerified(
+      page,
+      capture,
+      replaceEmail,
+      replacePassword,
+      'TOTP Replace Proof',
+    );
+    expect(await passwordSignIn(page, replaceEmail, replacePassword))
+      .toBe('session');
+    const replaceEnrolled = await enrollFirstTotp(
+      page, replacePassword, replaceTracker,
+    );
+    let replaceSecret = replaceEnrolled.secret;
+    replaceCleanupCode = replaceEnrolled.codes[9] as string;
+
+    stage('replace-settings');
+    await gotoHydrated(page, '/app/settings/sessions');
+    stage('replace-click');
+    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
+    await page.getByTestId('totp-setup-replace').click();
+    stage('replace-reauth-open');
+    await expect(page.getByTestId('second-factor-reauth-password'))
+      .toBeVisible();
+    stage('replace-reauth-submit');
+    await reauthenticateEnrolled(
+      page, replacePassword, replaceSecret, replaceTracker,
+    );
+    // The replace notice lives in the setup dialog, which opens only after
+    // the retried start succeeds.
+    stage('replace-start');
+    const oldReplaceSecret = replaceSecret;
+    replaceSecret = await startTotpSetup(page);
+    stage('replace-notice');
+    await expect(page.getByTestId('totp-replace-notice')).toBeVisible();
+    expect(replaceSecret).not.toBe(oldReplaceSecret);
+    stage('replace-code');
+    expect(await submitSetupCode(
+      page, await freshCode(page, replaceSecret, replaceTracker),
+    )).toBe(200);
+    stage('replace-complete');
+    await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
+    await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
+    steps.replaced = true;
+
+    stage('replace-old-secret-rejected');
+    await signOut(page);
+    expect(await passwordSignIn(page, replaceEmail, replacePassword))
+      .toBe('pending');
+    expect(await submitPendingTotpCode(
+      page, codeNow(oldReplaceSecret, systemClock()),
+    )).toBe(401);
+    stage('replace-new-secret-login');
+    await completeWithTotp(
+      page, await freshCode(page, replaceSecret, replaceTracker),
+    );
+    await expectSignedInApp(page);
+
+    // 15. A fifth fictional account carries the wrong-epoch fixture against
+    //     its own enrollment. Epoch's admitted attempts: 1 (enrollment) + 1
+    //     (reauth) + 1 (bump completion) + 1 (stale attempt) = 4.
+    role('epoch');
+    stage('epoch-account');
+    await signOut(page);
+    await registerVerified(
+      page,
+      capture,
+      epochEmail,
+      epochPassword,
+      'TOTP Epoch Proof',
+    );
+    expect(await passwordSignIn(page, epochEmail, epochPassword))
+      .toBe('session');
+    const epochEnrolled = await enrollFirstTotp(
+      page, epochPassword, epochTracker,
+    );
+    let epochSecret = epochEnrolled.secret;
+    epochCleanupCode = epochEnrolled.codes[9] as string;
+
+    stage('wrong-epoch-setup');
+    const staleContext = await browser.newContext();
+    extraContexts.push(staleContext);
+    await setLocale(staleContext, 'en');
+    await installExternalRequestFirewall(staleContext, counters);
+    const stalePage = await staleContext.newPage();
+    attach(stalePage);
+    expect(await passwordSignIn(stalePage, epochEmail, epochPassword))
+      .toBe('pending');
+    const staleCookie = await pendingCookieHeader(staleContext);
+    const staleCsrf = await pendingCSRFToken(stalePage);
+
+    stage('wrong-epoch-bump');
+    await gotoHydrated(page, '/app/settings/sessions');
+    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
+    await page.getByTestId('totp-setup-replace').click();
+    await reauthenticateEnrolled(page, epochPassword, epochSecret, epochTracker);
+    const bumpSecret = await startTotpSetup(page);
+    expect(await submitSetupCode(
+      page, await freshCode(page, bumpSecret, epochTracker),
+    )).toBe(200);
+    await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
+    epochSecret = bumpSecret;
+
+    stage('wrong-epoch-assert');
+    const staleAttempt = await trustedPost(
+      ca,
+      '/api/v1/auth/second-factor/totp/verify',
+      {
+        'Content-Type': 'application/json',
+        'Cookie': staleCookie,
+        'Origin': ORIGIN,
+        'X-CSRF-Token': staleCsrf,
+      },
+      JSON.stringify({ code: codeNow(epochSecret, systemClock()) }),
+    );
+    expect(staleAttempt.status).toBe(401);
+    steps.wrongEpochRejected = true;
+    await staleContext.close();
+
+    // 16. A sixth fictional account carries both locales and the
+    //     password-reset preservation case against its own enrollment.
+    //     Locale's admitted attempts: 1 (enrollment) + 2 (locales) + 1
+    //     (post-reset completion) = 4.
+    role('locale');
+    stage('locale-account');
+    await signOut(page);
+    await registerVerified(
+      page,
+      capture,
+      localeEmail,
+      localePassword,
+      'TOTP Locale Proof',
+    );
+    expect(await passwordSignIn(page, localeEmail, localePassword))
+      .toBe('session');
+    const localeEnrolled = await enrollFirstTotp(
+      page, localePassword, localeTracker,
+    );
+    const localeSecret = localeEnrolled.secret;
+    localeCleanupCode = localeEnrolled.codes[9] as string;
+
+    stage('locales');
+    await signOut(page);
+    await provePendingLocale(page, context, {
+      code: await freshCode(page, localeSecret, localeTracker),
+      email: localeEmail,
+      locale: 'vi',
+      password: localePassword,
+      viewport: PHONE,
+    });
+    await provePendingLocale(page, context, {
+      code: await freshCode(page, localeSecret, localeTracker),
+      email: localeEmail,
+      locale: 'en',
+      password: localePassword,
+      viewport: DESKTOP,
+    });
+    steps.locales = true;
+    steps.viewports = true;
+
+    // 17. A password reset revokes sessions but preserves enforcement.
+    stage('password-reset');
+    const resetPassword = runPassword();
+    await gotoHydrated(page, '/forgot-password');
+    await page.getByLabel('Email').fill(localeEmail);
+    await page.getByRole('button', { name: 'Send reset link' }).click();
+    await expect(page.getByTestId('forgot-success')).toBeVisible();
+    const resetToken = await capture.waitForToken('reset', localeEmail);
+    await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToken}`);
+    await page.getByLabel('New password', { exact: true }).fill(resetPassword);
+    await page.getByLabel('Confirm password', { exact: true })
+      .fill(resetPassword);
+    await page.getByRole('button', { name: 'Reset password' }).click();
+    await expect(page.getByTestId('reset-success')).toBeVisible();
+    localeFinalPassword = resetPassword;
+    expect(await passwordSignIn(page, localeEmail, resetPassword))
+      .toBe('pending');
+    steps.resetPreservesEnforcement = true;
+    await completeWithTotp(page, await freshCode(page, localeSecret, localeTracker));
+    await expectSignedInApp(page);
+
+    // 18. A seventh fictional account carries the recovery-completion case,
+    //     which needs a still-enrolled TOTP credential to remain. Recovery's
+    //     admitted attempts: 1 (enrollment) + 1 (recovery completion) = 2.
     role('recovery');
     stage('recovery-account');
     await signOut(page);
@@ -1575,7 +1741,9 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     );
     expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
       .toBe('session');
-    const recoveryEnrolled = await enrollFirstTotp(page, recoveryPassword);
+    const recoveryEnrolled = await enrollFirstTotp(
+      page, recoveryPassword, recoveryTracker,
+    );
     recoveryCleanupCode = recoveryEnrolled.codes[9] as string;
 
     stage('recovery-completion');
@@ -1586,8 +1754,9 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await expectSignedInApp(page);
     steps.recoveryCompletion = true;
 
-    // 18. A third fictional account carries attempt exhaustion, whose five
+    // 19. An eighth fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
+    //     Attempts' admitted attempts: 1 (enrollment) + 5 (exhaustion) = 6.
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
@@ -1600,7 +1769,9 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     );
     expect(await passwordSignIn(page, attemptsEmail, attemptsPassword))
       .toBe('session');
-    const attemptsEnrolled = await enrollFirstTotp(page, attemptsPassword);
+    const attemptsEnrolled = await enrollFirstTotp(
+      page, attemptsPassword, attemptsTracker,
+    );
     attemptsCleanupCode = attemptsEnrolled.codes[9] as string;
 
     stage('attempts-exhausted');
@@ -1632,8 +1803,33 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     const removed = [
       await deleteAccount(page, {
         email: primaryEmail,
-        password: primaryFinalPassword,
+        password: primaryPassword,
         recoveryCode: primaryCleanupCode,
+      }),
+      await deleteAccount(page, {
+        email: replayEmail,
+        password: replayPassword,
+        recoveryCode: replayCleanupCode,
+      }),
+      await deleteAccount(page, {
+        email: concurrentEmail,
+        password: concurrentPassword,
+        recoveryCode: concurrentCleanupCode,
+      }),
+      await deleteAccount(page, {
+        email: replaceEmail,
+        password: replacePassword,
+        recoveryCode: replaceCleanupCode,
+      }),
+      await deleteAccount(page, {
+        email: epochEmail,
+        password: epochPassword,
+        recoveryCode: epochCleanupCode,
+      }),
+      await deleteAccount(page, {
+        email: localeEmail,
+        password: localeFinalPassword,
+        recoveryCode: localeCleanupCode,
       }),
       await deleteAccount(page, {
         email: recoveryEmail,

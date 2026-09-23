@@ -56,8 +56,9 @@ apply or redeploy then fails, the fence stays raised; fix forward with the same
 or a newer capable tag.
 
 Run the second production proof (mode `totp-prod-enabled`): first enrollment,
-pending login, replacement, shared recovery, passkey coexistence, both locales,
-and removal.
+pending login, replacement (without the old-secret rejection, which the hosted
+proof covers), shared recovery, one pending row proving passkey coexistence
+across both locales and completed with TOTP, and removal.
 
 ## Key rotation
 
@@ -152,7 +153,14 @@ browser by hand.
   disabled enrollment.
 - After activation and the flag-on redeploy, run mode `totp-prod-enabled`, using
   only the release's named fictional account: first enrollment, pending login,
-  replacement, shared recovery, passkey coexistence, both locales, and removal.
+  replacement (without the old-secret rejection), shared recovery, one pending
+  row proving passkey coexistence across both locales and completed with TOTP,
+  and removal. The hosted proof (`totp.spec.ts`) covers replay, concurrency,
+  step skew, and old-secret rejection; production has only one account, so
+  `totp-prod-enabled` stays within its per-account pending budget
+  (`secondFactorAttemptAccountLimit`,
+  apps/server/internal/auth/second_factor_handlers.go) by spending at most 8
+  admitted attempts.
 
 Each proof reads the fictional account from the owner-only ignored file
 `.dev/v0.4.7/production-input/account.env`, mounted read-only, computes TOTP
