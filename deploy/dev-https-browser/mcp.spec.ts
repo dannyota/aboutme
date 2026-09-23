@@ -5,6 +5,7 @@ import { request as httpsRequest, type IncomingHttpHeaders } from 'node:https';
 
 import { deleteRecordedResume } from './editor-fixtures';
 import {
+  type DiagnosticCounters,
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
   isUnexpectedConsoleError,
@@ -68,6 +69,43 @@ function object(value: unknown): Record<string, unknown> | null {
 
 function stage(name: string): void {
   console.log(`mcp-stage:${name}`);
+}
+
+// The native stack serves Nuxt in development mode, which compiles a route on
+// its first visit. On a fresh server, such as a hosted runner, the editor and
+// settings routes can hydrate later than the default five-second expect
+// timeout. A failure adds one fixed stage naming the failure and route class
+// only, never the URL, page text, or error.
+const FIRST_VISIT_HYDRATION_MS = 40_000;
+
+function routeClass(page: Page): string {
+  const path = new URL(page.url()).pathname;
+  if (/^\/app\/resumes\/[0-9a-f-]{36}$/i.test(path)) return 'editor';
+  if (path === '/app/settings/sessions') return 'settings';
+  if (path === '/login') return 'login';
+  return 'other';
+}
+
+async function waitForFirstVisitHydration(
+  page: Page,
+  name: string,
+  counters: DiagnosticCounters,
+): Promise<void> {
+  const pageErrors = counters.pageErrors;
+  try {
+    await expect.poll(
+      () => page.evaluate(() => Boolean(
+        (document.getElementById('__nuxt') as HTMLElement & {
+          __vue_app__?: unknown;
+        } | null)?.__vue_app__,
+      )),
+      { timeout: FIRST_VISIT_HYDRATION_MS },
+    ).toBe(true);
+  } catch (error) {
+    const cause = counters.pageErrors > pageErrors ? 'page-error' : 'timeout';
+    stage(`${name}-${cause}-at-${routeClass(page)}`);
+    throw error;
+  }
 }
 
 function trustedRequest(
@@ -482,7 +520,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     const editor = await page.goto(`/app/resumes/${resumeID}`);
     expect(editor?.status()).toBe(200);
     stage('hydrate-editor');
-    await waitForHydration(page);
+    await waitForFirstVisitHydration(page, 'hydrate-editor', counters);
     stage('verify-editor-content');
     await page
       .getByRole('navigation', { name: 'Resume outline' })
@@ -498,7 +536,7 @@ test('proves MCP agent access over trusted HTTPS', async ({
     stage('revoke-grant');
     const settings = await page.goto('/app/settings/sessions');
     expect(settings?.status()).toBe(200);
-    await waitForHydration(page);
+    await waitForFirstVisitHydration(page, 'revoke-grant-hydration', counters);
     await expect(
       page.getByRole('heading', { name: 'Signed-in devices' }),
     ).toBeVisible();

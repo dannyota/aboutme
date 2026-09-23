@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,8 @@ const (
 	accessTokenTTL     = time.Hour
 	refreshFamilyTTL   = 30 * 24 * time.Hour
 )
+
+const rawResourceFormKey = "\x00oauthsrv_raw_resource"
 
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
@@ -55,9 +58,13 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	form, err := decodeOAuthForm(r, map[string]bool{
 		"grant_type": true, "code": true, "redirect_uri": true, "client_id": true,
-		"code_verifier": true, "refresh_token": true,
+		"code_verifier": true, "refresh_token": true, "resource": true,
 	})
 	if err != nil {
+		if errors.Is(err, errOAuthResourceParse) {
+			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_grant", "The request is invalid.")
+			return
+		}
 		writeOAuthError(w, http.StatusBadRequest)
 		return
 	}
@@ -81,8 +88,12 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	var response tokenResponse
 	switch form.Get("grant_type") {
 	case "authorization_code":
-		if !exactFormKeys(form, "grant_type", "code", "redirect_uri", "client_id", "code_verifier") {
+		if !exactAuthorizationCodeForm(form) {
 			writeOAuthError(w, http.StatusBadRequest)
+			return
+		}
+		if !s.canonicalResource(form, form.Get(rawResourceFormKey)) {
+			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_grant", "The request is invalid.")
 			return
 		}
 		response, err = s.exchangeAuthorizationCode(r.Context(), form)
@@ -142,6 +153,7 @@ func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.
 var (
 	errOAuthInvalidClient = errors.New("oauth invalid client")
 	errOAuthInvalidGrant  = errors.New("oauth invalid grant")
+	errOAuthResourceParse = errors.New("oauth resource parse")
 )
 
 func decodeOAuthForm(r *http.Request, allowed map[string]bool) (url.Values, error) {
@@ -155,22 +167,69 @@ func decodeOAuthForm(r *http.Request, allowed map[string]bool) (url.Values, erro
 	}
 	form, err := url.ParseQuery(string(raw))
 	if err != nil {
+		if malformedAuthorizationCodeResource(form, string(raw)) {
+			return nil, errOAuthResourceParse
+		}
 		return nil, errors.New("oauth form parse")
 	}
 	for key, values := range form {
-		if !allowed[key] || len(values) != 1 {
+		if !allowed[key] || (key != "resource" && len(values) != 1) {
 			return nil, errors.New("oauth form keys")
 		}
+	}
+	if _, ok := form["resource"]; ok {
+		form[rawResourceFormKey] = []string{string(raw)}
 	}
 	return form, nil
 }
 
+func malformedAuthorizationCodeResource(form url.Values, raw string) bool {
+	fields := strings.Split(raw, "&")
+	if len(fields) != 6 {
+		return false
+	}
+	resources := 0
+	for _, field := range fields {
+		if strings.HasPrefix(field, "resource=") {
+			resources++
+		}
+	}
+	if resources != 1 || len(form) != 5 || form.Get("grant_type") != "authorization_code" {
+		return false
+	}
+	return exactFormKeys(form, "grant_type", "code", "redirect_uri", "client_id", "code_verifier")
+}
+
 func exactFormKeys(form url.Values, keys ...string) bool {
-	if len(form) != len(keys) {
+	count := len(form)
+	if _, ok := form[rawResourceFormKey]; ok {
+		count--
+	}
+	if count != len(keys) {
 		return false
 	}
 	for _, key := range keys {
 		if _, ok := form[key]; !ok || form.Get(key) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+func exactAuthorizationCodeForm(form url.Values) bool {
+	keys := []string{"grant_type", "code", "redirect_uri", "client_id", "code_verifier"}
+	if _, ok := form["resource"]; ok {
+		keys = append(keys, "resource")
+	}
+	count := len(form)
+	if _, ok := form[rawResourceFormKey]; ok {
+		count--
+	}
+	if count != len(keys) {
+		return false
+	}
+	for _, key := range keys[:5] {
+		if len(form[key]) != 1 || form.Get(key) == "" {
 			return false
 		}
 	}

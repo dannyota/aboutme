@@ -8,8 +8,7 @@ readonly IMAGE_NSS='2:3.98-1ubuntu0.2'
 readonly IMAGE_ENTRYPOINT='["/opt/aboutme-auth/run.sh","--inside"]'
 readonly MCP_CLIENT_NAME_RE='^aboutme MCP UAT [0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
 
-# Spec sources are mounted read-only per run, never baked into the image.
-# Both sides validate this exact set; scripts/dev-https-check.sh stages it.
+# Mounted read-only per run; both sides validate this exact set.
 readonly -a SPEC_SOURCES=(
   playwright.config.ts
   auth.spec.ts
@@ -18,6 +17,7 @@ readonly -a SPEC_SOURCES=(
   public.spec.ts
   password-auth.spec.ts
   mcp.spec.ts
+  mcp-sdk.spec.ts
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
@@ -113,6 +113,26 @@ validate_mode_input_files() {
   esac
 }
 
+validate_mcp_credential_file() {
+  # <path> <expected-owner-uid>; structural only, never opens or reads it.
+  local path=$1 uid=$2
+  [ -f "$path" ] && [ ! -L "$path" ] ||
+    fail 'MCP credential file is not a regular file'
+  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'MCP credential file owner mismatch'
+  [ "$(stat -c %a "$path")" = 600 ] || fail 'MCP credential file mode must be 0600'
+}
+
+validate_mcp_browser_dir() {
+  # validate_mcp_browser_dir <directory> <expected-owner-uid>
+  local dir=$1 uid=$2 entries
+  [ -d "$dir" ] && [ ! -L "$dir" ] ||
+    fail 'MCP browser directory is not a real directory'
+  [ "$(stat -c %u "$dir")" = "$uid" ] || fail 'MCP browser directory owner mismatch'
+  [ "$(stat -c %a "$dir")" = 700 ] || fail 'MCP browser directory mode must be 0700'
+  entries=$(find "$dir" -mindepth 1 -maxdepth 1 -print -quit)
+  [ -z "$entries" ] || fail 'MCP browser directory must start empty'
+}
+
 mount_has_option() {
   local options=$1 expected=$2
   case ",$options," in
@@ -122,12 +142,18 @@ mount_has_option() {
 }
 
 inside_container() {
-  [ "$#" -le 1 ] || fail 'container entrypoint accepts at most one mode'
-  local mode=${1:-auth}
+  [ "$#" -le 2 ] || fail 'container entrypoint accepts at most a mode and a workflow mode'
+  local mode=${1:-auth} workflow_mode=${2:-}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | mcp-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, or mcp-sdk' ;;
   esac
+  if [ "$mode" = mcp-sdk ]; then
+    [[ $workflow_mode = local || $workflow_mode = production ]] ||
+      fail 'mcp-sdk mode requires workflow mode local or production'
+  else
+    [ -z "$workflow_mode" ] || fail 'workflow mode is only accepted for mcp-sdk mode'
+  fi
   [ "$(id -u)" -ne 0 ] || fail 'browser must run as non-root'
 
   local root_target root_options input_target input_options
@@ -157,6 +183,10 @@ inside_container() {
   mount_has_option "$spec_options" ro || fail 'spec input is not read-only'
   mount_has_option "$spec_options" rw && fail 'spec input is writable'
 
+  [ -d /uat-input ] && [ ! -L /uat-input ] || fail 'invalid CA input directory'
+  [ "$(stat -c %u /uat-input)" = "$uid" ] || fail 'CA input owner mismatch'
+  [ "$(stat -c %a /uat-input)" = 700 ] || fail 'CA input mode must be 0700'
+
   evidence_target=$(findmnt -n -o TARGET --target /evidence) ||
     fail 'evidence output is not mounted'
   evidence_options=$(findmnt -n -o OPTIONS --target /evidence) ||
@@ -165,14 +195,35 @@ inside_container() {
     fail 'evidence output is not a dedicated mount'
   mount_has_option "$evidence_options" rw || fail 'evidence output is not writable'
   mount_has_option "$evidence_options" ro && fail 'evidence output is read-only'
-
-  [ -d /uat-input ] && [ ! -L /uat-input ] || fail 'invalid CA input directory'
   [ -d /evidence ] && [ ! -L /evidence ] || fail 'invalid evidence directory'
-  [ "$(stat -c %u /uat-input)" = "$uid" ] || fail 'CA input owner mismatch'
-  [ "$(stat -c %a /uat-input)" = 700 ] || fail 'CA input mode must be 0700'
   [ "$(stat -c %u /evidence)" = "$uid" ] || fail 'evidence owner mismatch'
   [ "$(stat -c %a /evidence)" = 700 ] || fail 'evidence mode must be 0700'
   [ -w /evidence ] || fail 'evidence output is not writable'
+  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
+  [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
+
+  if [ "$mode" = mcp-sdk ]; then
+    local credential_target credential_options browser_target browser_options
+    credential_target=$(findmnt -n -o TARGET --target /mcp-credentials/login.env) ||
+      fail 'MCP credential file is not mounted'
+    credential_options=$(findmnt -n -o OPTIONS --target /mcp-credentials/login.env) ||
+      fail 'cannot inspect MCP credential file options'
+    [ "$credential_target" = /mcp-credentials/login.env ] ||
+      fail 'MCP credential file is not a dedicated mount'
+    mount_has_option "$credential_options" ro || fail 'MCP credential file is not read-only'
+    mount_has_option "$credential_options" rw && fail 'MCP credential file is writable'
+    validate_mcp_credential_file /mcp-credentials/login.env "$uid"
+
+    browser_target=$(findmnt -n -o TARGET --target /mcp-browser) ||
+      fail 'MCP browser directory is not mounted'
+    browser_options=$(findmnt -n -o OPTIONS --target /mcp-browser) ||
+      fail 'cannot inspect MCP browser directory options'
+    [ "$browser_target" = /mcp-browser ] ||
+      fail 'MCP browser directory is not a dedicated mount'
+    mount_has_option "$browser_options" rw || fail 'MCP browser directory is not writable'
+    mount_has_option "$browser_options" ro && fail 'MCP browser directory is read-only'
+    validate_mcp_browser_dir /mcp-browser "$uid"
+  fi
 
   input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
   [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
@@ -184,8 +235,6 @@ inside_container() {
   [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
     fail 'Caddy root mode must be 0600'
   validate_mode_input_files "$mode" /uat-input "$uid"
-  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -print -quit)
-  [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
 
   validate_spec_dir /uat-spec "$uid"
 
@@ -281,6 +330,11 @@ inside_container() {
     proof_name='disabled passkey enrollment'
     spec=second-factor.spec.ts
     ;;
+  mcp-sdk)
+    # No fixed /evidence schema: /mcp-browser carries the result instead.
+    proof_name='MCP SDK owner workflow browser handoff'
+    spec=mcp-sdk.spec.ts
+    ;;
   esac
   # Stage the mounted specs beside a node_modules symlink so module
   # resolution finds the image's pinned dependencies. The image package.json
@@ -298,7 +352,11 @@ inside_container() {
 
   local log_file=/tmp/playwright-uat.log status=0
   cd /tmp/spec
-  ABOUTME_BROWSER_MODE=$mode \
+  local -a mode_env=(ABOUTME_BROWSER_MODE="$mode")
+  if [ "$mode" = mcp-sdk ]; then
+    mode_env+=(ABOUTME_MCP_BROWSER_DIR=/mcp-browser ABOUTME_MCP_WORKFLOW_MODE="$workflow_mode")
+  fi
+  env "${mode_env[@]}" \
     /opt/aboutme-auth/node_modules/.bin/playwright test \
     --config playwright.config.ts "$spec" \
     >"$log_file" 2>&1 || status=$?
@@ -306,7 +364,7 @@ inside_container() {
     if [ "$mode" = public ] || [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
       [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ] ||
       [ "$mode" = sample-start ] || [ "$mode" = second-factor ] ||
-      [ "$mode" = second-factor-disabled ]; then
+      [ "$mode" = second-factor-disabled ] || [ "$mode" = mcp-sdk ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
@@ -317,6 +375,11 @@ inside_container() {
       fi
     fi
     fail "$proof_name proof failed; volatile browser output was withheld"
+  fi
+
+  if [ "$mode" = mcp-sdk ]; then
+    printf 'dev-https-browser %s proof: PASS\n' "$proof_name"
+    return 0
   fi
 
   evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n')
@@ -332,249 +395,7 @@ inside_container() {
   [ "$(stat -c %s "$evidence_path")" -le "$evidence_limit" ] ||
     fail 'browser evidence exceeds its bound'
 
-  if ! node --input-type=module - "$mode" "$evidence_path" <<'VERIFY_EVIDENCE'
-import { readFile } from 'node:fs/promises';
-
-const mode = process.argv[2];
-const path = process.argv[3];
-const actual = JSON.parse(await readFile(path, 'utf8'));
-const common = {
-  errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
-  origin: 'https://localhost:20443',
-};
-const expected = mode === 'auth' ? {
-  ...common,
-  scenario: 'google-authentication',
-  schemaVersion: 1,
-  steps: Object.fromEntries(
-    Array.from({ length: 10 }, (_, index) => [String(index + 1), true]),
-  ),
-} : mode === 'transport' ? {
-  ...common,
-  scenario: 'authenticated-transport',
-  schemaVersion: 1,
-  steps: { auth: true, cache: true, etag: true, ifMatch: true, teardown: true },
-} : mode === 'public' ? {
-  schemaVersion: 1,
-  scenario: 'public-resume-hydration',
-  origin: 'https://localhost:20443',
-  errors: { console: 0, externalRequest: 0, page: 0 },
-  steps: { published: true, ssr: true, hydrated: true },
-} : mode === 'password-auth' ? {
-  ...common,
-  scenario: 'password-authentication',
-  schemaVersion: 1,
-  steps: {
-    differentEmailLink: true,
-    newPasswordLogin: true,
-    oldPasswordRejected: true,
-    oldSessionsRevoked: true,
-    passwordAdded: true,
-    passwordLogin: true,
-    providerOnlyLogin: true,
-    registerAccepted: true,
-    reset: true,
-    resetReplayRejected: true,
-    verifiedWithoutSession: true,
-  },
-} : mode === 'mcp' ? {
-  ...common,
-  scenario: 'mcp-agent-access',
-  schemaVersion: 1,
-  steps: {
-    clientRegistered: true,
-    authorizeRedirected: true,
-    consentApproved: true,
-    tokenExchanged: true,
-    toolsListed: true,
-    resumeCreated: true,
-    entryUpserted: true,
-    editorVisible: true,
-    grantRevoked: true,
-    revokedRejected: true,
-  },
-} : mode === 'privacy' ? {
-  ...common,
-  scenario: 'account-privacy',
-  schemaVersion: 1,
-  steps: {
-    auth: true,
-    export: true,
-    cancel: true,
-    reauth: true,
-    explicitConfirmation: true,
-    deletion: true,
-    sessionRevoked: true,
-    grantRevoked: true,
-    publicRevoked: true,
-    tombstone: true,
-    cleanup: true,
-  },
-} : mode === 'exports' ? {
-  ...common,
-  scenario: 'resume-exports',
-  schemaVersion: 1,
-  steps: {
-    auth: true,
-    ownerSaveFirst: true,
-    ownerDownload: true,
-    ownerPrivacy: true,
-    publicPDF: true,
-    shareImage: true,
-    conditional: true,
-    downloadGate: true,
-    discoveryIndependent: true,
-    revocation: true,
-    cleanup: true,
-  },
-} : mode === 'publish' ? {
-  ...common,
-  scenario: 'native-https-publish',
-  schemaVersion: 1,
-  steps: {
-    auth: true,
-    complete: true,
-    published: true,
-    saveFirst: true,
-    headers: true,
-    noindex: true,
-    discovery: true,
-    unpublish: true,
-    revocation: true,
-    cleanup: true,
-    signOut: true,
-    accessibility: true,
-    keyboard: true,
-    longInvalidLayout: true,
-    publicRealtime: true,
-    ownerRealtime: true,
-    scroll: true,
-  },
-  statuses: {
-    publish: 200,
-    publicPrivate: 200,
-    publicDiscoverable: 200,
-    unpublish: 200,
-    revoked: 404,
-  },
-  elapsedMs: { revocation: Number.isInteger(actual.elapsedMs?.revocation)
-    && actual.elapsedMs.revocation >= 0
-    && actual.elapsedMs.revocation <= 5000 ? actual.elapsedMs.revocation : -1 },
-  headers: {
-    publishContentType: true,
-    publishCSRF: true,
-    publishIfMatch: true,
-    publishIdempotency: true,
-    publishSchema: true,
-    unpublishContentType: true,
-    unpublishCSRF: true,
-    unpublishIfMatch: true,
-    unpublishIdempotency: true,
-    unpublishSchema: true,
-  },
-} : mode === 'entry' ? {
-  ...common,
-  scenario: 'entry-flow',
-  schemaVersion: 1,
-  steps: {
-    landing: true,
-    providerLinks: true,
-    resumeList: true,
-    signIn: true,
-    signOut: true,
-    signedInShell: true,
-  },
-} : mode === 'second-factor' ? {
-  ...common,
-  scenario: 'passkey-second-factor',
-  schemaVersion: 1,
-  steps: {
-    agentGranted: true,
-    agentRevoked: true,
-    attemptsExhausted: true,
-    ceremonyReplayRejected: true,
-    cleanup: true,
-    concurrentCompletion: true,
-    enrolled: true,
-    finalRemoved: true,
-    locales: true,
-    oneRemoved: true,
-    otherSessionRevoked: true,
-    otherSessionStarted: true,
-    passkeyCompletion: true,
-    passwordPending: true,
-    providerAccount: true,
-    providerPending: true,
-    reauthPending: true,
-    reauthRequired: true,
-    recoveryCompletion: true,
-    recoveryRegenerated: true,
-    recoveryRevealedOnce: true,
-    recoveryReuseRejected: true,
-    resetPreservesEnforcement: true,
-    secondPasskeyAdded: true,
-    staleEpochRejected: true,
-    userVerificationRequired: true,
-    viewports: true,
-    wrongBindingRejected: true,
-    wrongOriginRejected: true,
-  },
-} : mode === 'second-factor-disabled' ? {
-  ...common,
-  scenario: 'passkey-enrollment-disabled',
-  schemaVersion: 1,
-  steps: {
-    assertionRouteRegistered: true,
-    capabilityClosed: true,
-    cleanup: true,
-    completionNotFound: true,
-    enrollmentHidden: true,
-    locales: true,
-    optionsNotFound: true,
-    recoveryRouteRegistered: true,
-    removalRouteRegistered: true,
-    stateAvailable: true,
-    unregisteredRouteMatches: true,
-    viewports: true,
-  },
-} : mode === 'sample-start' ? {
-  ...common,
-  scenario: 'sample-start',
-  schemaVersion: 1,
-  steps: {
-    capHidesCreate: true,
-    created: true,
-    editorOpen: true,
-    nextAfterVerify: true,
-    nextKept: true,
-    registered: true,
-    reloadCreatedNothing: true,
-    signedIn: true,
-    verified: true,
-  },
-} : {
-  schemaVersion: 1,
-  scenario: 'authenticated-editor',
-  origin: 'https://localhost:20443',
-  errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
-  steps: {
-    auth: true,
-    cache: true,
-    etag: true,
-    ifMatch: true,
-    autosave: true,
-    conflict: true,
-    template: true,
-    photo: true,
-    session: true,
-    persistence: true,
-    accessibility: true,
-    teardown: true,
-  },
-};
-if (JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(1);
-VERIFY_EVIDENCE
-  then
+  if ! node /opt/aboutme-auth/verify-evidence.mjs "$mode" "$evidence_path"; then
     fail 'browser evidence has invalid schema'
   fi
 
@@ -582,29 +403,60 @@ VERIFY_EVIDENCE
 }
 
 host_run() {
-  [ "$#" -ge 4 ] && [ "$#" -le 5 ] ||
-    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <empty-evidence-directory> [auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|second-factor|second-factor-disabled]'
+  [ "$#" -ge 4 ] && [ "$#" -le 9 ] ||
+    fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <evidence-directory> [mode] [workflow-mode] [MCP-browser-directory] [MCP-credential-file] [MCP-container-name]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
+  local workflow_mode=${6:-} browser_dir=${7:-} credential=${8:-} container_name=${9:-}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | mcp-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, or mcp-sdk' ;;
   esac
-  local uid gid input_entries evidence_entries
+  if [ "$mode" = mcp-sdk ]; then
+    [[ $workflow_mode = local || $workflow_mode = production ]] ||
+      fail 'mcp-sdk mode requires workflow mode local or production'
+    [ -n "$browser_dir" ] || fail 'mcp-sdk mode requires an MCP browser directory'
+    [ -n "$credential" ] || fail 'mcp-sdk mode requires an MCP credential file'
+    [[ $container_name =~ ^aboutme-mcp-sdk-[0-9a-f]{32}$ ]] ||
+      fail 'mcp-sdk mode requires a container name matching aboutme-mcp-sdk-<32 lowercase hex characters>'
+  else
+    [ -z "$workflow_mode" ] && [ -z "$browser_dir" ] && [ -z "$credential" ] &&
+      [ -z "$container_name" ] ||
+      fail 'workflow mode, MCP browser directory, MCP credential file, and MCP container name are only accepted for mcp-sdk mode'
+  fi
+  local uid gid input_entries evidence_entries i j
   local inspect inspected_id image_user entrypoint contract base playwright nss extra
+  local -a dir_paths=("$input" "$spec_input" "$evidence")
+  [ "$mode" = mcp-sdk ] && dir_paths+=("$browser_dir")
   [[ $image =~ ^sha256:[0-9a-f]{64}$ ]] ||
     fail 'image must be an immutable sha256 ID'
-  for path in "$input" "$spec_input" "$evidence"; do
+  for path in "${dir_paths[@]}"; do
     [[ $path = /* ]] || fail 'mount paths must be absolute'
     [[ $path != *$'\n'* && $path != *$'\r'* && $path != *$'\t'* ]] ||
       fail 'mount paths contain control characters'
     [ -d "$path" ] && [ ! -L "$path" ] || fail 'mount path is not a real directory'
   done
+  if [ "$mode" = mcp-sdk ]; then
+    [[ $credential = /* ]] || fail 'mount paths must be absolute'
+    [[ $credential != *$'\n'* && $credential != *$'\r'* && $credential != *$'\t'* ]] ||
+      fail 'mount paths contain control characters'
+  fi
   input=$(realpath -e -- "$input") || fail 'cannot resolve CA input directory'
   spec_input=$(realpath -e -- "$spec_input") ||
     fail 'cannot resolve spec input directory'
   evidence=$(realpath -e -- "$evidence") || fail 'cannot resolve evidence directory'
-  [ "$input" != "$evidence" ] && [ "$spec_input" != "$evidence" ] &&
-    [ "$spec_input" != "$input" ] || fail 'mount directories must differ'
+  dir_paths=("$input" "$spec_input" "$evidence")
+  if [ "$mode" = mcp-sdk ]; then
+    browser_dir=$(realpath -e -- "$browser_dir") ||
+      fail 'cannot resolve MCP browser directory'
+    credential=$(realpath -e -- "$credential") ||
+      fail 'cannot resolve MCP credential file'
+    dir_paths+=("$browser_dir" "$credential")
+  fi
+  for ((i = 0; i < ${#dir_paths[@]}; i++)); do
+    for ((j = i + 1; j < ${#dir_paths[@]}; j++)); do
+      [ "${dir_paths[i]}" != "${dir_paths[j]}" ] || fail 'mount directories must differ'
+    done
+  done
 
   uid=$(id -u)
   gid=$(id -g)
@@ -614,6 +466,10 @@ host_run() {
   [ "$(stat -c %u "$evidence")" = "$uid" ] || fail 'evidence owner mismatch'
   [ "$(stat -c %a "$evidence")" = 700 ] || fail 'evidence mode must be 0700'
   [ -w "$evidence" ] || fail 'evidence output is not writable'
+  if [ "$mode" = mcp-sdk ]; then
+    validate_mcp_browser_dir "$browser_dir" "$uid"
+    validate_mcp_credential_file "$credential" "$uid"
+  fi
 
   input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
   [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
@@ -651,8 +507,23 @@ host_run() {
 
   local -a mode_args=()
   [ "$mode" = auth ] || mode_args=("$mode")
+  [ "$mode" = mcp-sdk ] && mode_args+=("$workflow_mode")
+  local -a mount_args=(
+    "--mount=type=bind,src=$input,dst=/uat-input,ro=true"
+    "--mount=type=bind,src=$spec_input,dst=/uat-spec,ro=true"
+    "--mount=type=bind,src=$evidence,dst=/evidence,rw=true"
+  )
+  if [ "$mode" = mcp-sdk ]; then
+    mount_args+=(
+      "--mount=type=bind,src=$credential,dst=/mcp-credentials/login.env,ro=true"
+      "--mount=type=bind,src=$browser_dir,dst=/mcp-browser,rw=true"
+    )
+  fi
+  local -a name_args=()
+  [ "$mode" = mcp-sdk ] && name_args=("--name=$container_name")
   exec podman run \
     --rm \
+    --init \
     --pull=never \
     --network=host \
     --read-only \
@@ -662,10 +533,12 @@ host_run() {
     --security-opt=no-new-privileges \
     --cap-drop=all \
     --cap-add=SYS_CHROOT \
+    --memory=2g \
+    --memory-swap=2g \
+    --cpus=2 \
     --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
-    --mount="type=bind,src=$input,dst=/uat-input,ro=true" \
-    --mount="type=bind,src=$spec_input,dst=/uat-spec,ro=true" \
-    --mount="type=bind,src=$evidence,dst=/evidence,rw=true" \
+    "${name_args[@]}" \
+    "${mount_args[@]}" \
     "$image" "${mode_args[@]}"
 }
 

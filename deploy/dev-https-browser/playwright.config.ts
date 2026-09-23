@@ -15,6 +15,7 @@ const browserModes = [
   'sample-start',
   'second-factor',
   'second-factor-disabled',
+  'mcp-sdk',
 ] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
@@ -31,9 +32,11 @@ const secondFactor = mode === 'second-factor'
 // test, so it gets its own budget. The disabled journey opens three pages and
 // makes a handful of calls, so it gets a much smaller one. Together with the
 // stack restart between them, both fit inside the hosted job's own limit.
+// mcp-sdk.spec.ts calls test.setTimeout with its own handoff and step
+// bounds once it runs; this default only covers setup before that call.
 const timeout = mode === 'second-factor'
   ? 1_200_000
-  : mode === 'second-factor-disabled'
+  : mode === 'second-factor-disabled' || mode === 'mcp-sdk'
     ? 420_000
     : mode === 'editor' || mode === 'public' || mode === 'password-auth'
       || mode === 'mcp' || mode === 'publish' || mode === 'exports'

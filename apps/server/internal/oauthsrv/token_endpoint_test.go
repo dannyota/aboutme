@@ -574,6 +574,76 @@ func (f codeFixture) exchange(t *testing.T, clientID uuid.UUID, redirect, verifi
 	return w
 }
 
+func TestToken_ResourceCompatibility(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		valid bool
+	}{
+		{"missing", "", true},
+		{"canonical", "&resource=https%3A%2F%2Faboutme.example", true},
+		{"empty", "&resource=", false},
+		{"duplicate", "&resource=https%3A%2F%2Faboutme.example&resource=https%3A%2F%2Faboutme.example", false},
+		{"encoded", "&resource=https%3A%2F%2Faboutme%2Eexample", false},
+		{"path", "&resource=https%3A%2F%2Faboutme.example%2Fmcp", false},
+		{"other origin", "&resource=https%3A%2F%2Fagent.example", false},
+		{"malformed", "&resource=%ZZ", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newCodeFixture(t, time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC))
+			body := "grant_type=authorization_code&code=" + f.code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + f.clientID.String() + "&code_verifier=" + f.verifier + tc.value
+			r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			f.s.HandleToken(w, r)
+			if tc.valid {
+				if w.Code != http.StatusOK {
+					t.Fatalf("valid resource response = %d %q", w.Code, w.Body.String())
+				}
+			} else {
+				if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+					t.Fatalf("invalid resource response = %d %q", w.Code, w.Body.String())
+				}
+				code, err := f.q.GetOAuthAuthorizationCodeByDigest(context.Background(), f.digest[:])
+				if err != nil || code.ConsumedAt != nil {
+					t.Fatal("invalid resource consumed code")
+				}
+				var tokens int
+				if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE client_id = $1", f.clientID).Scan(&tokens); err != nil || tokens != 0 {
+					t.Fatalf("invalid resource inserted tokens: %d %v", tokens, err)
+				}
+			}
+		})
+	}
+
+	f := newRefreshFixture(t, time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC), time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+f.raw+"&resource=https%3A%2F%2Faboutme.example"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	f.s.HandleToken(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("refresh resource response = %d", w.Code)
+	}
+
+	r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+f.raw+"&resource=%ZZ"))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w = httptest.NewRecorder()
+	f.s.HandleToken(w, r)
+	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_request","error_description":"The request is invalid."}` {
+		t.Fatalf("malformed refresh resource response = %d %q", w.Code, w.Body.String())
+	}
+
+	code := newCodeFixture(t, time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC))
+	body := "grant_type=authorization_code&code=" + code.code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + code.clientID.String() + "&code_verifier=" + code.verifier + "&resource=https%3A%2F%2Faboutme.example&extra=%ZZ"
+	r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w = httptest.NewRecorder()
+	f.s.HandleToken(w, r)
+	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_request","error_description":"The request is invalid."}` {
+		t.Fatalf("canonical resource with malformed extra response = %d %q", w.Code, w.Body.String())
+	}
+}
+
 // This catches validation branches that consume a code or insert tokens before
 // rejecting a bad binding, and pins the 60-second exclusive expiry boundary.
 func TestToken_CodeBindingAndExpiryMatrixDoesNotConsume(t *testing.T) {

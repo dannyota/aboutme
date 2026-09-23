@@ -21,6 +21,7 @@ readonly -a SPEC_FILES=(
   public.spec.ts
   password-auth.spec.ts
   mcp.spec.ts
+  mcp-sdk.spec.ts
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
@@ -31,7 +32,8 @@ readonly -a SPEC_FILES=(
   network-policy.ts
   harness-lib.ts
 )
-for file in Dockerfile package.json package-lock.json run.sh "${SPEC_FILES[@]}"; do
+for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+  "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
@@ -52,16 +54,20 @@ digest_output=$(node "$ROOT/scripts/generate-public-roots.mjs" --check) ||
 for file in \
   deploy/dev-https-browser/Dockerfile \
   deploy/dev-https-browser/package.json \
-  deploy/dev-https-browser/package-lock.json; do
+  deploy/dev-https-browser/package-lock.json \
+  deploy/dev-https-browser/run.sh; do
   grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
     fail "browser image hash does not include ${file##*/}"
 done
-grep -Eq '^[[:blank:]]*deploy/dev-https-browser/run\.sh$' "$ROOT/Makefile" ||
-  fail 'browser image hash does not include run.sh'
+grep -Eq '^[[:blank:]]*deploy/dev-https-browser/verify-evidence\.mjs$' "$ROOT/Makefile" ||
+  fail 'browser image hash does not include verify-evidence.mjs'
 for file in "${SPEC_FILES[@]}"; do
   if grep -Eq "^[[:blank:]]*deploy/dev-https-browser/${file//./\\.}" "$ROOT/Makefile"; then
     fail "spec source ${file} re-entered the image manifest hash"
   fi
+  # mcp-sdk.spec.ts is staged by scripts/mcp-owner-workflow.sh, not the
+  # shared multi-mode scripts/dev-https-check.sh entry point.
+  [ "$file" = mcp-sdk.spec.ts ] && continue
   grep -Eq "^[[:blank:]]*${file//./\\.}$" "$ROOT/scripts/dev-https-check.sh" ||
     fail "check script does not stage ${file}"
 done
@@ -80,7 +86,8 @@ readonly INPUT=$WORK/input
 readonly MCP_INPUT=$WORK/mcp-input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$MCP_INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json run.sh "${SPEC_FILES[@]}"; do
+for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+  "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
 readonly SPEC_INPUT=$WORK/spec-input
@@ -130,7 +137,8 @@ build)
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
   ! grep -Eq '\.spec\.ts|network-policy\.ts|editor-fixtures\.ts|harness-lib\.ts|playwright\.config\.ts' \
     "$context/Dockerfile"
-  grep -Fq 'COPY run.sh' "$context/Dockerfile"
+  grep -Fq 'COPY run.sh verify-evidence.mjs' "$context/Dockerfile"
+  [ -f "$context/verify-evidence.mjs" ] && [ ! -L "$context/verify-evidence.mjs" ]
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
 image)
@@ -161,7 +169,12 @@ run)
   [ -s "$FAKE_IMAGE_META" ]
   case ${!#} in
   "$FAKE_EXPECTED_IMAGE_ID") ;;
-  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled)
+  local | production)
+    previous_index=$(($# - 1))
+    before_index=$(($# - 2))
+    [ "${!previous_index}" = mcp-sdk ] && [ "${!before_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
+    ;;
+  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | mcp-sdk)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -252,6 +265,8 @@ readonly SECOND_RUNTIME_CALL=$(awk '/^CALL$/{n++; if (n == 2) {getline; print; e
 [ "$FIRST_RUNTIME_CALL" = image ] || fail 'image inspection did not precede run'
 [ "$SECOND_RUNTIME_CALL" = run ] || fail 'runtime was not the second call'
 grep -Fxq -- '--network=host' "$READABLE_LOG" || fail 'host network is missing'
+grep -Fxq -- '--init' "$READABLE_LOG" ||
+  fail 'init process is missing; the entrypoint would run as PID 1'
 grep -Fxq -- '--read-only' "$READABLE_LOG" || fail 'read-only root is missing'
 grep -Fxq -- '--userns=keep-id' "$READABLE_LOG" || fail 'keep-id user namespace is missing'
 grep -Exq -- '--user=[1-9][0-9]*:[1-9][0-9]*' "$READABLE_LOG" ||
@@ -263,6 +278,9 @@ grep -Fxq -- '--cap-add=SYS_CHROOT' "$READABLE_LOG" ||
   fail 'Chromium sandbox capability is missing'
 [ "$(grep -Ec '^--cap-add=' "$READABLE_LOG")" -eq 1 ] ||
   fail 'runtime has an extra added capability'
+grep -Fxq -- '--memory=2g' "$READABLE_LOG" || fail 'memory cap is missing'
+grep -Fxq -- '--memory-swap=2g' "$READABLE_LOG" || fail 'memory swap cap is missing'
+grep -Fxq -- '--cpus=2' "$READABLE_LOG" || fail 'CPU cap is missing'
 grep -Fxq -- "--mount=type=bind,src=$INPUT,dst=/uat-input,ro=true" "$READABLE_LOG" ||
   fail 'closed CA input mount is missing'
 grep -Fxq -- "--mount=type=bind,src=$SPEC_INPUT,dst=/uat-spec,ro=true" "$READABLE_LOG" ||
@@ -336,6 +354,100 @@ grep -Fq 'MCP client name must contain a lowercase UUIDv4' <<<"$output" ||
 printf '%s\n' 'aboutme MCP UAT 11111111-1111-4111-8111-111111111111' \
   >"$MCP_INPUT/mcp-client-name"
 
+readonly MCP_SDK_CREDENTIAL=$WORK/mcp-sdk-credential.env
+printf '%s\n' 'ABOUTME_TEST_EMAIL=owner@example.invalid' \
+  'ABOUTME_TEST_PASSWORD=static-test-only' >"$MCP_SDK_CREDENTIAL"
+chmod 0600 "$MCP_SDK_CREDENTIAL"
+readonly MCP_SDK_BROWSER=$WORK/mcp-sdk-browser
+install -d -m 0700 "$MCP_SDK_BROWSER"
+readonly MCP_SDK_EVIDENCE=$WORK/mcp-sdk-evidence
+install -d -m 0700 "$MCP_SDK_EVIDENCE"
+readonly MCP_SDK_NAME=aboutme-mcp-sdk-11111111111111111111111111111111
+
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" \
+  "$MCP_SDK_EVIDENCE" mcp-sdk local "$MCP_SDK_BROWSER" "$MCP_SDK_CREDENTIAL" "$MCP_SDK_NAME"
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fxq mcp-sdk "$READABLE_LOG" || fail 'mcp-sdk mode did not reach the image'
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = mcp-sdk ] ||
+  fail 'mcp-sdk mode was not passed after the verified image ID'
+[ "$(sed -n "$((image_line + 2))p" "$READABLE_LOG")" = local ] ||
+  fail 'mcp-sdk workflow mode was not passed after the mode'
+grep -Fxq -- "--name=$MCP_SDK_NAME" "$READABLE_LOG" ||
+  fail 'mcp-sdk container name is missing'
+grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_EVIDENCE,dst=/evidence,rw=true" "$READABLE_LOG" ||
+  fail 'closed evidence mount is missing for mcp-sdk mode'
+grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_CREDENTIAL,dst=/mcp-credentials/login.env,ro=true" \
+  "$READABLE_LOG" || fail 'closed MCP credential mount is missing'
+grep -Fxq -- "--mount=type=bind,src=$MCP_SDK_BROWSER,dst=/mcp-browser,rw=true" \
+  "$READABLE_LOG" || fail 'closed MCP browser mount is missing'
+[ "$(grep -Ec '^--mount=type=bind,.*dst=/' "$READABLE_LOG")" -eq 5 ] ||
+  fail 'mcp-sdk runtime has an unexpected bind mount count'
+
+readonly MCP_SDK_MISSING_ARGS_EVIDENCE=$WORK/mcp-sdk-missing-args-evidence
+install -d -m 0700 "$MCP_SDK_MISSING_ARGS_EVIDENCE"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk 2>&1); then
+  fail 'mcp-sdk accepted a missing workflow mode, browser directory, and credential'
+fi
+grep -Fq 'mcp-sdk mode requires workflow mode local or production' <<<"$output" ||
+  fail 'mcp-sdk missing-workflow-mode diagnostic drifted'
+
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk local \
+  "$MCP_SDK_BROWSER" 2>&1); then
+  fail 'mcp-sdk accepted a missing credential file'
+fi
+grep -Fq 'mcp-sdk mode requires an MCP credential file' <<<"$output" ||
+  fail 'mcp-sdk missing-credential diagnostic drifted'
+
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk local \
+  "$MCP_SDK_BROWSER" "$MCP_SDK_CREDENTIAL" 2>&1); then
+  fail 'mcp-sdk accepted a missing container name'
+fi
+grep -Fq 'mcp-sdk mode requires a container name matching aboutme-mcp-sdk-<32 lowercase hex characters>' \
+  <<<"$output" || fail 'mcp-sdk missing-container-name diagnostic drifted'
+
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk local \
+  "$MCP_SDK_BROWSER" "$MCP_SDK_CREDENTIAL" 'aboutme-mcp-sdk-not-hex' 2>&1); then
+  fail 'mcp-sdk accepted a malformed container name'
+fi
+grep -Fq 'mcp-sdk mode requires a container name matching aboutme-mcp-sdk-<32 lowercase hex characters>' \
+  <<<"$output" || fail 'mcp-sdk malformed-container-name diagnostic drifted'
+
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$EVIDENCE" mcp local "$MCP_SDK_BROWSER" \
+  "$MCP_SDK_CREDENTIAL" "$MCP_SDK_NAME" 2>&1); then
+  fail 'mcp mode accepted mcp-sdk-only arguments'
+fi
+grep -Fq 'workflow mode, MCP browser directory, MCP credential file, and MCP container name are only accepted for mcp-sdk mode' \
+  <<<"$output" || fail 'unexpected-argument diagnostic drifted'
+
+readonly MCP_SDK_WRONG_MODE_CREDENTIAL=$WORK/mcp-sdk-wrong-mode-credential.env
+printf '%s\n' bad >"$MCP_SDK_WRONG_MODE_CREDENTIAL"
+chmod 0644 "$MCP_SDK_WRONG_MODE_CREDENTIAL"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk local \
+  "$MCP_SDK_BROWSER" "$MCP_SDK_WRONG_MODE_CREDENTIAL" "$MCP_SDK_NAME" 2>&1); then
+  fail 'mcp-sdk accepted a credential file with the wrong mode'
+fi
+grep -Fq 'MCP credential file mode must be 0600' <<<"$output" ||
+  fail 'mcp-sdk credential-mode diagnostic drifted'
+
+readonly MCP_SDK_NONEMPTY_BROWSER=$WORK/mcp-sdk-nonempty-browser
+install -d -m 0700 "$MCP_SDK_NONEMPTY_BROWSER"
+printf '%s\n' stale >"$MCP_SDK_NONEMPTY_BROWSER/stale"
+if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$MCP_SDK_MISSING_ARGS_EVIDENCE" mcp-sdk production \
+  "$MCP_SDK_NONEMPTY_BROWSER" "$MCP_SDK_CREDENTIAL" "$MCP_SDK_NAME" 2>&1); then
+  fail 'mcp-sdk accepted a non-empty browser directory'
+fi
+grep -Fq 'MCP browser directory must start empty' <<<"$output" ||
+  fail 'mcp-sdk non-empty-browser diagnostic drifted'
+
 readonly PASSWORD_INPUT=$WORK/password-input
 readonly PASSWORD_EVIDENCE=$WORK/password-evidence
 install -d -m 0700 "$PASSWORD_INPUT" "$PASSWORD_EVIDENCE"
@@ -367,11 +479,11 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, or mcp-sdk' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
-for source in "$SOURCE"/*.sh "$SOURCE"/*.ts "$SOURCE"/Dockerfile; do
+for source in "$SOURCE"/*.sh "$SOURCE"/*.ts "$SOURCE"/*.mjs "$SOURCE"/Dockerfile; do
   if grep -nE '[[:blank:]]+$' "$source"; then
     fail "trailing whitespace in ${source#$ROOT/}"
   fi
@@ -544,6 +656,12 @@ grep -Fq 'certutil -A' "$SOURCE/run.sh" || fail 'CA import is missing'
 grep -Fq 'certutil -L' "$SOURCE/run.sh" || fail 'CA verification is missing'
 grep -Fq '/uat-input/caddy-root.crt' "$SOURCE/run.sh" ||
   fail 'runner does not use the closed CA path'
+grep -Fq 'node /opt/aboutme-auth/verify-evidence.mjs' "$SOURCE/run.sh" ||
+  fail 'run.sh does not delegate to the image-side evidence verifier'
+[ -f "$SOURCE/verify-evidence.mjs" ] && [ ! -L "$SOURCE/verify-evidence.mjs" ] ||
+  fail 'verify-evidence.mjs is not a regular file'
+node --check "$SOURCE/verify-evidence.mjs" ||
+  fail 'verify-evidence.mjs has a syntax error'
 grep -Fq 'chromiumSandbox: true' "$SOURCE/playwright.config.ts" ||
   fail 'Chromium sandbox is not enabled'
 for heavy_mode in editor public password-auth mcp publish second-factor second-factor-disabled; do
@@ -554,6 +672,10 @@ grep -Fq '? 120_000' "$SOURCE/playwright.config.ts" ||
   fail 'heavy-flow timeout bound drifted'
 grep -Fq ': 30_000' "$SOURCE/playwright.config.ts" ||
   fail 'default timeout bound drifted'
+grep -Eq "mode === ['\"]mcp-sdk['\"]" "$SOURCE/playwright.config.ts" ||
+  fail 'mcp-sdk timeout is not explicitly bounded'
+grep -Fq '? 420_000' "$SOURCE/playwright.config.ts" ||
+  fail 'mcp-sdk timeout bound drifted'
 grep -Fq '  timeout,' "$SOURCE/playwright.config.ts" ||
   fail 'Playwright does not use the bounded mode timeout'
 
@@ -797,6 +919,8 @@ readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
 readonly INSIDE_SPEC=$INSIDE_ROOT/uat-spec
 readonly INSIDE_EVIDENCE=$INSIDE_ROOT/evidence
+readonly INSIDE_MCP_CREDENTIAL=$INSIDE_ROOT/mcp-credentials/login.env
+readonly INSIDE_MCP_BROWSER=$INSIDE_ROOT/mcp-browser
 readonly INSIDE_TMP=$INSIDE_ROOT/tmp
 readonly INSIDE_APP=$INSIDE_ROOT/opt/aboutme-auth
 readonly INSIDE_BIN=$INSIDE_ROOT/bin
@@ -804,16 +928,23 @@ readonly INSIDE_RUN=$INSIDE_ROOT/run.sh
 readonly CERT_LOG=$INSIDE_ROOT/certutil.calls
 readonly BROWSER_LOG=$INSIDE_ROOT/browser.calls
 install -d -m 0700 "$INSIDE_INPUT" "$INSIDE_SPEC" "$INSIDE_EVIDENCE" \
+  "$(dirname "$INSIDE_MCP_CREDENTIAL")" "$INSIDE_MCP_BROWSER" \
   "$INSIDE_TMP" "$INSIDE_APP/node_modules/.bin" "$INSIDE_BIN"
 cp -- "$SOURCE/package.json" "$INSIDE_APP/package.json"
+cp -- "$SOURCE/verify-evidence.mjs" "$INSIDE_APP/verify-evidence.mjs"
 cp -- "$INPUT/caddy-root.crt" "$INSIDE_INPUT/caddy-root.crt"
 for file in "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$INSIDE_SPEC/$file"
   chmod 0600 "$INSIDE_SPEC/$file"
 done
+printf '%s\n' 'ABOUTME_TEST_EMAIL=owner@example.invalid' \
+  'ABOUTME_TEST_PASSWORD=static-test-only' >"$INSIDE_MCP_CREDENTIAL"
+chmod 0600 "$INSIDE_MCP_CREDENTIAL"
 sed \
   -e "s#/uat-input#$INSIDE_INPUT#g" \
   -e "s#/uat-spec#$INSIDE_SPEC#g" \
+  -e "s#/mcp-credentials/login.env#$INSIDE_MCP_CREDENTIAL#g" \
+  -e "s#/mcp-browser#$INSIDE_MCP_BROWSER#g" \
   -e "s#/evidence#$INSIDE_EVIDENCE#g" \
   -e "s#/tmp/home#$INSIDE_TMP/home#g" \
   -e "s#/tmp/spec#$INSIDE_TMP/spec#g" \
@@ -842,6 +973,14 @@ case "$target:$field" in
 "$FAKE_INSIDE_SPEC":OPTIONS) printf '%s\n' "${FAKE_SPEC_OPTIONS:-ro,nosuid,nodev}" ;;
 "$FAKE_INSIDE_EVIDENCE":TARGET) printf '%s\n' "${FAKE_EVIDENCE_TARGET:-$FAKE_INSIDE_EVIDENCE}" ;;
 "$FAKE_INSIDE_EVIDENCE":OPTIONS) printf '%s\n' "${FAKE_EVIDENCE_OPTIONS:-rw,nosuid,nodev}" ;;
+"$FAKE_INSIDE_MCP_CREDENTIAL":TARGET)
+  printf '%s\n' "${FAKE_MCP_CREDENTIAL_TARGET:-$FAKE_INSIDE_MCP_CREDENTIAL}" ;;
+"$FAKE_INSIDE_MCP_CREDENTIAL":OPTIONS)
+  printf '%s\n' "${FAKE_MCP_CREDENTIAL_OPTIONS:-ro,nosuid,nodev}" ;;
+"$FAKE_INSIDE_MCP_BROWSER":TARGET)
+  printf '%s\n' "${FAKE_MCP_BROWSER_TARGET:-$FAKE_INSIDE_MCP_BROWSER}" ;;
+"$FAKE_INSIDE_MCP_BROWSER":OPTIONS)
+  printf '%s\n' "${FAKE_MCP_BROWSER_OPTIONS:-rw,nosuid,nodev}" ;;
 *) exit 1 ;;
 esac
 FAKE_FINDMNT
@@ -881,8 +1020,8 @@ FAKE_CERTUTIL
 cat >"$INSIDE_APP/node_modules/.bin/playwright" <<'FAKE_PLAYWRIGHT'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-printf 'HOME=%s\nMODE=%s\nARGV=' "$HOME" "${ABOUTME_BROWSER_MODE:-}" \
-  >>"$FAKE_BROWSER_LOG"
+printf 'HOME=%s\nMODE=%s\nMCP_BROWSER_DIR=%s\nARGV=' "$HOME" \
+  "${ABOUTME_BROWSER_MODE:-}" "${ABOUTME_MCP_BROWSER_DIR:-}" >>"$FAKE_BROWSER_LOG"
 printf '%q ' "$@" >>"$FAKE_BROWSER_LOG"
 printf '\n' >>"$FAKE_BROWSER_LOG"
 case ${FAKE_BROWSER_MODE:-good} in
@@ -900,6 +1039,12 @@ mcp-fail)
   printf '%s\n' 'browser-secret-must-not-escape'
   printf '%s\n' 'mcp-stage:exchange-token'
   printf '%s\n' 'mcp-stage:list-tools'
+  exit 1
+  ;;
+mcp-sdk-fail)
+  printf '%s\n' 'browser-secret-must-not-escape'
+  printf '%s\n' 'mcp-sdk-stage:browser-ready'
+  printf '%s\n' 'mcp-sdk-stage:consent-approved'
   exit 1
   ;;
 publish-fail)
@@ -992,6 +1137,11 @@ JSON
 }
 JSON
     ;;
+  *' mcp-sdk.spec.ts '*)
+    # No /evidence output for this mode: the browser-side helper writes only
+    # the private handoff files that the host runner interprets.
+    :
+    ;;
   *' entry.spec.ts '*)
     cat >"$FAKE_INSIDE_EVIDENCE/entry-proof.json" <<'JSON'
 {
@@ -1081,7 +1231,14 @@ JSON
   ;;
 *) exit 64 ;;
 esac
-chmod 0600 "$FAKE_INSIDE_EVIDENCE"/*.json
+# mcp-sdk writes no /evidence file, so this glob may have zero matches; an
+# unmatched trailing `[ -e ] && chmod` would leave the script's own exit
+# status at 1 with nothing after it to reset it, so use if/then instead.
+for evidence_json in "$FAKE_INSIDE_EVIDENCE"/*.json; do
+  if [ -e "$evidence_json" ]; then
+    chmod 0600 "$evidence_json"
+  fi
+done
 FAKE_PLAYWRIGHT
 chmod 0700 "$INSIDE_BIN/findmnt" "$INSIDE_BIN/certutil" \
   "$INSIDE_APP/node_modules/.bin/playwright"
@@ -1089,30 +1246,41 @@ chmod 0700 "$INSIDE_BIN/findmnt" "$INSIDE_BIN/certutil" \
 export FAKE_INSIDE_INPUT=$INSIDE_INPUT
 export FAKE_INSIDE_SPEC=$INSIDE_SPEC
 export FAKE_INSIDE_EVIDENCE=$INSIDE_EVIDENCE
+export FAKE_INSIDE_MCP_CREDENTIAL=$INSIDE_MCP_CREDENTIAL
+export FAKE_INSIDE_MCP_BROWSER=$INSIDE_MCP_BROWSER
 export FAKE_INSIDE_TMP=$INSIDE_TMP
 export FAKE_CERT_LOG=$CERT_LOG
 export FAKE_BROWSER_LOG=$BROWSER_LOG
 
 reset_inside() {
-  rm -rf -- "$INSIDE_EVIDENCE" "$INSIDE_TMP/home" "$INSIDE_TMP/spec" \
+  rm -rf -- "$INSIDE_EVIDENCE" "$INSIDE_MCP_BROWSER" "$INSIDE_TMP/home" "$INSIDE_TMP/spec" \
     "$INSIDE_TMP/playwright-uat.log" "$INSIDE_TMP/imported-ca"
-  install -d -m 0700 "$INSIDE_EVIDENCE"
+  install -d -m 0700 "$INSIDE_EVIDENCE" "$INSIDE_MCP_BROWSER"
   : >"$CERT_LOG"
   : >"$BROWSER_LOG"
 }
 
 run_inside() {
-  if [ "$#" -eq 0 ]; then
-    PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside
-  else
-    PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside "$1"
-  fi
+  PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside "$@"
 }
 
 assert_inside_rejected() {
   local name=$1 expected=$2 output status=0
   shift 2
   if output=$(env PATH="$INSIDE_BIN:$PATH" "$@" "$INSIDE_RUN" --inside 2>&1); then
+    status=0
+  else
+    status=$?
+  fi
+  [ "$status" -ne 0 ] || fail "$name was accepted"
+  grep -Fq "$expected" <<<"$output" || fail "$name returned the wrong diagnostic"
+  printf '%s' "$output"
+}
+
+assert_inside_mcp_sdk_rejected() {
+  local name=$1 expected=$2 output status=0
+  shift 2
+  if output=$(env PATH="$INSIDE_BIN:$PATH" "$@" "$INSIDE_RUN" --inside mcp-sdk local 2>&1); then
     status=0
   else
     status=$?
@@ -1141,7 +1309,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, or second-factor-disabled' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, or mcp-sdk' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 
@@ -1401,6 +1569,71 @@ fi
 grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
   fail 'oversized mcp evidence returned the wrong diagnostic'
 rm -- "$INSIDE_INPUT/mcp-client-name"
+
+reset_inside
+readonly MCP_SDK_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside mcp-sdk production)
+grep -Fq 'dev-https-browser MCP SDK owner workflow browser handoff proof: PASS' \
+  <<<"$MCP_SDK_INSIDE_OUTPUT" ||
+  fail 'inside-container mcp-sdk success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts mcp-sdk.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused mcp-sdk invocation drifted'
+grep -Fxq 'MODE=mcp-sdk' "$BROWSER_LOG" ||
+  fail 'mcp-sdk mode did not reach Playwright config'
+grep -Fxq "MCP_BROWSER_DIR=$INSIDE_MCP_BROWSER" "$BROWSER_LOG" ||
+  fail 'mcp-sdk browser handoff directory was not passed to Playwright'
+evidence_after_mcp_sdk=$(find "$INSIDE_EVIDENCE" -mindepth 1 -maxdepth 1 -print -quit)
+[ -z "$evidence_after_mcp_sdk" ] ||
+  fail 'mcp-sdk mode wrote to the unrelated evidence directory'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside mcp-sdk invalid 2>&1); then
+  fail 'invalid workflow mode was accepted'
+fi
+grep -Fq 'mcp-sdk mode requires workflow mode local or production' <<<"$output" ||
+  fail 'invalid workflow mode returned the wrong diagnostic'
+[ ! -s "$BROWSER_LOG" ] || fail 'invalid workflow mode reached the browser'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=mcp-sdk-fail PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside mcp-sdk local 2>&1); then
+  fail 'mcp-sdk browser failure was accepted'
+fi
+grep -Fxq 'dev-https-browser: mcp-sdk-stage:consent-approved' <<<"$output" ||
+  fail 'mcp-sdk failure did not expose its last bounded stage'
+if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
+  fail 'mcp-sdk failure leaked volatile output'
+fi
+
+reset_inside
+FAKE_MCP_CREDENTIAL_OPTIONS=rw FAKE_BROWSER_MODE=good \
+  assert_inside_mcp_sdk_rejected credential-writable \
+  'MCP credential file is not read-only' >/dev/null
+[ ! -s "$BROWSER_LOG" ] || fail 'writable credential mount reached the browser'
+
+reset_inside
+FAKE_MCP_BROWSER_OPTIONS=ro FAKE_BROWSER_MODE=good \
+  assert_inside_mcp_sdk_rejected browser-dir-read-only \
+  'MCP browser directory is not writable' >/dev/null
+[ ! -s "$BROWSER_LOG" ] || fail 'read-only browser mount reached the browser'
+
+reset_inside
+printf '%s\n' stale >"$INSIDE_MCP_BROWSER/stale"
+assert_inside_mcp_sdk_rejected browser-dir-nonempty \
+  'MCP browser directory must start empty' FAKE_BROWSER_MODE=good >/dev/null
+rm -- "$INSIDE_MCP_BROWSER/stale"
+[ ! -s "$BROWSER_LOG" ] || fail 'non-empty browser directory reached the browser'
+
+reset_inside
+chmod 0644 "$INSIDE_MCP_CREDENTIAL"
+if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside mcp-sdk local 2>&1); then
+  fail 'mcp-sdk accepted a credential file with the wrong mode'
+fi
+grep -Fq 'MCP credential file mode must be 0600' <<<"$output" ||
+  fail 'mcp-sdk inside-container credential-mode diagnostic drifted'
+chmod 0600 "$INSIDE_MCP_CREDENTIAL"
+[ ! -s "$BROWSER_LOG" ] || fail 'wrong-mode credential reached the browser'
 
 reset_inside
 readonly ENTRY_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside entry)

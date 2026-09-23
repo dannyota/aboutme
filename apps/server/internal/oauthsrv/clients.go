@@ -212,6 +212,18 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if registration.ApplicationTypeSet {
+		if registration.ApplicationType != "native" {
+			writeOAuthError(w, http.StatusBadRequest)
+			return
+		}
+		for _, redirectURI := range registration.RedirectURIs {
+			if !nativeLoopbackRedirect(redirectURI) {
+				writeOAuthError(w, http.StatusBadRequest)
+				return
+			}
+		}
+	}
 	if registration.TokenEndpointAuthMethod != "" && registration.TokenEndpointAuthMethod != "none" {
 		writeOAuthError(w, http.StatusBadRequest)
 		return
@@ -236,19 +248,23 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := json.Marshal(registerResponse{
+	response := registerResponse{
 		ClientID:                client.ID.String(),
 		ClientName:              clientName,
 		RedirectURIs:            registration.RedirectURIs,
 		TokenEndpointAuthMethod: "none",
-	})
+	}
+	if registration.ApplicationTypeSet {
+		response.ApplicationType = "native"
+	}
+	responseJSON, err := json.Marshal(response)
 	if err != nil {
 		writeOAuthServerError(w)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	if _, err := w.Write(response); err != nil {
+	if _, err := w.Write(responseJSON); err != nil {
 		return
 	}
 }
@@ -257,6 +273,8 @@ type registrationInput struct {
 	ClientName              string
 	RedirectURIs            []string
 	TokenEndpointAuthMethod string
+	ApplicationType         string
+	ApplicationTypeSet      bool
 }
 
 type registerResponse struct {
@@ -264,6 +282,12 @@ type registerResponse struct {
 	ClientName              string   `json:"client_name"`
 	RedirectURIs            []string `json:"redirect_uris"`
 	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	ApplicationType         string   `json:"application_type,omitempty"`
+}
+
+func nativeLoopbackRedirect(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "http" && loopbackRedirectHosts[strings.ToLower(u.Hostname())]
 }
 
 func exactJSONContentType(header http.Header) bool {
@@ -287,7 +311,7 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
 		return registrationInput{}, errRegisterRequestInvalid
 	}
-	fields := make(map[string]json.RawMessage, 3)
+	fields := make(map[string]json.RawMessage, 4)
 	for decoder.More() {
 		token, err := decoder.Token()
 		if err != nil {
@@ -301,7 +325,7 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
 		switch name {
-		case "client_name", "redirect_uris", "token_endpoint_auth_method":
+		case "client_name", "redirect_uris", "token_endpoint_auth_method", "application_type":
 		default:
 			return registrationInput{}, errRegisterRequestInvalid
 		}
@@ -334,6 +358,12 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 		if err := json.Unmarshal(authMethod, &registration.TokenEndpointAuthMethod); err != nil || registration.TokenEndpointAuthMethod != "none" {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
+	}
+	if applicationType, ok := fields["application_type"]; ok {
+		if err := json.Unmarshal(applicationType, &registration.ApplicationType); err != nil {
+			return registrationInput{}, errRegisterRequestInvalid
+		}
+		registration.ApplicationTypeSet = true
 	}
 	return registration, nil
 }

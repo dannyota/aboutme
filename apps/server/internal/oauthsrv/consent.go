@@ -123,7 +123,7 @@ func (s *Service) denyConsent(ctx context.Context, request ConsentQuery) (redire
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("commit consent denial transaction: %w", err)
 	}
-	return oauthResultURL(request.RedirectURI, "", "access_denied", request.State), nil
+	return oauthResultURL(request.RedirectURI, s.publicOrigin, "", "access_denied", request.State), nil
 }
 
 func validateConsentQuery(q ConsentQuery) error {
@@ -222,7 +222,7 @@ func (s *Service) approveConsent(ctx context.Context, sess store.Session, reques
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("commit consent transaction: %w", err)
 	}
-	return oauthResultURL(request.RedirectURI, rawCode, "", request.State), nil
+	return oauthResultURL(request.RedirectURI, s.publicOrigin, rawCode, "", request.State), nil
 }
 
 // requireConsentAuthority locks the caller's concrete session and second-factor
@@ -330,7 +330,7 @@ func (s *Service) approveExistingGrant(ctx context.Context, sess store.Session, 
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("commit code transaction: %w", err)
 	}
-	return oauthResultURL(request.RedirectURI, rawCode, "", request.State), nil
+	return oauthResultURL(request.RedirectURI, s.publicOrigin, rawCode, "", request.State), nil
 }
 
 func (s *Service) newCode() (string, [32]byte, error) {

@@ -42,7 +42,7 @@ func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 		t.Fatalf("deny: %v", err)
 	}
 	denyURL := urlMustParse(t, denied)
-	if denyURL.Query().Get("error") != "access_denied" || denyURL.Query().Get("state") != "opaque<&state" || denyURL.Query().Get("code") != "" {
+	if denyURL.Query().Get("error") != "access_denied" || denyURL.Query().Get("state") != "opaque<&state" || denyURL.Query().Get("code") != "" || denyURL.Query().Get("iss") != "https://aboutme.example" || denyURL.Query().Get("fixed") != "yes" {
 		t.Fatalf("denial redirect = %q", denied)
 	}
 
@@ -50,7 +50,11 @@ func TestConsent_ContextAndDecisionRevalidateAndIssueBoundCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("approve: %v", err)
 	}
-	codeRaw := urlMustParse(t, approved).Query().Get("code")
+	approvedURL := urlMustParse(t, approved)
+	if approvedURL.Query().Get("iss") != "https://aboutme.example" || approvedURL.Query().Get("fixed") != "yes" {
+		t.Fatalf("approval redirect = %q", approved)
+	}
+	codeRaw := approvedURL.Query().Get("code")
 	if len(codeRaw) != 43 {
 		t.Fatalf("approved redirect = %q, want 43-byte code", approved)
 	}
