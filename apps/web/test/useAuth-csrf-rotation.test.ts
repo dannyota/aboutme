@@ -7,6 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
+import { landedOn } from './support/routing';
 
 // Deliberately its own file, not a case inside `useAuth.test.ts`: this
 // test needs to control PRECISELY which csrfToken value `/me` returns on
@@ -116,7 +117,7 @@ describe('useAuth mutate() CSRF x rotation self-heal', () => {
       // pass a "did it retry" test while still shipping this bug).
       expect(receivedHeaders[0]).toBe('test-csrf-token');
       expect(receivedHeaders[1]).toBe('rotated-csrf-token');
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+      expect(await landedOn('/login')).toBe('/login');
     },
   );
 });

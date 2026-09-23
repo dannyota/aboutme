@@ -7,6 +7,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { readRawBody, setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
+import { currentPath, landedOn } from './support/routing';
 
 // logout() navigates away via `navigateTo` on success — stub it so tests
 // can assert on the target without a real page transition tearing the
@@ -264,7 +265,7 @@ describe('useAuth', () => {
     await wrapper.get('[data-testid="logout-button"]').trigger('click');
     await flushPromises();
 
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+    expect(await landedOn('/login')).toBe('/login');
   });
 
   it(
@@ -373,6 +374,7 @@ describe('useAuth', () => {
       // rejection surfaces (no navigation), it does not loop.
       expect(logoutCalls).toBe(2);
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(currentPath()).toBe('/');
     });
 
     it(
@@ -402,6 +404,7 @@ describe('useAuth', () => {
         // refused for a reason retrying can never fix.
         expect(logoutCalls).toBe(1);
         expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+        expect(currentPath()).toBe('/');
       },
     );
   });

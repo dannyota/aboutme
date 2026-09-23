@@ -10,7 +10,7 @@ import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
 import {
   clearNavigationInFlight,
-  landedFrom,
+  landedOn,
   markNavigationInFlight,
 } from './support/routing';
 
@@ -89,7 +89,7 @@ describe('password sign-in landing', () => {
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
 
-    expect(await landedFrom('/login')).toBe('/app/resumes');
+    expect(await landedOn('/app/resumes')).toBe('/app/resumes');
   });
 
   it('leaves the login page for the app after a 204 while another '
@@ -101,7 +101,7 @@ describe('password sign-in landing', () => {
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
 
-    expect(await landedFrom('/login')).toBe('/app/resumes');
+    expect(await landedOn('/app/resumes')).toBe('/app/resumes');
   });
 
   it('reaches the pending page after a 202 while another navigation is '
@@ -114,7 +114,7 @@ describe('password sign-in landing', () => {
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
 
-    expect(await landedFrom('/login')).toBe('/login/second-factor');
+    expect(await landedOn('/login/second-factor')).toBe('/login/second-factor');
     await flushPromises();
     expect(wrapper.find('[data-testid="second-factor-page"]').exists())
       .toBe(true);
@@ -139,6 +139,6 @@ describe('second-factor completion landing', () => {
     await wrapper.get('[data-testid="second-factor-recovery-form"]')
       .trigger('submit');
 
-    expect(await landedFrom('/login/second-factor')).toBe('/app/resumes');
+    expect(await landedOn('/app/resumes')).toBe('/app/resumes');
   });
 });

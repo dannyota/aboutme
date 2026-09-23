@@ -9,6 +9,7 @@ import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 import AppShell from '../app/components/app/AppShell.vue';
 import { setSiteLocale } from './support/locale';
+import { landedOn } from './support/routing';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 
@@ -108,6 +109,6 @@ describe('logout state transition', () => {
       'Create account',
     );
     expect(meReads).toBe(readsBeforeLogout);
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+    expect(await landedOn('/login')).toBe('/login');
   });
 });

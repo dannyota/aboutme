@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mockNuxtImport,
   mountSuspended,
@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import NewResumePage from '../../app/pages/app/new.vue';
 import { setSiteLocale } from '../support/locale';
+import { currentPath, landedOn } from '../support/routing';
 
 // /app/new is reached from a public gallery page, so a signed-out visitor
 // must land on account creation, not sign-in, carrying the sample or
@@ -25,6 +26,15 @@ registerEndpoint('/api/v1/me', (event) => {
 });
 
 describe('/app/new', () => {
+  // Each case really navigates now, and a page left mounted from an earlier
+  // case would answer the route change too, so every mount is torn down.
+  let mounted: { unmount: () => void } | null = null;
+
+  const mountNew = async (route: string): Promise<void> => {
+    mounted = await mountSuspended(NewResumePage, { route });
+    await flushPromises();
+  };
+
   beforeEach(() => {
     meStatus = 401;
     clearNuxtData();
@@ -33,15 +43,18 @@ describe('/app/new', () => {
     startDocumentSpy.mockClear();
   });
 
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = null;
+  });
+
   it(
     'sends a signed-out sample visitor to register, next the full path',
     async () => {
       const route = '/app/new?sample=ats-plain&lng=en';
-      await mountSuspended(NewResumePage, { route });
-      await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(route)}`,
-      );
+      await mountNew(route);
+      const want = `/register?next=${encodeURIComponent(route)}`;
+      expect(await landedOn(want)).toBe(want);
     },
   );
 
@@ -49,24 +62,17 @@ describe('/app/new', () => {
     'sends a signed-out template visitor to register the same way',
     async () => {
       const route = '/app/new?template=classic-serif';
-      await mountSuspended(NewResumePage, { route });
-      await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(route)}`,
-      );
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
-        expect.stringContaining('/login'),
-      );
+      await mountNew(route);
+      const want = `/register?next=${encodeURIComponent(route)}`;
+      expect(await landedOn(want)).toBe(want);
+      expect(currentPath()).not.toContain('/login');
     },
   );
 
   it('does not restart a blank document when the interface locale changes',
     async () => {
       setSiteLocale('vi');
-      await mountSuspended(NewResumePage, {
-        route: '/app/new?template=classic-serif',
-      });
-      await flushPromises();
+      await mountNew('/app/new?template=classic-serif');
       const started = startDocumentSpy.mock.calls;
       expect(started).toHaveLength(1);
       const request = started[0]?.[0];
@@ -75,9 +81,7 @@ describe('/app/new', () => {
       await flushPromises();
 
       expect(startDocumentSpy.mock.calls).toEqual([[request]]);
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
-        expect.stringContaining('/app/resumes/'),
-      );
+      expect(currentPath()).not.toContain('/app/resumes/');
     },
   );
 });

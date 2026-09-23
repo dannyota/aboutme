@@ -11,7 +11,7 @@ import LoginPage from '../app/pages/login.vue';
 import { OAuthConsentFailure } from '../app/composables/useOAuthConsent';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
-import { landedFrom } from './support/routing';
+import { landedOn } from './support/routing';
 
 // These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
@@ -225,11 +225,12 @@ describe('/authorize', () => {
       await mountSuspended(AuthorizePage, {
         route: route('/authorize?x=1'),
       });
+      // Read before the redirect resolves: this is the path the page must
+      // carry onward verbatim.
+      const authorizePath = useRoute().fullPath;
       await flushPromises();
-      const currentPath = useRoute().fullPath;
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/login?next=${encodeURIComponent(currentPath)}`,
-      );
+      const want = `/login?next=${encodeURIComponent(authorizePath)}`;
+      expect(await landedOn(want)).toBe(want);
     },
   );
 
@@ -268,11 +269,11 @@ describe('/authorize', () => {
       const path = route('/authorize?x=1');
       const wrapper = await mountSuspended(AuthorizePage, { route: path });
       await flushPromises();
+      const authorizePath = useRoute().fullPath;
       await wrapper.get('[data-testid="consent-form"]').trigger('submit');
       await flushPromises();
-      const target = vi.mocked(navigateTo).mock.calls[0]?.[0] as string;
-      const currentPath = useRoute().fullPath;
-      expect(target).toBe(`/login?next=${encodeURIComponent(currentPath)}`);
+      const want = `/login?next=${encodeURIComponent(authorizePath)}`;
+      expect(await landedOn(want)).toBe(want);
     });
 });
 
@@ -414,7 +415,7 @@ describe('login next preservation', () => {
     await flushPromises();
     // `/authorize` is one of this app's own pages, so the client router
     // carries the whole path, query and all.
-    expect(await landedFrom('/login')).toBe(next);
+    expect(await landedOn(next)).toBe(next);
   });
 
   it('round-trips an unauthenticated authorize request through password login',
@@ -422,10 +423,13 @@ describe('login next preservation', () => {
       consentMocks.get.mockRejectedValue(
         new OAuthConsentFailure('session-required'),
       );
-      const authorizePath = route('/authorize?x=1');
-      await mountSuspended(AuthorizePage, { route: authorizePath });
+      await mountSuspended(AuthorizePage, { route: route('/authorize?x=1') });
+      // Read before the redirect resolves, so the expected target is built
+      // from the same path the page carries onward.
+      const authorizePath = useRoute().fullPath;
       await flushPromises();
-      const loginTarget = vi.mocked(navigateTo).mock.calls[0]?.[0] as string;
+      const want = `/login?next=${encodeURIComponent(authorizePath)}`;
+      const loginTarget = await landedOn(want);
       expect(loginTarget).toMatch(/^\/login\?next=/);
 
       registerEndpoint('/api/v1/auth/password/login', {
@@ -447,6 +451,6 @@ describe('login next preservation', () => {
         loginTarget,
         'http://localhost',
       ).searchParams.get('next');
-      expect(await landedFrom('/login')).toBe(expectedPath);
+      expect(await landedOn(expectedPath)).toBe(expectedPath);
     });
 });

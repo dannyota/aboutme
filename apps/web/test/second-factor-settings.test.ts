@@ -23,7 +23,16 @@ import {
 } from '../app/utils/webauthn';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
+import {
+  clearNavigationInFlight,
+  landedOn,
+  markNavigationInFlight,
+} from './support/routing';
 
+// Only a provider authorize URL leaves this app, so only that case asserts
+// `navigateTo`. An in-app destination moves the client router, which is what
+// the cases below read: see test/auth-landing.test.ts for why asserting the
+// helper cannot see whether the page actually left.
 mockNuxtImport('navigateTo', () => vi.fn());
 
 /**
@@ -579,6 +588,7 @@ describe('second-factor settings', () => {
     });
     vi.mocked(navigateTo).mockReset();
     vi.mocked(navigateTo).mockResolvedValue(undefined);
+    clearNavigationInFlight();
   });
 
   afterEach(() => {
@@ -897,7 +907,39 @@ describe('second-factor settings', () => {
         .trigger('click');
       await flushPromises();
 
-      expect(navigateTo).toHaveBeenCalledWith('/login/second-factor');
+      expect(await landedOn('/login/second-factor'))
+        .toBe('/login/second-factor');
+    },
+  );
+
+  it(
+    'reaches the pending second-factor page even while another navigation '
+    + 'is still settling',
+    async () => {
+      registerRemoval(
+        'pk-1',
+        (event) => errorBody(event, 403, 'reauth_required'),
+      );
+      const wrapper = await mountSettings();
+
+      await wrapper.get('[data-testid="passkey-remove-pk-1"]')
+        .trigger('click');
+      await flushPromises();
+      clickInDialog('[data-action="passkey-remove-confirm"]');
+      await flushPromises();
+
+      passwordReauthResponse = () => ({ data: { secondFactorRequired: true } });
+      const passwordInput = wrapper.get(
+        '[data-testid="second-factor-reauth-password"] input[type="password"]',
+      );
+      await passwordInput.setValue('current-password');
+      markNavigationInFlight();
+      await wrapper.get('[data-testid="second-factor-reauth-submit"]')
+        .trigger('click');
+      await flushPromises();
+
+      expect(await landedOn('/login/second-factor'))
+        .toBe('/login/second-factor');
     },
   );
 
