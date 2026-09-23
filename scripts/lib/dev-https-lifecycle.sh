@@ -16,6 +16,19 @@ passkey_enrollment_flag() {
   esac
 }
 
+# totp_enrollment_flag echoes the closed TOTP_ENROLLMENT_ENABLED value for the
+# server environment. DEV_HTTPS_TOTP_ENROLLMENT selects it and accepts only
+# "true" or "false"; it defaults to true so the harness can run the TOTP
+# enrollment journey without an extra switch
+# (docs/design/totp-key-management.md "Key ring").
+totp_enrollment_flag() {
+  local raw=${DEV_HTTPS_TOTP_ENROLLMENT:-true}
+  case $raw in
+  true | false) printf '%s' "$raw" ;;
+  *) return 1 ;;
+  esac
+}
+
 write_service_env() {
   local name=$1 file
   file=$(service_env_file "$name")
@@ -26,12 +39,14 @@ write_service_env() {
       127.0.0.1 "$MOCK_PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" >"$file"
     ;;
   server)
-    local passkey_enrollment
+    local passkey_enrollment totp_enrollment
     passkey_enrollment=$(passkey_enrollment_flag) || return 1
-    printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nPUBLIC_RENDER_ORIGIN=%q\nAPP_BUILD_DIGEST=%q\nPUBLIC_RENDERER_BUILD_DIGEST=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\nPASSWORD_RATE_HMAC_KEY=%q\nAUTH_EMAIL_ACTIVE_KEY_ID=%q\nAUTH_EMAIL_ACTIVE_KEY=%q\nAUTH_EMAIL_MODE=%q\nAUTH_EMAIL_CAPTURE_URL=%q\nAUTH_EMAIL_CAPTURE_BEARER=%q\nMCP_ENABLED=%q\nPROVIDER_LOGIN_ENABLED=%q\nPASSKEY_ENROLLMENT_ENABLED=%q\n' \
+    totp_enrollment=$(totp_enrollment_flag) || return 1
+    printf 'PORT=%q\nLISTEN_HOST=%q\nDATABASE_URL=%q\nENV=%q\nPUBLIC_ORIGIN=%q\nPUBLIC_RENDER_ORIGIN=%q\nAPP_BUILD_DIGEST=%q\nPUBLIC_RENDERER_BUILD_DIGEST=%q\nTRUSTED_PROXY_CIDRS=%q\nLOG_LEVEL=%q\nMEDIA_BACKEND=%q\nMEDIA_FS_DIR=%q\nGOOGLE_CLIENT_ID=%q\nGOOGLE_CLIENT_SECRET=%q\nGOOGLE_OIDC_ISSUER_URL=%q\nPASSWORD_RATE_HMAC_KEY=%q\nAUTH_EMAIL_ACTIVE_KEY_ID=%q\nAUTH_EMAIL_ACTIVE_KEY=%q\nAUTH_EMAIL_MODE=%q\nAUTH_EMAIL_CAPTURE_URL=%q\nAUTH_EMAIL_CAPTURE_BEARER=%q\nMCP_ENABLED=%q\nPROVIDER_LOGIN_ENABLED=%q\nPASSKEY_ENROLLMENT_ENABLED=%q\nTOTP_ACTIVE_KEY=%q\nTOTP_ENROLLMENT_ENABLED=%q\n' \
       "$SERVER_PORT" 127.0.0.1 "$DATABASE_URL" dev "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" 127.0.0.1/32 "$LOG_LEVEL" fs "$MEDIA_DIR" \
       "$GOOGLE_CLIENT_ID" "$GOOGLE_CLIENT_SECRET" "$GOOGLE_ISSUER_URL" \
-      "$PASSWORD_RATE_HMAC_KEY_B64" "$ACTIVE_KEY_ID" "$AUTH_EMAIL_ACTIVE_KEY_B64" capture "$MAIL_CAPTURE_URL" "$AUTH_EMAIL_CAPTURE_BEARER_B64" true true "$passkey_enrollment" >"$file"
+      "$PASSWORD_RATE_HMAC_KEY_B64" "$ACTIVE_KEY_ID" "$AUTH_EMAIL_ACTIVE_KEY_B64" capture "$MAIL_CAPTURE_URL" "$AUTH_EMAIL_CAPTURE_BEARER_B64" true true "$passkey_enrollment" \
+      "$TOTP_ACTIVE_KEY_B64" "$totp_enrollment" >"$file"
     local chromium_path
     chromium_path=$(node "$ROOT/scripts/chromium-path.mjs") || return 1
     printf 'PRINT_LISTEN_ADDR=%q\nCHROMIUM_PATH=%q\n' "$PRINT_LISTEN_ADDR" "$chromium_path" >>"$file"
