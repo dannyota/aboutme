@@ -840,7 +840,9 @@ async function registerVerified(
 
 /**
  * Submits the password sign-in form and reports whether the account was sent
- * to the pending second-factor page instead of receiving a session.
+ * to the pending second-factor page instead of receiving a session. The
+ * fields are found by id and the button by its form, not by label, because
+ * the locale journey signs in with the page in Vietnamese.
  */
 async function passwordSignIn(
   page: Page,
@@ -850,15 +852,16 @@ async function passwordSignIn(
   stage('sign-in-open');
   await gotoHydrated(page, '/login');
   stage('sign-in-fill');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password', { exact: true }).fill(password);
+  await page.locator('#login-email').fill(email);
+  await page.locator('#login-password').fill(password);
   const response = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
     return url.origin === ORIGIN
       && url.pathname === '/api/v1/auth/password/login';
   }, { timeout: WAIT_RESPONSE_MS });
   stage('sign-in-submit');
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByTestId('login-form').locator('button[type="submit"]')
+    .click();
   const status = (await response).status();
   stage('sign-in-landing');
   const where = await landedAfter(page, '/login');
@@ -874,12 +877,14 @@ async function passwordSignIn(
 }
 
 /**
- * Logs out from the settings page. The logout response sends
- * `Clear-Site-Data: "cookies"`, which also drops the locale cookie, so the
- * next page would render in the Vietnamese default. English is pinned again
- * here; a caller that wants another locale sets it afterwards.
+ * Logs out from the settings page in English, whatever locale the previous
+ * step left. The logout response sends `Clear-Site-Data: "cookies"`, which
+ * also drops the locale cookie, so the next page would render in the
+ * Vietnamese default. English is pinned again afterwards; a caller that wants
+ * another locale sets it after this returns.
  */
 async function signOut(page: Page): Promise<void> {
+  await setLocale(page.context(), 'en');
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
