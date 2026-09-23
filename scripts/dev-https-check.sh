@@ -2,8 +2,8 @@
 
 # One entry point for the trusted-browser proofs (auth, transport, editor,
 # public, password-auth, MCP, entry, publish, exports, privacy, sample-start,
-# and passkey). Stages an immutable per-run copy of the spec sources and
-# mounts it into the pinned browser image, so editing a spec
+# passkey, and totp). Stages an immutable per-run copy of the spec sources
+# and mounts it into the pinned browser image, so editing a spec
 # never requires an image rebuild; the image manifest gates only the
 # image-side sources (Dockerfile, run.sh, package manifests).
 set -Eeuo pipefail
@@ -44,6 +44,8 @@ readonly -a SPEC_SOURCES=(
   privacy.spec.ts
   sample-start.spec.ts
   second-factor.spec.ts
+  totp.spec.ts
+  totp-fixture.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -80,9 +82,15 @@ passkey)
   evidence_prefix=passkey-enabled
   TARGET=dev-https-passkey-check
   ;;
+totp)
+  # Two bounded phases, one per server enrollment flag. Both evidence
+  # directories start with "totp-" so the hosted job uploads exactly them.
+  evidence_prefix=totp-enabled
+  TARGET=dev-https-totp-check
+  ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|passkey'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|passkey|totp'
   ;;
 esac
 
@@ -160,6 +168,7 @@ staging=
 password_input=
 mcp_input=
 passkey_input=
+totp_input=
 mcp_fixture=
 mcp_client_name=
 mcp_seeded=0
@@ -168,6 +177,7 @@ cleanup() {
   [ -z "$password_input" ] || rm -rf -- "$password_input"
   [ -z "$mcp_input" ] || rm -rf -- "$mcp_input"
   [ -z "$passkey_input" ] || rm -rf -- "$passkey_input"
+  [ -z "$totp_input" ] || rm -rf -- "$totp_input"
   if [ "$mcp_seeded" -eq 1 ] && [ -n "$mcp_fixture" ]; then
     "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
       --client-name "$mcp_client_name" >/dev/null 2>&1 || true
@@ -186,13 +196,13 @@ new_client_name() {
 }
 
 # assert_server_flag proves the running server environment carries the exact
-# passkey enrollment flag this phase needs.
+# named enrollment flag this phase needs.
 assert_server_flag() {
-  local want=$1 env_file=$STATE/run/server.env
+  local name=$1 want=$2 env_file=$STATE/run/server.env
   [ -f "$env_file" ] && [ ! -L "$env_file" ] ||
     fail 'server environment file is missing'
-  grep -Fqx "PASSKEY_ENROLLMENT_ENABLED=$want" "$env_file" ||
-    fail "server environment does not carry PASSKEY_ENROLLMENT_ENABLED=$want"
+  grep -Fqx "$name=$want" "$env_file" ||
+    fail "server environment does not carry $name=$want"
 }
 
 # prune_evidence keeps only the newest EVIDENCE_KEEP runs of one prefix.
@@ -253,7 +263,7 @@ if [ "$MODE" = passkey ]; then
     "http://127.0.0.1:20444/api/messages" >/dev/null
 
   status=0
-  assert_server_flag true
+  assert_server_flag PASSKEY_ENROLLMENT_ENABLED true
   enabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/passkey-enabled.XXXXXX")
   [ "$(stat -c %u "$enabled_evidence")" = "$UID_NOW" ] &&
     [ "$(stat -c %a "$enabled_evidence")" = 700 ] ||
@@ -269,7 +279,7 @@ if [ "$MODE" = passkey ]; then
       fail 'cannot stop the harness between passkey phases'
     DEV_HTTPS_PASSKEY_ENROLLMENT=false bash "$REPO/scripts/dev-https.sh" up ||
       fail 'cannot restart the harness with passkey enrollment disabled'
-    assert_server_flag false
+    assert_server_flag PASSKEY_ENROLLMENT_ENABLED false
     disabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/passkey-disabled.XXXXXX")
     [ "$(stat -c %u "$disabled_evidence")" = "$UID_NOW" ] &&
       [ "$(stat -c %a "$disabled_evidence")" = 700 ] ||
@@ -289,6 +299,82 @@ if [ "$MODE" = passkey ]; then
   fi
   prune_evidence passkey-enabled
   prune_evidence passkey-disabled
+  [ "$status" -eq 0 ] || fail 'browser proof failed'
+  printf '%s evidence: %s and %s (spec sha256 %s)\n' \
+    "$TARGET" "$enabled_evidence" "$disabled_evidence" "$spec_sha"
+  exit 0
+fi
+
+if [ "$MODE" = totp ]; then
+  # Two bounded phases, one per server TOTP enrollment flag. The enabled
+  # phase registers a connected agent, links a provider, and reads security
+  # mail, so its input carries the capture token and this run's client name
+  # beside the Caddy root, exactly like the passkey mode above. The disabled
+  # phase needs only the root
+  # (docs/design/totp-second-factor-contract.md "Migration, mixed versions,
+  # and loss").
+  capture_secret=$STATE/secrets/auth-email-capture-bearer
+  [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
+    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    fail 'invalid capture secret'
+  mcp_client_name=$(new_client_name) || fail 'cannot create a run client name'
+  totp_input=$(mktemp -d "$STATE/totp-input.XXXXXX")
+  chmod 0700 "$totp_input"
+  cp -- "$INPUT/caddy-root.crt" "$totp_input/caddy-root.crt"
+  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  printf '%s' "$capture_token" >"$totp_input/mail-capture-token"
+  printf '%s\n' "$mcp_client_name" >"$totp_input/mcp-client-name"
+  chmod 0600 "$totp_input/caddy-root.crt" \
+    "$totp_input/mail-capture-token" "$totp_input/mcp-client-name"
+
+  install -d -m 0700 "$REPO/.dev/bin"
+  mcp_fixture=$REPO/.dev/bin/mcp-uat-fixture
+  (cd "$REPO/apps/server" &&
+    go build -o "$mcp_fixture" ./cmd/mcp-uat-fixture) ||
+    fail 'MCP fixture build failed'
+  "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"
+  mcp_seeded=1
+  curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
+    "http://127.0.0.1:20444/api/messages" >/dev/null
+
+  status=0
+  assert_server_flag TOTP_ENROLLMENT_ENABLED true
+  enabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/totp-enabled.XXXXXX")
+  [ "$(stat -c %u "$enabled_evidence")" = "$UID_NOW" ] &&
+    [ "$(stat -c %a "$enabled_evidence")" = 700 ] ||
+    fail 'evidence directory ownership or mode mismatch'
+  "$CONTEXT/run.sh" "$image_id" "$totp_input" "$staging" \
+    "$enabled_evidence" totp || status=$?
+
+  disabled_evidence=none
+  if [ "$status" -eq 0 ]; then
+    # The runner-local database keeps its rows across this restart; only the
+    # server enrollment flag changes.
+    bash "$REPO/scripts/dev-https.sh" down ||
+      fail 'cannot stop the harness between TOTP phases'
+    DEV_HTTPS_TOTP_ENROLLMENT=false bash "$REPO/scripts/dev-https.sh" up ||
+      fail 'cannot restart the harness with TOTP enrollment disabled'
+    assert_server_flag TOTP_ENROLLMENT_ENABLED false
+    disabled_evidence=$(mktemp -d "$EVIDENCE_ROOT/totp-disabled.XXXXXX")
+    [ "$(stat -c %u "$disabled_evidence")" = "$UID_NOW" ] &&
+      [ "$(stat -c %a "$disabled_evidence")" = 700 ] ||
+      fail 'evidence directory ownership or mode mismatch'
+    "$CONTEXT/run.sh" "$image_id" "$INPUT" "$staging" \
+      "$disabled_evidence" totp-disabled || status=$?
+    # Leave no stack running at an unexpected flag; the operator or the
+    # hosted job starts a fresh one.
+    bash "$REPO/scripts/dev-https.sh" down || status=1
+  fi
+
+  if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
+    --client-name "$mcp_client_name"; then
+    mcp_seeded=0
+  else
+    status=1
+  fi
+  prune_evidence totp-enabled
+  prune_evidence totp-disabled
   [ "$status" -eq 0 ] || fail 'browser proof failed'
   printf '%s evidence: %s and %s (spec sha256 %s)\n' \
     "$TARGET" "$enabled_evidence" "$disabled_evidence" "$spec_sha"

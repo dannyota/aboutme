@@ -37,7 +37,7 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 	bash scripts/check-tool-versions.sh $(ARGS)
 
 operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
-	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/mcp-owner-workflow_test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh
+	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/mcp-owner-workflow_test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh
 	bash scripts/test/render-topology-test.sh
 	bash deploy/aws/scripts/deploy_test.sh
 	bash -n scripts/test/db-setup-wiring-test.sh
@@ -55,6 +55,7 @@ operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-s
 	scripts/test/scan-products-contract-test.sh
 	scripts/test/toolchain-contract-test.sh
 	scripts/test/workflow-safety-test.sh
+	scripts/test/totp-production-proof-test.sh
 	scripts/generate-web-e2e-source-manifest.test.sh
 	scripts/web-e2e-source.test.sh
 
@@ -382,6 +383,10 @@ dev-https-privacy-check: dev-https-status ## Prove account export, reauthenticat
 .PHONY: dev-https-passkey-check
 dev-https-passkey-check: dev-https-status ## Prove the passkey second factor over trusted HTTPS, with enrollment on then off; stops the harness when it ends
 	@bash scripts/dev-https-check.sh passkey
+
+.PHONY: dev-https-totp-check
+dev-https-totp-check: dev-https-status ## Prove the authenticator-app (TOTP) second factor over trusted HTTPS, with enrollment on then off; stops the harness when it ends
+	@bash scripts/dev-https-check.sh totp
 
 native-http-check: ## Run the deterministic native public HTTP capture and retain only bounded local evidence
 	bash scripts/native-http-capture.sh

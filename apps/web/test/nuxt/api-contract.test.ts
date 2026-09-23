@@ -199,7 +199,7 @@ describe(
 
       // Compiles only while `Capabilities` still declares `totpEnrollment`
       // as a boolean; `useCapabilities` reads this same field.
-      const totpEnrollment: boolean | undefined = data?.data.totpEnrollment;
+      const totpEnrollment: boolean | undefined = data?.data?.totpEnrollment;
       expect(totpEnrollment).toBe(true);
     });
 

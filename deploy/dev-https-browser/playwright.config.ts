@@ -15,6 +15,8 @@ const browserModes = [
   'sample-start',
   'second-factor',
   'second-factor-disabled',
+  'totp',
+  'totp-disabled',
   'mcp-sdk',
 ] as const;
 type BrowserMode = typeof browserModes[number];
@@ -26,26 +28,31 @@ if (!browserModes.includes(requestedMode as BrowserMode)) {
 
 const mode = requestedMode as BrowserMode;
 const secondFactor = mode === 'second-factor'
-  || mode === 'second-factor-disabled';
-// The enabled second-factor journey warms every page it uses, then walks
-// enrollment, four pending sign-ins, the negative cases, and teardown in one
-// test, so it gets its own budget. The disabled journey opens three pages and
-// makes a handful of calls, so it gets a much smaller one. Together with the
-// stack restart between them, both fit inside the hosted job's own limit.
-// mcp-sdk.spec.ts calls test.setTimeout with its own handoff and step
-// bounds once it runs; this default only covers setup before that call.
-const timeout = mode === 'second-factor'
+  || mode === 'second-factor-disabled'
+  || mode === 'totp'
+  || mode === 'totp-disabled';
+// The enabled second-factor and TOTP journeys each warm every page they use,
+// then walk enrollment, several pending sign-ins, the negative cases, and
+// teardown in one test, so each gets its own budget. Each disabled journey
+// opens three pages and makes a handful of calls, so it gets a much smaller
+// one. Together with the stack restart between phases, both fit inside the
+// hosted job's own limit. mcp-sdk.spec.ts calls test.setTimeout with its own
+// handoff and step bounds once it runs; this default only covers setup
+// before that call.
+const timeout = mode === 'second-factor' || mode === 'totp'
   ? 1_200_000
-  : mode === 'second-factor-disabled' || mode === 'mcp-sdk'
+  : mode === 'second-factor-disabled' || mode === 'totp-disabled' || mode === 'mcp-sdk'
     ? 420_000
     : mode === 'editor' || mode === 'public' || mode === 'password-auth'
       || mode === 'mcp' || mode === 'publish' || mode === 'exports'
       || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
 
-// Both second-factor modes run one spec. The server enrollment flag, not the
-// spec file, is what differs between them; the spec selects its own test from
-// ABOUTME_BROWSER_MODE.
-const specName = mode === 'second-factor-disabled' ? 'second-factor' : mode;
+// Both second-factor modes run one spec, and both TOTP modes run another.
+// The server enrollment flag, not the spec file, is what differs within
+// each pair; the spec selects its own test from ABOUTME_BROWSER_MODE.
+const specName = mode === 'second-factor-disabled'
+  ? 'second-factor'
+  : mode === 'totp-disabled' ? 'totp' : mode;
 
 for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
   if (Object.hasOwn(process.env, name)) {

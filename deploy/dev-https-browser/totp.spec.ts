@@ -1,32 +1,20 @@
 /**
- * Passkey second-factor journey over the trusted HTTPS harness.
+ * Authenticator-app (TOTP) second-factor journey over the trusted HTTPS
+ * harness. One spec serves two browser modes, mirroring
+ * `second-factor.spec.ts`. `totp` runs against a server whose TOTP
+ * enrollment flag is on and walks enrollment, step acceptance, replay and
+ * concurrency rejection, replacement, recovery, passkey coexistence,
+ * revocation, and removal. `totp-disabled` runs against the same stack
+ * restarted with the flag off and proves enrollment answers exactly like an
+ * unregistered route while verification, removal, state, passkeys, and
+ * recovery keep working.
  *
- * One spec serves two browser modes. `second-factor` runs against a server
- * whose passkey enrollment flag is on and walks enrollment, pending password
- * and provider sign-in, recovery, revocation, and removal.
- * `second-factor-disabled` runs against the same stack restarted with the flag
- * off and proves enrollment answers exactly like an unregistered route while
- * verification, removal, state, and recovery routes keep working.
+ * The setup secret, provisioning URI, and every code are computed in this
+ * process with `totp-fixture.ts` and never leave it: the evidence file holds
+ * only booleans, the fixed scenario name, and the origin.
  *
- * Ceremonies use Chrome DevTools virtual authenticators. Exactly one simulates
- * presence at a time, so a registration whose `excludeCredentials` names an
- * existing credential still has a device that can answer, and every assertion
- * resolves against a known credential. Chrome allows one internal (platform)
- * authenticator per page, so the first is internal and every later one is a
- * USB security key.
- *
- * The proof spends three fictional accounts because every pending route shares
- * one bounded budget of ten attempts per account and client address in fifteen
- * minutes (docs/design/budgets.md). Attempt exhaustion alone costs five, so it
- * gets an account of its own.
- *
- * Recovery plaintext, credential material, cookies and CSRF values stay in
- * process memory. The evidence file holds only booleans, the fixed scenario
- * name, and the origin. Accounts carry a per-run marker and are deleted in a
- * `finally` path on success and failure alike.
- *
- * Contract: docs/design/passkey-second-factor-contract.md and
- * docs/design/second-factor-authentication.md.
+ * Contract: docs/design/totp-second-factor-contract.md,
+ * docs/design/totp-key-management.md, and ADR 0049.
  */
 import {
   expect,
@@ -34,9 +22,10 @@ import {
   type BrowserContext,
   type ConsoleMessage,
   type Page,
+  type Request,
   type Route,
 } from '@playwright/test';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { request as httpsRequest } from 'node:https';
 import { freshCSRF } from './editor-fixtures';
@@ -53,87 +42,70 @@ import {
   httpFailureStatus,
   isExpectedNegativeHTTPConsole,
 } from './network-policy';
+import {
+  codeNextStep,
+  codeNow,
+  codePreviousStep,
+  fixedClock,
+  mismatchedCode,
+  stepAt,
+  systemClock,
+  toFullwidthDigits,
+  TOTP_PERIOD_SECONDS,
+} from './totp-fixture';
 
 const ORIGIN = ALLOWED_ORIGIN;
-const MODE = process.env.ABOUTME_BROWSER_MODE ?? 'second-factor';
+const MODE = process.env.ABOUTME_BROWSER_MODE ?? 'totp';
 const CA_PATH = '/uat-input/caddy-root.crt';
 const CAPTURE_TOKEN_PATH = '/uat-input/mail-capture-token';
 const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
-const ENABLED_EVIDENCE_PATH = '/evidence/passkey-second-factor-proof.json';
-const DISABLED_EVIDENCE_PATH
-  = '/evidence/passkey-enrollment-disabled-proof.json';
+const ENABLED_EVIDENCE_PATH = '/evidence/totp-second-factor-proof.json';
+const DISABLED_EVIDENCE_PATH = '/evidence/totp-enrollment-disabled-proof.json';
 const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
 const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
 const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
 const PENDING_COOKIE = '__Host-auth-pending';
+const SESSION_COOKIE = '__Host-session';
 const RECOVERY_INPUT = '#second-factor-recovery-code';
+const TOTP_LOGIN_INPUT = '#second-factor-totp-code';
+const TOTP_SETUP_INPUT = '#totp-code';
 const PHONE = { height: 844, width: 390 };
 const DESKTOP = { height: 900, width: 1440 };
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-// Explicit bounds for the waits Playwright's action and navigation options do
-// not cover: response and event waits, DevTools commands, loopback requests
-// from Node, and this spec's own polling. Every one is far above the slowest
-// healthy hosted step, so only a genuinely stuck wait trips it, and a trip
-// fails at its own stage instead of consuming the whole test budget.
+// See second-factor.spec.ts for why each of these is bounded rather than
+// left to Playwright's own defaults.
 const WAIT_RESPONSE_MS = 30_000;
 const WAIT_NAVIGATION_MS = 60_000;
-// The first visit to an app route pulls that route's whole module graph from
-// the harness's Vite dev server, transformed on demand and replayed through
-// this proof's request interception, so it is far slower than any later
-// navigation. Three minutes is a ceiling, not a cost: only the first landing
-// approaches it, and it stays well inside the 900-second test budget.
 const WAIT_LANDING_MS = 180_000;
-// A first visit to a page compiles its route on the harness's dev server and
-// pulls its module graph through this proof's request interception, so it is
-// far slower than any later visit. The journey pays that once up front, under
-// the warm bound; every visit after it uses the tight hydration bound, which
-// is what makes a hydration failure inside the journey mean something.
 const WAIT_WARM_MS = 90_000;
 const WAIT_HYDRATE_MS = 30_000;
-const WAIT_CDP_MS = 30_000;
 const WAIT_LOOPBACK_MS = 20_000;
 const WAIT_MAIL_MS = 45_000;
 
-// Every negative status this proof deliberately provokes inside the page,
-// keyed by the exact path that may answer with it. Anything else counts as a
-// console error and fails the run.
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me', [401]],
   ['/api/v1/me/second-factor', [401]],
-  ['/api/v1/me/second-factor/passkeys', [404]],
-  ['/api/v1/me/second-factor/passkeys/options', [403, 404]],
-  ['/api/v1/me/second-factor/recovery-codes', [403]],
-  ['/api/v1/me/second-factor/totp/enrollment', [404]],
+  ['/api/v1/me/second-factor/totp', [404]],
+  ['/api/v1/me/second-factor/totp/enrollment', [400, 401, 404]],
   ['/api/v1/me/second-factor/unregistered/enrollment', [404]],
   ['/api/v1/auth/second-factor', [401]],
-  ['/api/v1/auth/second-factor/passkey/options', [400, 401]],
-  ['/api/v1/auth/second-factor/passkey/verify', [400, 401]],
+  ['/api/v1/auth/second-factor/totp/verify', [400, 401, 429]],
   ['/api/v1/auth/second-factor/recovery/verify', [401]],
   ['/api/v1/auth/password/login', [401]],
   ['/api/v1/auth/password/reauth', [401]],
-  // The revoked agent grant's tool call.
   ['/mcp', [401]],
 ]);
-const REMOVAL_PATH = /^\/api\/v1\/me\/second-factor\/passkeys\/[^/]+$/u;
 
-// --- Failure reporting ------------------------------------------------------
-//
-// The runner prints only the last stage line it finds and withholds every
-// other byte of browser output, so that one line has to carry the whole
-// diagnosis. It is assembled from three closed vocabularies and never from an
-// exception message, a URL, a response body, or an account value. Teardown
-// stops updating the recorded stage, so a failure keeps the stage it happened
-// in instead of being relabelled as cleanup.
+// --- Failure reporting, modeled on second-factor.spec.ts --------------------
 
 type FailureOutcome
   = | 'timeout'
     | 'navigation'
     | 'response'
-    | 'locator'
-    | 'ceremony'
     | 'capture'
+    | 'locator'
     | 'assertion'
     | 'unknown';
 
@@ -153,28 +125,16 @@ function role(next: AccountRole): void {
   if (!tearingDown) recordedRole = next;
 }
 
-/**
- * Marks the point after which stage and role stop being recorded, and names
- * the stage the body stopped at. The runner forwards only the last stage line,
- * so a bare teardown line would hide exactly what a reader needs.
- */
 function beginTeardown(): void {
   tearingDown = true;
   console.log(`${MODE}-stage:cleanup-after-${recordedStage}`);
 }
 
-// Ordered classifiers. Each maps a Playwright or helper failure to one fixed
-// word; the matched text itself is never printed.
 const OUTCOME_PATTERNS: ReadonlyArray<readonly [RegExp, FailureOutcome]> = [
   [/^Test timeout of \d+ms exceeded/u, 'timeout'],
   [/waitForURL|waiting for navigation/u, 'navigation'],
   [/waitForResponse|waitForEvent/u, 'response'],
-  [
-    /credentials\.(get|create)|WebAuthn|NotAllowedError|InvalidStateError|virtual authenticator/u,
-    'ceremony',
-  ],
   [/capture (read|reset) failed|within its capture bound/u, 'capture'],
-  // An action timeout arrives as `TimeoutError: locator.fill: ...`.
   [/^(?:TimeoutError: )?(locator|page|frame|elementHandle)\./u, 'locator'],
   [/expect|Timed out \d+ms waiting for/u, 'assertion'],
 ];
@@ -188,8 +148,6 @@ function outcomeOf(status: string, message: string): FailureOutcome {
 }
 
 test.afterEach(({}, testInfo) => {
-  // One spec serves both modes, so the other mode's test is always skipped.
-  // Only a real failure may add a line.
   if (testInfo.status === 'skipped') return;
   if (testInfo.status === testInfo.expectedStatus) return;
   const outcome = outcomeOf(
@@ -201,13 +159,6 @@ test.afterEach(({}, testInfo) => {
   );
 });
 
-/**
- * Names where a provider round trip landed, from a closed set. The harness
- * redirects a failed link or login back to the settings or login page with an
- * `error` code, and waiting for the clean URL alone would hang on a page that
- * has already finished loading. Recording the category turns that into a
- * named stage.
- */
 function callbackCategory(value: string): string {
   let url: URL;
   try {
@@ -219,25 +170,11 @@ function callbackCategory(value: string): string {
   if (url.pathname === '/login/second-factor') return 'callback-second-factor';
   if (url.pathname === '/login') return 'callback-login';
   if (url.pathname !== '/app/settings/sessions') return 'callback-other-path';
-  const code = url.searchParams.get('error');
-  if (code === null) return 'callback-settings-clean';
-  switch (code) {
-    case 'auth_failed': return 'callback-settings-auth-failed';
-    case 'authentication_required':
-      return 'callback-settings-authentication-required';
-    case 'cancelled': return 'callback-settings-cancelled';
-    case 'email_already_registered':
-      return 'callback-settings-email-already-registered';
-    case 'email_not_verified':
-      return 'callback-settings-email-not-verified';
-    case 'identity_already_linked':
-      return 'callback-settings-identity-already-linked';
-    case 'reauth_required': return 'callback-settings-reauth-required';
-    default: return 'callback-settings-unrecognized';
-  }
+  return url.searchParams.get('error') === null
+    ? 'callback-settings-clean'
+    : 'callback-settings-error';
 }
 
-/** Every landing that means the browser holds a signed-in app session. */
 const APP_LANDINGS: readonly string[] = [
   'landing-app-new',
   'landing-app-other',
@@ -246,12 +183,6 @@ const APP_LANDINGS: readonly string[] = [
   'landing-app-settings',
 ];
 
-/**
- * Names where a sign-in or a pending completion landed, from a closed set.
- * The proof asserts the class of destination it depends on, not one exact
- * path, so an app route this spec did not predict is named rather than
- * waited on until the budget runs out.
- */
 function landingCategory(value: string): string {
   let url: URL;
   try {
@@ -272,12 +203,6 @@ function landingCategory(value: string): string {
   return 'landing-other-path';
 }
 
-/**
- * Whether the sign-in form is still submitting, as one closed word. A form
- * that is still busy means its navigation started and the destination has not
- * settled; an idle form means the submit finished without one. Read from the
- * control's disabled state, never from its text.
- */
 async function submitState(page: Page): Promise<string> {
   const submit = page
     .getByTestId('login-form')
@@ -286,13 +211,6 @@ async function submitState(page: Page): Promise<string> {
   return await submit.isDisabled() ? 'submit-busy' : 'submit-idle';
 }
 
-/**
- * Waits for the page to leave `from`, then records and returns the closed
- * name for where it stopped. A page that never leaves is named too, a login
- * page is split by whether it is showing an error, and a wait that gave up
- * also records whether the form is still submitting. That one forwarded line
- * then says which side is wrong without carrying any page text.
- */
 async function landedAfter(page: Page, from: string): Promise<string> {
   let settled = true;
   try {
@@ -313,24 +231,15 @@ async function landedAfter(page: Page, from: string): Promise<string> {
   return where;
 }
 
-/** Asserts exactly where the page landed, naming it as a stage first. */
 function expectLanding(page: Page, want: string): void {
-  // landedAfter already recorded this landing, with its discriminator when
-  // its wait gave up; recording the plain name again would drop that.
   expect(landingCategory(page.url())).toBe(want);
 }
 
-/** Asserts the browser holds a signed-in app session, wherever it landed. */
 async function expectSignedInApp(page: Page): Promise<void> {
   expect(APP_LANDINGS).toContain(landingCategory(page.url()));
   expect(await meStatus(page)).toBe(200);
 }
 
-/**
- * Runs a provider round trip while recording where each main-frame navigation
- * landed. A failure is re-stamped with that closed category, so the withheld
- * log still names the exact callback outcome.
- */
 async function watchingCallback(
   page: Page,
   body: () => Promise<void>,
@@ -350,7 +259,7 @@ async function watchingCallback(
   }
 }
 
-function isUnexpectedSecondFactorConsole(message: ConsoleMessage): boolean {
+function isUnexpectedTotpConsole(message: ConsoleMessage): boolean {
   const text = message.text();
   const location = message.location().url;
   if (isExpectedNegativeHTTPConsole(text, location)) return false;
@@ -363,23 +272,20 @@ function isUnexpectedSecondFactorConsole(message: ConsoleMessage): boolean {
     return true;
   }
   if (url.origin !== ORIGIN) return true;
-  const allowed = EXPECTED_PAGE_FAILURES.get(url.pathname)
-    ?? (REMOVAL_PATH.test(url.pathname) ? [404] : undefined);
+  const allowed = EXPECTED_PAGE_FAILURES.get(url.pathname);
   return allowed === undefined || !allowed.includes(status);
 }
 
-// --- Fictional run identity -----------------------------------------------
+// --- Fictional run identity --------------------------------------------
 
 const RUN_MARKER = randomBytes(6).toString('hex');
 let accountSequence = 0;
 
-/** A fictional, per-run address in the reserved invalid top-level domain. */
 function runEmail(role: string): string {
   accountSequence += 1;
-  return `pk-${role}-${RUN_MARKER}-${accountSequence}@example.invalid`;
+  return `totp-${role}-${RUN_MARKER}-${accountSequence}@example.invalid`;
 }
 
-/** A runtime-random password inside the accepted length policy. */
 function runPassword(): string {
   return randomBytes(24).toString('base64url');
 }
@@ -388,12 +294,8 @@ function canonicalRecovery(value: string): string {
   return value.replace(/[- ]/gu, '').toUpperCase();
 }
 
-/** A canonical recovery-code shape that is none of the issued codes. */
 function fabricatedRecoveryCode(issued: readonly string[]): string {
   for (;;) {
-    // 26 characters carry 130 bits for a 128-bit code, so the first one keeps
-    // its two high bits zero; any other first character is a malformed code
-    // (400), not a wrong one (401).
     let body = '';
     for (const [index, byte] of [...randomBytes(26)].entries()) {
       body += CROCKFORD[byte % (index === 0 ? 8 : 32)];
@@ -406,21 +308,16 @@ function fabricatedRecoveryCode(issued: readonly string[]): string {
   }
 }
 
-// --- Trusted loopback requests --------------------------------------------
+// --- Trusted loopback requests -------------------------------------------
 
 interface TrustedResult {
   readonly status: number;
   readonly code: string | null;
 }
 
-/**
- * One bounded HTTPS request to the harness origin, made from Node with the
- * exported Caddy root. Used only for states the page cannot produce: a
- * foreign Origin, a missing bound session cookie, a replayed ceremony, and
- * two genuinely concurrent completions.
- */
-function trustedPost(
+function trustedRequest(
   ca: Buffer,
+  method: 'POST' | 'PUT',
   path: string,
   headers: Readonly<Record<string, string>>,
   body: string,
@@ -434,7 +331,7 @@ function trustedPost(
         ca,
         headers,
         hostname: 'localhost',
-        method: 'POST',
+        method,
         path,
         port: 20443,
         protocol: 'https:',
@@ -468,7 +365,15 @@ function trustedPost(
   });
 }
 
-/** The `error.code` of a JSON envelope, or null for any other body. */
+function trustedPost(
+  ca: Buffer,
+  path: string,
+  headers: Readonly<Record<string, string>>,
+  body: string,
+): Promise<TrustedResult> {
+  return trustedRequest(ca, 'POST', path, headers, body);
+}
+
 function errorCode(body: string): string | null {
   try {
     const parsed = JSON.parse(body) as { error?: { code?: unknown } };
@@ -486,11 +391,24 @@ async function cookieValue(
   return jar.find((entry) => entry.name === name)?.value ?? null;
 }
 
-/** The pending cookie header for a Node request, or a fixed failure. */
 async function pendingCookieHeader(context: BrowserContext): Promise<string> {
   const token = await cookieValue(context, PENDING_COOKIE);
   if (token === null) throw new Error('no pending cookie to carry');
   return `${PENDING_COOKIE}=${token}`;
+}
+
+async function pendingCSRFToken(page: Page): Promise<string> {
+  return page.evaluate(async () => {
+    const response = await fetch('/api/v1/auth/second-factor', {
+      cache: 'no-store',
+      credentials: 'include',
+    });
+    const body = (await response.json()) as { data?: { csrfToken?: unknown } };
+    if (response.status !== 200 || typeof body.data?.csrfToken !== 'string') {
+      throw new Error('pending status read failed');
+    }
+    return body.data.csrfToken;
+  });
 }
 
 // --- Captured security mail ------------------------------------------------
@@ -504,6 +422,7 @@ interface CapturedMessage {
 interface CaptureClient {
   reset(): Promise<void>;
   waitForToken(kind: string, to: string): Promise<string>;
+  waitForKind(kind: string, to: string): Promise<void>;
 }
 
 function captureClient(token: string): CaptureClient {
@@ -528,6 +447,16 @@ function captureClient(token: string): CaptureClient {
         throw new Error(`capture reset failed: ${response.status}`);
       }
     },
+    async waitForKind(kind, to) {
+      const deadline = Date.now() + WAIT_MAIL_MS;
+      while (Date.now() < deadline) {
+        for (const message of await read()) {
+          if (message.kind === kind && message.to === to) return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      throw new Error('no security message within its capture bound');
+    },
     async waitForToken(kind, to) {
       const deadline = Date.now() + WAIT_MAIL_MS;
       while (Date.now() < deadline) {
@@ -543,114 +472,7 @@ function captureClient(token: string): CaptureClient {
   };
 }
 
-// --- Virtual authenticators -------------------------------------------------
-
-type CDPSend = (
-  method: string,
-  params?: Record<string, unknown>,
-) => Promise<Record<string, unknown>>;
-
-/**
- * Bounds one DevTools round trip. Nothing in Playwright's action or
- * navigation options covers DevTools, so an unanswered command would stall the
- * whole test. The rejection carries fixed words only.
- */
-async function boundedCDPCall<T>(work: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(
-            'virtual authenticator command exceeded its bound',
-          )),
-          WAIT_CDP_MS,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
-function boundedCDP(send: CDPSend): CDPSend {
-  return (method, params) => boundedCDPCall(send(method, params));
-}
-
-/** A pool of virtual authenticators on one page, one present at a time. */
-class AuthenticatorPool {
-  private readonly ids: string[] = [];
-
-  private constructor(private readonly send: CDPSend) {}
-
-  /** The transport for the authenticator added after `existing` others. */
-  static transportFor(existing: number): 'internal' | 'usb' {
-    return existing === 0 ? 'internal' : 'usb';
-  }
-
-  static async attach(
-    context: BrowserContext,
-    page: Page,
-  ): Promise<AuthenticatorPool> {
-    const session = await boundedCDPCall(context.newCDPSession(page));
-    const send = boundedCDP(
-      session.send.bind(session) as unknown as CDPSend,
-    );
-    await send('WebAuthn.enable', { enableUI: false });
-    return new AuthenticatorPool(send);
-  }
-
-  /**
-   * Adds an authenticator and makes it the only one that can answer. Chrome
-   * rejects a second internal authenticator in one environment, so only the
-   * first is internal and the rest are resident-key USB security keys.
-   */
-  async add(): Promise<string> {
-    const result = await this.send('WebAuthn.addVirtualAuthenticator', {
-      options: {
-        automaticPresenceSimulation: true,
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        protocol: 'ctap2',
-        transport: AuthenticatorPool.transportFor(this.ids.length),
-      },
-    });
-    const id = result.authenticatorId;
-    if (typeof id !== 'string' || id === '') {
-      throw new Error('virtual authenticator was not created');
-    }
-    this.ids.push(id);
-    await this.present(id);
-    return id;
-  }
-
-  async present(id: string): Promise<void> {
-    for (const other of this.ids) {
-      await this.send('WebAuthn.setAutomaticPresenceSimulation', {
-        authenticatorId: other,
-        enabled: other === id,
-      });
-    }
-  }
-
-  async setUserVerified(id: string, verified: boolean): Promise<void> {
-    await this.send('WebAuthn.setUserVerified', {
-      authenticatorId: id,
-      isUserVerified: verified,
-    });
-  }
-
-  async credentialCount(id: string): Promise<number> {
-    const result = await this.send('WebAuthn.getCredentials', {
-      authenticatorId: id,
-    });
-    return Array.isArray(result.credentials) ? result.credentials.length : 0;
-  }
-}
-
-// --- Page helpers -----------------------------------------------------------
+// --- Page helpers ------------------------------------------------------
 
 async function setLocale(
   context: BrowserContext,
@@ -661,24 +483,6 @@ async function setLocale(
   ]);
 }
 
-/**
- * Pages the journey opens that are safe to warm with no session, each with
- * the closed word that names it. A first visit is compiled on demand by the
- * harness's dev server, so paying them once, up front and in a stage of their
- * own, keeps a later failure about the behaviour under test rather than about
- * a cold route. None of these issues a request while signed out beyond the
- * reads this proof's console filter already accepts.
- *
- * The two pages that take their token from the URL fragment are deliberately
- * absent. Each reads the fragment during setup, on the client only, because
- * the token must never reach the server, and with no fragment each sets its
- * own failure state before hydration. The server render and the first client
- * render then disagree and the development build says so on the console.
- * Every other page here starts in the same state on both sides: the ones
- * that fetch do it after mount or with server rendering turned off. The
- * journey only opens the fragment pages with a real token, where they are
- * clean, so each takes its first visit there instead.
- */
 const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/register', 'register'],
   ['/login', 'login'],
@@ -686,27 +490,17 @@ const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/forgot-password', 'forgot-password'],
 ];
 
-/**
- * Pages that require a session. Warming these signed out would make the
- * account reads behind them answer 401, which is correct behaviour but noise
- * this proof would then have to accept everywhere, so they are warmed once
- * the journey has a session instead. The one landing that reaches an app
- * page before that runs under the landing bound.
- */
 const SIGNED_IN_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/app/resumes', 'app-resumes'],
   ['/app/settings/sessions', 'app-settings-sessions'],
 ];
 
-/** The signed-out page the disabled-enrollment journey opens first. */
 const DISABLED_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/login', 'login'],
 ];
 
-/** The counter classes a warm visit may move, as closed words. */
 type CounterClass = 'certificate' | 'console' | 'external' | 'page';
 
-/** The first counter class that moved, or null when the visit was clean. */
 function dirtiedCounter(
   before: DiagnosticCounters,
   after: DiagnosticCounters,
@@ -720,12 +514,6 @@ function dirtiedCounter(
   return null;
 }
 
-/**
- * Opens each route once, so its first compile happens in a stage that names
- * it, and checks the diagnostic counters after every visit rather than once
- * at the end. A page that dirties a counter names itself and the counter
- * class before the assertion fails.
- */
 async function warmRoutes(
   page: Page,
   routes: ReadonlyArray<readonly [string, string]>,
@@ -758,7 +546,6 @@ async function gotoHydrated(page: Page, path: string): Promise<void> {
   await hydrated(page, WAIT_HYDRATE_MS);
 }
 
-/** Opens a page the warm pass skips, at first-visit cost. */
 async function gotoFirstVisit(page: Page, url: string): Promise<void> {
   await page.goto(url, { timeout: WAIT_WARM_MS });
   await hydrated(page, WAIT_WARM_MS);
@@ -777,7 +564,7 @@ async function meStatus(page: Page): Promise<number> {
 interface FactorState {
   readonly status: number;
   readonly enabled: boolean;
-  readonly passkeyCount: number;
+  readonly totpEnabled: boolean;
   readonly recoveryRemaining: number;
 }
 
@@ -790,32 +577,29 @@ async function factorState(page: Page): Promise<FactorState> {
     if (response.status !== 200) {
       return {
         enabled: false,
-        passkeyCount: -1,
         recoveryRemaining: -1,
         status: response.status,
+        totpEnabled: false,
       };
     }
     const body = (await response.json()) as {
       data?: {
         enabled?: unknown;
-        passkeys?: unknown;
+        totpEnabled?: unknown;
         recoveryCodesRemaining?: unknown;
       };
     };
     return {
       enabled: body.data?.enabled === true,
-      passkeyCount: Array.isArray(body.data?.passkeys)
-        ? body.data.passkeys.length
-        : -1,
       recoveryRemaining: typeof body.data?.recoveryCodesRemaining === 'number'
         ? body.data.recoveryCodesRemaining
         : -1,
       status: response.status,
+      totpEnabled: body.data?.totpEnabled === true,
     };
   });
 }
 
-/** Registers a fictional account and verifies it through the captured mail. */
 async function registerVerified(
   page: Page,
   capture: CaptureClient,
@@ -825,8 +609,6 @@ async function registerVerified(
 ): Promise<void> {
   stage('register-open');
   await gotoHydrated(page, '/register');
-  // The form is inert and invisible until the capabilities read resolves, so
-  // this is the first step that depends on the page's own data.
   stage('register-form-ready');
   await expect(page.getByTestId('register-form')).toBeVisible();
   stage('register-fill');
@@ -846,12 +628,6 @@ async function registerVerified(
   await expect(page.getByTestId('verify-success')).toBeVisible();
 }
 
-/**
- * Submits the password sign-in form and reports whether the account was sent
- * to the pending second-factor page instead of receiving a session. The
- * fields are found by id and the button by its form, not by label, because
- * the locale journey signs in with the page in Vietnamese.
- */
 async function passwordSignIn(
   page: Page,
   email: string,
@@ -884,13 +660,6 @@ async function passwordSignIn(
   return 'session';
 }
 
-/**
- * Logs out from the settings page in English, whatever locale the previous
- * step left. The logout response sends `Clear-Site-Data: "cookies"`, which
- * also drops the locale cookie, so the next page would render in the
- * Vietnamese default. English is pinned again afterwards; a caller that wants
- * another locale sets it after this returns.
- */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
   await gotoHydrated(page, '/app/settings/sessions');
@@ -899,19 +668,26 @@ async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
 }
 
-/** Runs the pending passkey ceremony with the present virtual authenticator. */
-async function clickPasskey(page: Page): Promise<void> {
-  await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
-  await page.getByTestId('second-factor-passkey-button').click();
+/** Submits one TOTP code on the pending login page and returns the status. */
+async function submitPendingTotpCode(page: Page, code: string): Promise<number> {
+  const response = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+    return url.origin === ORIGIN
+      && url.pathname === '/api/v1/auth/second-factor/totp/verify';
+  }, { timeout: WAIT_RESPONSE_MS });
+  const input = page.locator(TOTP_LOGIN_INPUT);
+  await input.click();
+  await input.fill(code);
+  await page.getByRole('button', { name: 'Verify code' }).click();
+  return (await response).status();
 }
 
-/** Completes the open pending authentication with a passkey. */
-async function completeWithPasskey(page: Page): Promise<void> {
-  await clickPasskey(page);
+/** Completes the open pending authentication with a valid TOTP code. */
+async function completeWithTotp(page: Page, code: string): Promise<void> {
+  expect(await submitPendingTotpCode(page, code)).toBe(204);
   await landedAfter(page, '/login/second-factor');
 }
 
-/** Submits one recovery code by keyboard and returns the response status. */
 async function submitRecoveryCode(page: Page, code: string): Promise<number> {
   const response = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
@@ -925,13 +701,11 @@ async function submitRecoveryCode(page: Page, code: string): Promise<number> {
   return (await response).status();
 }
 
-/** Completes the open pending authentication with one recovery code. */
 async function completeWithRecovery(page: Page, code: string): Promise<void> {
   expect(await submitRecoveryCode(page, code)).toBe(204);
   await landedAfter(page, '/login/second-factor');
 }
 
-/** Answers the settings reauthentication prompt with the account password. */
 async function reauthenticateWithPassword(
   page: Page,
   password: string,
@@ -943,12 +717,6 @@ async function reauthenticateWithPassword(
     .toHaveCount(0);
 }
 
-/**
- * Makes the next request to `pathname` answer `403 reauth_required` inside the
- * browser, which drives the settings block into its reauthentication branch
- * without waiting out the fifteen-minute window. The request never leaves the
- * page, so the real route and its budgets are untouched.
- */
 async function forceReauthOnce(page: Page, pathname: string): Promise<void> {
   let spent = false;
   await page.route(`${ORIGIN}${pathname}`, async (route: Route) => {
@@ -972,7 +740,6 @@ async function forceReauthOnce(page: Page, pathname: string): Promise<void> {
   });
 }
 
-/** Reads the one-time recovery codes from the open reveal dialog. */
 async function readRevealedCodes(page: Page): Promise<string[]> {
   const reveal = page.getByTestId('recovery-reveal');
   const list = page.getByTestId('recovery-codes-list');
@@ -986,7 +753,6 @@ async function readRevealedCodes(page: Page): Promise<string[]> {
   return codes;
 }
 
-/** Closes the reveal and proves the plaintext left every page-held store. */
 async function closeRevealAndProveCleared(
   page: Page,
   codes: readonly string[],
@@ -1006,91 +772,161 @@ async function closeRevealAndProveCleared(
   expect(leaked).toBe(false);
 }
 
-/**
- * Adds one passkey from the settings page. `expectCodes` states whether this
- * enrollment creates the factor policy and therefore the one-time recovery
- * set; the returned codes are read from the reveal dialog itself.
- */
-async function addPasskey(
+/** Reads the grouped secret from the open setup dialog. */
+async function readSetupSecret(page: Page): Promise<string> {
+  await expect(page.getByTestId('totp-setup-dialog')).toBeVisible();
+  await expect(page.getByTestId('totp-qr')).toBeVisible();
+  const grouped = (await page.getByTestId('totp-secret').textContent()) ?? '';
+  const secret = grouped.replace(/\s+/gu, '');
+  expect(secret).toMatch(/^[A-Z2-7]{32}$/u);
+  return secret;
+}
+
+/** Proves opening the setup dialog issues no external network request. */
+async function proveQrIsLocal(
   page: Page,
-  expectCodes: boolean,
-): Promise<string[]> {
+  counters: DiagnosticCounters,
+): Promise<void> {
+  const before = counters.externalRequests;
+  const seen: string[] = [];
+  const onRequest = (request: Request): void => { seen.push(request.url()); };
+  page.on('request', onRequest);
+  try {
+    await expect(page.getByTestId('totp-qr')).toBeVisible();
+    await page.waitForTimeout(250);
+  } finally {
+    page.off('request', onRequest);
+  }
+  expect(counters.externalRequests).toBe(before);
+  const foreign = seen.some((url) => {
+    try {
+      return new URL(url).origin !== ORIGIN;
+    } catch {
+      return true;
+    }
+  });
+  expect(foreign).toBe(false);
+}
+
+/** Submits one TOTP code in the settings setup dialog and returns status. */
+async function submitSetupCode(page: Page, code: string): Promise<number> {
+  const response = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+    return url.origin === ORIGIN
+      && url.pathname === '/api/v1/me/second-factor/totp/enrollment'
+      && candidate.request().method() === 'PUT';
+  }, { timeout: WAIT_RESPONSE_MS });
+  const input = page.locator(TOTP_SETUP_INPUT);
+  await input.click();
+  await input.fill(code);
+  await page.getByTestId('totp-code-submit').click();
+  return (await response).status();
+}
+
+/**
+ * Starts (or replaces) TOTP setup and returns the freshly read secret plus
+ * the enrollment token the server issued. The token is held only in process
+ * memory, for the HTTP-level supersession fixture; it never reaches evidence
+ * or console output.
+ */
+async function startTotpSetupCapturing(
+  page: Page,
+): Promise<{ enrollmentId: string; secret: string }> {
   const created = page.waitForResponse((candidate) => {
     const url = new URL(candidate.url());
     return url.origin === ORIGIN
-      && url.pathname === '/api/v1/me/second-factor/passkeys'
+      && url.pathname === '/api/v1/me/second-factor/totp/enrollment'
       && candidate.request().method() === 'POST';
   }, { timeout: WAIT_RESPONSE_MS });
-  await page.getByTestId('passkey-add').click();
-  expect((await created).status()).toBe(201);
-  if (!expectCodes) {
-    await expect(page.getByTestId('passkey-added-success')).toBeVisible();
-    await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
-    return [];
+  const startButton = (await page.getByTestId('totp-setup-start').count()) > 0
+    ? page.getByTestId('totp-setup-start')
+    : page.getByTestId('totp-setup-replace');
+  await startButton.click();
+  const response = await created;
+  expect(response.status()).toBe(200);
+  const body = (await response.json()) as { data?: { enrollmentId?: unknown } };
+  const enrollmentId = body.data?.enrollmentId;
+  if (typeof enrollmentId !== 'string' || enrollmentId === '') {
+    throw new Error('enrollment response is missing its token');
   }
-  const codes = await readRevealedCodes(page);
-  await closeRevealAndProveCleared(page, codes);
-  return codes;
+  const secret = await readSetupSecret(page);
+  return { enrollmentId, secret };
 }
 
-/** Enrolls a first passkey on a freshly signed-in account. */
-async function enrollFirstPasskey(
+/** Starts (or replaces) TOTP setup and returns the freshly read secret. */
+async function startTotpSetup(page: Page): Promise<string> {
+  return (await startTotpSetupCapturing(page)).secret;
+}
+
+/**
+ * Enrolls a first TOTP credential on a freshly signed-in account, proving
+ * the reauthentication gate and the one-time recovery reveal.
+ */
+async function enrollFirstTotp(
   page: Page,
   password: string,
-): Promise<string[]> {
+): Promise<{ codes: string[]; secret: string }> {
   await gotoHydrated(page, '/app/settings/sessions');
-  await expect(page.getByTestId('second-factor-empty')).toBeVisible();
-  await forceReauthOnce(page, '/api/v1/me/second-factor/passkeys/options');
-  await page.getByTestId('passkey-add').click();
+  await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
+  await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
+  await page.getByTestId('totp-setup-start').click();
   await expect(page.getByTestId('second-factor-reauth-password')).toBeVisible();
   await reauthenticateWithPassword(page, password);
-  return addPasskey(page, true);
+  const secret = await startTotpSetup(page);
+  const code = codeNow(secret, systemClock());
+  expect(await submitSetupCode(page, code)).toBe(200);
+  const codes = await readRevealedCodes(page);
+  await closeRevealAndProveCleared(page, codes);
+  await expect(page.getByTestId('totp-added-success')).toBeVisible();
+  return { codes, secret };
 }
 
-// --- Enabled-enrollment journey --------------------------------------------
+// --- Enabled-enrollment journey ------------------------------------------
 
-test('proves the passkey second factor over native HTTPS', async ({
+test('proves the authenticator-app second factor over native HTTPS', async ({
   browser,
   context,
   page,
 }) => {
-  test.skip(MODE !== 'second-factor', 'enabled enrollment mode only');
+  test.skip(MODE !== 'totp', 'enabled enrollment mode only');
 
   const steps = {
     agentGranted: false,
     agentRevoked: false,
     attemptsExhausted: false,
-    ceremonyReplayRejected: false,
     cleanup: false,
-    concurrentCompletion: false,
+    concurrentUseRejected: false,
+    currentStepAccepted: false,
     enrolled: false,
     finalRemoved: false,
+    invalidCodeRejected: false,
     locales: false,
+    nextStepAccepted: false,
     oneRemoved: false,
     otherSessionRevoked: false,
     otherSessionStarted: false,
-    passkeyCompletion: false,
+    passkeyCoexistence: false,
     passwordPending: false,
+    previousStepAccepted: false,
     providerAccount: false,
     providerPending: false,
-    reauthPending: false,
+    qrIsLocal: false,
     reauthRequired: false,
     recoveryCompletion: false,
-    recoveryRegenerated: false,
     recoveryRevealedOnce: false,
-    recoveryReuseRejected: false,
+    replaced: false,
     resetPreservesEnforcement: false,
-    secondPasskeyAdded: false,
-    staleEpochRejected: false,
-    userVerificationRequired: false,
+    sameStepReplayRejected: false,
+    supersededEnrollmentRejected: false,
+    unicodeDigitsRejected: false,
     viewports: false,
-    wrongBindingRejected: false,
-    wrongOriginRejected: false,
+    wrongEpochRejected: false,
+    wrongSessionRejected: false,
   };
 
   const counters = newDiagnosticCounters();
   const attach = pageDiagnosticsAttacher(counters, {
-    countConsoleError: isUnexpectedSecondFactorConsole,
+    countConsoleError: isUnexpectedTotpConsole,
   });
   attach(page);
   context.on('page', attach);
@@ -1108,10 +944,6 @@ test('proves the passkey second factor over native HTTPS', async ({
   );
   await capture.reset();
 
-  stage('virtual-authenticator');
-  const pool = await AuthenticatorPool.attach(context, page);
-  const authPrimary = await pool.add();
-
   const primaryEmail = runEmail('primary');
   const primaryPassword = runPassword();
   const recoveryEmail = runEmail('recovery');
@@ -1119,8 +951,6 @@ test('proves the passkey second factor over native HTTPS', async ({
   const attemptsEmail = runEmail('attempts');
   const attemptsPassword = runPassword();
 
-  let authRecovery = '';
-  let authAttempts = '';
   let primaryFinalPassword = primaryPassword;
   let primaryCleanupCode = '';
   let recoveryCleanupCode = '';
@@ -1128,7 +958,9 @@ test('proves the passkey second factor over native HTTPS', async ({
   const extraContexts: BrowserContext[] = [];
 
   try {
-    // 1. A fictional primary account with a password and a linked provider.
+    // 1. A fictional primary account with a password and a linked provider,
+    //    plus a connected agent and a second session, all created before
+    //    enrollment so completion's epoch change can be proved against them.
     role('primary');
     stage('primary-register');
     await registerVerified(
@@ -1136,7 +968,7 @@ test('proves the passkey second factor over native HTTPS', async ({
       capture,
       primaryEmail,
       primaryPassword,
-      'Passkey Proof',
+      'TOTP Proof',
     );
     stage('primary-first-sign-in');
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
@@ -1145,7 +977,6 @@ test('proves the passkey second factor over native HTTPS', async ({
 
     stage('primary-open-settings');
     await gotoHydrated(page, '/app/settings/sessions');
-    stage('primary-open-provider-list');
     await page.getByTestId('add-provider-button').click();
     const linkGoogle = page.getByRole('button', {
       exact: true,
@@ -1164,9 +995,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     stage('primary-link-select-account');
     await page.getByLabel(LINK_ACCOUNT_LABEL).check();
     stage('primary-link-callback');
-    // Wait for the settings page itself, then judge the outcome from the
-    // closed callback vocabulary. Waiting for the clean URL alone would hang
-    // on an error redirect that has already finished loading.
     await watchingCallback(page, async () => {
       await Promise.all([
         page.waitForURL(
@@ -1182,8 +1010,6 @@ test('proves the passkey second factor over native HTTPS', async ({
     await expect(page.getByTestId('linked-provider-google')).toBeVisible();
     steps.providerAccount = true;
 
-    // 2. A connected agent and a second browser session, both created while
-    //    the account is still unenrolled.
     stage('agent-grant');
     const agentToken = await createAgentGrant(context, page);
     expect(await agentToolsStatus(page, agentToken)).toBe(200);
@@ -1201,21 +1027,69 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await meStatus(otherPage)).toBe(200);
     steps.otherSessionStarted = true;
 
-    // 3. Enrollment demands recent reauthentication, then issues the one-time
-    //    recovery set exactly once.
-    stage('enroll-first-passkey');
+    // 2. First enrollment demands recent reauthentication, renders the QR
+    //    with no external request, and issues the one-time recovery set.
+    stage('enroll-first-totp');
     await gotoHydrated(page, '/app/settings/sessions');
-    await expect(page.getByTestId('second-factor-empty')).toBeVisible();
-    await forceReauthOnce(page, '/api/v1/me/second-factor/passkeys/options');
-    await page.getByTestId('passkey-add').click();
+    await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
+    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
+    await page.getByTestId('totp-setup-start').click();
     await expect(page.getByTestId('second-factor-reauth-password'))
       .toBeVisible();
     steps.reauthRequired = true;
     await reauthenticateWithPassword(page, primaryPassword);
-    const firstCodes = await addPasskey(page, true);
+    const firstEnrollment = await startTotpSetupCapturing(page);
+    let secret = firstEnrollment.secret;
+    await proveQrIsLocal(page, counters);
+    steps.qrIsLocal = true;
+
+    // 3. Abandoning setup and starting again supersedes the first enrollment
+    //    row. Proving the old enrollmentId with the new secret's own code
+    //    against the completion route (an authenticated HTTP fixture, since
+    //    the settings dialog always names its own current enrollment) shows
+    //    the superseded row is gone, not merely that a stale code fails.
+    stage('enrollment-superseded');
+    await page.getByTestId('totp-setup-cancel').click();
+    await expect(page.getByTestId('totp-setup-dialog')).toHaveCount(0);
+    secret = await startTotpSetup(page);
+    expect(secret).not.toBe(firstEnrollment.secret);
+    const sessionCookie = await cookieValue(context, SESSION_COOKIE);
+    if (sessionCookie === null) throw new Error('no session cookie to carry');
+    const supersededResult = await trustedRequest(
+      ca,
+      'PUT',
+      '/api/v1/me/second-factor/totp/enrollment',
+      {
+        'Content-Type': 'application/json',
+        'Cookie': `${SESSION_COOKIE}=${sessionCookie}`,
+        'Origin': ORIGIN,
+        'X-CSRF-Token': await freshCSRF(page),
+      },
+      JSON.stringify({
+        code: codeNow(secret, systemClock()),
+        enrollmentId: firstEnrollment.enrollmentId,
+      }),
+    );
+    expect(supersededResult).toEqual({ code: 'enrollment_invalid', status: 400 });
+    steps.supersededEnrollmentRejected = true;
+
+    stage('unicode-digits-rejected');
+    const validCode = codeNow(secret, systemClock());
+    const unicodeStatus = await submitSetupCode(
+      page,
+      toFullwidthDigits(validCode),
+    );
+    expect(unicodeStatus).toBe(400);
+    steps.unicodeDigitsRejected = true;
+
+    stage('enroll-complete');
+    expect(await submitSetupCode(page, codeNow(secret, systemClock())))
+      .toBe(200);
+    const firstCodes = await readRevealedCodes(page);
+    await closeRevealAndProveCleared(page, firstCodes);
+    await expect(page.getByTestId('totp-added-success')).toBeVisible();
     steps.enrolled = true;
     steps.recoveryRevealedOnce = true;
-    expect(await pool.credentialCount(authPrimary)).toBe(1);
 
     // 4. The epoch change ended every other session and the agent grant.
     stage('revocation');
@@ -1226,144 +1100,166 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(200);
     await otherContext.close();
 
-    // 5. A second passkey on a second device adds no recovery codes.
-    stage('second-passkey');
-    const authSecondary = await pool.add();
-    await gotoHydrated(page, '/app/settings/sessions');
-    expect(await addPasskey(page, false)).toEqual([]);
-    expect(await pool.credentialCount(authSecondary)).toBe(1);
-    await pool.present(authPrimary);
     let state = await factorState(page);
     expect(state.enabled).toBe(true);
-    expect(state.passkeyCount).toBe(2);
+    expect(state.totpEnabled).toBe(true);
     expect(state.recoveryRemaining).toBe(10);
-    steps.secondPasskeyAdded = true;
 
-    // 6. Regeneration replaces the set and moves the epoch, which kills a
-    //    pending login another browser is still holding.
-    stage('stale-epoch');
-    const staleContext = await browser.newContext();
-    extraContexts.push(staleContext);
-    await setLocale(staleContext, 'en');
-    await installExternalRequestFirewall(staleContext, counters);
-    const stalePage = await staleContext.newPage();
-    attach(stalePage);
-    expect(await passwordSignIn(stalePage, primaryEmail, primaryPassword))
-      .toBe('pending');
-    await gotoHydrated(page, '/app/settings/sessions');
-    await page.getByTestId('recovery-regenerate').click();
-    await page.locator('[data-action="recovery-regenerate-confirm"]').click();
-    const primaryCodes = await readRevealedCodes(page);
-    expect(canonicalRecovery(primaryCodes.join()))
-      .not.toBe(canonicalRecovery(firstCodes.join()));
-    await closeRevealAndProveCleared(page, primaryCodes);
-    steps.recoveryRegenerated = true;
-    primaryCleanupCode = primaryCodes[9] as string;
-    await stalePage.reload({ timeout: WAIT_NAVIGATION_MS });
-    await hydrated(stalePage, WAIT_HYDRATE_MS);
-    await expect(stalePage.getByTestId('second-factor-expired')).toBeVisible();
-    steps.staleEpochRejected = true;
-    await staleContext.close();
+    // 5. A passkey enrolled alongside TOTP adds no recovery codes and the
+    //    pending page lists passkey before TOTP before recovery.
+    stage('passkey-coexistence');
+    const pool = await AuthenticatorPool.attach(context, page);
+    const authPrimary = await pool.add();
+    const created = page.waitForResponse((candidate) => {
+      const url = new URL(candidate.url());
+      return url.origin === ORIGIN
+        && url.pathname === '/api/v1/me/second-factor/passkeys'
+        && candidate.request().method() === 'POST';
+    }, { timeout: WAIT_RESPONSE_MS });
+    await page.getByTestId('passkey-add').click();
+    expect((await created).status()).toBe(201);
+    await expect(page.getByTestId('passkey-added-success')).toBeVisible();
+    await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
+    steps.passkeyCoexistence = true;
 
-    // 7. Removing one of two passkeys keeps enforcement on. The list is in
-    //    creation order, so the newer credential goes and the one the present
-    //    authenticator holds stays.
-    stage('remove-one');
-    await gotoHydrated(page, '/app/settings/sessions');
-    await page.locator('[data-testid^="passkey-remove-"]').last().click();
-    await expect(page.getByRole('alertdialog')).toContainText(
-      'Every other device and connected agent will be signed out.',
-    );
-    await page.locator('[data-action="passkey-remove-confirm"]').click();
-    await expect(page.getByTestId('passkey-removed-success')).toBeVisible();
-    state = await factorState(page);
-    expect(state.enabled).toBe(true);
-    expect(state.passkeyCount).toBe(1);
-    steps.oneRemoved = true;
-
-    // 8. Password sign-in stops at the pending page; only a verified passkey
-    //    finishes it.
+    // 6. Password sign-in stops at the pending page; the fixed method order
+    //    is passkey, then authenticator app, then recovery code.
     stage('password-pending');
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
     expect(await meStatus(page)).toBe(401);
-    await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
-    await expect(page.getByTestId('second-factor-recovery')).toBeVisible();
+    const order = await page.evaluate(() =>
+      [...document.querySelectorAll('section[data-testid]')]
+        .map((el) => el.getAttribute('data-testid'))
+        .filter((id): id is string => id !== null
+          && ['second-factor-passkey', 'second-factor-totp', 'second-factor-recovery']
+            .includes(id)));
+    expect(order).toEqual([
+      'second-factor-passkey',
+      'second-factor-totp',
+      'second-factor-recovery',
+    ]);
     steps.passwordPending = true;
 
-    stage('pending-wrong-origin');
-    const foreignOrigin = await trustedPost(
+    // 7. Wrong-session HTTP fixture: the pending verify route bound to one
+    //    session rejects a foreign pending cookie.
+    stage('wrong-session');
+    const foreignSessionResult = await trustedPost(
       ca,
-      '/api/v1/auth/second-factor/passkey/options',
+      '/api/v1/auth/second-factor/totp/verify',
       {
         'Content-Type': 'application/json',
-        'Cookie': await pendingCookieHeader(context),
-        'Origin': 'https://passkey-proof.invalid',
-        'X-CSRF-Token': await pendingCSRFToken(page),
-      },
-      '{}',
-    );
-    expect(foreignOrigin).toEqual({ code: 'csrf_rejected', status: 403 });
-    steps.wrongOriginRejected = true;
-
-    stage('pending-user-verification');
-    await pool.setUserVerified(authPrimary, false);
-    await clickPasskey(page);
-    // Bounded on purpose: an authenticator that can never verify must fail the
-    // ceremony, not hold the page until the five-minute WebAuthn timeout.
-    await expect(page.getByTestId('second-factor-passkey-error'))
-      .toBeVisible({ timeout: 30_000 });
-    expect(new URL(page.url()).pathname).toBe('/login/second-factor');
-    expect(await meStatus(page)).toBe(401);
-    await pool.setUserVerified(authPrimary, true);
-    // A rejected ceremony must not stay outstanding: a second concurrent
-    // request would be refused by the browser, not by the server. Reloading
-    // discards it before the completion that follows.
-    await page.reload({ timeout: WAIT_NAVIGATION_MS });
-    await hydrated(page, WAIT_HYDRATE_MS);
-    steps.userVerificationRequired = true;
-
-    stage('pending-passkey-completion');
-    await completeWithPasskey(page);
-    await expectSignedInApp(page);
-    steps.passkeyCompletion = true;
-
-    // 9. A settings reauthentication opens a pending row bound to this exact
-    //    session, and the binding is enforced.
-    stage('reauth-pending');
-    await gotoHydrated(page, '/app/settings/sessions');
-    await forceReauthOnce(page, '/api/v1/me/second-factor/recovery-codes');
-    await page.getByTestId('recovery-regenerate').click();
-    await page.locator('[data-action="recovery-regenerate-confirm"]').click();
-    await page.getByTestId('second-factor-reauth-password').waitFor();
-    await page.getByLabel('Current password', { exact: true })
-      .fill(primaryPassword);
-    await Promise.all([
-      page.waitForURL(`${ORIGIN}/login/second-factor`, { timeout: WAIT_NAVIGATION_MS }),
-      page.getByTestId('second-factor-reauth-submit').click(),
-    ]);
-    await hydrated(page, WAIT_HYDRATE_MS);
-    steps.reauthPending = true;
-
-    stage('reauth-wrong-binding');
-    const unbound = await trustedPost(
-      ca,
-      '/api/v1/auth/second-factor/passkey/options',
-      {
-        'Content-Type': 'application/json',
-        'Cookie': await pendingCookieHeader(context),
+        'Cookie': `${PENDING_COOKIE}=not-a-real-pending-token`,
         'Origin': ORIGIN,
-        'X-CSRF-Token': await pendingCSRFToken(page),
+        'X-CSRF-Token': 'not-a-real-token',
       },
-      '{}',
+      JSON.stringify({ code: codeNow(secret, systemClock()) }),
     );
-    expect(unbound).toEqual({ code: 'authentication_required', status: 401 });
-    steps.wrongBindingRejected = true;
-    await completeWithRecovery(page, primaryCodes[0] as string);
-    expectLanding(page, 'landing-app-settings');
+    expect(foreignSessionResult.status).toBe(401);
+    steps.wrongSessionRejected = true;
 
-    // 10. Provider sign-in on the enrolled account also stops at pending.
+    // 8. Previous, current, and next step each complete one pending login,
+    //    each on a fresh sign-in because a step only accepts a code greater
+    //    than the credential's last used step.
+    stage('previous-step');
+    await completeWithTotp(page, codePreviousStep(secret, systemClock()));
+    await expectSignedInApp(page);
+    steps.previousStepAccepted = true;
+
+    stage('current-step');
+    await signOut(page);
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await expectSignedInApp(page);
+    steps.currentStepAccepted = true;
+
+    stage('next-step');
+    await signOut(page);
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    await completeWithTotp(page, codeNextStep(secret, systemClock()));
+    await expectSignedInApp(page);
+    steps.nextStepAccepted = true;
+
+    // 9. A replayed code and an invalid code are both rejected as failed
+    //    verification, then a valid code still completes the same pending row.
+    stage('same-step-replay');
+    await signOut(page);
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    const usedCode = codeNow(secret, systemClock());
+    expect(await submitPendingTotpCode(page, usedCode)).toBe(204);
+    await landedAfter(page, '/login/second-factor');
+    await expectSignedInApp(page);
+    await signOut(page);
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    // The already-consumed step is no longer greater than last_used_step.
+    expect(await submitPendingTotpCode(page, usedCode)).toBe(401);
+    steps.sameStepReplayRejected = true;
+
+    stage('invalid-code');
+    expect(await submitPendingTotpCode(page, mismatchedCode(usedCode)))
+      .toBe(401);
+    await expect(page.getByTestId('second-factor-totp-error')).toBeVisible();
+    expect(await meStatus(page)).toBe(401);
+    steps.invalidCodeRejected = true;
+    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await expectSignedInApp(page);
+
+    // 10. Concurrent submission of one code has exactly one winner.
+    stage('concurrent-use');
+    await signOut(page);
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    const concurrentHeaders = {
+      'Content-Type': 'application/json',
+      'Cookie': await pendingCookieHeader(context),
+      'Origin': ORIGIN,
+      'X-CSRF-Token': await pendingCSRFToken(page),
+    };
+    const concurrentBody = JSON.stringify({
+      code: codeNow(secret, systemClock()),
+    });
+    const race = await Promise.all([
+      trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
+        concurrentHeaders, concurrentBody),
+      trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
+        concurrentHeaders, concurrentBody),
+    ]);
+    expect(race.filter((result) => result.status === 204)).toHaveLength(1);
+    expect(race.filter((result) => result.status === 401)).toHaveLength(1);
+    steps.concurrentUseRejected = true;
+    await gotoHydrated(page, '/app/settings/sessions');
+
+    // 11. Replacement issues a new secret; the old secret's codes then fail.
+    stage('replace');
+    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
+    await page.getByTestId('totp-setup-replace').click();
+    await expect(page.getByTestId('second-factor-reauth-password'))
+      .toBeVisible();
+    await reauthenticateWithPassword(page, primaryPassword);
+    await expect(page.getByTestId('totp-replace-notice')).toBeVisible();
+    const oldSecret = secret;
+    secret = await startTotpSetup(page);
+    expect(secret).not.toBe(oldSecret);
+    expect(await submitSetupCode(page, codeNow(secret, systemClock())))
+      .toBe(200);
+    await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
+    await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
+    steps.replaced = true;
+
+    await signOut(page);
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    expect(await submitPendingTotpCode(page, codeNow(oldSecret, systemClock())))
+      .toBe(401);
+    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await expectSignedInApp(page);
+
+    // 12. Provider sign-in on the enrolled account also stops at pending.
     stage('provider-pending');
     await signOut(page);
     await watchingCallback(page, () => signInWithGoogle(page, {
@@ -1373,22 +1269,64 @@ test('proves the passkey second factor over native HTTPS', async ({
     }));
     await hydrated(page, WAIT_HYDRATE_MS);
     expect(await meStatus(page)).toBe(401);
-    await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
+    await expect(page.getByTestId('second-factor-totp')).toBeVisible();
     steps.providerPending = true;
-    await completeWithRecovery(page, primaryCodes[1] as string);
+    await completeWithTotp(page, codeNow(secret, systemClock()));
     await expectSignedInApp(page);
 
-    // 11. Both locales at both proof widths on the pending page.
+    // 13. Wrong-epoch HTTP fixture: a pending row frozen before a
+    //     replacement's epoch bump is rejected after that bump lands.
+    stage('wrong-epoch-setup');
+    const staleContext = await browser.newContext();
+    extraContexts.push(staleContext);
+    await setLocale(staleContext, 'en');
+    await installExternalRequestFirewall(staleContext, counters);
+    const stalePage = await staleContext.newPage();
+    attach(stalePage);
+    expect(await passwordSignIn(stalePage, primaryEmail, primaryPassword))
+      .toBe('pending');
+    const staleCookie = await pendingCookieHeader(staleContext);
+    const staleCsrf = await pendingCSRFToken(stalePage);
+
+    stage('wrong-epoch-bump');
+    await gotoHydrated(page, '/app/settings/sessions');
+    await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
+    await page.getByTestId('totp-setup-replace').click();
+    await reauthenticateWithPassword(page, primaryPassword);
+    const bumpSecret = await startTotpSetup(page);
+    expect(await submitSetupCode(page, codeNow(bumpSecret, systemClock())))
+      .toBe(200);
+    await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
+    secret = bumpSecret;
+
+    stage('wrong-epoch-assert');
+    const staleAttempt = await trustedPost(
+      ca,
+      '/api/v1/auth/second-factor/totp/verify',
+      {
+        'Content-Type': 'application/json',
+        'Cookie': staleCookie,
+        'Origin': ORIGIN,
+        'X-CSRF-Token': staleCsrf,
+      },
+      JSON.stringify({ code: codeNow(secret, systemClock()) }),
+    );
+    expect(staleAttempt.status).toBe(401);
+    steps.wrongEpochRejected = true;
+    await staleContext.close();
+
+    // 14. Both locales at both proof widths on the pending page.
     stage('locales');
+    await signOut(page);
     await provePendingLocale(page, context, {
-      code: primaryCodes[2] as string,
+      code: codeNow(secret, fixedClock(nextWindowSeconds())),
       email: primaryEmail,
       locale: 'vi',
       password: primaryPassword,
       viewport: PHONE,
     });
     await provePendingLocale(page, context, {
-      code: primaryCodes[3] as string,
+      code: codeNextStep(secret, systemClock()),
       email: primaryEmail,
       locale: 'en',
       password: primaryPassword,
@@ -1397,7 +1335,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.locales = true;
     steps.viewports = true;
 
-    // 12. A password reset revokes sessions but preserves enforcement.
+    // 15. A password reset revokes sessions but preserves enforcement.
     stage('password-reset');
     const resetPassword = runPassword();
     await gotoHydrated(page, '/forgot-password');
@@ -1415,141 +1353,89 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(await passwordSignIn(page, primaryEmail, resetPassword))
       .toBe('pending');
     steps.resetPreservesEnforcement = true;
-    await completeWithRecovery(page, primaryCodes[4] as string);
+    await completeWithTotp(page, codeNow(secret, systemClock()));
     await expectSignedInApp(page);
 
-    // 13. Removing the final factor turns second-factor sign-in off.
-    stage('final-removal');
+    // 16. Removing TOTP while a passkey remains is non-final; removing the
+    //     remaining passkey then turns enforcement off.
+    stage('remove-totp');
     await gotoHydrated(page, '/app/settings/sessions');
+    await forceReauthOnce(page, '/api/v1/me/second-factor/totp');
+    await page.getByTestId('totp-remove').click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.locator('[data-action="totp-remove-confirm"]').click();
+    await expect(page.getByTestId('second-factor-reauth-password'))
+      .toBeVisible();
+    await reauthenticateWithPassword(page, resetPassword);
+    await page.getByTestId('totp-remove').click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.locator('[data-action="totp-remove-confirm"]').click();
+    await expect(page.getByTestId('totp-removed-success')).toBeVisible();
+    state = await factorState(page);
+    expect(state.enabled).toBe(true);
+    expect(state.totpEnabled).toBe(false);
+    steps.oneRemoved = true;
+
+    stage('final-removal');
     await page.locator('[data-testid^="passkey-remove-"]').first().click();
     await expect(page.getByRole('alertdialog'))
       .toContainText('This is your last passkey.');
     await page.locator('[data-action="passkey-remove-confirm"]').click();
     await expect(page.getByTestId('passkey-removed-success')).toBeVisible();
     state = await factorState(page);
-    expect(state)
-      .toEqual({
-        enabled: false,
-        passkeyCount: 0,
-        recoveryRemaining: 0,
-        status: 200,
-      });
+    expect(state).toEqual({
+      enabled: false,
+      recoveryRemaining: 0,
+      status: 200,
+      totpEnabled: false,
+    });
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, resetPassword))
       .toBe('session');
     primaryCleanupCode = '';
     steps.finalRemoved = true;
 
-    // 14. A second fictional account carries the recovery-code and ceremony
-    //     cases, which need their own attempt budget.
+    // 17. A second fictional account carries the recovery-completion case,
+    //     which needs a still-enrolled TOTP credential to remain.
     role('recovery');
     stage('recovery-account');
     await signOut(page);
-    authRecovery = await pool.add();
     await registerVerified(
       page,
       capture,
       recoveryEmail,
       recoveryPassword,
-      'Recovery Proof',
+      'TOTP Recovery Proof',
     );
     expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
       .toBe('session');
-    const codes = await enrollFirstPasskey(page, recoveryPassword);
-    recoveryCleanupCode = codes[9] as string;
-    expect(await pool.credentialCount(authRecovery)).toBe(1);
-
-    stage('ceremony-replay');
-    await signOut(page);
-    expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
-      .toBe('pending');
-    const captured = await captureAssertion(page);
-    const consumedPending = await trustedPost(
-      ca,
-      '/api/v1/auth/second-factor/passkey/verify',
-      {
-        'Content-Type': 'application/json',
-        'Cookie': `${PENDING_COOKIE}=${captured.pendingToken}`,
-        'Origin': ORIGIN,
-        'X-CSRF-Token': captured.csrfToken,
-      },
-      captured.body,
-    );
-    expect(consumedPending)
-      .toEqual({ code: 'authentication_required', status: 401 });
-
-    await signOut(page);
-    expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
-      .toBe('pending');
-    const foreignCeremony = await trustedPost(
-      ca,
-      '/api/v1/auth/second-factor/passkey/verify',
-      {
-        'Content-Type': 'application/json',
-        'Cookie': await pendingCookieHeader(context),
-        'Origin': ORIGIN,
-        'X-CSRF-Token': await pendingCSRFToken(page),
-      },
-      captured.body,
-    );
-    expect(foreignCeremony).toEqual({ code: 'challenge_invalid', status: 400 });
-    steps.ceremonyReplayRejected = true;
+    const recoveryEnrolled = await enrollFirstTotp(page, recoveryPassword);
+    recoveryCleanupCode = recoveryEnrolled.codes[9] as string;
 
     stage('recovery-completion');
-    await completeWithRecovery(page, codes[0] as string);
+    await signOut(page);
+    expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
+      .toBe('pending');
+    await completeWithRecovery(page, recoveryEnrolled.codes[0] as string);
     await expectSignedInApp(page);
     steps.recoveryCompletion = true;
 
-    stage('recovery-reuse');
-    await signOut(page);
-    expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
-      .toBe('pending');
-    expect(await submitRecoveryCode(page, codes[0] as string)).toBe(401);
-    await expect(page.getByTestId('second-factor-recovery-error'))
-      .toBeVisible();
-    expect(await meStatus(page)).toBe(401);
-    await completeWithRecovery(page, codes[1] as string);
-    steps.recoveryReuseRejected = true;
-
-    stage('recovery-concurrent');
-    await signOut(page);
-    expect(await passwordSignIn(page, recoveryEmail, recoveryPassword))
-      .toBe('pending');
-    const concurrentHeaders = {
-      'Content-Type': 'application/json',
-      'Cookie': await pendingCookieHeader(context),
-      'Origin': ORIGIN,
-      'X-CSRF-Token': await pendingCSRFToken(page),
-    };
-    const concurrentBody = JSON.stringify({ code: codes[2] });
-    const race = await Promise.all([
-      trustedPost(ca, '/api/v1/auth/second-factor/recovery/verify',
-        concurrentHeaders, concurrentBody),
-      trustedPost(ca, '/api/v1/auth/second-factor/recovery/verify',
-        concurrentHeaders, concurrentBody),
-    ]);
-    expect(race.filter((result) => result.status === 204)).toHaveLength(1);
-    expect(race.filter((result) => result.status === 401)).toHaveLength(1);
-    steps.concurrentCompletion = true;
-
-    // 15. A third fictional account carries attempt exhaustion, whose five
+    // 18. A third fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
-    authAttempts = await pool.add();
     await registerVerified(
       page,
       capture,
       attemptsEmail,
       attemptsPassword,
-      'Attempts Proof',
+      'TOTP Attempts Proof',
     );
     expect(await passwordSignIn(page, attemptsEmail, attemptsPassword))
       .toBe('session');
-    const attemptsCodes = await enrollFirstPasskey(page, attemptsPassword);
-    attemptsCleanupCode = attemptsCodes[9] as string;
-    expect(await pool.credentialCount(authAttempts)).toBe(1);
+    const attemptsEnrolled = await enrollFirstTotp(page, attemptsPassword);
+    attemptsCleanupCode = attemptsEnrolled.codes[9] as string;
 
     stage('attempts-exhausted');
     await signOut(page);
@@ -1558,7 +1444,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       expect(await submitRecoveryCode(
         page,
-        fabricatedRecoveryCode(attemptsCodes),
+        fabricatedRecoveryCode(attemptsEnrolled.codes),
       )).toBe(401);
     }
     expect(await cookieValue(context, PENDING_COOKIE)).toBeNull();
@@ -1571,20 +1457,17 @@ test('proves the passkey second factor over native HTTPS', async ({
   } finally {
     beginTeardown();
     const removed = [
-      await deleteAccount(page, pool, {
-        authenticatorId: authPrimary,
+      await deleteAccount(page, {
         email: primaryEmail,
         password: primaryFinalPassword,
         recoveryCode: primaryCleanupCode,
       }),
-      await deleteAccount(page, pool, {
-        authenticatorId: authRecovery,
+      await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
       }),
-      await deleteAccount(page, pool, {
-        authenticatorId: authAttempts,
+      await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
         recoveryCode: attemptsCleanupCode,
@@ -1604,7 +1487,7 @@ test('proves the passkey second factor over native HTTPS', async ({
           page: counters.pageErrors,
         },
         origin: ORIGIN,
-        scenario: 'passkey-second-factor',
+        scenario: 'totp-second-factor',
         schemaVersion: 1,
         steps,
       }, null, 2)}\n`,
@@ -1613,25 +1496,28 @@ test('proves the passkey second factor over native HTTPS', async ({
   }
 });
 
-// --- Disabled-enrollment journey -------------------------------------------
+/** The Unix second just past the current TOTP window, for a fresh clock. */
+function nextWindowSeconds(): number {
+  const now = Math.floor(Date.now() / 1000);
+  return (stepAt(now) + 1) * TOTP_PERIOD_SECONDS;
+}
 
-test('proves disabled passkey enrollment answers as an unregistered route',
+// --- Disabled-enrollment journey -----------------------------------------
+
+test('proves disabled TOTP enrollment answers as an unregistered route',
   async ({ context, page }) => {
-    test.skip(
-      MODE !== 'second-factor-disabled',
-      'disabled enrollment mode only',
-    );
+    test.skip(MODE !== 'totp-disabled', 'disabled enrollment mode only');
 
     const steps = {
-      assertionRouteRegistered: false,
       capabilityClosed: false,
       cleanup: false,
       completionNotFound: false,
       enrollmentHidden: false,
       locales: false,
-      optionsNotFound: false,
-      recoveryRouteRegistered: false,
-      removalRouteRegistered: false,
+      passkeyStillWorks: false,
+      recoveryStillWorks: false,
+      removalStillWorks: false,
+      startNotFound: false,
       stateAvailable: false,
       unregisteredRouteMatches: false,
       viewports: false,
@@ -1639,7 +1525,7 @@ test('proves disabled passkey enrollment answers as an unregistered route',
 
     const counters = newDiagnosticCounters();
     const attach = pageDiagnosticsAttacher(counters, {
-      countConsoleError: isUnexpectedSecondFactorConsole,
+      countConsoleError: isUnexpectedTotpConsole,
     });
     attach(page);
     context.on('page', attach);
@@ -1663,71 +1549,63 @@ test('proves disabled passkey enrollment answers as an unregistered route',
           cache: 'no-store',
         });
         const body = (await response.json()) as {
-          data?: { passkeyEnrollment?: unknown };
+          data?: { totpEnrollment?: unknown };
         };
-        return {
-          hasTotp: Object.hasOwn(body.data ?? {}, 'totpEnrollment'),
-          passkeyEnrollment: body.data?.passkeyEnrollment,
-          status: response.status,
-        };
+        return { status: response.status, totpEnrollment: body.data?.totpEnrollment };
       });
-      expect(capability).toEqual({
-        hasTotp: true,
-        passkeyEnrollment: false,
-        status: 200,
-      });
+      expect(capability).toEqual({ status: 200, totpEnrollment: false });
       steps.capabilityClosed = true;
 
       stage('disabled-settings');
       await gotoHydrated(page, '/app/settings/sessions');
-      await expect(page.getByTestId('second-factor-settings')).toBeVisible();
-      await expect(page.getByTestId('second-factor-empty')).toBeVisible();
-      await expect(page.getByTestId('passkey-add')).toHaveCount(0);
-      await expect(page.getByTestId('second-factor-unsupported'))
-        .toHaveCount(0);
+      await expect(page.getByTestId('totp-settings')).toBeVisible();
+      await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
+      await expect(page.getByTestId('totp-setup-start')).toHaveCount(0);
+      await expect(page.getByTestId('totp-setup-replace')).toHaveCount(0);
       steps.enrollmentHidden = true;
 
       stage('disabled-state');
-      expect(await factorState(page)).toEqual({
+      const state = await factorState(page);
+      expect(state).toEqual({
         enabled: false,
-        passkeyCount: 0,
         recoveryRemaining: 0,
         status: 200,
+        totpEnabled: false,
       });
       steps.stateAvailable = true;
 
       stage('disabled-routes');
-      const probes = await probeDisabledRoutes(page, await freshCSRF(page));
-      expect(probes.options).toEqual({ code: 'not_found', status: 404 });
-      steps.optionsNotFound = true;
-      expect(probes.completion).toEqual({ code: 'not_found', status: 404 });
+      const csrf = await freshCSRF(page);
+      const probes = await probeDisabledRoutes(page, csrf);
+      expect(probes.start).toEqual({ code: 'not_found', status: 404 });
+      steps.startNotFound = true;
+      expect(probes.complete).toEqual({ code: 'not_found', status: 404 });
       steps.completionNotFound = true;
-      expect(probes.unregistered).toEqual(probes.options);
+      expect(probes.unregistered).toEqual(probes.start);
       steps.unregisteredRouteMatches = true;
       expect(probes.removal).toEqual({ code: 'factor_not_found', status: 404 });
-      steps.removalRouteRegistered = true;
-      expect(probes.assertion)
+      steps.removalStillWorks = true;
+      expect(probes.totpVerify)
         .toEqual({ code: 'authentication_required', status: 401 });
-      steps.assertionRouteRegistered = true;
       expect(probes.recovery)
         .toEqual({ code: 'authentication_required', status: 401 });
-      steps.recoveryRouteRegistered = true;
+      steps.recoveryStillWorks = true;
+      expect(probes.passkeyOptions)
+        .toEqual({ code: 'reauth_required', status: 403 });
+      steps.passkeyStillWorks = true;
 
       stage('disabled-locales');
       await setLocale(context, 'vi');
       await page.setViewportSize(PHONE);
       await gotoHydrated(page, '/app/settings/sessions');
-      await expect(page.getByTestId('second-factor-settings'))
-        .toContainText('Chưa có passkey nào.');
-      await expect(page.getByTestId('passkey-add')).toHaveCount(0);
+      await expect(page.getByTestId('totp-status')).toContainText('Chưa thiết lập.');
+      await expect(page.getByTestId('totp-setup-start')).toHaveCount(0);
       expect(await page.evaluate(() =>
         document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await setLocale(context, 'en');
       await page.setViewportSize(DESKTOP);
       await gotoHydrated(page, '/app/settings/sessions');
-      await expect(page.getByTestId('second-factor-settings'))
-        .toContainText('No passkeys yet.');
-      await expect(page.getByTestId('passkey-add')).toHaveCount(0);
+      await expect(page.getByTestId('totp-status')).toContainText('Not set up.');
       steps.locales = true;
       steps.viewports = true;
     } finally {
@@ -1743,7 +1621,7 @@ test('proves disabled passkey enrollment answers as an unregistered route',
             page: counters.pageErrors,
           },
           origin: ORIGIN,
-          scenario: 'passkey-enrollment-disabled',
+          scenario: 'totp-enrollment-disabled',
           schemaVersion: 1,
           steps,
         }, null, 2)}\n`,
@@ -1752,50 +1630,7 @@ test('proves disabled passkey enrollment answers as an unregistered route',
     }
   });
 
-// --- Shared journey helpers -------------------------------------------------
-
-/** The pending row's own CSRF token, read through its status route. */
-async function pendingCSRFToken(page: Page): Promise<string> {
-  return page.evaluate(async () => {
-    const response = await fetch('/api/v1/auth/second-factor', {
-      cache: 'no-store',
-      credentials: 'include',
-    });
-    const body = (await response.json()) as { data?: { csrfToken?: unknown } };
-    if (response.status !== 200 || typeof body.data?.csrfToken !== 'string') {
-      throw new Error('pending status read failed');
-    }
-    return body.data.csrfToken;
-  });
-}
-
-interface CapturedAssertion {
-  readonly body: string;
-  readonly csrfToken: string;
-  readonly pendingToken: string;
-}
-
-/**
- * Completes one pending sign-in with the virtual authenticator and keeps the
- * exact request bytes, so a replay of the same consumed ceremony can be proved
- * from Node. The captured value never leaves process memory.
- */
-async function captureAssertion(page: Page): Promise<CapturedAssertion> {
-  const pattern = `${ORIGIN}/api/v1/auth/second-factor/passkey/verify`;
-  const pendingToken = await cookieValue(page.context(), PENDING_COOKIE);
-  const csrfToken = await pendingCSRFToken(page);
-  let body = '';
-  await page.route(pattern, async (route: Route) => {
-    body = route.request().postData() ?? '';
-    await route.continue();
-  });
-  await completeWithPasskey(page);
-  await page.unroute(pattern);
-  if (body === '' || pendingToken === null) {
-    throw new Error('assertion capture failed');
-  }
-  return { body, csrfToken, pendingToken };
-}
+// --- Shared journey helpers ------------------------------------------------
 
 /** Registers a connected agent and completes one consent round trip. */
 async function createAgentGrant(
@@ -1822,6 +1657,7 @@ async function createAgentGrant(
     },
     { name: clientName, redirectURI: REDIRECT_URI },
   );
+  const { createHash, randomUUID } = await import('node:crypto');
   const verifier = randomBytes(48).toString('base64url');
   const challenge = createHash('sha256').update(verifier).digest('base64url');
   const state = randomUUID();
@@ -1882,7 +1718,6 @@ async function createAgentGrant(
   return accessToken;
 }
 
-/** The status a connected agent gets when it lists tools with its token. */
 async function agentToolsStatus(page: Page, token: string): Promise<number> {
   return page.evaluate(async (bearer) => {
     const response = await fetch('/mcp', {
@@ -1915,8 +1750,9 @@ interface PendingLocaleCase {
 
 /**
  * Signs in again in one locale at one proof width and completes the pending
- * page entirely by keyboard, checking the localized copy, the accessible
- * names, the focus order, and that nothing overflows the viewport.
+ * page entirely by keyboard through the authenticator-app field, checking
+ * the localized copy, the phishing guidance, the accessible names, the
+ * focus order, and that nothing overflows the viewport.
  */
 async function provePendingLocale(
   page: Page,
@@ -1924,7 +1760,6 @@ async function provePendingLocale(
   options: PendingLocaleCase,
 ): Promise<void> {
   const vietnamese = options.locale === 'vi';
-  await signOut(page);
   await setLocale(context, options.locale);
   await page.setViewportSize({
     height: options.viewport.height,
@@ -1935,41 +1770,42 @@ async function provePendingLocale(
   await expect(page.getByRole('heading', {
     name: vietnamese ? 'Xác thực hai bước' : 'Two-factor verification',
   })).toBeVisible();
-  await expect(page.getByTestId('second-factor-page')).toContainText(
+  await expect(page.getByTestId('second-factor-totp')).toContainText(
     vietnamese
-      ? 'Hoàn tất đăng nhập bằng passkey, ứng dụng xác thực hoặc mã khôi phục.'
-      : 'Finish signing in with a passkey, an authenticator app, or a '
-        + 'recovery code.',
+      ? 'Chỉ nhập mã này trên aboutme.vn'
+      : 'Only enter this code on aboutme.vn',
   );
-  await expect(page.getByRole('button', {
-    name: vietnamese ? 'Tiếp tục với passkey' : 'Continue with passkey',
-  })).toBeVisible();
-  await expect(page.getByLabel(
-    vietnamese ? 'Mã khôi phục' : 'Recovery code',
-    { exact: true },
-  )).toBeVisible();
-  const passkeyButton = page.getByTestId('second-factor-passkey-button');
-  await passkeyButton.focus();
-  await expect(passkeyButton).toBeFocused();
+  const totpInput = page.locator(TOTP_LOGIN_INPUT);
+  await totpInput.focus();
+  await expect(totpInput).toBeFocused();
   expect(await page.evaluate(() =>
     document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await completeWithRecovery(page, options.code);
+  await totpInput.fill(options.code);
+  const response = page.waitForResponse((candidate) => {
+    const url = new URL(candidate.url());
+    return url.origin === ORIGIN
+      && url.pathname === '/api/v1/auth/second-factor/totp/verify';
+  }, { timeout: WAIT_RESPONSE_MS });
+  await page.keyboard.press('Enter');
+  expect((await response).status()).toBe(204);
+  await landedAfter(page, '/login/second-factor');
   await expectSignedInApp(page);
 }
 
 interface DisabledProbes {
-  readonly assertion: TrustedResult;
-  readonly completion: TrustedResult;
-  readonly options: TrustedResult;
+  readonly complete: TrustedResult;
+  readonly passkeyOptions: TrustedResult;
   readonly recovery: TrustedResult;
   readonly removal: TrustedResult;
+  readonly start: TrustedResult;
+  readonly totpVerify: TrustedResult;
   readonly unregistered: TrustedResult;
 }
 
 /**
- * Probes every second-factor route from the signed-in page while enrollment
- * is off: the two enrollment routes must match a never-registered
- * path, and the flag-independent routes must answer with their own codes.
+ * Probes every TOTP route from the signed-in page while enrollment is off:
+ * the two enrollment routes must match a never-registered path, and the
+ * flag-independent routes must answer with their own codes.
  */
 async function probeDisabledRoutes(
   page: Page,
@@ -2001,68 +1837,115 @@ async function probeDisabledRoutes(
       }
       return { code, status: response.status };
     };
-    const unknownID = '01900000-0000-7000-8000-000000000001';
     return {
-      assertion: await call(
-        '/api/v1/auth/second-factor/passkey/options', 'POST', '{}'),
-      completion: await call(
-        '/api/v1/me/second-factor/passkeys',
-        'POST',
-        JSON.stringify({
-          ceremonyId: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-          credential: {
-            clientExtensionResults: {},
-            id: 'AAAA',
-            rawId: 'AAAA',
-            response: {
-              attestationObject: 'AAAA',
-              clientDataJSON: 'AAAA',
-              transports: ['internal'],
-            },
-            type: 'public-key',
-          },
-        }),
+      complete: await call(
+        '/api/v1/me/second-factor/totp/enrollment',
+        'PUT',
+        JSON.stringify({ code: '000000', enrollmentId: 'A'.repeat(43) }),
       ),
-      options: await call(
+      passkeyOptions: await call(
         '/api/v1/me/second-factor/passkeys/options', 'POST', '{}'),
       recovery: await call(
         '/api/v1/auth/second-factor/recovery/verify',
         'POST',
         JSON.stringify({ code: 'amr_00000000000000000000000000' }),
       ),
-      removal: await call(
-        `/api/v1/me/second-factor/passkeys/${unknownID}`, 'DELETE', null),
+      removal: await call('/api/v1/me/second-factor/totp', 'DELETE', null),
+      start: await call(
+        '/api/v1/me/second-factor/totp/enrollment', 'POST', '{}'),
+      totpVerify: await call(
+        '/api/v1/auth/second-factor/totp/verify',
+        'POST',
+        JSON.stringify({ code: '000000' }),
+      ),
       unregistered: await call(
         '/api/v1/me/second-factor/unregistered/enrollment', 'POST', '{}'),
     };
   }, csrf);
 }
 
+// --- Virtual authenticators (passkey coexistence only) ---------------------
+
+type CDPSend = (
+  method: string,
+  params?: Record<string, unknown>,
+) => Promise<Record<string, unknown>>;
+
+const WAIT_CDP_MS = 30_000;
+
+async function boundedCDPCall<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(
+            'virtual authenticator command exceeded its bound',
+          )),
+          WAIT_CDP_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+function boundedCDP(send: CDPSend): CDPSend {
+  return (method, params) => boundedCDPCall(send(method, params));
+}
+
+/** One virtual authenticator, used only to prove TOTP and passkeys coexist. */
+class AuthenticatorPool {
+  private constructor(private readonly send: CDPSend) {}
+
+  static async attach(
+    context: BrowserContext,
+    page: Page,
+  ): Promise<AuthenticatorPool> {
+    const session = await boundedCDPCall(context.newCDPSession(page));
+    const send = boundedCDP(
+      session.send.bind(session) as unknown as CDPSend,
+    );
+    await send('WebAuthn.enable', { enableUI: false });
+    return new AuthenticatorPool(send);
+  }
+
+  async add(): Promise<string> {
+    const result = await this.send('WebAuthn.addVirtualAuthenticator', {
+      options: {
+        automaticPresenceSimulation: true,
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        protocol: 'ctap2',
+        transport: 'internal',
+      },
+    });
+    const id = result.authenticatorId;
+    if (typeof id !== 'string' || id === '') {
+      throw new Error('virtual authenticator was not created');
+    }
+    return id;
+  }
+}
+
 // --- Teardown ---------------------------------------------------------------
 
 interface AccountTeardown {
-  readonly authenticatorId: string;
   readonly email: string;
   readonly password: string;
   /** An unused recovery code, when the account is still enrolled. */
   readonly recoveryCode: string;
 }
 
-/**
- * Removes one fictional account. An enrolled account finishes its pending
- * sign-in with a spare recovery code, which sets both verification times and
- * therefore satisfies the deletion boundary without a further round trip.
- */
 async function deleteAccount(
   page: Page,
-  pool: AuthenticatorPool,
   account: AccountTeardown,
 ): Promise<boolean> {
   if (account.email === '') return true;
   try {
-    if (account.authenticatorId !== '') {
-      await pool.present(account.authenticatorId);
-    }
     await page.context().clearCookies();
     await setLocale(page.context(), 'en');
     const outcome = await passwordSignIn(page, account.email, account.password);
@@ -2095,7 +1978,6 @@ async function deleteAccount(
   }
 }
 
-/** Deletes the account the current page is signed into. */
 async function deleteSignedInAccount(page: Page): Promise<boolean> {
   await gotoHydrated(page, '/app/settings/sessions');
   if (await meStatus(page) !== 200) return false;
