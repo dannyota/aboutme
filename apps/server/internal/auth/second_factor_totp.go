@@ -96,18 +96,23 @@ type (
 // registerTOTPRoutes attaches the pending verify, enrollment, and removal
 // routes. It is called from RegisterRoutes in second_factor_handlers.go.
 func (h *SecondFactorHandlers) registerTOTPRoutes(mux *http.ServeMux, noStore func(http.Handler) http.Handler) {
+	if h.totp == nil {
+		// Unwired TOTP answers exactly like an unregistered route, before any
+		// session, CSRF, or body work.
+		notFound := noStore(api.NotFound())
+		for _, path := range []string{SecondFactorPendingTOTPPath, SecondFactorTOTPEnrollmentPath, SecondFactorTOTPPath} {
+			mux.Handle(path, notFound)
+		}
+		return
+	}
 	mux.Handle(SecondFactorPendingTOTPPath, noStore(route(http.MethodPost, h.pendingCompletion(secondFactorRecoveryBodyBytes, h.decodeTOTPBody))))
 	mux.Handle(SecondFactorTOTPEnrollmentPath, noStore(http.HandlerFunc(h.handleTOTPEnrollment)))
 	mux.Handle(SecondFactorTOTPPath, noStore(route(http.MethodDelete, h.handleRemoveTOTP)))
 }
 
-// decodeTOTPBody answers the uniform pending decode shape when TOTP is not
-// wired, so an unconfigured deployment behaves like every other unwired TOTP
-// route rather than panicking on a nil service.
+// decodeTOTPBody decodes a pending TOTP code. It runs only when TOTP is
+// wired; registerTOTPRoutes answers 404 otherwise.
 func (h *SecondFactorHandlers) decodeTOTPBody(body []byte) (SecondFactorCredential, error) {
-	if h.totp == nil {
-		return nil, ErrSecondFactorRequestInvalid
-	}
 	return h.totp.DecodeTOTPCode(body)
 }
 
