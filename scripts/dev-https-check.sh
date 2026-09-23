@@ -46,6 +46,8 @@ readonly -a SPEC_SOURCES=(
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts
+  totp-production.spec.ts
+  production.config.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
