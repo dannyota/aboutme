@@ -87,7 +87,6 @@ const WAIT_MAIL_MS = 45_000;
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me', [401]],
   ['/api/v1/me/second-factor', [401]],
-  ['/api/v1/me/second-factor/passkeys/options', [403]],
   ['/api/v1/me/second-factor/totp', [403, 404]],
   ['/api/v1/me/second-factor/totp/enrollment', [403, 404]],
   ['/api/v1/me/second-factor/unregistered/enrollment', [404]],
@@ -1983,8 +1982,9 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
       expect(probes.recovery)
         .toEqual({ code: 'authentication_required', status: 401 });
       steps.recoveryStillWorks = true;
-      expect(probes.passkeyOptions)
-        .toEqual({ code: 'reauth_required', status: 403 });
+      // Passkey enrollment stays on, and this fresh sign-in is recent
+      // primary proof for a first factor, so options are issued.
+      expect(probes.passkeyOptions.status).toBe(200);
       steps.passkeyStillWorks = true;
 
       stage('disabled-locales');
