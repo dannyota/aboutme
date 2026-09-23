@@ -13,7 +13,7 @@ describe("GET /capabilities", () => {
     expect(Object.keys(doc.paths["/capabilities"])).toEqual(["get"]);
   });
 
-  it("returns two required booleans and the enabled providers in the data envelope", () => {
+  it("returns the required feature booleans and the enabled providers in the data envelope", () => {
     const schema = doc.components.schemas.Capabilities;
     expect(schema.type).toBe("object");
     expect(schema.additionalProperties).toBe(false);
@@ -23,11 +23,13 @@ describe("GET /capabilities", () => {
       "passwordRegistration",
       "providerLogin",
       "providers",
+      "totpEnrollment",
     ]);
     expect(schema.properties.passwordRegistration.type).toBe("boolean");
     expect(schema.properties.providerLogin.type).toBe("boolean");
     expect(schema.properties.agentAccess.type).toBe("boolean");
     expect(schema.properties.passkeyEnrollment.type).toBe("boolean");
+    expect(schema.properties.totpEnrollment.type).toBe("boolean");
     expect(schema.properties.providers.type).toBe("array");
     expect(schema.properties.providers.uniqueItems).toBe(true);
     expect(schema.properties.providers.items.enum).toEqual([

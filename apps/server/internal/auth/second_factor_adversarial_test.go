@@ -337,10 +337,9 @@ func TestSecondFactorTOTPEnrollment_WiredHappyPathAndErrorMapping(t *testing.T) 
 	}
 }
 
-// TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound proves DELETE
-// requires a session before reporting whether TOTP is wired, then maps
-// ErrSecondFactorNotFound to 404 factor_not_found; an unwired TOTP
-// dependency answers the same 404 once a session is present
+// TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound proves DELETE maps
+// ErrSecondFactorNotFound to 404 factor_not_found, while an unwired TOTP
+// dependency answers exactly like an unregistered route
 // ("Removal, recovery, and races").
 func TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound(t *testing.T) {
 	pool := newTestPool(t)
@@ -366,8 +365,9 @@ func TestSecondFactorTOTPRemoval_WiredHappyPathAndNotFound(t *testing.T) {
 	}
 
 	unwired := sfMux(t, &sfService{}, pool)
-	if rec = sfServe(t, unwired, req); rec.Code != http.StatusNotFound || sfErrorCode(t, rec) != "factor_not_found" {
-		t.Fatalf("unwired removal with a session = %d %s, want 404 factor_not_found", rec.Code, rec.Body)
+	want := sfServe(t, api.NotFound(), req)
+	if rec = sfServe(t, unwired, req); rec.Code != http.StatusNotFound || rec.Body.String() != want.Body.String() {
+		t.Fatalf("unwired removal with a session = %d %s, want the unregistered-route body", rec.Code, rec.Body)
 	}
 }
 
