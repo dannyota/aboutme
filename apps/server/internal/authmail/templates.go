@@ -103,6 +103,9 @@ var templates = map[Kind]template{
 	KindRecoveryCodesRegenerated:      securityTemplate("Mã khôi phục đã tạo lại / Recovery codes regenerated", "Mã khôi phục đã được tạo lại", "Recovery codes were regenerated"),
 	KindRecoveryCodeUsed:              securityTemplate("Mã khôi phục đã được dùng / Recovery code used", "Một mã khôi phục đã được dùng", "A recovery code was used"),
 	KindSecondFactorAttemptsExhausted: securityTemplate("Đã hết lượt xác thực hai bước / Second-factor attempts exhausted", "Đã hết lượt thử xác thực hai bước", "Second-factor verification attempts were exhausted"),
+	KindTOTPAdded:                     securityTemplate("Ứng dụng xác thực đã được thêm / Authenticator app added", "Một ứng dụng xác thực đã được thêm", "An authenticator app was added"),
+	KindTOTPReplaced:                  securityTemplate("Ứng dụng xác thực đã được thay thế / Authenticator app replaced", "Một ứng dụng xác thực đã được thay thế", "An authenticator app was replaced"),
+	KindTOTPRemoved:                   securityTemplate("Ứng dụng xác thực đã được xóa / Authenticator app removed", "Một ứng dụng xác thực đã được xóa", "An authenticator app was removed"),
 }
 
 func securityTemplate(subject, viAction, enAction string) template {

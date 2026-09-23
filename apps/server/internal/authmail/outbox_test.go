@@ -272,6 +272,9 @@ func TestOutboxEnqueueSecurityKindUsesUserScope(t *testing.T) {
 		KindRecoveryCodesRegenerated,
 		KindRecoveryCodeUsed,
 		KindSecondFactorAttemptsExhausted,
+		KindTOTPAdded,
+		KindTOTPReplaced,
+		KindTOTPRemoved,
 	} {
 		t.Run(string(kind), func(t *testing.T) {
 			ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
@@ -307,13 +310,15 @@ func TestOutboxEnqueueSecurityKindRequiresEventPlus24HourExpiry(t *testing.T) {
 	ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
 	o := newTestOutbox(t, ring, func() time.Time { return testNow })
 	userID := uuid.New()
-	payload := securityPayloadForKind(KindSecondFactorEnabled)
-	for _, expiresAt := range []time.Time{testNow.Add(23 * time.Hour), testNow.Add(24*time.Hour + time.Second)} {
-		err := o.EnqueueTx(context.Background(), store.New(&fakeDBTX{}), EnqueueRequest{
-			JobID: uuid.New(), Kind: KindSecondFactorEnabled, UserID: &userID, Payload: payload, ExpiresAt: expiresAt,
-		})
-		if !errors.Is(err, ErrExpiry) {
-			t.Fatalf("EnqueueTx expiry %s = %v, want ErrExpiry", expiresAt, err)
+	for _, kind := range []Kind{KindSecondFactorEnabled, KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved} {
+		payload := securityPayloadForKind(kind)
+		for _, expiresAt := range []time.Time{testNow.Add(23 * time.Hour), testNow.Add(24*time.Hour + time.Second)} {
+			err := o.EnqueueTx(context.Background(), store.New(&fakeDBTX{}), EnqueueRequest{
+				JobID: uuid.New(), Kind: kind, UserID: &userID, Payload: payload, ExpiresAt: expiresAt,
+			})
+			if !errors.Is(err, ErrExpiry) {
+				t.Fatalf("EnqueueTx kind %s expiry %s = %v, want ErrExpiry", kind, expiresAt, err)
+			}
 		}
 	}
 }

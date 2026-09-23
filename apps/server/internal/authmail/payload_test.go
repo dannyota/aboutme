@@ -21,6 +21,17 @@ func TestValidateKind(t *testing.T) {
 	}
 }
 
+func TestValidateKindAcceptsTOTPKinds(t *testing.T) {
+	for _, k := range []Kind{KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved} {
+		if err := validateKind(k); err != nil {
+			t.Errorf("validateKind(%q) = %v, want nil", k, err)
+		}
+	}
+	if err := validateKind(Kind("totp_verified")); !errors.Is(err, ErrInvalidKind) {
+		t.Errorf("validateKind(totp_verified) = %v, want ErrInvalidKind", err)
+	}
+}
+
 func TestValidateEmailMinimalStructural(t *testing.T) {
 	valid := []string{
 		"a@b.c",
@@ -166,6 +177,21 @@ func TestDecodePayloadStrictAcceptsVersionTwoSecurityPayload(t *testing.T) {
 			kind: Kind("second_factor_attempts_exhausted"),
 			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z"}`,
 		},
+		{
+			name: "totp added",
+			kind: KindTOTPAdded,
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z"}`,
+		},
+		{
+			name: "totp replaced",
+			kind: KindTOTPReplaced,
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z"}`,
+		},
+		{
+			name: "totp removed",
+			kind: KindTOTPRemoved,
+			json: `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z"}`,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -193,6 +219,9 @@ func TestDecodePayloadStrictRejectsMalformedVersionTwoSecurityPayload(t *testing
 		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":"forbidden"}`},
 		{KindSecondFactorEnabled, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":9}`},
 		{KindRecoveryCodeUsed, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","link":""}`},
+		{KindTOTPAdded, `{"version":1,"to":"alice@example.com"}`},
+		{KindTOTPReplaced, `{"version":2,"to":"alice@example.com","occurredAt":"2026-09-20T09:00:00Z","remainingRecoveryCodes":9}`},
+		{KindTOTPRemoved, `{"version":2,"to":"alice@example.com","occurredAt":"not-a-time"}`},
 	}
 	for _, tc := range cases {
 		payload, err := decodePayloadStrict([]byte(tc.input))

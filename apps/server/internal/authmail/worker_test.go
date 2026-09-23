@@ -477,6 +477,43 @@ func TestWorkerDeliversSecurityJobUnderUserScopeLock(t *testing.T) {
 	}
 }
 
+func TestWorkerDeliversTOTPSecurityJobUnderUserScopeLock(t *testing.T) {
+	for _, kind := range []Kind{KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved} {
+		t.Run(string(kind), func(t *testing.T) {
+			ctx, sp, q := newWorkerPool(t)
+			clock := testutil.NewClockAtEpoch()
+			ring := mustRing(t, "k-active", map[string][32]byte{"k-active": fixedKey()}, fixedNonce())
+			user, err := q.CreateUser(ctx, store.CreateUserParams{Email: uuid.NewString() + "@example.com", Name: "Worker Test"})
+			if err != nil {
+				t.Fatalf("CreateUser: %v", err)
+			}
+			t.Cleanup(func() {
+				if _, cleanupErr := sp.Exec(context.Background(), `DELETE FROM users WHERE id = $1`, user.ID); cleanupErr != nil {
+					t.Errorf("cleanup user: %v", cleanupErr)
+				}
+			})
+			tx := beginWorkerTx(ctx, t, sp)
+			jobID := enqueueSecurityJob(ctx, t, q.WithTx(tx), ring, clock.Now, user.ID, kind)
+			if err := tx.Commit(ctx); err != nil {
+				t.Fatalf("Commit: %v", err)
+			}
+
+			sender := &stubSender{result: SendResult{Outcome: SendAccepted}}
+			w := newTestWorker(t, sp, q, ring, sender, clock, nil, uuid.New())
+			if err := w.RunOnce(ctx); err != nil {
+				t.Fatalf("RunOnce: %v", err)
+			}
+			if sender.count() != 1 || !strings.Contains(sender.calls[0].TextBody, "ứng dụng xác thực") {
+				t.Fatalf("TOTP delivery = %+v", sender.calls)
+			}
+			state, _ := jobState(ctx, t, sp, jobID)
+			if state != "sent" {
+				t.Fatalf("state = %q, want sent", state)
+			}
+		})
+	}
+}
+
 func TestWorkerTemporaryFailureRequeuesWithBackoff(t *testing.T) {
 	ctx, sp, q := newWorkerPool(t)
 	clock := testutil.NewClockAtEpoch()

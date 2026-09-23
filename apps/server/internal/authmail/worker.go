@@ -431,7 +431,8 @@ func (w *Worker) lockScope(ctx context.Context, qtx *store.Queries, job store.Au
 		return &scopeState{tokenDigest: tok.TokenDigest}, nil
 	case KindPasswordChanged, KindSecondFactorEnabled, KindPasskeyAdded,
 		KindPasskeyRemoved, KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
-		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted,
+		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved:
 		if job.UserID == nil {
 			return nil, ErrScope
 		}
