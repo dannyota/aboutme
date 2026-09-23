@@ -45,9 +45,9 @@ scope spellings and order, absence of extra scopes, and unchanged challenge.
 The authorization endpoint accepts zero or one `resource`. A present value must
 equal the canonical public origin byte for byte. Missing preserves legacy
 clients. Empty, duplicate, malformed, non-canonical, and different values
-receive the existing closed `invalid_request` result. The token endpoint
-applies the same rule to an `authorization_code` exchange: invalid values
-receive `invalid_grant` and no token, missing preserves the raw client, and
+receive the existing closed `invalid_request` result. The token endpoint applies
+the same rule to an `authorization_code` exchange: invalid values receive
+`invalid_grant` and no token, missing preserves the raw client, and
 refresh-token requests retain their exact form and reject `resource`.
 
 The server has one protected resource, so this needs no database field or token
@@ -59,11 +59,11 @@ Registration accepts zero or one `application_type` for legacy compatibility. A
 present value must be exactly `native`, and every redirect must be an accepted
 HTTP loopback URI. Other, empty, duplicate, mixed, or non-loopback shapes fail
 closed. The response echoes `native` only when supplied. No database field is
-needed because registration validates the value.
-The runner supplies only `client_name: "aboutme MCP owner workflow"`, the exact
-loopback `redirect_uris` value, and `token_endpoint_auth_method: "none"`. The
-SDK adds `application_type`; all other optional metadata stays unset. Tests use
-the real SDK shape and cover legacy omission, invalid values, duplicates, and
+needed because registration validates the value. The runner supplies only
+`client_name: "aboutme MCP owner workflow"`, the exact loopback `redirect_uris`
+value, and `token_endpoint_auth_method: "none"`. The SDK adds
+`application_type`; all other optional metadata stays unset. Tests use the real
+SDK shape and cover legacy omission, invalid values, duplicates, and
 non-loopback redirects.
 
 ## SDK and HTTP boundary
@@ -89,12 +89,11 @@ One restricted HTTP client handles metadata, registration, token exchange,
 refresh, revocation, and MCP transport. It permits only the configured local
 origin or canonical production HTTPS origin. It rejects cross-origin endpoints
 and redirects, uses no ambient cookies or proxy credentials, and permits
-loopback only for the exact callback.
-The runner wraps the SDK OAuth handler with a one-shot gate. The first
-authorization may reach discovery, registration, consent, and exchange. After
-the grant succeeds, another `Authorize` call always returns
-`reauthorization_disabled`. The gate never resets after a token error. The SDK
-cannot replace a revoked grant after `401`.
+loopback only for the exact callback. The runner wraps the SDK OAuth handler
+with a one-shot gate. The first authorization may reach discovery, registration,
+consent, and exchange. After the grant succeeds, another `Authorize` call always
+returns `reauthorization_disabled`. The gate never resets after a token error.
+The SDK cannot replace a revoked grant after `401`.
 
 The SDK has no revocation helper, so the runner makes one narrow RFC 7009 call
 through the restricted client. It posts the current refresh token to the
@@ -190,25 +189,25 @@ Playwright reads and unlinks the request without printing it. It atomically
 writes the result mode `0600` with only `completed`, `login_failed`,
 `origin_rejected`, `consent_failed`, `second_factor_required`, or `timeout` as
 raw ASCII bytes with no quotes or newline; only `completed` succeeds. Passkeys
-are live in production and the owner workflow signs in with password only, so
-a `202 secondFactorRequired` login reports `second_factor_required`, and the
-runner maps it to its own word `second-factor-required` instead of the
-generic `browser-handoff`. The fetcher waits at most five minutes. Go alone
-validates callback code, state, issuer, host, port, and path, then hands the
-SDK that already-verified issuer as `Iss`, never the raw query byte;
-revocation needs no browser cookies.
+are live in production and the owner workflow signs in with password only, so a
+`202 secondFactorRequired` login reports `second_factor_required`, and the
+runner maps it to its own word `second-factor-required` instead of the generic
+`browser-handoff`. The fetcher waits at most five minutes. Go alone validates
+callback code, state, issuer, host, port, and path, then hands the SDK that
+already-verified issuer as `Iss`, never the raw query byte; revocation needs no
+browser cookies.
 
 Trace, video, screenshots, and browser console attachment are disabled. The URL
 never enters an argument, environment variable, test title, stdout, report, or
 retained artifact. The browser directory starts empty and permits only
 `browser-ready`, `browser-request.json`, and `browser-result.json`, all regular
 mode-`0600` files. The launcher and helper reject extra entries and symbolic
-links. Handoff files and the subdirectory are removed after use.
-Immediately before each saved credential fill, Playwright requires the top-level
-page to have the configured origin and exact `/login` path. A `next` value may
-name only a relative internal `/oauth/authorize` target. The helper rejects
-child-frame forms, cross-origin frames, navigation, or redirects. It fills
-credentials once and never refills after navigation.
+links. Handoff files and the subdirectory are removed after use. Immediately
+before each saved credential fill, Playwright requires the top-level page to
+have the configured origin and exact `/login` path. A `next` value may name only
+a relative internal `/oauth/authorize` target. The helper rejects child-frame
+forms, cross-origin frames, navigation, or redirects. It fills credentials once
+and never refills after navigation.
 
 ## Inputs and private runtime
 
