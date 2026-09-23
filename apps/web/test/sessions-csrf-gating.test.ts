@@ -104,4 +104,19 @@ describe('sessions.vue CSRF gating', () => {
     const revokeAllButton = wrapper.get('[data-testid="revoke-all-button"]');
     expect(revokeAllButton.element.disabled).toBe(true);
   });
+
+  it(
+    'mounts the authenticator-app section with no usable csrfToken',
+    async () => {
+      // `TotpSettings` reads its own `useAuth()` instance (see
+      // `composables/totpSettings.ts`); this proves it shares the same
+      // cached, csrfToken-less `/me` state as the rest of the page instead
+      // of hanging or throwing on a second independent fetch.
+      const wrapper = await mountSuspended(SessionsPage);
+      await flushPromises();
+
+      expect(wrapper.get('[data-testid="totp-status"]').text())
+        .toBe('Not set up.');
+    },
+  );
 });

@@ -7,13 +7,15 @@ import { registerCapabilities } from './support/capabilities';
 
 const Probe = defineComponent({
   setup() {
-    const { providerLogin, agentAccess, passkeyEnrollment, resolved }
-      = useCapabilities();
+    const {
+      providerLogin, agentAccess, passkeyEnrollment, totpEnrollment, resolved,
+    } = useCapabilities();
     return () =>
       h('div', {
         'data-provider': String(providerLogin.value),
         'data-agent': String(agentAccess.value),
         'data-passkey-enrollment': String(passkeyEnrollment.value),
+        'data-totp-enrollment': String(totpEnrollment.value),
         'data-resolved': String(resolved.value),
       });
   },
@@ -30,6 +32,7 @@ async function probe(): Promise<Record<string, string | undefined>> {
     provider: el.attributes('data-provider'),
     agent: el.attributes('data-agent'),
     passkeyEnrollment: el.attributes('data-passkey-enrollment'),
+    totpEnrollment: el.attributes('data-totp-enrollment'),
     resolved: el.attributes('data-resolved'),
   };
 }
@@ -45,6 +48,7 @@ describe('useCapabilities', () => {
       provider: 'true',
       agent: 'false',
       passkeyEnrollment: 'false',
+      totpEnrollment: 'false',
       resolved: 'true',
     });
   });
@@ -59,6 +63,22 @@ describe('useCapabilities', () => {
       provider: 'false',
       agent: 'false',
       passkeyEnrollment: 'true',
+      totpEnrollment: 'false',
+      resolved: 'true',
+    });
+  });
+
+  it('reflects an open totp-enrollment flag', async () => {
+    registerCapabilities({
+      providerLogin: false,
+      agentAccess: false,
+      totpEnrollment: true,
+    });
+    expect(await probe()).toEqual({
+      provider: 'false',
+      agent: 'false',
+      passkeyEnrollment: 'false',
+      totpEnrollment: 'true',
       resolved: 'true',
     });
   });
@@ -76,6 +96,7 @@ describe('useCapabilities', () => {
       provider: 'false',
       agent: 'false',
       passkeyEnrollment: 'false',
+      totpEnrollment: 'false',
       resolved: 'true',
     });
   });
@@ -85,11 +106,13 @@ describe('useCapabilities', () => {
       providerLogin: 'yes' as unknown as boolean,
       agentAccess: 1 as unknown as boolean,
       passkeyEnrollment: 'true' as unknown as boolean,
+      totpEnrollment: 'true' as unknown as boolean,
     });
     expect(await probe()).toEqual({
       provider: 'false',
       agent: 'false',
       passkeyEnrollment: 'false',
+      totpEnrollment: 'false',
       resolved: 'true',
     });
   });
@@ -103,6 +126,7 @@ describe('useCapabilities', () => {
       provider: 'false',
       agent: 'false',
       passkeyEnrollment: 'false',
+      totpEnrollment: 'false',
       resolved: 'true',
     });
   });

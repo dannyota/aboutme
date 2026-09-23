@@ -155,6 +155,7 @@ apps/web/app/components/settings/ConnectedAgents.vue
 apps/web/app/components/settings/LinkedIdentities.vue
 apps/web/app/components/settings/PrivacySettings.vue
 apps/web/app/components/settings/SecondFactorSettings.vue
+apps/web/app/components/settings/TotpSettings.vue
 apps/web/app/components/templates/SheetThumbnail.vue
 apps/web/app/components/templates/TemplateCard.vue
 apps/web/app/components/ui/alert-dialog/AlertDialog.vue
@@ -297,6 +298,7 @@ apps/web/app/composables/privacySettings.ts
 apps/web/app/composables/providerAuthorization.ts
 apps/web/app/composables/secondFactorPending.ts
 apps/web/app/composables/secondFactorSettings.ts
+apps/web/app/composables/totpSettings.ts
 apps/web/app/composables/useAuth.ts
 apps/web/app/composables/useCapabilities.ts
 apps/web/app/composables/useFieldDrafts.ts

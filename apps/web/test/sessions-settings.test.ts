@@ -160,6 +160,22 @@ describe('settings sessions page', () => {
   );
 
   it(
+    'treats an older, TOTP-unaware /me/second-factor response as closed',
+    async () => {
+      const wrapper = await mountSuspended(SessionsPage, { props: { now } });
+      await flushPromises();
+
+      // Neither field is in this file's fixture response above, matching a
+      // pre-authenticator-app server (totp-second-factor-contract.md
+      // "Migration, mixed versions, and loss").
+      expect(wrapper.get('[data-testid="totp-status"]').text())
+        .toBe('Not set up.');
+      expect(wrapper.find('[data-testid="totp-setup-start"]').exists())
+        .toBe(false);
+    },
+  );
+
+  it(
     'translates a revoke failure without repeating the revoke request',
     async () => {
       let revokeCalls = 0;

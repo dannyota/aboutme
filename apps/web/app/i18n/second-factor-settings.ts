@@ -1,6 +1,7 @@
 import type {
   SecondFactorSettingsErrorKind,
 } from '../composables/secondFactorSettings';
+import type { TotpSettingsErrorKind } from '../composables/totpSettings';
 import type { WorkspaceCopy } from './workspace';
 
 export type SecondFactorSettingsMessage
@@ -183,6 +184,153 @@ export const secondFactorSettingsCopy: WorkspaceCopy<
       'cancelled': 'That was cancelled.',
       'current-password-required': 'Enter your current password.',
       'reauth-failed': 'Incorrect password.',
+    },
+  },
+};
+
+export type TotpSettingsCopy = {
+  readonly title: string;
+  readonly description: string;
+  readonly passkeyRecommendation: string;
+  readonly statusNotSetUp: string;
+  readonly statusEnabled: string;
+  readonly setUpButton: string;
+  readonly replaceButton: string;
+  readonly removeButton: string;
+  readonly starting: string;
+  readonly setupTitleNew: string;
+  readonly setupTitleReplace: string;
+  readonly setupDescription: string;
+  readonly replaceNotice: string;
+  readonly qrAlt: string;
+  readonly secretLabel: string;
+  readonly copySecret: string;
+  readonly secretCopied: string;
+  readonly codeLabel: string;
+  readonly invalidFormat: string;
+  readonly verifyButton: string;
+  readonly verifying: string;
+  readonly cancel: string;
+  readonly close: string;
+  readonly addedNotice: string;
+  readonly replacedNotice: string;
+  readonly removedNotice: string;
+  readonly removeTitle: string;
+  readonly removeDescription: string;
+  readonly removeDescriptionFinal: string;
+  readonly removeConfirm: string;
+  readonly errors: Readonly<Record<TotpSettingsErrorKind, string>>;
+};
+
+export const totpSettingsCopy: WorkspaceCopy<TotpSettingsCopy> = {
+  vi: {
+    title: 'Ứng dụng xác thực',
+    description:
+      'Mã từ ứng dụng xác thực là lớp bảo vệ thứ hai cho tài khoản. Đây '
+      + 'không phải phương thức chống lừa đảo; nếu trình duyệt hỗ trợ, hãy '
+      + 'ưu tiên dùng passkey.',
+    passkeyRecommendation:
+      'Trình duyệt này hỗ trợ passkey, một lựa chọn chống lừa đảo tốt hơn.',
+    statusNotSetUp: 'Chưa thiết lập.',
+    statusEnabled: 'Đã bật.',
+    setUpButton: 'Thiết lập ứng dụng xác thực',
+    replaceButton: 'Thay ứng dụng xác thực',
+    removeButton: 'Xoá',
+    starting: 'Đang bắt đầu…',
+    setupTitleNew: 'Thiết lập ứng dụng xác thực',
+    setupTitleReplace: 'Thay ứng dụng xác thực',
+    setupDescription:
+      'Quét mã QR bằng ứng dụng xác thực, hoặc nhập mã bí mật theo cách '
+      + 'thủ công.',
+    replaceNotice:
+      'Ứng dụng xác thực hiện tại vẫn hoạt động cho đến khi bạn hoàn tất '
+      + 'bước này.',
+    qrAlt: 'Mã QR thiết lập ứng dụng xác thực',
+    secretLabel: 'Mã bí mật',
+    copySecret: 'Sao chép mã bí mật',
+    secretCopied: 'Đã sao chép mã bí mật.',
+    codeLabel: 'Mã 6 chữ số',
+    invalidFormat: 'Nhập đủ 6 chữ số.',
+    verifyButton: 'Xác minh',
+    verifying: 'Đang xác minh…',
+    cancel: 'Hủy',
+    close: 'Đóng',
+    addedNotice: 'Đã thêm ứng dụng xác thực.',
+    replacedNotice: 'Đã thay ứng dụng xác thực.',
+    removedNotice: 'Đã xoá ứng dụng xác thực.',
+    removeTitle: 'Xoá ứng dụng xác thực',
+    removeDescription:
+      'Xoá ứng dụng xác thực này? Mọi thiết bị và tác nhân đã kết nối khác '
+      + 'sẽ bị đăng xuất.',
+    removeDescriptionFinal:
+      'Đây là phương thức xác thực hai lớp cuối cùng của bạn. Xoá nó sẽ '
+      + 'tắt xác thực hai lớp và xoá các mã khôi phục. Mọi thiết bị và tác '
+      + 'nhân đã kết nối khác sẽ bị đăng xuất.',
+    removeConfirm: 'Xoá',
+    errors: {
+      'reauth-required':
+        'Đăng nhập lại để xác nhận danh tính trước khi tiếp tục.',
+      'closed': 'Việc thiết lập ứng dụng xác thực hiện đang tắt.',
+      'expired': 'Yêu cầu thiết lập đã hết hạn. Hãy bắt đầu lại.',
+      'invalid-code': 'Mã không đúng. Hãy thử lại.',
+      'not-found': 'Không tìm thấy ứng dụng xác thực nào.',
+      'rate-limited': 'Bạn đã thử quá nhiều lần. Hãy thử lại sau.',
+      'unavailable': 'Đã có lỗi. Hãy thử lại.',
+    },
+  },
+  en: {
+    title: 'Authenticator app',
+    description:
+      'An authenticator app code is a second layer of protection. It is '
+      + 'not phishing-resistant; use a passkey instead when your browser '
+      + 'supports one.',
+    passkeyRecommendation:
+      'This browser supports passkeys, a more phishing-resistant choice.',
+    statusNotSetUp: 'Not set up.',
+    statusEnabled: 'Enabled.',
+    setUpButton: 'Set up authenticator app',
+    replaceButton: 'Replace authenticator app',
+    removeButton: 'Remove',
+    starting: 'Starting…',
+    setupTitleNew: 'Set up authenticator app',
+    setupTitleReplace: 'Replace authenticator app',
+    setupDescription:
+      'Scan the QR code with your authenticator app, or enter the secret '
+      + 'key by hand.',
+    replaceNotice:
+      'Your current authenticator app code keeps working until you finish '
+      + 'this step.',
+    qrAlt: 'Authenticator app setup QR code',
+    secretLabel: 'Secret key',
+    copySecret: 'Copy secret key',
+    secretCopied: 'Secret key copied.',
+    codeLabel: '6-digit code',
+    invalidFormat: 'Enter all 6 digits.',
+    verifyButton: 'Verify',
+    verifying: 'Verifying…',
+    cancel: 'Cancel',
+    close: 'Close',
+    addedNotice: 'Authenticator app added.',
+    replacedNotice: 'Authenticator app replaced.',
+    removedNotice: 'Authenticator app removed.',
+    removeTitle: 'Remove authenticator app',
+    removeDescription:
+      'Remove this authenticator app? Every other device and connected '
+      + 'agent will be signed out.',
+    removeDescriptionFinal:
+      'This is your last second factor. Removing it turns off two-factor '
+      + 'sign-in and deletes your recovery codes. Every other device and '
+      + 'connected agent will be signed out.',
+    removeConfirm: 'Remove',
+    errors: {
+      'reauth-required':
+        'Sign in again to confirm it\'s you before continuing.',
+      'closed': 'Setting up an authenticator app is turned off right now.',
+      'expired': 'That setup request expired. Start again.',
+      'invalid-code': 'That code could not be verified. Try again.',
+      'not-found': 'No authenticator app was found.',
+      'rate-limited': 'Too many attempts. Try again later.',
+      'unavailable': 'Something went wrong. Please try again.',
     },
   },
 };

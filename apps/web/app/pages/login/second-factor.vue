@@ -9,10 +9,17 @@
  * with no query string, and none of its text ever becomes copy, markup, or
  * a request target.
  *
- * Methods render in the server's fixed order (passkey, then recovery). A
- * method value this build does not recognize renders a refresh prompt
- * instead of a route call — beside the known methods, or alone when none
- * remain — and never touches the pending cookie itself.
+ * Methods render in the server's fixed order (passkey, totp, then recovery;
+ * docs/design/totp-second-factor-contract.md "Release surface"). A method
+ * value this build does not recognize renders a refresh prompt instead of a
+ * route call — beside the known methods, or alone when none remain — and
+ * never touches the pending cookie itself (AC-AUTH-028).
+ *
+ * The authenticator code lives only in `totpCode`, a component-local ref.
+ * `submitTotp` clears it the instant the submit handler reads it, before any
+ * network call, and `clearTotpCode` runs again on unmount, so no exit path
+ * (submit outcome, navigation, expiry, exhaustion, or unmount) leaves it in
+ * memory (docs/design/totp-second-factor-contract.md "Provisioning data").
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import FormField from '@/components/app/FormField.vue';
@@ -65,14 +72,29 @@ const purpose = ref<'login' | 'reauth'>('login');
 
 const passkeyBusy = ref(false);
 const passkeyMessage = ref<SecondFactorMessage | null>(null);
+const totpCode = ref('');
+const totpBusy = ref(false);
+const totpMessage = ref<SecondFactorMessage | null>(null);
+// Set only for a 429 cool-down; holds the server's `Retry-After` seconds so
+// the banner can show localized remaining time instead of generic copy
+// (docs/design/totp-second-factor-contract.md "Per-account TOTP failure
+// budget"). `null` means the current totpMessage, if any, applies instead.
+const totpCooldownSeconds = ref<number | null>(null);
 const recoveryCode = ref('');
 const recoveryBusy = ref(false);
 const recoveryMessage = ref<SecondFactorMessage | null>(null);
 
 const KNOWN_ORDER: readonly SecondFactorPendingMethod[] = [
   'passkey',
+  'totp',
   'recovery',
 ];
+
+/** Exactly six ASCII digits, matching the server's own input bound
+ * (docs/design/totp-second-factor-contract.md "TOTP profile and code
+ * verification"). Checked client-side so a malformed value never reaches
+ * the network or spends a rate-limit slot. */
+const TOTP_CODE_SHAPE = /^[0-9]{6}$/;
 
 const knownMethods = computed<SecondFactorPendingMethod[]>(() => {
   const methods = status.value?.methods ?? [];
@@ -86,6 +108,16 @@ const expiredTarget = computed(() => (purpose.value === 'reauth'
   ? '/app/settings/sessions?error=authentication_required'
   : '/login?error=authentication_required'));
 
+/** The totp section's current error text, or `null` for none. A cool-down
+ * always wins over a stale message because `submitTotp` clears whichever one
+ * does not apply for the new outcome. */
+const totpErrorText = computed<string | null>(() => {
+  if (totpCooldownSeconds.value !== null) {
+    return copy.value.totp.cooldown(totpCooldownSeconds.value);
+  }
+  return totpMessage.value ? copy.value.messages[totpMessage.value] : null;
+});
+
 /** Maps a retryable pending failure to its generic display copy. Callers
  * handle `authentication-required` separately by moving to "expired". */
 function messageFor(kind: SecondFactorPendingError): SecondFactorMessage {
@@ -95,6 +127,25 @@ function messageFor(kind: SecondFactorPendingError): SecondFactorMessage {
       return 'verificationFailed';
     case 'rate-limited':
       return 'rateLimited';
+    default:
+      return 'tryAgain';
+  }
+}
+
+/** Maps a retryable TOTP pending failure to its display copy. Distinct from
+ * `messageFor` because a stale credential and a cool-down each need their
+ * own copy here (docs/design/totp-second-factor-contract.md "Pending
+ * verification API", "Per-account TOTP failure budget"; AC-AUTH-028). The
+ * `rate-limited` kind never reaches this function: `submitTotp` reads its
+ * `retryAfterSeconds` into `totpCooldownSeconds` instead. */
+function totpMessageFor(kind: SecondFactorPendingError): SecondFactorMessage {
+  switch (kind) {
+    case 'verification-failed':
+      return 'verificationFailed';
+    case 'factor-not-found':
+      return 'totpNotFound';
+    case 'unavailable':
+      return 'unavailable';
     default:
       return 'tryAgain';
   }
@@ -170,6 +221,48 @@ async function usePasskey(): Promise<void> {
   }
 }
 
+// Never keep an authenticator code around longer than the keystroke that
+// entered it: `submitTotp` calls this immediately after reading the field,
+// before the request or navigation, so no exit path (submit outcome,
+// navigation, expiry, exhaustion, or unmount) leaves it in memory.
+function clearTotpCode(): void {
+  totpCode.value = '';
+}
+
+async function submitTotp(): Promise<void> {
+  if (!status.value || totpBusy.value) return;
+  const code = totpCode.value.trim();
+  clearTotpCode();
+  totpMessage.value = null;
+  totpCooldownSeconds.value = null;
+  if (!TOTP_CODE_SHAPE.test(code)) {
+    totpMessage.value = 'enterTotpCode';
+    return;
+  }
+  totpBusy.value = true;
+  const csrfToken = status.value.csrfToken;
+  try {
+    await pending.verifyTotp(csrfToken, code);
+    await afterSuccess();
+  } catch (error) {
+    if (error instanceof SecondFactorPendingFailure
+      && error.kind === 'authentication-required') {
+      state.value = 'expired';
+    } else if (error instanceof SecondFactorPendingFailure
+      && error.kind === 'rate-limited') {
+      // Retry-After is capped at 86,400 seconds (24 hours); a missing
+      // header still shows the cap so the banner never reads as instant.
+      totpCooldownSeconds.value = error.retryAfterSeconds ?? 86400;
+    } else if (error instanceof SecondFactorPendingFailure) {
+      totpMessage.value = totpMessageFor(error.kind);
+    } else {
+      totpMessage.value = 'tryAgain';
+    }
+  } finally {
+    totpBusy.value = false;
+  }
+}
+
 function clearRecoveryCode(): void {
   recoveryCode.value = '';
 }
@@ -202,8 +295,12 @@ async function submitRecovery(): Promise<void> {
   }
 }
 
-// Never keep a recovery code around longer than the attempt that used it.
-onBeforeUnmount(clearRecoveryCode);
+// Never keep a recovery code or an authenticator code around longer than
+// the attempt that used it.
+onBeforeUnmount(() => {
+  clearRecoveryCode();
+  clearTotpCode();
+});
 </script>
 
 <template>
@@ -302,6 +399,64 @@ onBeforeUnmount(clearRecoveryCode);
         >
           {{ copy.messages.passkeyUnsupported }}
         </StatusBanner>
+      </section>
+
+      <section
+        v-if="knownMethods.includes('totp')"
+        class="mt-8"
+        data-testid="second-factor-totp"
+      >
+        <h2 class="text-sm font-medium">
+          {{ copy.totp.heading }}
+        </h2>
+        <p class="mt-1 text-sm text-muted-foreground">
+          {{ copy.totp.description }}
+        </p>
+        <p class="mt-1 text-xs text-muted-foreground">
+          {{ copy.totp.guidance }}
+        </p>
+        <StatusBanner
+          v-if="totpErrorText"
+          class="mt-3"
+          kind="error"
+          testid="second-factor-totp-error"
+        >
+          {{ totpErrorText }}
+        </StatusBanner>
+        <form
+          class="mt-3 grid gap-3"
+          data-testid="second-factor-totp-form"
+          novalidate
+          @submit.prevent="submitTotp"
+        >
+          <FormField
+            id="second-factor-totp-code"
+            v-slot="{ id, describedBy, invalid }"
+            :label="copy.totp.label"
+          >
+            <Input
+              :id="id"
+              v-model="totpCode"
+              :aria-describedby="describedBy"
+              :aria-invalid="invalid"
+              autocapitalize="off"
+              autocomplete="one-time-code"
+              autocorrect="off"
+              inputmode="numeric"
+              maxlength="6"
+              pattern="[0-9]*"
+              spellcheck="false"
+              type="text"
+            />
+          </FormField>
+          <Button
+            class="h-9 w-full"
+            :disabled="totpBusy"
+            type="submit"
+          >
+            {{ totpBusy ? copy.totp.pending : copy.totp.button }}
+          </Button>
+        </form>
       </section>
 
       <section

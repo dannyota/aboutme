@@ -61,8 +61,9 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     addProvider: 'Thêm phương thức đăng nhập khác',
     linkProvider: (provider) => `Liên kết ${provider}`,
     secondFactorEndsOtherSessions:
-      'Thêm, xoá passkey hoặc tạo lại mã khôi phục sẽ đăng xuất mọi thiết bị '
-      + 'và tác nhân đã kết nối khác. Thiết bị này vẫn giữ đăng nhập.',
+      'Thêm, thay, hoặc xoá passkey hay ứng dụng xác thực, hoặc tạo lại mã '
+      + 'khôi phục, sẽ đăng xuất mọi thiết bị và tác nhân đã kết nối khác. '
+      + 'Thiết bị này vẫn giữ đăng nhập.',
   },
   en: {
     title: 'Settings',
@@ -94,8 +95,8 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     addProvider: 'Add another sign-in provider',
     linkProvider: (provider) => `Link ${provider}`,
     secondFactorEndsOtherSessions:
-      'Adding or removing a passkey, or regenerating recovery codes, signs '
-      + 'out every other device and connected agent. This device stays '
-      + 'signed in.',
+      'Adding, replacing, or removing a passkey or authenticator app, or '
+      + 'regenerating recovery codes, signs out every other device and '
+      + 'connected agent. This device stays signed in.',
   },
 };
