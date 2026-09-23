@@ -31,7 +31,7 @@ local tests, builds, lint, browsers, database writes, or stacks.
 
 ## Required behavior
 
-- Add a fixed 45-minute `totp-browser-proof` job that uses repository lifecycle
+- Add a fixed 60-minute `totp-browser-proof` job that uses repository lifecycle
   targets, builds the pinned browser image, executes `make dev-https-totp-check`
   on the exact candidate, and uploads only bounded secret-free
   `.dev/native-https/evidence/totp-*`.

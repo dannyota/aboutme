@@ -463,6 +463,13 @@ absent "$work/fence_missing_describe_error.calls" "ecs register-task-definition"
 grep -qF "could not read the running app service" "$work/fence_missing_describe_error.out" ||
   { echo "fence_missing_describe_error: no read-failure message" >&2; exit 1; }
 
+# A running app task definition that jq cannot parse fails closed, not open:
+# it must not read as an empty (so "off") enrollment value.
+run_case fence_running_def_malformed fail v0.1.0
+absent "$work/fence_running_def_malformed.calls" "ecs register-task-definition"
+grep -qF "could not read the running app task definition" "$work/fence_running_def_malformed.out" ||
+  { echo "fence_running_def_malformed: no read-failure message" >&2; exit 1; }
+
 # fence_read checks the service's actual running revision, not a family's
 # latest, so the running app proves enrollment off. The revision this deploy
 # would register still carries enrollment on below the fence, so it stops
@@ -576,20 +583,38 @@ grep -qF "TOTP enrollment on while the release fence is below v0.4.7" \
   "$work/fence_new_revision_totp_enrolled.out" ||
   { echo "fence_new_revision_totp_enrolled: no TOTP enrollment message" >&2; exit 1; }
 
-# --totp-key-reencrypt runs only the re-encryption family, with no image,
-# service, snapshot, or schedule mutation, and requires the running app to be
-# the exact tag requested.
+# --totp-key-reencrypt builds and registers its own totp-reencrypt revision
+# from the tag's server image, the same way the other one-shot families are
+# built and registered, with no service, snapshot, or schedule mutation, and
+# requires the running app to be the exact tag requested.
 run_case totp_reencrypt_ok 0 --totp-key-reencrypt v0.4.7
 f=$work/totp_reencrypt_ok.calls
-absent "$f" "ecs register-task-definition"
 absent "$f" "rds create-db-snapshot"
 absent "$f" "scheduler update-schedule"
 absent "$f" "ecs update-service"
-grep -qF -- "--task-definition aboutme-prod-totp-reencrypt --started-by deploy-totp-reencrypt" "$f" ||
-  { echo "totp_reencrypt_ok: did not run the re-encryption family" >&2; exit 1; }
+grep -qF "ecs register-task-definition" "$f" ||
+  { echo "totp_reencrypt_ok: did not register a revision" >&2; exit 1; }
+grep -qF -- "--task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --started-by deploy-totp-reencrypt" "$f" ||
+  { echo "totp_reencrypt_ok: did not run its own registered revision" >&2; exit 1; }
 grep -qF "REMOVE operation_id" "$f" || { echo "totp_reencrypt_ok: lock was not released" >&2; exit 1; }
 grep -qF "totp-key-reencrypt done for v0.4.7" "$work/totp_reencrypt_ok.out" ||
   { echo "totp_reencrypt_ok: no completion message" >&2; exit 1; }
+# Registered from current_def totp-reencrypt, stamped with the tag's server
+# image and DEPLOY_RELEASE_*, not var.image_server's untouched registration.
+jq -e '.containerDefinitions[0].image == "ghcr.io/dannyota/aboutme-server@sha256:'"$(printf '%064d' 1)"'"
+  and (.containerDefinitions[0].environment | any(.name == "DEPLOY_RELEASE_TAG" and .value == "v0.4.7"))' \
+  "$work/last-registered.json" >/dev/null ||
+  { echo "totp_reencrypt_ok: registered revision is not stamped with the tag's server image" >&2; exit 1; }
+
+# A run still going after every wait keeps the operation lock, so no deploy
+# can start beside it (docs/design/passkey-release-fence.md).
+run_case totp_reencrypt_wait_timeout fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_wait_timeout.calls
+[[ $(grep -c "ecs wait tasks-stopped" "$f") -eq 4 ]] ||
+  { echo "totp_reencrypt_wait_timeout: did not wait four times" >&2; exit 1; }
+absent "$f" "REMOVE operation_id"
+grep -qF "operation lock stays held" "$work/totp_reencrypt_wait_timeout.out" ||
+  { echo "totp_reencrypt_wait_timeout: no held-lock message" >&2; exit 1; }
 
 # The stored minimum must itself already be at v0.4.7; a lower stored
 # minimum refuses the one-shot before the lock, even though a normal deploy
@@ -602,13 +627,34 @@ grep -qF "release fence is below v0.4.7" "$work/totp_reencrypt_below_floor.out" 
   { echo "totp_reencrypt_below_floor: no floor message" >&2; exit 1; }
 
 # The requested tag must equal the running app's exact release: the same-tag
-# rule the rotation runbook step relies on.
+# rule the rotation runbook step relies on. This check runs after the lock is
+# acquired, not before, so it always reads the running app under the lock.
 run_case totp_reencrypt_tag_mismatch fail --totp-key-reencrypt v0.4.7
 f=$work/totp_reencrypt_tag_mismatch.calls
-absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs register-task-definition"
 absent "$f" "ecs run-task"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "totp_reencrypt_tag_mismatch: lock was not released" >&2; exit 1; }
 grep -qF "is release 4006, not v0.4.7" "$work/totp_reencrypt_tag_mismatch.out" ||
   { echo "totp_reencrypt_tag_mismatch: no release-mismatch message" >&2; exit 1; }
+
+# Before registering, the new revision's TOTP_ACTIVE_KEY/TOTP_PREVIOUS_KEY
+# slots must match the running app's; a mismatch would seal the task under a
+# key the running app cannot read, so it is refused instead.
+run_case totp_reencrypt_slot_mismatch fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_slot_mismatch.calls
+absent "$f" "ecs register-task-definition"
+absent "$f" "ecs run-task"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "totp_reencrypt_slot_mismatch: lock was not released" >&2; exit 1; }
+grep -qF "run tofu apply first" "$work/totp_reencrypt_slot_mismatch.out" ||
+  { echo "totp_reencrypt_slot_mismatch: no slot-mismatch message" >&2; exit 1; }
+
+run_case totp_reencrypt_register_fails fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_register_fails.calls
+absent "$f" "ecs run-task"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "totp_reencrypt_register_fails: lock was not released" >&2; exit 1; }
 
 run_case totp_reencrypt_runtask_fails fail --totp-key-reencrypt v0.4.7
 f=$work/totp_reencrypt_runtask_fails.calls
@@ -623,6 +669,17 @@ grep -qF "REMOVE operation_id" "$f" ||
   { echo "totp_reencrypt_task_fails: lock was not released" >&2; exit 1; }
 grep -qF "totp-key-reencrypt exited with 1" "$work/totp_reencrypt_task_fails.out" ||
   { echo "totp_reencrypt_task_fails: no exit-code message" >&2; exit 1; }
+
+# A release at or above v0.4.7 must name TOTP_ACTIVE_KEY in the app's server
+# secrets, or the app would start and fail at TOTP use after migrate has
+# already run.
+run_case totp_key_secret_missing fail v0.4.7
+f=$work/totp_key_secret_missing.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs register-task-definition"
+grep -qF "run tofu apply for the TOTP key before deploying this release" \
+  "$work/totp_key_secret_missing.out" ||
+  { echo "totp_key_secret_missing: no TOTP key message" >&2; exit 1; }
 
 # A candidate that never reaches the fence (CI is not green) never acquires
 # or releases the lock: a crash before the lock exists leaves nothing to

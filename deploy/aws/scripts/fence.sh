@@ -126,9 +126,11 @@ fence_read() {
   if ((deployed)); then
     def=$(describe_task_def "$running") || { say "could not read the running app task definition"; return 1; }
     enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
-      | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null)
+      | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null) ||
+      { say "could not read the running app task definition"; return 1; }
     totp_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
-      | .environment[]? | select(.name == "TOTP_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null)
+      | .environment[]? | select(.name == "TOTP_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null) ||
+      { say "could not read the running app task definition"; return 1; }
   fi
   if [[ -z $item_present && -n $enrolled && $enrolled != false ]]; then
     say "the release fence is missing and the running app does not prove passkey enrollment off"

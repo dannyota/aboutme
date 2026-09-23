@@ -85,7 +85,11 @@ running tag through a serialized `deploy.sh` operation.
    `aboutme-prod-totp-reencrypt`, waits for it to stop, and releases the exact
    lock it holds. It changes no service, schedule, alarm, or rule. Counts and
    internal row IDs are in the task's own CloudWatch log stream; the command
-   never prints a key, secret, nonce, or ciphertext.
+   never prints a key, secret, nonce, or ciphertext. If the task is still
+   running after about 40 minutes of waiting, the command exits nonzero and
+   keeps the lock held on purpose. Clear it only through the manual lock-clear
+   procedure in [the production runbook](production.md), after the
+   `deploy-totp-reencrypt` task has stopped.
 
 5. At least ten minutes after the step 3 deploy completes, so every enrollment
    an older task sealed has expired or been rewritten, run step 4 again. Repeat

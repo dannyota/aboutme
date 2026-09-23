@@ -252,7 +252,7 @@ jobs:
   # Uploaded evidence covers only fictional accounts.
   totp-browser-proof:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     # TOTP enrollment ships off. This proof must pass before
     # TOTP_ENROLLMENT_ENABLED is turned on; until then it reports without
     # blocking the release of the flag-off code.

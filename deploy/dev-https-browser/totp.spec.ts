@@ -43,10 +43,10 @@ import {
   isExpectedNegativeHTTPConsole,
 } from './network-policy';
 import {
+  codeForStep,
   codeNextStep,
   codeNow,
   codePreviousStep,
-  fixedClock,
   mismatchedCode,
   stepAt,
   systemClock,
@@ -808,6 +808,32 @@ async function proveQrIsLocal(
   expect(foreign).toBe(false);
 }
 
+/**
+ * The newest step any accepted code for the primary account has used. The
+ * server accepts only a step greater than the credential's last used step,
+ * so every later accepted code must come from a newer step.
+ */
+let lastUsedStep = -1;
+
+/** Returns a current-step code newer than every step already accepted. */
+async function freshCode(page: Page, secret: string): Promise<string> {
+  await waitForStepAtLeast(page, lastUsedStep + 1);
+  const step = stepAt(systemClock().nowSeconds());
+  lastUsedStep = step;
+  return codeForStep(secret, step);
+}
+
+/**
+ * Waits on the real clock until the current 30-second step reaches `step`,
+ * so a later code is strictly newer than every step already consumed
+ * (totp-second-factor-contract.md, "TOTP profile and code verification").
+ */
+async function waitForStepAtLeast(page: Page, step: number): Promise<void> {
+  const target = step * TOTP_PERIOD_SECONDS;
+  const waitMs = (target - Date.now() / 1000) * 1000;
+  if (waitMs > 0) await page.waitForTimeout(Math.ceil(waitMs) + 500);
+}
+
 /** Submits one TOTP code in the settings setup dialog and returns status. */
 async function submitSetupCode(page: Page, code: string): Promise<number> {
   const response = page.waitForResponse((candidate) => {
@@ -1103,7 +1129,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.unicodeDigitsRejected = true;
 
     stage('enroll-complete');
-    expect(await submitSetupCode(page, codeNow(secret, systemClock())))
+    expect(await submitSetupCode(page, await freshCode(page, secret)))
       .toBe(200);
     const firstCodes = await readRevealedCodes(page);
     await closeRevealAndProveCleared(page, firstCodes);
@@ -1182,7 +1208,11 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     // 8. Previous, current, and next step each complete one pending login,
     //    each on a fresh sign-in because a step only accepts a code greater
     //    than the credential's last used step.
+    //    Earlier stages used steps up to the current one, so wait until the
+    //    previous step is newer than any of them.
     stage('previous-step');
+    await waitForStepAtLeast(page, lastUsedStep + 2);
+    lastUsedStep = stepAt(systemClock().nowSeconds()) - 1;
     await completeWithTotp(page, codePreviousStep(secret, systemClock()));
     await expectSignedInApp(page);
     steps.previousStepAccepted = true;
@@ -1191,7 +1221,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
-    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await completeWithTotp(page, await freshCode(page, secret));
     await expectSignedInApp(page);
     steps.currentStepAccepted = true;
 
@@ -1199,6 +1229,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
+    await waitForStepAtLeast(page, lastUsedStep);
+    lastUsedStep = stepAt(systemClock().nowSeconds()) + 1;
     await completeWithTotp(page, codeNextStep(secret, systemClock()));
     await expectSignedInApp(page);
     steps.nextStepAccepted = true;
@@ -1209,7 +1241,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
-    const usedCode = codeNow(secret, systemClock());
+    const usedCode = await freshCode(page, secret);
     expect(await submitPendingTotpCode(page, usedCode)).toBe(204);
     await landedAfter(page, '/login/second-factor');
     await expectSignedInApp(page);
@@ -1226,7 +1258,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-totp-error')).toBeVisible();
     expect(await meStatus(page)).toBe(401);
     steps.invalidCodeRejected = true;
-    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await completeWithTotp(page, await freshCode(page, secret));
     await expectSignedInApp(page);
 
     // 10. Concurrent submission of one code has exactly one winner.
@@ -1241,7 +1273,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       'X-CSRF-Token': await pendingCSRFToken(page),
     };
     const concurrentBody = JSON.stringify({
-      code: codeNow(secret, systemClock()),
+      code: await freshCode(page, secret),
     });
     const race = await Promise.all([
       trustedPost(ca, '/api/v1/auth/second-factor/totp/verify',
@@ -1265,7 +1297,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     const oldSecret = secret;
     secret = await startTotpSetup(page);
     expect(secret).not.toBe(oldSecret);
-    expect(await submitSetupCode(page, codeNow(secret, systemClock())))
+    expect(await submitSetupCode(page, await freshCode(page, secret)))
       .toBe(200);
     await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
     await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
@@ -1276,7 +1308,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       .toBe('pending');
     expect(await submitPendingTotpCode(page, codeNow(oldSecret, systemClock())))
       .toBe(401);
-    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await completeWithTotp(page, await freshCode(page, secret));
     await expectSignedInApp(page);
 
     // 12. Provider sign-in on the enrolled account also stops at pending.
@@ -1291,7 +1323,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(401);
     await expect(page.getByTestId('second-factor-totp')).toBeVisible();
     steps.providerPending = true;
-    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await completeWithTotp(page, await freshCode(page, secret));
     await expectSignedInApp(page);
 
     // 13. Wrong-epoch HTTP fixture: a pending row frozen before a
@@ -1314,7 +1346,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await page.getByTestId('totp-setup-replace').click();
     await reauthenticateWithPassword(page, primaryPassword);
     const bumpSecret = await startTotpSetup(page);
-    expect(await submitSetupCode(page, codeNow(bumpSecret, systemClock())))
+    expect(await submitSetupCode(page, await freshCode(page, bumpSecret)))
       .toBe(200);
     await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
     secret = bumpSecret;
@@ -1339,14 +1371,14 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     stage('locales');
     await signOut(page);
     await provePendingLocale(page, context, {
-      code: codeNow(secret, fixedClock(nextWindowSeconds())),
+      code: await freshCode(page, secret),
       email: primaryEmail,
       locale: 'vi',
       password: primaryPassword,
       viewport: PHONE,
     });
     await provePendingLocale(page, context, {
-      code: codeNextStep(secret, systemClock()),
+      code: await freshCode(page, secret),
       email: primaryEmail,
       locale: 'en',
       password: primaryPassword,
@@ -1373,7 +1405,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(await passwordSignIn(page, primaryEmail, resetPassword))
       .toBe('pending');
     steps.resetPreservesEnforcement = true;
-    await completeWithTotp(page, codeNow(secret, systemClock()));
+    await completeWithTotp(page, await freshCode(page, secret));
     await expectSignedInApp(page);
 
     // 16. Removing TOTP while a passkey remains is non-final; removing the
@@ -1515,12 +1547,6 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     );
   }
 });
-
-/** The Unix second just past the current TOTP window, for a fresh clock. */
-function nextWindowSeconds(): number {
-  const now = Math.floor(Date.now() / 1000);
-  return (stepAt(now) + 1) * TOTP_PERIOD_SECONDS;
-}
 
 // --- Disabled-enrollment journey -----------------------------------------
 

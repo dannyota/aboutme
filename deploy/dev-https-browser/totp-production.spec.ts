@@ -33,12 +33,31 @@ import { expect, test, type BrowserContext, type Page, type Route } from '@playw
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
-  codeNextStep,
+  codeForStep,
   codeNow,
-  codePreviousStep,
   mismatchedCode,
+  stepAt,
   systemClock,
+  TOTP_PERIOD_SECONDS,
 } from './totp-fixture';
+
+/**
+ * The newest step an accepted code has used. The server accepts only a step
+ * greater than the credential's last used step
+ * (totp-second-factor-contract.md, "TOTP profile and code verification"),
+ * so each accepted code waits for a newer step.
+ */
+let lastUsedStep = -1;
+
+/** Returns a current-step code newer than every step already accepted. */
+async function freshCode(page: Page, secret: string): Promise<string> {
+  const waitMs = ((lastUsedStep + 1) * TOTP_PERIOD_SECONDS - Date.now() / 1000)
+    * 1000;
+  if (waitMs > 0) await page.waitForTimeout(Math.ceil(waitMs) + 500);
+  const step = stepAt(systemClock().nowSeconds());
+  lastUsedStep = step;
+  return codeForStep(secret, step);
+}
 
 const MODE = process.env.ABOUTME_BROWSER_MODE ?? '';
 const ORIGIN = 'https://aboutme.vn';
@@ -516,7 +535,7 @@ test('proves the activated production authenticator-app journey', async ({
       await expect(page.getByTestId('second-factor-reauth-password')).toBeVisible();
       await reauthenticateWithPassword(page, account.password);
       secret = await startTotpSetup(page);
-      if (await submitSetupCode(page, codeNow(secret, systemClock())) !== 200) {
+      if (await submitSetupCode(page, await freshCode(page, secret)) !== 200) {
         throw new Error('TOTP enrollment completion was rejected');
       }
       recoveryCodes = await readRevealedCodes(page);
@@ -527,7 +546,7 @@ test('proves the activated production authenticator-app journey', async ({
       if (await passwordSignIn(page, account) !== 'pending') {
         throw new Error('enrolled account did not require a second factor');
       }
-      await completeWithTotp(page, codeNextStep(secret, systemClock()));
+      await completeWithTotp(page, await freshCode(page, secret));
       if (await meStatus(page) !== 200) throw new Error('TOTP login did not establish a session');
     });
 
@@ -539,7 +558,7 @@ test('proves the activated production authenticator-app journey', async ({
       await reauthenticateWithPassword(page, account.password);
       const oldSecret = secret;
       secret = await startTotpSetup(page);
-      if (await submitSetupCode(page, codeNow(secret, systemClock())) !== 200) {
+      if (await submitSetupCode(page, await freshCode(page, secret)) !== 200) {
         throw new Error('TOTP replacement completion was rejected');
       }
       await signOut(page);
@@ -551,7 +570,7 @@ test('proves the activated production authenticator-app journey', async ({
         mismatchedCode(codeNow(oldSecret, systemClock())),
       );
       if (oldRejected !== 401) throw new Error('the replaced secret still verified');
-      await completeWithTotp(page, codeNow(secret, systemClock()));
+      await completeWithTotp(page, await freshCode(page, secret));
     });
 
     await step('recovery-completion', async () => {
@@ -591,9 +610,9 @@ test('proves the activated production authenticator-app journey', async ({
     });
 
     await step('locales', async () => {
-      for (const [locale, viewport, code] of [
-        ['vi', PHONE, codePreviousStep(secret, systemClock())],
-        ['en', DESKTOP, codeNextStep(secret, systemClock())],
+      for (const [locale, viewport] of [
+        ['vi', PHONE],
+        ['en', DESKTOP],
       ] as const) {
         await signOut(page);
         await context.addCookies([{ name: 'aboutme-locale', url: ORIGIN, value: locale }]);
@@ -604,7 +623,7 @@ test('proves the activated production authenticator-app journey', async ({
         const overflow = await page.evaluate(() =>
           document.documentElement.scrollWidth <= window.innerWidth);
         if (!overflow) throw new Error('pending page overflowed its viewport');
-        await completeWithTotp(page, code);
+        await completeWithTotp(page, await freshCode(page, secret));
       }
       await context.addCookies([{ name: 'aboutme-locale', url: ORIGIN, value: 'en' }]);
       await page.setViewportSize(DESKTOP);

@@ -362,11 +362,12 @@ OpenTofu and account administration already trust as a privileged bypass:
    ```sh
    aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-migrate
    aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-db-setup
+   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-totp-reencrypt
    aws rds describe-db-snapshots --region ap-southeast-1 --db-instance-identifier aboutme-prod \
      --query 'DBSnapshots[?Status!=`available`]'
    ```
 
-   Both `list-tasks` calls must return no task ARNs, and the snapshot query must
+   Every `list-tasks` call must return no task ARNs, and the snapshot query must
    return an empty list, before continuing.
 
 3. Inspect `aboutme-prod-app`, `aboutme-prod-web`, `aboutme-prod-maintenance`,

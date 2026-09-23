@@ -33,19 +33,23 @@ const secondFactor = mode === 'second-factor'
   || mode === 'totp-disabled';
 // The enabled second-factor and TOTP journeys each warm every page they use,
 // then walk enrollment, several pending sign-ins, the negative cases, and
-// teardown in one test, so each gets its own budget. Each disabled journey
-// opens three pages and makes a handful of calls, so it gets a much smaller
-// one. Together with the stack restart between phases, both fit inside the
-// hosted job's own limit. mcp-sdk.spec.ts calls test.setTimeout with its own
-// handoff and step bounds once it runs; this default only covers setup
-// before that call.
-const timeout = mode === 'second-factor' || mode === 'totp'
-  ? 1_200_000
-  : mode === 'second-factor-disabled' || mode === 'totp-disabled' || mode === 'mcp-sdk'
-    ? 420_000
-    : mode === 'editor' || mode === 'public' || mode === 'password-auth'
-      || mode === 'mcp' || mode === 'publish' || mode === 'exports'
-      || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
+// teardown in one test, so each gets its own budget. The TOTP journey also
+// waits for fresh 30-second steps between accepted codes, so it gets more.
+// Each disabled journey opens three pages and makes a handful of calls, so it
+// gets a much smaller one. Together with the stack restart between phases,
+// both fit inside the hosted job's own limit. mcp-sdk.spec.ts calls
+// test.setTimeout with its own handoff and step bounds once it runs; this
+// default only covers setup before that call.
+const timeout = mode === 'totp'
+  ? 1_800_000
+  : mode === 'second-factor'
+    ? 1_200_000
+    : mode === 'second-factor-disabled' || mode === 'totp-disabled'
+      || mode === 'mcp-sdk'
+      ? 420_000
+      : mode === 'editor' || mode === 'public' || mode === 'password-auth'
+        || mode === 'mcp' || mode === 'publish' || mode === 'exports'
+        || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
 
 // Both second-factor modes run one spec, and both TOTP modes run another.
 // The server enrollment flag, not the spec file, is what differs within
