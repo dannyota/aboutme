@@ -24,6 +24,10 @@ readonly -a SPEC_SOURCES=(
   privacy.spec.ts
   sample-start.spec.ts
   second-factor.spec.ts
+  totp.spec.ts
+  totp-fixture.ts
+  totp-production.spec.ts
+  production.config.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -76,7 +80,12 @@ mode_input_entries() {
   case $1 in
   password-auth | sample-start) printf 'caddy-root.crt\nmail-capture-token' ;;
   mcp | privacy) printf 'caddy-root.crt\nmcp-client-name' ;;
-  second-factor) printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name' ;;
+  second-factor | totp)
+    printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name'
+    ;;
+  totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup)
+    printf 'account.env'
+    ;;
   *) printf 'caddy-root.crt' ;;
   esac
 }
@@ -90,10 +99,24 @@ mode_input_diagnostic() {
   mcp | privacy)
     printf 'MCP input must contain the Caddy root and the run client name'
     ;;
-  second-factor)
+  second-factor | totp)
     printf 'CA input must contain the Caddy root, the capture token, and the run client name'
     ;;
+  totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup)
+    printf 'production input must contain exactly the fictional account file'
+    ;;
   *) printf 'CA input must contain one root' ;;
+  esac
+}
+
+# mode_is_totp_production reports whether mode is one of the three
+# production TOTP proof modes, which carry no CA root and never import one
+# (docs/runbooks/totp-keys.md "Production proofs": the real public origin
+# already validates against the image's own system trust store).
+mode_is_totp_production() {
+  case $1 in
+  totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup) return 0 ;;
+  *) return 1 ;;
   esac
 }
 
@@ -102,15 +125,27 @@ mode_input_diagnostic() {
 validate_mode_input_files() {
   local mode=$1 dir=$2 uid=$3
   case $mode in
-  password-auth | sample-start | second-factor)
+  password-auth | sample-start | second-factor | totp)
     validate_capture_token_file "$dir/mail-capture-token" "$uid"
     ;;
   esac
   case $mode in
-  mcp | privacy | second-factor)
+  mcp | privacy | second-factor | totp)
     validate_mcp_client_name_file "$dir/mcp-client-name" "$uid"
     ;;
   esac
+  if mode_is_totp_production "$mode"; then
+    validate_account_file "$dir/account.env" "$uid"
+  fi
+}
+
+validate_account_file() {
+  # <path> <expected-owner-uid>; structural only, never opens or reads it.
+  local path=$1 uid=$2
+  [ -f "$path" ] && [ ! -L "$path" ] ||
+    fail 'production account file is not a regular file'
+  [ "$(stat -c %u "$path")" = "$uid" ] || fail 'production account file owner mismatch'
+  [ "$(stat -c %a "$path")" = 600 ] || fail 'production account file mode must be 0600'
 }
 
 validate_mcp_credential_file() {
@@ -145,8 +180,8 @@ inside_container() {
   [ "$#" -le 2 ] || fail 'container entrypoint accepts at most a mode and a workflow mode'
   local mode=${1:-auth} workflow_mode=${2:-}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | mcp-sdk) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, or mcp-sdk' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
   esac
   if [ "$mode" = mcp-sdk ]; then
     [[ $workflow_mode = local || $workflow_mode = production ]] ||
@@ -162,6 +197,11 @@ inside_container() {
   # mounts no CA input and the container never imports one.
   local production_sdk=0
   [ "$mode" = mcp-sdk ] && [ "$workflow_mode" = production ] && production_sdk=1
+  # The three production TOTP modes keep the /uat-input mount (it carries
+  # only the fictional account file) but never import a CA root, for the
+  # same reason as production_sdk above.
+  local skip_ca_import=$production_sdk
+  mode_is_totp_production "$mode" && skip_ca_import=1
 
   local root_target root_options input_target input_options
   local evidence_target evidence_options uid input_entries evidence_entries
@@ -243,13 +283,17 @@ inside_container() {
     input_entries=$(find /uat-input -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
     [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
       fail "$(mode_input_diagnostic "$mode")"
-    [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
-      fail 'Caddy root is not a regular file'
-    [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
-      fail 'Caddy root owner mismatch'
-    [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
-      fail 'Caddy root mode must be 0600'
-    validate_mode_input_files "$mode" /uat-input "$uid"
+    if mode_is_totp_production "$mode"; then
+      validate_mode_input_files "$mode" /uat-input "$uid"
+    else
+      [ -f /uat-input/caddy-root.crt ] && [ ! -L /uat-input/caddy-root.crt ] ||
+        fail 'Caddy root is not a regular file'
+      [ "$(stat -c %u /uat-input/caddy-root.crt)" = "$uid" ] ||
+        fail 'Caddy root owner mismatch'
+      [ "$(stat -c %a /uat-input/caddy-root.crt)" = 600 ] ||
+        fail 'Caddy root mode must be 0600'
+      validate_mode_input_files "$mode" /uat-input "$uid"
+    fi
   fi
 
   validate_spec_dir /uat-spec "$uid"
@@ -261,7 +305,7 @@ inside_container() {
     "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
   certutil -N --empty-password -d "sql:$HOME/.pki/nssdb" >/dev/null ||
     fail 'cannot initialize the isolated NSS database'
-  if [ "$production_sdk" -ne 1 ]; then
+  if [ "$skip_ca_import" -ne 1 ]; then
     certutil -A -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root \
       -t 'C,,' -i /uat-input/caddy-root.crt || fail 'cannot import the Caddy root'
     certutil -L -d "sql:$HOME/.pki/nssdb" -n aboutme-local-caddy-root >/dev/null ||
@@ -348,6 +392,33 @@ inside_container() {
     proof_name='disabled passkey enrollment'
     spec=second-factor.spec.ts
     ;;
+  totp)
+    evidence_name=totp-second-factor-proof.json
+    evidence_limit=8192
+    proof_name='authenticator-app second factor'
+    spec=totp.spec.ts
+    ;;
+  totp-disabled)
+    evidence_name=totp-enrollment-disabled-proof.json
+    evidence_limit=8192
+    proof_name='disabled authenticator-app enrollment'
+    spec=totp.spec.ts
+    ;;
+  totp-prod-flag-off)
+    # No fixed /evidence schema: only fixed step names and outcomes reach
+    # the runner's own output (docs/runbooks/totp-keys.md "Production
+    # proofs"); the mounted evidence directory stays empty and unused.
+    proof_name='production TOTP flag-off proof'
+    spec=totp-production.spec.ts
+    ;;
+  totp-prod-enabled)
+    proof_name='production TOTP enabled proof'
+    spec=totp-production.spec.ts
+    ;;
+  totp-prod-cleanup)
+    proof_name='production TOTP cleanup'
+    spec=totp-production.spec.ts
+    ;;
   mcp-sdk)
     # No fixed /evidence schema: /mcp-browser carries the result instead.
     proof_name='MCP SDK owner workflow browser handoff'
@@ -368,6 +439,9 @@ inside_container() {
   chmod 0400 /tmp/spec/package.json
   ln -s /opt/aboutme-auth/node_modules /tmp/spec/node_modules
 
+  local config=playwright.config.ts
+  mode_is_totp_production "$mode" && config=production.config.ts
+
   local log_file=/tmp/playwright-uat.log status=0
   cd /tmp/spec
   local -a mode_env=(ABOUTME_BROWSER_MODE="$mode")
@@ -376,13 +450,15 @@ inside_container() {
   fi
   env "${mode_env[@]}" \
     /opt/aboutme-auth/node_modules/.bin/playwright test \
-    --config playwright.config.ts "$spec" \
+    --config "$config" "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
     if [ "$mode" = public ] || [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
       [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ] ||
       [ "$mode" = sample-start ] || [ "$mode" = second-factor ] ||
-      [ "$mode" = second-factor-disabled ] || [ "$mode" = mcp-sdk ]; then
+      [ "$mode" = second-factor-disabled ] || [ "$mode" = totp ] ||
+      [ "$mode" = totp-disabled ] || mode_is_totp_production "$mode" ||
+      [ "$mode" = mcp-sdk ]; then
       local -a bounded_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
@@ -395,7 +471,7 @@ inside_container() {
     fail "$proof_name proof failed; volatile browser output was withheld"
   fi
 
-  if [ "$mode" = mcp-sdk ]; then
+  if [ "$mode" = mcp-sdk ] || mode_is_totp_production "$mode"; then
     printf 'dev-https-browser %s proof: PASS\n' "$proof_name"
     return 0
   fi
@@ -426,8 +502,8 @@ host_run() {
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   local workflow_mode=${6:-} browser_dir=${7:-} credential=${8:-} container_name=${9:-}
   case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | mcp-sdk) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, or mcp-sdk' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
   esac
   if [ "$mode" = mcp-sdk ]; then
     [[ $workflow_mode = local || $workflow_mode = production ]] ||
@@ -506,13 +582,17 @@ host_run() {
     input_entries=$(find "$input" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
     [ "$input_entries" = "$(mode_input_entries "$mode")" ] ||
       fail "$(mode_input_diagnostic "$mode")"
-    [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
-      fail 'Caddy root is not a regular file'
-    [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
-      fail 'Caddy root owner mismatch'
-    [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
-      fail 'Caddy root mode must be 0600'
-    validate_mode_input_files "$mode" "$input" "$uid"
+    if mode_is_totp_production "$mode"; then
+      validate_mode_input_files "$mode" "$input" "$uid"
+    else
+      [ -f "$input/caddy-root.crt" ] && [ ! -L "$input/caddy-root.crt" ] ||
+        fail 'Caddy root is not a regular file'
+      [ "$(stat -c %u "$input/caddy-root.crt")" = "$uid" ] ||
+        fail 'Caddy root owner mismatch'
+      [ "$(stat -c %a "$input/caddy-root.crt")" = 600 ] ||
+        fail 'Caddy root mode must be 0600'
+      validate_mode_input_files "$mode" "$input" "$uid"
+    fi
   fi
   evidence_entries=$(find "$evidence" -mindepth 1 -maxdepth 1 -print -quit)
   [ -z "$evidence_entries" ] || fail 'evidence output must start empty'
@@ -555,15 +635,20 @@ host_run() {
   fi
   local -a name_args=()
   [ "$mode" = mcp-sdk ] && name_args=("--name=$container_name")
-  # Only mcp-sdk mode runs the browser beside a second local process (the Go
-  # runner) under run_joined's own bound in scripts/mcp-owner-workflow.sh, so
-  # only that mode caps the container. The other modes' own long, many-page
-  # journeys (for example second-factor) are unbounded on main and stay that
-  # way here: a 2 GiB, 2-CPU ceiling on a shared hosted runner already busy
-  # with the server, web, Caddy, and Postgres processes can starve Chromium
-  # into an uncleanly killed run instead of a classified test failure.
+  # mcp-sdk caps the container because it runs the browser beside a second
+  # local process (the Go runner) under run_joined's own bound in
+  # scripts/mcp-owner-workflow.sh. The production TOTP modes cap it because
+  # they run directly against a production host, not a hosted CI runner
+  # (docs/runbooks/totp-keys.md "Production proofs"). The other modes' own
+  # long, many-page journeys (for example second-factor) are unbounded on
+  # main and stay that way here: a 2 GiB, 2-CPU ceiling on a shared hosted
+  # runner already busy with the server, web, Caddy, and Postgres processes
+  # can starve Chromium into an uncleanly killed run instead of a classified
+  # test failure.
   local -a resource_args=()
-  [ "$mode" = mcp-sdk ] && resource_args=(--memory=2g --memory-swap=2g --cpus=2)
+  if [ "$mode" = mcp-sdk ] || mode_is_totp_production "$mode"; then
+    resource_args=(--memory=2g --memory-swap=2g --cpus=2)
+  fi
   exec podman run \
     --rm \
     --init \

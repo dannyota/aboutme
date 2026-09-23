@@ -1937,8 +1937,9 @@ async function provePendingLocale(
   })).toBeVisible();
   await expect(page.getByTestId('second-factor-page')).toContainText(
     vietnamese
-      ? 'Hoàn tất đăng nhập bằng passkey hoặc mã khôi phục.'
-      : 'Finish signing in with a passkey or a recovery code.',
+      ? 'Hoàn tất đăng nhập bằng passkey, ứng dụng xác thực hoặc mã khôi phục.'
+      : 'Finish signing in with a passkey, an authenticator app, or a '
+        + 'recovery code.',
   );
   await expect(page.getByRole('button', {
     name: vietnamese ? 'Tiếp tục với passkey' : 'Continue with passkey',

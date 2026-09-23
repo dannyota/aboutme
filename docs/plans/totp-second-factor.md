@@ -240,25 +240,13 @@ The proof config keeps secrets out of every artifact:
 - It prints only fixed step names and outcomes, so no secret enters output,
   evidence, or an agent transcript.
 
-Before each run, the manager confirms at least 8 GiB `MemAvailable`, no other
-holder of the shared local-check lock, no aboutme local check process, and no
-active aboutme development stack. It builds the image once under the same lock
-and timeout with
-`podman build --memory=2g --memory-swap=2g deploy/dev-https-browser` and records
-the immutable image ID. `run.sh` starts the proof modes with
-`--memory=2g --memory-swap=2g --cpus=2` added to its existing hardened
-`podman run` flags, so the container has a 2 GiB hard limit, no swap, and two
-CPUs. One command runs at a time:
-
-```bash
-common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
-flock -o -n "$common_dir/aboutme-local-check.lock" \
-  timeout --signal=TERM 60m \
-  deploy/dev-https-browser/run.sh "$image_id" \
-    "$PWD/.dev/v0.4.7/production-input" \
-    "$PWD/deploy/dev-https-browser" \
-    "$PWD/.dev/v0.4.7/production-evidence" totp-prod-enabled
-```
+The manager runs each mode with `scripts/totp-production-proof.sh <mode>`,
+directly and without another lock around it. The wrapper enforces the 8 GiB
+floor, the non-blocking shared lock (held until exit and never inherited by
+children), and stack quiescence. It builds the image once with
+`podman build --memory=2g --memory-swap=2g`, stages the exact spec files, and
+runs `run.sh`, which adds `--memory=2g --memory-swap=2g --cpus=2` to its
+hardened `podman run` flags, under a 60-minute timeout. One run at a time.
 
 The proof starts no local product stack. The browser profile lives on the
 container tmpfs. On success, failure, a blocker, or browser exit, the `finally`

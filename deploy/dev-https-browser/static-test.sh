@@ -28,6 +28,10 @@ readonly -a SPEC_FILES=(
   privacy.spec.ts
   sample-start.spec.ts
   second-factor.spec.ts
+  totp.spec.ts
+  totp-fixture.ts
+  totp-production.spec.ts
+  production.config.ts
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
@@ -948,6 +952,29 @@ for passkey_mode in second-factor second-factor-disabled; do
   done
 done
 
+# Both TOTP modes run one spec file; the server enrollment flag, not the
+# spec, is what differs. Each mode must compile and list exactly the two
+# authenticator-app proofs and no other.
+for totp_mode in totp totp-disabled; do
+  totp_list=$(ABOUTME_BROWSER_MODE=$totp_mode \
+    "$SOURCE/node_modules/.bin/playwright" test --list \
+    --config "$CONTEXT/playwright.config.ts")
+  grep -Fq 'proves the authenticator-app second factor over native HTTPS' \
+    <<<"$totp_list" ||
+    fail "Playwright could not compile and list the $totp_mode proof"
+  grep -Fq 'proves disabled TOTP enrollment answers as an unregistered route' \
+    <<<"$totp_list" ||
+    fail "$totp_mode mode did not list the disabled-enrollment proof"
+  for unrelated in \
+    'proves trusted local Google authentication and CSRF boundaries' \
+    'proves password authentication over native HTTPS' \
+    'proves the passkey second factor over native HTTPS'; do
+    if grep -Fq "$unrelated" <<<"$totp_list"; then
+      fail "$totp_mode mode listed an unrelated proof"
+    fi
+  done
+done
+
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
 readonly INSIDE_SPEC=$INSIDE_ROOT/uat-spec
@@ -1101,6 +1128,12 @@ malformed)
     *) evidence=passkey-second-factor-proof.json ;;
     esac
     ;;
+  *' totp.spec.ts '*)
+    case ${ABOUTME_BROWSER_MODE:-} in
+    totp-disabled) evidence=totp-enrollment-disabled-proof.json ;;
+    *) evidence=totp-second-factor-proof.json ;;
+    esac
+    ;;
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
@@ -1120,9 +1153,30 @@ oversized)
     *) evidence=passkey-second-factor-proof.json ;;
     esac
     ;;
+  *' totp.spec.ts '*)
+    case ${ABOUTME_BROWSER_MODE:-} in
+    totp-disabled) evidence=totp-enrollment-disabled-proof.json ;;
+    *) evidence=totp-second-factor-proof.json ;;
+    esac
+    ;;
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
+  ;;
+extra-field)
+  # A schema-valid TOTP payload plus one field the schema does not name.
+  # verify-evidence.mjs compares the whole serialized object, so a single
+  # extra key must fail it exactly like a missing or malformed one.
+  cat >"$FAKE_INSIDE_EVIDENCE/totp-second-factor-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "totp-second-factor",
+  "schemaVersion": 1,
+  "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "cleanup": true, "concurrentUseRejected": true, "currentStepAccepted": true, "enrolled": true, "finalRemoved": true, "invalidCodeRejected": true, "locales": true, "nextStepAccepted": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCoexistence": true, "passwordPending": true, "previousStepAccepted": true, "providerAccount": true, "providerPending": true, "qrIsLocal": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRevealedOnce": true, "replaced": true, "resetPreservesEnforcement": true, "sameStepReplayRejected": true, "supersededEnrollmentRejected": true, "unicodeDigitsRejected": true, "viewports": true, "wrongEpochRejected": true, "wrongSessionRejected": true},
+  "unexpectedField": true
+}
+JSON
   ;;
 good)
   case " $* " in
@@ -1218,6 +1272,32 @@ JSON
   "scenario": "passkey-second-factor",
   "schemaVersion": 1,
   "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "ceremonyReplayRejected": true, "cleanup": true, "concurrentCompletion": true, "enrolled": true, "finalRemoved": true, "locales": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCompletion": true, "passwordPending": true, "providerAccount": true, "providerPending": true, "reauthPending": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRegenerated": true, "recoveryRevealedOnce": true, "recoveryReuseRejected": true, "resetPreservesEnforcement": true, "secondPasskeyAdded": true, "staleEpochRejected": true, "userVerificationRequired": true, "viewports": true, "wrongBindingRejected": true, "wrongOriginRejected": true}
+}
+JSON
+      ;;
+    esac
+    ;;
+  *' totp.spec.ts '*)
+    case ${ABOUTME_BROWSER_MODE:-} in
+    totp-disabled)
+      cat >"$FAKE_INSIDE_EVIDENCE/totp-enrollment-disabled-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "totp-enrollment-disabled",
+  "schemaVersion": 1,
+  "steps": {"capabilityClosed": true, "cleanup": true, "completionNotFound": true, "enrollmentHidden": true, "locales": true, "passkeyStillWorks": true, "recoveryStillWorks": true, "removalStillWorks": true, "startNotFound": true, "stateAvailable": true, "unregisteredRouteMatches": true, "viewports": true}
+}
+JSON
+      ;;
+    *)
+      cat >"$FAKE_INSIDE_EVIDENCE/totp-second-factor-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "totp-second-factor",
+  "schemaVersion": 1,
+  "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "cleanup": true, "concurrentUseRejected": true, "currentStepAccepted": true, "enrolled": true, "finalRemoved": true, "invalidCodeRejected": true, "locales": true, "nextStepAccepted": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCoexistence": true, "passwordPending": true, "previousStepAccepted": true, "providerAccount": true, "providerPending": true, "qrIsLocal": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRevealedOnce": true, "replaced": true, "resetPreservesEnforcement": true, "sameStepReplayRejected": true, "supersededEnrollmentRejected": true, "unicodeDigitsRejected": true, "viewports": true, "wrongEpochRejected": true, "wrongSessionRejected": true}
 }
 JSON
       ;;
@@ -1823,5 +1903,65 @@ grep -Fq 'CA input must contain the Caddy root, the capture token, and the run c
   <<<"$output" ||
   fail 'second-factor single-file input returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'second-factor wrong input reached the browser'
+
+reset_inside
+printf '%s\n' 'static-test-capture-token' >"$INSIDE_INPUT/mail-capture-token"
+printf '%s\n' 'aboutme MCP UAT 71000000-0000-4000-8000-000000000042' \
+  >"$INSIDE_INPUT/mcp-client-name"
+chmod 0600 "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+readonly TOTP_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good run_inside totp)
+grep -Fq 'dev-https-browser authenticator-app second factor proof: PASS' \
+  <<<"$TOTP_INSIDE_OUTPUT" ||
+  fail 'inside-container totp success did not complete'
+grep -Fq 'ARGV=test --config playwright.config.ts totp.spec.ts' "$BROWSER_LOG" ||
+  fail 'focused totp invocation drifted'
+grep -Fxq 'MODE=totp' "$BROWSER_LOG" || fail 'totp mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/totp-second-factor-proof.json" ] ||
+  fail 'totp evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/totp-second-factor-proof.json")" = 600 ] ||
+  fail 'totp evidence mode drifted'
+if grep -Eiq '"(code|codes|cookie|credential|csrfToken|email|password|privateKey|provisioningUri|recoveryCodes|secret|token)"[[:blank:]]*:' \
+  "$INSIDE_EVIDENCE/totp-second-factor-proof.json"; then
+  fail 'totp evidence contains secret-bearing fields'
+fi
+if grep -Fq 'amr_' "$INSIDE_EVIDENCE/totp-second-factor-proof.json"; then
+  fail 'totp evidence contains recovery-code plaintext'
+fi
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside totp 2>&1); then
+  fail 'malformed totp evidence was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'malformed totp evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=oversized PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside totp 2>&1); then
+  fail 'oversized totp evidence was accepted'
+fi
+grep -Fq 'browser evidence exceeds its bound' <<<"$output" ||
+  fail 'oversized totp evidence returned the wrong diagnostic'
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=extra-field PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside totp 2>&1); then
+  fail 'totp evidence with an extra field was accepted'
+fi
+grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
+  fail 'totp evidence with an extra field returned the wrong diagnostic'
+rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
+
+reset_inside
+readonly TOTP_DISABLED_INSIDE_OUTPUT=$(FAKE_BROWSER_MODE=good \
+  run_inside totp-disabled)
+grep -Fq 'dev-https-browser disabled authenticator-app enrollment proof: PASS' \
+  <<<"$TOTP_DISABLED_INSIDE_OUTPUT" ||
+  fail 'inside-container totp-disabled success did not complete'
+grep -Fxq 'MODE=totp-disabled' "$BROWSER_LOG" ||
+  fail 'totp-disabled mode did not reach Playwright config'
+[ -f "$INSIDE_EVIDENCE/totp-enrollment-disabled-proof.json" ] ||
+  fail 'totp-disabled evidence filename drifted'
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

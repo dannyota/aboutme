@@ -156,19 +156,20 @@ codes and reads the setup secret and recovery codes into process memory only,
 and prints only fixed step names and outcomes; no assertion prints a secret,
 URI, code, or password.
 
-Before each run, confirm at least 8 GiB `MemAvailable`, no other holder of the
-shared local-check lock, no local check process, and no active development
-stack:
+Run each mode with the wrapper, directly and without another lock around it:
 
 ```sh
-common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
-flock -o -n "$common_dir/aboutme-local-check.lock" \
-  timeout --signal=TERM 60m \
-  deploy/dev-https-browser/run.sh "$image_id" \
-    "$PWD/.dev/v0.4.7/production-input" \
-    "$PWD/deploy/dev-https-browser" \
-    "$PWD/.dev/v0.4.7/production-evidence" totp-prod-enabled
+scripts/totp-production-proof.sh totp-prod-enabled
 ```
+
+The wrapper refuses to start below 8 GiB `MemAvailable`, while another local
+check holds the shared lock, or while a development stack is active. It takes
+the lock without blocking and holds it until it exits, and no child process
+inherits the lock. It requires the account file with mode 0600 and never reads
+it. It builds the pinned image once, stages the exact production spec files into
+an owner-only temporary directory, runs `deploy/dev-https-browser/run.sh` under
+a 60-minute timeout, and removes the staging directory on every exit. Evidence
+goes to `.dev/v0.4.7/production-evidence`, which must start empty.
 
 The container runs with a 2 GiB hard memory limit, no swap, and two CPUs
 (`--memory=2g --memory-swap=2g --cpus=2`), an isolated browser profile on the
