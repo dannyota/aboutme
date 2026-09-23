@@ -1,6 +1,6 @@
 # TOTP cryptography brief
 
-Role: backend. Model: `gpt-5.6-terra`.
+Role: backend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 

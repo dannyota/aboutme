@@ -23,11 +23,13 @@ intended model, not replacement DDL.
 | `oauth_authorization_codes`      | Unique code digest, client/user/grant, epoch, scopes, S256 challenge, redirect URI, 60-second expiry, consumed time       |
 | `oauth_grants`                   | Unique live (user, client) pair, epoch, granted scopes, created and revoked times                                         |
 | `oauth_tokens`                   | Unique token digest, closed kind, family ID, rotated-from lineage, client/user/grant, expiry, revoked and last-used times |
-| `second_factor_policies`         | One per enrolled user: random WebAuthn user handle and enforcement start                                                  |
+| `second_factor_policies`         | One per enrolled user: random WebAuthn user handle, enforcement start, and last attempt-mail time                         |
 | `webauthn_credentials`           | Owned credential ID, COSE public key, counter, backup flags, transports, and use times                                    |
 | `second_factor_recovery_codes`   | Single-use, domain-separated recovery-code digests and creation time                                                      |
 | `pending_authentications`        | Hashed pending token, CSRF secret, purpose, epoch, optional session binding, expiry, and failure count                    |
 | `webauthn_ceremonies`            | One-use challenge, purpose, account/session or pending binding, epoch, expiry, and optional proposed user handle          |
+| `totp_credentials`               | Zero or one per user: sealed secret, key ID, nonce, format, last used step, failure count, and cool-down                  |
+| `totp_enrollments`               | Ten-minute sealed setup secret bound to account, session, epoch, and issuer; token digest; one row per user               |
 | `authentication_security_events` | Rejected non-increasing passkey counter values, retained for 180 days                                                     |
 | `resumes`                        | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts                      |
 | `slug_tombstones`                | Released slug and release time; the former owner becomes nullable on account deletion                                     |
@@ -44,8 +46,9 @@ schema. Their design is kept in [the runtime schema](scaling/runtime-schema.md)
 as reference for a later fleet
 ([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
 
-Server-owned relational rows use PostgreSQL UUIDv7 defaults. Client-generated
-UUIDs occur only inside resume documents as entry identifiers.
+Server-owned relational rows use PostgreSQL UUIDv7 defaults, except the two TOTP
+tables described below. Client-generated UUIDs occur only inside resume
+documents as entry identifiers.
 
 `media_deletion_jobs` is cleanup state, not media ownership. A transaction that
 removes a photo reference enqueues its validated exact key in the same commit.
@@ -68,6 +71,28 @@ bounded cleanup, counter-event atomicity, and mixed-version rules follow the
 migration deletes outstanding 60-second authorization codes before adding their
 required grant and epoch bindings. It deletes no session, grant, token, account,
 resume, or mail job.
+
+Migration `00005_totp_second_factor.sql` adds `totp_credentials`,
+`totp_enrollments`, and nullable `second_factor_policies.attempt_mail_at`. The
+application generates the UUIDv7 IDs of both TOTP tables, because each ID is
+bound into its ciphertext before insert. Both tables cascade from `users`, and
+an enrollment also cascades from its bound session. `totp_credentials.user_id`
+is unique, and so is `totp_enrollments.user_id`: completion, supersession, and
+removal delete the enrollment row. Both key-ID columns are indexed for rotation,
+and enrollment cleanup uses `(expires_at, id)`. Checks enforce every byte
+length, the `tk1_` key-ID shape, format version 1, expiry after creation, a
+nonnegative step, and a failure count from 0 through 1,000. Replacement and
+re-encryption rewrite the credential row in place, keeping its ID and creation
+time. Portable export excludes both tables.
+
+The migration replaces the closed `auth_email_jobs_kind_check` and
+`auth_email_jobs_scope_check` constraints to admit `totp_added`,
+`totp_replaced`, and `totp_removed` with required user scope. It changes no
+existing row and deletes no data. Used and expired enrollments are the only rows
+TOTP ever deletes automatically. The down section refuses to run while any TOTP
+credential exists, so it is supported only before enrollment enablement. The
+[authenticator-app contract](totp-second-factor-contract.md#postgresql-shape-and-bounds)
+owns the exact columns, grants, and down section.
 
 `public_state` has one checked singleton row and a positive monotonic
 `discovery_generation`. A transaction that changes a resume slug, live state,

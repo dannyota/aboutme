@@ -92,10 +92,10 @@ provider sign-up is unaffected. The capabilities read reports
 ## Passkey second factor
 
 An enrolled account requires a primary password or provider proof followed by a
-passkey or single-use recovery code. Primary proof creates a bounded pending
-authentication instead of a session. The pending cookie grants no access to
-`/me`, consent, resumes, MCP, or any other session route. V0.4.2 has no TOTP
-surface.
+passkey, an authenticator-app code, or a single-use recovery code. Primary proof
+creates a bounded pending authentication instead of a session. The pending
+cookie grants no access to `/me`, consent, resumes, MCP, or any other session
+route.
 
 The account authentication epoch binds sessions, connected-agent grants,
 authorization codes, pending authentications, and WebAuthn ceremonies. A factor
@@ -106,6 +106,56 @@ session with both primary and factor proof inside the 15-minute window.
 [shared design](second-factor-authentication.md), and the
 [v0.4.2 contract](passkey-second-factor-contract.md) own the exact flows and
 invariants.
+
+## Authenticator-app second factor
+
+V0.4.3 adds time-based one-time password (TOTP) codes inside the same boundary
+without weakening any passkey rule.
+[ADR 0049](../adr/0049-totp-second-factor-authentication.md), the
+[authenticator-app contract](totp-second-factor-contract.md), and the
+[key-management design](totp-key-management.md) own the exact rules.
+
+- **Surface.** `POST /api/v1/auth/second-factor/totp/verify` completes a pending
+  authentication. `POST` and `PUT /api/v1/me/second-factor/totp/enrollment`
+  start and prove enrollment or replacement.
+  `DELETE /api/v1/me/second-factor/totp` removes the credential. Capabilities
+  add `totpEnrollment`, account state adds `totpEnabled`, and pending status
+  adds the closed `totp` method. No response returns a stored secret,
+  ciphertext, key ID, nonce, or last-used step.
+- **Caching.** Every second-factor route, TOTP included, sends exact
+  `Cache-Control: no-store, no-transform` on success and error.
+- **Codes.** A code is exactly six ASCII digits. A matched step is single-use
+  across login, reauthentication, and enrollment proof under the credential row
+  lock.
+- **Guessing.** Pending rows keep the shared five-failure limit. Each credential
+  also carries a per-account failure count and a cool-down that starts at 15
+  minutes after every fifth consecutive failure and doubles to at most 24 hours.
+  The cool-down never blocks a passkey or recovery code. Every
+  attempt-exhaustion mail, from any method, is capped at one per account per
+  hour.
+- **Mutations.** Enrollment, replacement, and removal use the current-session,
+  recent-proof, CSRF, exact Origin, epoch, revocation, session-rotation, and
+  lock-order rules of the passkey boundary. The first TOTP completion creates
+  the factor policy and its random WebAuthn user handle in at most three
+  candidates; later passkey enrollment reuses that handle.
+- **Mail.** `totp_added`, `totp_replaced`, and `totp_removed`, plus the shared
+  enabled, disabled, and attempt events, commit with their mutation. Every
+  template is bilingual and carries no code, secret, URI, or identifier.
+- **Key ring.** AES-256-GCM seals each secret with associated data that binds
+  account, row, record kind, format, and derived key ID. Runtime holds one
+  active key and at most one previous key. Only the app ECS execution role reads
+  the two exact key parameters; scheduled jobs get none. Rotation re-encrypts
+  lazily on use and through the one-shot `totp_reencrypt` operation.
+- **Key failure.** A malformed ring fails startup. An unknown key ID or an
+  authentication failure fails closed with `503 authentication_unavailable` for
+  that TOTP row only, counts no failure, and logs the secret-free
+  `totp_unavailable` signal that alarm `aboutme-prod-totp-unavailable` watches.
+  `/readyz` and `internal/publicstate/readiness.go` read no TOTP state, so
+  passkeys, recovery, and accounts without TOTP stay available.
+- **Older clients and floor.** A v0.4.2 browser shows a refresh prompt for the
+  unknown `totp` method and grants nothing. Enrollment stays off until the
+  release fence reaches v0.4.3, numeric release 4003. Turning the flag off never
+  lowers the fence or disables verification, removal, or recovery.
 
 ## OAuth transaction
 

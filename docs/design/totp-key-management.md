@@ -73,7 +73,7 @@ running tag through a serialized `deploy.sh` operation.
    and redeploy. During rollout, step 2 tasks still write under `a`, which the
    new tasks read as previous, and read rows the new tasks write under `b`.
 4. Run `deploy.sh --totp-key-reencrypt <tag>` until it reports zero credential
-   rows and zero unconsumed, unexpired enrollment rows off the active key.
+   rows and zero enrollment rows of any age off the active key.
 5. At least ten minutes after the step 3 deploy completes, so every enrollment
    an older task sealed has expired or been rewritten, run step 4 again. Repeat
    until it reports zero.
@@ -86,13 +86,25 @@ Steps 1 and 7 write only a parameter that no running task names. Steps 2, 3, and
 starts a revision whose key set is complete. Restoring a revision from before
 step 3 after step 7 fails closed for TOTP only.
 
-The re-encryption command uses the same authenticated decrypt and encrypt paths,
-row locks, and a key-ID compare before update. Each transaction locks and
-rewrites at most 200 rows, and one run processes at most 10,000 rows in 30
-minutes. It reports counts and row IDs only, never keys, secrets, nonces,
-ciphertext, email, or account IDs. A run with nothing to rewrite only counts. A
-decrypt failure leaves the row unchanged, emits the signal below, and fails the
-run.
+The re-encryption command uses the same authenticated decrypt and encrypt paths
+and a key-ID compare before update. It takes no user lock. Each transaction
+handles one record kind, credentials first and then enrollments, and locks at
+most 200 rows off the active key in `id` order with `FOR UPDATE SKIP LOCKED`. A
+skipped row belongs to a live factor transaction and waits for a later batch, so
+the command never waits on a lock that a user, session, or policy lock precedes.
+It rewrites unexpired enrollments and deletes expired ones without decrypting.
+One run processes at most 10,000 rows in 30 minutes. It reports counts and row
+IDs only, never keys, secrets, nonces, ciphertext, email, or account IDs. A run
+with nothing to rewrite only counts. Batches skip rows another transaction
+holds, so the reported off-key totals come from an unlocked `count(*)` of every
+credential and enrollment row off the active key, taken after the batches.
+
+A decrypt failure leaves the row unchanged, emits the signal below, and fails
+the run, so rotation stops at step 4 with the previous key still configured and
+nothing else broken. The owner of that account can replace or remove TOTP after
+proving a passkey or recovery code, because neither action decrypts the row.
+That removes the blocking row. No operator deletes or rewrites a credential
+([ADR 0028](../adr/0028-no-operator-surface.md)).
 
 ## Key failures
 

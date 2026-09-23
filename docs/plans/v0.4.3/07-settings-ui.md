@@ -1,6 +1,6 @@
 # TOTP settings UI brief
 
-Role: frontend. Model: `gpt-5.6-terra`.
+Role: frontend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
@@ -29,6 +29,8 @@ specs, backend, infrastructure, or design. Do not add a QR network request.
 
 ## Required behavior
 
+- Keep the v0.4.2 latched section state on main: a refresh after a factor change
+  must not replace the section with a skeleton.
 - Read `totpEnabled` regardless of enrollment capability. Treat absent or
   malformed new capability and state fields as false during mixed versions.
 - Start setup only when capability is true. Render the exact provisioning URI

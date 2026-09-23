@@ -1,6 +1,6 @@
 # TOTP pending login UI brief
 
-Role: frontend. Model: `gpt-5.6-terra`.
+Role: frontend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
@@ -23,6 +23,9 @@ infrastructure, or design.
 
 ## Required behavior
 
+- Keep the v0.4.2 rules on main: the page renders as a child of `/login`
+  (`apps/web/app/pages/login.vue` outlet, `test/login-child-route.test.ts`), and
+  pending requests never retry automatically.
 - Render methods in server order and permit passkey, TOTP, or recovery without
   treating the pending cookie as a session.
 - Accept exactly six ASCII digits. Keep the code in component memory only and

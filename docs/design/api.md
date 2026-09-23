@@ -49,9 +49,12 @@ behavior that future contract changes must implement.
 | `GET /auth/second-factor`                                             | Read a pending login or reauthentication                         |
 | `POST /auth/second-factor/passkey/options`                            | Start a pending passkey assertion                                |
 | `POST /auth/second-factor/passkey/verify`, `POST .../recovery/verify` | Complete a pending authentication                                |
-| `GET /me/second-factor`                                               | Read passkeys and recovery-code count                            |
+| `POST /auth/second-factor/totp/verify`                                | Complete a pending authentication with an authenticator code     |
+| `GET /me/second-factor`                                               | Read passkeys, TOTP state, and recovery-code count               |
 | `POST /me/second-factor/passkeys/options`, `POST .../passkeys`        | Start and complete passkey registration                          |
 | `DELETE /me/second-factor/passkeys/{id}`                              | Remove an owned passkey                                          |
+| `POST/PUT /me/second-factor/totp/enrollment`                          | Start and prove TOTP enrollment or replacement                   |
+| `DELETE /me/second-factor/totp`                                       | Remove the active TOTP credential                                |
 | `POST /me/second-factor/recovery-codes`                               | Replace all recovery codes and return them once                  |
 | `GET /sessions`, `DELETE /sessions/{id}`, `DELETE /sessions`          | Device list, per-session revoke, and logout-everywhere           |
 | `GET/POST /resumes`, `GET/PATCH/DELETE /resumes/{id}`                 | Resume list, create, read, metadata update, and delete           |
@@ -74,10 +77,10 @@ behavior that future contract changes must implement.
 Provider start and callback operations are registered only when
 `PROVIDER_LOGIN_ENABLED` enables that provider; the OpenAPI description on each
 says so. The capabilities read is `security: []`, returns the required
-`providerLogin`, `providers`, `agentAccess`, `passwordRegistration`, and
-`passkeyEnrollment` fields, and uses `Cache-Control: no-store`.
-`POST /auth/password/register` is registered only when
-`PASSWORD_REGISTRATION_ENABLED` is not `false`.
+`providerLogin`, `providers`, `agentAccess`, `passwordRegistration`,
+`passkeyEnrollment`, and `totpEnrollment` fields, and uses
+`Cache-Control: no-store, no-transform`. `POST /auth/password/register` is
+registered only when `PASSWORD_REGISTRATION_ENABLED` is not `false`.
 
 Password routes use strict JSON with a 4,096-byte body cap and the exact
 `application/json` media type. Registration and forgot-password return an
@@ -92,8 +95,20 @@ provider emails are not exposed through linked identities.
 
 The [passkey second-factor contract](passkey-second-factor-contract.md) owns the
 exact pending response, cookie, redirect, CSRF, WebAuthn JSON, completion,
-recovery download, and error shapes. V0.4.2 exposes no TOTP route,
-`totpEnrollment` capability, `totpEnabled` state, or `totp` pending method.
+recovery download, and error shapes. The
+[authenticator-app contract](totp-second-factor-contract.md) adds the TOTP
+verification, enrollment, and removal routes, the `totpEnrollment` capability,
+the required `totpEnabled` state field, and the closed `totp` pending method,
+listed between `passkey` and `recovery`. TOTP bodies are strict JSON of at most
+4,096 bytes. Every second-factor route, TOTP included, sends exact
+`Cache-Control: no-store, no-transform` on success and error.
+
+`TOTP_ENROLLMENT_ENABLED` gates only enrollment start and completion. The web
+treats an absent or malformed `totpEnrollment` or `totpEnabled` field as false.
+An older web client that receives the `totp` method shows a refresh prompt and
+calls no route for it, so it cannot bypass pending authentication. Once
+enrollment is enabled, production runs only v0.4.3 or later, numeric release
+4003, under the [release fence](passkey-release-fence.md).
 
 ### Photo intake
 

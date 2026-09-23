@@ -1,6 +1,6 @@
 # TOTP release path brief
 
-Role: devops. Model: `gpt-5.6-terra`.
+Role: devops. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
@@ -18,7 +18,10 @@ release plan, verified runtime-secret report, and verified QA report.
   `deploy/aws/scripts/testdata/respond` only for v0.4.3 floor and same-tag
   activation and one-shot rotation cases.
 - Modify `deploy/aws/scripts/deploy.sh` only to add the supported
-  `--totp-key-reencrypt <tag>` operation.
+  `--totp-key-reencrypt <tag>` operation and to extend the existing
+  enrollment-below-fence refusal to `TOTP_ENROLLMENT_ENABLED`.
+- Modify `deploy/aws/scripts/fence.sh` only where the 4003 floor or the
+  `totp_reencrypt` operation kind needs it (it pins `fence_epoch=4002` today).
 - Modify `docs/runbooks/production.md`.
 
 Do not alter existing deploy or rollback behavior beyond the accepted one-shot
@@ -32,6 +35,14 @@ local tests, builds, lint, browsers, database writes, or stacks.
   targets, builds the pinned browser image, executes `make dev-https-totp-check`
   on the exact candidate, and uploads only bounded secret-free
   `.dev/native-https/evidence/totp-*`.
+- Model the job on the v0.4.2 `passkey-browser-proof` job on main, including its
+  `continue-on-error: true` rule: TOTP enrollment ships off, so the proof
+  reports without blocking the flag-off release and must pass before the flag
+  turns on. The manager confirms that rule before release.
+- Extend the pre-lock refusal in `deploy.sh` that stops a revision turning
+  passkey enrollment on below the fence: refuse a revision with
+  `TOTP_ENROLLMENT_ENABLED=true` while the floor is below 4003, with a
+  `deploy_test.sh` case.
 - Use unconditional cleanup for the HTTPS stack and runner-local database on
   success, failure, and cancellation. Give the job no production secret or AWS
   access.

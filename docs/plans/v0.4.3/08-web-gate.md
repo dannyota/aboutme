@@ -1,6 +1,6 @@
 # TOTP web source and unit gate brief
 
-Role: frontend. Model: `gpt-5.6-terra`.
+Role: frontend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 

@@ -1,6 +1,6 @@
 # TOTP API and composition brief
 
-Role: backend. Model: `gpt-5.6-terra`.
+Role: backend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
@@ -45,10 +45,9 @@ client.
   routes.
 - Enforce strict JSON, exact media, body, field, cookie, CSRF, Origin, cache,
   status, error, and one-time plaintext shapes in OpenAPI and handlers.
-- Keep exact `Cache-Control: no-store` on capabilities, password login and
-  reauthentication, every v0.4.2 factor route, TOTP verification, removal, and
-  state. Use exact `no-store, no-transform` only on TOTP enrollment start and
-  completion.
+- Keep the router's exact `Cache-Control: no-store, no-transform`
+  (`apps/server/internal/api/cache_policy.go`) on capabilities, every v0.4.2
+  factor route, and every TOTP route. Add no route-specific cache policy.
 - Wire the lifecycle key-health check at startup and every five minutes. Do not
   edit `apps/server/internal/publicstate/readiness.go` or add a TOTP input to
   `/readyz`. Add a `cmd/server` test that `/readyz` stays ready while a stored

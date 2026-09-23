@@ -1,12 +1,14 @@
 # TOTP security mail brief
 
-Role: backend. Model: `gpt-5.6-terra`.
+Role: backend. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
 Add the bilingual, secret-free notification vocabulary for TOTP mutations. Read
 `AGENTS.md`, the accepted TOTP contract and key-management design, accepted ADR
-0049, the auth-mail design, and the verified v0.4.2 mail report.
+0049, the auth-mail design, and the v0.4.2 second-factor mail code on main
+(`payload.go`, `templates.go`, `outbox.go`, `worker.go`, and
+`second_factor_templates_test.go` in `apps/server/internal/authmail`).
 
 ## Owned paths
 

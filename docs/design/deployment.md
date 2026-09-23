@@ -219,6 +219,14 @@ serialized operation lock in the
 principal assumes the dedicated operator role, then the dedicated deploy role;
 application and other runtime roles cannot read or write the fence.
 
+Production TOTP enrollment uses the same fence and lock with floor v0.4.3,
+numeric release 4003. Before taking the lock, `deploy.sh` refuses to register an
+app revision that turns passkey enrollment on below 4002 or TOTP enrollment on
+while the fence item is missing or below 4003, and `fence.sh` blocks every mode
+while a running app has TOTP enrollment on below 4003. The
+[fence contract](passkey-release-fence.md#authenticator-app-key-re-encryption)
+also defines the one-shot `totp_reencrypt` operation.
+
 Enrollment stays off until a healthy capable release raises the fence. Every
 supported rollback and restoration continues through the current deployer, not a
 script from the target release. DynamoDB cannot constrain a pre-fence script,
@@ -236,6 +244,13 @@ Application secrets use AWS Systems Manager Parameter Store `SecureString`
 values in `ap-southeast-1`, injected at runtime. They never enter images,
 source, command lines, logs, or OpenTofu state. Secret names and rotation
 procedures are tracked; values are never evidence.
+
+The TOTP key ring uses two such parameters, `totp/key-a` and `totp/key-b`, and
+nonsecret OpenTofu slot variables choose the active and optional previous key.
+Only the app ECS execution role reads those two exact ARNs; scheduled jobs and
+other roles get none. A TOTP key failure never changes `/readyz`. The
+[key-management design](totp-key-management.md) owns rotation and the
+`aboutme-prod-totp-unavailable` alarm.
 
 A later second replica uses the pinned admission and password-email key versions
 from [rate identities](scaling/rate-identities.md). A key change then requires

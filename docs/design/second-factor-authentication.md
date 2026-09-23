@@ -63,9 +63,9 @@ sensitive mutation carries the concrete caller session ID into its transaction.
 After locking the user, it locks that session and rechecks liveness, ownership,
 epoch, and required verification times before writing. Factor mutations take the
 same locks before factor, grant, token, or notification rows. The lock order is
-OAuth client when applicable, user, session, factor policy, credential, pending
-authentication or ceremony, OAuth grant, authorization code, token, then email
-outbox.
+OAuth client when applicable, user, session, factor policy, credential, TOTP
+enrollment, pending authentication or ceremony, OAuth grant, authorization code,
+token, then email outbox.
 
 Regular authenticated routes accept a live current-epoch session regardless of
 the age of its factor proof. Existing sensitive actions keep the 15-minute
@@ -227,7 +227,9 @@ service. TOTP work that needs a secret fails closed with
 accounts without TOTP are unaffected. The server emits a fixed secret-free log
 signal that a production alarm watches. Key values come from the runtime secret
 path and never enter source, state output, logs, metrics, documentation, or
-command output. No failure accepts a code without verification.
+command output. No failure accepts a code without verification. The
+[authenticator-app contract](totp-second-factor-contract.md) and
+[key-management design](totp-key-management.md) fix the exact TOTP rules.
 
 ## Recovery codes
 
@@ -237,10 +239,11 @@ with an `amr_` prefix and display-only hyphen groups. Input accepts ASCII
 hyphens and spaces, canonicalizes the remaining characters, and rejects every
 other shape before database work.
 
-The response displays the codes once. It uses `Cache-Control: no-store` and
-never puts a code in a URL, cookie, browser storage, analytics, log, trace,
-metric, email, or account export. PostgreSQL stores only domain-separated
-SHA-256 digests because 128 random bits make offline guessing infeasible.
+The response displays the codes once. It uses
+`Cache-Control: no-store, no-transform` and never puts a code in a URL, cookie,
+browser storage, analytics, log, trace, metric, email, or account export.
+PostgreSQL stores only domain-separated SHA-256 digests because 128 random bits
+make offline guessing infeasible.
 
 Verification locks the user, deletes exactly one matching unused digest, and
 completes the pending authentication in one transaction. Concurrent use has one

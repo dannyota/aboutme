@@ -1,6 +1,6 @@
 # TOTP hosted browser proof brief
 
-Role: qa. Model: `gpt-5.6-terra`.
+Role: qa. Model: Sonnet (Codex: `gpt-5.6-terra`).
 
 ## Objective and authority
 
@@ -24,6 +24,17 @@ accepted traceability rows, and every verified author report.
 - Modify the root `Makefile` only to add `dev-https-totp-check` and its phony
   entry.
 - Produce bounded hosted evidence under `.dev/native-https/evidence/` for CI.
+
+Follow the v0.4.2 passkey proof on main: `scripts/dev-https-check.sh` mode
+`passkey` (two phases with a flag-off restart, `passkey-enabled` and
+`passkey-disabled` evidence prefixes), `run.sh` modes `second-factor` and
+`second-factor-disabled`, the `dev-https-passkey-check` Makefile target, and its
+route-warming and bounded-wait helpers. Add a parallel `totp` mode with
+`totp-enabled` and `totp-disabled` evidence prefixes. The v0.4.4 release also
+edits the Makefile, the `run.sh` and `static-test.sh` mode lists, and
+`scripts/test/*-safety-test.sh`; rebase on main before editing them and report
+each hunk. `scripts/test/workflow-safety-test.sh` belongs to the release-path
+brief with the workflow job.
 
 Do not edit product source, package files, images, design, generated files,
 manifests, baselines, workflows, runbooks, or infrastructure. Do not fix product
