@@ -649,19 +649,21 @@ async function setLocale(
  * a cold route. None of these issues a request while signed out beyond the
  * reads this proof's console filter already accepts.
  *
- * `/verify-email` is deliberately absent. With no token it decides during
- * setup, on the client only, that the link is incomplete, because the token
- * lives in the fragment and must never reach the server. The server render
- * and the first client render then disagree and the development build says
- * so on the console. The journey only ever opens that page with a real
- * token, where it is clean, so it takes its first visit there instead.
+ * The two pages that take their token from the URL fragment are deliberately
+ * absent. Each reads the fragment during setup, on the client only, because
+ * the token must never reach the server, and with no fragment each sets its
+ * own failure state before hydration. The server render and the first client
+ * render then disagree and the development build says so on the console.
+ * Every other page here starts in the same state on both sides: the ones
+ * that fetch do it after mount or with server rendering turned off. The
+ * journey only opens the fragment pages with a real token, where they are
+ * clean, so each takes its first visit there instead.
  */
 const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/register', 'register'],
   ['/login', 'login'],
   ['/login/second-factor', 'login-second-factor'],
   ['/forgot-password', 'forgot-password'],
-  ['/reset-password', 'reset-password'],
 ];
 
 /**
@@ -1371,7 +1373,7 @@ test('proves the passkey second factor over native HTTPS', async ({
     await page.getByRole('button', { name: 'Send reset link' }).click();
     await expect(page.getByTestId('forgot-success')).toBeVisible();
     const resetToken = await capture.waitForToken('reset', primaryEmail);
-    await gotoHydrated(page, `${ORIGIN}/reset-password#token=${resetToken}`);
+    await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToken}`);
     await page.getByLabel('New password', { exact: true }).fill(resetPassword);
     await page.getByLabel('Confirm password', { exact: true })
       .fill(resetPassword);
