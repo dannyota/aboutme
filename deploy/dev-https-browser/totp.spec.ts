@@ -1051,7 +1051,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     stage('enrollment-superseded');
     await page.getByTestId('totp-setup-cancel').click();
     await expect(page.getByTestId('totp-setup-dialog')).toHaveCount(0);
-    secret = await startTotpSetup(page);
+    const secondEnrollment = await startTotpSetupCapturing(page);
+    secret = secondEnrollment.secret;
     expect(secret).not.toBe(firstEnrollment.secret);
     const sessionCookie = await cookieValue(context, SESSION_COOKIE);
     if (sessionCookie === null) throw new Error('no session cookie to carry');
@@ -1073,13 +1074,32 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(supersededResult).toEqual({ code: 'enrollment_invalid', status: 400 });
     steps.supersededEnrollmentRejected = true;
 
+    // Non-ASCII digits never leave the settings form, and the server
+    // rejects them as a malformed request when sent directly
+    // (totp-second-factor-contract.md, "TOTP profile and code verification").
     stage('unicode-digits-rejected');
-    const validCode = codeNow(secret, systemClock());
-    const unicodeStatus = await submitSetupCode(
-      page,
-      toFullwidthDigits(validCode),
+    const unicodeCode = toFullwidthDigits(codeNow(secret, systemClock()));
+    const setupInput = page.locator(TOTP_SETUP_INPUT);
+    await setupInput.fill(unicodeCode);
+    await page.getByTestId('totp-code-submit').click();
+    await expect(setupInput).toHaveAttribute('aria-invalid', 'true');
+    await setupInput.fill('');
+    const unicodeResult = await trustedRequest(
+      ca,
+      'PUT',
+      '/api/v1/me/second-factor/totp/enrollment',
+      {
+        'Content-Type': 'application/json',
+        'Cookie': `${SESSION_COOKIE}=${sessionCookie}`,
+        'Origin': ORIGIN,
+        'X-CSRF-Token': await freshCSRF(page),
+      },
+      JSON.stringify({
+        code: unicodeCode,
+        enrollmentId: secondEnrollment.enrollmentId,
+      }),
     );
-    expect(unicodeStatus).toBe(400);
+    expect(unicodeResult).toEqual({ code: 'request_invalid', status: 400 });
     steps.unicodeDigitsRejected = true;
 
     stage('enroll-complete');
