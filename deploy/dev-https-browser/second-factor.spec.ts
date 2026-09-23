@@ -106,6 +106,7 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me/second-factor/passkeys/options', [403, 404]],
   ['/api/v1/me/second-factor/recovery-codes', [403]],
   ['/api/v1/me/second-factor/totp/enrollment', [404]],
+  ['/api/v1/me/second-factor/unregistered/enrollment', [404]],
   ['/api/v1/auth/second-factor', [401]],
   ['/api/v1/auth/second-factor/passkey/options', [400, 401]],
   ['/api/v1/auth/second-factor/passkey/verify', [400, 401]],
@@ -1671,7 +1672,7 @@ test('proves disabled passkey enrollment answers as an unregistered route',
         };
       });
       expect(capability).toEqual({
-        hasTotp: false,
+        hasTotp: true,
         passkeyEnrollment: false,
         status: 200,
       });
@@ -1966,7 +1967,7 @@ interface DisabledProbes {
 
 /**
  * Probes every second-factor route from the signed-in page while enrollment
- * is off: the two enrollment routes must match the never-registered TOTP
+ * is off: the two enrollment routes must match a never-registered
  * path, and the flag-independent routes must answer with their own codes.
  */
 async function probeDisabledRoutes(
@@ -2031,7 +2032,7 @@ async function probeDisabledRoutes(
       removal: await call(
         `/api/v1/me/second-factor/passkeys/${unknownID}`, 'DELETE', null),
       unregistered: await call(
-        '/api/v1/me/second-factor/totp/enrollment', 'POST', '{}'),
+        '/api/v1/me/second-factor/unregistered/enrollment', 'POST', '{}'),
     };
   }, csrf);
 }

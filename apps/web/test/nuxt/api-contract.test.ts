@@ -175,7 +175,7 @@ describe('generated API surface (consumer wiring)', () => {
 });
 
 describe(
-  'generated TOTP shapes (docs/design/totp-second-factor-contract.md, ADR 0049)',
+  'generated TOTP shapes (totp-second-factor-contract.md, ADR 0049)',
   () => {
     it('exposes totpEnrollment on GET /capabilities', async () => {
       const client = createApiClient({
@@ -230,12 +230,13 @@ describe(
       // this alias; a literal assignment keeps `totp` pinned as a member
       // even though the composable itself only checks membership at
       // runtime.
-      const method = 'totp' satisfies components['schemas']['SecondFactorPendingMethod'];
+      const method = 'totp' satisfies
+        components['schemas']['SecondFactorPendingMethod'];
       expect(method).toBe('totp');
     });
 
     it(
-      'returns the enrollment secret and provisioning URI from POST .../totp/enrollment',
+      'returns the enrollment secret and provisioning URI on start',
       async () => {
         const start: TotpEnrollmentStart = {
           enrollmentId: 'A'.repeat(43),
@@ -256,9 +257,10 @@ describe(
           },
         });
 
-        const { data } = await client.POST('/me/second-factor/totp/enrollment', {
-          body: {},
-        });
+        const { data } = await client.POST(
+          '/me/second-factor/totp/enrollment',
+          { body: {} },
+        );
 
         expect(new URL(seen).pathname).toBe(
           '/api/v1/me/second-factor/totp/enrollment',
@@ -269,7 +271,7 @@ describe(
     );
 
     it(
-      'accepts the completion request and returns totpEnabled from PUT .../totp/enrollment',
+      'accepts the completion request and returns totpEnabled',
       async () => {
         const complete: TotpEnrollmentComplete = {
           totpEnabled: true,
@@ -290,7 +292,10 @@ describe(
           body: { enrollmentId: 'A'.repeat(43), code: '123456' },
         });
 
-        expect(seenBody).toEqual({ enrollmentId: 'A'.repeat(43), code: '123456' });
+        expect(seenBody).toEqual({
+          enrollmentId: 'A'.repeat(43),
+          code: '123456',
+        });
         // `totpEnabled` is a `true` literal in the generated response.
         expect(data?.data.totpEnabled).toBe(true);
         expect(data?.data.recoveryCodes).toEqual(complete.recoveryCodes);
@@ -324,7 +329,7 @@ describe(
       },
     );
 
-    it('exposes the removal route at DELETE /me/second-factor/totp', async () => {
+    it('exposes the removal route', async () => {
       let seen = '';
       let method = '';
       const client = createApiClient({

@@ -44,7 +44,9 @@ func discardLogger() *slog.Logger {
 // reachable.
 func TestNewSecondFactorRoutes_RegistersEveryContractRoute(t *testing.T) {
 	t.Parallel()
-	runtime, err := newSecondFactorRoutes(discardLogger(), validSecondFactorConfig("https://aboutme.example", true), &store.Pool{})
+	cfg := validSecondFactorConfig("https://aboutme.example", true)
+	cfg.TOTPEnrollment = true
+	runtime, err := newSecondFactorRoutes(discardLogger(), cfg, &store.Pool{})
 	if err != nil {
 		t.Fatalf("newSecondFactorRoutes() error = %v", err)
 	}

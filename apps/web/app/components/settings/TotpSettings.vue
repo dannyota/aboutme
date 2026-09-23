@@ -50,7 +50,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  changed: [recoveryCodes: readonly string[] | null];
+  'changed': [recoveryCodes: readonly string[] | null];
   'reauth-required': [];
 }>();
 
@@ -380,7 +380,9 @@ async function confirmRemove(): Promise<void> {
           <p
             class="rounded-md border p-2 font-mono text-sm"
             data-testid="totp-secret"
-          >{{ secret ?? '' }}</p>
+          >
+            {{ secret ?? '' }}
+          </p>
           <Button
             class="justify-self-start"
             data-testid="totp-secret-copy"
