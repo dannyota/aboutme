@@ -307,6 +307,11 @@ carries no release or enrollment logic and stays available as a recovery
 fallback even when a checkpoint elsewhere fails. The lock releases only once
 notifications are restored, using the exact operation ID this run acquired.
 
+The same fence and lock gate TOTP enrollment at a second, higher floor (numeric
+4007). [The TOTP keys runbook](totp-keys.md) covers the flag-off deploy, floor
+activation, flag enablement, key rotation, the `aboutme-prod-totp-unavailable`
+alarm, and the production proofs for that release.
+
 The one-time bootstrap, before the first fence-aware deploy: set
 `operator_principal_arn` in the ignored `prod.tfvars` to the owner's `aws login`
 identity, run `sync.sh` in the `aboutme-infra` repository to back up that

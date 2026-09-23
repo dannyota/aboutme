@@ -6,6 +6,9 @@
 #   deploy.sh <tag> --first-deploy   also creates roles, grants, and logins
 #   deploy.sh --rollback <tag>       earlier images, no snapshot, no migration
 #   deploy.sh --activate <tag>       raises the release fence; no ECS change
+#   deploy.sh --totp-key-reencrypt <tag>   runs the TOTP key re-encryption
+#                                     one-shot; no image, service, or schedule
+#                                     change (see fence.sh's fence_epoch_totp)
 #
 # Every mode assumes the operator role, strongly reads the release fence,
 # assumes the deploy role, and holds one operation lock across the run (see
@@ -38,15 +41,17 @@ snapshot_tag_key=aboutme:created-by
 snapshot_tag_value=deploy.sh
 
 usage() {
-  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag> | deploy.sh --activate <tag>" >&2
+  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag> | deploy.sh --activate <tag> | deploy.sh --totp-key-reencrypt <tag>" >&2
   exit 2
 }
 first=0
 rollback=0
 activate=0
+totp_reencrypt=0
 case "$#:${1:-}:${2:-}" in
   2:--rollback:?*) rollback=1 tag=$2 ;;
   2:--activate:?*) activate=1 tag=$2 ;;
+  2:--totp-key-reencrypt:?*) totp_reencrypt=1 tag=$2 ;;
   1:[!-]*:) tag=$1 ;;
   2:[!-]*:--first-deploy) first=1 tag=$1 ;;
   *) usage ;;
@@ -54,6 +59,7 @@ esac
 operation_kind=deploy
 ((!rollback)) || operation_kind=rollback
 ((!activate)) || operation_kind=activate
+((!totp_reencrypt)) || operation_kind=totp_reencrypt
 
 say() { printf 'deploy: %s\n' "$*" >&2; }
 
@@ -311,6 +317,40 @@ if ((activate)); then
   exit 0
 fi
 
+# --totp-key-reencrypt runs the one-shot key re-encryption task under the
+# totp_reencrypt operation kind (docs/design/passkey-release-fence.md,
+# "Authenticator-app key re-encryption"). OpenTofu registers the
+# aboutme-prod-totp-reencrypt task definition itself, from the same active and
+# previous key slots the app uses; this only checkpoints and runs it. No
+# image, service, snapshot, or schedule mutation. It prints no key, secret, or
+# ciphertext; the task's own bounded counts and row IDs go to its log stream.
+if ((totp_reencrypt)); then
+  ((fence_min >= fence_epoch_totp)) ||
+    { say "the release fence is below v0.4.7; run --activate first"; exit 1; }
+  service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
+    { say "could not read the running app service"; exit 1; }
+  service_td=$(jq -r '.services[0].taskDefinition // empty' <<<"$service")
+  running_count=$(jq -r '.services[0].runningCount // 0' <<<"$service")
+  desired_count=$(jq -r '.services[0].desiredCount // 0' <<<"$service")
+  [[ -n $service_td ]] && ((running_count > 0)) && ((running_count == desired_count)) ||
+    { say "the running app service is not stable; TOTP key re-encryption requires a healthy running app"; exit 1; }
+  service_release=$(task_def_release_number "$service_td") || { say "could not verify the running app's release"; exit 1; }
+  [[ $service_release == "$candidate" ]] ||
+    { say "the running app is release $service_release, not $tag"; exit 1; }
+  fence_lock || exit 1
+  fence_checkpoint || exit 1
+  task=$(aws_ ecs run-task --cluster "$cluster" --launch-type EC2 \
+    --task-definition aboutme-prod-totp-reencrypt --started-by deploy-totp-reencrypt \
+    --query 'tasks[0].taskArn' --output text) || { say "totp-key-reencrypt did not start"; exit 1; }
+  [[ $task == arn:* ]] || { say "totp-key-reencrypt did not start"; exit 1; }
+  aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "$task"
+  code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$task" \
+    --query 'tasks[0].containers[0].exitCode' --output text)
+  [[ $code == 0 ]] || { say "totp-key-reencrypt exited with $code"; exit 1; }
+  say "totp-key-reencrypt done for $tag; counts are in the aboutme-prod-totp-reencrypt log stream"
+  exit 0
+fi
+
 declare -A image
 for name in server web caddy; do
   d=$(digest "$name")
@@ -398,6 +438,12 @@ new_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
   | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' "$work/app.json")
 if ((fence_min < fence_epoch)) && [[ $new_enrolled == true ]]; then
   say "the new app turns passkey enrollment on while the release fence is below v0.4.2; run --activate first"
+  exit 1
+fi
+new_totp_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
+  | .environment[]? | select(.name == "TOTP_ENROLLMENT_ENABLED") | .value' "$work/app.json")
+if ((fence_min < fence_epoch_totp)) && [[ $new_totp_enrolled == true ]]; then
+  say "the new app turns TOTP enrollment on while the release fence is below v0.4.7; run --activate first"
   exit 1
 fi
 
