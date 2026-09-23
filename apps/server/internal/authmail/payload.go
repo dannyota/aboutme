@@ -1,4 +1,4 @@
-// Package authmail implements the Phase PA encrypted transactional email
+// Package authmail implements the encrypted transactional email
 // outbox: closed payload types, the D3 AES-256-GCM key ring, and the
 // transaction-scoped enqueue primitive. It imports no crypto dependency beyond
 // the standard library and never holds or logs plaintext, keys, nonces, or
@@ -30,6 +30,9 @@ const (
 	KindRecoveryCodesRegenerated      Kind = "recovery_codes_regenerated"
 	KindRecoveryCodeUsed              Kind = "recovery_code_used"
 	KindSecondFactorAttemptsExhausted Kind = "second_factor_attempts_exhausted"
+	KindTOTPAdded                     Kind = "totp_added"
+	KindTOTPReplaced                  Kind = "totp_replaced"
+	KindTOTPRemoved                   Kind = "totp_removed"
 )
 
 // payloadVersion remains the closed payload version for existing email jobs.
@@ -97,7 +100,8 @@ func validateKind(k Kind) error {
 	case KindVerify, KindReset, KindPasswordChanged,
 		KindSecondFactorEnabled, KindPasskeyAdded, KindPasskeyRemoved,
 		KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
-		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted,
+		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved:
 		return nil
 	default:
 		return ErrInvalidKind

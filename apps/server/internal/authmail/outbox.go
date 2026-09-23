@@ -122,7 +122,8 @@ func validateRequest(req EnqueueRequest) error {
 		}
 	case KindPasswordChanged, KindSecondFactorEnabled, KindPasskeyAdded,
 		KindPasskeyRemoved, KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
-		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted,
+		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved:
 		if req.UserID == nil || *req.UserID == uuid.Nil {
 			return ErrScope
 		}
@@ -160,7 +161,8 @@ func isSecurityKind(kind Kind) bool {
 	switch kind {
 	case KindSecondFactorEnabled, KindPasskeyAdded, KindPasskeyRemoved,
 		KindSecondFactorDisabled, KindRecoveryCodesRegenerated,
-		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted:
+		KindRecoveryCodeUsed, KindSecondFactorAttemptsExhausted,
+		KindTOTPAdded, KindTOTPReplaced, KindTOTPRemoved:
 		return true
 	default:
 		return false
