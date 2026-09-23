@@ -11,7 +11,9 @@
  * Ceremonies use Chrome DevTools virtual authenticators. Exactly one simulates
  * presence at a time, so a registration whose `excludeCredentials` names an
  * existing credential still has a device that can answer, and every assertion
- * resolves against a known credential.
+ * resolves against a known credential. Chrome allows one internal (platform)
+ * authenticator per page, so the first is internal and every later one is a
+ * USB security key.
  *
  * The proof spends three fictional accounts because every pending route shares
  * one bounded budget of ten attempts per account and client address in fifteen
@@ -573,6 +575,11 @@ class AuthenticatorPool {
 
   private constructor(private readonly send: CDPSend) {}
 
+  /** The transport for the authenticator added after `existing` others. */
+  static transportFor(existing: number): 'internal' | 'usb' {
+    return existing === 0 ? 'internal' : 'usb';
+  }
+
   static async attach(
     context: BrowserContext,
     page: Page,
@@ -585,7 +592,11 @@ class AuthenticatorPool {
     return new AuthenticatorPool(send);
   }
 
-  /** Adds an authenticator and makes it the only one that can answer. */
+  /**
+   * Adds an authenticator and makes it the only one that can answer. Chrome
+   * rejects a second internal authenticator in one environment, so only the
+   * first is internal and the rest are resident-key USB security keys.
+   */
   async add(): Promise<string> {
     const result = await this.send('WebAuthn.addVirtualAuthenticator', {
       options: {
@@ -594,7 +605,7 @@ class AuthenticatorPool {
         hasUserVerification: true,
         isUserVerified: true,
         protocol: 'ctap2',
-        transport: 'internal',
+        transport: AuthenticatorPool.transportFor(this.ids.length),
       },
     });
     const id = result.authenticatorId;
