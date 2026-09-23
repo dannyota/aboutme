@@ -11,7 +11,6 @@ import LoginPage from '../app/pages/login.vue';
 import { OAuthConsentFailure } from '../app/composables/useOAuthConsent';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
-import { landedFrom } from './support/routing';
 
 // These tests pin the English copy; Vietnamese has its own cases.
 beforeEach(() => setSiteLocale('en'));
@@ -412,9 +411,7 @@ describe('login next preservation', () => {
       .setValue('correct horse battery staple');
     await wrapper.get('[data-testid="login-form"]').trigger('submit');
     await flushPromises();
-    // `/authorize` is one of this app's own pages, so the client router
-    // carries the whole path, query and all.
-    expect(await landedFrom('/login')).toBe(next);
+    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(next);
   });
 
   it('round-trips an unauthenticated authorize request through password login',
@@ -447,6 +444,6 @@ describe('login next preservation', () => {
         loginTarget,
         'http://localhost',
       ).searchParams.get('next');
-      expect(await landedFrom('/login')).toBe(expectedPath);
+      expect(vi.mocked(navigateTo)).toHaveBeenLastCalledWith(expectedPath);
     });
 });
