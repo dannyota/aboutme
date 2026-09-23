@@ -314,6 +314,24 @@ export default defineNuxtConfig({
 
   vite: {
     plugins: [tailwindcss(), publicRenderWorkerPlugin(false)],
+    // The dev server discovers these on the first visit to a page that
+    // imports them and then reloads the document at whatever URL it shows.
+    // A client navigation that has not committed yet is lost to that reload,
+    // so the first sign-in would land back on /login. Production builds
+    // bundle them and never reload.
+    optimizeDeps: {
+      include: [
+        '@lucide/vue',
+        '@vueuse/core',
+        'ajv-formats',
+        'ajv/dist/2020.js',
+        'class-variance-authority',
+        'clsx',
+        'dompurify',
+        'reka-ui',
+        'tailwind-merge',
+      ],
+    },
   },
 
   hooks: {
