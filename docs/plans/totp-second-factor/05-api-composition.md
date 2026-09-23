@@ -35,6 +35,17 @@ client.
 
 ## Required behavior
 
+- Wire the committed lifecycle code in `apps/server/internal/secondfactor`:
+  build one `NewTOTPKeyRing(TOTP_ACTIVE_KEY, TOTP_PREVIOUS_KEY, entropy)` and
+  one shared `NewTOTPUnavailableSignal`; pass the ring, the enrollment flag, the
+  issuer (the canonical `PUBLIC_ORIGIN` host, checked with `ValidateTOTPIssuer`
+  and fatal at startup when invalid), and the signal to `secondfactor.Options`;
+  pass the same signal to `TOTPHealthConfig` and `TOTPRotationConfig`. Call
+  `TOTPHealthChecker.Check` at startup and on a five-minute ticker. The
+  re-encryption command runs `TOTPRotationRunner.Run` once and exits nonzero on
+  error. Register `auth.TOTPSecondFactorService` routes through the existing
+  second-factor handler options.
+
 - Parse `TOTP_ENROLLMENT_ENABLED` with default false and closed Boolean syntax.
 - Require `TOTP_ACTIVE_KEY` and accept an absent or present `TOTP_PREVIOUS_KEY`.
   Decode each as exactly 32 bytes from canonical unpadded base64url without

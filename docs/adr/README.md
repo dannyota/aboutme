@@ -13,7 +13,7 @@ The most recent accepted decision is
 passkey second-factor authentication, recovery codes, and a release fence.
 
 [ADR 0049](0049-totp-second-factor-authentication.md), which adds optional
-authenticator-app codes as a second factor, is proposed.
+authenticator-app codes as a second factor.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

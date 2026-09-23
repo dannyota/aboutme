@@ -28,7 +28,7 @@ intended model, not replacement DDL.
 | `second_factor_recovery_codes`   | Single-use, domain-separated recovery-code digests and creation time                                                      |
 | `pending_authentications`        | Hashed pending token, CSRF secret, purpose, epoch, optional session binding, expiry, and failure count                    |
 | `webauthn_ceremonies`            | One-use challenge, purpose, account/session or pending binding, epoch, expiry, and optional proposed user handle          |
-| `totp_credentials`               | Zero or one per user: sealed secret, key ID, nonce, format, last used step, failure count, and cool-down                  |
+| `totp_credentials`               | Zero or one per user: sealed secret, key ID, nonce, format, last used step, failure count, last failure, and cool-down    |
 | `totp_enrollments`               | Ten-minute sealed setup secret bound to account, session, epoch, and issuer; token digest; one row per user               |
 | `authentication_security_events` | Rejected non-increasing passkey counter values, retained for 180 days                                                     |
 | `resumes`                        | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts                      |

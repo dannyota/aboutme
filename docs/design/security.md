@@ -154,7 +154,7 @@ inside the same boundary without weakening any passkey rule.
   passkeys, recovery, and accounts without TOTP stay available.
 - **Older clients and floor.** A v0.4.2 browser shows a refresh prompt for the
   unknown `totp` method and grants nothing. Enrollment stays off until the
-  release fence reaches v0.4.6, numeric release 4006. Turning the flag off never
+  release fence reaches v0.4.7, numeric release 4007. Turning the flag off never
   lowers the fence or disables verification, removal, or recovery.
 
 ## OAuth transaction

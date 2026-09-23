@@ -321,9 +321,11 @@ credential row, so it holds across client IPs and restarts. The cool-down after
 the k-th group of five failures is 15 minutes times 2^min(k − 1, 7), at most 24
 hours. At the 1,000-failure ceiling each further failure sets 24 hours. It
 admits 35 guesses in the first day and 5 a day after that, under 0.6 percent
-success in a year, and never blocks passkey or recovery completion. TOTP
-enrollment proof skips pending rows but uses the shared second-factor attempt
-limits. The policy-row mail cap bounds attempt mail to 24 a day per account.
+success in a year, and never blocks passkey or recovery completion. A valid code
+resets the count only after 24 hours without a failure, so a user's own sign-ins
+do not restart the escalation during an attack. TOTP enrollment proof skips
+pending rows but uses the shared second-factor attempt limits. The policy-row
+mail cap bounds attempt mail to 24 a day per account.
 
 **Agent access rows.** This table is the enforcement authority for agent access.
 Registration is unauthenticated, so five per hour per IP admits a genuine first

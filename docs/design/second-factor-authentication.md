@@ -1,6 +1,6 @@
 # Second-factor authentication
 
-Status: Approved for v0.4.2; proposed for the authenticator-app release.
+Status: Approved for v0.4.2; accepted for the authenticator-app release.
 
 Accounts may add a passkey or an authenticator-app code as an optional second
 factor. A primary password or linked provider remains required. A passkey is not
