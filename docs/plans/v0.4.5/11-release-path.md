@@ -5,7 +5,7 @@ Role: devops. Model: Sonnet (Codex: `gpt-5.6-terra`).
 ## Objective and authority
 
 Add the hosted TOTP proof job and document the accepted flag-off deploy, floor
-4003 activation, key rotation, production proof, and failure order. Read
+4005 activation, key rotation, production proof, and failure order. Read
 `AGENTS.md`, the accepted TOTP contract and key-management design, accepted ADR
 0049, the passkey release-fence contract, deployment design, production runbook,
 release plan, verified runtime-secret report, and verified QA report.
@@ -15,12 +15,12 @@ release plan, verified runtime-secret report, and verified QA report.
 - Modify `.github/workflows/ci.yml` only for `totp-browser-proof`.
 - Modify `scripts/test/workflow-safety-test.sh` only for that job.
 - Modify `deploy/aws/scripts/deploy_test.sh` and
-  `deploy/aws/scripts/testdata/respond` only for v0.4.3 floor and same-tag
+  `deploy/aws/scripts/testdata/respond` only for v0.4.5 floor and same-tag
   activation and one-shot rotation cases.
 - Modify `deploy/aws/scripts/deploy.sh` only to add the supported
   `--totp-key-reencrypt <tag>` operation and to extend the existing
   enrollment-below-fence refusal to `TOTP_ENROLLMENT_ENABLED`.
-- Modify `deploy/aws/scripts/fence.sh` only where the 4003 floor or the
+- Modify `deploy/aws/scripts/fence.sh` only where the 4005 floor or the
   `totp_reencrypt` operation kind needs it (it pins `fence_epoch=4002` today).
 - Modify `docs/runbooks/production.md`.
 
@@ -41,7 +41,7 @@ local tests, builds, lint, browsers, database writes, or stacks.
   turns on. The manager confirms that rule before release.
 - Extend the pre-lock refusal in `deploy.sh` that stops a revision turning
   passkey enrollment on below the fence: refuse a revision with
-  `TOTP_ENROLLMENT_ENABLED=true` while the floor is below 4003, with a
+  `TOTP_ENROLLMENT_ENABLED=true` while the floor is below 4005, with a
   `deploy_test.sh` case.
 - Use unconditional cleanup for the HTTPS stack and runner-local database on
   success, failure, and cancellation. Give the job no production secret or AWS
@@ -49,13 +49,13 @@ local tests, builds, lint, browsers, database writes, or stacks.
 - Add workflow-safety assertions for the exact target, timeout, artifact path,
   lack of production credentials, and cleanup. Listing or compilation is not a
   substitute for execution.
-- Prove the generic serialized activation accepts 4003 after 4002, never lowers
+- Prove the generic serialized activation accepts 4005 after 4002, never lowers
   the floor, rejects lower deploy and restoration targets, and preserves the
   higher floor after later failure.
 - Add `deploy/aws/scripts/deploy.sh --totp-key-reencrypt <tag>` as the supported
   one-shot operator path under the fence contract's `totp_reencrypt` operation.
   It acquires the durable lock with that kind, requires tag and floor at least
-  4003 and the tag equal to the running app release, runs the conditional check
+  4005 and the tag equal to the running app release, runs the conditional check
   before registration and `RunTask`, runs only `aboutme-prod-totp-reencrypt`,
   emits only bounded counts and internal row IDs, and releases the exact lock.
 - Document valid-key flag-off deployment, readiness and compatibility proof,

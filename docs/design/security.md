@@ -109,7 +109,7 @@ invariants.
 
 ## Authenticator-app second factor
 
-V0.4.3 adds time-based one-time password (TOTP) codes inside the same boundary
+V0.4.5 adds time-based one-time password (TOTP) codes inside the same boundary
 without weakening any passkey rule.
 [ADR 0049](../adr/0049-totp-second-factor-authentication.md), the
 [authenticator-app contract](totp-second-factor-contract.md), and the
@@ -130,9 +130,9 @@ without weakening any passkey rule.
 - **Guessing.** Pending rows keep the shared five-failure limit. Each credential
   also carries a per-account failure count and a cool-down that starts at 15
   minutes after every fifth consecutive failure and doubles to at most 24 hours.
-  The cool-down never blocks a passkey or recovery code. Every
-  attempt-exhaustion mail, from any method, is capped at one per account per
-  hour.
+  The cool-down never blocks a passkey or recovery code, and a password reset
+  does not clear it. Every attempt-exhaustion mail, from any method, is capped
+  at one per account per hour.
 - **Mutations.** Enrollment, replacement, and removal use the current-session,
   recent-proof, CSRF, exact Origin, epoch, revocation, session-rotation, and
   lock-order rules of the passkey boundary. The first TOTP completion creates
@@ -154,7 +154,7 @@ without weakening any passkey rule.
   passkeys, recovery, and accounts without TOTP stay available.
 - **Older clients and floor.** A v0.4.2 browser shows a refresh prompt for the
   unknown `totp` method and grants nothing. Enrollment stays off until the
-  release fence reaches v0.4.3, numeric release 4003. Turning the flag off never
+  release fence reaches v0.4.5, numeric release 4005. Turning the flag off never
   lowers the fence or disables verification, removal, or recovery.
 
 ## OAuth transaction

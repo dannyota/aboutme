@@ -80,7 +80,7 @@ installs, database writes, browsers, or stacks. Locally you may run only
 wrapped exactly as:
 
 ```bash
-flock "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" \
+flock -o "$(git rev-parse --path-format=absolute --git-common-dir)/aboutme-local-check.lock" \
   timeout 600 systemd-run --user --scope -p MemoryMax=2G -p MemorySwapMax=0 \
   -p CPUQuota=200% <command>
 ```

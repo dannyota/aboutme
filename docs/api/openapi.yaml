@@ -3416,7 +3416,7 @@ paths:
   # ---- Second factor: passkeys and recovery codes (v0.4.2) ----------------
   # docs/design/second-factor-authentication.md,
   # docs/design/passkey-second-factor-contract.md. V0.4.2 registers no TOTP
-  # route; V0.4.3 adds those additively without changing any route below.
+  # route; V0.4.5 adds those additively without changing any route below.
   /auth/second-factor:
     get:
       operationId: getAuthSecondFactor
@@ -7148,7 +7148,7 @@ components:
     # ---- Second factor: passkeys and recovery codes (v0.4.2) -------------
     # docs/design/second-factor-authentication.md,
     # docs/design/passkey-second-factor-contract.md. No TOTP schema exists
-    # yet; V0.4.3 adds `totpEnabled` and `totp` additively.
+    # yet; V0.4.5 adds `totpEnabled` and `totp` additively.
     SecondFactorCeremonyID:
       type: string
       minLength: 43

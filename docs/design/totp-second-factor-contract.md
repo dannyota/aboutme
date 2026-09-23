@@ -1,6 +1,6 @@
 # Authenticator-app second-factor contract
 
-Status: Proposed for v0.4.3. The owner approved all seven product choices below
+Status: Proposed for v0.4.5. The owner approved all seven product choices below
 on 2026-09-22.
 
 This contract adds time-based one-time password (TOTP) verification to the
@@ -29,13 +29,13 @@ The owner approved these product choices on 2026-09-22:
    deletes the set and disables second-factor enforcement.
 6. Approved: Send bilingual security mail after TOTP addition, replacement,
    removal, and final disablement. Starting or abandoning setup sends no mail.
-7. Approved: Raise the production minimum-release fence to v0.4.3 before TOTP
+7. Approved: Raise the production minimum-release fence to v0.4.5 before TOTP
    enrollment is enabled. Once TOTP enrollment can succeed, a supported rollback
-   below v0.4.3 is forbidden.
+   below v0.4.5 is forbidden.
 
 ## Release surface
 
-V0.4.3 preserves every v0.4.2 passkey, pending, recovery, error, cookie, CSRF,
+V0.4.5 preserves every v0.4.2 passkey, pending, recovery, error, cookie, CSRF,
 cache, and epoch rule. `GET /api/v1/capabilities` adds
 `totpEnrollment: boolean`, true only when TOTP enrollment and replacement may
 start and complete.
@@ -272,10 +272,10 @@ cool-down covers only TOTP. Passkey and recovery verification never read these
 fields, so the budget cannot lock out another method.
 
 Residual risk: a password holder can keep TOTP in cool-down indefinitely. The
-user's ways out are a passkey, a recovery code, or a password reset. A completed
-password reset clears `cooldown_until` and `failed_attempts` in its own
-transaction, and the new password stops the attacker from starting another
-cool-down.
+user's ways out are waiting, a passkey, or a recovery code. A completed password
+reset changes neither `cooldown_until` nor `failed_attempts`, so an attacker who
+controls the mailbox cannot reset the budget. The new password still stops the
+attacker from starting another cool-down.
 
 Every `second_factor_attempts_exhausted` job, from any method, obeys one
 per-account cap. Migration 00005 adds nullable
@@ -382,7 +382,7 @@ tests:
 
 ## Security mail and locales
 
-V0.4.3 adds closed mail kinds `totp_added`, `totp_replaced`, and `totp_removed`.
+V0.4.5 adds closed mail kinds `totp_added`, `totp_replaced`, and `totp_removed`.
 First-factor completion uses `second_factor_enabled`. Final factor removal uses
 `second_factor_disabled`. Existing recovery events stay unchanged. The existing
 attempt event also marks a TOTP cool-down start, and every attempt mail obeys
@@ -411,17 +411,17 @@ nullable policy column, which changes no row value. It changes no passkey,
 policy, recovery, pending, session, grant, authorization-code, token, or mail
 row and deletes no data. Rollback leaves the empty or populated tables in place.
 
-Before enrollment enablement, v0.4.2 and v0.4.3 application tasks may overlap
-because no TOTP row can exist. The v0.4.3 web treats absent or malformed new
+Before enrollment enablement, v0.4.2 and v0.4.5 application tasks may overlap
+because no TOTP row can exist. The v0.4.5 web treats absent or malformed new
 capability and state fields as false during that window. The flag stays false
 until every running server and web asset supports TOTP.
 
 After TOTP enrollment can succeed, an older server cannot provide every active
 method or manage a TOTP-only account. A v0.4.2 passkey removal counts only
 passkeys, so it could delete the policy and recovery codes while TOTP stays
-active. The durable production floor must therefore be v0.4.3, numeric release
-4003, before the flag turns on. `deploy.sh` and `fence.sh` refuse any app
-revision with TOTP enrollment on while the fence item is missing or below 4003,
+active. The durable production floor must therefore be v0.4.5, numeric release
+4005, before the flag turns on. `deploy.sh` and `fence.sh` refuse any app
+revision with TOTP enrollment on while the fence item is missing or below 4005,
 as the
 [release fence](passkey-release-fence.md#authenticator-app-key-re-encryption)
 defines. Older browser assets fail closed: primary login still creates no
@@ -432,7 +432,7 @@ still work, but compatibility does not depend on it.
 Turning `TOTP_ENROLLMENT_ENABLED` off stops new setup and replacement. It never
 lowers the floor, removes a credential, disables TOTP verification, changes
 recovery, or permits primary-only login. After enablement, rollback means a
-forward fix or an image at or above the v0.4.3 fence.
+forward fix or an image at or above the v0.4.5 fence.
 
 The only intentional loss is ephemeral: starting a new enrollment deletes the
 prior incomplete enrollment, and cleanup removes expired enrollment rows. Active
@@ -443,7 +443,7 @@ deliberate removal.
 
 GitHub CI owns every build, test, lint, database, migration, browser,
 infrastructure, Semgrep, and gitleaks gate. Production deploys valid keys with
-enrollment off, proves compatibility, raises the serialized floor to v0.4.3,
+enrollment off, proves compatibility, raises the serialized floor to v0.4.5,
 enables enrollment, and proves the flow with the authorized fictional account.
 The scripted production proof keeps every secret, URI, and code in process
 memory and prints only fixed step outcomes.
