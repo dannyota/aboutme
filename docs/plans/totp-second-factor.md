@@ -207,8 +207,11 @@ The top manager owns this sequence:
 7. Enable TOTP enrollment through the reviewed OpenTofu apply. Redeploy the same
    tag through a new serialized operation.
 8. Run the second bounded production proof with only the named fictional
-   account. Prove first TOTP enrollment, pending login, replacement, shared
-   recovery, passkey coexistence, both locales, and removal.
+   account. Prove first TOTP enrollment, pending login, replacement (without the
+   old-secret rejection, which the hosted proof covers), shared recovery, one
+   pending row proving passkey coexistence across both locales and completed
+   with TOTP, and removal, staying within the account's per-account pending
+   budget.
 9. Remove the proof factor, recovery plaintext, sessions, and browser profile.
    Record bounded redacted evidence. Fix forward at v0.4.7 or later on failure.
 

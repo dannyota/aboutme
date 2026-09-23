@@ -34,8 +34,6 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
   codeForStep,
-  codeNow,
-  mismatchedCode,
   stepAt,
   systemClock,
   TOTP_PERIOD_SECONDS,
@@ -578,13 +576,16 @@ test('proves the activated production authenticator-app journey', async ({
       if (await meStatus(page) !== 200) throw new Error('TOTP login did not establish a session');
     });
 
+    // The old-secret rejection after replacement is dropped here: the hosted
+    // proof (totp.spec.ts, "replace-old-secret-rejected") already covers it,
+    // and production has only one account to spend its pending budget on
+    // (docs/runbooks/totp-keys.md "Production proofs").
     await step('totp-replace', async () => {
       await gotoHydrated(page, '/app/settings/sessions');
       await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
       await page.getByTestId('totp-setup-replace').click();
       await expect(page.getByTestId('second-factor-reauth-password')).toBeVisible();
       await reauthenticateEnrolled(page, account.password, secret);
-      const oldSecret = secret;
       secret = await startTotpSetup(page);
       if (await submitSetupCode(page, await freshCode(page, secret)) !== 200) {
         throw new Error('TOTP replacement completion was rejected');
@@ -593,11 +594,6 @@ test('proves the activated production authenticator-app journey', async ({
       if (await passwordSignIn(page, account) !== 'pending') {
         throw new Error('replaced account did not require a second factor');
       }
-      const oldRejected = await submitPendingTotpCode(
-        page,
-        mismatchedCode(codeNow(oldSecret, systemClock())),
-      );
-      if (oldRejected !== 401) throw new Error('the replaced secret still verified');
       await completeWithTotp(page, await freshCode(page, secret));
     });
 
@@ -611,7 +607,12 @@ test('proves the activated production authenticator-app journey', async ({
     });
     recoveryCleanupCode = recoveryCodes[1] as string;
 
-    await step('passkey-coexistence', async () => {
+    // Passkey coexistence and both locales share one pending row and one
+    // completion: the account has only 8 admitted attempts to spend here
+    // (docs/runbooks/totp-keys.md "Production proofs"), so this proves
+    // passkey and authenticator-app both list on the pending page, in both
+    // locales, and completes once with TOTP rather than the passkey.
+    await step('passkey-coexistence-and-locales', async () => {
       await attachAuthenticator(context, page);
       await gotoHydrated(page, '/app/settings/sessions');
       const created = page.waitForResponse((candidate) => {
@@ -623,38 +624,31 @@ test('proves the activated production authenticator-app journey', async ({
       await page.getByTestId('passkey-add').click();
       if ((await created).status() !== 201) throw new Error('passkey enrollment failed');
       await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
+
       await signOut(page);
+      await context.addCookies([{ name: 'aboutme-locale', url: ORIGIN, value: 'vi' }]);
+      await page.setViewportSize(PHONE);
       if (await passwordSignIn(page, account) !== 'pending') {
         throw new Error('account did not require a second factor');
       }
       await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
       await expect(page.getByTestId('second-factor-totp')).toBeVisible();
-      await page.getByTestId('second-factor-passkey-button').click();
-      await page.waitForURL(
-        (url) => url.origin === ORIGIN && url.pathname !== '/login/second-factor',
-        { timeout: WAIT_NAVIGATION_MS },
-      );
-      if (await meStatus(page) !== 200) throw new Error('passkey login did not establish a session');
-    });
+      const viOverflow = await page.evaluate(() =>
+        document.documentElement.scrollWidth <= window.innerWidth);
+      if (!viOverflow) throw new Error('pending page overflowed its viewport');
 
-    await step('locales', async () => {
-      for (const [locale, viewport] of [
-        ['vi', PHONE],
-        ['en', DESKTOP],
-      ] as const) {
-        await signOut(page);
-        await context.addCookies([{ name: 'aboutme-locale', url: ORIGIN, value: locale }]);
-        await page.setViewportSize(viewport);
-        if (await passwordSignIn(page, account) !== 'pending') {
-          throw new Error('account did not require a second factor');
-        }
-        const overflow = await page.evaluate(() =>
-          document.documentElement.scrollWidth <= window.innerWidth);
-        if (!overflow) throw new Error('pending page overflowed its viewport');
-        await completeWithTotp(page, await freshCode(page, secret));
-      }
+      // Same pending row, reloaded under the other locale and viewport.
       await context.addCookies([{ name: 'aboutme-locale', url: ORIGIN, value: 'en' }]);
       await page.setViewportSize(DESKTOP);
+      await gotoHydrated(page, '/login/second-factor');
+      await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
+      await expect(page.getByTestId('second-factor-totp')).toBeVisible();
+      const enOverflow = await page.evaluate(() =>
+        document.documentElement.scrollWidth <= window.innerWidth);
+      if (!enOverflow) throw new Error('pending page overflowed its viewport');
+
+      await completeWithTotp(page, await freshCode(page, secret));
+      if (await meStatus(page) !== 200) throw new Error('TOTP login did not establish a session');
     });
 
     await step('removal', async () => {
