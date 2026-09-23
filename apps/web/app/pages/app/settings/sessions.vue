@@ -40,7 +40,6 @@ import { useNow } from '../../../composables/useNow';
 import {
   validateAuthorizeUrl,
 } from '../../../composables/providerAuthorization';
-import { goToPath } from '@/utils/navigate';
 import { formatRelativeTime } from '../../../utils/relativeTime';
 import { describeUserAgent } from '../../../utils/userAgent';
 import { workspaceTitles } from '@/i18n/meta';
@@ -211,7 +210,7 @@ async function revokeAll(): Promise<void> {
     return;
   }
   // This also destroys the current session, so there is nothing to refresh.
-  await goToPath('/login');
+  await navigateTo('/login');
 }
 
 const linkedProviders = computed(
@@ -275,7 +274,7 @@ async function reauthenticatePassword(password: string): Promise<void> {
   // complete: the pending second factor lives on its own page, whose return
   // path for this purpose is fixed back to these settings.
   if (response?.data?.secondFactorRequired === true) {
-    await goToPath('/login/second-factor');
+    await navigateTo('/login/second-factor');
   }
 }
 

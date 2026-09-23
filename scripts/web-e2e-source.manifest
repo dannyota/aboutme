@@ -405,7 +405,6 @@ apps/web/app/templates/structuredData.ts
 apps/web/app/utils/csp.ts
 apps/web/app/utils/fontCatalog.ts
 apps/web/app/utils/fontsReady.ts
-apps/web/app/utils/navigate.ts
 apps/web/app/utils/pendingReturnPath.ts
 apps/web/app/utils/publicPage.ts
 apps/web/app/utils/relativeTime.ts

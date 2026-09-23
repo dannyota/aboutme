@@ -14,7 +14,6 @@ import {
 } from '../../composables/agentGrants';
 import { useAuth } from '../../composables/useAuth';
 import { agentSettingsCopy } from '../../i18n/agent-settings';
-import { goToPath } from '@/utils/navigate';
 
 const { grants, refresh, revoke } = useAgentGrants();
 const { csrfToken } = useAuth();
@@ -46,7 +45,7 @@ async function load(): Promise<void> {
     await refresh();
   } catch (error) {
     if (failureKind(error)?.kind === 'session-required') {
-      await goToPath('/login');
+      await navigateTo('/login');
       return;
     }
     unavailable.value = true;
@@ -80,7 +79,7 @@ async function confirmRevoke(): Promise<void> {
     const failure = failureKind(error);
     if (failure?.kind === 'session-required') {
       closeAfterAction();
-      await goToPath('/login');
+      await navigateTo('/login');
       return;
     }
     if (failure?.kind === 'not-found') {
@@ -106,7 +105,7 @@ async function refreshAfterAction(): Promise<void> {
     unavailable.value = false;
   } catch (error) {
     if (failureKind(error)?.kind === 'session-required') {
-      await goToPath('/login');
+      await navigateTo('/login');
       return;
     }
     unavailable.value = true;

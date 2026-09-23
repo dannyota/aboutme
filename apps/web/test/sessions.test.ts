@@ -9,7 +9,6 @@ import { createError, readRawBody, setResponseStatus } from 'h3';
 import SessionsPage from '../app/pages/app/settings/sessions.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
-import { currentPath, landedOn } from './support/routing';
 
 registerCapabilities();
 
@@ -333,7 +332,6 @@ describe('sessions.vue', () => {
       );
       expect(wrapper.find('[data-testid="link-error"]').exists()).toBe(false);
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-      expect(currentPath()).toBe('/');
     },
   );
 
@@ -465,7 +463,7 @@ describe('sessions.vue', () => {
 
       // Revoke-all destroys the current session too (Clear-Site-Data) —
       // there is nothing left to refetch, only somewhere else to go.
-      expect(await landedOn('/login')).toBe('/login');
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
       expect(meGetCalls).toBe(meGetCallsAtMount);
       expect(sessionsGetCalls).toBe(sessionsGetCallsAtMount);
     },
@@ -507,7 +505,6 @@ describe('sessions.vue', () => {
       // Sensitive-op rejection, not a generic failure — and definitely
       // not a silent success.
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-      expect(currentPath()).toBe('/');
     },
   );
 
@@ -531,7 +528,6 @@ describe('sessions.vue', () => {
     );
     expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(false);
     expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-    expect(currentPath()).toBe('/');
   });
 
   describe('password settings integration', () => {

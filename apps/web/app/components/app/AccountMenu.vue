@@ -3,7 +3,6 @@ import { LogOut, Moon, Settings2, Sun, UserRound } from '@lucide/vue';
 import { computed } from 'vue';
 import IconButton from '@/components/app/IconButton.vue';
 import { shellCopy } from '@/i18n/shell';
-import { goToPath } from '@/utils/navigate';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +38,7 @@ function signOut(): void {
     <DropdownMenuContent align="end">
       <DropdownMenuItem
         data-testid="account-menu-settings"
-        @select="goToPath('/app/settings/sessions')"
+        @select="navigateTo('/app/settings/sessions')"
       >
         <Settings2 aria-hidden="true" />{{ copy.settings }}
       </DropdownMenuItem>
