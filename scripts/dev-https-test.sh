@@ -410,6 +410,8 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'MCP_ENABLED=true'
   assert_contains "$server_env" 'PROVIDER_LOGIN_ENABLED=true'
   assert_contains "$server_env" 'PASSKEY_ENROLLMENT_ENABLED=true'
+  assert_contains "$server_env" 'TOTP_ACTIVE_KEY='
+  assert_contains "$server_env" 'TOTP_ENROLLMENT_ENABLED=true'
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)
@@ -540,6 +542,13 @@ run_happy_path_and_lifecycle_checks() (
   printf 'capture_bearer=%s\n' "$capture_bearer" >>.dev/native-https/log/server.log
   output=$(bash scripts/dev-https.sh logs server 2>&1) || fail "secret redaction logs failed: $output"
   assert_not_contains "$output" "$capture_bearer"
+  assert_contains "$output" '[REDACTED]'
+
+  totp_active_key=$(sed -n 's/^TOTP_ACTIVE_KEY=//p' .dev/native-https/run/server.env)
+  [ -n "$totp_active_key" ] || fail 'TOTP active key is missing from the server environment'
+  printf 'totp_active_key=%s\n' "$totp_active_key" >>.dev/native-https/log/server.log
+  output=$(bash scripts/dev-https.sh logs server 2>&1) || fail "TOTP key redaction logs failed: $output"
+  assert_not_contains "$output" "$totp_active_key"
   assert_contains "$output" '[REDACTED]'
 
   output=$(bash scripts/dev-https.sh down 2>&1) || fail "down failed: $output"
@@ -1213,6 +1222,31 @@ run_passkey_enrollment_flag_check() (
   done
 )
 
+# The TOTP browser proof runs one phase with enrollment open and one with it
+# closed, so the server environment flag must follow DEV_HTTPS_TOTP_ENROLLMENT
+# exactly and reject anything but true or false
+# (docs/design/totp-key-management.md "Key ring").
+run_totp_enrollment_flag_check() (
+  local value
+  # shellcheck source=lib/dev-https-lifecycle.sh
+  source "$SOURCE_LIB_DIR/dev-https-lifecycle.sh"
+  value=$(DEV_HTTPS_TOTP_ENROLLMENT= totp_enrollment_flag) ||
+    fail 'empty TOTP enrollment selector was rejected'
+  [ "$value" = true ] || fail "default TOTP enrollment flag is $value, want true"
+  value=$(DEV_HTTPS_TOTP_ENROLLMENT=true totp_enrollment_flag) ||
+    fail 'explicit true TOTP enrollment selector was rejected'
+  [ "$value" = true ] || fail "explicit true flag is $value, want true"
+  value=$(DEV_HTTPS_TOTP_ENROLLMENT=false totp_enrollment_flag) ||
+    fail 'explicit false TOTP enrollment selector was rejected'
+  [ "$value" = false ] || fail "explicit false flag is $value, want false"
+  for value in TRUE 1 yes ' ' 'true false'; do
+    if DEV_HTTPS_TOTP_ENROLLMENT=$value totp_enrollment_flag >/dev/null
+    then
+      fail "TOTP enrollment selector accepted '$value'"
+    fi
+  done
+)
+
 run_missing_tool_check() (
   local fixture output
   fixture=$(new_fixture)
@@ -1257,6 +1291,7 @@ main() {
   secret-reuse) run_secret_reuse_check; return ;;
   secret-mode) run_secret_mode_check; return ;;
   passkey-flag) run_passkey_enrollment_flag_check; return ;;
+  totp-flag) run_totp_enrollment_flag_check; return ;;
   '') ;;
   *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
   esac
@@ -1290,6 +1325,7 @@ main() {
   run_secret_reuse_check
   run_secret_mode_check
   run_passkey_enrollment_flag_check
+  run_totp_enrollment_flag_check
   run_missing_tool_check
   printf '%s\n' 'dev-https static tests: PASS'
 }

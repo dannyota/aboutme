@@ -84,6 +84,7 @@ PUBLIC_RENDERER_BUILD_DIGEST=
 PASSWORD_RATE_HMAC_KEY_B64=
 AUTH_EMAIL_ACTIVE_KEY_B64=
 AUTH_EMAIL_CAPTURE_BEARER_B64=
+TOTP_ACTIVE_KEY_B64=
 
 # --------------------------------------------------------------------------
 # output helpers
@@ -177,7 +178,7 @@ ensure_secrets() {
   local name file
   mkdir -p "$SECRETS_DIR"
   chmod 0700 "$SECRETS_DIR"
-  for name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer; do
+  for name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer totp-key-a; do
     file="$SECRETS_DIR/$name"
     if [ ! -e "$file" ] && [ ! -L "$file" ]; then
       umask 077
@@ -189,6 +190,9 @@ ensure_secrets() {
   PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
   AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
   AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
+  # TOTP_ACTIVE_KEY takes the same 32-byte state secret and base64url shape as
+  # the keys above (docs/design/totp-key-management.md "Key ring").
+  TOTP_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/totp-key-a")
 }
 
 start_service() {
@@ -467,6 +471,8 @@ start_server() {
     AUTH_EMAIL_MODE=capture \
     AUTH_EMAIL_CAPTURE_URL="$MAIL_CAPTURE_URL" \
     AUTH_EMAIL_CAPTURE_BEARER="$AUTH_EMAIL_CAPTURE_BEARER_B64" \
+    TOTP_ACTIVE_KEY="$TOTP_ACTIVE_KEY_B64" \
+    TOTP_ENROLLMENT_ENABLED=true \
     "$BIN_DIR/server"
   wait_http server "http://127.0.0.1:$SERVER_PORT/healthz" 30
   info "server ready on http://127.0.0.1:$SERVER_PORT"

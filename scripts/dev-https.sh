@@ -86,6 +86,7 @@ PUBLIC_RENDERER_BUILD_DIGEST=
 PASSWORD_RATE_HMAC_KEY_B64=
 AUTH_EMAIL_ACTIVE_KEY_B64=
 AUTH_EMAIL_CAPTURE_BEARER_B64=
+TOTP_ACTIVE_KEY_B64=
 
 info() { printf '%s\n' "$*"; }
 warn() { printf 'dev-https: %s\n' "$*" >&2; }
@@ -224,6 +225,7 @@ redact_logs() {
   [ -z "${PASSWORD_RATE_HMAC_KEY_B64-}" ] || secret_rules+=(-e "s/${PASSWORD_RATE_HMAC_KEY_B64}/[REDACTED]/g")
   [ -z "${AUTH_EMAIL_ACTIVE_KEY_B64-}" ] || secret_rules+=(-e "s/${AUTH_EMAIL_ACTIVE_KEY_B64}/[REDACTED]/g")
   [ -z "${AUTH_EMAIL_CAPTURE_BEARER_B64-}" ] || secret_rules+=(-e "s/${AUTH_EMAIL_CAPTURE_BEARER_B64}/[REDACTED]/g")
+  [ -z "${TOTP_ACTIVE_KEY_B64-}" ] || secret_rules+=(-e "s/${TOTP_ACTIVE_KEY_B64}/[REDACTED]/g")
   sed -E \
     -e 's/(GOOGLE_CLIENT_SECRET[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/g' \
     -e 's/(__Host-(session|oauth-tx)=)[^;[:space:]]+/\1[REDACTED]/gI' \

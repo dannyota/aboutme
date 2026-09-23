@@ -125,7 +125,7 @@ ensure_secrets() {
   local name file
   mkdir -p -- "$SECRETS_DIR"
   chmod 0700 -- "$SECRETS_DIR"
-  for name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer; do
+  for name in password-rate-hmac-key auth-email-active-key auth-email-capture-bearer totp-key-a; do
     file="$SECRETS_DIR/$name"
     if [ ! -e "$file" ] && [ ! -L "$file" ]; then
       umask 077
@@ -137,6 +137,9 @@ ensure_secrets() {
   PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
   AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
   AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
+  # TOTP_ACTIVE_KEY takes the same 32-byte state secret and base64url shape as
+  # the keys above (docs/design/totp-key-management.md "Key ring").
+  TOTP_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/totp-key-a")
 }
 
 # load_secrets sets the derived secret values from existing state without
@@ -145,13 +148,15 @@ load_secrets() {
   PASSWORD_RATE_HMAC_KEY_B64=
   AUTH_EMAIL_ACTIVE_KEY_B64=
   AUTH_EMAIL_CAPTURE_BEARER_B64=
+  TOTP_ACTIVE_KEY_B64=
   [ -f "$SECRETS_DIR/password-rate-hmac-key" ] || return 0
   PASSWORD_RATE_HMAC_KEY_B64=$(base64url_of "$SECRETS_DIR/password-rate-hmac-key")
   AUTH_EMAIL_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/auth-email-active-key")
   AUTH_EMAIL_CAPTURE_BEARER_B64=$(base64url_of "$SECRETS_DIR/auth-email-capture-bearer")
+  TOTP_ACTIVE_KEY_B64=$(base64url_of "$SECRETS_DIR/totp-key-a")
 }
 
 mail_secrets_sha256() {
-  sha256sum "$SECRETS_DIR/password-rate-hmac-key" "$SECRETS_DIR/auth-email-active-key" "$SECRETS_DIR/auth-email-capture-bearer" \
+  sha256sum "$SECRETS_DIR/password-rate-hmac-key" "$SECRETS_DIR/auth-email-active-key" "$SECRETS_DIR/auth-email-capture-bearer" "$SECRETS_DIR/totp-key-a" \
     | sha256sum | awk '{print $1}'
 }
