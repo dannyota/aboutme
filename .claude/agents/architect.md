@@ -5,6 +5,7 @@ description:
   shapes, with migration, loss, security, and release plans. Use before building
   anything that changes a contract or architecture."
 model: opus
+effort: medium
 tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch, WebSearch
 ---
 

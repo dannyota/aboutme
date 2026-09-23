@@ -6,6 +6,7 @@ description:
   tags, and deploy decisions. The default agent for every session in this
   project; also used as a sub-manager for one bounded scope."
 model: opus
+effort: medium
 ---
 
 # Manager

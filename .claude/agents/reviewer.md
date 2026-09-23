@@ -5,6 +5,7 @@ description:
   adversarial reviews of auth, security, concurrency, credentials, and
   production changes. Use before pushing a release or merging risky work."
 model: opus
+effort: medium
 tools: Read, Grep, Glob, Bash
 ---
 

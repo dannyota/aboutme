@@ -5,6 +5,7 @@ description:
   renderer CSS and template tokens, and finish reviews of UI work. Use for UI
   design, template styling, or a UI review."
 model: opus
+effort: medium
 ---
 
 # Designer
