@@ -16,8 +16,9 @@ import (
 
 // grantRevocationSweepLimit bounds one epoch-change revocation pass to a
 // constant rather than a function of table size, matching the other bounded
-// sweeps in this package. The M5 live-grant cap keeps one account's live
-// grants well under this bound, so the pass always covers every live grant.
+// sweeps in this package. The live-grant cap in docs/design/security.md
+// keeps one account's live grants well under this bound, so the pass always
+// covers every live grant.
 const grantRevocationSweepLimit = 200
 
 // RevokeGrantsForEpochChangeTx revokes every live OAuth grant and its token

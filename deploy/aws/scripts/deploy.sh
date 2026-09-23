@@ -392,6 +392,15 @@ while IFS= read -r ref; do
 done < <(sort -u <<<"$refs")
 ((!missing)) || { say "create the missing secrets, or turn off the setting that needs them, then rerun"; exit 1; }
 
+# Enrollment may only start after --activate has raised the fence, so a
+# revision that turns it on below the fence never reaches ECS.
+new_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
+  | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' "$work/app.json")
+if ((fence_min < fence_epoch)) && [[ $new_enrolled == true ]]; then
+  say "the new app turns passkey enrollment on while the release fence is below v0.4.2; run --activate first"
+  exit 1
+fi
+
 fence_lock || exit 1
 
 # 4. Snapshot.
