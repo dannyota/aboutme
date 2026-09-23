@@ -78,7 +78,7 @@ func newAuthorizationHandler(client *http.Client, redirectURI, issuer string, br
 
 func newCallbackFetcher(redirectURI, issuer string, browser browserHandoff, listener loopbackListener) auth.AuthorizationCodeFetcher {
 	return func(ctx context.Context, args *auth.AuthorizationArgs) (result *auth.AuthorizationResult, err error) {
-		state, err := validateAuthorizationURL(args, redirectURI, issuer)
+		openURL, state, err := validateAuthorizationURL(args, redirectURI, issuer)
 		if err != nil {
 			return nil, err
 		}
@@ -91,49 +91,66 @@ func newCallbackFetcher(redirectURI, issuer string, browser browserHandoff, list
 				err = closeErr
 			}
 		}()
-		if err := browser.Open(waitContext, args.URL); err != nil {
+		if err := browser.Open(waitContext, openURL); err != nil {
 			return nil, err
 		}
 		return receiver.wait(waitContext)
 	}
 }
 
-func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer string) (string, error) {
+// scopeReadWrite and scopeWriteRead are the only two byte sequences a scope
+// parameter naming exactly resumes:read and resumes:write once each can take.
+// RFC 6749 §3.3 gives scope order no meaning, and the pinned SDK's step-up
+// union (internal/authutil.UnionScopes) collects the requested set through a
+// map, so it hands back either order at random from one run to the next. The
+// server's own authorize endpoint accepts only the canonical order, so the
+// browser is always sent that order regardless of which one the SDK chose.
+const (
+	scopeReadWrite = "resumes:read resumes:write"
+	scopeWriteRead = "resumes:write resumes:read"
+)
+
+func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer string) (string, string, error) {
 	if args == nil {
-		return "", errAuthorizationShape
+		return "", "", errAuthorizationShape
 	}
 	origin, err := parseOrigin(issuer)
 	if err != nil {
-		return "", errAuthorizationShape
+		return "", "", errAuthorizationShape
 	}
 	authorizationURL, err := url.Parse(args.URL)
 	if err != nil || authorizationURL.Scheme != origin.Scheme || authorizationURL.Host != origin.Host || authorizationURL.User != nil || authorizationURL.Path != "/oauth/authorize" || authorizationURL.RawPath != "" || authorizationURL.Fragment != "" {
-		return "", errAuthorizationShape
+		return "", "", errAuthorizationShape
 	}
 	values, err := url.ParseQuery(authorizationURL.RawQuery)
 	if err != nil || len(values) != 8 {
-		return "", errAuthorizationShape
+		return "", "", errAuthorizationShape
 	}
 	for _, key := range []string{"response_type", "client_id", "redirect_uri", "scope", "state", "code_challenge", "code_challenge_method", "resource"} {
 		if len(values[key]) != 1 {
-			return "", errAuthorizationShape
+			return "", "", errAuthorizationShape
 		}
 	}
 	if values.Get("redirect_uri") != redirectURI {
-		return "", errAuthorizationRedirect
+		return "", "", errAuthorizationRedirect
 	}
-	if values.Get("scope") != "resumes:read resumes:write" {
-		return "", errAuthorizationScope
+	scope := values.Get("scope")
+	if scope != scopeReadWrite && scope != scopeWriteRead {
+		return "", "", errAuthorizationScope
 	}
 	if values.Get("resource") != issuer || !canonicalResourceParameter(authorizationURL.RawQuery, issuer) {
-		return "", errAuthorizationResource
+		return "", "", errAuthorizationResource
 	}
 	state := values.Get("state")
 	if values.Get("response_type") != "code" || values.Get("client_id") == "" || state == "" ||
 		values.Get("code_challenge_method") != "S256" || !isS256Challenge(values.Get("code_challenge")) {
-		return "", errAuthorizationChallenge
+		return "", "", errAuthorizationChallenge
 	}
-	return state, nil
+	if scope == scopeWriteRead {
+		values.Set("scope", scopeReadWrite)
+		authorizationURL.RawQuery = values.Encode()
+	}
+	return authorizationURL.String(), state, nil
 }
 
 func canonicalResourceParameter(rawQuery, issuer string) bool {

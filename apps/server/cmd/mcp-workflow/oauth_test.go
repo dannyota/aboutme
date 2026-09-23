@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -86,9 +87,63 @@ func TestAuthorizationURLValidationAcceptsSDKShape(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"
 	raw := "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
-	state, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: raw}, redirectURI, issuer)
-	if err != nil || state != "state" {
-		t.Fatalf("validateAuthorizationURL = %q, %v", state, err)
+	openURL, state, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: raw}, redirectURI, issuer)
+	if err != nil || state != "state" || openURL != raw {
+		t.Fatalf("validateAuthorizationURL = %q, %q, %v", openURL, state, err)
+	}
+}
+
+// The pinned SDK's step-up scope union collects the requested set through a
+// map (internal/authutil.UnionScopes), so it hands the authorization URL
+// either scope order at random. Both must be accepted, and the browser must
+// always be sent the canonical order the server's own authorize endpoint
+// requires (see docs/design/mcp-owner-workflow.md#browser-helper-interface).
+func TestAuthorizationURLValidationAcceptsEitherSDKScopeOrder(t *testing.T) {
+	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
+	const issuer = "https://aboutme.vn"
+	const canonical = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
+	reversed := strings.Replace(canonical, "scope=resumes%3Aread+resumes%3Awrite", "scope=resumes%3Awrite+resumes%3Aread", 1)
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{"canonical order", canonical},
+		{"reversed order", reversed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			openURL, state, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: tc.raw}, redirectURI, issuer)
+			if err != nil || state != "state" {
+				t.Fatalf("validateAuthorizationURL = %q, %q, %v", openURL, state, err)
+			}
+			opened, err := url.Parse(openURL)
+			if err != nil {
+				t.Fatalf("parse open URL: %v", err)
+			}
+			if got := opened.Query().Get("scope"); got != "resumes:read resumes:write" {
+				t.Fatalf("open URL scope = %q, want the canonical order regardless of input order", got)
+			}
+		})
+	}
+}
+
+func TestAuthorizationURLValidationRejectsScopeOutsideTheClosedSet(t *testing.T) {
+	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
+	const issuer = "https://aboutme.vn"
+	const valid = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{"missing a scope", strings.Replace(valid, "scope=resumes%3Aread+resumes%3Awrite", "scope=resumes%3Aread", 1)},
+		{"repeated scope", strings.Replace(valid, "scope=resumes%3Aread+resumes%3Awrite", "scope=resumes%3Aread+resumes%3Aread", 1)},
+		{"unknown scope", strings.Replace(valid, "scope=resumes%3Aread+resumes%3Awrite", "scope=resumes%3Aread+resumes%3Aadmin", 1)},
+		{"extra whitespace", strings.Replace(valid, "scope=resumes%3Aread+resumes%3Awrite", "scope=resumes%3Aread++resumes%3Awrite", 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: tc.raw}, redirectURI, issuer); !errors.Is(err, errAuthorizationScope) {
+				t.Fatalf("validateAuthorizationURL error = %v, want %v", err, errAuthorizationScope)
+			}
+		})
 	}
 }
 
@@ -108,7 +163,7 @@ func TestAuthorizationURLValidationRejectsContractMismatch(t *testing.T) {
 		{"PKCE challenge", strings.Replace(valid, "code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "code_challenge=short", 1)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: tc.raw}, redirectURI, issuer); !errors.Is(err, errInvalidCallback) {
+			if _, _, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: tc.raw}, redirectURI, issuer); !errors.Is(err, errInvalidCallback) {
 				t.Fatalf("validateAuthorizationURL error = %v, want %v", err, errInvalidCallback)
 			}
 		})
