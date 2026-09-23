@@ -147,6 +147,48 @@ function outcomeOf(status: string, message: string): FailureOutcome {
   return 'unknown';
 }
 
+/**
+ * Closed test ids a failure may name. They are component ids, not secrets,
+ * and each maps to one word inside run.sh's [a-z0-9-] stage filter.
+ */
+const DIAG_TEST_IDS: ReadonlyArray<readonly [string, string]> = [
+  ['second-factor-reauth-password', 'reauth'],
+  ['totp-setup-dialog', 'setupdialog'],
+  ['totp-start-error', 'starterror'],
+  ['totp-setup-error', 'setuperror'],
+  ['totp-remove-error', 'removeerror'],
+  ['totp-setup-replace', 'replacebutton'],
+  ['totp-setup-start', 'startbutton'],
+  ['totp-replace-notice', 'replacenotice'],
+  ['totp-replaced-success', 'replacedsuccess'],
+  ['totp-settings', 'settings'],
+  ['second-factor-totp', 'pendingtotp'],
+];
+
+/** Names the closed test id a failed locator waited for, if any. */
+function waitedFor(message: string): string {
+  const match = /getByTestId\('([a-z0-9-]+)'\)/u.exec(message);
+  if (match === null) return 'none';
+  const known = DIAG_TEST_IDS.find(([id]) => id === match[1]);
+  return known === undefined ? 'unlisted' : known[1];
+}
+
+let failureSeen = 'none';
+let failurePage = 'unknown';
+
+/** Lists which closed test ids are visible on the page right now. */
+async function visibleWords(page: Page): Promise<string> {
+  const words: string[] = [];
+  for (const [id, word] of DIAG_TEST_IDS) {
+    try {
+      if (await page.getByTestId(id).first().isVisible()) words.push(word);
+    } catch {
+      // A closed page shows nothing.
+    }
+  }
+  return words.length > 0 ? words.join('-') : 'none';
+}
+
 test.afterEach(({}, testInfo) => {
   if (testInfo.status === 'skipped') return;
   if (testInfo.status === testInfo.expectedStatus) return;
@@ -162,7 +204,9 @@ test.afterEach(({}, testInfo) => {
       : /toBe/u.test(message) ? 'status-mismatch' : 'other';
   console.log(
     `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
-      + `-verify-${verifyTrace}-error-${errorKind}`,
+      + `-verify-${verifyTrace}-error-${errorKind}`
+      + `-waited-${waitedFor(message)}-page-${failurePage}`
+      + `-seen-${failureSeen}`,
   );
 });
 
@@ -1310,32 +1354,48 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(race.filter((result) => result.status === 204)).toHaveLength(1);
     expect(race.filter((result) => result.status === 401)).toHaveLength(1);
     steps.concurrentUseRejected = true;
-    await gotoHydrated(page, '/app/settings/sessions');
+    // The race winner's session went to this test's own HTTP client, not the
+    // browser, so the browser signs in again before it opens settings.
+    stage('concurrent-browser-sign-in');
+    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
+      .toBe('pending');
+    await completeWithTotp(page, await freshCode(page, secret));
+    await expectSignedInApp(page);
 
     // 11. Replacement issues a new secret; the old secret's codes then fail.
-    stage('replace');
+    stage('replace-settings');
+    await gotoHydrated(page, '/app/settings/sessions');
+    stage('replace-click');
     await forceReauthOnce(page, '/api/v1/me/second-factor/totp/enrollment');
     await page.getByTestId('totp-setup-replace').click();
+    stage('replace-reauth-open');
     await expect(page.getByTestId('second-factor-reauth-password'))
       .toBeVisible();
+    stage('replace-reauth-submit');
     await reauthenticateWithPassword(page, primaryPassword);
     // The replace notice lives in the setup dialog, which opens only after
     // the retried start succeeds.
+    stage('replace-start');
     const oldSecret = secret;
     secret = await startTotpSetup(page);
+    stage('replace-notice');
     await expect(page.getByTestId('totp-replace-notice')).toBeVisible();
     expect(secret).not.toBe(oldSecret);
+    stage('replace-code');
     expect(await submitSetupCode(page, await freshCode(page, secret)))
       .toBe(200);
+    stage('replace-complete');
     await expect(page.getByTestId('totp-replaced-success')).toBeVisible();
     await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
     steps.replaced = true;
 
+    stage('replace-old-secret-rejected');
     await signOut(page);
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
     expect(await submitPendingTotpCode(page, codeNow(oldSecret, systemClock())))
       .toBe(401);
+    stage('replace-new-secret-login');
     await completeWithTotp(page, await freshCode(page, secret));
     await expectSignedInApp(page);
 
@@ -1535,6 +1595,13 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
   } finally {
+    // Snapshot the page before teardown navigates away from the failure.
+    try {
+      failureSeen = await visibleWords(page);
+      failurePage = landingCategory(page.url());
+    } catch {
+      // A closed page leaves the defaults.
+    }
     beginTeardown();
     const removed = [
       await deleteAccount(page, {
