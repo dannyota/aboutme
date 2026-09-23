@@ -112,6 +112,7 @@ body:has(> #public-resume) {
 
 .public-toolbar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 1em;
   padding: var(--page-margin-y) var(--page-margin-x) 0;
@@ -119,10 +120,33 @@ body:has(> #public-resume) {
   font-size: var(--fs-meta);
 }
 
-.public-credit,
-.public-download {
+.public-credit {
   color: var(--color-link);
   text-decoration: underline;
+}
+
+/* The one action a reader takes on a shared resume, so it reads as a button
+   in the template's link color rather than as another text link. */
+.public-download {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75em;
+  padding: 0.5em 1.1em;
+  border-radius: 0.4em;
+  background: var(--color-link);
+  color: var(--color-surface);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.public-download:hover {
+  filter: brightness(1.12);
+}
+
+.public-download:focus-visible {
+  outline: 2px solid var(--color-link);
+  outline-offset: 2px;
 }
 
 @media print {
