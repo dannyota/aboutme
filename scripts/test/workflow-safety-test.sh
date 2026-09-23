@@ -118,15 +118,13 @@ grep -Fq 'if: always()' <<<"$STOP_DB_STEP" ||
 grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
   fail "passkey-browser-proof job's stop-database step does not stop the runner-local database"
 
-# The TOTP proof mirrors the passkey job's shape, with TOTP enrollment ships
-# off: continue-on-error keeps it from blocking the flag-off release while it
-# still must pass before the flag turns on.
+# The TOTP proof mirrors the passkey job's shape and blocks the release.
 TOTP_JOB=$(sed -n '/^  totp-browser-proof:/,/^  web-source-build:/p' "$WORKFLOW")
 [ -n "$TOTP_JOB" ] || fail "hosted workflow lacks the totp-browser-proof job"
 grep -Fq '    timeout-minutes: 60' <<<"$TOTP_JOB" ||
   fail "totp-browser-proof job lacks a fixed 60-minute timeout"
-grep -Fq '    continue-on-error: true' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job does not report without blocking the flag-off release"
+! grep -Fq 'continue-on-error' <<<"$TOTP_JOB" ||
+  fail "totp-browser-proof job must block the release"
 grep -Fq -- '- run: make dev-https' <<<"$TOTP_JOB" ||
   fail "totp-browser-proof job does not start the repository HTTPS harness"
 grep -Fq -- '- run: make dev-https-browser-image' <<<"$TOTP_JOB" ||
