@@ -171,7 +171,8 @@ const OUTCOME_PATTERNS: ReadonlyArray<readonly [RegExp, FailureOutcome]> = [
     'ceremony',
   ],
   [/capture (read|reset) failed|within its capture bound/u, 'capture'],
-  [/^(locator|page|frame|elementHandle)\./u, 'locator'],
+  // An action timeout arrives as `TimeoutError: locator.fill: ...`.
+  [/^(?:TimeoutError: )?(locator|page|frame|elementHandle)\./u, 'locator'],
   [/expect|Timed out \d+ms waiting for/u, 'assertion'],
 ];
 
@@ -872,10 +873,17 @@ async function passwordSignIn(
   return 'session';
 }
 
+/**
+ * Logs out from the settings page. The logout response sends
+ * `Clear-Site-Data: "cookies"`, which also drops the locale cookie, so the
+ * next page would render in the Vietnamese default. English is pinned again
+ * here; a caller that wants another locale sets it afterwards.
+ */
 async function signOut(page: Page): Promise<void> {
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
+  await setLocale(page.context(), 'en');
 }
 
 /** Runs the pending passkey ceremony with the present virtual authenticator. */
