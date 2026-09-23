@@ -453,7 +453,7 @@ if grep -Fq 'waitForHydration' "$SECOND_FACTOR_SPEC"; then
   fail 'second-factor proof uses the unbounded shared hydration wait'
 fi
 warm_paths=$(grep -cE "^  \['/[a-z/-]*', '[a-z0-9-]+'\],$" "$SECOND_FACTOR_SPEC")
-[ "$warm_paths" -ge 8 ] ||
+[ "$warm_paths" -ge 7 ] ||
   fail 'the warm route table lost entries'
 grep -Fq "stage(\`warm-\${token}\`);" "$SECOND_FACTOR_SPEC" ||
   fail 'a warm visit no longer names its page'
@@ -474,8 +474,15 @@ grep -Fq 'async function gotoFirstVisit(' "$SECOND_FACTOR_SPEC" ||
 grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/verify-email#token=${token}`);' \
   "$SECOND_FACTOR_SPEC" ||
   fail 'the verification link no longer opens at first-visit cost'
-if grep -qE "^  \['/verify-email', " <<<"$(sed -n '/^const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")"; then
-  fail 'the tokenless verification page is warmed again'
+grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToken}`);' \
+  "$SECOND_FACTOR_SPEC" ||
+  fail 'the reset link no longer opens at first-visit cost'
+# Neither page that takes its token from the URL fragment may be warmed
+# without one: each decides its own failure state during setup, on the client
+# only, so a tokenless visit cannot match the server render.
+warm_table=$(sed -n '/^const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")
+if grep -qE "^  \['/(verify-email|reset-password)', " <<<"$warm_table"; then
+  fail 'a tokenless fragment page is warmed again'
 fi
 
 # A page that needs a session is warmed with one, not signed out.
