@@ -24,12 +24,14 @@ readonly IMAGE_RE='^sha256:[0-9a-f]{64}$'
 # The release-images workflow publishes here, and deploy/aws/scripts/deploy.sh
 # deploys the digest this registry returns for the release tag.
 readonly IMAGE_REPOSITORY=dannyota/aboutme
-# The runner prints at most one closed failure word on standard error, and
-# only while it has written no evidence. Anything else there stays unprinted.
+# The runner prints at most one closed failure word (reason.go) on stderr, only
+# while it has written no evidence; this list must match them all.
 RUNNER_REASONS=' arguments control-root run-root entry-set artifact-mode tls network discovery'
-RUNNER_REASONS+=' oauth browser-handoff grant source-selection source-changed candidate create-intent'
-RUNNER_REASONS+=' create-rejected mutation-cap tool-output photo recovery revocation evidence'
-RUNNER_REASONS+=' workflow-state contract local-proof internal '
+RUNNER_REASONS+=' oauth registration metadata issuer state-mismatch token-exchange authorize-shape'
+RUNNER_REASONS+=' authorize-redirect authorize-scope authorize-resource authorize-challenge callback'
+RUNNER_REASONS+=' callback-bind second-factor-required reauthorization browser-handoff grant'
+RUNNER_REASONS+=' source-selection source-changed candidate create-intent create-rejected mutation-cap'
+RUNNER_REASONS+=' tool-output photo recovery revocation evidence workflow-state contract local-proof internal '
 readonly RUNNER_REASONS
 readonly -a IMAGE_SOURCES=(
   deploy/dev-https-browser/Dockerfile
@@ -553,8 +555,8 @@ report_failure() {
     and (.revocation | IN("revoked", "revocation_unconfirmed"))) | "\(.stage) \(.revocation)"' \
     "$RUN/evidence.json" 2>/dev/null) || evidence=none
   result=$(cat "$RUN/browser/browser-result.json" 2>/dev/null) || result=
-  case $result in
-  completed | login_failed | origin_rejected | consent_failed | timeout) ;;
+  case $result in # must match HelperResult in mcp-sdk.spec.ts
+  completed | login_failed | origin_rejected | consent_failed | second_factor_required | timeout) ;;
   *) result=none ;;
   esac
   say "runner exit $RUNNER_STATUS"
