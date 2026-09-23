@@ -292,7 +292,7 @@ const typeOptions = computed(
       <div class="grid gap-4">
         <!-- prettier-ignore -->
         <div
-          class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]
+          class="grid grid-cols-[auto_minmax(0,1fr)_auto]
             items-end gap-2"
         >
           <SelectField
