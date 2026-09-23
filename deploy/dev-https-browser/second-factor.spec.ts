@@ -642,16 +642,22 @@ async function setLocale(
 }
 
 /**
- * Every page the journey opens, with the closed word that names it. A first
- * visit is compiled on demand by the harness's dev server, so paying all of
- * them once, up front and in a stage of their own, keeps a later failure
- * about the behaviour under test rather than about a cold route. None of
- * these pages issues a request while signed out beyond the reads this
- * proof's console filter already accepts.
+ * Pages the journey opens that are safe to warm with no session, each with
+ * the closed word that names it. A first visit is compiled on demand by the
+ * harness's dev server, so paying them once, up front and in a stage of their
+ * own, keeps a later failure about the behaviour under test rather than about
+ * a cold route. None of these issues a request while signed out beyond the
+ * reads this proof's console filter already accepts.
+ *
+ * `/verify-email` is deliberately absent. With no token it decides during
+ * setup, on the client only, that the link is incomplete, because the token
+ * lives in the fragment and must never reach the server. The server render
+ * and the first client render then disagree and the development build says
+ * so on the console. The journey only ever opens that page with a real
+ * token, where it is clean, so it takes its first visit there instead.
  */
 const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
   ['/register', 'register'],
-  ['/verify-email', 'verify-email'],
   ['/login', 'login'],
   ['/login/second-factor', 'login-second-factor'],
   ['/forgot-password', 'forgot-password'],
@@ -728,6 +734,12 @@ async function hydrated(page: Page, timeout: number): Promise<void> {
 async function gotoHydrated(page: Page, path: string): Promise<void> {
   await page.goto(path);
   await hydrated(page, WAIT_HYDRATE_MS);
+}
+
+/** Opens a page the warm pass skips, at first-visit cost. */
+async function gotoFirstVisit(page: Page, url: string): Promise<void> {
+  await page.goto(url, { timeout: WAIT_WARM_MS });
+  await hydrated(page, WAIT_WARM_MS);
 }
 
 async function meStatus(page: Page): Promise<number> {
@@ -807,7 +819,7 @@ async function registerVerified(
   stage('register-await-mail');
   const token = await capture.waitForToken('verify', email);
   stage('register-verify-open');
-  await gotoHydrated(page, `${ORIGIN}/verify-email#token=${token}`);
+  await gotoFirstVisit(page, `${ORIGIN}/verify-email#token=${token}`);
   stage('register-verified');
   await expect(page.getByTestId('verify-success')).toBeVisible();
 }

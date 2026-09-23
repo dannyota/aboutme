@@ -453,7 +453,7 @@ if grep -Fq 'waitForHydration' "$SECOND_FACTOR_SPEC"; then
   fail 'second-factor proof uses the unbounded shared hydration wait'
 fi
 warm_paths=$(grep -cE "^  \['/[a-z/-]*', '[a-z0-9-]+'\],$" "$SECOND_FACTOR_SPEC")
-[ "$warm_paths" -ge 9 ] ||
+[ "$warm_paths" -ge 8 ] ||
   fail 'the warm route table lost entries'
 grep -Fq "stage(\`warm-\${token}\`);" "$SECOND_FACTOR_SPEC" ||
   fail 'a warm visit no longer names its page'
@@ -467,6 +467,17 @@ grep -Fq 'const before = { ...counters };' "$SECOND_FACTOR_SPEC" ||
 grep -Fq "type CounterClass = 'certificate' | 'console' | 'external' | 'page';" \
   "$SECOND_FACTOR_SPEC" ||
   fail 'the warm counter classes are no longer a closed set'
+# The one page the warm pass skips pays its first-visit cost where the
+# journey opens it for real, under the warm bound rather than the tight one.
+grep -Fq 'async function gotoFirstVisit(' "$SECOND_FACTOR_SPEC" ||
+  fail 'the skipped page has no first-visit open'
+grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/verify-email#token=${token}`);' \
+  "$SECOND_FACTOR_SPEC" ||
+  fail 'the verification link no longer opens at first-visit cost'
+if grep -qE "^  \['/verify-email', " <<<"$(sed -n '/^const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")"; then
+  fail 'the tokenless verification page is warmed again'
+fi
+
 # A page that needs a session is warmed with one, not signed out.
 grep -Fq 'const SIGNED_IN_WARM_ROUTES' "$SECOND_FACTOR_SPEC" ||
   fail 'the signed-in warm pass is gone'
