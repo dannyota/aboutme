@@ -117,6 +117,14 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   // The revoked agent grant's tool call.
   ['/mcp', [401]],
 ]);
+// Startup reads of the app pages the journey lands on, named apart so a 401
+// says which page was still loading.
+const NAMED_API_READS: ReadonlyMap<string, string> = new Map([
+  ['/api/v1/resumes', 'resumes'],
+  ['/api/v1/sessions', 'sessions'],
+  ['/api/v1/me/agents', 'agents'],
+]);
+
 const REMOVAL_PATH = /^\/api\/v1\/me\/second-factor\/passkeys\/[^/]+$/u;
 
 // --- Failure reporting ------------------------------------------------------
@@ -393,7 +401,10 @@ const unexpectedConsole: string[] = [];
 function isUnexpectedSecondFactorConsole(message: ConsoleMessage): boolean {
   const unexpected = classifySecondFactorConsole(message);
   if (unexpected !== null) {
-    unexpectedConsole.push(`${recordedStage}-${unexpected}`);
+    // Teardown stops recording stages, so mark its errors apart from the
+    // journey stage they would otherwise inherit.
+    const where = tearingDown ? `teardown-${recordedStage}` : recordedStage;
+    unexpectedConsole.push(`${where}-${unexpected}`);
   }
   return unexpected !== null;
 }
@@ -417,8 +428,9 @@ function classifySecondFactorConsole(message: ConsoleMessage): string | null {
   const index = [...EXPECTED_PAGE_FAILURES.keys()].indexOf(url.pathname);
   const path = index >= 0 ? `path${index}`
     : REMOVAL_PATH.test(url.pathname) ? 'removal'
-      : url.pathname.startsWith('/api/') ? 'api'
-        : url.pathname.startsWith('/_nuxt/') ? 'asset' : 'other';
+      : NAMED_API_READS.get(url.pathname)
+        ?? (url.pathname.startsWith('/api/') ? 'api'
+          : url.pathname.startsWith('/_nuxt/') ? 'asset' : 'other');
   return `${path}-${status}`;
 }
 
@@ -2176,6 +2188,11 @@ async function deleteAccount(
     if (account.authenticatorId !== '') {
       await pool.present(account.authenticatorId);
     }
+    // Leave the app page first. The previous step may have just landed on a
+    // signed-in page whose startup reads (`/me`, then the resume list) are
+    // still running; clearing cookies under it turns the next read into a
+    // 401 that the page logs as a console error.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await setLocale(page.context(), 'en');
     const outcome = await passwordSignIn(page, account.email, account.password);
