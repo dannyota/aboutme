@@ -9,8 +9,9 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decision is
-[ADR 0050](0050-aurora-application-identity.md), which gives the application
-chrome the Aurora identity and logo while the resume renderer stays unchanged.
+[ADR 0051](0051-vietnam-hosted-production.md), which moves production to
+GreenNode and Bizfly in Vietnam and keeps AWS as a test environment with
+fictional data only.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

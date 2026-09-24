@@ -1,4 +1,4 @@
--- Phase 8 privacy retention queries. Every mutation is bounded and ordered;
+-- Privacy retention queries. Every mutation is bounded and ordered;
 -- command-level advisory locks are session locks held on a dedicated pooled
 -- connection for the whole run.
 
@@ -75,12 +75,17 @@ SELECT pg_try_advisory_lock(hashtextextended('aboutme.privacy-retention-sweep.v1
 SELECT pg_advisory_unlock(hashtextextended('aboutme.privacy-retention-sweep.v1', 0));
 
 -- name: RedactSessionMetadataPage :execrows
+-- Session IP and user agent are redacted before the session's absolute expiry
+-- (docs/design/operations.md), not by created_at, so a rotation or reissue
+-- successor that inherits the original absolute expiry cannot extend how long
+-- its metadata survives. The caller's cutoff already carries the redaction
+-- lead ahead of now, so this query only compares absolute_expires_at to it.
 WITH candidates AS MATERIALIZED (
     SELECT id
     FROM sessions
-    WHERE created_at <= sqlc.arg(cutoff)::timestamptz
+    WHERE absolute_expires_at <= sqlc.arg(cutoff)::timestamptz
       AND (ua IS NOT NULL OR ip IS NOT NULL)
-    ORDER BY created_at, id
+    ORDER BY absolute_expires_at, id
     LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
     FOR UPDATE SKIP LOCKED
 )
@@ -90,12 +95,17 @@ FROM candidates
 WHERE session.id = candidates.id;
 
 -- name: GetSessionMetadataBacklog :one
+-- oldest_age_seconds is age since the original sign-in, not since
+-- absolute_expires_at, matching every other *_oldest_seconds field: a
+-- session's absolute expiry is sign-in plus the fixed 90-day absolute timeout
+-- (docs/design/security.md), so subtracting that interval back out of
+-- absolute_expires_at recovers the sign-in time.
 SELECT count(*)::bigint AS backlog,
        (COALESCE(floor(extract(epoch FROM
-           greatest(sqlc.arg(now)::timestamptz - min(created_at), interval '0 seconds'))), 0))::bigint
+           greatest(sqlc.arg(now)::timestamptz - (min(absolute_expires_at) - interval '90 days'), interval '0 seconds'))), 0))::bigint
            AS oldest_age_seconds
 FROM sessions
-WHERE created_at <= sqlc.arg(cutoff)::timestamptz
+WHERE absolute_expires_at <= sqlc.arg(cutoff)::timestamptz
   AND (ua IS NOT NULL OR ip IS NOT NULL);
 
 -- name: DeleteLifecycleAuditPage :execrows
@@ -161,3 +171,26 @@ SELECT count(*)::bigint AS backlog,
            AS oldest_age_seconds
 FROM authentication_security_events
 WHERE occurred_at <= sqlc.arg(cutoff)::timestamptz;
+
+-- name: DeleteExpiredSlugTombstonesPage :execrows
+-- A released slug stays reserved and unlinked from any account for 180 days
+-- (docs/design/product.md), then the privacy sweep deletes the reservation.
+WITH candidates AS MATERIALIZED (
+    SELECT id
+    FROM slug_tombstones
+    WHERE released_at <= sqlc.arg(cutoff)::timestamptz
+    ORDER BY released_at, id
+    LIMIT LEAST(sqlc.arg(limit_rows)::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM slug_tombstones AS tombstone
+USING candidates
+WHERE tombstone.id = candidates.id;
+
+-- name: GetExpiredSlugTombstonesBacklog :one
+SELECT count(*)::bigint AS backlog,
+       (COALESCE(floor(extract(epoch FROM
+           greatest(sqlc.arg(now)::timestamptz - min(released_at), interval '0 seconds'))), 0))::bigint
+           AS oldest_age_seconds
+FROM slug_tombstones
+WHERE released_at <= sqlc.arg(cutoff)::timestamptz;

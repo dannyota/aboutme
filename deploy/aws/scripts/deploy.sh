@@ -15,7 +15,9 @@
 # the sourced fence.sh). Order: build revisions, check that every task secret
 # exists, snapshot, register revisions, stop jobs and app, swap in the
 # maintenance page, migrate, start web, swap maintenance back out, start app,
-# re-enable jobs, smoke. The maintenance and app services bind the same host
+# re-enable jobs, smoke, warm the release, re-enable the task-stopped rule,
+# wait (bounded) for the site-down alarm's post-recovery health, then
+# re-enable its actions. The maintenance and app services bind the same host
 # port, so exactly one of them is ever asked to run at once. The
 # release-snapshot-sweep job deletes this script's tagged snapshots once they
 # are more than 27 days old, before they reach 30.
@@ -61,7 +63,12 @@ operation_kind=deploy
 ((!activate)) || operation_kind=activate
 ((!totp_reencrypt)) || operation_kind=totp_reencrypt
 
-say() { printf 'deploy: %s\n' "$*" >&2; }
+# fd 9 is a fixed duplicate of the script's own stderr, made once, before
+# anything ever redirects fd 2 for a single read (notifications.sh's alarm
+# wait does this to capture a failing call's stderr without losing its own
+# messages to that same file).
+exec 9>&2
+say() { printf 'deploy: %s\n' "$*" >&9; }
 
 # A strict vMAJOR.MINOR.PATCH tag, no leading zero, components 0 through 999,
 # maps to MAJOR*1000000 + MINOR*1000 + PATCH. Defined here, before fence.sh is
@@ -83,6 +90,8 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/fence.sh"
 # shellcheck source=totp-reencrypt.sh
 source "$script_dir/totp-reencrypt.sh"
+# shellcheck source=notifications.sh
+source "$script_dir/notifications.sh"
 
 # Shared by the mid-deploy maintenance-page check and the final smoke checks.
 smoke_attempts=5
@@ -103,101 +112,30 @@ retry() { # command...
 # through section 8, so restore() can tell "asked to start, health unknown"
 # from "confirmed healthy" and never leave both app and maintenance wanting
 # host port 443. schedules_enabled tracks the enable loop the same way.
+# site_up_epoch records the moment app_stable is set, so the post-recovery
+# site-down alarm wait (notifications.sh) never reads Route 53 data from
+# before the site actually came back up. signaled marks a HUP/INT/TERM that
+# arrived before on_exit's cleanup wait, so that wait is skipped entirely; one
+# that arrives during the cleanup wait itself stops that wait early instead,
+# without re-entering on_signal. site_alarm_waited marks that the wait already
+# ran once this exit, however it ended, so a later failure in the same exit
+# (such as a failed alarm-actions retry) never runs it again.
 phase=prepare
 oneshot_task=""
 migration_may_be_applied=0
 app_start_requested=0
 app_stable=0
+site_up_epoch=0
 schedules_enabled=()
 site_alarm_restore=0
 task_stopped_rule_restore=0
-
-# The planned handoff stops the app and starts maintenance, so suppress only
-# the resulting site-down and stopped-task notifications. Database, capacity,
-# Scheduler, and host recovery alarms remain live throughout the deploy.
-restore_deploy_notifications() {
-  local failed=0 actions state
-  if ((task_stopped_rule_restore)); then
-    if ! aws_ events enable-rule --name aboutme-prod-task-stopped >/dev/null; then
-      say "could not re-enable the task-stopped notification rule"
-      failed=1
-    else
-      state=$(aws_ events describe-rule --name aboutme-prod-task-stopped --query State --output text) || state=""
-      if [[ $state != ENABLED ]]; then
-        say "task-stopped notification rule is '$state', want ENABLED"
-        failed=1
-      else
-        task_stopped_rule_restore=0
-      fi
-    fi
-  fi
-  if ((site_alarm_restore)); then
-    if ! aws_site_alarm_ cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down >/dev/null; then
-      say "could not re-enable site-down alarm actions"
-      failed=1
-    else
-      actions=$(aws_site_alarm_ cloudwatch describe-alarms --alarm-names aboutme-prod-site-down \
-        --query 'MetricAlarms[0].ActionsEnabled' --output text) || actions=""
-      if [[ $actions != True ]]; then
-        say "site-down alarm actions are '$actions', want True"
-        failed=1
-      else
-        site_alarm_restore=0
-      fi
-    fi
-  fi
-  return "$failed"
-}
-
-pause_deploy_notifications() {
-  local actions state
-  actions=$(aws_site_alarm_ cloudwatch describe-alarms --alarm-names aboutme-prod-site-down \
-    --query 'MetricAlarms[0].ActionsEnabled' --output text) || { say "could not read site-down alarm actions"; return 1; }
-  case $actions in True|False) ;; *) say "site-down alarm actions are '$actions', want True or False"; return 1;; esac
-  state=$(aws_ events describe-rule --name aboutme-prod-task-stopped --query State --output text) ||
-    { say "could not read the task-stopped notification rule"; return 1; }
-  case $state in ENABLED|DISABLED) ;; *) say "task-stopped notification rule is '$state', want ENABLED or DISABLED"; return 1;; esac
-
-  say "deployment notification states: site-down actions=$actions, task-stopped rule=$state"
-
-  if [[ $actions == True ]]; then
-    fence_checkpoint || { say "fence checkpoint failed before pausing notifications"; return 1; }
-    # Mark first because AWS can accept a request even when the client loses its
-    # response. Cleanup must then treat the action as possibly disabled.
-    site_alarm_restore=1
-    if ! aws_site_alarm_ cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down >/dev/null; then
-      say "could not disable site-down alarm actions"
-      restore_deploy_notifications || true
-      return 1
-    fi
-    actions=$(aws_site_alarm_ cloudwatch describe-alarms --alarm-names aboutme-prod-site-down \
-      --query 'MetricAlarms[0].ActionsEnabled' --output text) || actions=""
-    if [[ $actions != False ]]; then
-      say "site-down alarm actions are '$actions', want False before the handoff"
-      restore_deploy_notifications || true
-      return 1
-    fi
-  fi
-
-  if [[ $state == ENABLED ]]; then
-    fence_checkpoint || { say "fence checkpoint failed before pausing notifications"; return 1; }
-    task_stopped_rule_restore=1
-    if ! aws_ events disable-rule --name aboutme-prod-task-stopped >/dev/null; then
-      say "could not disable the task-stopped notification rule"
-      restore_deploy_notifications || true
-      return 1
-    fi
-    state=$(aws_ events describe-rule --name aboutme-prod-task-stopped --query State --output text) || state=""
-    if [[ $state != DISABLED ]]; then
-      say "task-stopped notification rule is '$state', want DISABLED before the handoff"
-      restore_deploy_notifications || true
-      return 1
-    fi
-  fi
-}
+signaled=0
+site_alarm_waited=0
 
 on_exit() {
   local status=$? cleanup_failed=0
+  # Undo any single-read stderr capture a signal interrupted.
+  exec 2>&9
   # A second HUP/INT/TERM during cleanup must not re-enter on_signal and race
   # this same restore/release sequence against itself.
   trap '' HUP INT TERM
@@ -208,7 +146,26 @@ on_exit() {
       say "service recovery did not complete; restoring deployment notifications"
     fi
   fi
-  restore_deploy_notifications || cleanup_failed=1
+  # A warm-up or smoke failure after the handoff finished must not re-enable
+  # the alarm immediately: that recreates the false alert the bounded wait
+  # exists to avoid, so it waits the same way a clean finish does. A signal
+  # here, or a wait this exit already ran, skips straight to restoring so
+  # Ctrl-C is never stuck behind a wait of up to DEPLOY_ALARM_WAIT seconds.
+  if ((status != 0)) && [[ $phase == finished ]] && ((site_alarm_restore && !signaled && !site_alarm_waited)); then
+    local wait_s=${DEPLOY_ALARM_WAIT:-900}
+    say "waiting up to $wait_s s for the site-down alarm before re-enabling its actions; press Ctrl-C to skip the wait"
+    trap 'signaled=1' HUP INT TERM
+    restore_deploy_notifications 1 || cleanup_failed=1
+    trap '' HUP INT TERM
+    # A Ctrl-C meant for the wait also reaches the AWS calls around it, so
+    # retry, now immediately and with signals ignored, anything it cut short.
+    if ((task_stopped_rule_restore || site_alarm_restore)); then
+      cleanup_failed=0
+      restore_deploy_notifications || cleanup_failed=1
+    fi
+  else
+    restore_deploy_notifications || cleanup_failed=1
+  fi
   ((!lock_held)) || fence_release ||
     { say "could not release the operation lock; the runbook owns the manual clear"; cleanup_failed=1; }
   rm -rf "$work"
@@ -217,6 +174,7 @@ on_exit() {
 }
 trap on_exit EXIT
 on_signal() { # name exit status
+  signaled=1
   say "received $1; restoring deployment notifications"
   exit "$2"
 }
@@ -291,8 +249,22 @@ app_down() { scale_to_zero_and_wait aboutme-prod-app; }
 git fetch -q origin main
 commit=$(git rev-list -n1 "$tag")
 git merge-base --is-ancestor "$commit" origin/main || { say "$tag is not on main"; exit 1; }
-ci=$(gh run list --workflow ci.yml --commit "$commit" --json conclusion -q '.[0].conclusion')
-[[ $ci == success ]] || { say "CI for $tag is '$ci', not success"; exit 1; }
+# gh's own --commit filter accepts a run for that SHA from any event or
+# branch, so a green workflow_dispatch run on a feature branch at the same
+# commit would satisfy it. Filter in the script instead: only a push run on
+# main for this exact commit counts (AGENTS.md: a manual run never replaces
+# the release's green main run).
+ci_runs=$(gh run list --workflow ci.yml --commit "$commit" --event push --branch main \
+  --json databaseId,conclusion,status,event,headBranch,headSha --limit 20) ||
+  { say "could not list CI runs for $tag"; exit 1; }
+ci=$(jq -r --arg c "$commit" \
+  '[.[] | select(.event == "push" and .headBranch == "main" and .headSha == $c)] | .[0]
+   | if . == null then "none"
+     elif (.conclusion // "") == "" then .status
+     else .conclusion end' \
+  <<<"$ci_runs")
+[[ $ci == success ]] ||
+  { say "no successful push run of ci.yml on main for $tag (${commit:0:7}); latest: '$ci'"; exit 1; }
 
 fence_read || exit 1
 ((candidate >= fence_min)) ||
@@ -646,12 +618,13 @@ aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
   --task-definition "${revision[app]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
 app_stable=1
+site_up_epoch=$EPOCHSECONDS
 for name in $schedules; do
   set_schedule "$name" ENABLED "${revision[jobs]}"
   schedules_enabled+=("$name")
 done
 phase=finished
-say "site up; job schedules enabled"
+say "app started; job schedules enabled"
 
 # 9. Smoke through Cloudflare, and prove the origin rejects direct requests.
 # Right after Caddy restarts, Cloudflare can see a TLS reset or serve a 525, so
@@ -678,5 +651,37 @@ if curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$smoke_ip/"; t
   say "smoke: the origin answered a direct request"
   exit 1
 fi
-restore_deploy_notifications || { say "notification restoration failed after the deploy"; exit 1; }
+
+# Warm the new release through Cloudflare before calling the site up. The
+# first requests after a restart can be slow on the Cloudflare-to-origin path,
+# which /healthz does not exercise, so request a public resume page (Go, the
+# database, and the Nuxt render) and the homepage (Nuxt) until each answers
+# 200 quickly, within a bounded number of attempts.
+warm_path() { # path
+  local path=$1 attempts=${DEPLOY_WARM_ATTEMPTS:-8} fast=${DEPLOY_WARM_FAST:-3} \
+    timeout=${DEPLOY_WARM_TIMEOUT:-30} attempt out code time_total
+  for ((attempt = 1; attempt <= attempts; attempt++)); do
+    if out=$(curl -s -o /dev/null -m "$timeout" -w '%{http_code} %{time_total}' "https://aboutme.vn$path"); then
+      code=${out%% *}
+      time_total=${out#* }
+    else
+      code=000
+      time_total=$timeout
+    fi
+    say "warm: $path $code in $time_total s"
+    # Compare as a float with awk, not bash arithmetic, which is integer-only.
+    if [[ $code == 200 ]] && awk -v t="$time_total" -v f="$fast" 'BEGIN { exit !(t < f) }'; then
+      return 0
+    fi
+    ((attempt == attempts)) || sleep "$smoke_delay"
+  done
+  say "warm-up: $path did not answer 200 within $fast s in $attempts attempts (last: $code in $time_total s)"
+  return 1
+}
+for path in "${DEPLOY_WARM_PAGE:-/danny}" /; do
+  warm_path "$path" || exit 1
+done
+say "site up"
+
+restore_deploy_notifications 1 || { say "notification restoration failed after the deploy"; exit 1; }
 say "deployed $tag"

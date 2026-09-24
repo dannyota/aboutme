@@ -376,9 +376,8 @@ func TestDeleteAccountCommitsThreeResumePrivacyLifecycle(t *testing.T) {
 	assertRowsAbsent(ctx, t, pool, "auth_email_jobs", deletedEmailJobs)
 	assertRowsPresent(ctx, t, pool, "auth_email_jobs", foreignEmailJobs)
 	for _, item := range fixtures {
-		tombstone, err := q.GetSlugTombstoneForUpdate(ctx, item.slug)
-		if err != nil || tombstone.ReleasedByUserID != nil {
-			t.Errorf("tombstone %q = (%+v, %v), want retained with nil owner", item.slug, tombstone, err)
+		if _, err := q.GetSlugTombstoneForUpdate(ctx, item.slug); err != nil {
+			t.Errorf("tombstone %q retained: %v", item.slug, err)
 		}
 		if _, err := q.GetMediaDeletionJobByObjectKey(ctx, store.GetMediaDeletionJobByObjectKeyParams{ResumeID: item.id, ObjectKey: item.photo}); err != nil {
 			t.Errorf("media job %q: %v", item.photo, err)

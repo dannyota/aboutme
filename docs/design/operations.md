@@ -11,7 +11,8 @@ exercised at the environment that owns the risk.
 | Account deletion | Recent reauthentication; transactionally revoke sessions, identities, resumes, public generations, and media references; retain slug tombstones      |
 | Media deletion   | Enqueue exact keys with reference revocation; deny access immediately; target physical removal within 24 hours; audit, alert, and retry overdue work |
 | Export           | A JSON bundle of the account's resume documents and related portable data                                                                            |
-| Session metadata | IP and user-agent data redacted after 90 days                                                                                                        |
+| Session metadata | IP and user agent are redacted two days before the session's absolute expiry, so no later than 90 days after sign-in; rotation never extends it      |
+| Slug tombstones  | Hold no account link; deleted by the privacy sweep 180 days after release                                                                            |
 | Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                        |
 | Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                  |
 | Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                    |
@@ -72,15 +73,19 @@ commands take PostgreSQL advisory overlap locks, every command has a bounded run
 and fixed numeric result fields, and none starts the HTTP listeners or Chromium.
 A failed scheduled run raises an alarm.
 
-Session metadata is redacted 90 days after the session's creation. Lifecycle
-events contain only a generated event ID, fixed kind, occurrence time and an
-optional media-job ID. Account deletion and media overdue/completion events are
-durable; audit insertion and the state they describe commit together. Completed
-media jobs remain for 180 days from completion to preserve outcome and
+Session IP and user agent are redacted two days before the session's absolute
+expiry, so no later than 90 days after the original sign-in; rotation and
+reissue never extend that expiry, so a redaction cannot be outrun by staying
+signed in. The two-day lead covers the daily sweep schedule plus one missed run.
+Lifecycle events contain only a generated event ID, fixed kind, occurrence time
+and an optional media-job ID. Account deletion and media overdue/completion
+events are durable; audit insertion and the state they describe commit together.
+Completed media jobs remain for 180 days from completion to preserve outcome and
 ambiguous-commit proof. Audit events expire after 180 days from occurrence.
-Pending and overdue jobs never expire. Security diagnostic logs use the same
-180-day hosted log retention; cleared mail delivery bookkeeping remains on its
-existing seven-day cleanup schedule.
+Pending and overdue jobs never expire. A released slug's tombstone holds no
+account link and is deleted 180 days after release. Security diagnostic logs use
+the same 180-day hosted log retention; cleared mail delivery bookkeeping remains
+on its existing seven-day cleanup schedule.
 
 Orphan dry runs do not mutate objects, jobs, audit or the stored cursor. Failed
 orphan removal creates exact durable retry work before advancing the cursor.

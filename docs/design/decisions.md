@@ -1,7 +1,7 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. ADRs 0001–0050 are
+supersession record; these pages state the resulting design. ADRs 0001–0051 are
 accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                     |
@@ -56,15 +56,14 @@ accepted.
 | [0048](../adr/0048-passkey-second-factor-authentication.md)          | Accepted | Optional passkey second factor, recovery codes, authority epoch, exact wire contract, and release fence                |
 | [0049](../adr/0049-totp-second-factor-authentication.md)             | Accepted | Optional authenticator-app second factor, sealed secrets with a derived-ID key ring, shared recovery, and floor v0.4.7 |
 | [0050](../adr/0050-aurora-application-identity.md)                   | Accepted | Aurora chrome: blue-led palette, canvas glows, logo mark; renderer stays white and isolated                            |
+| [0051](../adr/0051-vietnam-hosted-production.md)                     | Accepted | Vietnam-hosted production: GreenNode compute, storage, CDN, DNS; Bizfly mail; AWS becomes test only                    |
 
 ## Remaining gates
 
 | Gate                                                   | Owner                                     | Due                            |
 | ------------------------------------------------------ | ----------------------------------------- | ------------------------------ |
 | Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added |
-| Product name and trademark review                      | Human owner                               | Before the public announcement |
 | Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before the public announcement |
-| SES production access                                  | Human owner                               | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes.
 [ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md) is the

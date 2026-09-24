@@ -558,10 +558,11 @@ WHERE slug = sqlc.arg(slug)::text
 RETURNING id;
 
 -- name: InsertSlugTombstone :one
-INSERT INTO slug_tombstones (slug, released_by_user_id, released_at)
+-- Holds no account link (docs/design/product.md): the released slug and its
+-- release time are the only claim needed to reserve it.
+INSERT INTO slug_tombstones (slug, released_at)
 VALUES (
   sqlc.arg(slug)::text,
-  sqlc.narg(released_by_user_id)::uuid,
   sqlc.arg(released_at)::timestamptz
 )
 RETURNING *;

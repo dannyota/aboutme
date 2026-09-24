@@ -54,11 +54,11 @@ process-local state, which is correct only with one replica. The
 [scaling contract](design/scaling/README.md) records which parts of a
 multi-replica runtime are deferred.
 
-Production enables Google sign-in and agent access. Email-and-password
-registration is disabled; existing password login remains available. The public
-capabilities endpoint reports these settings. Five enabled schedules invoke
-idempotency expiry, media deletion, orphan reconciliation, privacy retention,
-and release-snapshot cleanup. Successful job-run evidence is not yet recorded.
+Production enables email-and-password sign-up, Google sign-in, passkey and TOTP
+second factors, and agent access. The public capabilities endpoint reports these
+settings. Five enabled schedules invoke idempotency expiry, media deletion,
+orphan reconciliation, privacy retention, and release-snapshot cleanup.
+Successful job-run evidence is not yet recorded.
 
 The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
 `db-setup` creates and grants them, and every migration runs as
