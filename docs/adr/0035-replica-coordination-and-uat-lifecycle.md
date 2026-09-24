@@ -41,7 +41,8 @@ transition whose initiator was fenced. It must obtain the transition's execution
 lock and validate the exact stored proof. It cannot change committed results,
 repair unresolved evidence or perform business work. This closes the recovery
 gap when no serving replica survives; the proof role itself cannot mutate
-transitions. See [transition recovery](../design/scaling/transition-commit.md).
+transitions. See
+[transition recovery](../design/scaling/transitions.md#fenced-initiator-recovery).
 
 Render snapshots, capabilities, controllers, and completion authority stay in
 the initiating Go process. Shared claims enforce one running job and eight
@@ -127,8 +128,8 @@ The transaction mechanism was corrected during local implementation on
 private write runner therefore calls an explicit finish function before commit;
 the deferred trigger only asserts completion. Owner-only temporary markers,
 contaminated-backend removal and framed migrator bookkeeping preserve the write
-barrier. See [transaction entry](../design/scaling/transaction-entry.md). This
-correction changes neither deployment scope nor the approved budget.
+barrier. This correction changes neither deployment scope nor the approved
+budget.
 
 Local hostile-SQL probes also showed that DISCARD TEMP can remove a finished
 marker after forced constraint checks. A reserved per-backend transaction
