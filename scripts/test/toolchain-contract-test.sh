@@ -114,7 +114,7 @@ chmod +x "$BIN/sqlc"
 CONTRACT=$WORK/contract
 mkdir -p "$CONTRACT/scripts" "$CONTRACT/.github/workflows" \
   "$CONTRACT/apps/web" "$CONTRACT/apps/server" \
-  "$CONTRACT/packages/schema/gen/go" "$CONTRACT/deploy"
+  "$CONTRACT/packages/schema/gen/go" "$CONTRACT/deploy/caddy/production"
 cp "$ROOT/.tool-versions" "$CONTRACT/.tool-versions"
 cp "$ROOT/scripts/check-tool-versions.sh" "$CONTRACT/scripts/"
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
@@ -124,6 +124,7 @@ cp "$ROOT/packages/schema/gen/go/go.mod" "$CONTRACT/packages/schema/gen/go/"
 cp "$ROOT/go.work" "$CONTRACT/"
 cp "$ROOT/deploy/web.Dockerfile" "$ROOT/deploy/server.Dockerfile" \
   "$ROOT/deploy/compose.yml" "$CONTRACT/deploy/"
+cp "$ROOT/deploy/caddy/production/Dockerfile" "$CONTRACT/deploy/caddy/production/"
 
 awk '
   $1 == "node-version:" {
