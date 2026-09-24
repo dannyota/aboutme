@@ -1215,7 +1215,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
   // tell a role whose account creation was never attempted (for example a
   // shard's first role failing before it gets that far) from one whose
   // account exists and needs deleting.
-  const created: Partial<Record<AccountRole, true>> = {};
+  const createdAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
     // 1. A fictional primary account with a password and a linked provider,
@@ -1224,7 +1224,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     if (runsRole('primary')) {
     role('primary');
     stage('primary-register');
-    created.primary = true;
+    createdAccounts.primary = true;
     await registerVerified(
       page,
       capture,
@@ -1542,7 +1542,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('replay');
     stage('replay-account');
     await signOut(page);
-    created.replay = true;
+    createdAccounts.replay = true;
     await registerVerified(
       page,
       capture,
@@ -1593,7 +1593,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('concurrent');
     stage('concurrent-account');
     await signOut(page);
-    created.concurrent = true;
+    createdAccounts.concurrent = true;
     await registerVerified(
       page,
       capture,
@@ -1649,7 +1649,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('replace');
     stage('replace-account');
     await signOut(page);
-    created.replace = true;
+    createdAccounts.replace = true;
     await registerVerified(
       page,
       capture,
@@ -1715,7 +1715,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('epoch');
     stage('epoch-account');
     await signOut(page);
-    created.epoch = true;
+    createdAccounts.epoch = true;
     await registerVerified(
       page,
       capture,
@@ -1780,7 +1780,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('locale');
     stage('locale-account');
     await signOut(page);
-    created.locale = true;
+    createdAccounts.locale = true;
     await registerVerified(
       page,
       capture,
@@ -1844,7 +1844,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('recovery');
     stage('recovery-account');
     await signOut(page);
-    created.recovery = true;
+    createdAccounts.recovery = true;
     await registerVerified(
       page,
       capture,
@@ -1875,7 +1875,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
-    created.attempts = true;
+    createdAccounts.attempts = true;
     await registerVerified(
       page,
       capture,
@@ -1921,56 +1921,56 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     // the unsharded default), so a shard's cleanup step reports on exactly
     // its own accounts.
     const removed: boolean[] = [];
-    if (created.primary) {
+    if (createdAccounts.primary) {
       removed.push(await deleteAccount(page, {
         email: primaryEmail,
         password: primaryPassword,
         recoveryCode: primaryCleanupCode,
       }));
     }
-    if (created.replay) {
+    if (createdAccounts.replay) {
       removed.push(await deleteAccount(page, {
         email: replayEmail,
         password: replayPassword,
         recoveryCode: replayCleanupCode,
       }));
     }
-    if (created.concurrent) {
+    if (createdAccounts.concurrent) {
       removed.push(await deleteAccount(page, {
         email: concurrentEmail,
         password: concurrentPassword,
         recoveryCode: concurrentCleanupCode,
       }));
     }
-    if (created.replace) {
+    if (createdAccounts.replace) {
       removed.push(await deleteAccount(page, {
         email: replaceEmail,
         password: replacePassword,
         recoveryCode: replaceCleanupCode,
       }));
     }
-    if (created.epoch) {
+    if (createdAccounts.epoch) {
       removed.push(await deleteAccount(page, {
         email: epochEmail,
         password: epochPassword,
         recoveryCode: epochCleanupCode,
       }));
     }
-    if (created.locale) {
+    if (createdAccounts.locale) {
       removed.push(await deleteAccount(page, {
         email: localeEmail,
         password: localeFinalPassword,
         recoveryCode: localeCleanupCode,
       }));
     }
-    if (created.recovery) {
+    if (createdAccounts.recovery) {
       removed.push(await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
       }));
     }
-    if (created.attempts) {
+    if (createdAccounts.attempts) {
       removed.push(await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
