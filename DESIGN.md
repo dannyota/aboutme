@@ -252,12 +252,15 @@ portals. Templates with a sample show “Use this sample”, a note that it make
 private copy, and a blank-resume link; templates without one show a filler note
 and the blank-resume action.
 
-A template with a sample shows two tabs over the document: Page (“Trang CV”) and
-“What an ATS reads” (“ATS đọc được gì”). Page shows the document on a white 2 px
-sheet with `--shadow-paper`. The ATS tab shows a one-line hint and the resume's
-text in reading order, in the chrome typeface on a `.paper-surface` panel with
-the same radius and shadow. A template without a sample shows the sheet with no
-tabs.
+A template with a sample shows three tabs over the document: Page (“Trang CV”),
+PDF, and “What an ATS reads” (“ATS đọc được gì”). Page shows the document on a
+white 2 px sheet with `--shadow-paper`. PDF shows a one-line hint, then every
+stored page of the sample's PDF download in order, each on its own white sheet
+with `--shadow-paper` and a caption naming its page number; each page's alt text
+names the page, the total, and the template. The ATS tab shows a one-line hint
+and the resume's text in reading order, in the chrome typeface on a
+`.paper-surface` panel with the same radius and shadow. A template without a
+sample shows the sheet with no tabs.
 
 "Use this sample" opens `/app/new`, a confirm step that never creates on its
 own: thumbnail, summary, editable title, and the resume count, or the limit
