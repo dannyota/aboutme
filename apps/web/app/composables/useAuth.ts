@@ -1,4 +1,10 @@
 import { nextTick, type ComputedRef } from 'vue';
+import {
+  isLocale,
+  localeCookie,
+  localeCookieMaxAgeSeconds,
+  type Locale,
+} from '@/i18n/locale';
 
 /**
  * `useAuth` — session/identity state backed by `GET /api/v1/me`.
@@ -96,6 +102,26 @@ function isRecoveredMeEnvelope(
     && recovered.csrfToken !== '';
 }
 
+/**
+ * Logout, logout-everywhere, revoking the caller's own session, and account
+ * deletion all send `Clear-Site-Data: "cookies", "storage"`
+ * (docs/design/security.md, session lifecycle). The browser wipes every
+ * cookie for this origin, including `aboutme-locale`, before this response
+ * reaches `mutate`'s caller, so the next render falls back to Vietnamese.
+ * Rewriting it from the in-memory locale state keeps the interface language
+ * a device preference across that response (docs/design/localization.md,
+ * "Two language domains"). `useCookie` can skip writing an unchanged value,
+ * so this writes `document.cookie` directly, with the same attributes
+ * `useLocale` sets. A state that never held a valid locale writes nothing,
+ * so a browser that never chose a language still gets none.
+ */
+function restoreLocaleCookie(): void {
+  const state = useState<Locale | undefined>(localeCookie);
+  if (!isLocale(state.value)) return;
+  document.cookie = `${localeCookie}=${state.value}; Path=/; `
+    + `Max-Age=${localeCookieMaxAgeSeconds}; SameSite=Lax`;
+}
+
 export function useAuth(): UseAuthReturn {
   // Authenticated reads wait for the browser, where the cookie and proxy exist.
   const {
@@ -152,6 +178,8 @@ export function useAuth(): UseAuthReturn {
 
   // Rotation can invalidate the cached CSRF token. Refresh and retry once;
   // surface a second rejection so forged or expired requests cannot loop.
+  // Every mutation goes through here, so the `onResponse` hook below covers
+  // every Clear-Site-Data endpoint without each call site repeating it.
   async function mutate<T = void>(
     url: string,
     options: MutateOptions,
@@ -161,6 +189,11 @@ export function useAuth(): UseAuthReturn {
         ...options,
         credentials: 'include',
         headers: csrfHeaders(csrfToken.value, options.body !== undefined),
+        onResponse: ({ response }) => {
+          if (response.ok && response.headers.has('clear-site-data')) {
+            restoreLocaleCookie();
+          }
+        },
       });
 
     try {

@@ -14,10 +14,12 @@ const common = {
 };
 
 // A sharded totp-browser-proof run proves only some of this scenario's steps
-// per shard (ABOUTME_TOTP_SHARD in run.sh). This checks one shard's evidence
+// per shard (ABOUTME_TOTP_SHARD, set in the container environment by
+// run.sh's --env when the host set it). This checks one shard's evidence
 // against the closed step-name list below and leaves checking that every
 // step is true somewhere to the aggregation the totp-browser-proof workflow
-// runs after every shard finishes.
+// runs after every shard finishes. An unset or empty shard is the unsharded
+// case, which must still prove every step itself.
 const TOTP_STEP_NAMES = new Set([
   'agentGranted', 'agentRevoked', 'attemptsExhausted', 'cleanup',
   'concurrentUseRejected', 'currentStepAccepted', 'enrolled', 'finalRemoved',
@@ -41,7 +43,50 @@ if (mode === 'totp') {
   const stepsValid = stepNames.length > 0 && stepNames.every(
     (name) => TOTP_STEP_NAMES.has(name) && steps[name] === true,
   );
-  if (JSON.stringify(rest) !== JSON.stringify(expectedRest) || !stepsValid) {
+  const countValid = process.env.ABOUTME_TOTP_SHARD
+    ? true
+    : stepNames.length === TOTP_STEP_NAMES.size;
+  if (
+    JSON.stringify(rest) !== JSON.stringify(expectedRest)
+    || !stepsValid || !countValid
+  ) {
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
+// A sharded passkey-browser-proof run proves only some of this scenario's
+// steps per shard (ABOUTME_PASSKEY_SHARD), the same as totp above: an unset
+// or empty shard is the unsharded case, which must still prove every step.
+const PASSKEY_STEP_NAMES = new Set([
+  'agentGranted', 'agentRevoked', 'attemptsExhausted', 'ceremonyReplayRejected',
+  'cleanup', 'concurrentCompletion', 'enrolled', 'finalRemoved', 'locales',
+  'oneRemoved', 'otherSessionRevoked', 'otherSessionStarted',
+  'passkeyCompletion', 'passwordPending', 'providerAccount', 'providerPending',
+  'reauthPending', 'reauthRequired', 'recoveryCompletion',
+  'recoveryRegenerated', 'recoveryRevealedOnce', 'recoveryReuseRejected',
+  'resetPreservesEnforcement', 'secondPasskeyAdded', 'staleEpochRejected',
+  'userVerificationRequired', 'viewports', 'wrongBindingRejected',
+  'wrongOriginRejected',
+]);
+if (mode === 'second-factor') {
+  const { steps, ...rest } = actual;
+  const expectedRest = {
+    ...common,
+    scenario: 'passkey-second-factor',
+    schemaVersion: 1,
+  };
+  const stepNames = Object.keys(steps ?? {});
+  const stepsValid = stepNames.length > 0 && stepNames.every(
+    (name) => PASSKEY_STEP_NAMES.has(name) && steps[name] === true,
+  );
+  const countValid = process.env.ABOUTME_PASSKEY_SHARD
+    ? true
+    : stepNames.length === PASSKEY_STEP_NAMES.size;
+  if (
+    JSON.stringify(rest) !== JSON.stringify(expectedRest)
+    || !stepsValid || !countValid
+  ) {
     process.exit(1);
   }
   process.exit(0);
@@ -188,41 +233,6 @@ const expected = mode === 'auth' ? {
     signIn: true,
     signOut: true,
     signedInShell: true,
-  },
-} : mode === 'second-factor' ? {
-  ...common,
-  scenario: 'passkey-second-factor',
-  schemaVersion: 1,
-  steps: {
-    agentGranted: true,
-    agentRevoked: true,
-    attemptsExhausted: true,
-    ceremonyReplayRejected: true,
-    cleanup: true,
-    concurrentCompletion: true,
-    enrolled: true,
-    finalRemoved: true,
-    locales: true,
-    oneRemoved: true,
-    otherSessionRevoked: true,
-    otherSessionStarted: true,
-    passkeyCompletion: true,
-    passwordPending: true,
-    providerAccount: true,
-    providerPending: true,
-    reauthPending: true,
-    reauthRequired: true,
-    recoveryCompletion: true,
-    recoveryRegenerated: true,
-    recoveryRevealedOnce: true,
-    recoveryReuseRejected: true,
-    resetPreservesEnforcement: true,
-    secondPasskeyAdded: true,
-    staleEpochRejected: true,
-    userVerificationRequired: true,
-    viewports: true,
-    wrongBindingRejected: true,
-    wrongOriginRejected: true,
   },
 } : mode === 'second-factor-disabled' ? {
   ...common,

@@ -196,7 +196,8 @@ check_repository_contract() {
   assert_file_text semgrep .github/workflows/ci.yml \
     "semgrep==${expected[semgrep]}"
   assert_file_text sqlc .github/workflows/ci.yml "sqlc@v${expected[sqlc]}"
-  assert_file_text caddy .github/workflows/ci.yml "caddy@v${expected[caddy]}"
+  assert_file_text caddy .github/workflows/ci.yml \
+    "caddyserver/caddy/releases/download/v${expected[caddy]}"
 }
 
 select_tools() {

@@ -92,7 +92,7 @@ grep -Fq 'semgrep==1.176.0' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin Semgrep 1.176.0"
 grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin sqlc v1.31.1"
-grep -Fq 'caddy@v2.11.4' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'caddyserver/caddy/releases/download/v2.11.4' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin Caddy 2.11.4"
 grep -Fq 'gitleaks/v8@v8.30.1' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin gitleaks 8.30.1"
