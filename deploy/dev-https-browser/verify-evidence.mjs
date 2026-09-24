@@ -12,6 +12,41 @@ const common = {
   errors: { certificate: 0, console: 0, externalRequest: 0, page: 0 },
   origin: 'https://localhost:20443',
 };
+
+// A sharded totp-browser-proof run proves only some of this scenario's steps
+// per shard (ABOUTME_TOTP_SHARD in run.sh). This checks one shard's evidence
+// against the closed step-name list below and leaves checking that every
+// step is true somewhere to the aggregation the totp-browser-proof workflow
+// runs after every shard finishes.
+const TOTP_STEP_NAMES = new Set([
+  'agentGranted', 'agentRevoked', 'attemptsExhausted', 'cleanup',
+  'concurrentUseRejected', 'currentStepAccepted', 'enrolled', 'finalRemoved',
+  'invalidCodeRejected', 'locales', 'nextStepAccepted', 'oneRemoved',
+  'otherSessionRevoked', 'otherSessionStarted', 'passkeyCoexistence',
+  'passwordPending', 'previousStepAccepted', 'providerAccount',
+  'providerPending', 'qrIsLocal', 'reauthRequired', 'recoveryCompletion',
+  'recoveryRevealedOnce', 'replaced', 'resetPreservesEnforcement',
+  'sameStepReplayRejected', 'supersededEnrollmentRejected',
+  'unicodeDigitsRejected', 'viewports', 'wrongEpochRejected',
+  'wrongSessionRejected',
+]);
+if (mode === 'totp') {
+  const { steps, ...rest } = actual;
+  const expectedRest = {
+    ...common,
+    scenario: 'totp-second-factor',
+    schemaVersion: 1,
+  };
+  const stepNames = Object.keys(steps ?? {});
+  const stepsValid = stepNames.length > 0 && stepNames.every(
+    (name) => TOTP_STEP_NAMES.has(name) && steps[name] === true,
+  );
+  if (JSON.stringify(rest) !== JSON.stringify(expectedRest) || !stepsValid) {
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 const expected = mode === 'auth' ? {
   ...common,
   scenario: 'google-authentication',
@@ -206,43 +241,6 @@ const expected = mode === 'auth' ? {
     stateAvailable: true,
     unregisteredRouteMatches: true,
     viewports: true,
-  },
-} : mode === 'totp' ? {
-  ...common,
-  scenario: 'totp-second-factor',
-  schemaVersion: 1,
-  steps: {
-    agentGranted: true,
-    agentRevoked: true,
-    attemptsExhausted: true,
-    cleanup: true,
-    concurrentUseRejected: true,
-    currentStepAccepted: true,
-    enrolled: true,
-    finalRemoved: true,
-    invalidCodeRejected: true,
-    locales: true,
-    nextStepAccepted: true,
-    oneRemoved: true,
-    otherSessionRevoked: true,
-    otherSessionStarted: true,
-    passkeyCoexistence: true,
-    passwordPending: true,
-    previousStepAccepted: true,
-    providerAccount: true,
-    providerPending: true,
-    qrIsLocal: true,
-    reauthRequired: true,
-    recoveryCompletion: true,
-    recoveryRevealedOnce: true,
-    replaced: true,
-    resetPreservesEnforcement: true,
-    sameStepReplayRejected: true,
-    supersededEnrollmentRejected: true,
-    unicodeDigitsRejected: true,
-    viewports: true,
-    wrongEpochRejected: true,
-    wrongSessionRejected: true,
   },
 } : mode === 'totp-disabled' ? {
   ...common,

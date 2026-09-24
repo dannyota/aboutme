@@ -11,7 +11,9 @@
  *
  * The setup secret, provisioning URI, and every code are computed in this
  * process with `totp-fixture.ts` and never leave it: the evidence file holds
- * only booleans, the fixed scenario name, and the origin.
+ * only booleans, the fixed scenario name, and the origin. CI also runs the
+ * `totp` journey as parallel shards (see "Enabled-proof sharding" below) and
+ * records section timing to a sidecar the evidence schema never covers.
  *
  * Contract: docs/design/totp-second-factor-contract.md,
  * docs/design/totp-key-management.md, and ADR 0049.
@@ -48,6 +50,7 @@ import {
   codeNow,
   codePreviousStep,
   mismatchedCode,
+  newSectionTimer,
   stepAt,
   systemClock,
   toFullwidthDigits,
@@ -62,6 +65,9 @@ const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const ENABLED_EVIDENCE_PATH = '/evidence/totp-second-factor-proof.json';
 const DISABLED_EVIDENCE_PATH = '/evidence/totp-enrollment-disabled-proof.json';
+// Diagnostic only: per-section wall-clock timing, never covered by
+// verify-evidence.mjs and never read by it.
+const ENABLED_TIMING_PATH = '/evidence/totp-timing.json';
 const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
 const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
 const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
@@ -121,9 +127,45 @@ type AccountRole =
   | 'attempts'
   | 'disabled';
 
+// --- Enabled-proof sharding --------------------------------------------------
+//
+// CI runs the enabled journey as up to three parallel shards, each its own
+// harness and evidence file (ABOUTME_TOTP_SHARD, read by run.sh from the
+// host environment). Unset (every local or single-shard run) proves every
+// role, exactly as before sharding existed. `primary` alone carries most of
+// the account's own step count, so it is its own shard.
+type TotpShard = 'primary' | 'accounts-b' | 'accounts-c';
+
+const TOTP_SHARD_ROLES: Readonly<Record<TotpShard, readonly AccountRole[]>> = {
+  'primary': ['primary'],
+  'accounts-b': ['replay', 'concurrent', 'replace'],
+  'accounts-c': ['epoch', 'locale', 'recovery', 'attempts'],
+};
+
+function activeShardRoles(): ReadonlySet<AccountRole> | null {
+  const raw = process.env.ABOUTME_TOTP_SHARD;
+  if (raw === undefined || raw === '') return null;
+  if (raw === 'primary' || raw === 'accounts-b' || raw === 'accounts-c') {
+    return new Set(TOTP_SHARD_ROLES[raw]);
+  }
+  throw new Error(
+    `ABOUTME_TOTP_SHARD must be primary, accounts-b, or accounts-c, not ${JSON.stringify(raw)}`,
+  );
+}
+
+const ACTIVE_ROLES = activeShardRoles();
+
+/** True when the active shard (or the unsharded default) proves `r`. */
+function runsRole(r: AccountRole): boolean {
+  return ACTIVE_ROLES === null || ACTIVE_ROLES.has(r);
+}
+
 let recordedStage = 'start';
 let recordedRole: AccountRole = 'none';
 let tearingDown = false;
+// CI diagnostics only (see totp-fixture.ts "CI section timing"); never part
+// of the withheld browser output or the verified evidence.
+const timer = newSectionTimer();
 
 function stage(name: string): void {
   if (tearingDown) return;
@@ -132,10 +174,13 @@ function stage(name: string): void {
 }
 
 function role(next: AccountRole): void {
-  if (!tearingDown) recordedRole = next;
+  if (tearingDown) return;
+  timer.enter(next);
+  recordedRole = next;
 }
 
 function beginTeardown(): void {
+  timer.enter('cleanup');
   tearingDown = true;
   console.log(`${MODE}-stage:cleanup-after-${recordedStage}`);
 }
@@ -1155,6 +1200,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     // 1. A fictional primary account with a password and a linked provider,
     //    plus a connected agent and a second session, all created before
     //    enrollment so completion's epoch change can be proved against them.
+    if (runsRole('primary')) {
     role('primary');
     stage('primary-register');
     await registerVerified(
@@ -1466,9 +1512,11 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.finalRemoved = true;
     // Primary's admitted attempts: 2 (enrollment) + 3 (skew) + 1 (provider
     // pending) + 1 (remove-totp reauth) = 7.
+    }
 
     // 11. A second fictional account carries the same-step replay and
     //     invalid-code cases against its own enrollment.
+    if (runsRole('replay')) {
     role('replay');
     stage('replay-account');
     await signOut(page);
@@ -1513,10 +1561,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.invalidCodeRejected = true;
     await completeWithTotp(page, await freshCode(page, replaySecret, replayTracker));
     await expectSignedInApp(page);
+    }
 
     // 13. A third fictional account carries the concurrent-submission case
     //     against its own enrollment. Concurrent's admitted attempts: 1
     //     (enrollment) + 2 (race) + 1 (browser resume) = 4.
+    if (runsRole('concurrent')) {
     role('concurrent');
     stage('concurrent-account');
     await signOut(page);
@@ -1565,11 +1615,13 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       page, await freshCode(page, concurrentSecret, concurrentTracker),
     );
     await expectSignedInApp(page);
+    }
 
     // 14. A fourth fictional account carries replacement against its own
     //     enrollment. Replace's admitted attempts: 1 (enrollment) + 1
     //     (reauth) + 1 (replacement completion) + 1 (old-secret rejection)
     //     + 1 (new-secret login) = 5.
+    if (runsRole('replace')) {
     role('replace');
     stage('replace-account');
     await signOut(page);
@@ -1629,10 +1681,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       page, await freshCode(page, replaceSecret, replaceTracker),
     );
     await expectSignedInApp(page);
+    }
 
     // 15. A fifth fictional account carries the wrong-epoch fixture against
     //     its own enrollment. Epoch's admitted attempts: 1 (enrollment) + 1
     //     (reauth) + 1 (bump completion) + 1 (stale attempt) = 4.
+    if (runsRole('epoch')) {
     role('epoch');
     stage('epoch-account');
     await signOut(page);
@@ -1690,11 +1744,13 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(staleAttempt.status).toBe(401);
     steps.wrongEpochRejected = true;
     await staleContext.close();
+    }
 
     // 16. A sixth fictional account carries both locales and the
     //     password-reset preservation case against its own enrollment.
     //     Locale's admitted attempts: 1 (enrollment) + 2 (locales) + 1
     //     (post-reset completion) = 4.
+    if (runsRole('locale')) {
     role('locale');
     stage('locale-account');
     await signOut(page);
@@ -1752,10 +1808,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.resetPreservesEnforcement = true;
     await completeWithTotp(page, await freshCode(page, localeSecret, localeTracker));
     await expectSignedInApp(page);
+    }
 
     // 18. A seventh fictional account carries the recovery-completion case,
     //     which needs a still-enrolled TOTP credential to remain. Recovery's
     //     admitted attempts: 1 (enrollment) + 1 (recovery completion) = 2.
+    if (runsRole('recovery')) {
     role('recovery');
     stage('recovery-account');
     await signOut(page);
@@ -1780,10 +1838,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await completeWithRecovery(page, recoveryEnrolled.codes[0] as string);
     await expectSignedInApp(page);
     steps.recoveryCompletion = true;
+    }
 
     // 19. An eighth fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
     //     Attempts' admitted attempts: 1 (enrollment) + 5 (exhaustion) = 6.
+    if (runsRole('attempts')) {
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
@@ -1818,6 +1878,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-sign-in-again')).toBeVisible();
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
+    }
   } finally {
     // Snapshot the page before teardown navigates away from the failure.
     try {
@@ -1827,52 +1888,82 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       // A closed page leaves the defaults.
     }
     beginTeardown();
-    const removed = [
-      await deleteAccount(page, {
+    // Deletes only the accounts the active shard created (every account on
+    // the unsharded default), so a shard's cleanup step reports on exactly
+    // its own accounts.
+    const removed: boolean[] = [];
+    if (runsRole('primary')) {
+      removed.push(await deleteAccount(page, {
         email: primaryEmail,
         password: primaryPassword,
         recoveryCode: primaryCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('replay')) {
+      removed.push(await deleteAccount(page, {
         email: replayEmail,
         password: replayPassword,
         recoveryCode: replayCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('concurrent')) {
+      removed.push(await deleteAccount(page, {
         email: concurrentEmail,
         password: concurrentPassword,
         recoveryCode: concurrentCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('replace')) {
+      removed.push(await deleteAccount(page, {
         email: replaceEmail,
         password: replacePassword,
         recoveryCode: replaceCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('epoch')) {
+      removed.push(await deleteAccount(page, {
         email: epochEmail,
         password: epochPassword,
         recoveryCode: epochCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('locale')) {
+      removed.push(await deleteAccount(page, {
         email: localeEmail,
         password: localeFinalPassword,
         recoveryCode: localeCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('recovery')) {
+      removed.push(await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (runsRole('attempts')) {
+      removed.push(await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
         recoveryCode: attemptsCleanupCode,
-      }),
-    ];
-    steps.cleanup = removed.every(Boolean);
+      }));
+    }
+    steps.cleanup = removed.length > 0 && removed.every(Boolean);
     for (const extra of extraContexts) {
       await extra.close().catch(() => undefined);
     }
+    await writeFile(
+      ENABLED_TIMING_PATH,
+      `${JSON.stringify({ schemaVersion: 1, sections: timer.finish() }, null, 2)}\n`,
+      { flag: 'wx', mode: 0o600 },
+    );
+    // A shard's evidence lists only the steps it proved: the closed-list
+    // schema check in verify-evidence.mjs accepts any true subset of the
+    // full step set for this scenario and expects every step to be present
+    // and true only once its results are combined across every shard.
+    const provenSteps = Object.fromEntries(
+      Object.entries(steps).filter(([, proved]) => proved === true),
+    );
     await writeFile(
       ENABLED_EVIDENCE_PATH,
       `${JSON.stringify({
@@ -1885,11 +1976,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
         origin: ORIGIN,
         scenario: 'totp-second-factor',
         schemaVersion: 1,
-        steps,
+        steps: provenSteps,
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
-    failOnUnexpectedConsole(steps.attemptsExhausted);
+    // The active shard's own last step, or attemptsExhausted on the
+    // unsharded default (whose last role is always attempts).
+    const journeyDone = ACTIVE_ROLES === null || ACTIVE_ROLES.has('attempts')
+      ? steps.attemptsExhausted
+      : ACTIVE_ROLES.has('replace') ? steps.replaced : steps.finalRemoved;
+    failOnUnexpectedConsole(journeyDone);
   }
 });
 
