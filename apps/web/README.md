@@ -54,8 +54,11 @@ and [`DESIGN.md`](../../DESIGN.md).
 The application UI has three layers:
 
 - Generated primitives live under `app/components/ui/`. Add them through
-  `scripts/ui-add.sh`; never hand-edit generated primitive files. Their
-  `data-slot` attributes mark primitive boundaries.
+  `scripts/ui-add.sh`; do not hand-edit generated primitive files except
+  for the token-colored variant edits that
+  [ADR 0052](../../docs/adr/0052-guarded-token-edits-to-generated-primitives.md)
+  allows under a guard test. Re-apply those edits after a regeneration.
+  Their `data-slot` attributes mark primitive boundaries.
 - Shared application composites live under `app/components/app/`.
 - Pages and editor panels compose those layers into product surfaces.
 
