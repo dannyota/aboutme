@@ -207,9 +207,35 @@ stop_owned_service() {
   info "stopped $name (pid $pid)"
 }
 
+# report_startup_failure names the one service the start_* wrappers were
+# waiting on when startup aborted (CURRENT_SERVICE, set for the duration of
+# each wrapper's start_service/wait_* pair) and prints its redacted log tail,
+# so a public CI failure names its cause instead of only "startup failed"
+# (the rollback below removes the pidfile and identity records that would
+# otherwise let a later run distinguish this service, but never removes the
+# log file itself).
+report_startup_failure() {
+  local log line
+  if [ -z "$CURRENT_SERVICE" ]; then
+    warn "startup failed before any service was launched; see the build and migration output above"
+    return 0
+  fi
+  warn "$CURRENT_SERVICE did not finish starting"
+  log=$(logfile "$CURRENT_SERVICE")
+  if [ -s "$log" ]; then
+    warn "$CURRENT_SERVICE: last log lines follow"
+    while IFS= read -r line; do
+      warn "$CURRENT_SERVICE: $line"
+    done < <(tail -n 40 -- "$log" | redact_logs)
+  else
+    warn "$CURRENT_SERVICE produced no log output before failing"
+  fi
+}
+
 rollback_startup() {
   local index name
   warn "startup failed; rolling back only services started by this invocation"
+  report_startup_failure
   for ((index = ${#STARTED_SERVICES[@]} - 1; index >= 0; index--)); do
     name=${STARTED_SERVICES[$index]}
     stop_owned_service "$name" 1 || true
@@ -243,8 +269,10 @@ build_and_migrate() {
 }
 
 start_mock() {
+  CURRENT_SERVICE=mock-oauth
   start_service mock-oauth "$ROOT/apps/server" "$BIN_DIR/mock-oauth"
   wait_http mock-oauth "$GOOGLE_ISSUER_URL/.well-known/openid-configuration" 30
+  CURRENT_SERVICE=
 }
 
 # wait_mail_capture treats a bound loopback listener as readiness: the capture
@@ -268,30 +296,38 @@ wait_mail_capture() {
 }
 
 start_mail_capture() {
+  CURRENT_SERVICE=mail-capture
   start_service mail-capture "$ROOT/apps/server" "$BIN_DIR/mail-capture" \
     --secret-file "$SECRETS_DIR/auth-email-capture-bearer" --addr "$MAIL_CAPTURE_ADDR"
   wait_mail_capture mail-capture "$MAIL_CAPTURE_PORT" 30
+  CURRENT_SERVICE=
 }
 
 start_server() {
+  CURRENT_SERVICE=server
   start_service server "$ROOT/apps/server" "$BIN_DIR/server"
   wait_http server "http://127.0.0.1:${SERVER_PORT}/healthz" 30
+  CURRENT_SERVICE=
 }
 
 start_web() {
+  CURRENT_SERVICE=web
   [ -d "$ROOT/apps/web/node_modules" ] || return 1
   start_service web "$ROOT/apps/web" npm run dev -- --port "$WEB_PORT" --host 127.0.0.1
   wait_http web "http://127.0.0.1:${WEB_PORT}/" 240
+  CURRENT_SERVICE=
 }
 
 start_caddy() {
   local generated
+  CURRENT_SERVICE=caddy
   generated=$(generate_caddyfile) || return 1
   printf '%s' "$generated" >"$CADDYFILE_GEN"
   start_service caddy "$ROOT" caddy run --config "$CADDYFILE_GEN" --adapter caddyfile
   wait_for_caddy_root
   install -m 0600 "$CADDY_ROOT" "$EXPORTED_ROOT"
   wait_https "$PUBLIC_ORIGIN/healthz" 30
+  CURRENT_SERVICE=
 }
 
 web_source_hash() {
