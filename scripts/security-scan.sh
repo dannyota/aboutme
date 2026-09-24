@@ -130,7 +130,7 @@ weekly_scan() {
     ref="ghcr.io/dannyota/aboutme-${name}:${tag}"
     report="$report_dir/released-${name}.json"
     scan_image "$trivy_bin" "$ref" linux/arm64 "$report" || fail=1
-    printf 'security-scan: findings for %s\n' "$ref" | tee -a "$report_dir/summary.txt"
+    printf 'security-scan: result for %s\n' "$ref" | tee -a "$report_dir/summary.txt"
     if ! report_findings "$report" >>"$report_dir/summary.txt"; then
       printf '%s\n' "$ref" >>"$report_dir/failed.txt"
       fail=1
