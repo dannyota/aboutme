@@ -9,8 +9,13 @@ ROOT=$PWD
 readonly CONTAINER=aboutme-test-s3
 readonly ENV_FILE=$ROOT/.dev/test-s3.env
 readonly ENDPOINT=http://127.0.0.1:20091
-readonly MINIO_IMAGE=quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-readonly MC_IMAGE=quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+# MinIO stopped publishing the community edition to Docker Hub and quay.io
+# (both now answer unauthorized for every tag, including :latest); these are
+# Chainguard's images, built from the same upstream MinIO/mc source, so the
+# S3 API — including If-None-Match conditional writes and ListObjectsV2
+# paging — matches unchanged. Pinned by digest for both amd64 and arm64.
+readonly MINIO_IMAGE=cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+readonly MC_IMAGE=cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
 
 die() {
   printf 'test-s3: %s\n' "$*" >&2
@@ -144,10 +149,13 @@ ensure_bucket() {
   local MC_HOST_test
   MC_HOST_test="http://${TEST_S3_ACCESS_KEY_ID}:${TEST_S3_SECRET_ACCESS_KEY}@127.0.0.1:20091"
   export MC_HOST_test
-  podman run --rm --network host -e MC_HOST_test "$MC_IMAGE" \
+  # MC_CONFIG_DIR: the image runs as a fixed non-root UID with no home
+  # directory entry, so mc's default $HOME/.mc config path cannot be
+  # resolved; /tmp is writable regardless of UID.
+  podman run --rm --network host -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
     mb --ignore-existing test/aboutme-test >/dev/null ||
     die "could not create the private test bucket"
-  podman run --rm --network host -e MC_HOST_test "$MC_IMAGE" \
+  podman run --rm --network host -e MC_HOST_test -e MC_CONFIG_DIR=/tmp/.mc "$MC_IMAGE" \
     anonymous set none test/aboutme-test >/dev/null ||
     die "could not enforce the private test bucket policy"
 }

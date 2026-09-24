@@ -263,10 +263,9 @@ type Session struct {
 }
 
 type SlugTombstone struct {
-	ID               uuid.UUID
-	Slug             string
-	ReleasedByUserID *uuid.UUID
-	ReleasedAt       time.Time
+	ID         uuid.UUID
+	Slug       string
+	ReleasedAt time.Time
 }
 
 type TotpCredential struct {

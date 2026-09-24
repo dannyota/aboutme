@@ -1,9 +1,9 @@
 # Authentication email
 
-Status: **configured in the SES sandbox**. Google Workspace and AWS SES are
-configured for `aboutme.vn`. This runbook records the current setup and the
-checks an operator can repeat without exposing credentials or AWS account
-identifiers.
+Status: **in production**. Google Workspace and AWS SES are configured for
+`aboutme.vn`, and the SES account has production access. This runbook records
+the current setup and the checks an operator can repeat without exposing
+credentials or AWS account identifiers.
 
 ## Mail flow
 
@@ -70,12 +70,11 @@ SES_CONFIGURATION_SET=aboutme-auth
 AWS credentials use the runtime credential chain. Never put credentials in
 `.env.example`, source, images, commands, logs, or this runbook.
 
-## Account limits and launch gate
+## Account limits
 
-The SES account remains in sandbox: at setup it allowed 200 messages per day and
-1 message per second. The public HTTPS site is live, but SES production access
-remains a public-announcement gate. Until access is granted, use the mailbox
-simulator or approved test addresses.
+The SES account has production access: 50,000 messages per 24 hours and 14
+messages per second (checked 2026-09-24 with `aws sesv2 get-account`). It can
+send to any address. Use the mailbox simulator for smoke tests.
 
 The app task role grants only `ses:SendEmail`, which the SES v2 sender uses,
 limited to the configured from address. Add another sending action only with a
@@ -93,10 +92,9 @@ as a shortcut.
 
 A failed send logs `authmail: ses send failed` with the closed `outcome` and,
 when SES returns one, its error `code`. The log never carries the recipient,
-body, request ID, or SES error message. `code=MessageRejected` while the account
-is in sandbox usually means the recipient is not a verified identity;
-`code=AccessDeniedException` points at the app task role's `ses:SendEmail`
-policy.
+body, request ID, or SES error message. `code=MessageRejected` usually means SES
+refused the message content or the from identity; `code=AccessDeniedException`
+points at the app task role's `ses:SendEmail` policy.
 
 ## Verification
 
@@ -143,5 +141,5 @@ aws sesv2 send-email \
 ```
 
 Confirm the command returns a message ID, then inspect the configuration-set
-metrics and CloudWatch alarm state. Do not send a smoke test to
-`danny@aboutme.vn` or another real mailbox while the account is in sandbox.
+metrics and CloudWatch alarm state. Send smoke tests to the mailbox simulator,
+not to a real mailbox.

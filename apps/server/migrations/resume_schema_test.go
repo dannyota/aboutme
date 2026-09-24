@@ -109,9 +109,8 @@ func withSavepoint(ctx context.Context, t *testing.T, tx pgx.Tx, fn func(sp pgx.
 	return nil
 }
 
-// createTestUser inserts a minimal users row via raw SQL (resumes.user_id,
-// slug_tombstones.released_by_user_id, and idempotency_records.user_id are
-// all FKs into users) and returns its ID.
+// createTestUser inserts a minimal users row via raw SQL (resumes.user_id and
+// idempotency_records.user_id are FKs into users) and returns its ID.
 func createTestUser(ctx context.Context, t *testing.T, db sqlExecer) uuid.UUID {
 	t.Helper()
 
@@ -366,10 +365,8 @@ func TestResumeSchema_DuplicateSlugRejected(t *testing.T) {
 // slug_tombstones: format check + duplicate.
 // -----------------------------------------------------------------------
 
-func insertTombstone(ctx context.Context, db sqlExecer, slug string, releasedBy *uuid.UUID) error {
-	_, err := db.Exec(ctx,
-		`INSERT INTO slug_tombstones (slug, released_by_user_id) VALUES ($1, $2)`,
-		slug, releasedBy)
+func insertTombstone(ctx context.Context, db sqlExecer, slug string) error {
+	_, err := db.Exec(ctx, `INSERT INTO slug_tombstones (slug) VALUES ($1)`, slug)
 	return err
 }
 
@@ -431,14 +428,8 @@ func TestSlugTombstones_ConstraintBoundaries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Each case gets its own user (released_by_user_id), same
-			// rationale as TestResumeSchema_ConstraintBoundaries: this
-			// matrix is unrelated to any per-user invariant, so nothing
-			// here should share state across cases.
-			userID := createTestUser(ctx, t, tx)
-
 			err := withSavepoint(ctx, t, tx, func(sp pgx.Tx) error {
-				return insertTombstone(ctx, sp, tt.slug, &userID)
+				return insertTombstone(ctx, sp, tt.slug)
 			})
 
 			if tt.wantConstraint == "" {
@@ -455,14 +446,13 @@ func TestSlugTombstones_ConstraintBoundaries(t *testing.T) {
 func TestSlugTombstones_DuplicateSlugRejected(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
-	userID := createTestUser(ctx, t, tx)
 
 	slug := "tombstone-dup-slug"
-	if err := insertTombstone(ctx, tx, slug, &userID); err != nil {
+	if err := insertTombstone(ctx, tx, slug); err != nil {
 		t.Fatalf("first insert: %v", err)
 	}
 
-	err := insertTombstone(ctx, tx, slug, &userID)
+	err := insertTombstone(ctx, tx, slug)
 	requireConstraintViolation(t, err, "slug_tombstones_slug_key")
 }
 
@@ -770,40 +760,42 @@ func TestIdempotencyRecords_OwningUserDeletedCascades(t *testing.T) {
 	}
 }
 
-// TestSlugTombstones_ReleasingUserDeletedSetsNullNotCascade proves the
-// deliberate spec asymmetry: a tombstone must outlive the user who
-// released it -- deleting that account must never free the tombstoned
-// slug early -- so released_by_user_id is ON DELETE SET NULL, unlike every
-// other user_id FK in this task's DDL, which is ON DELETE CASCADE. This is
-// exactly the kind of thing a later, careless "make the FKs consistent"
-// change would silently flip.
-func TestSlugTombstones_ReleasingUserDeletedSetsNullNotCascade(t *testing.T) {
+// TestSlugTombstonesCarryNoAccountLinkAndRetentionIndexesExist proves the
+// privacy notice's tombstone rule (docs/design/product.md): a released slug
+// carries no link to any account, so slug_tombstones has no
+// released_by_user_id column. It also proves the retention indexes the
+// session and tombstone sweeps rely on exist, and the created_at-keyed
+// session index they replaced is gone.
+func TestSlugTombstonesCarryNoAccountLinkAndRetentionIndexesExist(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
-	userID := createTestUser(ctx, t, tx)
 
-	slug := "outlives-releaser"
-	if err := insertTombstone(ctx, tx, slug, &userID); err != nil {
-		t.Fatalf("insert tombstone: %v", err)
+	var columnCount int
+	if err := tx.QueryRow(ctx, `
+		SELECT count(*) FROM information_schema.columns
+		WHERE table_name = 'slug_tombstones' AND column_name = 'released_by_user_id'
+	`).Scan(&columnCount); err != nil {
+		t.Fatalf("count released_by_user_id column: %v", err)
 	}
-
-	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, userID); err != nil {
-		t.Fatalf("delete releasing user: %v", err)
-	}
-
-	var count int
-	if err := tx.QueryRow(ctx, `SELECT count(*) FROM slug_tombstones WHERE slug = $1`, slug).Scan(&count); err != nil {
-		t.Fatalf("count slug_tombstones: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("slug_tombstones row count after releasing user deleted = %d, want 1 (a tombstone must outlive its releasing user)", count)
+	if columnCount != 0 {
+		t.Errorf("slug_tombstones.released_by_user_id column count = %d, want 0", columnCount)
 	}
 
-	var releasedBy *uuid.UUID
-	if err := tx.QueryRow(ctx, `SELECT released_by_user_id FROM slug_tombstones WHERE slug = $1`, slug).Scan(&releasedBy); err != nil {
-		t.Fatalf("select released_by_user_id: %v", err)
+	for _, indexName := range []string{"slug_tombstones_released_at_idx", "sessions_metadata_expiry_idx"} {
+		var indexCount int
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM pg_indexes WHERE indexname = $1`, indexName).Scan(&indexCount); err != nil {
+			t.Fatalf("count index %s: %v", indexName, err)
+		}
+		if indexCount != 1 {
+			t.Errorf("index %s count = %d, want 1", indexName, indexCount)
+		}
 	}
-	if releasedBy != nil {
-		t.Errorf("released_by_user_id = %v, want nil after releasing user deleted (ON DELETE SET NULL)", *releasedBy)
+
+	var oldIndexCount int
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM pg_indexes WHERE indexname = 'sessions_metadata_age_idx'`).Scan(&oldIndexCount); err != nil {
+		t.Fatalf("count sessions_metadata_age_idx: %v", err)
+	}
+	if oldIndexCount != 0 {
+		t.Errorf("sessions_metadata_age_idx count = %d, want 0 (replaced by sessions_metadata_expiry_idx)", oldIndexCount)
 	}
 }

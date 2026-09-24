@@ -64,6 +64,35 @@ func (q *Queries) DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCo
 	return result.RowsAffected(), nil
 }
 
+const deleteExpiredSlugTombstonesPage = `-- name: DeleteExpiredSlugTombstonesPage :execrows
+WITH candidates AS MATERIALIZED (
+    SELECT id
+    FROM slug_tombstones
+    WHERE released_at <= $1::timestamptz
+    ORDER BY released_at, id
+    LIMIT LEAST($2::int, 1000)
+    FOR UPDATE SKIP LOCKED
+)
+DELETE FROM slug_tombstones AS tombstone
+USING candidates
+WHERE tombstone.id = candidates.id
+`
+
+type DeleteExpiredSlugTombstonesPageParams struct {
+	Cutoff    time.Time
+	LimitRows int32
+}
+
+// A released slug stays reserved and unlinked from any account for 180 days
+// (docs/design/product.md), then the privacy sweep deletes the reservation.
+func (q *Queries) DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredSlugTombstonesPage, arg.Cutoff, arg.LimitRows)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteLifecycleAuditPage = `-- name: DeleteLifecycleAuditPage :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id
@@ -221,6 +250,32 @@ func (q *Queries) GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompl
 	return i, err
 }
 
+const getExpiredSlugTombstonesBacklog = `-- name: GetExpiredSlugTombstonesBacklog :one
+SELECT count(*)::bigint AS backlog,
+       (COALESCE(floor(extract(epoch FROM
+           greatest($1::timestamptz - min(released_at), interval '0 seconds'))), 0))::bigint
+           AS oldest_age_seconds
+FROM slug_tombstones
+WHERE released_at <= $2::timestamptz
+`
+
+type GetExpiredSlugTombstonesBacklogParams struct {
+	Now    time.Time
+	Cutoff time.Time
+}
+
+type GetExpiredSlugTombstonesBacklogRow struct {
+	Backlog          int64
+	OldestAgeSeconds int64
+}
+
+func (q *Queries) GetExpiredSlugTombstonesBacklog(ctx context.Context, arg GetExpiredSlugTombstonesBacklogParams) (GetExpiredSlugTombstonesBacklogRow, error) {
+	row := q.db.QueryRow(ctx, getExpiredSlugTombstonesBacklog, arg.Now, arg.Cutoff)
+	var i GetExpiredSlugTombstonesBacklogRow
+	err := row.Scan(&i.Backlog, &i.OldestAgeSeconds)
+	return i, err
+}
+
 const getIdempotencyExpiryBacklog = `-- name: GetIdempotencyExpiryBacklog :one
 SELECT count(*)::bigint AS backlog,
        (COALESCE(floor(extract(epoch FROM
@@ -271,10 +326,10 @@ func (q *Queries) GetLifecycleAuditBacklog(ctx context.Context, arg GetLifecycle
 const getSessionMetadataBacklog = `-- name: GetSessionMetadataBacklog :one
 SELECT count(*)::bigint AS backlog,
        (COALESCE(floor(extract(epoch FROM
-           greatest($1::timestamptz - min(created_at), interval '0 seconds'))), 0))::bigint
+           greatest($1::timestamptz - (min(absolute_expires_at) - interval '90 days'), interval '0 seconds'))), 0))::bigint
            AS oldest_age_seconds
 FROM sessions
-WHERE created_at <= $2::timestamptz
+WHERE absolute_expires_at <= $2::timestamptz
   AND (ua IS NOT NULL OR ip IS NOT NULL)
 `
 
@@ -288,6 +343,11 @@ type GetSessionMetadataBacklogRow struct {
 	OldestAgeSeconds int64
 }
 
+// oldest_age_seconds is age since the original sign-in, not since
+// absolute_expires_at, matching every other *_oldest_seconds field: a
+// session's absolute expiry is sign-in plus the fixed 90-day absolute timeout
+// (docs/design/security.md), so subtracting that interval back out of
+// absolute_expires_at recovers the sign-in time.
 func (q *Queries) GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error) {
 	row := q.db.QueryRow(ctx, getSessionMetadataBacklog, arg.Now, arg.Cutoff)
 	var i GetSessionMetadataBacklogRow
@@ -299,9 +359,9 @@ const redactSessionMetadataPage = `-- name: RedactSessionMetadataPage :execrows
 WITH candidates AS MATERIALIZED (
     SELECT id
     FROM sessions
-    WHERE created_at <= $1::timestamptz
+    WHERE absolute_expires_at <= $1::timestamptz
       AND (ua IS NOT NULL OR ip IS NOT NULL)
-    ORDER BY created_at, id
+    ORDER BY absolute_expires_at, id
     LIMIT LEAST($2::int, 1000)
     FOR UPDATE SKIP LOCKED
 )
@@ -316,6 +376,11 @@ type RedactSessionMetadataPageParams struct {
 	LimitRows int32
 }
 
+// Session IP and user agent are redacted before the session's absolute expiry
+// (docs/design/operations.md), not by created_at, so a rotation or reissue
+// successor that inherits the original absolute expiry cannot extend how long
+// its metadata survives. The caller's cutoff already carries the redaction
+// lead ahead of now, so this query only compares absolute_expires_at to it.
 func (q *Queries) RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error) {
 	result, err := q.db.Exec(ctx, redactSessionMetadataPage, arg.Cutoff, arg.LimitRows)
 	if err != nil {
@@ -329,7 +394,7 @@ const tryLockIdempotencyExpirySweep = `-- name: TryLockIdempotencyExpirySweep :o
 SELECT pg_try_advisory_lock(hashtextextended('aboutme.idempotency-expiry-sweep.v1', 0))
 `
 
-// Phase 8 privacy retention queries. Every mutation is bounded and ordered;
+// Privacy retention queries. Every mutation is bounded and ordered;
 // command-level advisory locks are session locks held on a dedicated pooled
 // connection for the whole run.
 func (q *Queries) TryLockIdempotencyExpirySweep(ctx context.Context) (bool, error) {
