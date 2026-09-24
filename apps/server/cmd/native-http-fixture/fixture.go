@@ -285,9 +285,9 @@ func runSeed(ctx context.Context, cfg Config, plan seedPlan) error {
 	}
 
 	if _, err = db.ExecContext(ctx,
-		`INSERT INTO slug_tombstones (id, slug, released_by_user_id, released_at)
-		 VALUES ($1, $2, $3, $4) ON CONFLICT (slug) DO NOTHING`,
-		fixtureTombstoneID, plan.TombstoneSlug, plan.OwnerID, plan.TombstoneReleasedAt); err != nil {
+		`INSERT INTO slug_tombstones (id, slug, released_at)
+		 VALUES ($1, $2, $3) ON CONFLICT (slug) DO NOTHING`,
+		fixtureTombstoneID, plan.TombstoneSlug, plan.TombstoneReleasedAt); err != nil {
 		return fmt.Errorf("insert tombstone: %w", err)
 	}
 

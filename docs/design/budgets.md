@@ -127,6 +127,8 @@ admission bound; the [scaling contract](scaling/README.md) and
 | WebAuthn and pending cleanup                    | ≤ 200 expired rows per run                          | Second-factor store                                      |
 | Security mail job expiry                        | 24 h after event, rounded to whole seconds          | Second-factor security mail                              |
 | Authentication security-event retention         | 180 days; 1,000/page; 10,000/run                    | Privacy sweep                                            |
+| Session metadata retention                      | 88 days after sign-in; 1,000/page; 10,000/run       | Privacy sweep                                            |
+| Slug tombstone retention                        | 180 days; 1,000/page; 10,000/run                    | Privacy sweep                                            |
 | Recovery-code set / entropy                     | 10 codes / 128 random bits per code                 | Second-factor recovery                                   |
 | Recovery verification request body              | ≤ 4,096 bytes                                       | Second-factor recovery route                             |
 | Recovery code input length                      | ≤ 128 characters before canonicalization            | Second-factor recovery                                   |

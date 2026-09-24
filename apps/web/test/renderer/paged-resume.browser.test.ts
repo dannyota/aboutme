@@ -276,6 +276,81 @@ describe('PagedResume browser measurement', () => {
       wrapper.unmount();
     });
 
+  it('lays out a sidebar column\'s split entry whole for measurement only',
+    async () => {
+      const fontEvents = new EventTarget();
+      Object.assign(fontEvents, {
+        load: vi.fn(async () => [{} as FontFace]),
+        ready: Promise.resolve(),
+      });
+      Object.defineProperty(document, 'fonts', {
+        configurable: true,
+        value: fontEvents,
+      });
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function () {
+          if (this.tagName === 'LI') {
+            const index = Array.from(this.parentElement!.children)
+              .indexOf(this);
+            return {
+              ...layoutRect(20),
+              top: index * 26,
+              bottom: (index * 26) + 20,
+            };
+          }
+          return layoutRect(
+            this.dataset.paginationBlockIndex === undefined ? 40 : 20,
+          );
+        });
+
+      // work stays whole in the main column; the split entry lives in the
+      // sidebar's certificate section instead.
+      const sidebarSplit = namedFixture('draft-partial');
+      sidebarSplit.customization.layout.columns = 2;
+      sidebarSplit.customization.layout.sections
+        = { main: ['work'], sidebar: ['certificate'] };
+      sidebarSplit.content.certificate = {
+        sectionType: 'certificate',
+        displayName: 'Certifications',
+        entries: [{
+          id: '11111111-1111-1111-1111-111111111111',
+          title: 'Certified Analytical Engineer',
+          description: '<ul><li>First item</li><li>Second item</li></ul>',
+        }],
+      };
+      const wrapper = mount(ResumeDocument, {
+        attachTo: document.body,
+        props: {
+          document: sidebarSplit,
+          context: { lng: 'en', mode: 'paged' },
+        },
+      });
+      await flushPromises();
+      expect(wrapper.attributes('data-pagination-settled')).toBe('true');
+
+      const sidebarWhole = wrapper.findAll(
+        '.pagination-measurement .resume-sidebar [data-pagination-whole-entry]',
+      );
+      expect(sidebarWhole).toHaveLength(1);
+      // Blocks measure in order: the main heading and its whole work entry,
+      // then the sidebar heading and this entry's first part.
+      expect(sidebarWhole[0]!.attributes('data-pagination-whole-entry'))
+        .toBe('3');
+      expect(sidebarWhole[0]!.findAll('li')).toHaveLength(2);
+      expect(wrapper.findAll(
+        '.pagination-measurement .resume-main [data-pagination-whole-entry]',
+      )).toHaveLength(0);
+
+      expect(wrapper.findAll(
+        '.resume-page:not(.pagination-measurement) '
+        + '[data-pagination-whole-entry]',
+      )).toHaveLength(0);
+      wrapper.unmount();
+    });
+
   it('settles under zoom and reacts to a real resize', async () => {
     const fontEvents = new EventTarget();
     const load = vi.fn(async () => [{} as FontFace]);

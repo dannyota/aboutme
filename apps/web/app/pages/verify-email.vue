@@ -19,6 +19,7 @@ import {
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
 import StatusBanner from '@/components/app/StatusBanner.vue';
+import AuthLayout from '@/components/auth/AuthLayout.vue';
 import ProviderButtons from '@/components/auth/ProviderButtons.vue';
 import { useCapabilities } from '@/composables/useCapabilities';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
@@ -101,10 +102,7 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
 </script>
 
 <template>
-  <main
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
-    data-testid="verify-email-page"
-  >
+  <AuthLayout testid="verify-email-page">
     <h1
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
@@ -149,12 +147,12 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
     </p>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         data-testid="verify-sign-in"
         :to="signInLink"
       >
         {{ copy.signIn }}
       </NuxtLink>
     </nav>
-  </main>
+  </AuthLayout>
 </template>

@@ -16,6 +16,7 @@
  * `/login/second-factor` path instead, which finishes the sign-in.
  */
 import FormField from '@/components/app/FormField.vue';
+import AuthLayout from '@/components/auth/AuthLayout.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import LegalAgreement from '@/components/legal/LegalAgreement.vue';
 import ProviderButtons from '@/components/auth/ProviderButtons.vue';
@@ -141,10 +142,9 @@ async function onSubmit() {
 
 <template>
   <NuxtPage v-if="onChildRoute" />
-  <main
+  <AuthLayout
     v-else
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
-    data-testid="login-page"
+    testid="login-page"
   >
     <h1
       class="border-b pb-4 text-xl font-semibold"
@@ -250,18 +250,18 @@ async function onSubmit() {
     </template>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         to="/forgot-password"
       >
         {{ copy.login.forgotPassword }}
       </NuxtLink>
       <NuxtLink
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         data-testid="login-create-account"
         :to="registerLink"
       >
         {{ copy.createAccount }}
       </NuxtLink>
     </nav>
-  </main>
+  </AuthLayout>
 </template>

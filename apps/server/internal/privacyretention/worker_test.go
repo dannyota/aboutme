@@ -395,9 +395,9 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	userID := createRetentionUser(ctx, t, q)
 	t.Cleanup(func() { cleanupUsers(ctx, t, pool, userID) })
 
-	oldSession := insertSession(ctx, t, pool, userID, retentionNow.Add(-90*24*time.Hour-time.Second))
-	exactSession := insertSession(ctx, t, pool, userID, retentionNow.Add(-90*24*time.Hour))
-	youngSession := insertSession(ctx, t, pool, userID, retentionNow.Add(-90*24*time.Hour+time.Second))
+	oldSession := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-91*24*time.Hour), retentionNow.Add(sessionRedactionLead-time.Second), nil)
+	exactSession := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-91*24*time.Hour), retentionNow.Add(sessionRedactionLead), nil)
+	youngSession := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-91*24*time.Hour), retentionNow.Add(sessionRedactionLead+time.Second), nil)
 
 	oldAudit := insertAudit(ctx, t, pool, "account_deleted", retentionNow.Add(-180*24*time.Hour-time.Second))
 	// The sweep deletes every audit kind by age, including provider unlinks.
@@ -451,6 +451,98 @@ func TestRetainUsesExactBoundariesAndPreservesPendingMedia(t *testing.T) {
 	if again.SessionMetadataRedacted != 0 || again.LifecycleAuditDeleted != 0 || again.CompletedMediaJobsDeleted != 0 || again.AuthenticationSecurityEventsDeleted != 0 {
 		t.Errorf("second Retain mutated retained rows: %+v", again)
 	}
+}
+
+// TestRetainRedactsSessionMetadataByAbsoluteExpiry proves the privacy notice's
+// session rule: IP and user-agent redaction runs a sessionRedactionLead ahead
+// of a session's absolute expiry (docs/design/operations.md), not by its
+// created_at, so a rotation successor cannot keep metadata alive past the
+// original sign-in's 90-day bound, and the daily sweep schedule (plus one
+// missed run) still finishes redaction inside that bound.
+func TestRetainRedactsSessionMetadataByAbsoluteExpiry(t *testing.T) {
+	ctx, pool := newRetentionPool(t)
+	q := store.New(pool)
+	worker, err := New(Config{
+		Pool: pool, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Now: func() time.Time { return retentionNow },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	userID := createRetentionUser(ctx, t, q)
+	t.Cleanup(func() { cleanupUsers(ctx, t, pool, userID) })
+
+	// A predecessor signed in 91 days ago (absolute_expires_at = sign-in +
+	// 90d = 1 day ago) rotates into a successor created 1 day ago. Rotation
+	// inherits absolute_expires_at unchanged (session.go's
+	// createRotationSuccessor), so the successor is just as overdue for
+	// redaction as its predecessor despite its recent created_at.
+	signIn := retentionNow.Add(-91 * 24 * time.Hour)
+	absoluteExpiry := signIn.Add(90 * 24 * time.Hour)
+	predecessor := insertSessionWithExpiry(ctx, t, pool, userID, signIn, absoluteExpiry, nil)
+	successor := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-24*time.Hour), absoluteExpiry, &predecessor)
+
+	// Boundary pair: absolute_expires_at exactly now+48h (the redaction lead)
+	// is redacted; one second later is kept, even though its created_at (89
+	// days ago) is well past the old created_at-based cutoff.
+	atBoundary := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-89*24*time.Hour), retentionNow.Add(sessionRedactionLead), nil)
+	pastBoundary := insertSessionWithExpiry(ctx, t, pool, userID, retentionNow.Add(-89*24*time.Hour), retentionNow.Add(sessionRedactionLead+time.Second), nil)
+
+	// A session locked by a concurrent writer is skipped (FOR UPDATE SKIP
+	// LOCKED) and stays in the backlog, so the backlog and its age-since-
+	// sign-in accounting are observable in the same run.
+	lockedSignIn := retentionNow.Add(-95 * 24 * time.Hour)
+	lockedExpiry := lockedSignIn.Add(90 * 24 * time.Hour)
+	locked := insertSessionWithExpiry(ctx, t, pool, userID, lockedSignIn, lockedExpiry, nil)
+	lockTx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin session lock: %v", err)
+	}
+	t.Cleanup(func() { rollbackTestTx(ctx, t, lockTx) })
+	if _, lockErr := lockTx.Exec(ctx, `SELECT id FROM sessions WHERE id = $1 FOR UPDATE`, locked); lockErr != nil {
+		t.Fatalf("lock session: %v", lockErr)
+	}
+
+	result, err := worker.Retain(ctx)
+	if err != nil {
+		t.Fatalf("Retain: %v", err)
+	}
+	assertSessionMetadata(ctx, t, pool, predecessor, false)
+	assertSessionMetadata(ctx, t, pool, successor, false)
+	assertSessionMetadata(ctx, t, pool, atBoundary, false)
+	assertSessionMetadata(ctx, t, pool, pastBoundary, true)
+	assertSessionMetadata(ctx, t, pool, locked, true)
+	wantAge := int64(retentionNow.Sub(lockedSignIn).Seconds())
+	if result.SessionMetadataBacklog != 1 || result.SessionOldestAgeSeconds != wantAge {
+		t.Errorf("backlog = (%d, %d seconds), want (1, %d)", result.SessionMetadataBacklog, result.SessionOldestAgeSeconds, wantAge)
+	}
+}
+
+// TestRetainDeletesExpiredSlugTombstones proves the privacy notice's
+// tombstone rule (docs/design/product.md): a released slug stays reserved for
+// 180 days, unlinked from any account, then the daily privacy sweep deletes
+// it.
+func TestRetainDeletesExpiredSlugTombstones(t *testing.T) {
+	ctx, pool := newRetentionPool(t)
+	worker, err := New(Config{
+		Pool: pool, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Now: func() time.Time { return retentionNow },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	expired := insertSlugTombstone(ctx, t, pool, "expired-slug", retentionNow.Add(-180*24*time.Hour))
+	kept := insertSlugTombstone(ctx, t, pool, "kept-slug", retentionNow.Add(-180*24*time.Hour+time.Second))
+	t.Cleanup(func() {
+		cleanupExec(ctx, t, pool, "slug tombstones", `DELETE FROM slug_tombstones WHERE slug = ANY($1::text[])`, []string{expired, kept})
+	})
+
+	if _, err := worker.Retain(ctx); err != nil {
+		t.Fatalf("Retain: %v", err)
+	}
+	assertSlugTombstoneExists(ctx, t, pool, expired, false)
+	assertSlugTombstoneExists(ctx, t, pool, kept, true)
 }
 
 func newRetentionPool(t *testing.T) (context.Context, *store.Pool) {
@@ -517,17 +609,42 @@ func assertUsage(ctx context.Context, t *testing.T, pool *store.Pool, userID uui
 	}
 }
 
-func insertSession(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, createdAt time.Time) uuid.UUID {
+// insertSessionWithExpiry inserts a session with independently chosen
+// created_at and absolute_expires_at values. rotatedFrom links a rotation
+// successor to its predecessor, matching createRotationSuccessor's lineage.
+func insertSessionWithExpiry(ctx context.Context, t *testing.T, pool *store.Pool, userID uuid.UUID, createdAt, absoluteExpiresAt time.Time, rotatedFrom *uuid.UUID) uuid.UUID {
 	t.Helper()
 	id := uuid.New()
 	_, err := pool.Exec(ctx, `INSERT INTO sessions
-		(id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip)
-		VALUES ($1, $2, $3, $4, $5, $5, $5, $6, 'test-agent', '192.0.2.1')`,
-		id, userID, uuid.NewString(), uuid.NewString(), createdAt, createdAt.Add(365*24*time.Hour))
+		(id, user_id, token_hash, csrf_secret, created_at, last_seen_at, reauthenticated_at, absolute_expires_at, ua, ip, rotated_from)
+		VALUES ($1, $2, $3, $4, $5, $5, $5, $6, 'test-agent', '192.0.2.1', $7)`,
+		id, userID, uuid.NewString(), uuid.NewString(), createdAt, absoluteExpiresAt, rotatedFrom)
 	if err != nil {
-		t.Fatalf("insert session: %v", err)
+		t.Fatalf("insert session with expiry: %v", err)
 	}
 	return id
+}
+
+// insertSlugTombstone inserts a raw slug_tombstones row with no owning
+// account, matching the privacy notice's rule that a released slug carries no
+// account link (docs/design/product.md).
+func insertSlugTombstone(ctx context.Context, t *testing.T, pool *store.Pool, slug string, releasedAt time.Time) string {
+	t.Helper()
+	if _, err := pool.Exec(ctx, `INSERT INTO slug_tombstones (slug, released_at) VALUES ($1, $2)`, slug, releasedAt); err != nil {
+		t.Fatalf("insert slug tombstone: %v", err)
+	}
+	return slug
+}
+
+func assertSlugTombstoneExists(ctx context.Context, t *testing.T, pool *store.Pool, slug string, want bool) {
+	t.Helper()
+	var got bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM slug_tombstones WHERE slug = $1)`, slug).Scan(&got); err != nil {
+		t.Fatalf("read slug tombstone: %v", err)
+	}
+	if got != want {
+		t.Errorf("slug tombstone %s exists = %t, want %t", slug, got, want)
+	}
 }
 
 func insertAudit(ctx context.Context, t *testing.T, pool *store.Pool, kind string, occurredAt time.Time) uuid.UUID {
