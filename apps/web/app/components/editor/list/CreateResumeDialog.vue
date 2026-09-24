@@ -317,7 +317,7 @@ function persona(templateId: string): string {
     >
       <!-- First here, so it stacks last on phones (DESIGN.md dialogs). -->
       <NuxtLink
-        class="create-resume-browse text-sm text-primary underline
+        class="create-resume-browse text-sm text-link underline
           underline-offset-4 sm:mr-auto sm:self-center"
         to="/templates"
       >

@@ -139,12 +139,14 @@ never displays token or code material.
 
 The contract is `(currentDocument, renderContext) -> deterministic HTML`.
 `renderContext` contains only explicit presentation input: pagination mode, the
-server-normalized resume language, and an already-authorized photo URL when
-needed. It never contains a store, API client, clock, random source, locale
-default, or network capability. The renderer fails closed when
-`currentDocument.schemaVersion` is not the generated current version. CSS custom
-properties are derived once from `customization`; leaf components do not invent
-their own token values.
+server-normalized resume language, an already-authorized photo URL when needed,
+and, only for an embed that owns its own page `h1` (the homepage sample, a
+template thumbnail), a `nameHeading: 'p'` override so the resume name renders as
+a `p` instead of the default `h1`. It never contains a store, API client, clock,
+random source, locale default, or network capability. The renderer fails closed
+when `currentDocument.schemaVersion` is not the generated current version. CSS
+custom properties are derived once from `customization`; leaf components do not
+invent their own token values.
 
 The print browser has no general outbound network access. Fonts and renderer
 assets are local. Its controller supplies an authorized photo as same-origin or

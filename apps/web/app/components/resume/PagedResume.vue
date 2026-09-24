@@ -247,6 +247,7 @@ export default defineComponent({
         personalDetails: targetModel.personalDetails,
         header: targetModel.header,
         photo: targetModel.photo,
+        nameHeading: targetModel.nameHeading,
       })]);
       const renderColumns = (
         targetModel: ResolvedRenderModel,

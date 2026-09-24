@@ -31,6 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import AppLogo from '../app/AppLogo.vue';
 import IconButton from '../app/IconButton.vue';
 import StateMark from '../app/StateMark.vue';
 import { iconFor } from '../resume/icons';
@@ -72,6 +73,12 @@ const props = defineProps<{
 }>();
 const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
+
+// The rail shows the selected tool by shape as well as by color (DESIGN.md).
+const railButtonClass
+  = 'aria-pressed:bg-surface-blue aria-pressed:text-link '
+    + 'aria-pressed:shadow-[inset_3px_0_0_var(--primary)] '
+    + 'max-[72rem]:aria-pressed:shadow-[inset_0_-3px_0_var(--primary)]';
 
 const inspector = ref<InspectorPanel>({ kind: 'personal' });
 const narrowRegion = ref<'editor' | 'preview'>('editor');
@@ -201,7 +208,7 @@ async function discardAndSignIn(): Promise<void> {
     :class="[
       'editor-shell grid min-h-dvh max-h-dvh',
       'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_22rem]',
-      'grid-rows-[4rem_minmax(0,1fr)] overflow-hidden bg-background',
+      'grid-rows-[4rem_minmax(0,1fr)] overflow-hidden bg-editor-canvas',
       'text-foreground max-[72rem]:grid-cols-[16.5rem_minmax(0,1fr)]',
       'max-[42rem]:grid-cols-[minmax(0,1fr)]',
       'max-[42rem]:grid-rows-[6rem_minmax(0,1fr)]',
@@ -209,7 +216,7 @@ async function discardAndSignIn(): Promise<void> {
   >
     <header
       class="editor-topbar col-span-full flex h-16 items-center gap-4
-        border-b bg-background/95 px-4 max-[42rem]:h-24 max-[42rem]:flex-col
+        border-b bg-card px-4 max-[42rem]:h-24 max-[42rem]:flex-col
         max-[42rem]:gap-0 max-[42rem]:px-2 max-[42rem]:py-2"
       data-region="topbar"
     >
@@ -220,9 +227,19 @@ async function discardAndSignIn(): Promise<void> {
         data-editor-topbar-row="identity"
       >
         <NuxtLink
-          class="editor-brand font-semibold"
+          class="editor-brand flex shrink-0 items-center rounded-md"
           to="/app/resumes"
-        > aboutme </NuxtLink>
+        >
+          <AppLogo
+            size="sm"
+            class="max-[42rem]:hidden"
+          />
+          <AppLogo
+            mark-only
+            size="sm"
+            class="min-[42rem]:hidden"
+          />
+        </NuxtLink>
         <span
           aria-hidden="true"
           class="h-5 border-l max-[42rem]:hidden"
@@ -308,7 +325,7 @@ async function discardAndSignIn(): Promise<void> {
       role="toolbar"
     >
       <IconButton
-        class="aria-pressed:bg-secondary aria-pressed:text-primary"
+        :class="railButtonClass"
         data-action="open-document"
         :pressed="inspector.kind === 'personal' || inspector.kind === 'section'"
         :label="copy.document"
@@ -320,7 +337,7 @@ async function discardAndSignIn(): Promise<void> {
         />
       </IconButton>
       <IconButton
-        class="aria-pressed:bg-secondary aria-pressed:text-primary"
+        :class="railButtonClass"
         data-action="open-structure"
         :pressed="inspector.kind === 'structure'"
         :label="copy.structure"
@@ -332,7 +349,7 @@ async function discardAndSignIn(): Promise<void> {
         />
       </IconButton>
       <IconButton
-        class="aria-pressed:bg-secondary aria-pressed:text-primary"
+        :class="railButtonClass"
         data-action="open-design"
         :pressed="inspector.kind === 'customization'"
         :label="copy.design"
@@ -344,7 +361,7 @@ async function discardAndSignIn(): Promise<void> {
         />
       </IconButton>
       <IconButton
-        class="aria-pressed:bg-secondary aria-pressed:text-primary"
+        :class="railButtonClass"
         data-action="open-templates"
         :pressed="inspector.kind === 'templates'"
         :label="copy.templates"
@@ -356,7 +373,7 @@ async function discardAndSignIn(): Promise<void> {
         />
       </IconButton>
       <IconButton
-        class="aria-pressed:bg-secondary aria-pressed:text-primary"
+        :class="railButtonClass"
         data-action="open-photo"
         :pressed="inspector.kind === 'photo'"
         :label="copy.photo"
@@ -425,8 +442,8 @@ async function discardAndSignIn(): Promise<void> {
                   : undefined
               "
               :data-outline-key="item.key"
-              class="w-full justify-start aria-[current=page]:bg-accent
-                aria-[current=page]:text-accent-foreground"
+              class="w-full justify-start aria-[current=page]:bg-surface-blue
+                aria-[current=page]:font-semibold"
               variant="ghost"
               @click="selectOutline(item.key)"
             >
@@ -434,6 +451,7 @@ async function discardAndSignIn(): Promise<void> {
                 :is="item.icon"
                 :size="18"
                 aria-hidden="true"
+                class="text-brand-indigo"
                 :data-icon-key="item.iconKey"
                 data-outline-icon
               />
@@ -453,7 +471,7 @@ async function discardAndSignIn(): Promise<void> {
 
     <div
       class="editor-preview-region relative col-start-3 row-start-2 grid
-        min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden bg-background
+        min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden bg-editor-canvas
         max-[72rem]:col-span-2 max-[72rem]:col-start-1 max-[72rem]:row-start-2
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
         max-[72rem]:data-[narrow-active=false]:invisible"
@@ -528,8 +546,9 @@ async function discardAndSignIn(): Promise<void> {
                     : undefined
                 "
                 :data-outline-key="item.key"
-                class="w-full justify-start aria-[current=page]:bg-accent
-                  aria-[current=page]:text-accent-foreground"
+                class="w-full justify-start
+                  aria-[current=page]:bg-surface-blue
+                  aria-[current=page]:font-semibold"
                 type="button"
                 variant="ghost"
                 @click="selectOutline(item.key)"
@@ -538,6 +557,7 @@ async function discardAndSignIn(): Promise<void> {
                   :is="item.icon"
                   :size="18"
                   aria-hidden="true"
+                  class="text-brand-indigo"
                   :data-icon-key="item.iconKey"
                   data-outline-icon
                 />
@@ -605,13 +625,14 @@ async function discardAndSignIn(): Promise<void> {
     <div
       :aria-label="copy.editorView"
       class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t
-        bg-background p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]
+        bg-card p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]
         min-[42rem]:hidden"
       role="tablist"
     >
       <Button
         :aria-pressed="narrowRegion === 'editor'"
         :aria-selected="narrowRegion === 'editor'"
+        class="aria-selected:text-link aria-selected:font-semibold"
         data-action="show-editor"
         role="tab"
         type="button"
@@ -623,6 +644,7 @@ async function discardAndSignIn(): Promise<void> {
       <Button
         :aria-pressed="narrowRegion === 'preview'"
         :aria-selected="narrowRegion === 'preview'"
+        class="aria-selected:text-link aria-selected:font-semibold"
         data-action="show-preview"
         role="tab"
         type="button"

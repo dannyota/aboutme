@@ -32,6 +32,10 @@ type Provider = 'google' | 'github' | 'linkedin';
 
 export type AuthCopy = {
   readonly messages: Readonly<Record<AuthMessage, string>>;
+  readonly brandPanel: {
+    readonly statement: string;
+    readonly points: readonly [string, string, string];
+  };
   readonly email: string;
   readonly password: string;
   readonly newPassword: string;
@@ -83,6 +87,14 @@ export type AuthCopy = {
 
 export const authCopy: Record<Locale, AuthCopy> = {
   vi: {
+    brandPanel: {
+      statement: 'CV của bạn luôn riêng tư cho đến khi bạn đăng.',
+      points: [
+        'Miễn phí và mã nguồn mở',
+        'Mỗi CV một đường dẫn',
+        'PDF khổ A4 hoặc Letter',
+      ],
+    },
     messages: {
       enterEmailAndPassword: 'Nhập email và mật khẩu.',
       invalidCredentials: 'Email hoặc mật khẩu không đúng.',
@@ -172,6 +184,14 @@ export const authCopy: Record<Locale, AuthCopy> = {
     },
   },
   en: {
+    brandPanel: {
+      statement: 'Your resume stays private until you publish it.',
+      points: [
+        'Free and open source',
+        'One link per resume',
+        'PDF in A4 or Letter',
+      ],
+    },
     messages: {
       enterEmailAndPassword: 'Enter your email and password.',
       invalidCredentials: 'Invalid email or password.',
