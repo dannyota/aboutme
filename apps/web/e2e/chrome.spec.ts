@@ -9,9 +9,9 @@ import { verifyScreenshot, waitForImages } from './support';
 // cookie pattern).
 
 const PAGES = [
-  { name: 'home', path: '/' },
-  { name: 'login', path: '/login' },
-  { name: 'templates', path: '/templates' },
+  { name: 'home', path: '/', thumbnails: 4 },
+  { name: 'login', path: '/login', thumbnails: 0 },
+  { name: 'templates', path: '/templates', thumbnails: 20 },
 ] as const;
 const THEMES = ['light', 'dark'] as const;
 const WIDTHS = [390, 1440] as const;
@@ -47,16 +47,16 @@ for (const page of PAGES) {
           - document.documentElement.clientWidth);
         expect(overflow).toBe(0);
 
-        if (page.name === 'home') {
+        if (page.thumbnails > 0) {
           // Template thumbnails mount only near the viewport, so a full-page
           // capture of a short viewport shows empty sheets. Grow the viewport
-          // to the whole page and wait for the four showcase renders.
+          // to the whole page and wait for every thumbnail render.
           const height = await browserPage.evaluate(() =>
             document.documentElement.scrollHeight);
           await browserPage.setViewportSize({ width, height });
           await expect(
             browserPage.locator('[data-sheet-thumbnail-render]'),
-          ).toHaveCount(4);
+          ).toHaveCount(page.thumbnails);
           await waitForImages(browserPage);
         }
 
