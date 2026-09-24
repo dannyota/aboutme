@@ -44,11 +44,11 @@ export interface GalleryCopy {
 
 export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
   vi: {
-    title: 'Mẫu CV',
-    seoTitle: 'Mẫu CV miễn phí',
+    title: 'Thư viện',
+    seoTitle: 'Thư viện mẫu CV miễn phí',
     lead: '20 mẫu miễn phí. Trang bạn xem ở đây chính là trang nhà tuyển dụng '
       + 'mở và bản PDF họ tải về.',
-    filtersLabel: 'Lọc mẫu CV',
+    filtersLabel: 'Lọc thư viện',
     all: (count) => `Tất cả ${count}`,
     filters: {
       'sample': 'Có CV mẫu',
@@ -62,7 +62,7 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
     illustrative: 'Nội dung minh họa',
     noMatch: 'Không có mẫu nào khớp với bộ lọc này.',
     detail: {
-      breadcrumb: 'Mẫu CV',
+      breadcrumb: 'Thư viện',
       seoTitle: (name) => `Mẫu CV ${name}`,
       sampleToggle: 'Ngôn ngữ của CV mẫu',
       sampleLanguages: { vi: 'Tiếng Việt', en: 'Tiếng Anh' },
@@ -96,11 +96,11 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
     },
   },
   en: {
-    title: 'Resume templates',
-    seoTitle: 'Free resume templates',
+    title: 'Library',
+    seoTitle: 'Free resume library',
     lead: '20 free templates. What you see here is exactly the page a '
       + 'recruiter opens and the PDF they download.',
-    filtersLabel: 'Filter templates',
+    filtersLabel: 'Filter the library',
     all: (count) => `All ${count}`,
     filters: {
       'sample': 'With a sample',
@@ -114,7 +114,7 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
     illustrative: 'Illustrative content',
     noMatch: 'No template matches this filter.',
     detail: {
-      breadcrumb: 'Resume templates',
+      breadcrumb: 'Library',
       seoTitle: (name) => `${name} resume template`,
       sampleToggle: 'Sample language',
       sampleLanguages: { vi: 'Vietnamese sample', en: 'English sample' },

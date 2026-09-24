@@ -65,7 +65,7 @@ describe('AppShell', () => {
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
     expect(found['Create account']).toBe('/register');
-    expect(found['Templates']).toBe('/templates');
+    expect(found['Library']).toBe('/templates');
     expect(found['Resumes']).toBeUndefined();
     expect(found['Settings']).toBeUndefined();
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
@@ -122,7 +122,7 @@ describe('AppShell', () => {
     const found = links(wrapper);
     expect(found['Resumes']).toBe('/app/resumes');
     expect(found['Settings']).toBe('/app/settings/sessions');
-    expect(found['Templates']).toBe('/templates');
+    expect(found['Library']).toBe('/templates');
     expect(found['Sign in']).toBeUndefined();
     expect(found['Create account']).toBeUndefined();
     expect(wrapper.get('[aria-label="Account menu"]').exists()).toBe(true);
@@ -148,7 +148,7 @@ describe('AppShell', () => {
   });
 
   it(
-    'hides Templates on phones when signed in, keeps it when signed out',
+    'hides the Library link on phones when signed in, keeps it when signed out',
     async () => {
       meStatus = 200;
       const signedInWrapper = await mountShell();
@@ -351,7 +351,7 @@ describe('AppShell', () => {
   });
 
   it(
-    'marks the Templates link current on the gallery and its pages',
+    'marks the Library link current on the gallery and its pages',
     async () => {
       meStatus = 401;
       for (const route of ['/templates', '/templates/engineer-compact']) {
@@ -369,12 +369,12 @@ describe('AppShell', () => {
     },
   );
 
-  it('speaks Vietnamese for Templates on the localized gallery', async () => {
+  it('speaks Vietnamese for Library on the localized gallery', async () => {
     meStatus = 401;
     setSiteLocale('vi');
     const wrapper = await mountShell('/templates');
     await flushPromises();
-    expect(links(wrapper)['Mẫu']).toBe('/templates');
+    expect(links(wrapper)['Thư viện']).toBe('/templates');
   });
 
   it(
