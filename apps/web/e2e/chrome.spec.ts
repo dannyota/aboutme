@@ -1,4 +1,11 @@
-import { expect, test } from '@playwright/test';
+import {
+  type Browser,
+  chromium,
+  expect,
+  type Page,
+  test,
+  webkit,
+} from '@playwright/test';
 
 import { verifyScreenshot, waitForImages } from './support';
 
@@ -104,6 +111,72 @@ for (const page of PAGES) {
             testInfo,
             templates,
           );
+        }
+      });
+    }
+  }
+}
+
+// The hero sheet and its ghost stay the same size and centered at phone
+// widths in both engines. iPhone Safari once laid the zoomed sheet out
+// narrower than its stage, leaving the ghost wider and the pair off center
+// (DESIGN.md, landing).
+const PHONE_WIDTHS = [360, 375, 390, 414, 430] as const;
+
+async function expectCenteredSheet(page: Page, width: number) {
+  await page.setViewportSize({ width, height: 900 });
+  const response = await page.goto('/');
+  expect(response?.status()).toBe(200);
+  await page.evaluate(() => document.fonts.ready);
+  const boxes = await page.evaluate(() => {
+    const box = (id: string) => {
+      const element = document.querySelector(`[data-testid="${id}"]`);
+      if (element === null) throw new Error(`missing ${id}`);
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height,
+      };
+    };
+    return {
+      stage: box('landing-stage'),
+      sheet: box('landing-sheet'),
+      overflow: document.documentElement.scrollWidth
+        - document.documentElement.clientWidth,
+    };
+  });
+  expect(boxes.overflow).toBe(0);
+  expect(Math.abs(boxes.sheet.width - boxes.stage.width)).toBeLessThan(1);
+  expect(Math.abs(boxes.sheet.height - boxes.stage.height)).toBeLessThan(1);
+  expect(Math.abs(boxes.sheet.left - boxes.stage.left)).toBeLessThan(1);
+  const leftGap = boxes.sheet.left;
+  const rightGap = width - boxes.sheet.right;
+  expect(Math.abs(leftGap - rightGap)).toBeLessThan(2);
+}
+
+for (const engine of ['chromium', 'webkit'] as const) {
+  for (const theme of ['light', 'dark'] as const) {
+    for (const locale of ['vi', 'en'] as const) {
+      const title = `hero sheet centered on phones: ${engine} ${theme} `
+        + locale;
+      test(title, async ({ baseURL }) => {
+        const origin = baseURL ?? 'http://127.0.0.1:20092';
+        const launcher = engine === 'webkit' ? webkit : chromium;
+        const browser: Browser = await launcher.launch({ args: [] });
+        try {
+          const context = await browser.newContext({ baseURL: origin });
+          await context.addCookies([
+            { name: 'aboutme-locale', value: locale, url: origin },
+            { name: 'aboutme-theme', value: theme, url: origin },
+          ]);
+          const page = await context.newPage();
+          for (const width of PHONE_WIDTHS) {
+            await expectCenteredSheet(page, width);
+          }
+        } finally {
+          await browser.close();
         }
       });
     }

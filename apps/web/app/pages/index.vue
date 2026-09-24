@@ -143,7 +143,10 @@ useHead(computed(() => ({
         class="relative mx-auto w-fit max-w-full lg:col-span-7"
         data-testid="landing-sample"
       >
-        <div class="relative isolate">
+        <div
+          class="landing-stage relative isolate"
+          data-testid="landing-stage"
+        >
           <div
             aria-hidden="true"
             class="pointer-events-none absolute -inset-x-4 -inset-y-8 -z-10
@@ -499,28 +502,38 @@ useHead(computed(() => ({
 </template>
 
 <style scoped>
+/* The stage takes the zoomed sheet's size explicitly: WebKit does not
+   shrink a zoomed child's contribution to its parent's width, which left
+   the ghost sheet wider than the sheet and the pair off center on iPhone
+   Safari. */
+.landing-stage {
+  --sheet-zoom: 0.39;
+  width: calc(210mm * var(--sheet-zoom));
+  height: calc(297mm * var(--sheet-zoom));
+}
+
 .landing-sheet {
   width: 210mm;
-  min-height: 297mm;
+  height: 297mm;
   overflow: hidden;
-  zoom: 0.39;
+  zoom: var(--sheet-zoom);
 }
 
 @media (min-width: 28rem) {
-  .landing-sheet {
-    zoom: 0.5;
+  .landing-stage {
+    --sheet-zoom: 0.5;
   }
 }
 
 @media (min-width: 42rem) {
-  .landing-sheet {
-    zoom: 0.6;
+  .landing-stage {
+    --sheet-zoom: 0.6;
   }
 }
 
 @media (min-width: 80rem) {
-  .landing-sheet {
-    zoom: 0.64;
+  .landing-stage {
+    --sheet-zoom: 0.64;
   }
 }
 
