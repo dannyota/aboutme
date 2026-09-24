@@ -39,9 +39,9 @@ RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com
 FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e AS runtime
 
 USER root
-# Nothing in this image runs npm at runtime; the base's Node install ships it
-# unused (tar, brace-expansion, ip-address, undici, and pacote, all with
-# published CVEs). Node itself stays: it's Playwright's base.
+# Nothing in this image runs npm or corepack at runtime, so they are removed
+# rather than shipped unused; the final check fails the build if a base update
+# moves them. Node itself stays: it is Playwright's base.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
@@ -49,8 +49,11 @@ RUN apt-get update \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1234/chrome-linux; } \
     && ln -s "$chromium" /opt/chromium \
     && test -x /opt/chromium/chrome \
-    && rm -rf /usr/lib/node_modules/npm \
-    && rm -f /usr/bin/npm /usr/bin/npx
+    && rm -rf /usr/lib/node_modules/npm /usr/lib/node_modules/corepack \
+    && rm -f /usr/bin/npm /usr/bin/npx /usr/bin/corepack \
+    && for tool in npm npx corepack; do \
+        ! command -v "$tool" >/dev/null || exit 1; \
+    done
 ENV CHROMIUM_PATH=/opt/chromium/chrome TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 COPY --from=build /out/server /usr/local/bin/server
