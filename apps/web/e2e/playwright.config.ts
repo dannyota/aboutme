@@ -80,6 +80,7 @@ export default defineConfig({
         'corpus.spec.ts',
         'print.spec.ts',
         'samples.spec.ts',
+        'sample-pages.spec.ts',
       ]
     : ['normal-csp.spec.ts', 'gallery.spec.ts'],
   timeout: 20_000,
