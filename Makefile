@@ -421,7 +421,7 @@ test-db-up: ## Start THE one aboutme Postgres container (idempotent; serves the 
 	else \
 	  podman run -d --rm --name aboutme-test-db --memory 512m -p 127.0.0.1:20432:5432 \
 	    -e POSTGRES_USER=aboutme -e POSTGRES_PASSWORD=aboutme_dev -e POSTGRES_DB=aboutme \
-	    docker.io/library/postgres:18.4-alpine; \
+	    docker.io/library/postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873; \
 	fi
 	@echo "Waiting for aboutme-test-db to accept connections..."
 	@i=0; \
