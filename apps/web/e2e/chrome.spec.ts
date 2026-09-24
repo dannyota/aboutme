@@ -7,18 +7,17 @@ import {
   webkit,
 } from '@playwright/test';
 
-import { verifyScreenshot, waitForImages } from './support';
+import {
+  CHROME_PIXEL_TOLERANCE,
+  verifyScreenshot,
+  waitForImages,
+} from './support';
 
 // Application chrome pixel baselines: the signed-out homepage, the login
 // page, and the template gallery, at phone and desktop widths, in both
 // themes (DESIGN.md; ADR 0050). Vietnamese is the default locale, so these
 // baselines pin it rather than English (gallery.spec.ts uses the same
 // cookie pattern).
-
-// Renderer baselines stay exact (ADR 0029). Chrome captures allow a few
-// hundred pixels: Chromium's software raster anti-aliases the rounded header
-// pill two ways between runs on the tall library page, about 200 pixels.
-const CHROME_PIXEL_TOLERANCE = 400;
 
 const PAGES = [
   { name: 'home', path: '/', thumbnails: 4 },

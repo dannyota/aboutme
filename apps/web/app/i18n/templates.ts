@@ -21,6 +21,11 @@ export interface GalleryCopy {
     readonly sampleLanguages: Readonly<Record<Locale, string>>;
     readonly tabsLabel: string;
     readonly pageTab: string;
+    readonly pdfTab: string;
+    readonly pdfHint: string;
+    readonly pdfPageAlt: (number: number, total: number, name: string)
+      => string;
+    readonly pdfPageCaption: (number: number, total: number) => string;
     readonly atsTab: string;
     readonly atsHint: string;
     readonly sample: string;
@@ -70,6 +75,11 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       sampleLanguages: { vi: 'Tiếng Việt', en: 'Tiếng Anh' },
       tabsLabel: 'Cách xem CV mẫu',
       pageTab: 'Trang CV',
+      pdfTab: 'PDF',
+      pdfHint: 'Bản PDF tải về của CV mẫu, từng trang.',
+      pdfPageAlt: (number, total, name) =>
+        `Trang ${number}/${total} của CV mẫu ${name}`,
+      pdfPageCaption: (number, total) => `Trang ${number}/${total}`,
       atsTab: 'ATS đọc được gì',
       atsHint: 'Nội dung CV theo đúng thứ tự phần mềm lọc hồ sơ (ATS) đọc.',
       sample: 'CV mẫu',
@@ -123,6 +133,11 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       sampleLanguages: { vi: 'Vietnamese sample', en: 'English sample' },
       tabsLabel: 'How to view the sample',
       pageTab: 'Page',
+      pdfTab: 'PDF',
+      pdfHint: 'The sample’s PDF download, page by page.',
+      pdfPageAlt: (number, total, name) =>
+        `Page ${number} of ${total} of the ${name} sample resume`,
+      pdfPageCaption: (number, total) => `Page ${number} of ${total}`,
       atsTab: 'What an ATS reads',
       atsHint: 'The resume’s text, in the order an applicant tracking system '
         + 'reads it.',

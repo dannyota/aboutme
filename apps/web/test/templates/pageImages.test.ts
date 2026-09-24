@@ -5,7 +5,10 @@ import { SAMPLES } from '@aboutme/schema/samples';
 
 import manifest from '../../public/templates/pages/manifest.json';
 import { galleryCopy } from '../../app/i18n/templates';
-import { samplePageImage } from '../../app/templates/pageImages';
+import {
+  samplePageImage,
+  samplePageImages,
+} from '../../app/templates/pageImages';
 
 // Page-one images for gallery samples, stored by sample-pages.spec and read
 // build-time so the server-rendered card carries the image and its
@@ -36,6 +39,26 @@ describe('samplePageImage', () => {
   it('has no image for a template without a sample', () => {
     expect(samplePageImage('classic-serif', 'en')).toBeUndefined();
     expect(samplePageImage('classic-serif', 'vi')).toBeUndefined();
+  });
+});
+
+describe('samplePageImages', () => {
+  it('returns every stored page of a multi-page sample in order', () => {
+    const entry = manifest.find((candidate) =>
+      candidate.templateId === 'executive-band' && candidate.lng === 'en')!;
+    const images = samplePageImages('executive-band', 'en');
+    expect(images).toHaveLength(2);
+    expect(images.map((image) => image.number)).toEqual([1, 2]);
+    images.forEach((image, index) => {
+      expect(image.src).toBe(`/templates/pages/${entry.files[index]}`);
+      expect(image.width).toBe(entry.width);
+      expect(image.height).toBe(entry.height);
+    });
+  });
+
+  it('is empty for a template without a sample', () => {
+    expect(samplePageImages('classic-serif', 'en')).toEqual([]);
+    expect(samplePageImages('classic-serif', 'vi')).toEqual([]);
   });
 });
 
