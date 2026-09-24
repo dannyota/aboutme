@@ -63,6 +63,9 @@ for (const page of PAGES) {
           await browserPage.evaluate(() => new Promise<void>((done) => {
             requestAnimationFrame(() => requestAnimationFrame(() => done()));
           }));
+          // Each embedded sheet's name renders as a p, not an h1, so the
+          // page keeps exactly one h1 once every thumbnail has mounted.
+          await expect(browserPage.locator('h1')).toHaveCount(1);
         }
 
         await verifyScreenshot(
