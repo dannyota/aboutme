@@ -146,6 +146,151 @@ describe('measurePagination', () => {
     });
   });
 
+  it('gives a later entry part the gap the whole entry lays out', async () => {
+    const root = document.createElement('div');
+    root.style.setProperty('--gap-section', '20px');
+    root.style.setProperty('--gap-header', '30px');
+    root.style.setProperty('--gap-heading', '8px');
+    root.style.setProperty('--gap-entry', '6px');
+    root.getBoundingClientRect = () => ({ ...rect(100), width: 50 });
+    Object.defineProperty(root, 'offsetWidth', { value: 100 });
+    Object.defineProperty(root.ownerDocument, 'fonts', {
+      configurable: true,
+      value: {
+        load: async () => [{} as FontFace],
+        ready: Promise.resolve(),
+      },
+    });
+    document.body.replaceChildren(root);
+    const header = document.createElement('div');
+    header.dataset.paginationHeader = '';
+    header.getBoundingClientRect = () => rect(20);
+    root.append(header);
+    for (const index of [0, 1, 2, 3]) {
+      const block = document.createElement('div');
+      block.dataset.paginationBlockIndex = String(index);
+      block.getBoundingClientRect = () => rect(10);
+      root.append(block);
+    }
+    // The whole entry: a paragraph, then a two-item list. Rendered at half
+    // size, so every gap reads half as large as it lays out.
+    const whole = document.createElement('div');
+    whole.dataset.paginationWholeEntry = '1';
+    whole.innerHTML = '<article class="entry"><div class="entry-body">'
+      + '<p>Intro</p><ul><li>One</li><li>Two</li></ul></div></article>';
+    const [paragraph, first, second] = [
+      ...whole.querySelectorAll('p, li'),
+    ] as HTMLElement[];
+    const at = (top: number, height: number): DOMRect => ({
+      ...rect(height),
+      top,
+      y: top,
+      bottom: top + height,
+    });
+    paragraph!.getBoundingClientRect = () => at(0, 10);
+    first!.getBoundingClientRect = () => at(14, 10);
+    second!.getBoundingClientRect = () => at(26, 10);
+    root.append(whole);
+
+    const split: PaginationRequest = {
+      ...request(),
+      blocks: [
+        { sectionKey: 'work', kind: 'heading', column: 'main' },
+        ...[0, 1, 2].map((part) => ({
+          sectionKey: 'work',
+          kind: 'entry' as const,
+          entryIndex: 0,
+          part,
+          column: 'main' as const,
+        })),
+      ],
+    };
+    const measured = await measurePagination(root, split);
+    expect(measured.blocks.map((block) => block.gapBeforePx))
+      .toEqual([20, 8, 8, 4]);
+  });
+
+  it('falls back to no part gap when the whole entry has other blocks',
+    async () => {
+      const root = document.createElement('div');
+      root.style.setProperty('--gap-section', '20px');
+      root.style.setProperty('--gap-header', '30px');
+      root.style.setProperty('--gap-heading', '8px');
+      root.style.setProperty('--gap-entry', '6px');
+      Object.defineProperty(root.ownerDocument, 'fonts', {
+        configurable: true,
+        value: {
+          load: async () => [{} as FontFace],
+          ready: Promise.resolve(),
+        },
+      });
+      document.body.replaceChildren(root);
+      const header = document.createElement('div');
+      header.dataset.paginationHeader = '';
+      header.getBoundingClientRect = () => rect(20);
+      root.append(header);
+      for (const index of [0, 1]) {
+        const block = document.createElement('div');
+        block.dataset.paginationBlockIndex = String(index);
+        block.getBoundingClientRect = () => rect(10);
+        root.append(block);
+      }
+      const whole = document.createElement('div');
+      whole.dataset.paginationWholeEntry = '0';
+      whole.innerHTML = '<div class="entry-body"><p>Only one</p></div>';
+      root.append(whole);
+
+      const measured = await measurePagination(root, {
+        ...request(),
+        blocks: [0, 1].map((part) => ({
+          sectionKey: 'work',
+          kind: 'entry' as const,
+          entryIndex: 0,
+          part,
+          column: 'main' as const,
+        })),
+      });
+      expect(measured.blocks.map((block) => block.gapBeforePx))
+        .toEqual([6, 0]);
+    });
+
+  it('fails closed when a split entry is not laid out whole', async () => {
+    const root = document.createElement('div');
+    root.style.setProperty('--gap-section', '20px');
+    root.style.setProperty('--gap-header', '30px');
+    root.style.setProperty('--gap-heading', '8px');
+    root.style.setProperty('--gap-entry', '6px');
+    Object.defineProperty(root.ownerDocument, 'fonts', {
+      configurable: true,
+      value: {
+        load: async () => [{} as FontFace],
+        ready: Promise.resolve(),
+      },
+    });
+    document.body.replaceChildren(root);
+    const header = document.createElement('div');
+    header.dataset.paginationHeader = '';
+    header.getBoundingClientRect = () => rect(20);
+    root.append(header);
+    for (const index of [0, 1]) {
+      const block = document.createElement('div');
+      block.dataset.paginationBlockIndex = String(index);
+      block.getBoundingClientRect = () => rect(10);
+      root.append(block);
+    }
+
+    await expect(measurePagination(root, {
+      ...request(),
+      blocks: [0, 1].map((part) => ({
+        sectionKey: 'work',
+        kind: 'entry' as const,
+        entryIndex: 0,
+        part,
+        column: 'main' as const,
+      })),
+    })).rejects.toMatchObject({ code: 'invalid_measurement' });
+  });
+
   it('fails closed when the measurement tree is incomplete', async () => {
     const root = document.createElement('div');
     root.style.setProperty('--gap-section', '20px');

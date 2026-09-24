@@ -1,286 +1,286 @@
 {
   "version": 1,
-  "note": "Word-level drift ceilings per sample|lng|engine|zoom key, generated from a hosted CI run of preview-gap.spec.ts. A null metric is unenforced: the check reports the count but never fails on it. Every key here is currently null (no CI run has filled it in yet), so this file enforces nothing until it is regenerated from real evidence. Tighten a metric only to a value at or above what CI observed; do not guess.",
+  "note": "Word-level drift ceilings per sample|lng|engine|zoom key. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except executive-band vi, which allows one heading run whose cause CI has not yet shown. Line-break ceilings hold the differences that font hinting (Chromium without the print flags) and CSS zoom text metrics cause; they change only with the browser or font build. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
   "cases": {
     "ats-plain|en|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 2,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|en|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|en|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|en|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|vi|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 2,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|vi|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|vi|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "ats-plain|vi|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|en|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 2,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|en|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|en|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|en|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|vi|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|vi|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 10,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|vi|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "engineer-compact|vi|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|en|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 6,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|en|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 6,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|en|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|en|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|vi|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 12,
+      "maxPageBreak": 0,
+      "maxMissing": 1,
+      "maxExtra": 1,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|vi|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 1,
+      "maxExtra": 1,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|vi|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 1,
+      "maxExtra": 1,
+      "maxEntryPageMismatches": 0
     },
     "executive-band|vi|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 1,
+      "maxExtra": 1,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|en|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 2,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|en|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|en|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|en|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|vi|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 3,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|vi|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|vi|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "graduate-friendly|vi|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|en|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 4,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|en|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|en|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|en|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|vi|chromium-normal|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 14,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|vi|chromium-normal|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 6,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|vi|webkit|typical": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 4,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     },
     "modern-sidebar|vi|webkit|full": {
-      "maxLineBreak": null,
-      "maxPageBreak": null,
-      "maxMissing": null,
-      "maxExtra": null,
-      "maxEntryPageMismatches": null
+      "maxLineBreak": 4,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
     }
   }
 }

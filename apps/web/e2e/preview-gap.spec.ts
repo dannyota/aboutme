@@ -26,6 +26,17 @@ import { denyExternalRequests, waitForImages } from './support';
 // content for the PDF. A word-level LCS alignment tells which words the two
 // sides share; the boundaries between aligned words classify each
 // disagreement as a line-break, a page-break, or a missing/extra run.
+//
+// Both sides are read the same way so that only layout differences count:
+// - Words are compared case-folded, because the PDF text layer carries a
+//   heading's CSS text-transform while DOM text does not.
+// - A word splits after each hyphen, because the PDF text layer splits a
+//   word that wraps at its hyphen while a DOM text node does not.
+// - Words are ordered by flow (header, main column, sidebar), then page,
+//   then line. The PDF has no flow structure, so its words take the flow
+//   whose region they sit in, using the column split and header bottom the
+//   preview's first page reports. Without this, a PDF line that crosses both
+//   columns interleaves main and sidebar words and misaligns them.
 
 const TYPICAL_ZOOM = 0.84;
 const FULL_ZOOM = 1;
@@ -37,6 +48,24 @@ const ZOOM_VARIANTS = [
 ] as const;
 type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];
 type Engine = 'chromium-normal' | 'webkit';
+type Flow = 'header' | 'main' | 'sidebar';
+
+const FLOW_RANK: Readonly<Record<Flow, number>> = {
+  header: 0,
+  main: 1,
+  sidebar: 2,
+};
+
+// A word, or the part of a word up to and including a run of hyphens.
+const WORD_PATTERN = '[^\\s-]*-+|[^\\s-]+';
+
+// Where the flows sit on a page, as fractions of the page width so that
+// preview zoom and PDF points compare directly. bodyTop is measured on the
+// first page only; later pages carry no header.
+interface FlowGeometry {
+  readonly bodyTop: number;
+  readonly splitX: number | null;
+}
 
 interface EntryStart {
   readonly sectionKey: string;
@@ -45,6 +74,7 @@ interface EntryStart {
 
 interface FlatWord {
   readonly text: string;
+  readonly flow: Flow;
   readonly page: number;
   readonly line: number;
   readonly entryStart: EntryStart | null;
@@ -127,6 +157,7 @@ type PreviewResult
     readonly ok: true;
     readonly url: string;
     readonly extraction: Extraction;
+    readonly geometry: FlowGeometry;
   }
   | {
     readonly ok: false;
@@ -196,6 +227,29 @@ function assertWithinExpectation(result: CaseResult): void {
 }
 
 // --- word alignment (LCS) ----------------------------------------------
+
+function compareKey(text: string): string {
+  return text.normalize('NFC').toUpperCase();
+}
+
+function orderByFlow<T extends { readonly flow: Flow }>(
+  words: readonly T[],
+): T[] {
+  // Array.prototype.sort is stable, so page and line order hold per flow.
+  return [...words].sort((a, b) => FLOW_RANK[a.flow] - FLOW_RANK[b.flow]);
+}
+
+function firstOfEachKind(
+  diffs: readonly WordDiff[],
+  limit: number,
+): WordDiff[] {
+  const seen = new Map<WordDiff['kind'], number>();
+  return diffs.filter((diff) => {
+    const count = seen.get(diff.kind) ?? 0;
+    seen.set(diff.kind, count + 1);
+    return count < limit;
+  });
+}
 
 function alignIndices(
   a: readonly string[],
@@ -355,9 +409,20 @@ interface RawWord {
   readonly bottom: number;
 }
 
-function clusterRawLines(raw: readonly RawWord[]): RawWord[][] {
+// A PDF word with its position as a fraction of the page width, used to
+// assign it a flow once the preview reports the flow geometry.
+interface PdfWord extends RawWord {
+  readonly x: number;
+  readonly centerY: number;
+}
+
+interface PdfPage {
+  readonly words: readonly PdfWord[];
+}
+
+function clusterRawLines<T extends RawWord>(raw: readonly T[]): T[][] {
   const sorted = [...raw].sort((a, b) => a.top - b.top || a.left - b.left);
-  const lines: RawWord[][] = [];
+  const lines: T[][] = [];
   let anchor = Number.NaN;
   for (const word of sorted) {
     const tolerance = Math.max(3, (word.bottom - word.top) * 0.6);
@@ -373,22 +438,23 @@ function clusterRawLines(raw: readonly RawWord[]): RawWord[][] {
   return lines;
 }
 
-async function extractPdf(pdfBytes: Buffer): Promise<Extraction> {
+async function readPdfPages(pdfBytes: Buffer): Promise<PdfPage[]> {
   const loadingTask = getDocument({
     data: new Uint8Array(pdfBytes),
     isImageDecoderSupported: false,
     isOffscreenCanvasSupported: false,
     useSystemFonts: false,
   });
+  const pattern = new RegExp(WORD_PATTERN, 'gu');
   try {
     const document = await loadingTask.promise;
-    const pages: PageLines[] = [];
-    const words: FlatWord[] = [];
-    let lineOrdinal = 0;
+    const pages: PdfPage[] = [];
     for (let n = 1; n <= document.numPages; n += 1) {
       const pdfPage = await document.getPage(n);
+      const [viewLeft, , viewRight, viewTop] = pdfPage.view;
+      const pageWidth = viewRight! - viewLeft!;
       const content = await pdfPage.getTextContent();
-      const raw: RawWord[] = [];
+      const words: PdfWord[] = [];
       for (const item of content.items) {
         if (!('str' in item) || item.str.trim() === '') continue;
         const transform = item.transform;
@@ -396,20 +462,48 @@ async function extractPdf(pdfBytes: Buffer): Promise<Extraction> {
         const height = item.height > 0
           ? item.height
           : Math.abs(transform[3]!) || 10;
-        for (const match of item.str.matchAll(/\S+/gu)) {
+        for (const match of item.str.matchAll(pattern)) {
           if (match.index === undefined) continue;
           const fraction = match.index / Math.max(item.str.length, 1);
-          raw.push({
+          const left = transform[4]! + fraction * item.width;
+          words.push({
             text: match[0],
             top,
-            left: transform[4]! + fraction * item.width,
+            left,
             bottom: top + height,
+            x: (left - viewLeft!) / pageWidth,
+            centerY: (viewTop! - transform[5]! - (height / 2)) / pageWidth,
           });
         }
       }
-      const pageIndex = n - 1;
-      const lineSummaries: LineSummary[] = [];
-      for (const line of clusterRawLines(raw)) {
+      pages.push({ words });
+    }
+    return pages;
+  } finally {
+    await loadingTask.destroy();
+  }
+}
+
+function pdfFlow(word: PdfWord, page: number, geometry: FlowGeometry): Flow {
+  if (page === 0 && word.centerY < geometry.bodyTop) return 'header';
+  if (geometry.splitX !== null && word.x >= geometry.splitX) return 'sidebar';
+  return 'main';
+}
+
+function buildPdfExtraction(
+  pdfPages: readonly PdfPage[],
+  geometry: FlowGeometry,
+): Extraction {
+  const pages: PageLines[] = [];
+  const words: FlatWord[] = [];
+  let lineOrdinal = 0;
+  pdfPages.forEach((pdfPage, pageIndex) => {
+    const lineSummaries: LineSummary[] = [];
+    for (const flow of ['header', 'main', 'sidebar'] as const) {
+      const flowWords = pdfPage.words.filter(
+        (word) => pdfFlow(word, pageIndex, geometry) === flow,
+      );
+      for (const line of clusterRawLines(flowWords)) {
         lineSummaries.push({
           first: line[0]!.text,
           last: line.at(-1)!.text,
@@ -418,6 +512,7 @@ async function extractPdf(pdfBytes: Buffer): Promise<Extraction> {
         for (const word of line) {
           words.push({
             text: word.text,
+            flow,
             page: pageIndex,
             line: lineOrdinal,
             entryStart: null,
@@ -425,12 +520,10 @@ async function extractPdf(pdfBytes: Buffer): Promise<Extraction> {
         }
         lineOrdinal += 1;
       }
-      pages.push({ page: pageIndex, lines: lineSummaries });
     }
-    return { pages, words };
-  } finally {
-    await loadingTask.destroy();
-  }
+    pages.push({ page: pageIndex, lines: lineSummaries });
+  });
+  return { pages, words: orderByFlow(words) };
 }
 
 // --- preview extraction (DOM) --------------------------------------------
@@ -439,16 +532,18 @@ interface BrowserExtraction {
   pages: { page: number; lines: LineSummary[] }[];
   words: {
     text: string;
+    flow: Flow;
     page: number;
     line: number;
     entryStart: EntryStart | null;
   }[];
+  geometry: FlowGeometry;
 }
 
 // Runs inside the page via page.evaluate: no reference to anything outside
 // this function body survives serialization, so every helper it needs is
-// declared inline.
-function browserExtract(): BrowserExtraction {
+// declared inline, and the word pattern arrives as an argument.
+function browserExtract(wordPattern: string): BrowserExtraction {
   interface Word {
     text: string;
     top: number;
@@ -462,7 +557,7 @@ function browserExtract(): BrowserExtraction {
     let node = walker.nextNode();
     while (node !== null) {
       const text = node.textContent ?? '';
-      for (const match of text.matchAll(/\S+/gu)) {
+      for (const match of text.matchAll(new RegExp(wordPattern, 'gu'))) {
         if (match.index === undefined) continue;
         const range = document.createRange();
         range.setStart(node, match.index);
@@ -501,6 +596,7 @@ function browserExtract(): BrowserExtraction {
 
   interface Block {
     el: Element;
+    flow: Flow;
     sectionKey: string | null;
     isEntry: boolean;
   }
@@ -509,7 +605,12 @@ function browserExtract(): BrowserExtraction {
     const blocks: Block[] = [];
     const header = pageEl.querySelector(':scope > div > .pagination-header');
     if (header !== null) {
-      blocks.push({ el: header, sectionKey: null, isEntry: false });
+      blocks.push({
+        el: header,
+        flow: 'header',
+        sectionKey: null,
+        isEntry: false,
+      });
     }
     const columns = pageEl.querySelector(
       ':scope > .layout-one-column, :scope > .layout-two-columns',
@@ -522,15 +623,41 @@ function browserExtract(): BrowserExtraction {
         ));
     for (const flow of flows) {
       const atomics = flow.querySelectorAll(':scope > .pagination-atomic');
+      const flowName = flow.classList.contains('resume-sidebar')
+        ? 'sidebar'
+        : 'main';
       for (const atomic of atomics) {
         blocks.push({
           el: atomic,
+          flow: flowName,
           sectionKey: atomic.getAttribute('data-section-key'),
           isEntry: atomic.getAttribute('data-block-kind') === 'entry',
         });
       }
     }
     return blocks;
+  }
+
+  function geometryOf(pageEl: Element | undefined): FlowGeometry {
+    if (pageEl === undefined) return { bodyTop: 0, splitX: null };
+    const page = pageEl.getBoundingClientRect();
+    const header = pageEl.querySelector(':scope > div > .pagination-header');
+    const columns = pageEl.querySelector(
+      ':scope > .layout-one-column, :scope > .layout-two-columns',
+    );
+    const columnsTop = columns?.getBoundingClientRect().top ?? page.top;
+    const headerBottom = header?.getBoundingClientRect().bottom ?? columnsTop;
+    const main = columns?.querySelector(':scope > .resume-main') ?? null;
+    const sidebar = columns?.querySelector(':scope > .resume-sidebar') ?? null;
+    const splitX = main === null || sidebar === null
+      ? null
+      : (((main.getBoundingClientRect().right
+        + sidebar.getBoundingClientRect().left) / 2) - page.left)
+      / page.width;
+    return {
+      bodyTop: (((headerBottom + columnsTop) / 2) - page.top) / page.width,
+      splitX,
+    };
   }
 
   const pageEls = Array.from(
@@ -568,6 +695,7 @@ function browserExtract(): BrowserExtraction {
           if (entryStart !== null) tagged = true;
           words.push({
             text: word.text,
+            flow: block.flow,
             page: pageIndex,
             line: lineOrdinal,
             entryStart,
@@ -579,7 +707,7 @@ function browserExtract(): BrowserExtraction {
     pages.push({ page: pageIndex, lines: lineSummaries });
   }
 
-  return { pages, words };
+  return { pages, words, geometry: geometryOf(pageEls[0]) };
 }
 
 // --- fixture URLs and rendering ------------------------------------------
@@ -689,9 +817,14 @@ async function producePreview(
         diagnostics: await safeCaptureDiagnostics(page),
       };
     }
-    const extraction = await page.evaluate(browserExtract);
+    const raw = await page.evaluate(browserExtract, WORD_PATTERN);
     expect(external).toEqual([]);
-    return { ok: true, url, extraction };
+    return {
+      ok: true,
+      url,
+      extraction: { pages: raw.pages, words: orderByFlow(raw.words) },
+      geometry: raw.geometry,
+    };
   } finally {
     await context.close();
   }
@@ -801,7 +934,7 @@ for (const { templateId, lng } of SAMPLES) {
     test.setTimeout(60_000);
     if (baseURL === undefined) throw new Error('baseURL is required.');
     const pdfBytes = await producePdf(page, baseURL, templateId, lng);
-    const pdfExtraction = await extractPdf(pdfBytes);
+    const pdfPages = await readPdfPages(pdfBytes);
 
     const variants: Array<{ engine: Engine; browser: Browser }> = [
       { engine: 'chromium-normal', browser: normalChromium! },
@@ -836,9 +969,13 @@ for (const { templateId, lng } of SAMPLES) {
           continue;
         }
         const previewExtraction = previewResult.extraction;
+        const pdfExtraction = buildPdfExtraction(
+          pdfPages,
+          previewResult.geometry,
+        );
         const pairs = alignIndices(
-          previewExtraction.words.map((w) => w.text),
-          pdfExtraction.words.map((w) => w.text),
+          previewExtraction.words.map((w) => compareKey(w.text)),
+          pdfExtraction.words.map((w) => compareKey(w.text)),
         );
         const { diffs, counts } = classify(
           previewExtraction,
@@ -858,7 +995,7 @@ for (const { templateId, lng } of SAMPLES) {
           zoomLabel,
           zoomValue,
           counts: { ...counts, entryPageMismatches },
-          firstDiffs: diffs.slice(0, 10),
+          firstDiffs: firstOfEachKind(diffs, 10),
           entryPageStarts: starts,
           knownCauses: causesFor(engine, zoomLabel),
         };
