@@ -207,6 +207,40 @@ func TestRecoveryCanceledRunStillRemovesOwnerContent(t *testing.T) {
 	}
 }
 
+// A failed connect must leave browser-result.json for the launcher's
+// report_failure to read the browser helper's own word; only a successful
+// connect clears the browser-handoff files. See
+// docs/design/mcp-owner-workflow.md#browser-helper-interface.
+func TestRecoveryFinishConnectKeepsBrowserResultOnlyOnFailure(t *testing.T) {
+	for name, test := range map[string]struct {
+		connected   bool
+		wantRemoved bool
+	}{
+		"failed connect leaves the result file": {connected: false, wantRemoved: false},
+		"successful connect clears the handoff": {connected: true, wantRemoved: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			directory := filepath.Join(t.TempDir(), "browser")
+			makePrivateDirectory(t, directory)
+			for file, content := range map[string]string{
+				"browser-ready": "ready", "browser-request.json": "{}", "browser-result.json": "login_failed",
+			} {
+				if writeErr := atomicPrivateWrite(directory, file, []byte(content)); writeErr != nil {
+					t.Fatal(writeErr)
+				}
+			}
+			if err := finishConnect(directory, test.connected); err != nil {
+				t.Fatal(err)
+			}
+			_, statErr := os.Stat(filepath.Join(directory, "browser-result.json"))
+			removed := errors.Is(statErr, os.ErrNotExist)
+			if removed != test.wantRemoved {
+				t.Fatalf("browser-result.json removed = %t, want %t", removed, test.wantRemoved)
+			}
+		})
+	}
+}
+
 func TestRecoveryBrowserResultIsExactRawBytes(t *testing.T) {
 	for name, test := range map[string]struct {
 		result string
