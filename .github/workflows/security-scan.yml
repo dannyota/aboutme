@@ -67,10 +67,9 @@ jobs:
       - if: failure()
         run: echo "### npm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
 
-  # Scans the three images published for the latest release tag, and every
-  # pinned base image from the production Dockerfiles, with the same pinned
-  # Trivy install release-images.yml uses. Fails on any fixable HIGH or
-  # CRITICAL finding across every target; scripts/security-scan.sh
+  # Scans the three images published for the latest release tag with the
+  # same pinned Trivy install release-images.yml uses. Fails on any fixable
+  # HIGH or CRITICAL finding across every target; scripts/security-scan.sh
   # weekly-scan continues past a failing target so one run always reports
   # the complete picture.
   image-scan:
@@ -81,7 +80,7 @@ jobs:
           fetch-depth: 0 # scripts/security-scan.sh latest-tag needs full tag history
       - name: Install Trivy
         run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
-      - name: Scan released and base images
+      - name: Scan released images
         run: |
           scripts/security-scan.sh weekly-scan \
             "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/reports"
@@ -91,7 +90,7 @@ jobs:
           {
             echo "### Weekly image scan: fixable HIGH/CRITICAL findings"
             echo
-            echo "Failing images/base images:"
+            echo "Failing images:"
             echo '```'
             cat "$RUNNER_TEMP/reports/failed.txt" 2>/dev/null || echo "(none recorded)"
             echo '```'
