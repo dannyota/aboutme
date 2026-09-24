@@ -222,7 +222,7 @@ describe('build-only renderer harness', () => {
       'utf8',
     );
     expect(source).toContain(
-      ':style="printFixture ? undefined : paperStyle"',
+      ':style="printMode ? undefined : paperStyle"',
     );
     expect(source).toMatch(new RegExp([
       '@media\\s+print\\s*\\{[\\s\\S]*html',
