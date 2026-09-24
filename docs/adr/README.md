@@ -14,8 +14,7 @@ generated UI primitive carry token-colored variant edits when a guard test
 protects them.
 
 [ADR 0053](0053-public-pdf-tab-renders-the-download-in-the-browser.md) is
-proposed: the public page's PDF tab draws the downloaded PDF in the browser with
-pdf.js.
+rejected: public pages have no PDF tab.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.
