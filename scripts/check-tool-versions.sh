@@ -200,6 +200,13 @@ check_repository_contract() {
   assert_file_text sqlc .github/workflows/ci.yml "sqlc@v${expected[sqlc]}"
   assert_file_text caddy .github/workflows/ci.yml \
     "caddyserver/caddy/releases/download/v${expected[caddy]}"
+
+  assert_all_yaml_values node .github/workflows/security-scan.yml \
+    node-version "${expected[nodejs]}"
+  assert_all_yaml_values go .github/workflows/security-scan.yml go-version \
+    "${expected[golang]}"
+  assert_file_text govulncheck .github/workflows/security-scan.yml \
+    "govulncheck@v${expected[govulncheck]}"
 }
 
 select_tools() {

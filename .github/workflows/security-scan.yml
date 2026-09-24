@@ -2,9 +2,10 @@ name: security-scan
 
 # Runs the same dependency and image gates as ci.yml against the default
 # branch and the latest release on a schedule, so a vulnerability disclosed
-# after a release still surfaces. A scheduled run's failure notifies the
-# repository the same way any other workflow failure does; there is no
-# separate alerting path here.
+# after a release still surfaces. GitHub notifies only the user who last
+# edited the cron line when a scheduled run fails, and only if their Actions
+# notifications are on; in a public repository it also disables the schedule
+# after 60 days with no repository activity.
 on:
   schedule:
     - cron: "17 3 * * 1" # Monday 03:17 UTC, off-peak
@@ -17,6 +18,7 @@ permissions:
 jobs:
   govulncheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -45,6 +47,7 @@ jobs:
 
   npm-audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -74,6 +77,7 @@ jobs:
   # the complete picture.
   image-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

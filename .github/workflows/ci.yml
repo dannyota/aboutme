@@ -314,9 +314,11 @@ jobs:
   # (cel-go 0.28.1; Caddy 2.11.4 cannot build against cel-go >= 0.29) and
   # GO-2026-5932 (x/crypto/openpgp; no fix exists). If either ever reports
   # as reachable, this job fails and the trace must be investigated, not
-  # suppressed.
+  # suppressed. Revisit by 2026-12-31: check for a Caddy release that builds
+  # with cel-go >= 0.30, and for x/crypto dropping openpgp.
   govulncheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -347,6 +349,7 @@ jobs:
   # devDependencies, which never ship.
   npm-audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
