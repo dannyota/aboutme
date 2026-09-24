@@ -1,43 +1,43 @@
 # Delivery plans
 
-[`implementation-plan.md`](implementation-plan.md) is the current roadmap. It
-owns phase order, current state, and release gates. Active phases and tasks use
-numbers, such as Phase 10 and task 10.14. A phase directory owns the detailed
-tasks for that phase while the phase is active.
+Plans hold open work only. A plan is deleted when its work ships; Git keeps it. Code, [architecture](../architecture.md), and the traceability rows record what shipped. Design wins over a plan; numeric limits live in [budgets](../design/budgets.md).
 
-[The v0.4.x roadmap](v0.4-roadmap.md) proposes small releases for Vietnamese
-localization, optional two-factor authentication, MCP acceptance, and link
-previews. The v0.4.0 design is approved; later release designs remain proposed.
-None of those features is marked implemented.
+## Files
 
-[The v0.4.0 delivery plan](v0.4.0-localization.md) breaks down the first
-localization release. The owner approved its design on 2026-09-20; the plan
-records implementation work and verification still required.
+|Path|Holds|
+|-|-|
+|[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
+|[link-previews.md](link-previews.md)|Link-preview releases, waiting for the owner to schedule them|
+|[backlog.md](backlog.md)|Open follow-ups and launch gates|
+|[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
-## Layout
+A multi-release goal gets one plan file; its task briefs go in a directory of the same name while work is open. Delete both when the work ships, after moving any still-open item to `backlog.md`.
 
-| Path                                     | Purpose                                       |
-| ---------------------------------------- | --------------------------------------------- |
-| `implementation-plan.md`                 | Current roadmap, dependencies, and blockers   |
-| `phase-<number>/README.md`               | Active or future phase task index             |
-| `phase-<number>/task-*.md`               | One dispatchable task                         |
-| `phase-<number>/exit-criteria.md`        | Phase exit checklist                          |
-| `phase-<number>/adversarial-coverage.md` | Adversarial cases the owning tasks must cover |
-| `traceability/`                          | Acceptance ownership and evidence             |
+## Shipped
 
-## Lifecycle
+Production runs v0.5.3 on one AWS Singapore host ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)), live since v0.1.1.
 
-A phase exits through its `exit-criteria.md` checklist and green GitHub CI on
-the exact candidate commit, after one fresh review of the integrated diff.
-Authors run the affected checks locally. See
-[ADR 0046](../adr/0046-github-ci-delivery-gate.md). A criterion that turns out
-to be wrong is corrected in the same phase, with the change noted.
+|Tag|Shipped|
+|-|-|
+|v0.4.0|Vietnamese resume list, creation, editor, publish, and PDF controls|
+|v0.4.1|Vietnamese settings and agent consent|
+|v0.4.2|Optional passkey second factor with recovery codes and the release fence|
+|v0.4.3|Public PDF download as a button|
+|v0.4.4|MCP owner workflow runner on the official Go SDK|
+|v0.4.5|MCP accepts the public host behind the reverse proxy|
+|v0.4.6|Editor phone fixes: contact field width, one sheet per preview page|
+|v0.4.7|Optional authenticator-app (TOTP) second factor; release fence 4007|
+|v0.5.0|Owner homepage sample|
+|v0.5.1|Homepage sample fits one A4 sheet|
+|v0.5.2|Editor PDF and Web preview modes; gallery sample PDF page images and their CI check|
+|v0.5.3|Preview-to-PDF gap check; zoomed preview re-pagination fix; homepage sample fit|
 
-When a phase exits, delete its directory and any design draft it carried. Git
-history keeps them. The traceability rows the phase proved, the architecture
-narrative, and the code are the record of what it built. Numeric limits live in
-[`../design/budgets.md`](../design/budgets.md), not in a phase plan.
+## Remaining
 
-A task is dispatchable when its design authority, acceptance rows, numeric
-budgets, file ownership, predecessors, and verification command are settled.
-`Landed` means code exists. It does not mean the task or phase passed review.
+- The open rows of [v0.5-roadmap.md](v0.5-roadmap.md), then [link previews](link-previews.md) when scheduled.
+- [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
+- Flutter app: deferred beyond web v1 (AC-API-002).
+
+## Gates
+
+[ADR 0046](../adr/0046-github-ci-delivery-gate.md) governs: failing test first, one fresh review per plan or release, green GitHub CI on the exact commit before tag and deploy. Authentication, sessions, CSRF, concurrency, idempotency, migrations, sanitizing, publish revocation, secrets, and production deploys are high risk; the reviewer confirms those invariants by name.

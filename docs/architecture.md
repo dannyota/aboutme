@@ -58,8 +58,7 @@ Production enables Google sign-in and agent access. Email-and-password
 registration is disabled; existing password login remains available. The public
 capabilities endpoint reports these settings. Five enabled schedules invoke
 idempotency expiry, media deletion, orphan reconciliation, privacy retention,
-and release-snapshot cleanup. Successful job-run evidence remains open in the
-[production checklist](plans/phase-10/exit-criteria.md).
+and release-snapshot cleanup. Successful job-run evidence is not yet recorded.
 
 The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
 `db-setup` creates and grants them, and every migration runs as
@@ -364,6 +363,6 @@ agent metadata is redacted after 90 days. See the
 
 ## Deferred work
 
-Optional two-factor authentication, multi-replica runtime coordination, and the
-Flutter client are not implemented. Remaining operational acceptance work is
-recorded in the [roadmap](plans/README.md).
+Multi-replica runtime coordination and the Flutter client are not implemented.
+Remaining operational acceptance work is recorded in the
+[roadmap](plans/README.md).
