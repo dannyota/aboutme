@@ -117,51 +117,6 @@ export const sampleResume: Resume = {
             + 'merged device and software inventories into one source of '
             + 'truth.</li></ul>',
         },
-        {
-          id: '084228e1-7af8-4b4c-9bd9-941de6162d46',
-          isHidden: false,
-          jobTitle: 'Threat Hunting Team Leader',
-          employer: 'A cybersecurity firm',
-          employerLink: '',
-          dates: {
-            start: {
-              y: 2021,
-              m: 4,
-            },
-            end: {
-              y: 2023,
-              m: 4,
-            },
-            present: false,
-          },
-          description:
-            '<ul><li>Found and reported an account-takeover exploit chain '
-            + 'in a messaging platform with 100M+ users.</li><li>Contributed '
-            + 'to a threat-intelligence platform that aggregates 1,500+ '
-            + 'news sources.</li></ul>',
-        },
-        {
-          id: '877a45bf-7a5b-4dc2-816e-f1bbc7c0ce7a',
-          isHidden: false,
-          jobTitle: 'Security Researcher',
-          employer: 'A cybersecurity startup',
-          employerLink: '',
-          dates: {
-            start: {
-              y: 2017,
-              m: 11,
-            },
-            end: {
-              y: 2021,
-              m: 3,
-            },
-            present: false,
-          },
-          description:
-            '<ul><li>Wrote C/C++ exploits for Windows kernel and '
-            + 'user-mode vulnerabilities, and modular Python tooling for '
-            + 'red-team work.</li></ul>',
-        },
       ],
     },
     education: {
@@ -364,19 +319,19 @@ export const sampleResume: Resume = {
       columns: 2,
       surfaceTarget: 'sidebar',
       sections: {
-        main: ['profile', 'work', 'education'],
-        sidebar: ['skill', 'project'],
+        main: ['profile', 'work'],
+        sidebar: ['skill', 'project', 'education'],
       },
     },
     sectionDisplay: {
       skill: {
-        style: 'bar',
+        style: 'tag',
       },
       language: {
         style: 'dots',
       },
     },
-    pageFormat: 'letter',
+    pageFormat: 'a4',
     dateFormat: 'Mon YYYY',
   },
 };
