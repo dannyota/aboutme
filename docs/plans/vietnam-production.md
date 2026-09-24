@@ -15,10 +15,9 @@ Code, comments, tests, and living docs cite the design or ADR 0051, never this p
 7. Put Bizfly values in `.dev/credentials/bizfly.env`, mode 0600: `BIZFLY_SMTP_HOST`, `BIZFLY_SMTP_PORT`, `BIZFLY_SMTP_USERNAME`, `BIZFLY_SMTP_PASSWORD`, and `BIZFLY_API_KEY` if Bizfly offers one. `secrets.sh` pipes the SMTP values to the host without printing them.
 8. Generate an age key pair for `aboutme-infra`; keep the private key off the host; give devops the public recipient.
 9. Send the provider questions (design table Q1 to Q22) by support ticket or email; forward each written answer to the manager.
-10. Choose and register the test domain for the AWS environment, if approved.
-11. Move the support mailbox: create the Bizfly Business Email mailbox and import Google Workspace mail (after Q21).
-12. At cutover: run the SSM-to-host secret pipe, approve the DNS switch at Cloudflare, and later the NS change at the `.vn` registrar.
-13. After the rollback window: approve the AWS real-data deletion and cancel Google Workspace.
+10. Move the support mailbox: create the Bizfly Business Email mailbox and import Google Workspace mail (after Q21).
+11. At cutover: run the SSM-to-host secret pipe, approve the DNS switch at Cloudflare, and later the NS change at the `.vn` registrar.
+12. Once the cutover is verified: approve the AWS real-data deletion and cancel Google Workspace.
 
 ## Owner approvals (recommendation first)
 
@@ -32,8 +31,7 @@ Code, comments, tests, and living docs cite the design or ADR 0051, never this p
 - Release fence as a root-owned host file with a start-time check. Recommend yes over a PostgreSQL table.
 - Password reset may create the first password for a Google-only account. Recommend yes; otherwise those accounts lose sign-in.
 - Hardware-backed SSH key (`ed25519-sk`). Recommend yes.
-- 7-day rollback window, forward-only after Vietnam accepts writes. Recommend yes.
-- Separate test domain on Cloudflare for the AWS environment. Recommend yes.
+- Decided by the owner (2026-09-24): no rollback window after Vietnam accepts writes; no separate domain for the AWS test environment. All other approvals above: approved.
 - Keep Have I Been Pwned and record it in the DPIA. Recommend yes.
 
 ## Phases
@@ -50,6 +48,6 @@ Code, comments, tests, and living docs cite the design or ADR 0051, never this p
 |4 Rehearsal|devops, qa|All rehearsal checks in the design pass under the temporary hostname with fictional data; restore drill recorded; cutover dry run timed.|
 |5 Cutover|manager, devops, owner|Design cutover steps 1 to 6 done; verification hashes equal; smoke green; AWS in maintenance.|
 |6 NS move|devops, owner|After 48 h, NS at vDNS with identical records.|
-|7 AWS deletion|devops, owner|After the rollback window, every real-data item in the design deleted and recorded in `aboutme-infra`; keys rotated; AWS rebuilt empty as test.|
+|7 AWS deletion|devops, owner|Once the cutover is verified, every real-data item in the design deleted and recorded in `aboutme-infra`; keys rotated; AWS rebuilt empty as test.|
 
 Each phase with production infrastructure or deploy code needs a reviewer's adversarial pass before merge. Runbooks (`docs/runbooks/production.md`, `email.md`, `privacy.md`), `docs/architecture.md`, `docs/design/deployment.md`, `docs/design/single-host-production.md`, and `docs/design/decisions.md` update in the change that makes them true.

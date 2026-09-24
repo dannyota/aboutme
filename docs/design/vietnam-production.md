@@ -179,7 +179,7 @@ host with `openssl`, never overwrites or prints one, and writes a copy encrypted
 to the owner's age recipient; the laptop pulls only that ciphertext into
 `aboutme-infra`. Values already in SSM (TOTP key ring, auth-mail keys,
 password-rate key) move once at cutover through an owner-run pipe that prints
-nothing, and rotate after the rollback window.
+nothing, and rotate when AWS real data is deleted.
 
 Each vStorage service account has a policy for one bucket: media (get, put,
 list, delete), backups, or state. The state key, the OpenTofu service account,
@@ -394,7 +394,7 @@ working.
 
 ### 6. AWS real-data deletion
 
-After the rollback window, delete: the RDS instance without a final snapshot,
+Once the cutover is verified, delete: the RDS instance without a final snapshot,
 every manual snapshot and retained automated backup, every media object and the
 bucket, the CloudWatch log groups, the SES suppression list and feedback queue,
 and the Google Workspace mailbox once its mail has moved. Rotate the TOTP key
@@ -402,20 +402,19 @@ ring and auth-mail keys on the host, then delete their SSM copies. Record each
 deletion with its date in `aboutme-infra`. Then rebuild the AWS stack empty as
 the test environment.
 
-## Rollback window
+## Rollback
 
 Until cutover step 6 sends traffic, rollback is stopping the VN app and ending
-AWS maintenance. Once Vietnam accepts writes, moving data back would be a new
-transfer abroad, so recovery is a forward fix or a restore in Vietnam. AWS keeps
-its frozen copy through the window only as a last resort. **Owner approval:** 7
-days.
+AWS maintenance. Once Vietnam accepts writes, there is no rollback window
+(owner, 2026-09-24): moving data back would be a new transfer abroad, so
+recovery is a forward fix or a restore in Vietnam, and AWS real data is deleted
+as soon as the cutover is verified.
 
 ## Test environment
 
 The AWS stack holds fictional data only: no real accounts and no production
-copy. **Owner approval:** a separate test domain on Cloudflare, so the
-Cloudflare edge, origin pulls, and SES work unchanged and `aboutme.vn` has no
-AWS records. Its mail goes only to test addresses.
+copy. It gets no domain of its own (owner, 2026-09-24), and `aboutme.vn` keeps
+no AWS records. Its mail goes only to test addresses.
 
 Have I Been Pwned, MCP clients a user connects, and GitHub stay outside this
 move; [ADR 0051](../adr/0051-vietnam-hosted-production.md) records why.
