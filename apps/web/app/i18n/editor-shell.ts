@@ -62,6 +62,9 @@ export type EditorShellCopy = {
   readonly previewZoom: string;
   readonly fit: string;
   readonly fullZoom: string;
+  readonly previewMode: string;
+  readonly previewModePdf: string;
+  readonly previewModeWeb: string;
   readonly issueFor: (code: string) => string;
 };
 
@@ -132,6 +135,9 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     previewZoom: 'Thu phóng bản xem trước',
     fit: 'Vừa khung',
     fullZoom: '100%',
+    previewMode: 'Chế độ xem trước',
+    previewModePdf: 'PDF',
+    previewModeWeb: 'Web',
     issueFor: (code) => {
       if (code === 'required') return 'Thêm giá trị bắt buộc.';
       if (code === 'maxLength' || code === 'maxItems' || code === 'maximum') {
@@ -210,6 +216,9 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     previewZoom: 'Preview zoom',
     fit: 'Fit',
     fullZoom: '100%',
+    previewMode: 'Preview mode',
+    previewModePdf: 'PDF',
+    previewModeWeb: 'Web',
     issueFor: (code) => {
       if (code === 'required') return 'Add the required value.';
       if (code === 'maxLength' || code === 'maxItems' || code === 'maximum') {

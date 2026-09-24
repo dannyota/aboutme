@@ -15,9 +15,37 @@ import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
 import type { StampState } from '../../composables/useStamp';
 import type { PhotoReadState } from '../../stores/resumes';
 import AppSeal from '../app/AppSeal.vue';
+import { Button } from '../ui/button';
 import ResumeDocument from '../resume/ResumeDocument.vue';
 import { previewProjection } from './previewProjection';
 import { editorShellCopy } from '../../i18n/editor-shell';
+
+/**
+ * The preview's own display choice: PDF keeps today's paged A4 sheet, Web
+ * shows the continuous document at the pane's own width. It is a per-viewer
+ * convenience, not part of the resume, so a blocked or missing store just
+ * falls back to PDF instead of failing the preview.
+ */
+type PreviewMode = 'pdf' | 'web';
+const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
+
+function readStoredPreviewMode(): PreviewMode {
+  try {
+    return window.localStorage.getItem(PREVIEW_MODE_STORAGE_KEY) === 'web'
+      ? 'web'
+      : 'pdf';
+  } catch {
+    return 'pdf';
+  }
+}
+
+function writeStoredPreviewMode(mode: PreviewMode): void {
+  try {
+    window.localStorage.setItem(PREVIEW_MODE_STORAGE_KEY, mode);
+  } catch {
+    // A blocked or full store keeps today's in-memory choice for this tab.
+  }
+}
 
 const props = withDefaults(defineProps<{
   readonly document: Resume;
@@ -36,6 +64,7 @@ const { locale } = useLocale();
 const copy = computed(() => editorShellCopy[locale.value]);
 
 const previewRoot = shallowRef<HTMLElement | null>(null);
+const previewMode = ref<PreviewMode>(readStoredPreviewMode());
 const estimatedPages = ref<number | null>(null);
 const renderFailed = ref(false);
 const viewportWidth = ref<number | null>(null);
@@ -45,7 +74,9 @@ const projected = computed(() =>
 );
 const context = computed(() => ({
   lng: props.lng,
-  mode: 'paged' as const,
+  mode: previewMode.value === 'web'
+    ? 'continuous' as const
+    : 'paged' as const,
   ...(props.photoUrl === undefined ? {} : { photoUrl: props.photoUrl }),
 }));
 let stopObserving: (() => void) | undefined;
@@ -94,6 +125,13 @@ function startPageCountObservation(): void {
   );
 }
 
+// A continuous document has no discrete pages: drop a stale paged count
+// instead of showing a number that no longer describes what is on screen.
+watch(previewMode, (mode) => {
+  writeStoredPreviewMode(mode);
+  if (mode === 'web') estimatedPages.value = null;
+});
+
 onErrorCaptured(() => {
   renderFailed.value = true;
   return false;
@@ -131,8 +169,43 @@ onBeforeUnmount(() => {
 <template>
   <section
     :aria-label="copy.previewLabel"
-    class="grid h-full min-h-0 grid-rows-[minmax(0,1fr)]"
+    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]"
   >
+    <div
+      class="flex items-center justify-end border-b border-border bg-card
+        px-4 py-2 max-[42rem]:px-2"
+      data-testid="preview-toolbar"
+    >
+      <div
+        :aria-label="copy.previewMode"
+        class="flex w-fit rounded-md border bg-background p-0.5"
+        data-testid="preview-mode-switch"
+        role="group"
+      >
+        <Button
+          :aria-pressed="previewMode === 'pdf'"
+          class="h-8"
+          data-mode="pdf"
+          size="sm"
+          type="button"
+          :variant="previewMode === 'pdf' ? 'default' : 'ghost'"
+          @click="previewMode = 'pdf'"
+        >
+          {{ copy.previewModePdf }}
+        </Button>
+        <Button
+          :aria-pressed="previewMode === 'web'"
+          class="h-8"
+          data-mode="web"
+          size="sm"
+          type="button"
+          :variant="previewMode === 'web' ? 'default' : 'ghost'"
+          @click="previewMode = 'web'"
+        >
+          {{ copy.previewModeWeb }}
+        </Button>
+      </div>
+    </div>
     <div
       ref="previewRoot"
       class="overflow-auto bg-background p-6 max-[42rem]:p-4"
@@ -148,15 +221,20 @@ onBeforeUnmount(() => {
       </p>
       <div
         v-else
-        class="mx-auto w-fit"
+        :class="previewMode === 'web' ? 'w-full' : 'mx-auto w-fit'"
       >
         <div
           class="preview-sheet relative rounded-[var(--radius-sheet)] bg-white
             shadow-[var(--shadow-paper)]"
-          :data-scaled-width="scaledWidth.toFixed(2)"
-          :data-sheet-zoom="sheetZoom.toFixed(4)"
+          :class="previewMode === 'web' ? 'overflow-hidden' : undefined"
+          :data-scaled-width="
+            previewMode === 'pdf' ? scaledWidth.toFixed(2) : undefined
+          "
+          :data-sheet-zoom="
+            previewMode === 'pdf' ? sheetZoom.toFixed(4) : undefined
+          "
           data-testid="preview-sheet"
-          :style="{ zoom: sheetZoom }"
+          :style="previewMode === 'pdf' ? { zoom: sheetZoom } : undefined"
         >
           <ResumeDocument
             :context="context"
@@ -173,6 +251,7 @@ onBeforeUnmount(() => {
         </div>
         <div class="mt-3 flex flex-wrap items-center gap-3">
           <p
+            v-if="previewMode === 'pdf'"
             class="inline-flex items-center gap-1.5 text-sm
               text-muted-foreground"
             data-testid="page-count"

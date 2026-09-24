@@ -170,6 +170,17 @@ body:has(> #public-resume) {
   overflow-wrap: anywhere;
 }
 
+/*
+ * A continuous document's narrow-layout rules below query this element's own
+ * width, so a narrow editor pane matches what a phone reader sees regardless
+ * of the window's width. A page in `PagedResume` keeps an inline pixel width
+ * from its layout request, so containment never resizes it; paged output is
+ * excluded here anyway, matching those rules' own scope.
+ */
+.resume-document:not(.resume-page) {
+  container-type: inline-size;
+}
+
 .resume-document * {
   box-sizing: border-box;
 }
@@ -201,10 +212,8 @@ body:has(> #public-resume) {
 /*
  * A side photo sits beside the name, headline, and details, vertically
  * centered, with header.align applying inside the text column (ADR 0044).
- * Only a continuous page on a screen narrower than 36em stacks the photo on
- * top again; pages and print always keep the side layout. A media query, not
- * a container query: size containment would change how a shrink-to-fit
- * document measures its width.
+ * Only a continuous document narrower than 36em stacks the photo on top
+ * again; pages and print always keep the side layout.
  */
 .resume-document .resume-header-text {
   min-width: 0;
@@ -230,7 +239,7 @@ body:has(> #public-resume) {
   grid-column: 2;
 }
 
-@media screen and (width < 36em) {
+@container (width < 36em) {
   .resume-document:not(.resume-page) .resume-header[data-photo-position] {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -334,9 +343,9 @@ body:has(> #public-resume) {
   background: var(--color-surface);
 }
 
-/* A phone-width screen has no room for a sidebar: continuous pages stack main
-   then sidebar. Paged output and print keep the template's columns. */
-@media screen and (width < 36em) {
+/* A narrow continuous document has no room for a sidebar: it stacks main then
+   sidebar. Paged output and print keep the template's columns. */
+@container (width < 36em) {
   .resume-document:not(.resume-page) .layout-two-columns {
     grid-template-columns: minmax(0, 1fr);
   }
