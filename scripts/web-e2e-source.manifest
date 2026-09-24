@@ -421,6 +421,10 @@ apps/web/e2e/baselines/chrome--home--dark--1440.png
 apps/web/e2e/baselines/chrome--home--dark--390.png
 apps/web/e2e/baselines/chrome--home--light--1440.png
 apps/web/e2e/baselines/chrome--home--light--390.png
+apps/web/e2e/baselines/chrome--home-templates--dark--1440.png
+apps/web/e2e/baselines/chrome--home-templates--dark--390.png
+apps/web/e2e/baselines/chrome--home-templates--light--1440.png
+apps/web/e2e/baselines/chrome--home-templates--light--390.png
 apps/web/e2e/baselines/chrome--login--dark--1440.png
 apps/web/e2e/baselines/chrome--login--dark--390.png
 apps/web/e2e/baselines/chrome--login--light--1440.png
