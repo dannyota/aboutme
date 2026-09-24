@@ -232,13 +232,14 @@ the text color, and it carries `aria-current="page"`. One chip is active at a
 time and is kept in the URL (`?filter=ats`). The chip row scrolls sideways
 without a scrollbar when needed.
 
-Each card is a link to the template page. It shows page one of the template's
-own sample, or of the generic filler, as a white 2 px sheet with
-`--shadow-paper` that lifts 4 px on hover unless reduced motion is set. Under it
-sit the name, a two-line purpose, and a tag: a `--surface-blue` pill naming the
-sample, or a muted pill reading “Nội dung minh họa” or “Illustrative content”.
-The grid has two columns below 641 px, three from 641 px, four from 900 px, and
-five from 1180 px.
+Each card is a link to the template page. A template with a sample shows the
+stored image of the sample's first PDF page; the rest show a live render of the
+generic filler. Either way the card is a white 2 px sheet with `--shadow-paper`
+that lifts 4 px on hover unless reduced motion is set. Under it sit the name, a
+two-line purpose, and a tag: a `--surface-blue` pill naming the sample, or a
+muted pill reading “Nội dung minh họa” or “Illustrative content”. The grid has
+two columns below 641 px, three from 641 px, four from 900 px, and five from
+1180 px.
 
 At 900 px and wider, `/templates/{id}` shows the document beside a 360 px sticky
 info column with a 24 px top offset. Below 900 px, the info comes first and the

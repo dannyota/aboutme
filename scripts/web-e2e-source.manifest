@@ -403,6 +403,7 @@ apps/web/app/stores/resumes.ts
 apps/web/app/templates/atsText.ts
 apps/web/app/templates/catalog.ts
 apps/web/app/templates/documents.ts
+apps/web/app/templates/pageImages.ts
 apps/web/app/templates/samplePages.ts
 apps/web/app/templates/startDocument.ts
 apps/web/app/templates/structuredData.ts
