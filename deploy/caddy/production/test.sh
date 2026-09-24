@@ -68,7 +68,7 @@ start_stack() { # trusted ranges
     localhost/aboutme/caddy:test -c \
     'printf "{\n\tadmin off\n}\n:8080 {\n\trespond \"ip={http.request.header.X-Real-IP}\"\n}\n" >/tmp/echo && exec caddy run --config /tmp/echo --adapter caddyfile' \
     >/dev/null
-  for _ in $(seq 1 20); do
+  for _ in $(seq 1 60); do
     podman logs "$name" 2>&1 | grep -q 'serving initial configuration' &&
       podman logs "$name-echo" 2>&1 | grep -q 'serving initial configuration' && return
     sleep 0.5
@@ -148,7 +148,9 @@ podman run -d --name "$name" -p "127.0.0.1:$port:443" --tmpfs /run/caddy \
   -e ORIGIN_PULL_CA="$(cat "$work/ca.pem")" -e CLOUDFLARE_RANGES="192.0.2.0/24 198.51.100.0/24" \
   -e MAINTENANCE=1 \
   localhost/aboutme/caddy:test >/dev/null
-for _ in $(seq 1 20); do
+# Up to 30 s: a hosted runner can take about 10 s to start a container on a
+# port that a just-removed container held.
+for _ in $(seq 1 60); do
   podman logs "$name" 2>&1 | grep -q 'serving initial configuration' && break
   sleep 0.5
 done
