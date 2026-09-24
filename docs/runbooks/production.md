@@ -146,13 +146,13 @@ Turn it back on the same way with `true`.
 
 ## Deploy
 
-Public pages link the resume stylesheets and hydration script with a
-build-time content hash (`?v=`), so a release reaches browsers despite the
-one-year immutable cache. A font change must rename the fixed-name `.woff2`
-under `/_nuxt/fonts/`, changing both stylesheet hashes too.
+Public pages link the resume stylesheets and hydration script with a build-time
+content hash (`?v=`), so a release reaches browsers despite the one-year
+immutable cache. A font change must rename the fixed-name `.woff2` under
+`/_nuxt/fonts/`, changing both stylesheet hashes too.
 
-A release is a `v*` tag on `main` with green `ci.yml`; `workflow_dispatch`
-does not count. `release-images.yml` publishes
+A release is a `v*` tag on `main` with green `ci.yml`; `workflow_dispatch` does
+not count. `release-images.yml` publishes
 `ghcr.io/dannyota/aboutme-{server,web,caddy}` (public), scanning each with Trivy
 and failing on a fixable HIGH/CRITICAL finding. `security-scan.yml` reruns that
 plus `govulncheck` and `npm audit` weekly on `main` and the latest images.
