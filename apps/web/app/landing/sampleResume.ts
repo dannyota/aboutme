@@ -198,16 +198,6 @@ export const sampleResume: Resume = {
             + 'an A4 PDF.</p>',
         },
         {
-          id: '01b53fe7-a899-44af-9975-6440ea003404',
-          isHidden: false,
-          title: 'secops',
-          subtitle: 'Go',
-          link: '',
-          description:
-            '<p>CLI and SDK that manages Google SecOps SIEM and SOAR as '
-            + 'code: pull, diff, and push, with a built-in MCP server.</p>',
-        },
-        {
           id: 'f8d25e1c-71f8-4d3b-b1bc-3af2ad261e52',
           isHidden: false,
           title: 'banhmi',
