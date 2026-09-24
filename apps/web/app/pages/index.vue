@@ -187,7 +187,7 @@ useHead(computed(() => ({
             class="inline-flex h-9 items-center gap-2 whitespace-nowrap
               rounded-full border border-border bg-card px-4 text-sm
               font-medium text-foreground shadow-[var(--shadow-product)]
-              min-[42rem]:absolute min-[42rem]:-left-6 min-[42rem]:top-12"
+              min-[42rem]:absolute min-[42rem]:-left-16 min-[42rem]:top-4"
             data-chip="private"
           >
             <Lock
@@ -199,8 +199,8 @@ useHead(computed(() => ({
             class="inline-flex h-9 items-center gap-2 whitespace-nowrap
               rounded-full border border-border bg-card px-4 text-sm
               font-medium text-foreground shadow-[var(--shadow-product)]
-              min-[42rem]:absolute min-[42rem]:-right-6
-              min-[42rem]:top-1/3"
+              min-[42rem]:absolute min-[42rem]:-right-10
+              min-[42rem]:-top-4"
             data-chip="pdf"
           >
             <FileDown
