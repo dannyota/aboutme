@@ -1,56 +1,141 @@
-/* Application chrome tokens. Resume documents keep their own renderer tokens. */
+/* Application chrome tokens (DESIGN.md, ADR 0050). Resume documents keep their
+   own renderer tokens; nothing here may reach the renderer. */
 :root {
-  --radius: 6px;
+  --radius: 10px;
   --radius-sheet: 2px;
-  --radius-dialog: 8px;
-  --background: #edefeb;
-  --foreground: #171a18;
+  --radius-dialog: 14px;
+  --radius-feature: 20px;
+  --background: #f5f8ff;
+  --foreground: #101b3f;
   --card: #ffffff;
-  --card-foreground: #171a18;
+  --card-foreground: #101b3f;
   --popover: #ffffff;
-  --popover-foreground: #171a18;
-  --primary: #1f2a44;
+  --popover-foreground: #101b3f;
+  --primary: #1a5ceb;
   --primary-foreground: #ffffff;
-  --secondary: #e3e6e1;
-  --secondary-foreground: #171a18;
-  --muted: #e3e6e1;
-  --muted-foreground: #5f6763;
-  --accent: #e3e6e1;
-  --accent-foreground: #171a18;
+  --secondary: #eaf2ff;
+  --secondary-foreground: #101b3f;
+  --muted: #edf1fa;
+  --muted-foreground: #56648c;
+  --accent: #eaf2ff;
+  --accent-foreground: #101b3f;
   --destructive: #b42318;
-  --border: #d8ddd9;
-  --input: #d8ddd9;
-  --ring: #1f2a44;
-  --seal: #c8102e;
+  --border: #dce5f5;
+  --input: #7886ae;
+  --ring: #1a5ceb;
+  --seal: #cc2649;
   --seal-foreground: #ffffff;
+  /* Text-safe blue for links and blue text on tinted surfaces. */
+  --link: #123edb;
+  --brand-blue: #246bfd;
+  --brand-deep-blue: #123edb;
+  --brand-indigo: #6254ff;
+  --brand-cyan: #35c8f5;
+  --brand-purple: #a855f7;
+  --brand-pink: #f55db1;
+  --brand-orange: #ff9c47;
+  --surface-blue: #eaf2ff;
+  --surface-indigo: #f0eeff;
+  --surface-pink: #fff0fa;
+  --gradient-brand: linear-gradient(
+    90deg,
+    var(--brand-blue),
+    var(--brand-indigo)
+  );
+  /* The canvas glows sit at fixed offsets from the top of the document, so a
+     long page does not stretch them. */
+  --gradient-aurora:
+    radial-gradient(
+      44rem 30rem at 8% -4rem,
+      rgb(36 107 253 / 0.14),
+      transparent 70%
+    ),
+    radial-gradient(
+      38rem 28rem at 96% 0,
+      rgb(98 84 255 / 0.1),
+      transparent 70%
+    ),
+    radial-gradient(
+      40rem 28rem at 0% 40rem,
+      rgb(53 200 245 / 0.12),
+      transparent 70%
+    ),
+    radial-gradient(
+      34rem 24rem at 100% 44rem,
+      rgb(245 93 177 / 0.07),
+      transparent 70%
+    );
+  --shadow-product:
+    0 1px 2px rgba(16, 27, 63, 0.06), 0 12px 40px rgba(26, 63, 140, 0.1);
+  /* Neutral on purpose: the sheet reads as paper, never as a blue card. */
   --shadow-paper:
     0 1px 2px rgba(23, 26, 24, 0.06), 0 12px 32px rgba(23, 26, 24, 0.1);
 }
 
 html[data-theme="dark"] {
-  --radius: 6px;
+  --radius: 10px;
   --radius-sheet: 2px;
-  --radius-dialog: 8px;
-  --background: #121614;
-  --foreground: #ecefec;
-  --card: #1a1f1c;
-  --card-foreground: #ecefec;
-  --popover: #1a1f1c;
-  --popover-foreground: #ecefec;
-  --primary: #d7deee;
-  --primary-foreground: #171a18;
-  --secondary: #242a27;
-  --secondary-foreground: #ecefec;
-  --muted: #242a27;
-  --muted-foreground: #9aa39e;
-  --accent: #242a27;
-  --accent-foreground: #ecefec;
+  --radius-dialog: 14px;
+  --radius-feature: 20px;
+  --background: #071126;
+  --foreground: #f4f7ff;
+  --card: #0d1935;
+  --card-foreground: #f4f7ff;
+  --popover: #132244;
+  --popover-foreground: #f4f7ff;
+  --primary: #72a0ff;
+  --primary-foreground: #071126;
+  --secondary: #132244;
+  --secondary-foreground: #f4f7ff;
+  --muted: #132244;
+  --muted-foreground: #9eacca;
+  --accent: #1a2b52;
+  --accent-foreground: #f4f7ff;
   --destructive: #f0736a;
-  --border: rgba(255, 255, 255, 0.12);
-  --input: rgba(255, 255, 255, 0.12);
-  --ring: #d7deee;
-  --seal: #c8102e;
+  --border: rgba(180, 200, 255, 0.16);
+  --input: #5a6a95;
+  --ring: #72a0ff;
+  --seal: #cc2649;
   --seal-foreground: #ffffff;
+  --link: #8fb3ff;
+  --brand-blue: #72a0ff;
+  --brand-deep-blue: #4c7dff;
+  --brand-indigo: #8b80ff;
+  --brand-cyan: #54d6ff;
+  --brand-purple: #c08bff;
+  --brand-pink: #ff7cc4;
+  --brand-orange: #ffb067;
+  --surface-blue: #10224a;
+  --surface-indigo: #1a1a4a;
+  --surface-pink: #2a1533;
+  --gradient-brand: linear-gradient(
+    90deg,
+    var(--brand-blue),
+    var(--brand-indigo)
+  );
+  --gradient-aurora:
+    radial-gradient(
+      44rem 30rem at 8% -4rem,
+      rgb(36 107 253 / 0.24),
+      transparent 70%
+    ),
+    radial-gradient(
+      38rem 28rem at 96% 0,
+      rgb(98 84 255 / 0.2),
+      transparent 70%
+    ),
+    radial-gradient(
+      40rem 28rem at 0% 40rem,
+      rgb(53 200 245 / 0.14),
+      transparent 70%
+    ),
+    radial-gradient(
+      34rem 24rem at 100% 44rem,
+      rgb(245 93 177 / 0.1),
+      transparent 70%
+    );
+  --shadow-product:
+    0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 40px rgba(0, 0, 0, 0.45);
   --shadow-paper: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
@@ -76,6 +161,17 @@ html[data-theme="dark"] {
   --color-ring: var(--ring);
   --color-seal: var(--seal);
   --color-seal-foreground: var(--seal-foreground);
+  --color-link: var(--link);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-deep-blue: var(--brand-deep-blue);
+  --color-brand-indigo: var(--brand-indigo);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-brand-purple: var(--brand-purple);
+  --color-brand-pink: var(--brand-pink);
+  --color-brand-orange: var(--brand-orange);
+  --color-surface-blue: var(--surface-blue);
+  --color-surface-indigo: var(--surface-indigo);
+  --color-surface-pink: var(--surface-pink);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

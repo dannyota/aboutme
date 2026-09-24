@@ -39,6 +39,7 @@ apps/web/app/assets/fonts/spectral-400.woff2
 apps/web/app/assets/fonts/spectral-700.woff2
 apps/web/app/assets/fonts/work-sans-var.woff2
 apps/web/app/components/app/AccountMenu.vue
+apps/web/app/components/app/AppLogo.vue
 apps/web/app/components/app/AppSeal.vue
 apps/web/app/components/app/AppShell.vue
 apps/web/app/components/app/CheckboxField.vue
@@ -415,6 +416,14 @@ apps/web/app/utils/sanitizeRichText.ts
 apps/web/app/utils/userAgent.ts
 apps/web/app/utils/webauthn.ts
 apps/web/e2e/baselines/academic-dense--vn-full--paged.png
+apps/web/e2e/baselines/chrome--home--dark--1440.png
+apps/web/e2e/baselines/chrome--home--dark--390.png
+apps/web/e2e/baselines/chrome--home--light--1440.png
+apps/web/e2e/baselines/chrome--home--light--390.png
+apps/web/e2e/baselines/chrome--login--dark--1440.png
+apps/web/e2e/baselines/chrome--login--dark--390.png
+apps/web/e2e/baselines/chrome--login--light--1440.png
+apps/web/e2e/baselines/chrome--login--light--390.png
 apps/web/e2e/baselines/classic-serif--vn-full--justify--paged.png
 apps/web/e2e/baselines/classic-serif--vn-full--paged.png
 apps/web/e2e/baselines/consulting-formal--vn-full--letter--paged.png
@@ -426,6 +435,7 @@ apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
 apps/web/e2e/baselines/public--classic-serif--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--390.png
+apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/gallery.spec.ts
@@ -477,7 +487,7 @@ apps/web/public/font-licenses/space-mono/OFL.txt
 apps/web/public/font-licenses/spectral/ofl.txt
 apps/web/public/font-licenses/work-sans/OFL.txt
 apps/web/public/landing/danny.jpg
-apps/web/public/og-image.png
+apps/web/public/og-image.jpg
 apps/web/public/templates/pages/ats-plain-en-p1.png
 apps/web/public/templates/pages/ats-plain-vi-p1.png
 apps/web/public/templates/pages/engineer-compact-en-p1.png

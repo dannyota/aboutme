@@ -8,6 +8,7 @@ import { shellCopy } from '@/i18n/shell';
 import { cn } from '@/lib/utils';
 import { validateReturnPath } from '@/utils/returnPath';
 import AccountMenu from './AccountMenu.vue';
+import AppLogo from './AppLogo.vue';
 import LocaleToggle from './LocaleToggle.vue';
 import ThemeToggle from './ThemeToggle.vue';
 
@@ -70,9 +71,11 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
     data-testid="app-shell"
   >
     <NuxtLink
-      class="text-[0.925rem] font-bold tracking-tight"
+      class="flex items-center"
       to="/"
-    >aboutme</NuxtLink>
+    >
+      <AppLogo size="sm" />
+    </NuxtLink>
     <nav
       :aria-label="copy.primaryNavigation"
       class="flex flex-1 items-center gap-1"
