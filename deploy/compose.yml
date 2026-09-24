@@ -45,7 +45,9 @@ name: aboutme
 
 services:
   postgres:
-    image: docker.io/library/postgres:18.4-alpine3.24
+    # Matches production RDS's engine version. Digest pins the multi-arch
+    # index so the same reference resolves on amd64 and arm64.
+    image: docker.io/library/postgres:18.6-alpine3.24@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aboutme}
@@ -293,7 +295,9 @@ services:
       - render
 
   caddy:
-    image: docker.io/library/caddy:2.11.4-alpine
+    # Digest pins the multi-arch index so the same reference resolves on
+    # amd64 and arm64.
+    image: docker.io/library/caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
     restart: unless-stopped
     depends_on:
       server:

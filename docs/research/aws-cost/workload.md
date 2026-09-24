@@ -118,15 +118,13 @@ explicit upper bound, not a derived cadence. Generic CloudWatch API calls remain
 gross because their allowance eligibility depends on the operation mix measured
 in Phase 10.
 
-The selected 40-hour baseline costs
-$22.122210 after the modeled account
-allowances and $30.629128 if they are
-already consumed. Verify allowance use before activation. The 160-hour
-sensitivity costs $35.818148 after allowances
-and $44.403148 without them. It is
-not selected or an entitlement. Shorten optional test runtime and retain
-required evidence and retention resources. The forecast is a planning range
-rather than a technical spending cap; AWS budget data can lag.
+The selected 40-hour baseline costs $22.122210 after the modeled account
+allowances and $30.629128 if they are already consumed. Verify allowance use
+before activation. The 160-hour sensitivity costs $35.818148 after allowances
+and $44.403148 without them. It is not selected or an entitlement. Shorten
+optional test runtime and retain required evidence and retention resources. The
+forecast is a planning range rather than a technical spending cap; AWS budget
+data can lag.
 
 UAT low, expected, and stress campaign lifetimes are 72 hours, 336 hours, and
 730 hours. The former expected case is a 14-day rehearsal. A separate 14-day

@@ -3,8 +3,9 @@
 # through a relative `file:` reference, so the build needs both directories.
 
 # ---- build ----
-# Node 24.21.0: pinned exactly to apps/web/.nvmrc.
-FROM docker.io/library/node:24.21.0-alpine3.24 AS build
+# Node 24.21.0: pinned exactly to apps/web/.nvmrc. Digest pins the
+# multi-arch index so the same reference resolves on amd64 and arm64.
+FROM docker.io/library/node:24.21.0-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 
 WORKDIR /src
 
@@ -31,11 +32,21 @@ RUN npm --prefix apps/web run build
 # ---- runtime ----
 # Nitro's node-server preset (Nuxt's default) bundles its own dependencies
 # into .output/, so the runtime stage needs no node_modules install.
-FROM docker.io/library/node:24.21.0-alpine3.24 AS runtime
+FROM docker.io/library/node:24.21.0-alpine3.24@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runtime
 
 WORKDIR /app
 
-RUN addgroup -S aboutme && adduser -S aboutme -G aboutme
+# The runtime only runs `node .output/server/index.mjs`, so the base's package
+# managers (npm, npx, corepack, yarn) and their bundled dependencies are
+# removed rather than shipped unused. The final check fails the build if a
+# base update moves them.
+RUN addgroup -S aboutme && adduser -S aboutme -G aboutme \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && for tool in npm npx corepack yarn yarnpkg; do \
+        ! command -v "$tool" >/dev/null || exit 1; \
+    done
 
 COPY --from=build /src/apps/web/.output ./.output
 

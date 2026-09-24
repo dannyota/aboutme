@@ -15,11 +15,10 @@ target still depends on UAT proving ARM64 Chromium, concurrent job headroom,
 render latency, replica safety, server-sent event (SSE) behavior, and the
 private print path.
 
-The owner approved a revised operating estimate of
-**$20–30 per month** for
-part-time UAT, **$140–170 per month** for future
-autoscaled production, and **$160–200 per month** when both run in one account.
-Production activation remains a separate Phase 11 decision. The deterministic
+The owner approved a revised operating estimate of **$20–30 per month** for
+part-time UAT, **$140–170 per month** for future autoscaled production, and
+**$160–200 per month** when both run in one account. Production activation
+remains a separate Phase 11 decision. The deterministic
 [monthly model](monthly-inputs.json) gives these unrounded reference points:
 
 | Operating case                            |  Standalone | Increment beside production |
@@ -36,23 +35,20 @@ Combined expected pairs expected production with the selected 40-hour UAT
 schedule. Combined high pairs expected production with the unselected 160-hour
 UAT sensitivity.
 
-With every allowance set to zero, the same UAT schedules cost
-$30.629128 and
-$44.403148. The selected 40-hour baseline is within the approved
-range when the modeled allowances are available. Verify account use before
-activation. The 160-hour forecast exceeds the UAT range, and its combined high
-case exceeds $200. Neither is selected or a spending entitlement; reduce
-optional test hours or obtain a revised cost decision.
+With every allowance set to zero, the same UAT schedules cost $30.629128 and
+$44.403148. The selected 40-hour baseline is within the approved range when the
+modeled allowances are available. Verify account use before activation. The
+160-hour forecast exceeds the UAT range, and its combined high case exceeds
+$200. Neither is selected or a spending entitlement; reduce optional test hours
+or obtain a revised cost decision.
 
 Production uses one `t4g.medium` node normally and allows a second node for
 100–200 hours per month. A persistent public Application Load Balancer (ALB),
-one ALB capacity unit, and its two public IPv4 addresses cost
-$31.536000 per
+one ALB capacity unit, and its two public IPv4 addresses cost $31.536000 per
 month. Each extra node includes its public IPv4 address and prorated 30 GiB gp3
-root volume; 100 hours cost $5.134521.
-The database stays fixed-size Single-AZ RDS PostgreSQL. Multi-AZ RDS, NAT
-gateways, and paid VPC endpoints are excluded. All capacity remains unproven
-until hosted load and recovery checks run.
+root volume; 100 hours cost $5.134521. The database stays fixed-size Single-AZ
+RDS PostgreSQL. Multi-AZ RDS, NAT gateways, and paid VPC endpoints are excluded.
+All capacity remains unproven until hosted load and recovery checks run.
 
 The account-wide CloudFront and CloudWatch monthly allowances are applied to
 merged quantities once. For example, expected production's 10 million HTTPS
