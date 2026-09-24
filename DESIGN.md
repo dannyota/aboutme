@@ -7,13 +7,12 @@ seal applied by the person.
 
 ## Product principle
 
-The landing page leads with “CV của bạn. Miễn phí. Không ai thấy nếu bạn không
-muốn.” by default and “Your resume. Free. No one sees it unless you want them
-to.” in English. It shows a compiled-in resume rendered by the shared
-`ResumeDocument`, rather than a profile card or template carousel. Publishing is
-a deliberate action with three named choices: Public resume, PDF download, and
-SEO and GEO. The publish dialog also controls the optional browser-tab title and
-emoji icon.
+The landing page leads with “CV của bạn. Chia sẻ theo cách của bạn.” by default
+and “Your resume. Your link. Your control.” in English. It shows a compiled-in
+resume rendered by the shared `ResumeDocument`, rather than a profile card or
+template carousel. Publishing is a deliberate action with three named choices:
+Public resume, PDF download, and SEO and GEO. The publish dialog also controls
+the optional browser-tab title and emoji icon.
 
 The editor, public page, and PDF use the same document renderer. Application
 chrome may frame the renderer but does not change its output.
@@ -149,21 +148,42 @@ and successful publish response show the large stamp.
 
 ## Landing
 
-The landing page is a responsive two-column layout from 42 rem upward. Its left
-column spans five of twelve columns and the sample spans seven. Signed-out
-visitors see Create account, Browse templates, and Sign in, in that order.
-Signed-in visitors see Open your resumes and Browse templates.
+The landing page performs no data fetch. It stacks on phones and uses a
+12-column grid from 1024 px, with 80 px between sections, 112 px from 1024 px.
 
-The right column contains a compiled-in two-column Ada Lovelace sample inside a
-210 mm by at least 297 mm white sheet with a soft shadow. The sample uses its
-own Letter page metadata and does not use a gallery preset. A 96 px red seal
-names `aboutme.vn/ada-lovelace`. The sheet uses `zoom: 0.6` on wide screens,
-`0.5` below 42 rem, and `0.44` at widths up to 390 px.
+The hero text spans five columns. The headline's last phrase, “theo cách của
+bạn.” or “Your control.”, takes the brand gradient and falls back to the text
+color under `forced-colors: active`. Signed-out visitors see Create your resume,
+Browse templates, and a Sign in text link, in that order. Signed-in visitors see
+Open your resumes and Browse templates. The first action is a 48 px
+brand-gradient button with `--shadow-cta` that shifts to
+`--gradient-brand-strong` on hover. Actions stack full width below 28 rem.
 
-Below the sample are three ruled facts: Yours to keep, One link per resume, and
-Bring your own agent. A second ruled section explains Public resume, PDF
-download, and SEO and GEO. The footer links the AGPL-3.0 repository, Terms, and
-Privacy. The page performs no data fetch.
+The sample spans seven columns. It is Danny's own compiled-in resume, two
+columns with a sidebar and a photo, on A4 page metadata rather than a gallery
+preset. It sits on a whole white sheet, 210 mm by at least 297 mm with
+`--shadow-paper`, in front of a translucent ghost sheet and a
+`--gradient-hero-glow`. From 42 rem the ghost sheet is offset and rotated 2
+degrees. A 96 px seal names `aboutme.vn/danny`. The sheet zooms 0.39 on phones,
+0.5 from 28 rem, 0.6 from 42 rem, and 0.64 from 80 rem. Three decorative chips,
+Private by default, PDF, and the link, float at the sheet edges from 42 rem and
+wrap in a centered row under it below that. Screen readers skip them.
+
+Four sections follow the hero:
+
+1. Three feature cards on blue, indigo, and pink surface tints with the 20 px
+   feature radius: Private by default, One link per resume, and Bring your own
+   AI. They sit in three columns from 1024 px.
+2. Choose your style: filter chips for ATS-friendly, Technical, First job, and
+   Management, each linking to `/templates?filter=…`, and one real template card
+   per chip, in two columns and four from 1024 px. Cards lift 4 px on hover
+   unless reduced motion is set. A text link opens the full gallery.
+3. Publishing is three choices: an example settings card with Public resume and
+   PDF download on and SEO and GEO off, and the stamp on its top edge.
+4. Free and open source: the AGPL-3.0 link and an outline button to the GitHub
+   repository.
+
+The footer shows `aboutme.vn` and links Terms and Privacy.
 
 ## Template gallery
 
@@ -191,14 +211,20 @@ sample; a first resume opens on the samples.
 
 ## Authenticated chrome and editor
 
-The shared application shell has the `aboutme` logo and a Templates link for
-every visitor. Signed-out navigation also shows Sign in, Create account, and a
-theme toggle. Signed-in navigation also shows Resumes, Settings, and an account
-menu. The account menu contains Settings, theme switching, and Log out. On
-signed-in screens below 640 px, the direct Templates and Settings links are
-hidden; Settings remains in the account menu. On localized routes, the shell
-adds the Vietnamese and English toggle. Below 640 px its visible labels shorten
-to VI and EN while their accessible names remain complete.
+The shared application shell is a card-colored bar with a bottom border, its
+content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
+Templates link for every visitor. Signed-out navigation adds an Open source link
+to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
+and a primary create button. The create button reads Create your resume on the
+home page, the gallery, template pages, Terms, and Privacy, and Create account
+elsewhere. On localized routes other than sessions and agent consent, both
+account buttons hide below 44 rem, where the page's own links take over.
+Signed-in navigation also shows Resumes, Settings, and an account menu. The
+account menu contains Settings, theme switching, and Log out. On signed-in
+screens below 640 px, the direct Templates and Settings links are hidden;
+Settings remains in the account menu. On localized routes, the shell adds the
+Vietnamese and English toggle. Below 640 px its visible labels shorten to VI and
+EN while their accessible names remain complete.
 
 The resume list is a desk of up to three white paper cards in a three-column
 grid at medium widths. Each card shows its title, relative updated time, and a
