@@ -51,6 +51,8 @@ const lightTokens = {
   '--surface-pink': '#fff0fa',
   '--shadow-paper':
     '0 1px 2px rgba(23,26,24,0.06),0 12px 32px rgba(23,26,24,0.1)',
+  '--gradient-brand-strong': 'linear-gradient(90deg,#1a5ceb,#5144f0)',
+  '--shadow-cta': '0 8px 24px rgb(36 107 253 / 0.28)',
 } as const;
 
 const darkTokens = {
@@ -90,6 +92,8 @@ const darkTokens = {
   '--surface-indigo': '#1a1a4a',
   '--surface-pink': '#2a1533',
   '--shadow-paper': '0 1px 2px rgba(0,0,0,0.4),0 12px 32px rgba(0,0,0,0.5)',
+  '--gradient-brand-strong': 'linear-gradient(90deg,#8fb3ff,#a39bff)',
+  '--shadow-cta': '0 8px 24px rgb(114 160 255 / 0.22)',
 } as const;
 
 afterEach(() => {
@@ -108,6 +112,25 @@ describe('application theme', () => {
     );
     expect(css).not.toMatch(/--positive(?:-foreground)?\s*:/);
     expect(css).not.toMatch(/--chart-/);
+  });
+
+  it('defines a three-stop hero glow in both themes', () => {
+    const css = readFileSync(themePath, 'utf8');
+    const light = blockDeclarations(css, ':root')['--gradient-hero-glow'];
+    const dark = blockDeclarations(css, 'html[data-theme="dark"]')[
+      '--gradient-hero-glow'
+    ];
+    for (const value of [light, dark]) {
+      expect(value).toBeDefined();
+      expect(value!.match(/radial-gradient/gu)).toHaveLength(3);
+      expect(value).toContain('transparent 70%');
+    }
+    expect(light).toContain('rgb(53 200 245 / 0.3)');
+    expect(light).toContain('rgb(36 107 253 / 0.24)');
+    expect(light).toContain('rgb(168 85 247 / 0.18)');
+    expect(dark).toContain('rgb(84 214 255 / 0.22)');
+    expect(dark).toContain('rgb(114 160 255 / 0.3)');
+    expect(dark).toContain('rgb(192 139 255 / 0.22)');
   });
 
   it('maps the chrome font, seal colors, radii, shadow, and type scale', () => {
@@ -138,6 +161,13 @@ describe('application theme', () => {
     expect(theme['--text-xl']).toBe('1.5rem');
     expect(theme['--text-2xl']).toBe('2rem');
     expect(theme['--text-3xl']).toBe('2.75rem');
+    expect(theme['--text-4xl']).toBe('2.5rem');
+    expect(theme['--text-4xl--line-height']).toBe('1.15');
+    expect(theme['--text-6xl']).toBe('3.75rem');
+    expect(theme['--text-6xl--line-height']).toBe('1.1');
+    // The gallery page uses the Tailwind default text-5xl; the homepage
+    // hero does not need it overridden (DESIGN.md; ADR 0050).
+    expect(theme['--text-5xl']).toBeUndefined();
     for (const step of ['xs', 'sm', 'base', 'md']) {
       expect(theme[`--text-${step}--line-height`]).toBe('1.5');
     }

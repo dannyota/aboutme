@@ -65,7 +65,7 @@ describe('AppShell', () => {
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
     expect(found['Create account']).toBe('/register');
-    expect(found['Templates']).toBe('/templates');
+    expect(found['Library']).toBe('/templates');
     expect(found['Resumes']).toBeUndefined();
     expect(found['Settings']).toBeUndefined();
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
@@ -92,8 +92,8 @@ describe('AppShell', () => {
       const createAccount = wrapper.findAll('a')
         .find((link) => link.attributes('href') === '/register');
 
-      expect(signIn?.classes()).not.toContain('max-sm:hidden');
-      expect(createAccount?.classes()).not.toContain('max-sm:hidden');
+      expect(signIn?.classes()).not.toContain('max-[44rem]:hidden');
+      expect(createAccount?.classes()).not.toContain('max-[44rem]:hidden');
       wrapper.unmount();
     },
   );
@@ -108,8 +108,8 @@ describe('AppShell', () => {
       const createAccount = wrapper.findAll('a')
         .find((link) => link.attributes('href') === '/register');
 
-      expect(signIn?.classes()).toContain('max-sm:hidden');
-      expect(createAccount?.classes()).toContain('max-sm:hidden');
+      expect(signIn?.classes()).toContain('max-[44rem]:hidden');
+      expect(createAccount?.classes()).toContain('max-[44rem]:hidden');
       wrapper.unmount();
     },
   );
@@ -122,7 +122,7 @@ describe('AppShell', () => {
     const found = links(wrapper);
     expect(found['Resumes']).toBe('/app/resumes');
     expect(found['Settings']).toBe('/app/settings/sessions');
-    expect(found['Templates']).toBe('/templates');
+    expect(found['Library']).toBe('/templates');
     expect(found['Sign in']).toBeUndefined();
     expect(found['Create account']).toBeUndefined();
     expect(wrapper.get('[aria-label="Account menu"]').exists()).toBe(true);
@@ -148,7 +148,7 @@ describe('AppShell', () => {
   });
 
   it(
-    'hides Templates on phones when signed in, keeps it when signed out',
+    'hides the Library link on phones when signed in, keeps it when signed out',
     async () => {
       meStatus = 200;
       const signedInWrapper = await mountShell();
@@ -238,7 +238,7 @@ describe('AppShell', () => {
     await flushPromises();
     const found = links(wrapper);
     expect(found['Đăng nhập']).toBe('/login');
-    expect(found['Tạo tài khoản']).toBe('/register');
+    expect(found['Tạo CV của bạn']).toBe('/register');
     const theme = wrapper.get('[aria-label^="Chuyển sang chế độ"]');
     expect(theme.text()).toMatch(/Chế độ (sáng|tối)/);
 
@@ -351,7 +351,7 @@ describe('AppShell', () => {
   });
 
   it(
-    'marks the Templates link current on the gallery and its pages',
+    'marks the Library link current on the gallery and its pages',
     async () => {
       meStatus = 401;
       for (const route of ['/templates', '/templates/engineer-compact']) {
@@ -369,12 +369,12 @@ describe('AppShell', () => {
     },
   );
 
-  it('speaks Vietnamese for Templates on the localized gallery', async () => {
+  it('speaks Vietnamese for Library on the localized gallery', async () => {
     meStatus = 401;
     setSiteLocale('vi');
     const wrapper = await mountShell('/templates');
     await flushPromises();
-    expect(links(wrapper)['Mẫu']).toBe('/templates');
+    expect(links(wrapper)['Thư viện']).toBe('/templates');
   });
 
   it(
@@ -459,6 +459,48 @@ describe('AppShell', () => {
     },
   );
 
+  it.each([
+    ['/', 'Create your resume'],
+    ['/templates', 'Create your resume'],
+    ['/templates/engineer-compact', 'Create your resume'],
+    ['/terms', 'Create your resume'],
+    ['/privacy', 'Create your resume'],
+    ['/login', 'Create account'],
+    ['/register', 'Create account'],
+    ['/authorize', 'Create account'],
+  ])('labels the header CTA %s as %s', async (route, label) => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const wrapper = await mountShell(route);
+    await flushPromises();
+    const createAccount = wrapper.findAll('a')
+      .find((link) => link.attributes('href')?.startsWith('/register'));
+    expect(createAccount?.text()).toBe(label);
+  });
+
+  it('shows the open source link only when signed out', async () => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const signedOut = await mountShell('/');
+    await flushPromises();
+    const openSource = signedOut.get(
+      '[data-testid="app-shell-open-source"]',
+    );
+    expect(openSource.attributes('href')).toBe(
+      'https://github.com/dannyota/aboutme',
+    );
+    expect(openSource.attributes('rel')).toBe('noopener noreferrer');
+    expect(openSource.classes()).toContain('max-[56rem]:hidden');
+    signedOut.unmount();
+
+    meStatus = 200;
+    const signedIn = await mountShell('/');
+    await flushPromises();
+    expect(
+      signedIn.find('[data-testid="app-shell-open-source"]').exists(),
+    ).toBe(false);
+  });
+
   it('ignores next outside /login and /register', async () => {
     meStatus = 401;
     setSiteLocale('en');
@@ -468,6 +510,6 @@ describe('AppShell', () => {
     await flushPromises();
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
-    expect(found['Create account']).toBe('/register');
+    expect(found['Create your resume']).toBe('/register');
   });
 });
