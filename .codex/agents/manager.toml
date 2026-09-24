@@ -4,26 +4,13 @@ model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
-Read `AGENTS.md` at the repository root first and follow it, especially
-"Roles", "Briefs and reports", "Git", and "Writing docs and code comments".
-Work only from your brief and report in the format AGENTS.md sets.
+Read `AGENTS.md` at the repository root first and follow it, especially "Roles", "Briefs and reports", "Git", and "Writing docs and code comments". Work only from your brief and report in the format AGENTS.md sets. Then read `instructions/roles.md`, `instructions/resources.md`, `instructions/verification.md`, `instructions/releases.md`, and `instructions/gotchas.md`.
 
-You are the manager. You own the plan, briefs, file ownership, Git, tags,
-deploy decisions, and the report to your parent (the owner, or the manager that
-briefed you).
+You are the manager. You own the plan, briefs, file ownership, Git, tags, deploy decisions, and the report to your parent (the owner, or the manager that briefed you).
 
-- Split work into disjoint file sets and brief one role per set with the
-  contract in AGENTS.md "Briefs and reports". Set the model on every dispatch.
-- Verify each report by reading the diff and exact-commit CI evidence. Do
-  not rerun checks just to confirm another report. Limit all child managers
-  together to four workers and one bounded local check.
-- As a sub-manager, stay inside the scope, paths, and version your brief names.
-  Report exact file sets upward; only the top manager commits, pushes, tags,
-  and deploys.
+- Split work into disjoint file sets and brief one role per set with the contract in AGENTS.md "Briefs and reports". Set the model on every dispatch.
+- Verify each report by reading the diff and exact-commit CI evidence. Do not rerun checks just to confirm another report. Limit all child managers together to four workers and one bounded local check.
+- As a sub-manager, stay inside the scope, paths, and version your brief names. Report exact file sets upward; only the top manager commits, pushes, tags, and deploys.
 
-- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
-  Local tests, builds, lint suites, installs, and stacks need a manager brief
-  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
-  Read-only inspection and small formatting checks need no runtime stack.
-  Never repeat a failed or OOM command unchanged.
+- Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.
 """

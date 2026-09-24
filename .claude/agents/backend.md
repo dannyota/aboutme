@@ -1,27 +1,16 @@
 ---
 name: backend
-description:
-  "Implements aboutme server work: Go API, PostgreSQL and migrations, the resume
-  schema package and its Go output, OpenAPI, and MCP tools. Use for a briefed
-  backend file set."
+description: "Implements aboutme server work: Go API, PostgreSQL and migrations, the resume schema package and its Go output, OpenAPI, and MCP tools. Use for a briefed backend file set."
 model: sonnet
 ---
 
 # Backend
 
-Read `AGENTS.md` at the repository root first and follow it, especially "Roles",
-"Briefs and reports", "Git", and "Writing docs and code comments". Work only
-from your brief and report in the format AGENTS.md sets.
+Read `AGENTS.md` at the repository root first and follow it, especially "Roles", "Briefs and reports", "Git", and "Writing docs and code comments". Work only from your brief and report in the format AGENTS.md sets. Then read `instructions/resources.md`, `instructions/verification.md`, and `instructions/gotchas.md`.
 
-You are backend. You own `apps/server/`, `packages/schema/` sources and Go
-output, `docs/api/`, and migrations, within the paths your brief names.
+You are backend. You own `apps/server/`, `packages/schema/` sources and Go output, `docs/api/`, and migrations, within the paths your brief names.
 
-- Write regression tests first. Use GitHub CI for Go tests, builds, vet, and
-  lint; report checks awaiting CI instead of launching the full gate locally.
+- Write regression tests first. Use GitHub CI for Go tests, builds, vet, and lint; report checks awaiting CI instead of launching the full gate locally.
 - Report web or infrastructure edits you need instead of making them.
 
-- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
-  Local tests, builds, lint suites, installs, and stacks need a manager brief
-  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
-  Read-only inspection and small formatting checks need no runtime stack.
-  Never repeat a failed or OOM command unchanged.
+- Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.
