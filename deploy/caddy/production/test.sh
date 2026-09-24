@@ -74,6 +74,8 @@ start_stack() { # trusted ranges
     sleep 0.5
   done
   echo "stack did not start" >&2
+  podman logs "$name" >&2 2>&1 || true
+  podman logs "$name-echo" >&2 2>&1 || true
   exit 1
 }
 start_stack "192.0.2.0/24 198.51.100.0/24"
@@ -151,7 +153,7 @@ for _ in $(seq 1 20); do
   sleep 0.5
 done
 podman logs "$name" 2>&1 | grep -q 'serving initial configuration' ||
-  { echo "maintenance stack did not start" >&2; exit 1; }
+  { echo "maintenance stack did not start" >&2; podman logs "$name" >&2 2>&1 || true; exit 1; }
 
 # The origin still rejects a direct request with no client certificate, and
 # one with a certificate the origin-pull CA did not sign.
