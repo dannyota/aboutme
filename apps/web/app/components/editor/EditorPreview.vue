@@ -208,7 +208,7 @@ onBeforeUnmount(() => {
     </div>
     <div
       ref="previewRoot"
-      class="overflow-auto bg-background p-6 max-[42rem]:p-4"
+      class="overflow-auto bg-editor-canvas p-6 max-[42rem]:p-4"
       tabindex="0"
     >
       <p

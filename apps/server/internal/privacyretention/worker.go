@@ -19,9 +19,14 @@ const (
 	oauthCleanupBatch       = 200
 	maxRunDuration          = 30 * time.Minute
 	cleanupTimeout          = 5 * time.Second
-	sessionRetention        = 90 * 24 * time.Hour
 	auditRetention          = 180 * 24 * time.Hour
+	slugReservation         = 180 * 24 * time.Hour
 	oauthClientIdle         = 24 * time.Hour
+	// sessionRedactionLead covers the daily sweep schedule plus one missed
+	// run, so a session's IP and user agent are still redacted by its
+	// absolute expiry (90 days after sign-in, docs/design/security.md) even
+	// when a run is skipped.
+	sessionRedactionLead = 48 * time.Hour
 )
 
 var (
@@ -63,6 +68,9 @@ type Result struct {
 	AuthenticationSecurityEventsDeleted       int64 `json:"authenticationSecurityEventsDeleted"`
 	AuthenticationSecurityEventsBacklog       int64 `json:"authenticationSecurityEventsBacklog"`
 	AuthenticationSecurityEventsOldestSeconds int64 `json:"authenticationSecurityEventsOldestSeconds"`
+	SlugTombstonesDeleted                     int64 `json:"slugTombstonesDeleted"`
+	SlugTombstonesBacklog                     int64 `json:"slugTombstonesBacklog"`
+	SlugTombstonesOldestSeconds               int64 `json:"slugTombstonesOldestSeconds"`
 
 	OAuthTransactionsDeleted       int64 `json:"oauthTransactionsDeleted"`
 	OAuthAuthorizationCodesDeleted int64 `json:"oauthAuthorizationCodesDeleted"`
@@ -234,7 +242,7 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 
 	now := w.now()
 	result.SessionMetadataRedacted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
-		return q.RedactSessionMetadataPage(ctx, store.RedactSessionMetadataPageParams{Cutoff: now.Add(-sessionRetention), LimitRows: limit})
+		return q.RedactSessionMetadataPage(ctx, store.RedactSessionMetadataPageParams{Cutoff: now.Add(sessionRedactionLead), LimitRows: limit})
 	})
 	if err != nil {
 		return w.failed(result)
@@ -253,6 +261,12 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 	}
 	result.AuthenticationSecurityEventsDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
 		return q.DeleteAuthenticationSecurityEventsPage(ctx, store.DeleteAuthenticationSecurityEventsPageParams{Cutoff: now.Add(-auditRetention), LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
+	result.SlugTombstonesDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteExpiredSlugTombstonesPage(ctx, store.DeleteExpiredSlugTombstonesPageParams{Cutoff: now.Add(-slugReservation), LimitRows: limit})
 	})
 	if err != nil {
 		return w.failed(result)
@@ -383,7 +397,7 @@ func rollbackBounded(ctx context.Context, tx pgx.Tx) error {
 
 func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now time.Time, result *Result) error {
 	sessions, err := q.GetSessionMetadataBacklog(ctx, store.GetSessionMetadataBacklogParams{
-		Now: now, Cutoff: now.Add(-sessionRetention),
+		Now: now, Cutoff: now.Add(sessionRedactionLead),
 	})
 	if err != nil {
 		return err
@@ -406,6 +420,12 @@ func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now
 	if err != nil {
 		return err
 	}
+	tombstones, err := q.GetExpiredSlugTombstonesBacklog(ctx, store.GetExpiredSlugTombstonesBacklogParams{
+		Now: now, Cutoff: now.Add(-slugReservation),
+	})
+	if err != nil {
+		return err
+	}
 	result.SessionMetadataBacklog = sessions.Backlog
 	result.SessionOldestAgeSeconds = sessions.OldestAgeSeconds
 	result.LifecycleAuditBacklog = audits.Backlog
@@ -414,6 +434,8 @@ func (w *Worker) loadRetentionBacklog(ctx context.Context, q *store.Queries, now
 	result.CompletedMediaOldestSeconds = media.OldestAgeSeconds
 	result.AuthenticationSecurityEventsBacklog = events.Backlog
 	result.AuthenticationSecurityEventsOldestSeconds = events.OldestAgeSeconds
+	result.SlugTombstonesBacklog = tombstones.Backlog
+	result.SlugTombstonesOldestSeconds = tombstones.OldestAgeSeconds
 	return nil
 }
 
@@ -449,6 +471,9 @@ func (w *Worker) logResult(ctx context.Context, command string, result Result) {
 		"authentication_security_events_deleted", result.AuthenticationSecurityEventsDeleted,
 		"authentication_security_events_backlog", result.AuthenticationSecurityEventsBacklog,
 		"authentication_security_events_oldest_seconds", result.AuthenticationSecurityEventsOldestSeconds,
+		"slug_tombstones_deleted", result.SlugTombstonesDeleted,
+		"slug_tombstones_backlog", result.SlugTombstonesBacklog,
+		"slug_tombstones_oldest_seconds", result.SlugTombstonesOldestSeconds,
 		"oauth_transactions_deleted", result.OAuthTransactionsDeleted,
 		"oauth_authorization_codes_deleted", result.OAuthAuthorizationCodesDeleted,
 		"oauth_tokens_deleted", result.OAuthTokensDeleted,

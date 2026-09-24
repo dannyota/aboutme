@@ -206,6 +206,9 @@ type Querier interface {
 	// expires_at > now).
 	DeleteExpiredOAuthTransactions(ctx context.Context, arg DeleteExpiredOAuthTransactionsParams) (int64, error)
 	DeleteExpiredPendingAuthentications(ctx context.Context, limitRows int32) (int64, error)
+	// A released slug stays reserved and unlinked from any account for 180 days
+	// (docs/design/product.md), then the privacy sweep deletes the reservation.
+	DeleteExpiredSlugTombstonesPage(ctx context.Context, arg DeleteExpiredSlugTombstonesPageParams) (int64, error)
 	DeleteExpiredWebAuthnCeremonies(ctx context.Context, limitRows int32) (int64, error)
 	// Unlinks one identity only when it belongs to the given user. The caller holds
 	// the user-row lock, so the last-sign-in-method check and this delete cannot
@@ -269,6 +272,7 @@ type Querier interface {
 	GetAccountExportProfile(ctx context.Context, id uuid.UUID) (GetAccountExportProfileRow, error)
 	GetAuthenticationSecurityEventsBacklog(ctx context.Context, arg GetAuthenticationSecurityEventsBacklogParams) (GetAuthenticationSecurityEventsBacklogRow, error)
 	GetCompletedMediaJobsBacklog(ctx context.Context, arg GetCompletedMediaJobsBacklogParams) (GetCompletedMediaJobsBacklogRow, error)
+	GetExpiredSlugTombstonesBacklog(ctx context.Context, arg GetExpiredSlugTombstonesBacklogParams) (GetExpiredSlugTombstonesBacklogRow, error)
 	// Inputs for the capacity Retry-After decision: while an expired retained
 	// row remains the caller retries in one second (the next mutation's
 	// bounded cleanup frees space); otherwise the earliest retained expiry
@@ -353,6 +357,11 @@ type Querier interface {
 	// Returns a session only while its copied authentication epoch equals the
 	// account's current epoch, so a stale-epoch credential reads as unknown.
 	GetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	// oldest_age_seconds is age since the original sign-in, not since
+	// absolute_expires_at, matching every other *_oldest_seconds field: a
+	// session's absolute expiry is sign-in plus the fixed 90-day absolute timeout
+	// (docs/design/security.md), so subtracting that interval back out of
+	// absolute_expires_at recovers the sign-in time.
 	GetSessionMetadataBacklog(ctx context.Context, arg GetSessionMetadataBacklogParams) (GetSessionMetadataBacklogRow, error)
 	GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, error)
 	GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error)
@@ -404,6 +413,8 @@ type Querier interface {
 	// orphan. The partial unique index on rotated_from means one predecessor can
 	// mint at most one successor even under concurrent rotations.
 	InsertRotatedOAuthToken(ctx context.Context, arg InsertRotatedOAuthTokenParams) (OAuthToken, error)
+	// Holds no account link (docs/design/product.md): the released slug and its
+	// release time are the only claim needed to reserve it.
 	InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error)
 	// First install under the user lock. The caller generates id as a UUIDv7 and
 	// seals the secret with it before this insert (docs/design/totp-key-management.md#sealing).
@@ -509,6 +520,11 @@ type Querier interface {
 	// down. Every counted failure also sets last_failed_at, which gates whether a
 	// later valid code may reset the budget.
 	RecordTOTPCredentialFailure(ctx context.Context, arg RecordTOTPCredentialFailureParams) (TotpCredential, error)
+	// Session IP and user agent are redacted before the session's absolute expiry
+	// (docs/design/operations.md), not by created_at, so a rotation or reissue
+	// successor that inherits the original absolute expiry cannot extend how long
+	// its metadata survives. The caller's cutoff already carries the redaction
+	// lead ahead of now, so this query only compares absolute_expires_at to it.
 	RedactSessionMetadataPage(ctx context.Context, arg RedactSessionMetadataPageParams) (int64, error)
 	// Key-ID compare-before-update: the WHERE clause only applies the rewrite
 	// when the row is still sealed under the exact key the caller decrypted, so
@@ -610,7 +626,7 @@ type Querier interface {
 	// Records that this session's lineage just completed a full OAuth login
 	// after a real reauthentication round trip, never by rotation.
 	TouchReauthenticatedAt(ctx context.Context, arg TouchReauthenticatedAtParams) error
-	// Phase 8 privacy retention queries. Every mutation is bounded and ordered;
+	// Privacy retention queries. Every mutation is bounded and ordered;
 	// command-level advisory locks are session locks held on a dedicated pooled
 	// connection for the whole run.
 	TryLockIdempotencyExpirySweep(ctx context.Context) (bool, error)

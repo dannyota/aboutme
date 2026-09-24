@@ -242,12 +242,10 @@ func stringPointer(value string) *string { return &value }
 
 func TestSlugTombstoneExactBoundaryAndNoRefresh(t *testing.T) {
 	ctx, _, tx, queries := newPublicStoreTx(t)
-	userID := createPublicStoreUser(ctx, t, tx)
 	releasedAt := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
 	tombstone, err := queries.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-		Slug:             "held-slug",
-		ReleasedByUserID: &userID,
-		ReleasedAt:       releasedAt,
+		Slug:       "held-slug",
+		ReleasedAt: releasedAt,
 	})
 	if err != nil {
 		t.Fatalf("InsertSlugTombstone() error: %v", err)
@@ -257,8 +255,7 @@ func TestSlugTombstoneExactBoundaryAndNoRefresh(t *testing.T) {
 		t.Fatalf("GetSlugTombstoneForUpdate() error: %v", err)
 	}
 	if locked.ID != tombstone.ID || locked.Slug != tombstone.Slug ||
-		!locked.ReleasedAt.Equal(tombstone.ReleasedAt) ||
-		!equalOptionalUUID(locked.ReleasedByUserID, tombstone.ReleasedByUserID) {
+		!locked.ReleasedAt.Equal(tombstone.ReleasedAt) {
 		t.Fatalf("locked tombstone = %+v, want %+v", locked, tombstone)
 	}
 
@@ -272,9 +269,8 @@ func TestSlugTombstoneExactBoundaryAndNoRefresh(t *testing.T) {
 		t.Fatalf("begin conflict savepoint: %v", err)
 	}
 	_, err = store.New(conflictTx).InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-		Slug:             "held-slug",
-		ReleasedByUserID: &userID,
-		ReleasedAt:       releasedAt.Add(time.Hour),
+		Slug:       "held-slug",
+		ReleasedAt: releasedAt.Add(time.Hour),
 	})
 	requireConstraint(t, err, "slug_tombstones_slug_key")
 	if rollbackErr := conflictTx.Rollback(ctx); rollbackErr != nil {
@@ -349,9 +345,8 @@ func TestPublishRollbackRestoresClaimAndGeneration(t *testing.T) {
 	resumeID := createPublicStoreResume(ctx, t, tx, userID, nil, false, false)
 	releasedAt := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
 	tombstone, err := queries.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-		Slug:             "reclaim-slug",
-		ReleasedByUserID: &userID,
-		ReleasedAt:       releasedAt,
+		Slug:       "reclaim-slug",
+		ReleasedAt: releasedAt,
 	})
 	if err != nil {
 		t.Fatalf("InsertSlugTombstone() error: %v", err)
@@ -442,9 +437,8 @@ func TestDeleteRollbackRestoresRowTombstoneAndJob(t *testing.T) {
 		t.Fatalf("LockSlugClaim() error: %v", lockErr)
 	}
 	if _, insertErr := mutation.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-		Slug:             slug,
-		ReleasedByUserID: &userID,
-		ReleasedAt:       time.Date(2026, time.July, 2, 0, 0, 0, 0, time.UTC),
+		Slug:       slug,
+		ReleasedAt: time.Date(2026, time.July, 2, 0, 0, 0, 0, time.UTC),
 	}); insertErr != nil {
 		t.Fatalf("InsertSlugTombstone() error: %v", insertErr)
 	}
@@ -584,9 +578,8 @@ func TestSlugReclaimCollisionHasOneClaim(t *testing.T) {
 	slug := "reclaim-" + uuid.NewString()[:8]
 	releasedAt := time.Date(2025, time.January, 1, 0, 0, 0, 0, time.UTC)
 	if _, insertErr := store.New(setupTx).InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-		Slug:             slug,
-		ReleasedByUserID: &firstUser,
-		ReleasedAt:       releasedAt,
+		Slug:       slug,
+		ReleasedAt: releasedAt,
 	}); insertErr != nil {
 		t.Fatalf("setup InsertSlugTombstone() error: %v", insertErr)
 	}
@@ -800,13 +793,6 @@ func assertSamePublicResume(t *testing.T, got, want store.Resume) {
 }
 
 func equalOptionalString(left, right *string) bool {
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-	return *left == *right
-}
-
-func equalOptionalUUID(left, right *uuid.UUID) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}

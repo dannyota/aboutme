@@ -155,11 +155,15 @@ func (r mutationRecovery) exactStoredPublishResponse(record store.IdempotencyRec
 
 func (r mutationRecovery) proveCommittedDelete(ctx context.Context) error {
 	if r.delete.Slug != nil {
+		// The tombstone carries no account link, but the slug is unique and an
+		// unexpired tombstone blocks any other claim, so the slug this
+		// transaction released plus its exact release time identifies this
+		// request's own tombstone.
 		tombstone, err := store.New(r.pool).GetSlugTombstoneForUpdate(ctx, *r.delete.Slug)
 		if err != nil {
 			return fmt.Errorf("resumeapi: prove delete tombstone: %w", err)
 		}
-		if tombstone.ReleasedByUserID == nil || *tombstone.ReleasedByUserID != r.identity.UserID || !tombstone.ReleasedAt.Equal(r.delete.ReleasedAt) {
+		if !tombstone.ReleasedAt.Equal(r.delete.ReleasedAt) {
 			return errors.New("resumeapi: delete tombstone proof does not match")
 		}
 	}
@@ -196,8 +200,10 @@ func (r mutationRecovery) proveCommittedPublish(ctx context.Context, q *store.Qu
 		}
 	}
 	if r.publish.OldSlug != nil {
+		// See proveCommittedDelete: slug plus exact release time is proof
+		// enough that this is the request's own tombstone.
 		tombstone, tombstoneErr := q.GetSlugTombstoneForUpdate(ctx, *r.publish.OldSlug)
-		if tombstoneErr != nil || tombstone.ReleasedByUserID == nil || *tombstone.ReleasedByUserID != r.identity.UserID || !tombstone.ReleasedAt.Equal(r.publish.ReleasedAt) {
+		if tombstoneErr != nil || !tombstone.ReleasedAt.Equal(r.publish.ReleasedAt) {
 			return errors.New("resumeapi: publish recovery tombstone does not match intended state")
 		}
 	}

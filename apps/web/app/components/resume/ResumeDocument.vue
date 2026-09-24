@@ -43,6 +43,7 @@ const rootStyle = computed<CSSProperties>(() => ({
         :personal-details="model.personalDetails"
         :header="model.header"
         :photo="model.photo"
+        :name-heading="model.nameHeading"
       />
     </div>
     <LayoutColumns :model="model" />
@@ -265,6 +266,9 @@ body:has(> #public-resume) {
   margin: 0;
   color: var(--color-heading);
   font-size: var(--fs-name);
+  /* h1's browser default; stated so a p-tagged name (an embed that owns
+     its own page h1) renders identically to the h1 it replaces there. */
+  font-weight: 700;
   line-height: var(--lh-heading);
 }
 

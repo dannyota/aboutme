@@ -43,6 +43,9 @@ const page = computed(() => ({
 const context = computed(() => ({
   lng: props.lng,
   mode: 'continuous' as const,
+  // The thumbnail is decorative (aria-hidden and inert above); the name
+  // is visual only, so the page's h1 count stays one per template card.
+  nameHeading: 'p' as const,
 }));
 
 onMounted(() => {

@@ -23,10 +23,10 @@ three resumes, each with its own public URL. Accounts stay private.
   Connected assistants cannot publish resumes.
 - Account export and deletion, session controls, and connected-agent revocation.
 
-The hosted service runs at [aboutme.vn](https://aboutme.vn). Google sign-in is
-enabled; email-and-password registration is disabled. The homepage, account
-pages, policies, and template gallery support Vietnamese and English. The editor
-and settings are English.
+The hosted service runs at [aboutme.vn](https://aboutme.vn). Email-and-password
+sign-up and Google sign-in are enabled, with optional passkey and authenticator
+app second factors. The whole product, including the editor and settings,
+supports Vietnamese and English.
 
 ## Project status
 

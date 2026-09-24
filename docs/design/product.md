@@ -90,9 +90,10 @@ neither shadows the other.
 
 A slug claim validates both the grammar and exact registry membership. Reserved
 root segments cannot be claimed. A resume keeps its slug when unpublished.
-Rename or deletion releases the old slug into a 180-day tombstone so another
-account cannot immediately take over an old link.
-[ADR 0004](../adr/0004-resume-slug-only-urls.md) records the rationale.
+Rename or deletion releases the old slug into a tombstone that holds no link to
+any account. The tombstone blocks the slug for 180 days, then the daily privacy
+retention sweep deletes it. [ADR 0004](../adr/0004-resume-slug-only-urls.md)
+records the rationale.
 
 ## Publish controls
 

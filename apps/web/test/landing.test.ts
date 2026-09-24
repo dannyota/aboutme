@@ -78,6 +78,9 @@ describe('index.vue', () => {
         'shadow-[var(--shadow-paper)]',
       ]),
     );
+    // The page's only h1 is the hero title; the embedded sample resume's
+    // name is a p, so the document keeps a single h1.
+    expect(wrapper.findAll('h1')).toHaveLength(1);
   });
 
   it('sets the emphasized suffix apart from the rest of the headline',

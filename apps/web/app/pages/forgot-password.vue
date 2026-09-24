@@ -10,6 +10,7 @@
 import { usePasswordAuth } from '../composables/usePasswordAuth';
 import FormField from '@/components/app/FormField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
+import AuthLayout from '@/components/auth/AuthLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { type AuthMessage, authCopy } from '@/i18n/auth';
@@ -43,10 +44,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
-    data-testid="forgot-password-page"
-  >
+  <AuthLayout testid="forgot-password-page">
     <h1
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
@@ -103,11 +101,11 @@ async function onSubmit() {
     </form>
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         to="/login"
       >
         {{ copy.forgot.backToSignIn }}
       </NuxtLink>
     </nav>
-  </main>
+  </AuthLayout>
 </template>

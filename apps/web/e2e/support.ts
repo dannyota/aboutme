@@ -123,6 +123,7 @@ export async function compareRaster(
   actual: Buffer,
   expected: Buffer,
   diffPath: string,
+  maxChangedPixels = 0,
 ): Promise<void> {
   const [actualImage, expectedImage] = await Promise.all([
     loadImage(actual),
@@ -162,7 +163,7 @@ export async function compareRaster(
     diffContext.putImageData(diff, 0, 0);
     await writeFile(diffPath, diffCanvas.toBuffer('image/png'));
   }
-  expect(changed).toBe(0);
+  expect(changed).toBeLessThanOrEqual(maxChangedPixels);
 }
 
 /**
@@ -177,6 +178,7 @@ export async function verifyScreenshot(
   filename: string,
   testInfo: TestInfo,
   locator?: Locator,
+  maxChangedPixels = 0,
 ): Promise<void> {
   const options = {
     animations: 'disabled',
@@ -207,5 +209,6 @@ export async function verifyScreenshot(
     bytes,
     expected,
     testInfo.outputPath(filename.replace(/\.png$/, '-diff.png')),
+    maxChangedPixels,
   );
 }

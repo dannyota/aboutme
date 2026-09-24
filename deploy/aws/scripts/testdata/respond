@@ -8,7 +8,31 @@ case "$cmd $args" in
   "git rev-list"*) echo 0123456789abcdef0123456789abcdef01234567 ;;
   "git merge-base"*) exit 0 ;;
   "gh run list"*)
-    if [[ $STUB_CASE == fence_ci_fails ]]; then echo failure; else echo success; fi ;;
+    # The commit stub always returns this SHA (git rev-list, above).
+    sha=0123456789abcdef0123456789abcdef01234567
+    case $STUB_CASE in
+      fence_ci_fails)
+        printf '[{"conclusion":"failure","status":"completed","event":"push","headBranch":"main","headSha":"%s"}]\n' "$sha" ;;
+      ci_dispatch_only)
+        # A green run exists for this commit, but only from a manual dispatch
+        # on a branch, never a push run on main.
+        printf '[{"conclusion":"success","status":"completed","event":"workflow_dispatch","headBranch":"fix/x","headSha":"%s"}]\n' "$sha" ;;
+      ci_dispatch_newer)
+        # gh lists newest first: a newer green dispatch run must not hide an
+        # older failed push run on main for the same commit.
+        printf '[{"conclusion":"success","status":"completed","event":"workflow_dispatch","headBranch":"fix/x","headSha":"%s"},' "$sha"
+        printf '{"conclusion":"failure","status":"completed","event":"push","headBranch":"main","headSha":"%s"}]\n' "$sha" ;;
+      ci_push_other_branch)
+        printf '[{"conclusion":"success","status":"completed","event":"push","headBranch":"release/x","headSha":"%s"}]\n' "$sha" ;;
+      ci_wrong_sha)
+        printf '[{"conclusion":"success","status":"completed","event":"push","headBranch":"main","headSha":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}]\n' ;;
+      ci_push_in_progress)
+        # gh's real shape for a run still in progress: conclusion is "", not
+        # null.
+        printf '[{"conclusion":"","status":"in_progress","event":"push","headBranch":"main","headSha":"%s"}]\n' "$sha" ;;
+      *)
+        printf '[{"conclusion":"success","status":"completed","event":"push","headBranch":"main","headSha":"%s"}]\n' "$sha" ;;
+    esac ;;
   "aws "*"sts get-caller-identity --query Arn --output text")
     case "${AWS_PROFILE:-}" in
       fence-operator)
@@ -93,6 +117,24 @@ case "$cmd $args" in
     else
       printf '<!-- aboutme:maintenance -->\n503\n'
     fi ;;
+  "curl -s -o /dev/null -m "*"-w %{http_code} %{time_total} https://aboutme.vn"*)
+    # warm_path's own probe. $safe_path keys a per-path, per-case attempt
+    # counter, since the same case warms both /danny and / independently.
+    url=${args##* }
+    path=${url#https://aboutme.vn}
+    safe_path=${path//\//_}
+    n=$(($(cat "$STUB_DIR/warm-count.$STUB_CASE$safe_path" 2>/dev/null || echo 0) + 1))
+    echo "$n" >"$STUB_DIR/warm-count.$STUB_CASE$safe_path"
+    case $STUB_CASE in
+      warm_slow_then_fast)
+        if ((n == 1)); then printf '502 0.2'
+        elif ((n == 2)); then printf '200 5.0'
+        else printf '200 0.4'; fi ;;
+      warm_never_fast | cleanup_wait_signal | cleanup_rule_killed) printf '200 5.0' ;;
+      warm_timeout)
+        if ((n == 1)); then exit 28; else printf '200 0.4'; fi ;;
+      *) printf '200 0.4' ;;
+    esac ;;
   "curl "*"https://aboutme.vn/"*) echo 200 ;;
   "curl "*"https://192.0.2.10/"*)
     # origin_open: the origin answers a direct request.
@@ -271,6 +313,65 @@ case "$cmd $args" in
     elif [[ $STUB_CASE == *db_setup_fails && $args == *deploy-db-setup* ]]; then echo 1;
     elif [[ $STUB_CASE == totp_reencrypt_task_fails && $args == *deploy-totp-reencrypt* ]]; then echo 1;
     else echo 0; fi ;;
+  "aws "*"cloudwatch describe-alarms"*"--output json"*)
+    # wait_for_site_alarm_healthy's own read: StateValue plus the alarm's
+    # static evaluation shape (EvaluationPeriods=3, Period=60, Threshold=1,
+    # ComparisonOperator=LessThanThreshold, Statistic=Minimum), matching
+    # deploy/aws/modules/ops/main.tf's aws_cloudwatch_metric_alarm.site.
+    n=$(($(cat "$STUB_DIR/alarm-describe-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+    echo "$n" >"$STUB_DIR/alarm-describe-count.$STUB_CASE"
+    if [[ $STUB_CASE == alarm_signal_during_wait ]] && ((n == 1)); then
+      kill -TERM "$PPID"
+    elif [[ $STUB_CASE == cleanup_wait_signal ]] && ((n == 1)); then
+      # This read runs inside deploy.sh's on_exit (a running trap), where a
+      # command substitution forks a real subshell rather than exec'ing
+      # directly into this stub: $PPID here is that subshell, not deploy.sh
+      # itself, so run_case's own recorded PID is the one to signal.
+      kill -TERM "$(cat "$STUB_DIR/$STUB_CASE.pid")"
+    fi
+    astate=OK
+    comparison=LessThanThreshold
+    case $STUB_CASE in
+      alarm_late_alarm) ((n <= 2)) && astate=ALARM ;;
+      # An alarm someone edited outside OpenTofu: the wait must never treat
+      # this shape as healthy.
+      alarm_shape_changed) comparison=LessThanOrEqualToThreshold ;;
+    esac
+    printf '{"MetricAlarms":[{"StateValue":"%s","ComparisonOperator":"%s","Statistic":"Minimum","EvaluationPeriods":3,"Period":60,"Threshold":1,"Dimensions":[{"Name":"HealthCheckId","Value":"hc-stub-1"}]}]}' \
+      "$astate" "$comparison" ;;
+  "aws "*"cloudwatch get-metric-statistics"*)
+    if [[ $STUB_CASE == alarm_metric_error ]]; then
+      echo "AccessDeniedException: user is not authorized to perform this action" >&2
+      exit 254
+    fi
+    # Route 53's post-recovery healthy-minute count, read under the base
+    # caller's own profile (see wait_for_site_alarm_healthy). The wait now
+    # requires EvaluationPeriods (3) + 1 healthy minutes at the newest end.
+    n=$(($(cat "$STUB_DIR/alarm-metric-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+    echo "$n" >"$STUB_DIR/alarm-metric-count.$STUB_CASE"
+    # Minimums oldest first internally, with the oldest value unhealthy: an
+    # implementation that skips sorting drops the wrong end and fails.
+    # CloudWatch does not promise an order, so the ok case emits them oldest
+    # first and the rest emit newest first, exercising the script's own sort
+    # both ways.
+    values=(0 1 1 1 1)
+    case $STUB_CASE in
+      alarm_ok_stale) values=(0); for ((i = 0; i < n && i < 4; i++)); do values+=(1); done ;;
+      alarm_never_ok | cleanup_wait_signal | alarm_timeout_enable_retry) values=(0 1) ;;
+      # Three healthy minutes then an unhealthy newest one on the first read.
+      alarm_flap) if ((n == 1)); then values=(1 1 1 0); else values=(1 1 1 0 1 1 1 1); fi ;;
+    esac
+    dp=""
+    if [[ $STUB_CASE == ok ]]; then
+      for ((i = 0; i < ${#values[@]}; i++)); do
+        dp+=$(printf '{"Timestamp":"2026-10-20T00:%02d:00Z","Minimum":%s},' "$((i + 1))" "${values[i]}")
+      done
+    else
+      for ((i = ${#values[@]} - 1; i >= 0; i--)); do
+        dp+=$(printf '{"Timestamp":"2026-10-20T00:%02d:00Z","Minimum":%s},' "$((i + 1))" "${values[i]}")
+      done
+    fi
+    printf '{"Datapoints":[%s]}' "${dp%,}" ;;
   "aws "*"cloudwatch describe-alarms"*)
     if [[ $STUB_CASE == alerts_initially_disabled ]]; then echo False
     elif [[ $STUB_CASE == alerts_site_mismatch && -e $STUB_DIR/site-disabled ]]; then echo True
@@ -282,6 +383,11 @@ case "$cmd $args" in
   "aws "*"cloudwatch enable-alarm-actions"*)
     rm -f "$STUB_DIR/site-disabled"
     if [[ $STUB_CASE == signal_during_cleanup ]]; then kill -TERM "$PPID"; fi
+    if [[ $STUB_CASE == alarm_timeout_enable_retry ]]; then
+      n=$(($(cat "$STUB_DIR/enable-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$STUB_DIR/enable-count.$STUB_CASE"
+      ((n != 1)) || exit 255
+    fi
     [[ $STUB_CASE != alerts_restore_fails ]] || exit 255 ;;
   "aws "*"events describe-rule"*)
     if [[ $STUB_CASE == alerts_initially_disabled ]]; then echo DISABLED
@@ -292,6 +398,13 @@ case "$cmd $args" in
     if [[ $STUB_CASE == alerts_rule_lost ]]; then exit 255; fi
     if [[ $STUB_CASE == alerts_signal ]]; then kill -TERM "$PPID"; fi ;;
   "aws "*"events enable-rule"*)
+    # cleanup_rule_killed: a Ctrl-C meant for the cleanup wait reaches this
+    # call first; deploy.sh gets the signal and this call dies unfinished.
+    if [[ $STUB_CASE == cleanup_rule_killed && ! -e $STUB_DIR/$STUB_CASE.rule-killed ]]; then
+      : >"$STUB_DIR/$STUB_CASE.rule-killed"
+      kill -TERM "$(cat "$STUB_DIR/$STUB_CASE.pid")"
+      exit 130
+    fi
     rm -f "$STUB_DIR/task-rule-disabled" ;;
   "aws "*"scheduler list-schedules"*) printf 'a\tb\tc\td\n' ;;
   "aws "*"scheduler get-schedule"*)
