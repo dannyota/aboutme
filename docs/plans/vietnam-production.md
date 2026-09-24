@@ -14,10 +14,9 @@ Code, comments, tests, and living docs cite the design or ADR 0051, never this p
 6. Put those values in `.dev/credentials/greennode.env`, mode 0600: `GREENNODE_CLIENT_ID`, `GREENNODE_CLIENT_SECRET`, `VSTORAGE_STATE_ACCESS_KEY_ID`, `VSTORAGE_STATE_SECRET_ACCESS_KEY`, `TOFU_STATE_PASSPHRASE` (at least 32 random bytes, base64). Agents load it with `set -a; . .dev/credentials/greennode.env; set +a` inside the command that needs it and never print, echo, or log a value.
 7. Put Bizfly values in `.dev/credentials/bizfly.env`, mode 0600: `BIZFLY_SMTP_HOST`, `BIZFLY_SMTP_PORT`, `BIZFLY_SMTP_USERNAME`, `BIZFLY_SMTP_PASSWORD`, and `BIZFLY_API_KEY` if Bizfly offers one. `secrets.sh` pipes the SMTP values to the host without printing them.
 8. Generate an age key pair for `aboutme-infra`; keep the private key off the host; give devops the public recipient.
-9. Send the provider questions (design table Q1 to Q22) by support ticket or email; forward each written answer to the manager.
-10. Move the support mailbox: create the Bizfly Business Email mailbox and import Google Workspace mail (after Q21).
-11. At cutover: run the SSM-to-host secret pipe, approve the DNS switch at Cloudflare, and later the NS change at the `.vn` registrar.
-12. Once the cutover is verified: approve the AWS real-data deletion and cancel Google Workspace.
+9. Move the support mailbox: create the Bizfly Business Email mailbox and import Google Workspace mail.
+10. At cutover: run the SSM-to-host secret pipe, approve the DNS switch at Cloudflare, and later the NS change at the `.vn` registrar.
+11. Once the cutover is verified: approve the AWS real-data deletion and cancel Google Workspace.
 
 ## Owner approvals (recommendation first)
 
@@ -38,7 +37,7 @@ Code, comments, tests, and living docs cite the design or ADR 0051, never this p
 
 |Phase|Owner role|Done when|
 |-|-|-|
-|1 Confirm with providers|owner, manager|Accounts verified and topped up; credentials files exist; written answers to Q1 to Q22; no cutover blocker open (Q1, Q3, Q5, Q6, Q11). Q10 blocks only the NS move.|
+|1 Verify on the account|owner, devops|Accounts verified and topped up; credentials files exist; devops has tested Q1 to Q22 on the account and recorded results; no cutover blocker open (Q1, Q3, Q5, Q6, Q11). Q10 blocks only the NS move.|
 |2a amd64 images|devops|Release workflow publishes `linux/amd64` and `linux/arm64` manifests; smoke on both; deploy/aws unchanged in behavior.|
 |2b SMTP sender|backend|`AUTH_EMAIL_MODE=smtp` with config validation, TLS verification, outcome classification, stub-server tests; SES mode unchanged.|
 |2c Caddy edge selection|devops|`EDGE` selects cloudflare or vcdn, host from environment, edge-secret check with two values, vCDN client-IP trust; Caddy tests cover forged headers and missing secret.|

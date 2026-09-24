@@ -10,8 +10,8 @@ required and is not covered here.
 
 Status: proposed. **Owner approval** marks a choice the owner must make before
 the work that depends on it starts. **Unconfirmed** marks a provider fact from
-public docs or research; the provider confirms each in writing before cutover
-([questions](#provider-facts-to-confirm)).
+public docs or research; devops verifies each by testing on the account before
+cutover ([facts](#provider-facts-to-confirm)).
 
 ## Target architecture
 
@@ -329,11 +329,11 @@ state stay ignored.
 
 ## Migration
 
-### 1. Confirm with providers
+### 1. Verify on the account
 
-The owner opens both accounts and sends the
-[questions](#provider-facts-to-confirm). Work that depends on an answer waits
-for it in writing.
+The owner opens both accounts. Devops tests each
+[provider fact](#provider-facts-to-confirm) on them and records the result. Work
+that depends on a fact waits for its test.
 
 ### 2. App preparation releases
 
@@ -421,7 +421,8 @@ move; [ADR 0051](../adr/0051-vietnam-hosted-production.md) records why.
 
 ## Provider facts to confirm
 
-The owner asks each in writing; the runbook records the answers.
+Devops tests each on the account; the runbook records results. Data location and
+subprocessors come from the provider's published terms.
 
 | ID  | Provider           | Question                                                                                                                       |
 | --- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
