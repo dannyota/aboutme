@@ -331,7 +331,7 @@ func (s *Service) mutateDeletion(ctx context.Context, qtx *store.Queries, plan a
 	for _, item := range plan.resumes {
 		if item.Slug != nil {
 			if _, err := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-				Slug: *item.Slug, ReleasedByUserID: &plan.user.ID, ReleasedAt: plan.occurredAt,
+				Slug: *item.Slug, ReleasedAt: plan.occurredAt,
 			}); err != nil {
 				return fmt.Errorf("accountapi: insert slug tombstone: %w", err)
 			}

@@ -192,7 +192,7 @@ func (op deleteOperation) Run(ctx context.Context, qtx *store.Queries, mutation 
 			releasedAt = op.service.clock()
 		}
 		if _, tombstoneErr := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{
-			Slug: *current.Slug, ReleasedByUserID: &mutation.UserID, ReleasedAt: releasedAt,
+			Slug: *current.Slug, ReleasedAt: releasedAt,
 		}); tombstoneErr != nil {
 			return mutationRunResult{}, tombstoneErr
 		}
