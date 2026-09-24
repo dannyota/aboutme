@@ -62,6 +62,7 @@ let resumeDocument: Resume | undefined;
 let context: RenderContext | undefined;
 let mode: RenderMode | undefined;
 let printFixture = false;
+let printMode = false;
 let sampleLanguage: 'vi' | 'en' | undefined;
 let selectedFontId: string | undefined;
 
@@ -74,7 +75,9 @@ if (isCorpus) {
   rawCorpus = raw === '1';
 } else {
   requireAllowedKeys(
-    new Set(['align', 'fixture', 'font', 'mode', 'paper', 'template']),
+    new Set(
+      ['align', 'fixture', 'font', 'mode', 'paper', 'print', 'template'],
+    ),
   );
   const fixture = singleton('fixture', true) as FixtureId;
   const templateId = singleton('template', true);
@@ -88,6 +91,12 @@ if (isCorpus) {
           ? 'public'
           : badQuery();
   mode = resolvedMode;
+  // A non-golden fixture asks for the same print CSS the golden print
+  // fixtures always carry, so a real PDF can be produced from it too.
+  const requestedPrint = singleton('print');
+  if (requestedPrint !== undefined) {
+    if (requestedPrint !== '1' || resolvedMode !== 'continuous') badQuery();
+  }
   const template = templateById.get(templateId ?? '') ?? badQuery();
 
   const printRecord = PRINT_FIXTURES[fixture as PrintFixtureId];
@@ -110,6 +119,7 @@ if (isCorpus) {
     resumeDocument = sample.document;
     sampleLanguage = sample.lng;
   }
+  printMode = printFixture || requestedPrint === '1';
 
   const resolvedDocument = resumeDocument ?? badQuery();
   // The fixture owner already prints on the preset's paper; a template switch
@@ -218,7 +228,7 @@ const paperStyle = computed(() => {
   };
 });
 
-if (printFixture && resumeDocument !== undefined) {
+if (printMode && resumeDocument !== undefined) {
   useHead({
     bodyAttrs: { class: 'resume-print' },
     style: [
@@ -290,7 +300,7 @@ onMounted(async () => {
     <div
       v-else
       class="harness-paper"
-      :style="printFixture ? undefined : paperStyle"
+      :style="printMode ? undefined : paperStyle"
     >
       <ClientOnly v-if="mode === 'paged'">
         <ResumeDocument
