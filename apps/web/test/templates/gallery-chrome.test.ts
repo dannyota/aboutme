@@ -9,7 +9,6 @@ import { setSiteLocale } from '../support/locale';
 // The gallery header and filter chips (DESIGN.md, template gallery). The
 // dot is decorative: the chip text carries the meaning it names.
 
-
 const FORMAT_FILTERS = new Set<GalleryFilter>([
   'sample',
   'ats',
