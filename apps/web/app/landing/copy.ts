@@ -33,7 +33,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     signIn: 'Đăng nhập',
     openResumes: 'Mở CV của bạn',
     browseTemplates: 'Xem các mẫu',
-    sampleLabel: 'CV mẫu đăng tại aboutme.vn/ada-lovelace',
+    sampleLabel: 'CV mẫu đăng tại aboutme.vn/danny',
     points: [
       {
         title: 'Của bạn, do bạn giữ.',
@@ -82,7 +82,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     signIn: 'Sign in',
     openResumes: 'Open your resumes',
     browseTemplates: 'Browse templates',
-    sampleLabel: 'Sample resume published at aboutme.vn/ada-lovelace',
+    sampleLabel: 'Sample resume published at aboutme.vn/danny',
     points: [
       {
         title: 'Yours to keep.',

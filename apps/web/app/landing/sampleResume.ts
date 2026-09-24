@@ -4,280 +4,327 @@ import type { Resume } from '@aboutme/schema';
 export const sampleResume: Resume = {
   schemaVersion: 4,
   personalDetails: {
-    fullName: 'Ada Lovelace',
-    headline: 'Analytical Engineer',
+    fullName: 'Danny',
+    headline: 'Software Developer',
+    photo: {
+      key: 'landing/danny.jpg',
+    },
     details: [
       {
-        id: 'f0cf483d-585c-4340-9adc-773b3bea3db0',
-        type: 'email',
-        value: 'ada@example.com',
-        isHidden: false,
-      },
-      {
-        id: '2c25e47b-3eaa-4670-ac85-c23626079998',
-        type: 'phone',
-        value: '+84 90 000 0000',
-        isHidden: false,
-      },
-      {
-        id: '9d150558-23be-4bcd-b7ec-181932f94907',
+        id: 'c652f275-ca24-4f52-9790-2149d67b27fc',
         type: 'location',
-        value: 'Hanoi, Vietnam',
+        value: 'Vietnam',
         isHidden: false,
       },
       {
-        id: '062fe149-9545-4484-8df0-332c302cd3b8',
-        type: 'linkedin',
-        label: 'LinkedIn',
-        value: 'https://linkedin.com/in/ada',
-        isHidden: false,
-      },
-      {
-        id: '09418968-1a86-49cb-8dd8-c746a2780249',
-        type: 'website',
-        value: 'https://ada.example.com',
-        isHidden: false,
-      },
-      {
-        id: '5b0f3c1e-8d2a-4f6b-9c3e-1a2b3c4d5e6f',
+        id: 'a3145d5b-6dce-4e8c-b01c-8a7ae7757298',
         type: 'github',
-        value: 'https://github.com/ada',
+        value: 'https://github.com/dannyota',
         isHidden: false,
         display: 'label',
-      },
-      {
-        id: '7c1e4d2f-9e3b-4a7c-8d4f-2b3c4d5e6f70',
-        type: 'twitter',
-        value: 'https://x.com/ada',
-        isHidden: false,
-        display: 'full',
-      },
-      {
-        id: '8d2f5e3a-af4c-4b8d-9e5a-3c4d5e6f7081',
-        type: 'custom',
-        label: 'Google Scholar',
-        value: 'https://scholar.example.com/ada',
-        isHidden: false,
       },
     ],
   },
   content: {
-    'profile': {
+    profile: {
       sectionType: 'profile',
       displayName: 'Summary',
       iconKey: 'user',
       entries: [
         {
-          id: 'cb3fc772-efe2-4338-b299-def6d3bc18e4',
+          id: 'bac02090-1402-4141-80b0-82f3ef821def',
           isHidden: false,
           text:
-            '<p>Engineer and mathematician with a focus on analytical '
-            + 'engines.</p>',
+            '<p>Developer who builds command-line tools, SDKs, and MCP '
+            + 'servers in Go. Nine years in security engineering shaped how '
+            + 'I write software: every change is a reviewed diff, dry-run '
+            + 'by default, and tested in CI. I build and run aboutme.vn, a '
+            + 'resume builder for Vietnamese job seekers.</p>',
         },
       ],
     },
-    'work': {
+    work: {
       sectionType: 'work',
       displayName: 'Experience',
       iconKey: 'briefcase',
       entries: [
         {
-          id: 'dd89bd8a-ba7d-4bec-9c43-f1b296c56fac',
+          id: '475659ae-1277-4a52-b456-87c58a185991',
           isHidden: false,
-          jobTitle: 'Principal Engineer',
-          employer: 'Analytical Engines Ltd',
-          employerLink: 'https://analytical-engines.example.com',
-          city: 'Hanoi',
-          country: 'Vietnam',
-          dates: {
-            start: {
-              y: 2022,
-              m: 3,
-            },
-            end: null,
-            present: true,
-          },
-          description:
-            '<p>Leading design of the difference engine successor.</p>',
-        },
-        {
-          id: 'fd62bb07-f757-45cc-bd5f-8425be767300',
-          isHidden: true,
-          jobTitle: 'Junior Engineer',
-          employer: 'Babbage Works',
+          jobTitle: 'Head of IT Security',
+          employer: 'A regulated bank',
           employerLink: '',
-          city: 'London',
-          country: 'United Kingdom',
           dates: {
             start: {
-              y: 2018,
-              m: 6,
+              y: 2025,
+              m: 7,
             },
             end: {
-              y: 2022,
-              m: 2,
+              y: 2026,
+              m: 8,
             },
             present: false,
           },
           description:
-            '<p>Early-career role, currently hidden from the public '
-            + 'resume.</p>',
+            '<ul><li>Built the security team\'s tooling in Go: CLIs and '
+            + 'MCP servers that let a two-person team run operations and '
+            + 'governance.</li><li>Designed an AI agent harness that works '
+            + 'through reviewed, dry-run-first commands, with a person '
+            + 'approving every change.</li></ul>',
         },
-      ],
-    },
-    'education': {
-      sectionType: 'education',
-      displayName: 'Education',
-      iconKey: 'graduation-cap',
-      entries: [
         {
-          id: '528090d8-76ea-4a3c-8a72-15004434fdd1',
+          id: '8c69bc76-e4c4-41e3-99b6-c6e218207c3c',
           isHidden: false,
-          degree: 'B.Sc. Mathematics',
-          school: 'University of London',
-          schoolLink: 'https://london.example.edu',
-          city: 'London',
-          country: 'United Kingdom',
+          jobTitle: 'Security Operations Engineer',
+          employer: 'A Web3 gaming company',
+          employerLink: '',
           dates: {
             start: {
-              y: 2014,
-              m: 9,
+              y: 2024,
+              m: 4,
             },
             end: {
-              y: 2018,
+              y: 2025,
               m: 6,
             },
             present: false,
           },
           description:
-            '<p>Focused on numerical analysis and mechanical computation.</p>',
-        },
-      ],
-    },
-    'skill': {
-      sectionType: 'skill',
-      displayName: 'Skills',
-      iconKey: 'code',
-      entries: [
-        {
-          id: '5bd5dd21-108a-41e1-a2f7-34eeb93ee539',
-          isHidden: false,
-          name: 'Go',
-          level: 5,
-          infoHtml: '<p>Primary backend language since 2015.</p>',
+            '<ul><li>Wrote custom detection rules and automated incident '
+            + 'response with SOAR playbooks.</li><li>Reviewed third-party '
+            + 'game builds before release with reverse engineering and '
+            + 'automated scanning.</li></ul>',
         },
         {
-          id: '4bfed595-5c57-4207-916d-7a4a8581ea1f',
+          id: '7983cdd0-920a-40f1-a756-bc85ecf62fc7',
           isHidden: false,
-          name: 'TypeScript',
-          infoHtml: '',
-        },
-      ],
-    },
-    'language': {
-      sectionType: 'language',
-      displayName: 'Languages',
-      iconKey: 'languages',
-      entries: [
-        {
-          id: '9bc9b0b0-aaa6-4a43-b9f7-d958a3819ba0',
-          isHidden: false,
-          name: 'English',
-          level: 5,
-        },
-        {
-          id: 'bf4ba44d-afa9-4995-a407-115fe8375712',
-          isHidden: false,
-          name: 'Vietnamese',
-          level: 3,
-        },
-      ],
-    },
-    'certificate': {
-      sectionType: 'certificate',
-      displayName: 'Certifications',
-      iconKey: 'award',
-      entries: [
-        {
-          id: '6b8f414a-589f-44c4-9110-017486558074',
-          isHidden: false,
-          title: 'Certified Analytical Engineer',
-          titleLink: 'https://credentials.example.com/cae-1843-001',
-          issuer: 'Institute of Computing',
-          date: {
-            y: 2019,
-            m: 1,
+          jobTitle: 'IT Security Engineer',
+          employer: 'A semiconductor company',
+          employerLink: '',
+          dates: {
+            start: {
+              y: 2023,
+              m: 5,
+            },
+            end: {
+              y: 2024,
+              m: 4,
+            },
+            present: false,
           },
-          description: '<p>Credential ID CAE-1843-001.</p>',
+          description:
+            '<ul><li>Built an internal asset-management system that '
+            + 'merged device and software inventories into one source of '
+            + 'truth.</li></ul>',
         },
-      ],
-    },
-    'project': {
-      sectionType: 'project',
-      displayName: 'Projects',
-      iconKey: 'folder',
-      entries: [
         {
-          id: '12949dfe-d9dc-4292-a17b-faeda92081e4',
+          id: '084228e1-7af8-4b4c-9bd9-941de6162d46',
           isHidden: false,
-          title: 'Note G Interpreter',
-          link: 'https://github.com/ada/note-g',
+          jobTitle: 'Threat Hunting Team Leader',
+          employer: 'A cybersecurity firm',
+          employerLink: '',
           dates: {
             start: {
               y: 2021,
               m: 4,
             },
             end: {
-              y: 2021,
-              m: 11,
+              y: 2023,
+              m: 4,
             },
             present: false,
           },
           description:
-            '<p>An interpreter for the algorithm described in Note G.</p>',
-        },
-      ],
-    },
-    'a6a0a5fa-7fe4-4d52-be40-0da2db95de12': {
-      sectionType: 'custom',
-      displayName: 'Awards',
-      iconKey: 'trophy',
-      entries: [
-        {
-          id: '6f2b6ec0-dc76-4c6e-a44f-6d9e2141b44e',
-          isHidden: false,
-          title: 'Lovelace Medal',
-          titleLink: 'https://bcs.example.org/lovelace-medal',
-          subtitle: 'British Computer Society',
-          city: 'London',
-          dates: {
-            start: {
-              y: 2020,
-            },
-            end: null,
-            present: true,
-          },
-          description: '<p>Awarded for contributions to computing.</p>',
+            '<ul><li>Found and reported an account-takeover exploit chain '
+            + 'in a messaging platform with 100M+ users.</li><li>Contributed '
+            + 'to a threat-intelligence platform that aggregates 1,500+ '
+            + 'news sources.</li></ul>',
         },
         {
-          id: '55b412f2-fd0d-4c41-be7d-f2603d6058b3',
+          id: '877a45bf-7a5b-4dc2-816e-f1bbc7c0ce7a',
           isHidden: false,
-          title: 'Hackathon Winner',
-          titleLink: '',
-          subtitle: '',
-          city: '',
+          jobTitle: 'Security Researcher',
+          employer: 'A cybersecurity startup',
+          employerLink: '',
           dates: {
             start: {
-              y: 2019,
+              y: 2017,
               m: 11,
             },
             end: {
+              y: 2021,
+              m: 3,
+            },
+            present: false,
+          },
+          description:
+            '<ul><li>Wrote C/C++ exploits for Windows kernel and '
+            + 'user-mode vulnerabilities, and modular Python tooling for '
+            + 'red-team work.</li></ul>',
+        },
+      ],
+    },
+    education: {
+      sectionType: 'education',
+      displayName: 'Education',
+      iconKey: 'graduation-cap',
+      entries: [
+        {
+          id: 'b80ad022-2fb7-40f9-8a4a-b7a00d658db1',
+          isHidden: false,
+          degree: 'Master of Science in Computer Science',
+          school: 'University of Information Technology, VNU-HCM',
+          schoolLink: '',
+          dates: {
+            start: {
               y: 2019,
+              m: 12,
+            },
+            end: {
+              y: 2022,
               m: 11,
             },
             present: false,
           },
-          description: '',
+        },
+        {
+          id: 'af09d414-cc1d-4865-b465-e7dad48bbf79',
+          isHidden: false,
+          degree: 'Bachelor of Engineering in Software Engineering',
+          school: 'University of Information Technology, VNU-HCM',
+          schoolLink: '',
+          dates: {
+            start: {
+              y: 2014,
+              m: 8,
+            },
+            end: {
+              y: 2019,
+              m: 5,
+            },
+            present: false,
+          },
+        },
+      ],
+    },
+    skill: {
+      sectionType: 'skill',
+      displayName: 'Skills',
+      iconKey: 'code',
+      entries: [
+        {
+          id: '02877920-888c-4ae8-b836-119534f646b3',
+          isHidden: false,
+          name: 'Go',
+          level: 5,
+          infoHtml: '',
+        },
+        {
+          id: 'cae9602e-16a2-409e-9112-251e5f404722',
+          isHidden: false,
+          name: 'Python',
+          level: 4,
+          infoHtml: '',
+        },
+        {
+          id: 'f6091900-35c3-493d-82d1-155cb2025724',
+          isHidden: false,
+          name: 'TypeScript',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: '68d44051-78df-4dcd-a41f-c5609129b629',
+          isHidden: false,
+          name: 'C/C++',
+          level: 4,
+          infoHtml: '',
+        },
+        {
+          id: '0db67f9b-adb9-4eb1-a352-2e2a9005cab5',
+          isHidden: false,
+          name: 'SQL',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: '7ace5184-a0b1-40d7-8b20-b6434645b670',
+          isHidden: false,
+          name: 'PostgreSQL',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: 'e6dc902c-4bf0-419c-b0c1-ff7e3a12ba12',
+          isHidden: false,
+          name: 'Docker',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: '7ae6447a-1f6c-43d7-bc1c-e2d5faa84609',
+          isHidden: false,
+          name: 'AWS',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: '4f4571ca-d8ab-445d-9653-aa8eb4a66d1b',
+          isHidden: false,
+          name: 'OpenTofu',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: 'cac3626d-f668-4bd0-872d-34b73455374e',
+          isHidden: false,
+          name: 'GitHub Actions',
+          level: 3,
+          infoHtml: '',
+        },
+        {
+          id: '202157a7-cdde-48da-ba48-e0bb1a44c164',
+          isHidden: false,
+          name: 'MCP',
+          level: 4,
+          infoHtml: '',
+        },
+      ],
+    },
+    project: {
+      sectionType: 'project',
+      displayName: 'Projects',
+      iconKey: 'folder',
+      entries: [
+        {
+          id: '8d7df748-a4a2-4446-85b8-75053ff812b6',
+          isHidden: false,
+          title: 'aboutme.vn',
+          subtitle: 'Go, Nuxt, PostgreSQL, AWS',
+          link: 'https://aboutme.vn',
+          description:
+            '<p>Resume builder that renders one resume as a web page and '
+            + 'an A4 PDF.</p>',
+        },
+        {
+          id: '01b53fe7-a899-44af-9975-6440ea003404',
+          isHidden: false,
+          title: 'secops',
+          subtitle: 'Go',
+          link: '',
+          description:
+            '<p>CLI and SDK that manages Google SecOps SIEM and SOAR as '
+            + 'code: pull, diff, and push, with a built-in MCP server.</p>',
+        },
+        {
+          id: 'f8d25e1c-71f8-4d3b-b1bc-3af2ad261e52',
+          isHidden: false,
+          title: 'banhmi',
+          subtitle: 'Go',
+          link: '',
+          description:
+            '<p>MCP server that gives LLMs Vietnamese banking regulation '
+            + 'with exact citations to official sources.</p>',
         },
       ],
     },
@@ -311,19 +358,14 @@ export const sampleResume: Resume = {
       align: 'center',
       detailsLayout: 'inline',
       iconStyle: 'outline',
+      photoPosition: 'right',
     },
     layout: {
       columns: 2,
       surfaceTarget: 'sidebar',
       sections: {
         main: ['profile', 'work', 'education'],
-        sidebar: [
-          'skill',
-          'language',
-          'certificate',
-          'project',
-          'a6a0a5fa-7fe4-4d52-be40-0da2db95de12',
-        ],
+        sidebar: ['skill', 'project'],
       },
     },
     sectionDisplay: {
@@ -339,4 +381,4 @@ export const sampleResume: Resume = {
   },
 };
 
-export const sampleLink = '/ada-lovelace';
+export const sampleLink = '/danny';
