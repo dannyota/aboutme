@@ -13,8 +13,7 @@ import { ALLOWED_ORIGIN, isExpectedAnonymousMeConsole } from './network-policy';
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/entry-proof.json';
 
-// The seed identities are frozen by docs/plans/phase-pf/design.md D7 and
-// pinned by apps/server/cmd/dev-seed/seed_test.go.
+// The seed identities are pinned by apps/server/cmd/dev-seed/seed_test.go.
 const SEED_EMAIL = 'dev@aboutme.invalid';
 const SEED_PASSWORD = 'aboutme-dev-password-1';
 const THEMES = ['light', 'dark'] as const;
