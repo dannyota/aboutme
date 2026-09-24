@@ -8,6 +8,7 @@ import {
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import AppRoot from '../app/app.vue';
+import { landingCopy } from '../app/landing/copy';
 import LandingPage from '../app/pages/index.vue';
 import { setSiteLocale } from './support/locale';
 
@@ -67,10 +68,8 @@ describe('index.vue', () => {
     const heading = wrapper.get('[data-testid="landing-title"]');
 
     expect(heading.element.tagName).toBe('H1');
-    expect(heading.text()).toBe(
-      'Your resume. Free. No one sees it unless you want them to.',
-    );
-    expect(heading.classes()).toContain('text-2xl');
+    expect(heading.text()).toBe('Your resume. Your link. Your control.');
+    expect(heading.classes()).toContain('text-4xl');
     expect(wrapper.find('[data-slot="card"]').exists()).toBe(false);
     const sample = wrapper.get('[data-testid="landing-sample"]');
     expect(sample.get('[data-testid="landing-sheet"]').classes()).toEqual(
@@ -81,19 +80,33 @@ describe('index.vue', () => {
     );
   });
 
+  it('sets the emphasized suffix apart from the rest of the headline',
+    async () => {
+      for (const locale of ['en', 'vi'] as const) {
+        const wrapper = await mountLanding(locale);
+        const emphasis = wrapper.get(
+          '[data-testid="landing-title-emphasis"]',
+        );
+        expect(emphasis.text()).toBe(landingCopy[locale].titleEmphasis);
+        expect(landingCopy[locale].title[1].endsWith(
+          landingCopy[locale].titleEmphasis,
+        )).toBe(true);
+      }
+    });
+
   it('renders the approved English copy', async () => {
     const wrapper = await mountLanding('en');
     expect(wrapper.text()).toContain(
-      'aboutme is an open-source resume builder. Write up to three resumes, '
-      + 'preview the exact page, and publish each one at its own link.',
+      'Free and open source. Write your resume, see exactly how each page '
+      + 'will look, and publish it at its own link only when you’re ready.',
     );
     const points = wrapper
       .findAll('[data-testid="landing-point"]')
       .map((p) => p.get('[data-testid="landing-point-title"]').text());
     expect(points).toEqual([
-      'Yours to keep.',
-      'One link per resume.',
-      'Bring your own agent.',
+      'Private by default',
+      'One link per resume',
+      'Bring your own AI',
     ]);
     expect(wrapper.text()).toContain('Public resume');
     expect(wrapper.text()).toContain('Whether any public page exists.');
@@ -115,6 +128,9 @@ describe('index.vue', () => {
           .attributes('href'),
       ).toBe('/register');
       expect(
+        wrapper.get('[data-testid="landing-create-account"]').text(),
+      ).toBe('Create your resume');
+      expect(
         wrapper.get('[data-testid="landing-sign-in"]').attributes('href'),
       ).toBe('/login');
       expect(
@@ -124,8 +140,8 @@ describe('index.vue', () => {
         wrapper.get('[data-testid="landing-browse-templates"]')
           .attributes('href'),
       ).toBe('/templates');
-      const hero = wrapper.get('[aria-labelledby="landing-title"]');
-      expect(hero.text().indexOf('Create account')).toBeLessThan(
+      const hero = wrapper.get('[data-testid="landing-hero"]');
+      expect(hero.text().indexOf('Create your resume')).toBeLessThan(
         hero.text().indexOf('Sign in'),
       );
     },
@@ -159,6 +175,13 @@ describe('index.vue', () => {
     }
   });
 
+  it('never claims the assistant is "AI ready"', async () => {
+    for (const locale of ['en', 'vi'] as const) {
+      const wrapper = await mountLanding(locale);
+      expect(wrapper.text().toLowerCase()).not.toContain('ai ready');
+    }
+  });
+
   it('links the license line to the repository', async () => {
     const wrapper = await mountLanding('en');
     const license = wrapper.get('[data-testid="landing-license-link"]');
@@ -168,8 +191,18 @@ describe('index.vue', () => {
     );
     expect(license.attributes('rel')).toBe('noopener noreferrer');
     expect(license.classes()).toEqual(
-      expect.arrayContaining(['text-primary', 'underline']),
+      expect.arrayContaining(['text-link', 'underline']),
     );
+  });
+
+  it('offers a direct source link beside the license text', async () => {
+    const wrapper = await mountLanding('en');
+    const source = wrapper.get('[data-testid="landing-source-link"]');
+    expect(source.text()).toBe('View the code on GitHub');
+    expect(source.attributes('href')).toBe(
+      'https://github.com/dannyota/aboutme',
+    );
+    expect(source.attributes('rel')).toBe('noopener noreferrer');
   });
 
   it(
@@ -204,16 +237,21 @@ describe('index.vue', () => {
       expect(source).not.toContain('Content-Security-Policy');
     },
   );
+
+  it('uses only design tokens and utilities, never a page hex color', () => {
+    const source = readFileSync('app/pages/index.vue', 'utf8');
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/u);
+  });
 });
 
 describe('index.vue language', () => {
   it('renders Vietnamese by default', async () => {
     const wrapper = await mountLanding();
     expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
-      'CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.',
+      'CV của bạn. Chia sẻ theo cách của bạn.',
     );
     expect(wrapper.get('[data-testid="landing-create-account"]').text()).toBe(
-      'Tạo tài khoản',
+      'Tạo CV của bạn',
     );
     expect(wrapper.get('[data-testid="landing-sign-in"]').text()).toBe(
       'Đăng nhập',
@@ -222,9 +260,9 @@ describe('index.vue language', () => {
       .findAll('[data-testid="landing-point-title"]')
       .map((p) => p.text());
     expect(points).toEqual([
-      'Của bạn, do bạn giữ.',
-      'Mỗi CV một đường dẫn.',
-      'Dùng trợ lý AI của bạn.',
+      'Riêng tư theo mặc định',
+      'Mỗi CV một đường dẫn',
+      'Dùng trợ lý AI của bạn',
     ]);
     expect(wrapper.text()).toContain('Đăng CV gồm ba lựa chọn');
     expect(wrapper.text()).not.toContain('Create account');
@@ -281,7 +319,7 @@ describe('index.vue language', () => {
     // BroadcastChannel; the test DOM has neither, so read the cookie afresh.
     const page = await mountSuspended(LandingPage);
     expect(page.get('[data-testid="landing-title"]').text()).toBe(
-      'Your resume. Free. No one sees it unless you want them to.',
+      'Your resume. Your link. Your control.',
     );
   });
 
@@ -293,8 +331,8 @@ describe('index.vue language', () => {
         .map((line) => line.text());
       expect(lines).toEqual(
         locale === 'vi'
-          ? ['CV của bạn. Miễn phí.', 'Không ai thấy nếu bạn không muốn.']
-          : ['Your resume. Free.', 'No one sees it unless you want them to.'],
+          ? ['CV của bạn.', 'Chia sẻ theo cách của bạn.']
+          : ['Your resume.', 'Your link. Your control.'],
       );
     }
   });
@@ -302,7 +340,7 @@ describe('index.vue language', () => {
   it('falls back to Vietnamese for an unknown cookie value', async () => {
     const wrapper = await mountLanding('fr' as 'vi');
     expect(wrapper.get('[data-testid="landing-title"]').text()).toBe(
-      'CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.',
+      'CV của bạn. Chia sẻ theo cách của bạn.',
     );
   });
 });

@@ -50,6 +50,23 @@ for (const page of PAGES) {
           `chrome--${page.name}--${theme}--${width}.png`,
           testInfo,
         );
+
+        if (page.name === 'home') {
+          const templates = browserPage.locator(
+            '[data-testid="landing-templates"]',
+          );
+          await templates.scrollIntoViewIfNeeded();
+          await expect(
+            browserPage.locator('[data-sheet-thumbnail-render]'),
+          ).toHaveCount(4);
+          await waitForImages(browserPage);
+          await verifyScreenshot(
+            browserPage,
+            `chrome--home-templates--${theme}--${width}.png`,
+            testInfo,
+            templates,
+          );
+        }
       });
     }
   }

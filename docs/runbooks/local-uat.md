@@ -39,8 +39,8 @@ make dev-native
 ```
 
 The entry check seeds the development account, proves the stamped landing page,
-the `Create account` then `Sign in` hero order, the password toggle labels,
-sign-in, both-theme axe scans for `/`, `/login`, `/app/resumes`, and
+the `Create your resume` then `Sign in` hero order, the password toggle
+labels, sign-in, both-theme axe scans for `/`, `/login`, `/app/resumes`, and
 `/app/settings/sessions`, the signed-in shell, and sign-out; it deletes nothing.
 
 The workspace uses Vietnamese by default and English when the
@@ -50,12 +50,12 @@ stay the same in both languages. Use these names when inspecting a run or
 updating a selector:
 
 - Landing: Vietnamese by default, with heading
-  `CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.` and
-  `html lang="vi"`. With the `aboutme-locale=en` cookie: heading
-  `Your resume. Free. No one sees it unless you want them to.`, links
-  `Create account` and `Sign in`, signed-in link `Open your resumes`, and
+  `CV của bạn. Chia sẻ theo cách của bạn.` and `html lang="vi"`. With the
+  `aboutme-locale=en` cookie: heading
+  `Your resume. Your link. Your control.`, links `Create your resume` and
+  `Sign in`, signed-in link `Open your resumes`, and
   `[data-testid="landing-sample"]` with the seal label
-  `Public at aboutme.vn/ada-lovelace`.
+  `Public at aboutme.vn/danny`.
 - Authentication: the password control is an icon button named `Show password`
   or `Hide password`; there is no visible `Show` button text.
 - Resume list: rows are `[data-testid="resume-row-<id>"]`; the overflow trigger
