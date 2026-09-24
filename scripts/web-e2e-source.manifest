@@ -486,8 +486,12 @@ apps/web/public/font-licenses/source-sans-3/LICENSE.md
 apps/web/public/font-licenses/space-mono/OFL.txt
 apps/web/public/font-licenses/spectral/ofl.txt
 apps/web/public/font-licenses/work-sans/OFL.txt
-apps/web/public/landing/danny.jpg
+apps/web/public/icon-192.png
+apps/web/public/icon-32.png
+apps/web/public/icon-512.png
+apps/web/public/landing/danny.webp
 apps/web/public/og-image.jpg
+apps/web/public/site.webmanifest
 apps/web/public/templates/pages/ats-plain-en-p1.png
 apps/web/public/templates/pages/ats-plain-vi-p1.png
 apps/web/public/templates/pages/engineer-compact-en-p1.png

@@ -11,6 +11,14 @@ import { sampleContext } from '@/landing/sampleContext';
 import { sampleLink, sampleResume } from '@/landing/sampleResume';
 import { homeStructuredData } from '@/landing/structuredData';
 
+// Every link below sits above the fold or just past it, so NuxtLink's
+// default visibility-triggered prefetch would fetch /register, /templates,
+// /login, /app/resumes, /terms, and /privacy on first paint whether or not
+// the visitor follows any of them (docs/design/web.md). Interaction-only
+// prefetch keeps the fast navigation on a real hover, focus, or touch
+// without that unconditional network cost.
+const visitPrefetch = { visibility: false, interaction: true };
+
 const { authState } = useAuth();
 const signedIn = computed(() => authState.value === 'authenticated');
 const { locale } = useLocale();
@@ -65,16 +73,19 @@ useHead(computed(() => ({
         >
           <NuxtLink
             :class="buttonVariants({ variant: 'default' })"
+            :prefetch-on="visitPrefetch"
             data-testid="landing-create-account"
             to="/register"
           >{{ copy.createAccount }}</NuxtLink>
           <NuxtLink
             :class="buttonVariants({ variant: 'outline' })"
+            :prefetch-on="visitPrefetch"
             data-testid="landing-browse-templates"
             to="/templates"
           >{{ copy.browseTemplates }}</NuxtLink>
           <NuxtLink
             class="text-sm text-primary underline-offset-4 hover:underline"
+            :prefetch-on="visitPrefetch"
             data-testid="landing-sign-in"
             to="/login"
           >{{ copy.signIn }}</NuxtLink>
@@ -85,11 +96,13 @@ useHead(computed(() => ({
         >
           <NuxtLink
             :class="buttonVariants({ variant: 'default' })"
+            :prefetch-on="visitPrefetch"
             data-testid="landing-open-resumes"
             to="/app/resumes"
           >{{ copy.openResumes }}</NuxtLink>
           <NuxtLink
             :class="buttonVariants({ variant: 'outline' })"
+            :prefetch-on="visitPrefetch"
             data-testid="landing-browse-templates"
             to="/templates"
           >{{ copy.browseTemplates }}</NuxtLink>
@@ -184,12 +197,14 @@ useHead(computed(() => ({
       <span aria-hidden="true"> · </span>
       <NuxtLink
         class="text-primary underline underline-offset-4"
+        :prefetch-on="visitPrefetch"
         data-testid="landing-terms-link"
         to="/terms"
       >{{ legal.termsLink }}</NuxtLink>
       <span aria-hidden="true"> · </span>
       <NuxtLink
         class="text-primary underline underline-offset-4"
+        :prefetch-on="visitPrefetch"
         data-testid="landing-privacy-link"
         to="/privacy"
       >{{ legal.privacyLink }}</NuxtLink>
