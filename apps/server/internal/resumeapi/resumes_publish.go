@@ -74,7 +74,7 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 		}
 	}
 	if state.Slug != nil && validated.ChangedSlug {
-		if _, tombstoneErr := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{Slug: *state.Slug, ReleasedByUserID: &mutation.UserID, ReleasedAt: input.ReleasedAt}); tombstoneErr != nil {
+		if _, tombstoneErr := qtx.InsertSlugTombstone(ctx, store.InsertSlugTombstoneParams{Slug: *state.Slug, ReleasedAt: input.ReleasedAt}); tombstoneErr != nil {
 			return mutationRunResult{}, tombstoneErr
 		}
 	}

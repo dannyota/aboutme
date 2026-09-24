@@ -2802,18 +2802,13 @@ func (q *Queries) GetSlugClaim(ctx context.Context, slug string) (uuid.UUID, err
 }
 
 const getSlugTombstoneForUpdate = `-- name: GetSlugTombstoneForUpdate :one
-SELECT id, slug, released_by_user_id, released_at FROM slug_tombstones WHERE slug = $1 FOR UPDATE
+SELECT id, slug, released_at FROM slug_tombstones WHERE slug = $1 FOR UPDATE
 `
 
 func (q *Queries) GetSlugTombstoneForUpdate(ctx context.Context, slug string) (SlugTombstone, error) {
 	row := q.db.QueryRow(ctx, getSlugTombstoneForUpdate, slug)
 	var i SlugTombstone
-	err := row.Scan(
-		&i.ID,
-		&i.Slug,
-		&i.ReleasedByUserID,
-		&i.ReleasedAt,
-	)
+	err := row.Scan(&i.ID, &i.Slug, &i.ReleasedAt)
 	return i, err
 }
 
@@ -3064,30 +3059,25 @@ func (q *Queries) InsertRotatedOAuthToken(ctx context.Context, arg InsertRotated
 }
 
 const insertSlugTombstone = `-- name: InsertSlugTombstone :one
-INSERT INTO slug_tombstones (slug, released_by_user_id, released_at)
+INSERT INTO slug_tombstones (slug, released_at)
 VALUES (
   $1::text,
-  $2::uuid,
-  $3::timestamptz
+  $2::timestamptz
 )
-RETURNING id, slug, released_by_user_id, released_at
+RETURNING id, slug, released_at
 `
 
 type InsertSlugTombstoneParams struct {
-	Slug             string
-	ReleasedByUserID *uuid.UUID
-	ReleasedAt       time.Time
+	Slug       string
+	ReleasedAt time.Time
 }
 
+// Holds no account link (docs/design/product.md): the released slug and its
+// release time are the only claim needed to reserve it.
 func (q *Queries) InsertSlugTombstone(ctx context.Context, arg InsertSlugTombstoneParams) (SlugTombstone, error) {
-	row := q.db.QueryRow(ctx, insertSlugTombstone, arg.Slug, arg.ReleasedByUserID, arg.ReleasedAt)
+	row := q.db.QueryRow(ctx, insertSlugTombstone, arg.Slug, arg.ReleasedAt)
 	var i SlugTombstone
-	err := row.Scan(
-		&i.ID,
-		&i.Slug,
-		&i.ReleasedByUserID,
-		&i.ReleasedAt,
-	)
+	err := row.Scan(&i.ID, &i.Slug, &i.ReleasedAt)
 	return i, err
 }
 

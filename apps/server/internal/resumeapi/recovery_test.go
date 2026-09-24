@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -35,7 +36,7 @@ func TestDeleteRecoveryProofNoPhotoRequiresExactResumeTombstoneGenerationAndReco
 	if deleted.status != http.StatusNoContent {
 		t.Fatalf("delete = %d %s", deleted.status, deleted.body)
 	}
-	resolver := deleteRecoveryResolver(t, h, created.ID, created.Revision+1, before.DiscoveryGeneration, key, "")
+	resolver := deleteRecoveryResolver(t, h, created.ID, created.Revision+1, before.DiscoveryGeneration, key, slug, "")
 	proof, err := resolver.Resolve(context.Background())
 	if err != nil || proof.Disposition != publicstate.RecoveryCommitted || len(proof.State.RetiredResumes) != 1 || proof.State.RetiredResumes[0] != created.ID || proof.State.DiscoveryGeneration == nil || *proof.State.DiscoveryGeneration != before.DiscoveryGeneration+1 {
 		t.Fatalf("no-photo recovery proof = %#v err=%v", proof, err)
@@ -45,6 +46,41 @@ func TestDeleteRecoveryProofNoPhotoRequiresExactResumeTombstoneGenerationAndReco
 	}
 	if _, err := resolver.Resolve(context.Background()); err == nil {
 		t.Fatal("recovery accepted missing tombstone")
+	}
+}
+
+// TestDeleteRecoveryProofRejectsMismatchedTombstoneReleasedAt proves
+// proveCommittedDelete does not accept a tombstone merely because its slug
+// matches: the tombstone carries no account link (docs/design/product.md), so
+// the exact release time is the other half of the proof that this is the
+// request's own tombstone, not some other release of the same slug.
+func TestDeleteRecoveryProofRejectsMismatchedTombstoneReleasedAt(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Recover mismatch", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := "recover-mismatch-" + uuid.NewString()[:8]
+	published := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+slug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
+	if published.status != http.StatusOK {
+		t.Fatalf("publish = %d %s", published.status, published.body)
+	}
+	before, err := h.queries.GetPublicState(h.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := uuid.New()
+	deleted := h.mutationRequest(t, http.MethodDelete, apiResumePath+"/"+created.ID.String(), nil, created.Revision+1, key.String())
+	if deleted.status != http.StatusNoContent {
+		t.Fatalf("delete = %d %s", deleted.status, deleted.body)
+	}
+	resolver := deleteRecoveryResolver(t, h, created.ID, created.Revision+1, before.DiscoveryGeneration, key, slug, "")
+	resolver.delete.ReleasedAt = resolver.delete.ReleasedAt.Add(time.Microsecond)
+	if _, err := resolver.Resolve(context.Background()); err == nil {
+		t.Fatal("recovery accepted a tombstone with a mismatched released_at")
+	}
+	if _, err := h.pool.Exec(h.ctx, `DELETE FROM slug_tombstones WHERE slug = $1`, slug); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -76,7 +112,7 @@ func TestDeleteRecoveryProofPhotoRequiresExactMediaDeletionJob(t *testing.T) {
 	if deleted.status != http.StatusNoContent {
 		t.Fatalf("delete = %d %s", deleted.status, deleted.body)
 	}
-	resolver := deleteRecoveryResolver(t, h, created.ID, current.Revision, before.DiscoveryGeneration, key, current.Doc.PersonalDetails.Photo.Key)
+	resolver := deleteRecoveryResolver(t, h, created.ID, current.Revision, before.DiscoveryGeneration, key, slug, current.Doc.PersonalDetails.Photo.Key)
 	if proof, err := resolver.Resolve(context.Background()); err != nil || proof.Disposition != publicstate.RecoveryCommitted {
 		t.Fatalf("photo recovery proof = %#v err=%v", proof, err)
 	}
@@ -187,6 +223,47 @@ func TestPublishRenameRecoveryRequiresExactRowClaimTombstoneAndResponse(t *testi
 	}
 }
 
+// TestPublishRenameRecoveryRejectsMismatchedTombstoneReleasedAt is
+// proveCommittedPublish's counterpart to
+// TestDeleteRecoveryProofRejectsMismatchedTombstoneReleasedAt: the old
+// slug's tombstone carries no account link, so an exact released_at match is
+// what proves this rename's own tombstone rather than a stale or foreign one.
+func TestPublishRenameRecoveryRejectsMismatchedTombstoneReleasedAt(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Recover rename mismatch", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldSlug := "recover-old-mismatch-" + uuid.NewString()[:8]
+	first := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+oldSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision, uuid.NewString())
+	if first.status != http.StatusOK {
+		t.Fatalf("initial publish = %d %s", first.status, first.body)
+	}
+	before, err := h.queries.GetPublicState(h.ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, updateErr := h.pool.Exec(h.ctx, `UPDATE sessions SET reauthenticated_at = now() WHERE id = $1`, h.session.ID); updateErr != nil {
+		t.Fatal(updateErr)
+	}
+	newSlug := "recover-new-mismatch-" + uuid.NewString()[:8]
+	key := uuid.New()
+	renamed := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`), created.Revision+1, key.String())
+	if renamed.status != http.StatusOK {
+		t.Fatalf("rename = %d %s", renamed.status, renamed.body)
+	}
+	tombstone, err := h.queries.GetSlugTombstoneForUpdate(h.ctx, oldSlug)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := hexDigest(operationHash(http.MethodPost, "publishResume", []string{"resume_id", created.ID.String()}))
+	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(created.Revision+1, 10), nil, []byte(`{"slug":"`+newSlug+`","live":true,"downloadEnabled":false,"seoGeoEnabled":false}`))
+	resolver := mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{DiscoveryGeneration: &before.DiscoveryGeneration, Resumes: []publicstate.ResumeTarget{{ID: created.ID, ExpectedRevision: created.Revision + 1, Class: publicstate.Revoking}}}, publish: &publishRecoveryProof{ResumeID: created.ID, Effective: currentPublish{Slug: &newSlug, Live: true, Revision: created.Revision + 2}, OldSlug: &oldSlug, ReleasedAt: tombstone.ReleasedAt.Add(time.Microsecond)}}
+	if _, err := resolver.Resolve(context.Background()); err == nil {
+		t.Fatal("rename recovery accepted a tombstone with a mismatched released_at")
+	}
+}
+
 func TestPublishInitialClaimRecoveryRequiresExactClaimAndStoredResponse(t *testing.T) {
 	h := newResumeAPITestHarness(t)
 	created, err := h.resumes.Create(h.ctx, h.userID, "Recover initial claim", publishCompleteDocument(t))
@@ -261,23 +338,17 @@ func neverSluggedDeleteRecoveryResolver(h *resumeAPITestHarness, resumeID uuid.U
 	return mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: revision, Class: publicstate.NonDraining}}}, retire: true, delete: &deleteRecoveryProof{ResumeID: resumeID, PhotoKey: photoKey}}
 }
 
-func deleteRecoveryResolver(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID, revision, discovery int64, key uuid.UUID, photoKey string) mutationRecovery {
+// deleteRecoveryResolver builds the recovery resolver for a deleted resume
+// that released slug. The tombstone carries no account link (docs/design/product.md),
+// so the caller supplies the slug it published rather than looking it up by
+// owner.
+func deleteRecoveryResolver(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID, revision, discovery int64, key uuid.UUID, slug, photoKey string) mutationRecovery {
 	t.Helper()
 	operation := hexDigest(operationHash(http.MethodDelete, "deleteResume", []string{"resume_id", resumeID.String()}))
 	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, nil)
-	tombstone, err := h.queries.GetSlugTombstoneForUpdate(h.ctx, findDeleteRecoverySlug(t, h, resumeID))
+	tombstone, err := h.queries.GetSlugTombstoneForUpdate(h.ctx, slug)
 	if err != nil {
 		t.Fatal(err)
 	}
-	slug := tombstone.Slug
 	return mutationRecovery{pool: h.pool, identity: mutationIdentity{UserID: h.userID, Operation: operation, Key: key, RequestHash: hash}, plan: publicstate.Plan{DiscoveryGeneration: &discovery, Resumes: []publicstate.ResumeTarget{{ID: resumeID, ExpectedRevision: revision, Class: publicstate.Revoking}}}, retire: true, delete: &deleteRecoveryProof{ResumeID: resumeID, Slug: &slug, ReleasedAt: tombstone.ReleasedAt, PhotoKey: photoKey}}
-}
-
-func findDeleteRecoverySlug(t *testing.T, h *resumeAPITestHarness, resumeID uuid.UUID) string {
-	t.Helper()
-	var slug string
-	if err := h.pool.QueryRow(h.ctx, `SELECT slug FROM slug_tombstones WHERE released_by_user_id = $1 ORDER BY released_at DESC LIMIT 1`, h.userID).Scan(&slug); err != nil {
-		t.Fatal(err)
-	}
-	return slug
 }

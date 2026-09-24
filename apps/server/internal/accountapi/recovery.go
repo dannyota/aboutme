@@ -59,8 +59,11 @@ func (r *accountDeletionRecovery) Resolve(ctx context.Context) (publicstate.Reco
 	}
 	for _, item := range r.plan.resumes {
 		if item.Slug != nil {
+			// See resumeapi's proveCommittedDelete: the tombstone carries no
+			// account link, but slug plus exact release time identifies this
+			// deletion's own tombstone.
 			tombstone, tombstoneErr := q.GetSlugTombstoneForUpdate(ctx, *item.Slug)
-			if tombstoneErr != nil || tombstone.ReleasedByUserID != nil || !tombstone.ReleasedAt.Equal(r.plan.occurredAt) {
+			if tombstoneErr != nil || !tombstone.ReleasedAt.Equal(r.plan.occurredAt) {
 				return publicstate.RecoveryProof{}, errors.New("accountapi: committed proof tombstone does not match")
 			}
 		}
