@@ -63,6 +63,7 @@ let context: RenderContext | undefined;
 let mode: RenderMode | undefined;
 let printFixture = false;
 let printMode = false;
+let requestedZoomValue: number | undefined;
 let sampleLanguage: 'vi' | 'en' | undefined;
 let selectedFontId: string | undefined;
 
@@ -76,7 +77,10 @@ if (isCorpus) {
 } else {
   requireAllowedKeys(
     new Set(
-      ['align', 'fixture', 'font', 'mode', 'paper', 'print', 'template'],
+      [
+        'align', 'fixture', 'font', 'mode', 'paper', 'print', 'template',
+        'zoom',
+      ],
     ),
   );
   const fixture = singleton('fixture', true) as FixtureId;
@@ -96,6 +100,24 @@ if (isCorpus) {
   const requestedPrint = singleton('print');
   if (requestedPrint !== undefined) {
     if (requestedPrint !== '1' || resolvedMode !== 'continuous') badQuery();
+  }
+  // The paged preview's own CSS zoom (EditorPreview.vue's `.preview-sheet`)
+  // is set once, before the first render, and never toggled afterward: it
+  // must be requested the same way here, because PagedResume's pagination
+  // measurement does not settle cleanly if the zoom changes after the fact.
+  const requestedZoom = singleton('zoom');
+  if (requestedZoom !== undefined) {
+    if (resolvedMode !== 'paged' || !/^\d+(\.\d+)?$/u.test(requestedZoom)) {
+      badQuery();
+    }
+    requestedZoomValue = Number(requestedZoom);
+    if (
+      !Number.isFinite(requestedZoomValue)
+      || requestedZoomValue <= 0
+      || requestedZoomValue > 4
+    ) {
+      badQuery();
+    }
   }
   const template = templateById.get(templateId ?? '') ?? badQuery();
 
@@ -225,6 +247,9 @@ const paperStyle = computed(() => {
   return {
     width: `${page.widthPx}px`,
     minHeight: `${page.heightPx}px`,
+    ...(requestedZoomValue === undefined
+      ? {}
+      : { zoom: requestedZoomValue }),
   };
 });
 

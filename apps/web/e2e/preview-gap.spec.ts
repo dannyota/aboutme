@@ -551,11 +551,12 @@ function sampleUrl(
   mode: 'continuous' | 'paged',
   templateId: string,
   lng: SampleLanguage,
-  print: boolean,
+  options: { readonly print?: boolean; readonly zoom?: number } = {},
 ): string {
-  const printParam = print ? '&print=1' : '';
+  const printParam = options.print === true ? '&print=1' : '';
+  const zoomParam = options.zoom === undefined ? '' : `&zoom=${options.zoom}`;
   return `/_harness/render?fixture=sample-${templateId}-${lng}`
-    + `&template=${templateId}&mode=${mode}${printParam}`;
+    + `&template=${templateId}&mode=${mode}${printParam}${zoomParam}`;
 }
 
 async function producePdf(
@@ -566,7 +567,7 @@ async function producePdf(
 ): Promise<Buffer> {
   const external = await denyExternalRequests(page);
   const response = await page.goto(
-    `${baseURL}${sampleUrl('continuous', templateId, lng, true)}`,
+    `${baseURL}${sampleUrl('continuous', templateId, lng, { print: true })}`,
   );
   expect(response?.ok()).toBe(true);
   await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -600,23 +601,18 @@ async function producePreview(
   try {
     const page = await context.newPage();
     const external = await denyExternalRequests(page);
+    // The zoom is requested in the URL, not applied after the fact: the
+    // harness bakes it into the paper's style before Vue ever mounts, the
+    // same way EditorPreview.vue's zoom is set once and not toggled for a
+    // stable viewport class. Mutating the style after the first settle
+    // leaves PagedResume's pagination watcher unable to settle again.
     const response = await page.goto(
-      `${baseURL}${sampleUrl('paged', templateId, lng, false)}`,
+      `${baseURL}${sampleUrl('paged', templateId, lng, { zoom: zoomValue })}`,
     );
     expect(response?.ok()).toBe(true);
     await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
     await expect(page.locator('[data-pagination-settled="true"]'))
       .toHaveCount(1);
-    if (zoomValue !== FULL_ZOOM) {
-      await page.evaluate((zoom) => {
-        const target = document
-          .querySelector<HTMLElement>('.harness-paper');
-        if (target === null) throw new Error('Missing .harness-paper.');
-        target.style.zoom = String(zoom);
-      }, zoomValue);
-      await expect(page.locator('[data-pagination-settled="true"]'))
-        .toHaveCount(1);
-    }
     const extraction = await page.evaluate(browserExtract);
     expect(external).toEqual([]);
     return extraction;
@@ -668,9 +664,13 @@ let webkitBrowser: Browser | undefined;
 let webkitSkipReason = '';
 
 test.beforeAll(async () => {
-  normalChromium = await chromium.launch();
+  // @playwright/test's chromium/webkit exports default to the active
+  // project's launchOptions (the harness surface's print flags), so a
+  // "normal browser" launch must override args explicitly to stay empty;
+  // WebKit's binary rejects Chromium-only flags outright if they leak in.
+  normalChromium = await chromium.launch({ args: [] });
   try {
-    webkitBrowser = await webkit.launch();
+    webkitBrowser = await webkit.launch({ args: [] });
   } catch (error) {
     webkitSkipReason = error instanceof Error ? error.message : String(error);
   }
