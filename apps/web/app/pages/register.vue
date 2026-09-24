@@ -9,6 +9,7 @@
  * missing-email hint is shown to everyone and never claims a send failed.
  */
 import FormField from '@/components/app/FormField.vue';
+import AuthLayout from '@/components/auth/AuthLayout.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import LegalAgreement from '@/components/legal/LegalAgreement.vue';
 import ProviderButtons from '@/components/auth/ProviderButtons.vue';
@@ -117,10 +118,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
-    data-testid="register-page"
-  >
+  <AuthLayout testid="register-page">
     <h1
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
@@ -154,7 +152,7 @@ async function onSubmit() {
       class="mt-6 text-sm"
     >
       <NuxtLink
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         data-testid="register-success-sign-in"
         :to="signInLink"
       >
@@ -304,12 +302,12 @@ async function onSubmit() {
     >
       <span>{{ copy.register.haveAccount }}</span>
       <NuxtLink
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         data-testid="register-sign-in"
         :to="signInLink"
       >
         {{ copy.signIn }}
       </NuxtLink>
     </nav>
-  </main>
+  </AuthLayout>
 </template>

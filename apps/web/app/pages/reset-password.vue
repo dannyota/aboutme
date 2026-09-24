@@ -8,6 +8,7 @@
  * replaced with an empty string. A malformed or missing fragment renders a
  * local error and no form.
  */
+import AuthLayout from '@/components/auth/AuthLayout.vue';
 import PasswordField from '@/components/auth/PasswordField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button } from '@/components/ui/button';
@@ -104,10 +105,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <main
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
-    data-testid="reset-password-page"
-  >
+  <AuthLayout testid="reset-password-page">
     <h1
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
@@ -160,11 +158,11 @@ async function onSubmit() {
     <nav class="mt-6 flex justify-between gap-3 text-sm">
       <NuxtLink
         v-if="success"
-        class="text-primary underline-offset-4 hover:underline"
+        class="text-link underline-offset-4 hover:underline"
         to="/login"
       >
         {{ copy.signIn }}
       </NuxtLink>
     </nav>
-  </main>
+  </AuthLayout>
 </template>

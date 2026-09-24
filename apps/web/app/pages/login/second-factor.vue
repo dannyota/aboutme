@@ -24,6 +24,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import FormField from '@/components/app/FormField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
+import AuthLayout from '@/components/auth/AuthLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { pageTitle } from '@/i18n/meta';
@@ -304,10 +305,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main
-    class="mx-auto w-full max-w-[26rem] px-6 py-16"
-    data-testid="second-factor-page"
-  >
+  <AuthLayout testid="second-factor-page">
     <h1
       class="border-b pb-4 text-xl font-semibold"
       data-page-title
@@ -351,7 +349,7 @@ onBeforeUnmount(() => {
       </StatusBanner>
       <nav class="mt-6">
         <NuxtLink
-          class="text-primary underline-offset-4 hover:underline"
+          class="text-link underline-offset-4 hover:underline"
           data-testid="second-factor-sign-in-again"
           :to="expiredTarget"
         >
@@ -528,5 +526,5 @@ onBeforeUnmount(() => {
         </Button>
       </StatusBanner>
     </template>
-  </main>
+  </AuthLayout>
 </template>

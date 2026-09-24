@@ -39,6 +39,9 @@ watch(() => props.locale, load);
     :to="`/templates/${template.id}`"
   >
     <SheetThumbnail
+      class="transition-transform duration-200 ease-out
+        group-hover:-translate-y-1 motion-reduce:transition-none
+        motion-reduce:group-hover:translate-y-0"
       :document="document"
       :lng="locale"
     />
@@ -51,8 +54,12 @@ watch(() => props.locale, load);
       </span>
     </span>
     <span
-      class="justify-self-start rounded-lg border bg-background px-2 py-0.5
-        text-xs text-muted-foreground"
+      :class="template.sampleTags
+        ? 'rounded-full bg-surface-blue px-2.5 py-0.5 text-xs font-medium '
+          + 'text-foreground'
+        : 'rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground'"
+      :data-tag-kind="template.sampleTags ? 'sample' : 'illustrative'"
+      class="justify-self-start"
       data-template-tag
     >{{ template.sampleTags?.[locale]?.[locale] ?? illustrative }}</span>
   </NuxtLink>

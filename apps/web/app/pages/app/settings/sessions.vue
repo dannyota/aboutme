@@ -429,7 +429,7 @@ const linkErrorMessage = computed(() => {
     class="mx-auto w-full max-w-3xl px-6 py-10"
     data-testid="settings-page"
   >
-    <h1 class="text-xl font-semibold">
+    <h1 class="text-2xl font-semibold tracking-tight">
       {{ copy.title }}
     </h1>
 

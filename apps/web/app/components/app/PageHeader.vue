@@ -17,13 +17,13 @@ const props = withDefaults(
     <div>
       <h1
         :id="titleId"
-        class="text-2xl font-semibold tracking-tight"
+        class="text-2xl font-bold tracking-tight"
       >
         {{ title }}
       </h1>
       <p
         v-if="description"
-        class="text-muted-foreground"
+        class="mt-2 text-muted-foreground"
       >
         {{ description }}
       </p>

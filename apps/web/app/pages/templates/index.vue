@@ -35,6 +35,19 @@ function filterLink(filter: GalleryFilter | undefined) {
   return { path: '/templates', query: filter === undefined ? {} : { filter } };
 }
 
+// The chip dot's color names what the chip narrows: format (what the
+// document looks like) or the audience it suits. The dot is decorative;
+// the chip text carries the meaning (DESIGN.md, template gallery).
+const FORMAT_FILTERS = new Set<GalleryFilter>([
+  'sample',
+  'ats',
+  'one-page',
+  'photo',
+]);
+function chipGroup(filter: GalleryFilter): 'format' | 'audience' {
+  return FORMAT_FILTERS.has(filter) ? 'format' : 'audience';
+}
+
 useSiteSeo(() => ({
   path: '/templates',
   title: pageTitle(copy.value.seoTitle),
@@ -59,12 +72,18 @@ useHead(computed(() => ({
     class="mx-auto w-full max-w-7xl px-4 py-10 sm:px-8 sm:py-14"
     data-testid="template-gallery"
   >
-    <h1 class="text-3xl font-bold tracking-[-0.02em] sm:text-5xl">
-      {{ copy.title }}
-    </h1>
-    <p class="mt-4 max-w-2xl text-base text-muted-foreground">
-      {{ copy.lead }}
-    </p>
+    <header
+      class="rounded-[var(--radius-feature)] border border-border
+        bg-surface-blue px-5 py-8 sm:px-10 sm:py-12"
+      data-testid="gallery-header"
+    >
+      <h1 class="text-3xl font-bold tracking-[-0.02em] sm:text-5xl">
+        {{ copy.title }}
+      </h1>
+      <p class="mt-4 max-w-2xl text-md text-muted-foreground">
+        {{ copy.lead }}
+      </p>
+    </header>
     <nav
       :aria-label="copy.filtersLabel"
       class="gallery-filters -mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0"
@@ -94,8 +113,13 @@ useHead(computed(() => ({
               :aria-current="active === filter ? 'page' : undefined"
               class="gallery-chip"
               :data-filter="filter"
+              :data-group="chipGroup(filter)"
               :to="filterLink(filter)"
             >
+              <span
+                aria-hidden="true"
+                class="gallery-chip__dot"
+              />
               {{ label(filter) }}
             </NuxtLink>
           </li>
@@ -138,20 +162,45 @@ useHead(computed(() => ({
 .gallery-chip {
   display: inline-flex;
   align-items: center;
+  gap: 0.5rem;
   height: 2.25rem;
   padding: 0 1rem;
   border: 1px solid var(--border);
   border-radius: 9999px;
-  background: var(--background);
+  background: var(--card);
   color: var(--foreground);
   font-size: 0.875rem;
+  font-weight: 500;
   white-space: nowrap;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.gallery-chip:not([aria-current="page"]):hover {
+  background: var(--surface-indigo);
 }
 
 .gallery-chip[aria-current="page"] {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
+}
+
+.gallery-chip__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+}
+
+[data-group="format"] .gallery-chip__dot {
+  background: var(--brand-cyan);
+}
+
+[data-group="audience"] .gallery-chip__dot {
+  background: var(--brand-purple);
+}
+
+[aria-current="page"] .gallery-chip__dot {
+  background: currentColor;
 }
 
 .gallery-chip:focus-visible {
