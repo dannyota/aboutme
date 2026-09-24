@@ -40,10 +40,14 @@ export type LegalCopy = {
 
 export const legalCopy: Record<Locale, LegalCopy> = {
   vi: {
-    updated: 'Cập nhật lần cuối ngày 18/09/2026',
+    updated: 'Cập nhật lần cuối ngày 24/09/2026',
     privacyLink: 'Chính sách quyền riêng tư',
     termsLink: 'Điều khoản sử dụng',
-    agreement: ['Khi tạo tài khoản, bạn đồng ý với ', ' và ', '.'],
+    agreement: [
+      'Khi tạo tài khoản, bạn xác nhận đủ 16 tuổi và đồng ý với ',
+      ' và ',
+      '.',
+    ],
     privacy: {
       title: 'Chính sách quyền riêng tư',
       description:
@@ -54,7 +58,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         + 'này giải thích chúng tôi thu thập gì, dùng để làm gì, và bạn có '
         + 'những lựa chọn nào.',
       operator: {
-        text: 'aboutme do Danny vận hành.',
+        text:
+          'aboutme do Danny, một cá nhân, vận hành phi thương mại tại '
+          + 'Việt Nam.',
         contactLabel: 'Liên hệ',
       },
       sections: [
@@ -67,8 +73,17 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Nội dung: các CV bạn viết và ảnh bạn tải lên.',
             'Phiên đăng nhập: thông tin trình duyệt (user-agent) và địa chỉ '
             + 'IP của từng phiên, dùng cho bảo mật. Settings → Sessions liệt '
-            + 'kê các thiết bị đang đăng nhập. Thông tin trình duyệt và IP '
-            + 'được xoá 90 ngày sau khi đăng nhập.',
+            + 'kê các thiết bị đang đăng nhập. Chúng tôi xoá địa chỉ IP và '
+            + 'thông tin trình duyệt ghi nhận cho một lần đăng nhập trong '
+            + 'vòng 90 ngày kể từ lần đăng nhập đó. Việc duy trì phiên đăng '
+            + 'nhập không kéo dài thời hạn này.',
+            'Xác thực hai bước: khoá công khai của passkey (public key), mã '
+            + 'bí mật của ứng dụng xác thực (đã mã hoá), và mã băm của các '
+            + 'mã khôi phục. Bất thường về bộ đếm passkey được giữ trong '
+            + '180 ngày.',
+            'Trợ lý AI đã kết nối: tên ứng dụng, các địa chỉ chuyển hướng '
+            + '(redirect) của ứng dụng, quyền truy cập bạn đã cấp, và lần '
+            + 'dùng gần nhất. Token truy cập chỉ được lưu dưới dạng mã băm.',
             'Nhật ký yêu cầu của máy chủ (không ghi địa chỉ IP), lưu tối đa '
             + '180 ngày.',
             'Sự kiện gửi email: đã gửi, đã nhận, bị trả lại, hoặc bị đánh '
@@ -84,10 +99,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Mục đích và cơ sở xử lý',
           paragraphs: [
-            'Chúng tôi xử lý dữ liệu cá nhân của bạn để cung cấp tài khoản '
-            + 'và các CV bạn tạo, giữ an toàn cho dịch vụ, và gửi email về '
-            + 'tài khoản. Cơ sở xử lý là sự đồng ý của bạn khi tạo tài '
-            + 'khoản. Bạn có thể rút lại sự đồng ý bằng cách xoá tài khoản.',
+            'Chúng tôi xử lý dữ liệu cá nhân của bạn để thực hiện thỏa '
+            + 'thuận giữa bạn và aboutme theo Điều khoản sử dụng: cung cấp '
+            + 'tài khoản và các CV bạn tạo, giữ an toàn cho dịch vụ, và gửi '
+            + 'email về tài khoản. Các tính năng tuỳ chọn (đăng CV công '
+            + 'khai, cho phép lập chỉ mục, kết nối trợ lý AI, đăng nhập '
+            + 'bằng Google) chỉ chạy khi bạn tự bật, và bạn có thể tắt bất '
+            + 'cứ lúc nào. Bạn có thể chấm dứt thỏa thuận bằng cách xoá tài '
+            + 'khoản.',
           ],
         },
         {
@@ -98,7 +117,12 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Không bán dữ liệu của bạn và không chia sẻ dữ liệu cho mục đích '
             + 'tiếp thị.',
             'Cookie chỉ dùng để giữ phiên đăng nhập, hoàn tất đăng nhập bằng '
-            + 'Google, và ghi nhớ giao diện và ngôn ngữ bạn chọn.',
+            + 'Google, giữ trạng thái xác thực hai bước đang chờ trong năm '
+            + 'phút, và ghi nhớ giao diện và ngôn ngữ bạn chọn.',
+            'Bộ nhớ cục bộ của trình duyệt (localStorage) chỉ dùng để ghi '
+            + 'nhớ đường dẫn quay lại sau khi bạn xác minh email (tối đa 24 '
+            + 'giờ), và chế độ xem trước (PDF hoặc web) bạn chọn trong '
+            + 'trình chỉnh sửa CV.',
           ],
         },
         {
@@ -107,25 +131,33 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'CV ở chế độ riêng tư cho đến khi bạn đăng. Mỗi CV có đường dẫn '
             + 'riêng. Việc lập chỉ mục cho công cụ tìm kiếm và AI mặc định '
             + 'tắt cho đến khi bạn bật. Khi bạn ngừng công khai, đường dẫn '
-            + 'công khai ngừng hoạt động ngay lập tức.',
+            + 'công khai ngừng hoạt động ngay lập tức. Khi bạn xoá hoặc đổi '
+            + 'đường dẫn của một CV, chúng tôi giữ chỗ đường dẫn cũ trong '
+            + '180 ngày để không ai khác chiếm được đường dẫn đó. Việc giữ '
+            + 'chỗ này không gắn với tài khoản của bạn, và sẽ bị xoá sau '
+            + '180 ngày.',
             'Trang công khai được phân phối qua mạng CDN toàn cầu '
             + '(Cloudflare) nhưng không được lưu lại trên CDN. Khi CV đang '
             + 'công khai, bất kỳ ai xem được cũng có thể lưu hoặc chụp lại '
-            + 'trang.',
+            + 'trang. Theo mặc định, người xem cũng có thể tải về bản PDF '
+            + 'của CV; bạn có thể tắt tính năng này. Đừng đưa dữ liệu cá '
+            + 'nhân nhạy cảm, như số giấy tờ tuỳ thân, tình trạng sức khoẻ, '
+            + 'hoặc tôn giáo, vào một CV công khai.',
           ],
         },
         {
           heading: 'Dữ liệu được lưu ở đâu',
           paragraphs: [
             'Dữ liệu của bạn được lưu tại Amazon Web Services ở Singapore '
-            + '(ap-southeast-1): cơ sở dữ liệu, kho lưu ảnh, và việc gửi '
-            + 'email qua Amazon SES. Cloudflare phân phối trang web và xử lý '
-            + 'địa chỉ IP của bạn để làm việc đó. Thư trả '
-            + 'lời email của chúng tôi được gửi đến một hộp thư Google '
-            + 'Workspace. Nếu bạn ở Việt Nam, điều này có nghĩa là dữ liệu '
-            + 'cá nhân của bạn được chuyển ra nước ngoài (Singapore).',
-            'Kiểm tra mật khẩu dùng Have I Been Pwned. Nếu bật đăng nhập '
-            + 'bằng Google, Google xác thực tài khoản của bạn.',
+            + '(ap-southeast-1): cơ sở dữ liệu, bản sao lưu, kho ảnh, và '
+            + 'việc gửi email qua Amazon SES. Cloudflare (Hoa Kỳ, mạng máy '
+            + 'chủ toàn cầu) phân phối trang web và xử lý địa chỉ IP của '
+            + 'bạn. Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
+            + 'tài khoản của bạn. Email bạn gửi cho chúng tôi được lưu '
+            + 'trong hộp thư Google Workspace. Nếu bạn ở Việt Nam, dữ liệu '
+            + 'cá nhân của bạn được chuyển ra nước ngoài: chủ yếu đến '
+            + 'Singapore, và một phần đến Cloudflare và Google.',
+            'Kiểm tra mật khẩu dùng dịch vụ Have I Been Pwned.',
           ],
         },
         {
@@ -143,12 +175,15 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Quyền kiểm soát của bạn',
           paragraphs: [
             'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xoá CV, và xoá tài '
-            + 'khoản. Khi bạn xoá tài khoản:',
+            + 'khoản. Bản xuất gồm hồ sơ và nội dung CV của bạn; ảnh và '
+            + 'lịch sử phiên đăng nhập xin liên hệ qua email.',
+            'Khi bạn xoá tài khoản:',
           ],
           items: [
             'Quyền truy cập bị thu hồi ngay lập tức.',
             'Ảnh đã tải lên được xoá, thường trong vòng 24 giờ.',
-            'Bản sao lưu cơ sở dữ liệu hết hạn trong vòng 30 ngày.',
+            'Bản sao lưu cơ sở dữ liệu giữ các bản cũ trong tối đa 30 ngày '
+            + 'sau đó, và chỉ dùng để khôi phục sau sự cố.',
             'Bản ghi về việc xoá tài khoản và gỡ liên kết nhà cung cấp (chỉ '
             + 'gồm loại sự kiện và thời điểm) được giữ tối đa 180 ngày.',
           ],
@@ -157,25 +192,30 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Email',
           paragraphs: [
             'Chúng tôi chỉ gửi email về tài khoản: xác minh email, đặt lại '
-            + 'mật khẩu, và thông báo khi mật khẩu thay đổi. Không gửi email '
-            + 'tiếp thị.',
+            + 'mật khẩu, và thông báo bảo mật khi mật khẩu, xác thực hai '
+            + 'bước, passkey, ứng dụng xác thực, hoặc mã khôi phục của bạn '
+            + 'thay đổi. Không gửi email tiếp thị.',
           ],
         },
         {
           heading: 'Quyền của bạn',
           paragraphs: [
             'Bạn có quyền được biết, truy cập, chỉnh sửa, xoá dữ liệu cá '
-            + 'nhân của mình, rút lại sự đồng ý, phản đối hoặc yêu cầu hạn '
-            + 'chế xử lý, và khiếu nại với cơ quan có thẩm quyền. Phần lớn '
-            + 'các quyền này bạn tự thực hiện được trong Settings; các yêu '
-            + 'cầu khác xin gửi qua email bên dưới.',
+            + 'nhân của mình, phản đối hoặc yêu cầu hạn chế xử lý, khiếu '
+            + 'nại, tố cáo, khởi kiện, và yêu cầu bồi thường thiệt hại theo '
+            + 'quy định của pháp luật. Phần lớn các quyền này bạn tự thực '
+            + 'hiện được trong Settings; các yêu cầu khác xin gửi qua email '
+            + 'bên dưới. Chúng tôi phản hồi trong vòng 2 ngày làm việc và '
+            + 'hoàn tất yêu cầu trong thời hạn pháp luật quy định.',
           ],
         },
         {
           heading: 'Thay đổi và liên hệ',
           paragraphs: [
             'Khi chính sách này thay đổi, chúng tôi cập nhật trang này và '
-            + 'ngày cập nhật.',
+            + 'ngày cập nhật. Nếu chúng tôi thay đổi lý do xử lý dữ liệu '
+            + 'hoặc dữ liệu chúng tôi thu thập, chúng tôi sẽ gửi email cho '
+            + 'bạn trước khi thay đổi có hiệu lực.',
           ],
           contactLabel: 'Gửi câu hỏi và yêu cầu đến',
         },
@@ -199,10 +239,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Nội dung của bạn',
           paragraphs: [
-            'Bạn sở hữu nội dung bạn tạo. Bạn cho phép aboutme lưu trữ nội '
-            + 'dung đó và hiển thị theo cách bạn chọn, ví dụ khi bạn đăng '
-            + 'CV. Quyền này chấm dứt khi bạn xoá nội dung, trừ các bản sao '
-            + 'lưu cho đến khi chúng hết hạn.',
+            'Bạn sở hữu nội dung bạn tạo. Bạn cho phép aboutme lưu trữ, sao '
+            + 'lưu, kết xuất thành PDF, gửi đến các trợ lý AI bạn kết nối, '
+            + 'và hiển thị nội dung đó theo cách bạn chọn, ví dụ khi bạn '
+            + 'đăng CV. Quyền này chấm dứt khi bạn xoá nội dung, trừ các '
+            + 'bản sao lưu cho đến khi chúng hết hạn.',
+            'Bạn chịu trách nhiệm về nội dung bạn công khai, kể cả tính '
+            + 'chính xác và quyền chia sẻ thông tin hoặc hình ảnh của người '
+            + 'khác.',
           ],
         },
         {
@@ -231,6 +275,17 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Bạn phải từ 16 tuổi trở lên.',
             'Nếu biết một tài khoản thuộc về người dưới 16 tuổi, chúng tôi '
             + 'sẽ xoá tài khoản đó.',
+            'Bạn chịu trách nhiệm về hành động của các trợ lý AI bạn kết '
+            + 'nối với tài khoản.',
+          ],
+        },
+        {
+          heading: 'Chấm dứt',
+          paragraphs: [
+            'Bạn có thể xoá tài khoản bất cứ lúc nào. Nếu chúng tôi gỡ nội '
+            + 'dung hoặc tạm ngưng tài khoản do vi phạm, chúng tôi sẽ gửi '
+            + 'email và cho bạn thời gian hợp lý để xuất dữ liệu, trừ khi '
+            + 'vi phạm nghiêm trọng hoặc pháp luật yêu cầu khác.',
           ],
         },
         {
@@ -263,14 +318,19 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Luật áp dụng',
           paragraphs: [
             'Các điều khoản này tuân theo pháp luật Việt Nam.',
+            'Khi có tranh chấp, hai bên sẽ thương lượng trước; nếu không '
+            + 'giải quyết được, tranh chấp sẽ được xử lý theo pháp luật '
+            + 'Việt Nam.',
           ],
         },
         {
           heading: 'Thay đổi và liên hệ',
           paragraphs: [
             'Khi điều khoản thay đổi, chúng tôi cập nhật trang này và ngày '
-            + 'cập nhật. Việc bạn tiếp tục sử dụng dịch vụ sau khi thay đổi '
-            + 'có hiệu lực đồng nghĩa với việc bạn chấp nhận điều khoản mới.',
+            + 'cập nhật. Nếu thay đổi là quan trọng, chúng tôi sẽ gửi email '
+            + 'báo trước ít nhất 15 ngày trước khi thay đổi có hiệu lực. '
+            + 'Việc bạn tiếp tục sử dụng dịch vụ sau khi thay đổi có hiệu '
+            + 'lực đồng nghĩa với việc bạn chấp nhận điều khoản mới.',
           ],
           contactLabel: 'Liên hệ',
         },
@@ -278,10 +338,15 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     },
   },
   en: {
-    updated: 'Last updated September 18, 2026',
+    updated: 'Last updated September 24, 2026',
     privacyLink: 'Privacy Policy',
     termsLink: 'Terms of Service',
-    agreement: ['By creating an account you agree to the ', ' and the ', '.'],
+    agreement: [
+      'By creating an account you confirm you are at least 16 and agree '
+      + 'to the ',
+      ' and the ',
+      '.',
+    ],
     privacy: {
       title: 'Privacy Policy',
       description:
@@ -292,7 +357,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         + 'page explains what we collect, what we use it for, and the '
         + 'choices you have.',
       operator: {
-        text: 'aboutme is operated by Danny.',
+        text:
+          'aboutme is operated by Danny, an individual, on a '
+          + 'non-commercial basis in Vietnam.',
         contactLabel: 'Contact',
       },
       sections: [
@@ -305,8 +372,15 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Content: the resumes you write and the photos you upload.',
             'Sessions: the browser user-agent and IP address of each '
             + 'session, used for security. Settings → Sessions lists your '
-            + 'signed-in devices. We delete the user-agent and IP 90 days '
-            + 'after sign-in.',
+            + 'signed-in devices. We delete the IP address and browser '
+            + '(user agent) recorded for a sign-in no later than 90 days '
+            + 'after that sign-in. Staying signed in does not extend this.',
+            'Second factor: your passkey public keys, your authenticator-'
+            + 'app secret (encrypted), and hashes of your recovery codes. '
+            + 'Passkey counter anomalies are kept for 180 days.',
+            'Connected agents: the app name, its redirect addresses, the '
+            + 'access you granted, and when it was last used. Access '
+            + 'tokens are stored only as hashes.',
             'Server request logs, which do not record IP addresses, kept for '
             + 'up to 180 days.',
             'Email delivery events: sent, delivered, bounced, or marked as '
@@ -322,11 +396,13 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Why we use your data',
           paragraphs: [
-            'We process your personal data to provide your account and the '
-            + 'resumes you create, to keep the service secure, and to send '
-            + 'account emails. We do this with the consent you give when you '
-            + 'create an account. You can withdraw consent by deleting your '
-            + 'account.',
+            'We process your personal data to perform our agreement with '
+            + 'you under the Terms of Service: to provide your account and '
+            + 'the resumes you create, keep the service secure, and send '
+            + 'account emails. Optional features (publishing, search and '
+            + 'AI indexing, connected AI agents, Google sign-in) run only '
+            + 'when you turn them on, and you can turn them off at any '
+            + 'time. You can end the agreement by deleting your account.',
           ],
         },
         {
@@ -335,8 +411,13 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'No ads.',
             'No analytics or tracking scripts.',
             'We don\'t sell your data or share it for marketing.',
-            'Cookies are used only to keep you signed in, to complete Google '
-            + 'sign-in, and to remember your theme and language.',
+            'Cookies are used only to keep you signed in, to complete '
+            + 'Google sign-in, to hold a pending second-factor sign-in for '
+            + 'five minutes, and to remember your theme and language.',
+            'Browser local storage is used only to remember the page to '
+            + 'return to after you verify your email (for up to 24 hours), '
+            + 'and your chosen preview mode (PDF or web) in the resume '
+            + 'editor.',
           ],
         },
         {
@@ -344,25 +425,33 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'A resume is private until you publish it. Each resume has its '
             + 'own link. Search engine and AI indexing stays off until you '
-            + 'turn it on. When you unpublish, the public link stops working '
-            + 'right away.',
+            + 'turn it on. When you unpublish, the public link stops '
+            + 'working right away. When you delete or rename a resume, we '
+            + 'keep its old web address reserved for 180 days so no one '
+            + 'else can take over your link. The reservation is not linked '
+            + 'to your account, and we delete it after the 180 days.',
             'Public pages are delivered through a global CDN (Cloudflare), '
             + 'which does not store copies of them. While a resume is '
-            + 'public, anyone who can see it can save or screenshot it.',
+            + 'public, anyone who can see it can save or screenshot it. By '
+            + 'default, viewers can also download the resume\'s PDF; you '
+            + 'can turn this off. Avoid putting sensitive personal data, '
+            + 'such as ID numbers, health information, or religion, in a '
+            + 'public resume.',
           ],
         },
         {
           heading: 'Where your data is stored',
           paragraphs: [
             'Your data is stored with Amazon Web Services in Singapore '
-            + '(ap-southeast-1): the database, photo storage, and email '
-            + 'sending through Amazon SES. Cloudflare delivers the site and '
-            + 'processes your IP address to do so. '
-            + 'Replies to our emails reach a Google Workspace mailbox. If '
-            + 'you are in Vietnam, this means your personal data is '
-            + 'transferred abroad, to Singapore.',
-            'Password checks use Have I Been Pwned. If Google sign-in is on, '
-            + 'Google verifies your account.',
+            + '(ap-southeast-1): the database, its backups, photo storage, '
+            + 'and email sending through Amazon SES. Cloudflare (United '
+            + 'States, global network) delivers the site and processes '
+            + 'your IP address. If you sign in with Google, Google (United '
+            + 'States) verifies your account. Emails you send us are kept '
+            + 'in a Google Workspace mailbox. If you are in Vietnam, your '
+            + 'personal data is transferred abroad: mainly to Singapore, '
+            + 'and in part to Cloudflare and Google.',
+            'Password checks use Have I Been Pwned.',
           ],
         },
         {
@@ -379,13 +468,17 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Your controls',
           paragraphs: [
-            'You can export your account data, edit or delete your resumes, '
-            + 'and delete your account. When you delete your account:',
+            'You can export your account data, edit or delete your '
+            + 'resumes, and delete your account. The export holds your '
+            + 'profile and resume content; email us for photos or session '
+            + 'history.',
+            'When you delete your account:',
           ],
           items: [
             'Access is removed immediately.',
             'Uploaded photos are deleted, normally within 24 hours.',
-            'Database backups expire within 30 days.',
+            'Database backups keep earlier copies for up to 30 days after '
+            + 'that; they are used only for disaster recovery.',
             'Records of account deletions and provider unlinks, holding only '
             + 'the event type and time, are kept for up to 180 days.',
           ],
@@ -394,23 +487,29 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Emails',
           paragraphs: [
             'We send only account emails: email verification, password '
-            + 'reset, and a notice when your password changes. No marketing.',
+            + 'reset, and security notices when your password, second '
+            + 'factor, passkeys, authenticator app, or recovery codes '
+            + 'change. No marketing.',
           ],
         },
         {
           heading: 'Your rights',
           paragraphs: [
             'You have the right to know about, access, correct, and delete '
-            + 'your personal data, to withdraw consent, to object to or '
-            + 'restrict processing, and to complain to the authorities. You '
-            + 'can do most of this yourself in Settings; send other requests '
-            + 'to the address below.',
+            + 'your personal data, to object to or restrict processing, '
+            + 'and to complain, report, sue, and claim damages as the law '
+            + 'allows. You can do most of this yourself in Settings; send '
+            + 'other requests to the address below. We reply within 2 '
+            + 'working days and complete requests within the legal '
+            + 'deadlines.',
           ],
         },
         {
           heading: 'Changes and contact',
           paragraphs: [
-            'When this policy changes, we update this page and its date.',
+            'When this policy changes, we update this page and its date. '
+            + 'If we change why we process data or what we collect, we '
+            + 'will email you before the change applies.',
           ],
           contactLabel: 'Send questions and requests to',
         },
@@ -434,9 +533,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Your content',
           paragraphs: [
             'You own the content you create. You give aboutme permission to '
-            + 'store it and to display it the way you choose, for example by '
-            + 'publishing a resume. This permission ends when you delete the '
-            + 'content, except for backup copies until they expire.',
+            + 'store, back up, render as PDF, send to AI agents you '
+            + 'connect, and display your content the way you choose, for '
+            + 'example by publishing a resume. This permission ends when '
+            + 'you delete the content, except for backup copies until they '
+            + 'expire.',
+            'You are responsible for what you publish, including its '
+            + 'accuracy and your right to share other people\'s '
+            + 'information or images.',
           ],
         },
         {
@@ -463,6 +567,17 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'You must be at least 16 years old.',
             'If we learn an account belongs to someone under 16, we will '
             + 'delete it.',
+            'You are responsible for what an AI agent you connect does '
+            + 'with your account.',
+          ],
+        },
+        {
+          heading: 'Termination',
+          paragraphs: [
+            'You can delete your account at any time. If we remove content '
+            + 'or suspend an account for a breach, we will email you and '
+            + 'allow reasonable time to export your data, unless the '
+            + 'breach is serious or the law requires otherwise.',
           ],
         },
         {
@@ -493,14 +608,18 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Governing law',
           paragraphs: [
             'These terms are governed by the laws of Vietnam.',
+            'If a dispute arises, we will first try to resolve it by '
+            + 'negotiation; if that fails, it will be resolved under '
+            + 'Vietnamese law.',
           ],
         },
         {
           heading: 'Changes and contact',
           paragraphs: [
             'When these terms change, we update this page and its date. If '
-            + 'you keep using the service after a change, you accept the '
-            + 'updated terms.',
+            + 'a change is material, we will email you at least 15 days '
+            + 'before it applies. If you keep using the service after a '
+            + 'change takes effect, you accept the updated terms.',
           ],
           contactLabel: 'Contact',
         },
