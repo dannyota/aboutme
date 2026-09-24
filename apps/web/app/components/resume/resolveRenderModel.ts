@@ -15,6 +15,12 @@ export interface RenderContext {
   lng: string;
   mode: 'continuous' | 'paged';
   photoUrl?: string;
+  /**
+   * The element the header renders the resume name as. Only an embed that
+   * owns its own page `h1` passes `'p'`; every other caller omits this and
+   * keeps the default `'h1'`.
+   */
+  nameHeading?: 'h1' | 'p';
 }
 
 export type ResumeRenderErrorCode
@@ -59,6 +65,7 @@ export interface ResolvedRenderModel {
     /** Where a photo sits; absent means top (ADR 0044). */
     readonly photoPosition: 'top' | 'left' | 'right';
   };
+  readonly nameHeading: 'h1' | 'p';
   readonly heading: Customization['heading'];
   readonly sectionDisplay: Customization['sectionDisplay'];
   readonly dateFormat: Customization['dateFormat'];
@@ -142,6 +149,7 @@ export function resolveRenderModel(
       iconStyle: customization.header?.iconStyle ?? 'outline',
       photoPosition: customization.header?.photoPosition ?? 'top',
     },
+    nameHeading: context.nameHeading ?? 'h1',
     heading: { ...customization.heading },
     sectionDisplay: {
       skill: { ...customization.sectionDisplay.skill },
