@@ -39,6 +39,7 @@ apps/web/app/assets/fonts/spectral-400.woff2
 apps/web/app/assets/fonts/spectral-700.woff2
 apps/web/app/assets/fonts/work-sans-var.woff2
 apps/web/app/components/app/AccountMenu.vue
+apps/web/app/components/app/AppLogo.vue
 apps/web/app/components/app/AppSeal.vue
 apps/web/app/components/app/AppShell.vue
 apps/web/app/components/app/CheckboxField.vue
