@@ -955,23 +955,22 @@ function newStepTracker(): StepTracker {
   return { last: -1 };
 }
 
-/** Returns a current-step code newer than every step the tracker has used. */
+/** Returns a code from a step newer than every step the tracker has used, taking the next step without waiting unless it is already spent. */
 async function freshCode(
   page: Page,
   secret: string,
   tracker: StepTracker,
 ): Promise<string> {
-  await waitForStepAtLeast(page, tracker.last + 1);
-  const step = stepAt(systemClock().nowSeconds());
+  let step = stepAt(systemClock().nowSeconds()) + 1;
+  if (step <= tracker.last) {
+    await waitForStepAtLeast(page, tracker.last);
+    step = stepAt(systemClock().nowSeconds()) + 1;
+  }
   tracker.last = step;
   return codeForStep(secret, step);
 }
 
-/**
- * Waits on the real clock until the current 30-second step reaches `step`,
- * so a later code is strictly newer than every step already consumed
- * (totp-second-factor-contract.md, "TOTP profile and code verification").
- */
+/** Waits on the real clock until the current step reaches `step` (totp-second-factor-contract.md, "TOTP profile and code verification"). */
 async function waitForStepAtLeast(page: Page, step: number): Promise<void> {
   const target = step * TOTP_PERIOD_SECONDS;
   const waitMs = (target - Date.now() / 1000) * 1000;

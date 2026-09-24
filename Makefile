@@ -3,7 +3,7 @@
 # builtin that under dash never succeeds and turns the readiness loop into a
 # guaranteed 30s failure.
 SHELL := /bin/bash
-.PHONY: help ci check scan tools-check operational-test hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
+.PHONY: help ci check scan tools-check operational-test operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser hooks-install docs-lint lengths-check docs-fmt generate schema-gen schema-check api-gen api-check server-build server-vet server-test server-test-db server-test-s3 server-test-resumeapi server-test-resumeapi-s3 web-build web-lint web-typecheck web-test web-source-manifest-check web-source-manifest-update web-source-build web-no-eval-check web-e2e web-e2e-update dev dev-down test-db-up test-db-down test-s3-up test-s3-down server-test-integration semgrep semgrep-ci sqlc-gen sqlc-check migrate migrate-check server-migration-test public-roots-check route-table-test dev-native dev-seed dev-native-down dev-native-status dev-native-logs dev-https dev-https-down dev-https-status dev-https-logs mail-capture-static-check dev-https-browser-image dev-https-auth-check dev-https-transport-check dev-https-editor-check dev-https-public-check dev-https-password-check dev-https-mcp-check dev-https-entry-check dev-https-publish-check dev-https-exports-check native-http-check
 
 WEB_E2E_COMMIT := $(shell git rev-parse --verify 'HEAD^{commit}')
 WEB_E2E_IMAGE := mcr.microsoft.com/playwright:v1.62.1-noble@sha256:c091b21d9fae78c76e85cd4356431e9b018402f172a214fc7d7a5e9a7e29d8ac
@@ -36,15 +36,18 @@ scan: ## Batched security scan: Semgrep (SAST + Supply Chain SCA + secrets) then
 tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="ci", "scan", "dev", or tool names)
 	bash scripts/check-tool-versions.sh $(ARGS)
 
-operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
+# Split into four lanes so hosted CI can run them in parallel: the dev-https
+# static suite alone was 185s of a 284s sequential total, deploy_test.sh 38s,
+# and the browser-image/MCP-owner-workflow suites 25s and 23s. Each lane keeps
+# its slice of the original recipe lines unchanged; `operational-test` still
+# runs every one of them, in the same order, for a local or non-matrix caller.
+operational-test: operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
+
+operational-test-fast: ## operational-test's sub-second-to-low-single-digit-second scripts
 	bash -n scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/mcp-owner-workflow_test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh
 	bash scripts/test/render-topology-test.sh
-	bash deploy/aws/scripts/deploy_test.sh
 	bash -n scripts/test/db-setup-wiring-test.sh
 	bash scripts/test/db-setup-wiring-test.sh
-	bash scripts/dev-https-test.sh --static
-	bash deploy/dev-https-browser/static-test.sh
-	bash scripts/mcp-owner-workflow_test.sh
 	scripts/test/ci-failure-propagation-test.sh
 	scripts/test/ci-lifecycle-test.sh
 	scripts/test/ci-scan-adversarial-test.sh
@@ -58,6 +61,16 @@ operational-test: ## Test local CI, scan, toolchain, Compose guard, and native-s
 	scripts/test/totp-production-proof-test.sh
 	scripts/generate-web-e2e-source-manifest.test.sh
 	scripts/web-e2e-source.test.sh
+
+operational-test-dev-https: ## operational-test's dev-https static safety-test suite, its slowest script
+	bash scripts/dev-https-test.sh --static
+
+operational-test-deploy: ## operational-test's deploy-script static safety-test suite
+	bash deploy/aws/scripts/deploy_test.sh
+
+operational-test-browser: ## operational-test's browser-image and MCP owner-workflow static safety tests
+	bash deploy/dev-https-browser/static-test.sh
+	bash scripts/mcp-owner-workflow_test.sh
 
 hooks-install: ## Point git at .githooks so pre-commit runs gitleaks on staged content
 	git config core.hooksPath .githooks

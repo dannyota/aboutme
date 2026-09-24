@@ -31,18 +31,45 @@ jobs:
         with:
           node-version: 24.21.0
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            deploy/dev-https-browser/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
-      # `make operational-test` compiles and lists the trusted-browser specs
-      # through the pinned @playwright/test in this directory; the list-only
-      # check needs the runner, not downloaded browser binaries.
-      - run: npm ci
-        working-directory: deploy/dev-https-browser
       - run: make docs-lint
       - run: make lengths-check
-      - run: make operational-test
+      - run: make operational-test-fast
+
+  # `make operational-test`'s three slowest scripts, each in its own job
+  # instead of after one another in the sequence docs used to run them in:
+  # dev-https-test.sh --static alone was 185s of docs' 284s total,
+  # deploy_test.sh was 38s, and the browser-image and MCP owner-workflow
+  # suites were 25s and 23s. The Makefile still runs every one of them, in
+  # the same order, from a single `make operational-test`.
+  docs-dev-https:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make operational-test-dev-https
+
+  docs-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make operational-test-deploy
+
+  docs-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: deploy/dev-https-browser/package-lock.json
+      # `make operational-test-browser` compiles and lists the trusted-browser
+      # specs through the pinned @playwright/test in this directory; the
+      # list-only check needs the runner, not downloaded browser binaries.
+      - run: npm ci
+        working-directory: deploy/dev-https-browser
+      - run: make operational-test-browser
 
   schema:
     runs-on: ubuntu-latest
@@ -210,6 +237,18 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       # A go-installed caddy reports version "unknown", which the dev-https
       # tool check rejects, so this job uses the official release binary.
       - name: Install the pinned caddy (2.11.4)
@@ -264,6 +303,18 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       # A go-installed caddy reports version "unknown", which the dev-https
       # tool check rejects, so this job uses the official release binary.
       - name: Install the pinned caddy (2.11.4)
