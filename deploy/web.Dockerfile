@@ -36,13 +36,17 @@ FROM docker.io/library/node:24.21.0-alpine3.24@sha256:ebfe2f90462722a7a4de65e919
 
 WORKDIR /app
 
-# The runtime only runs `node .output/server/index.mjs`; it never invokes
-# npm, npx, or corepack, so their bundled dependencies (npm ships tar,
-# brace-expansion, ip-address, undici, and pacote, all with published CVEs)
-# are removed rather than shipped unused.
+# The runtime only runs `node .output/server/index.mjs`, so the base's package
+# managers (npm, npx, corepack, yarn) and their bundled dependencies are
+# removed rather than shipped unused. The final check fails the build if a
+# base update moves them.
 RUN addgroup -S aboutme && adduser -S aboutme -G aboutme \
-    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
-    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
+        /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+    && for tool in npm npx corepack yarn yarnpkg; do \
+        ! command -v "$tool" >/dev/null || exit 1; \
+    done
 
 COPY --from=build /src/apps/web/.output ./.output
 
