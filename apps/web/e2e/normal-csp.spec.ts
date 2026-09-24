@@ -137,6 +137,42 @@ test('the login page sends the plain app CSP', async ({ page }) => {
   expect(external).toEqual([]);
 });
 
+test('submitting the login form navigates cleanly under the app CSP', async ({
+  page,
+}) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  // A real successful login sets a session cookie and lands on /app/resumes
+  // through a full reload (crossing from the SSR /login to the client-only
+  // /app/resumes route rule), so /api/v1/me reads as signed in throughout,
+  // exactly as the real destination page would see it.
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/auth/password/login', async (route) => {
+    await route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/v1/resumes', async (route) => {
+    await route.fulfill({
+      headers: {
+        'Cache-Control': 'no-store, no-transform',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: { data: [] },
+    });
+  });
+
+  await page.goto('/login');
+  await page.locator('#login-email').fill('csp@example.invalid');
+  await page.locator('#login-password').fill('correct horse battery staple');
+  await page.getByTestId('login-form').locator('button[type="submit"]')
+    .click();
+  await page.waitForURL((url) => url.pathname !== '/login');
+  expect(new URL(page.url()).pathname).toBe('/app/resumes');
+  await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
+
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
 test('normal Nuxt output hydrates under the app CSP', async ({ page }) => {
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
@@ -189,8 +225,15 @@ test('the editor sends the plain app CSP and hydrates cleanly', async ({
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
   await mockSignedInSession(page);
+  // A successful, immediately closed stream: EventSource retries silently
+  // when its connection ends, but an aborted request logs the browser's own
+  // "Failed to load resource: net::ERR_FAILED", which is unrelated to CSP.
   await page.route('**/api/v1/events', async (route) => {
-    await route.abort();
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: '',
+    });
   });
   await page.route('**/api/v1/resumes/resume-1', async (route) => {
     if (route.request().method() !== 'GET') {
