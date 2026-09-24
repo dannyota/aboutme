@@ -1,7 +1,8 @@
 # Production
 
-Status: **serving production** at `v0.4.1` (verified 2026-09-20). This runbook
-covers the single-host production environment at `https://aboutme.vn`. The
+Status: **serving production**. The live release is the `DEPLOY_RELEASE_TAG`
+value in the `aboutme-prod-app` task definition. This runbook covers the
+single-host production environment at `https://aboutme.vn`. The
 [single-host design](../design/single-host-production.md) explains why it is
 shaped this way.
 
