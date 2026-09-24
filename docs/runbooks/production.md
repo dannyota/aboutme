@@ -152,9 +152,10 @@ immutable cache. Font files under `/_nuxt/fonts/` keep fixed names, so a font
 file change must rename the `.woff2`; the rename changes the font stylesheet and
 with it the public stylesheet hash.
 
-A release is a `v*` tag on `main` with green CI. The `release-images` workflow
-publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag; the
-packages must be public so the host can pull them.
+A release is a `v*` tag on `main` with a successful push run of `ci.yml` on that
+exact commit; a `workflow_dispatch` run does not count. The `release-images`
+workflow publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag;
+the packages must be public so the host can pull them.
 
 Before the first deploy after adding maintenance mode, apply the reviewed
 OpenTofu change. It creates `aboutme-prod-maintenance` at desired count zero.
@@ -177,20 +178,33 @@ schedules, and stops `app`. It then swaps in the `maintenance` service: the same
 Caddy image, in a mode that serves `deploy/caddy/production/maintenance.html` at
 503 for every path, including `/readyz` and `/api/*`. With the maintenance page
 up, it runs the database steps, starts `web`, swaps `maintenance` back out,
-starts `app`, re-enables the schedules, and smoke-tests through Cloudflare. The
-script requires the maintenance page's 503 response through Cloudflare before it
-starts a database task. `app` and `maintenance` both bind host port 443, so
-exactly one of them is ever asked to run at once. Task placement and image pulls
-determine how long the maintenance page remains up. After maintenance stops,
-Cloudflare can return 521 until `app` accepts traffic. The v0.3.30 handoff
-returned 521 for about one minute. Do not promise a bounded downtime window.
+starts `app`, and re-enables the schedules. It then smoke-tests through
+Cloudflare, using the base caller's own credentials for `ec2:DescribeAddresses`
+and `cloudwatch:GetMetricStatistics` (in `us-east-1`), both outside the deploy
+role's IAM list. It warms `DEPLOY_WARM_PAGE` (default `/danny`; must stay a
+published resume page) and the homepage, since first requests after a restart
+can be slow on the Cloudflare-to-origin path in a way `/healthz` misses, until
+each answers fast (`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run
+out. The script requires the maintenance page's 503 response through Cloudflare
+before it starts a database task. `app` and `maintenance` both bind host port
+443, so only one runs at once. After maintenance stops, Cloudflare can return
+521 until `app` accepts traffic. Do not promise a bounded downtime window.
 
 The deploy records the prior state of the site-down alarm actions and
-task-stopped rule before it changes either source. It restores only sources that
-were enabled after service recovery, including normal, rollback, error, and HUP,
-INT, or TERM exits. It leaves database, capacity, Scheduler, and host recovery
-alarms active. SIGKILL, host loss, and shell death cannot run cleanup. Before
-retrying after one of those failures, use the recorded
+task-stopped rule before it changes either source. On success, it re-enables the
+task-stopped rule, then waits (bounded by `DEPLOY_ALARM_WAIT` seconds, default
+900, polled every `DEPLOY_ALARM_POLL` seconds) for the alarm to read `OK` with
+enough healthy Route 53 minutes since the site came back up, before re-enabling
+its actions: CloudWatch evaluates the alarm on a delay, so `OK` alone does not
+prove the outage finished evaluating, and re-enabling early can send a false
+alert. A warm-up or smoke failure after the app started waits the same way, up
+to `DEPLOY_ALARM_WAIT` seconds; Ctrl-C during that wait skips it and re-enables
+the actions at once. A timeout still re-enables the actions and fails, naming
+the alarm's last state and healthy-minute count. An error before the handoff
+finishes, or a HUP, INT, or TERM exit before that wait starts, restores both
+sources at once when they were enabled. Database, capacity, Scheduler, and host
+recovery alarms stay active throughout. SIGKILL, host loss, and shell death skip
+cleanup. Before retrying after one of those failures, use the recorded
 `deployment notification states` line from the deploy output. If the recorded
 task-stopped rule was `ENABLED`, run:
 

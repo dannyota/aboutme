@@ -21,9 +21,18 @@ run_case() { # name expected-exit|fail args...
   shift 2
   : >"$work/$name.calls"
   set +e
+  # Backgrounded so its own PID (not a subshell bash forks internally for a
+  # command substitution) lands in $name.pid: a stub that signals deploy.sh
+  # from inside its own cleanup wait needs that exact PID, since a signal to
+  # the wrong process only kills a disposable subshell there.
   CALLS="$work/$name.calls" STUB_DIR="$work" STUB_CASE="$name" PATH="$work/bin:$PATH" \
     AWS_CONFIG_FILE="$work/no-such-aws-config" AWS_PROFILE=test-base \
-    DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1
+    DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 \
+    DEPLOY_ALARM_WAIT="${DEPLOY_ALARM_WAIT:-3}" DEPLOY_ALARM_POLL="${DEPLOY_ALARM_POLL:-0}" \
+    DEPLOY_WARM_ATTEMPTS="${DEPLOY_WARM_ATTEMPTS:-8}" \
+    bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1 &
+  echo $! >"$work/$name.pid"
+  wait $!
   got=$?
   set -e
   if [[ $want == fail ]] && ((got != 0 && got != 2)); then
@@ -55,6 +64,20 @@ absent() { # file text
   fi
 }
 
+# Regex-anchored variants of line/before, for a call whose URL is a substring
+# of another call's URL (the homepage warm probe "https://aboutme.vn/" is a
+# prefix of the resume-page probe "https://aboutme.vn/danny").
+line_re() { { grep -n -m1 -E -- "$2" "$1" || true; } | cut -d: -f1; }
+before_re() { # file first-regex second-regex
+  local a b
+  a=$(line_re "$1" "$2")
+  b=$(line_re "$1" "$3")
+  if [[ -z $a || -z $b || $a -ge $b ]]; then
+    echo "$(basename "$1"): '$2' must precede '$3'" >&2
+    exit 1
+  fi
+}
+
 count() { grep -c -F -- "$2" "$1" || true; }
 
 stop_app="--service aboutme-prod-app --desired-count 0"
@@ -63,7 +86,10 @@ start_web="--service aboutme-prod-web --task-definition arn:aws:ecs:ap-southeast
 up_maintenance="--service aboutme-prod-maintenance --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1"
 down_maintenance="--service aboutme-prod-maintenance --desired-count 0"
 prev_app_up="--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3 --desired-count 1"
+warm_danny_re='-w %\{http_code\} %\{time_total\} https://aboutme\.vn/danny$'
+warm_home_re='-w %\{http_code\} %\{time_total\} https://aboutme\.vn/$'
 
+before_ok_epoch=$(date -u +%s)
 run_case ok 0 v0.1.0
 f=$work/ok.calls
 before "$f" "rds create-db-snapshot" "$stop_app"
@@ -126,6 +152,56 @@ grep -F -- "$start_app" "$f" | grep -qF "[fence-deploy]" ||
 grep -qF "[fence-operator] aws --region ap-southeast-1 dynamodb get-item" "$f" ||
   { echo "ok: the fence read did not run as the operator role" >&2; exit 1; }
 
+# The site-down alarm's actions come back only once the task-stopped rule is
+# already re-enabled, the alarm itself reads OK, and Route 53 has reported
+# enough healthy post-up minutes; the metric read runs as the base caller,
+# not a role, because the deploy role's closed CloudWatch list has no
+# GetMetricStatistics (deploy/aws/modules/identity/main.tf).
+before "$f" "events enable-rule --name aboutme-prod-task-stopped" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json"
+before "$f" "cloudwatch get-metric-statistics" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+before "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down" "REMOVE operation_id"
+grep -qF "[test-base] aws --region us-east-1 cloudwatch get-metric-statistics" "$f" ||
+  { echo "ok: the alarm metric read did not run as the base caller" >&2; exit 1; }
+absent "$f" "[fence-deploy] aws --region us-east-1 cloudwatch get-metric-statistics"
+start_time=$(sed -E 's/.*--start-time ([0-9TZ:-]+).*/\1/' < <(grep -m1 -F "cloudwatch get-metric-statistics" "$f"))
+[[ $start_time =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:00Z$ ]] ||
+  { echo "ok: the metric read's start time '$start_time' is not rounded to a whole minute" >&2; exit 1; }
+start_epoch=$(date -u -d "$start_time" +%s)
+# Rounding up to the next whole minute only ever moves the start time later
+# than the moment the site came up, never earlier, so it is always at or
+# after this run's own start.
+((start_epoch >= before_ok_epoch && start_epoch <= before_ok_epoch + 120)) ||
+  { echo "ok: the metric read's start time is not close to the recorded site-up minute" >&2; exit 1; }
+logged_start=$(sed -nE 's/.*healthy minutes since ([0-9TZ:-]+)\).*/\1/p' "$work/ok.out" | head -n1)
+[[ $logged_start == "$start_time" ]] ||
+  { echo "ok: the logged wait start '$logged_start' does not match the metric call's start-time '$start_time'" >&2; exit 1; }
+
+# A local timezone must never change the metric read's UTC start time: it is
+# computed with TZ=UTC regardless of the caller's environment. The comparison
+# is against this run's own real-clock start, not the earlier "ok" run's
+# start time, so the check never flakes across a minute boundary between them.
+before_tz_epoch=$(date -u +%s)
+( export TZ=Asia/Ho_Chi_Minh; run_case ok_tz 0 v0.1.0 )
+f=$work/ok_tz.calls
+start_time_tz=$(sed -E 's/.*--start-time ([0-9TZ:-]+).*/\1/' < <(grep -m1 -F "cloudwatch get-metric-statistics" "$f"))
+[[ $start_time_tz =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:00Z$ ]] ||
+  { echo "ok_tz: the metric read's start time '$start_time_tz' is not UTC" >&2; exit 1; }
+logged_start_tz=$(sed -nE 's/.*healthy minutes since ([0-9TZ:-]+)\).*/\1/p' "$work/ok_tz.out" | head -n1)
+[[ $logged_start_tz == "$start_time_tz" ]] ||
+  { echo "ok_tz: the logged wait start does not match the metric call's start-time" >&2; exit 1; }
+start_epoch_tz=$(date -u -d "$start_time_tz" +%s)
+((start_epoch_tz >= before_tz_epoch && start_epoch_tz <= before_tz_epoch + 120)) ||
+  { echo "ok_tz: the metric read's start time is not close to this run's own site-up minute" >&2; exit 1; }
+
+# Both warm paths are requested through Cloudflare after the existing smoke
+# checks and before the site-down alarm wait, each in one attempt.
+f=$work/ok.calls
+before_re "$f" "https://aboutme\.vn/readyz" "$warm_danny_re"
+before_re "$f" "curl -fsSI https://aboutme\.vn/" "$warm_danny_re"
+before_re "$f" "$warm_danny_re" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json"
+before_re "$f" "$warm_home_re" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json"
+[[ $(count "$f" "https://aboutme.vn/danny") == 1 ]] || { echo "ok: want one warm attempt for /danny" >&2; exit 1; }
+
 # Existing disabled states must stay disabled and need no mutation.
 run_case alerts_initially_disabled 0 v0.1.0
 f=$work/alerts_initially_disabled.calls
@@ -133,6 +209,91 @@ absent "$f" "events disable-rule --name aboutme-prod-task-stopped"
 absent "$f" "events enable-rule --name aboutme-prod-task-stopped"
 absent "$f" "cloudwatch disable-alarm-actions --alarm-names aboutme-prod-site-down"
 absent "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+absent "$f" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json"
+absent "$f" "cloudwatch get-metric-statistics"
+
+# The alarm reads OK throughout, but Route 53 has not yet reported enough
+# healthy post-up minutes on the first polls; the actions come back only once
+# it has, and every poll is counted. DEPLOY_ALARM_WAIT is generous so a slow
+# runner's per-attempt overhead cannot hit the wall-clock deadline before the
+# 4th poll succeeds; the attempt count below still bounds it.
+DEPLOY_ALARM_WAIT=60 run_case alarm_ok_stale 0 v0.1.0
+f=$work/alarm_ok_stale.calls
+[[ $(count "$f" "cloudwatch get-metric-statistics") == 4 ]] ||
+  { echo "alarm_ok_stale: want 4 metric polls before the healthy count catches up" >&2; exit 1; }
+before "$f" "cloudwatch get-metric-statistics" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+
+# Healthy minutes count only at the newest end of the series: an unhealthy
+# newest minute after three healthy ones keeps the actions off. A generous
+# DEPLOY_ALARM_WAIT keeps a slow runner's per-attempt overhead from hitting
+# the wall-clock deadline before the 2nd poll succeeds.
+DEPLOY_ALARM_WAIT=60 run_case alarm_flap 0 v0.1.0
+f=$work/alarm_flap.calls
+[[ $(count "$f" "cloudwatch get-metric-statistics") == 2 ]] ||
+  { echo "alarm_flap: want a second metric poll after an unhealthy newest minute" >&2; exit 1; }
+before "$f" "cloudwatch get-metric-statistics" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+
+# The alarm itself still reads ALARM for the first polls (evaluating the
+# outage), then OK with a fully healthy metric; the actions come back only
+# after it turns OK. A generous DEPLOY_ALARM_WAIT keeps a slow runner's
+# per-attempt overhead from hitting the wall-clock deadline before the 3rd
+# poll turns OK.
+DEPLOY_ALARM_WAIT=60 run_case alarm_late_alarm 0 v0.1.0
+f=$work/alarm_late_alarm.calls
+[[ $(count "$f" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json") == 3 ]] ||
+  { echo "alarm_late_alarm: want 3 alarm-state polls before it turns OK" >&2; exit 1; }
+[[ $(count "$f" "cloudwatch get-metric-statistics") == 1 ]] ||
+  { echo "alarm_late_alarm: the metric should be read only once the alarm is OK" >&2; exit 1; }
+before "$f" "events enable-rule --name aboutme-prod-task-stopped" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json"
+
+# An alarm shape that no longer matches OpenTofu's definition (someone edited
+# it by hand) must never be treated as healthy, however long the wait runs.
+run_case alarm_shape_changed fail v0.1.0
+f=$work/alarm_shape_changed.calls
+absent "$f" "cloudwatch get-metric-statistics"
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "alarm_shape_changed: site-down actions were not re-enabled exactly once" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "alarm_shape_changed: lock was not released" >&2; exit 1; }
+grep -qF "unexpected alarm shape: LessThanOrEqualToThreshold/Minimum" "$work/alarm_shape_changed.out" ||
+  { echo "alarm_shape_changed: no shape-mismatch message" >&2; exit 1; }
+
+# A metric read that always fails must name its last error in the timeout
+# message, without ever failing the wait outright.
+run_case alarm_metric_error fail v0.1.0
+f=$work/alarm_metric_error.calls
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "alarm_metric_error: site-down actions were not re-enabled exactly once" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "alarm_metric_error: lock was not released" >&2; exit 1; }
+grep -qF "last read error: AccessDeniedException: user is not authorized to perform this action" \
+  "$work/alarm_metric_error.out" ||
+  { echo "alarm_metric_error: no last-read-error message" >&2; exit 1; }
+
+# Route 53 never reports enough healthy minutes: the deploy fails with the
+# timeout message, but the actions still come back once, the lock is still
+# released, and the app is never stopped a second time (a warm-up or alarm
+# timeout after phase=finished never triggers service recovery).
+run_case alarm_never_ok fail v0.1.0
+f=$work/alarm_never_ok.calls
+[[ $(count "$f" "$stop_app") == 1 ]] || { echo "alarm_never_ok: app was stopped again" >&2; exit 1; }
+absent "$f" "$prev_app_up"
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "alarm_never_ok: site-down actions were not re-enabled exactly once" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "alarm_never_ok: lock was not released" >&2; exit 1; }
+grep -qF "site-down alarm is 'OK' and Route 53 reported 1 of 4 healthy minutes since the site came up after 3 s; re-enabling its actions; check the site" \
+  "$work/alarm_never_ok.out" ||
+  { echo "alarm_never_ok: no timeout message" >&2; exit 1; }
+
+# A timed-out wait and a first enable-alarm-actions failure must not trigger a
+# second wait: on_exit's own cleanup retries only the enable call once the
+# wait already ran, and the operation lock still releases.
+run_case alarm_timeout_enable_retry fail v0.1.0
+f=$work/alarm_timeout_enable_retry.calls
+(($(count "$f" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json") <= 3)) ||
+  { echo "alarm_timeout_enable_retry: want at most 3 alarm-state polls, from a single wait" >&2; exit 1; }
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 2 ]] ||
+  { echo "alarm_timeout_enable_retry: the failed enable was not retried in cleanup" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "alarm_timeout_enable_retry: lock was not released" >&2; exit 1; }
 
 # An ambiguous or mismatched suppression response must restore what could have
 # changed and fail before the app is stopped.
@@ -250,6 +411,81 @@ grep -q "the origin answered a direct request" "$work/origin_open.out" || { echo
 run_case origin_unknown fail v0.1.0
 grep -q "smoke: could not resolve the origin address" "$work/origin_unknown.out" ||
   { echo "origin_unknown: no failure message" >&2; exit 1; }
+
+# A path that answers slow or with a 5xx on its first attempts, then fast and
+# 200, still succeeds; every attempt is counted.
+DEPLOY_WARM_ATTEMPTS=5 run_case warm_slow_then_fast 0 v0.1.0
+f=$work/warm_slow_then_fast.calls
+[[ $(count "$f" "https://aboutme.vn/danny") == 3 ]] ||
+  { echo "warm_slow_then_fast: want 3 warm attempts for /danny" >&2; exit 1; }
+grep -q "deployed v0.1.0" "$work/warm_slow_then_fast.out" ||
+  { echo "warm_slow_then_fast: deploy did not finish" >&2; exit 1; }
+
+# A path that never answers fast enough fails the deploy after the bounded
+# attempts, without touching service recovery: phase=finished by then, so a
+# warm-up failure never restores the previous app.
+DEPLOY_WARM_ATTEMPTS=3 run_case warm_never_fast fail v0.1.0
+f=$work/warm_never_fast.calls
+[[ $(count "$f" "https://aboutme.vn/danny") == 3 ]] ||
+  { echo "warm_never_fast: want exactly 3 warm attempts for /danny" >&2; exit 1; }
+absent "$f" "$prev_app_up"
+grep -qF "warm-up: /danny did not answer 200 within 3 s in 3 attempts (last: 200 in 5.0 s)" \
+  "$work/warm_never_fast.out" ||
+  { echo "warm_never_fast: no warm-up failure message" >&2; exit 1; }
+# A warm-up failure after the handoff finished still waits for the site-down
+# alarm's post-recovery health, the same bounded way a clean finish does,
+# before its actions come back; it does not re-enable them right away.
+grep -qF "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json" "$f" ||
+  { echo "warm_never_fast: the alarm wait did not run" >&2; exit 1; }
+grep -qF "cloudwatch get-metric-statistics" "$f" ||
+  { echo "warm_never_fast: the alarm metric read did not run" >&2; exit 1; }
+before "$f" "cloudwatch get-metric-statistics" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down"
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "warm_never_fast: site-down actions were not re-enabled exactly once" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "warm_never_fast: lock was not released" >&2; exit 1; }
+
+# A signal during the post-finish alarm wait skips the wait and restores at
+# once, instead of leaving the alarm suppressed until a bounded wait finishes.
+run_case alarm_signal_during_wait fail v0.1.0
+f=$work/alarm_signal_during_wait.calls
+absent "$f" "cloudwatch get-metric-statistics"
+grep -qF -- "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down" "$f" ||
+  { echo "alarm_signal_during_wait: site-down actions were not restored" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "alarm_signal_during_wait: lock was not released" >&2; exit 1; }
+
+# A signal during on_exit's own cleanup wait (a warm-up failure here, the same
+# as warm_never_fast) must stop that wait early too, instead of pushing the
+# operator to SIGKILL for up to DEPLOY_ALARM_WAIT seconds.
+DEPLOY_WARM_ATTEMPTS=3 run_case cleanup_wait_signal fail v0.1.0
+f=$work/cleanup_wait_signal.calls
+grep -qF "waiting up to 3 s for the site-down alarm before re-enabling its actions; press Ctrl-C to skip the wait" \
+  "$work/cleanup_wait_signal.out" ||
+  { echo "cleanup_wait_signal: no wait-start message" >&2; exit 1; }
+[[ $(count "$f" "cloudwatch describe-alarms --alarm-names aboutme-prod-site-down --output json") -lt 3 ]] ||
+  { echo "cleanup_wait_signal: the wait was not stopped by the signal" >&2; exit 1; }
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "cleanup_wait_signal: site-down actions were not re-enabled exactly once" >&2; exit 1; }
+grep -qF "REMOVE operation_id" "$f" || { echo "cleanup_wait_signal: lock was not released" >&2; exit 1; }
+grep -qF "skipping the site-down alarm wait; re-enabling its actions now" "$work/cleanup_wait_signal.out" ||
+  { echo "cleanup_wait_signal: no skip message" >&2; exit 1; }
+
+# A signal during cleanup that also kills the task-stopped rule's enable call
+# must not leave the rule disabled: cleanup retries it with signals ignored.
+DEPLOY_WARM_ATTEMPTS=3 run_case cleanup_rule_killed fail v0.1.0
+f=$work/cleanup_rule_killed.calls
+[[ $(count "$f" "events enable-rule --name aboutme-prod-task-stopped") == 2 ]] ||
+  { echo "cleanup_rule_killed: the killed rule enable was not retried" >&2; exit 1; }
+[[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
+  { echo "cleanup_rule_killed: site-down actions were not re-enabled exactly once" >&2; exit 1; }
+absent "$f" "cloudwatch get-metric-statistics"
+grep -qF "REMOVE operation_id" "$f" || { echo "cleanup_rule_killed: lock was not released" >&2; exit 1; }
+
+# A curl timeout on one attempt counts as a failed attempt, not a crash.
+run_case warm_timeout 0 v0.1.0
+f=$work/warm_timeout.calls
+[[ $(count "$f" "https://aboutme.vn/danny") == 2 ]] ||
+  { echo "warm_timeout: want the timed-out attempt plus one retry" >&2; exit 1; }
+grep -q "deployed v0.1.0" "$work/warm_timeout.out" || { echo "warm_timeout: deploy did not finish" >&2; exit 1; }
 
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
@@ -689,6 +925,46 @@ run_case fence_ci_fails fail v0.1.0
 f=$work/fence_ci_fails.calls
 absent "$f" "SET operation_id=:o, operation_kind=:k"
 absent "$f" "REMOVE operation_id"
+
+# The CI gate accepts only a green push run of ci.yml on main for the tag's
+# exact commit: not a workflow_dispatch run, an older run hidden behind a
+# newer unrelated run, a run on another branch, a run for a different commit,
+# or a run still in progress.
+grep -qF -- "--event push --branch main" "$f" ||
+  { echo "fence_ci_fails: gh run list did not filter by push event and main branch" >&2; exit 1; }
+
+run_case ci_dispatch_only fail v0.1.0
+f=$work/ci_dispatch_only.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs register-task-definition"
+grep -qF "no successful push run of ci.yml on main for v0.1.0" "$work/ci_dispatch_only.out" ||
+  { echo "ci_dispatch_only: no CI-gate message" >&2; exit 1; }
+grep -qF "latest: 'none'" "$work/ci_dispatch_only.out" ||
+  { echo "ci_dispatch_only: a dispatch-only run was not treated as none" >&2; exit 1; }
+
+run_case ci_dispatch_newer fail v0.1.0
+f=$work/ci_dispatch_newer.calls
+absent "$f" "ecs register-task-definition"
+grep -qF "latest: 'failure'" "$work/ci_dispatch_newer.out" ||
+  { echo "ci_dispatch_newer: did not report the older push run's own conclusion" >&2; exit 1; }
+
+run_case ci_push_other_branch fail v0.1.0
+f=$work/ci_push_other_branch.calls
+absent "$f" "ecs register-task-definition"
+grep -qF "latest: 'none'" "$work/ci_push_other_branch.out" ||
+  { echo "ci_push_other_branch: a run on another branch was not treated as none" >&2; exit 1; }
+
+run_case ci_wrong_sha fail v0.1.0
+f=$work/ci_wrong_sha.calls
+absent "$f" "ecs register-task-definition"
+grep -qF "latest: 'none'" "$work/ci_wrong_sha.out" ||
+  { echo "ci_wrong_sha: a run for a different commit was not treated as none" >&2; exit 1; }
+
+run_case ci_push_in_progress fail v0.1.0
+f=$work/ci_push_in_progress.calls
+absent "$f" "ecs register-task-definition"
+grep -qF "latest: 'in_progress'" "$work/ci_push_in_progress.out" ||
+  { echo "ci_push_in_progress: an in-progress run's own status was not reported" >&2; exit 1; }
 
 # An early verify_role failure, well before on_exit's full trap replaces the
 # minimal one installed right after mktemp, must still not leave deploy.sh's
