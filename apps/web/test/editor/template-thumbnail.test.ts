@@ -48,7 +48,7 @@ describe('TemplateThumbnail', () => {
     observers[0]!.callback([{ isIntersecting: true }]);
     await nextTick();
     expect(wrapper.get('[data-template-thumbnail-render]').text()).toContain(
-      'Ada Lovelace',
+      'Danny',
     );
 
     observers[0]!.callback([{ isIntersecting: false }]);
