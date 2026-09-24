@@ -408,6 +408,11 @@ async function removeEveryFactor(
   recoveryCode: string,
 ): Promise<boolean> {
   try {
+    // Leave the app page first. The previous step may have just landed on a
+    // signed-in page whose startup reads (`/me`, then the resume list) are
+    // still running; clearing cookies under it turns the next read into a
+    // 401 that the page logs as a console error.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     const outcome = await passwordSignIn(page, account);
     if (outcome === 'pending') {

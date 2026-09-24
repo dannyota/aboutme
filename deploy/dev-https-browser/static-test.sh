@@ -541,8 +541,8 @@ fi
 # it assembled from fixed words: no message, URL, body, or account value, and
 # nothing outside the vocabulary the runner's own grep accepts.
 readonly SECOND_FACTOR_SPEC=$SOURCE/second-factor.spec.ts
-[ "$(grep -c 'console\.log(' "$SECOND_FACTOR_SPEC")" = 3 ] ||
-  fail 'second-factor proof does not print exactly its three fixed lines'
+[ "$(grep -c 'console\.log(' "$SECOND_FACTOR_SPEC")" = 4 ] ||
+  fail 'second-factor proof does not print exactly its four fixed lines'
 while IFS= read -r template; do
   grep -Fq "$template" "$SECOND_FACTOR_SPEC" ||
     fail 'second-factor proof line drifted from its fixed template'
@@ -550,12 +550,15 @@ done <<'TEMPLATES'
 `${MODE}-stage:${name}`
 `${MODE}-stage:cleanup-after-${recordedStage}`
 `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
+`${MODE}-stage:${recordedStage}`
+= `console-unexpected-${unexpectedConsole.slice(0, 2).join('-')}`;
 TEMPLATES
 if grep -nE 'console\.log\([^`]*(error|message|url|token|email|password)' \
   "$SECOND_FACTOR_SPEC"; then
   fail 'second-factor proof logs a value instead of a fixed word'
 fi
-[ "$(grep -c 'recordedStage = ' "$SECOND_FACTOR_SPEC")" = 3 ] ||
+[ "$(grep -c 'recordedStage = ' "$SECOND_FACTOR_SPEC")" = 3 ] &&
+  [ "$(grep -c '^    = `console-unexpected-' "$SECOND_FACTOR_SPEC")" = 1 ] ||
   fail 'second-factor proof records its stage from an unexpected source'
 grep -Fq 'let recordedStage = ' "$SECOND_FACTOR_SPEC" ||
   fail 'second-factor proof lost its recorded stage'
