@@ -8,6 +8,96 @@ import {
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+export interface CspViolation {
+  readonly blockedURI: string;
+  readonly effectiveDirective: string;
+}
+
+export interface CspProbe {
+  readonly violations: () => Promise<readonly CspViolation[]>;
+  readonly consoleErrors: readonly string[];
+  readonly pageErrors: readonly string[];
+}
+
+/**
+ * Installs listeners a CSP regression would trip: a real
+ * `securitypolicyviolation` event, a console error, or an uncaught page
+ * error. Call before the first `page.goto`, since `addInitScript` only
+ * applies to documents created after it runs.
+ */
+export async function trackCsp(page: Page): Promise<CspProbe> {
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.addInitScript(() => {
+    const violations: CspViolation[] = [];
+    Object.defineProperty(window, '__cspViolations', { value: violations });
+    document.addEventListener('securitypolicyviolation', (event) => {
+      violations.push({
+        blockedURI: event.blockedURI,
+        effectiveDirective: event.effectiveDirective,
+      });
+    });
+  });
+  return {
+    violations: () => page.evaluate(() =>
+      (window as Window & { __cspViolations?: CspViolation[] })
+        .__cspViolations ?? []),
+    consoleErrors,
+    pageErrors,
+  };
+}
+
+/** Asserts a tracked page raised no CSP violation, error, or console error. */
+export async function expectCspClean(probe: CspProbe): Promise<void> {
+  expect(await probe.violations()).toEqual([]);
+  expect(probe.consoleErrors).toEqual([]);
+  expect(probe.pageErrors).toEqual([]);
+}
+
+/**
+ * Fakes a signed-in `GET /api/v1/me` and `GET /api/v1/capabilities` for an
+ * `/app/**` page in this build's live-backend-free "normal" e2e surface.
+ * Every optional capability defaults closed, matching how a real deployment
+ * degrades on a missing or malformed field
+ * (app/composables/useCapabilities.ts).
+ */
+export async function mockSignedInSession(
+  page: Page,
+  capabilities: Record<string, unknown> = {},
+): Promise<void> {
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          user: {
+            id: 'csp-user',
+            email: 'csp@example.invalid',
+            name: 'CSP User',
+            avatarKey: null,
+            hasPassword: true,
+          },
+          csrfToken: 'csp-test-token',
+          identities: [],
+        },
+      },
+    });
+  });
+  await page.route('**/api/v1/capabilities', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { providerLogin: false, agentAccess: false, ...capabilities },
+      }),
+    });
+  });
+}
+
 export async function denyExternalRequests(page: Page): Promise<string[]> {
   const attempted: string[] = [];
   await page.route('**/*', async (route) => {

@@ -1,66 +1,137 @@
 import { expect, test } from '@playwright/test';
 import { CURRENT_VERSION } from '@aboutme/schema/released';
+import { readFileSync } from 'node:fs';
+import { resolve as resolvePath } from 'node:path';
 
-import { HTML_CSP } from '../app/utils/csp';
-import { denyExternalRequests } from './support';
+import { APP_CSP } from '../app/utils/csp';
+import {
+  jsonLdScriptContent,
+  scriptHashSource,
+  withScriptSource,
+} from '../server/utils/cspHash';
+import {
+  denyExternalRequests,
+  expectCspClean,
+  mockSignedInSession,
+  trackCsp,
+} from './support';
 
-test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
-  const dialogs: string[] = [];
-  const errors: string[] = [];
-  const pageErrors: string[] = [];
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text());
-  });
-  page.on('dialog', async (dialog) => {
-    dialogs.push(`${dialog.type()}:${dialog.message()}`);
-    await dialog.dismiss();
-  });
-  page.on('pageerror', (error) => pageErrors.push(error.message));
-  await page.addInitScript(() => {
-    const violations: object[] = [];
-    Object.defineProperty(window, '__cspViolations', { value: violations });
-    document.addEventListener('securitypolicyviolation', (event) => {
-      violations.push({
-        blockedURI: event.blockedURI,
-        effectiveDirective: event.effectiveDirective,
-      });
-    });
-  });
+// A schema-current, photo-free sample document (part of the reviewed e2e
+// source set; packages/schema/samples), used as the editor test's mocked
+// resume body. The client validates it itself on read
+// (app/editor/resumeApi.ts's parseAcceptedResponse), so this file need not
+// duplicate that validation.
+const sampleDocument: unknown = JSON.parse(
+  readFileSync(
+    resolvePath(
+      import.meta.dirname,
+      '../../../packages/schema/samples/ats-plain.en.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Matches app/editor/types.ts's ResumeMetadata; the wire shape
+// app/editor/resumeApi.ts's read() expects nested under `document` and
+// `revision` (app/editor/resumeApiParsing.ts's parseSummary).
+const sampleMetadata = {
+  id: 'resume-1',
+  title: 'Fixture',
+  lng: 'en',
+  live: false,
+  downloadEnabled: false,
+  seoGeoEnabled: false,
+  slug: null,
+  publicTitle: null,
+  faviconEmoji: null,
+  schemaVersion: CURRENT_VERSION,
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+};
+
+// Every Nuxt-rendered page in the production build sends the app-page CSP
+// (nuxt.config.ts routeRules) and never x-powered-by
+// (server/plugins/security-headers.ts), and no real interaction on any of
+// them trips a CSP violation. docs/design/security.md and the CSP itself
+// (app/utils/csp.ts) own the policy this proves.
+
+/** The CSP header a page with no inline script sends: APP_CSP unchanged. */
+function expectPlainAppCsp(headers: Record<string, string>): void {
+  expect(headers['content-security-policy']).toBe(APP_CSP);
+  expect(headers['x-powered-by']).toBeUndefined();
+}
+
+/**
+ * The CSP header a page with one inline JSON-LD script sends: APP_CSP with
+ * that exact script's own hash added to script-src, computed the same way
+ * server/plugins/security-headers.ts computes it.
+ */
+async function expectHashedAppCsp(
+  headers: Record<string, string>,
+  html: string,
+): Promise<void> {
+  const content = jsonLdScriptContent(html);
+  expect(content).not.toBeNull();
+  const expected = withScriptSource(
+    APP_CSP,
+    scriptHashSource(content as string),
+  );
+  expect(headers['content-security-policy']).toBe(expected);
+  expect(headers['x-powered-by']).toBeUndefined();
+}
+
+test('homepage sends the app CSP with its JSON-LD script hashed', async ({
+  page,
+}) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+
+  const response = await page.goto('/');
+  expect(response?.status()).toBe(200);
+  await expectHashedAppCsp(response!.headers(), await response!.text());
+  await expect(page.getByTestId('landing')).toBeVisible();
+
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
+test('a template page sends the app CSP with its JSON-LD script hashed', async ({
+  page,
+}) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+
+  const response = await page.goto('/templates/engineer-compact');
+  expect(response?.status()).toBe(200);
+  await expectHashedAppCsp(response!.headers(), await response!.text());
+  await expect(page.locator('.template-detail__info h1')).toBeVisible();
+
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
+test('the login page sends the plain app CSP', async ({ page }) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+
+  const response = await page.goto('/login');
+  expect(response?.status()).toBe(200);
+  expectPlainAppCsp(response!.headers());
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
+test('normal Nuxt output hydrates under the app CSP', async ({ page }) => {
+  const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
   await page.context().addCookies([{
     name: 'aboutme-locale',
     value: 'en',
     url: 'http://127.0.0.1:20092',
   }]);
-  await page.route('/api/v1/me', async (route) => {
-    expect(route.request().method()).toBe('GET');
-    await route.fulfill({
-      status: 200,
-      json: {
-        data: {
-          user: {
-            id: 'csp-user',
-            email: 'csp@example.invalid',
-            name: 'CSP User',
-            avatarKey: null,
-            hasPassword: true,
-          },
-          csrfToken: 'csp-test-token',
-          identities: [],
-        },
-      },
-    });
-  });
-  await page.route('/api/v1/capabilities', async (route) => {
-    expect(route.request().method()).toBe('GET');
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: { providerLogin: false, agentAccess: false },
-      }),
-    });
-  });
+  await mockSignedInSession(page);
   await page.route('**/api/v1/resumes', async (route) => {
     await route.fulfill({
       headers: {
@@ -70,19 +141,10 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
       json: { data: [] },
     });
   });
-  await page.route('**/app/resumes', async (route) => {
-    const upstream = await route.fetch({ maxRedirects: 0, maxRetries: 0 });
-    await route.fulfill({
-      response: upstream,
-      headers: {
-        ...upstream.headers(),
-        'content-security-policy': HTML_CSP,
-      },
-    });
-  });
 
   const response = await page.goto('/app/resumes');
-  expect(response?.headers()['content-security-policy']).toBe(HTML_CSP);
+  expect(response?.status()).toBe(200);
+  expectPlainAppCsp(response!.headers());
   await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
   await expect.poll(() => page.evaluate(() =>
     Boolean((document.getElementById('__nuxt') as HTMLElement & {
@@ -103,12 +165,79 @@ test('normal Nuxt output hydrates under the renderer CSP', async ({ page }) => {
     page.getByRole('dialog', { name: 'Create resume' }),
   ).toBeVisible();
 
-  const violations = await page.evaluate(() =>
-    (window as Window & { __cspViolations?: unknown[] }).__cspViolations ?? [],
-  );
-  expect(violations).toEqual([]);
-  expect(dialogs).toEqual([]);
-  expect(errors).toEqual([]);
-  expect(pageErrors).toEqual([]);
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
+test('the editor sends the plain app CSP and hydrates cleanly', async ({
+  page,
+}) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/events', async (route) => {
+    await route.abort();
+  });
+  await page.route('**/api/v1/resumes/resume-1', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-transform',
+        'ETag': '"r1"',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: {
+        data: {
+          ...sampleMetadata,
+          revision: '1',
+          document: sampleDocument,
+        },
+      },
+    });
+  });
+
+  const response = await page.goto('/app/resumes/resume-1');
+  expect(response?.status()).toBe(200);
+  expectPlainAppCsp(response!.headers());
+  await expect(page.getByTestId('save-status')).toBeVisible();
+
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
+test('settings sends the plain app CSP and hydrates cleanly', async ({
+  page,
+}) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/sessions', async (route) => {
+    await route.fulfill({ status: 200, json: { data: [] } });
+  });
+  await page.route('**/api/v1/me/second-factor', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          enabled: false,
+          passkeys: [],
+          totpEnabled: false,
+          recoveryCodesRemaining: 0,
+        },
+      },
+    });
+  });
+
+  const response = await page.goto('/app/settings/sessions');
+  expect(response?.status()).toBe(200);
+  expectPlainAppCsp(response!.headers());
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+  await expectCspClean(probe);
   expect(external).toEqual([]);
 });
