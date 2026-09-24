@@ -84,7 +84,7 @@ setup_ci_fixture() {
   local repo=$1 fake_bin=$2 calls=$3
 
   mkdir -p "$repo/scripts" "$repo/apps/server" \
-    "$repo/packages/schema/gen/go" "$fake_bin"
+    "$repo/packages/schema/gen/go" "$repo/deploy/caddy/production/build" "$fake_bin"
   cp "$ROOT/scripts/ci.sh" "$repo/scripts/ci.sh"
   cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
   : >"$repo/apps/server/go.mod"
