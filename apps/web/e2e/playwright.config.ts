@@ -81,6 +81,7 @@ export default defineConfig({
         'print.spec.ts',
         'samples.spec.ts',
         'sample-pages.spec.ts',
+        'preview-gap.spec.ts',
       ]
     : ['normal-csp.spec.ts', 'gallery.spec.ts'],
   timeout: 20_000,

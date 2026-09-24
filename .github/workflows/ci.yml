@@ -189,6 +189,13 @@ jobs:
           test -z "${UPDATE_GOLDEN+x}"
           test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
           make web-e2e
+      - name: Upload preview gap report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preview-gap-report
+          path: .dev/web-e2e-results/*/*/compare/harness/preview-gap-report.json
+          if-no-files-found: warn
 
   # Runs the synthetic passkey and recovery journey against the exact
   # candidate through the repository HTTPS harness. This is the only hosted

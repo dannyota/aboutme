@@ -1,0 +1,286 @@
+{
+  "version": 1,
+  "note": "Word-level drift ceilings per sample|lng|engine|zoom key, generated from a hosted CI run of preview-gap.spec.ts. A null metric is unenforced: the check reports the count but never fails on it. Every key here is currently null (no CI run has filled it in yet), so this file enforces nothing until it is regenerated from real evidence. Tighten a metric only to a value at or above what CI observed; do not guess.",
+  "cases": {
+    "ats-plain|en|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|en|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|en|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|en|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|vi|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|vi|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|vi|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "ats-plain|vi|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|en|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|en|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|en|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|en|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|vi|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|vi|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|vi|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "engineer-compact|vi|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|en|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|en|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|en|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|en|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|vi|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|vi|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|vi|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "executive-band|vi|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|en|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|en|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|en|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|en|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|vi|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|vi|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|vi|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "graduate-friendly|vi|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|en|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|en|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|en|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|en|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|vi|chromium-normal|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|vi|chromium-normal|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|vi|webkit|typical": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    },
+    "modern-sidebar|vi|webkit|full": {
+      "maxLineBreak": null,
+      "maxPageBreak": null,
+      "maxMissing": null,
+      "maxExtra": null,
+      "maxEntryPageMismatches": null
+    }
+  }
+}

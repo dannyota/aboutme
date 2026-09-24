@@ -431,6 +431,8 @@ apps/web/e2e/fonts-offline.spec.ts
 apps/web/e2e/gallery.spec.ts
 apps/web/e2e/normal-csp.spec.ts
 apps/web/e2e/playwright.config.ts
+apps/web/e2e/preview-gap-expected.json
+apps/web/e2e/preview-gap.spec.ts
 apps/web/e2e/print-baselines/print-main-overflow-p1.png
 apps/web/e2e/print-baselines/print-main-overflow-p2.png
 apps/web/e2e/print-baselines/print-sidebar-overflow-p1.png
