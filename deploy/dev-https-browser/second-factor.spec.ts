@@ -117,6 +117,14 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   // The revoked agent grant's tool call.
   ['/mcp', [401]],
 ]);
+// Startup reads of the app pages the journey lands on, named apart so a 401
+// says which page was still loading.
+const NAMED_API_READS: ReadonlyMap<string, string> = new Map([
+  ['/api/v1/resumes', 'resumes'],
+  ['/api/v1/sessions', 'sessions'],
+  ['/api/v1/me/agents', 'agents'],
+]);
+
 const REMOVAL_PATH = /^\/api\/v1\/me\/second-factor\/passkeys\/[^/]+$/u;
 
 // --- Failure reporting ------------------------------------------------------
@@ -385,22 +393,59 @@ async function watchingCallback(
   }
 }
 
+// Closed words for each unexpected console error, each prefixed with the
+// stage it happened in, so a failure names where and what without printing
+// the message or its URL.
+const unexpectedConsole: string[] = [];
+
 function isUnexpectedSecondFactorConsole(message: ConsoleMessage): boolean {
+  const unexpected = classifySecondFactorConsole(message);
+  if (unexpected !== null) {
+    // Teardown stops recording stages, so mark its errors apart from the
+    // journey stage they would otherwise inherit.
+    const where = tearingDown ? `teardown-${recordedStage}` : recordedStage;
+    unexpectedConsole.push(`${where}-${unexpected}`);
+  }
+  return unexpected !== null;
+}
+
+function classifySecondFactorConsole(message: ConsoleMessage): string | null {
   const text = message.text();
   const location = message.location().url;
-  if (isExpectedNegativeHTTPConsole(text, location)) return false;
+  if (isExpectedNegativeHTTPConsole(text, location)) return null;
   const status = httpFailureStatus(text);
-  if (status === null) return true;
+  if (status === null) return 'nonhttp';
   let url: URL;
   try {
     url = new URL(location);
   } catch {
-    return true;
+    return 'nonhttp';
   }
-  if (url.origin !== ORIGIN) return true;
+  if (url.origin !== ORIGIN) return `offorigin-${status}`;
   const allowed = EXPECTED_PAGE_FAILURES.get(url.pathname)
     ?? (REMOVAL_PATH.test(url.pathname) ? [404] : undefined);
-  return allowed === undefined || !allowed.includes(status);
+  if (allowed !== undefined && allowed.includes(status)) return null;
+  const index = [...EXPECTED_PAGE_FAILURES.keys()].indexOf(url.pathname);
+  const path = index >= 0 ? `path${index}`
+    : REMOVAL_PATH.test(url.pathname) ? 'removal'
+      : NAMED_API_READS.get(url.pathname)
+        ?? (url.pathname.startsWith('/api/') ? 'api'
+          : url.pathname.startsWith('/_nuxt/') ? 'asset' : 'other');
+  return `${path}-${status}`;
+}
+
+/**
+ * Fails a completed journey whose page logged an unexpected error, naming
+ * the first two in closed words so the hosted log shows them. The evidence
+ * check would reject the run anyway, but only by count.
+ */
+function failOnUnexpectedConsole(journeyDone: boolean): void {
+  if (!journeyDone || unexpectedConsole.length === 0) return;
+  // Teardown has begun, so stage() is silent; record the words directly.
+  recordedStage
+    = `console-unexpected-${unexpectedConsole.slice(0, 2).join('-')}`;
+  console.log(`${MODE}-stage:${recordedStage}`);
+  throw new Error('the page logged unexpected console errors');
 }
 
 // --- Fictional run identity -----------------------------------------------
@@ -1683,6 +1728,13 @@ test('proves the passkey second factor over native HTTPS', async ({
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
+    // The completion step of the active shard's last role, or
+    // attemptsExhausted on the unsharded default.
+    const journeyDone = ACTIVE_ROLES === null || ACTIVE_ROLES.has('attempts')
+      ? steps.attemptsExhausted
+      : ACTIVE_ROLES.has('recovery') ? steps.recoveryCompletion
+        : steps.finalRemoved;
+    failOnUnexpectedConsole(journeyDone);
   }
 });
 
@@ -2136,6 +2188,11 @@ async function deleteAccount(
     if (account.authenticatorId !== '') {
       await pool.present(account.authenticatorId);
     }
+    // Leave the app page first. The previous step may have just landed on a
+    // signed-in page whose startup reads (`/me`, then the resume list) are
+    // still running; clearing cookies under it turns the next read into a
+    // 401 that the page logs as a console error.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await setLocale(page.context(), 'en');
     const outcome = await passwordSignIn(page, account.email, account.password);

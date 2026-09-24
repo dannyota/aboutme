@@ -178,20 +178,15 @@ export async function verifyScreenshot(
   testInfo: TestInfo,
   locator?: Locator,
 ): Promise<void> {
+  const options = {
+    animations: 'disabled',
+    caret: 'hide',
+    scale: 'css',
+    type: 'png',
+  } as const;
   const bytes = locator === undefined
-    ? await page.screenshot({
-      animations: 'disabled',
-      caret: 'hide',
-      fullPage: true,
-      scale: 'css',
-      type: 'png',
-    })
-    : await locator.screenshot({
-      animations: 'disabled',
-      caret: 'hide',
-      scale: 'css',
-      type: 'png',
-    });
+    ? await page.screenshot({ ...options, fullPage: true })
+    : await locator.screenshot(options);
   await writeFile(testInfo.outputPath(filename), bytes);
   if (testInfo.config.updateSnapshots !== 'none') {
     const root = process.env.PLAYWRIGHT_RESULTS_DIR;
