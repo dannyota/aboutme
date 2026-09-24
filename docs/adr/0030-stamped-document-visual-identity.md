@@ -1,6 +1,7 @@
 # 0030: Stamped-document visual identity for the application chrome
 
-Status: Accepted (2026-09-04)
+Status: Accepted (2026-09-04). Superseded in part by
+[ADR 0050](0050-aurora-application-identity.md).
 
 Amends [ADR 0029](0029-application-ui-toolkit.md), whose decision text keeps
 "the existing zinc and emerald values", and the "Application UI" section of the
