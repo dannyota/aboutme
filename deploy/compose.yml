@@ -13,7 +13,8 @@
 #   podman compose --env-file .env -f deploy/compose.yml up -d --build
 #   podman compose --env-file .env -f deploy/compose.yml down
 #
-# All images are pinned to exact version tags (no floating :latest).
+# All images are pinned to an exact version tag or digest (no floating
+# :latest).
 # Third-party images are fully qualified (docker.io/library/...) to avoid
 # short-name ambiguity. Locally-built images are qualified `localhost/...`
 # so a stale/missing local tag can never be silently satisfied by pulling an
@@ -130,33 +131,53 @@ services:
       - db
 
   media:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # MinIO stopped publishing the community edition to Docker Hub and
+    # quay.io (both now answer unauthorized for every tag, including
+    # :latest); these are Chainguard's images, built from the same upstream
+    # MinIO/mc source, so the S3 API — including If-None-Match conditional
+    # writes and ListObjectsV2 paging — matches unchanged. Pinned by digest
+    # for both amd64 and arm64.
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     restart: unless-stopped
     command: ["server", "/data"]
+    # The image's default non-root UID (65532) cannot take ownership of a
+    # freshly created named volume: Podman's per-mount ":U" ownership fix-up
+    # is not reliably applied when it comes from a Compose file (podman/podman
+    # issue #16477, podman-compose issue #376), and unlike the ephemeral test
+    # container in scripts/test-s3.sh, this service always has media-data
+    # mounted over /data, which shadows the image's own pre-created
+    # world-writable data directory. Running as root is the same fix a prior
+    # MinIO-to-Chainguard migration used for this exact case.
+    user: "0:0"
     environment:
       MINIO_ROOT_USER: ${MEDIA_ACCESS_KEY_ID:?MEDIA_ACCESS_KEY_ID is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       MINIO_ROOT_PASSWORD: ${MEDIA_SECRET_ACCESS_KEY:?MEDIA_SECRET_ACCESS_KEY is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
     volumes:
       - media-data:/data
     healthcheck:
+      # The image has no curl/wget; probe with bash's /dev/tcp instead (a
+      # real HTTP/1.0 request, not just a TCP connect, since the socket
+      # accepts a connection immediately but the health endpoint answers
+      # 200 only once minio is actually ready).
       test:
-        [
-          "CMD",
-          "curl",
-          "--fail",
-          "--silent",
-          "http://127.0.0.1:9000/minio/health/ready",
-        ]
+        - CMD-SHELL
+        - >-
+          bash -ec 'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET
+          /minio/health/ready HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n" >&3; read
+          -t 4 -r line <&3; case "$$line" in *" 200 "*) exit 0;; *) exit
+          1;; esac'
       interval: 5s
-      timeout: 3s
+      timeout: 5s
       retries: 12
       start_period: 5s
     networks:
       - media
 
   media-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
-    entrypoint: ["/bin/sh", "-c"]
+    # Same Chainguard source and digest rationale as `media` above.
+    image: cgr.dev/chainguard/minio-client@sha256:b8b144ab34694ecea25aa352c4be9de4c26ee2a02701521dce02ee5593c57338
+    # The image has no /bin/sh; bash is present.
+    entrypoint: ["/usr/bin/bash", "-c"]
     command:
       - >-
         mc alias set local http://media:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" >/dev/null &&
@@ -170,6 +191,10 @@ services:
       MINIO_ROOT_USER: ${MEDIA_ACCESS_KEY_ID:?MEDIA_ACCESS_KEY_ID is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       MINIO_ROOT_PASSWORD: ${MEDIA_SECRET_ACCESS_KEY:?MEDIA_SECRET_ACCESS_KEY is required — copy .env.example to .env, set it, then re-run (see deploy/README.md)}
       MEDIA_BUCKET: ${MEDIA_BUCKET:-aboutme-media}
+      # The image runs as a fixed non-root UID with no home directory entry,
+      # so mc's default $HOME/.mc config path cannot be resolved; /tmp is
+      # writable regardless of UID.
+      MC_CONFIG_DIR: /tmp/.mc
     healthcheck:
       disable: true
     networks:
