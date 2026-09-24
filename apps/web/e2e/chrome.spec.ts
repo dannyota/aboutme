@@ -58,6 +58,11 @@ for (const page of PAGES) {
             browserPage.locator('[data-sheet-thumbnail-render]'),
           ).toHaveCount(page.thumbnails);
           await waitForImages(browserPage);
+          // Thumbnails measure their width after mounting; let two frames
+          // pass so every zoom has settled before the capture.
+          await browserPage.evaluate(() => new Promise<void>((done) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => done()));
+          }));
         }
 
         await verifyScreenshot(
