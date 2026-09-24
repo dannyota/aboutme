@@ -308,6 +308,13 @@ export default defineNuxtConfig({
 
   experimental: {
     entryImportMap: false,
+    // Links prefetch their route chunk on hover, focus, or touch, not on
+    // sight: the homepage and header show many links above the fold, and
+    // visibility prefetch fetched every target on first paint
+    // (docs/design/web.md).
+    defaults: {
+      nuxtLink: { prefetchOn: { visibility: false, interaction: true } },
+    },
   },
   compatibilityDate: '2026-08-01',
 

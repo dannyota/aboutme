@@ -169,3 +169,15 @@ describe('the chrome font preload', () => {
       expect(htmlAttrsBlock, 'data-ui gated on isAppSurface').toBeDefined();
     });
 });
+
+describe('link prefetch', () => {
+  it('prefetches route chunks on interaction, not on sight', () => {
+    const config = readFileSync(
+      join(here, '../nuxt.config.ts'),
+      'utf8',
+    );
+    expect(config).toMatch(
+      /nuxtLink: \{ prefetchOn: \{ visibility: false, interaction: true \} \}/u,
+    );
+  });
+});
