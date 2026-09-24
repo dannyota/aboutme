@@ -339,8 +339,6 @@ useHead(computed(() => ({
         <li
           v-for="entry in SHOWCASE"
           :key="entry.id"
-          class="transition-transform duration-200 hover:-translate-y-1
-            motion-reduce:hover:translate-y-0"
         >
           <TemplateCard
             :illustrative="gallery.illustrative"

@@ -49,11 +49,28 @@ const lightTokens = {
   '--surface-blue': '#eaf2ff',
   '--surface-indigo': '#f0eeff',
   '--surface-pink': '#fff0fa',
+  '--editor-canvas': '#eef3fc',
+  '--primary-hover': '#1550d4',
+  '--shadow-primary':
+    '0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(26 92 235 / 0.2)',
+  '--paper': '#ffffff',
+  '--paper-ink': '#171a18',
+  '--paper-muted': '#5f6763',
+  '--paper-hover': '#f0f2f1',
   '--shadow-paper':
     '0 1px 2px rgba(23,26,24,0.06),0 12px 32px rgba(23,26,24,0.1)',
   '--gradient-brand-strong': 'linear-gradient(90deg,#1a5ceb,#5144f0)',
   '--shadow-cta': '0 8px 24px rgb(36 107 253 / 0.28)',
 } as const;
+
+// The paper tokens are defined in :root only (section 1); they never enter
+// the dark block, so the sheet keeps one white value in both themes.
+const paperOnlyTokens = [
+  '--paper',
+  '--paper-ink',
+  '--paper-muted',
+  '--paper-hover',
+] as const;
 
 const darkTokens = {
   '--radius': '10px',
@@ -91,6 +108,9 @@ const darkTokens = {
   '--surface-blue': '#10224a',
   '--surface-indigo': '#1a1a4a',
   '--surface-pink': '#2a1533',
+  '--editor-canvas': '#071126',
+  '--primary-hover': '#8fb3ff',
+  '--shadow-primary': '0 1px 2px rgb(0 0 0 / 0.4)',
   '--shadow-paper': '0 1px 2px rgba(0,0,0,0.4),0 12px 32px rgba(0,0,0,0.5)',
   '--gradient-brand-strong': 'linear-gradient(90deg,#8fb3ff,#a39bff)',
   '--shadow-cta': '0 8px 24px rgb(114 160 255 / 0.22)',
@@ -107,9 +127,11 @@ describe('application theme', () => {
     expect(blockDeclarations(css, ':root')).toMatchObject(
       normalizedValues(lightTokens),
     );
-    expect(blockDeclarations(css, 'html[data-theme="dark"]')).toMatchObject(
-      normalizedValues(darkTokens),
-    );
+    const dark = blockDeclarations(css, 'html[data-theme="dark"]');
+    expect(dark).toMatchObject(normalizedValues(darkTokens));
+    for (const token of paperOnlyTokens) {
+      expect(dark[token]).toBeUndefined();
+    }
     expect(css).not.toMatch(/--positive(?:-foreground)?\s*:/);
     expect(css).not.toMatch(/--chart-/);
   });
@@ -153,6 +175,12 @@ describe('application theme', () => {
         `var(--surface-${surface})`,
       );
     }
+    expect(theme['--color-editor-canvas']).toBe('var(--editor-canvas)');
+    expect(theme['--color-primary-hover']).toBe('var(--primary-hover)');
+    expect(theme['--color-paper']).toBe('var(--paper)');
+    expect(theme['--color-paper-ink']).toBe('var(--paper-ink)');
+    expect(theme['--color-paper-muted']).toBe('var(--paper-muted)');
+    expect(theme['--color-paper-hover']).toBe('var(--paper-hover)');
     expect(theme['--text-xs']).toBe('0.75rem');
     expect(theme['--text-sm']).toBe('0.8125rem');
     expect(theme['--text-base']).toBe('0.875rem');
@@ -175,7 +203,7 @@ describe('application theme', () => {
       expect(theme[`--text-${step}--line-height`]).toBe('1.2');
     }
     expect(theme['--radius-sm']).toBe('calc(var(--radius) - 4px)');
-    expect(theme['--radius-md']).toBe('calc(var(--radius) - 2px)');
+    expect(theme['--radius-md']).toBe('var(--radius)');
     expect(theme['--radius-lg']).toBe('var(--radius)');
     expect(theme['--radius-xl']).toBe('calc(var(--radius) + 4px)');
     expect(css).not.toContain('--shadow-paper: var(--shadow-paper)');
@@ -217,6 +245,21 @@ describe('application theme', () => {
       ).toContain('bg-seal text-seal-foreground hover:bg-seal/90');
     },
   );
+
+  it('scopes .paper-surface to the paper tokens, not the app palette', () => {
+    const css = readFileSync(themePath, 'utf8');
+    const scope = blockDeclarations(css, '.paper-surface');
+    const plain = plainDeclarations(css, '.paper-surface');
+
+    expect(scope['--foreground']).toBe('var(--paper-ink)');
+    expect(scope['--muted-foreground']).toBe('var(--paper-muted)');
+    expect(scope['--accent']).toBe('var(--paper-hover)');
+    expect(scope['--accent-foreground']).toBe('var(--paper-ink)');
+    expect(scope['--ring']).toBe('#1a5ceb');
+    expect(scope['--link']).toBe('#123edb');
+    expect(plain['background-color']).toBe('var(--paper)');
+    expect(plain['color']).toBe('var(--paper-ink)');
+  });
 
   it('has no retained utility consumer of removed palette tokens', () => {
     const consumers = sourceFiles(resolve(webRoot, 'app'))
@@ -271,6 +314,24 @@ function blockDeclarations(
   for (const match of css
     .slice(bodyStart, bodyEnd)
     .matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+    declarations[match[1]!] = normalize(match[2]!);
+  }
+  return declarations;
+}
+
+function plainDeclarations(
+  css: string,
+  selector: string,
+): Record<string, string> {
+  const start = css.indexOf(`${selector} {`);
+  expect(start, `missing ${selector} block`).toBeGreaterThanOrEqual(0);
+  const bodyStart = css.indexOf('{', start) + 1;
+  const bodyEnd = css.indexOf('}', bodyStart);
+  const declarations: Record<string, string> = {};
+
+  for (const match of css
+    .slice(bodyStart, bodyEnd)
+    .matchAll(/(?<!-)\b([a-z-]+)\s*:\s*([^;]+);/g)) {
     declarations[match[1]!] = normalize(match[2]!);
   }
   return declarations;

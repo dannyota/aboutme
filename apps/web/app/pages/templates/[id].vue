@@ -182,11 +182,11 @@ useHead(computed(() => ({
         </dl>
         <p
           v-if="template.columns === 2"
-          class="rounded-md border bg-background p-3 text-sm"
+          class="rounded-lg bg-surface-blue p-3 text-sm"
           data-two-column-note
         >
           {{ detail.twoColumnNote[0] }}<NuxtLink
-            class="text-primary underline underline-offset-4"
+            class="text-link underline underline-offset-4"
             to="/templates/ats-plain"
           >ATS Plain</NuxtLink>{{ detail.twoColumnNote[1] }}
         </p>
@@ -215,7 +215,7 @@ useHead(computed(() => ({
         </p>
         <NuxtLink
           v-if="isSample"
-          class="justify-self-start text-sm text-primary underline
+          class="justify-self-start text-sm text-link underline
             underline-offset-4"
           data-action="use-blank"
           :to="useBlankLink"
@@ -297,7 +297,7 @@ useHead(computed(() => ({
     z-index: 10;
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
-    background: var(--background);
+    background: var(--card);
   }
 }
 

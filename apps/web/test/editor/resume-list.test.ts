@@ -716,25 +716,26 @@ describe('useResumeList', () => {
         'mx-auto',
         'w-full',
         'max-w-7xl',
-        'px-6',
-        'py-8',
+        'px-4',
+        'py-10',
         'space-y-8',
       ]));
       const sheets = wrapper.findAll('[data-testid^="resume-row-"]');
       expect(sheets).toHaveLength(3);
       expect(sheets[0]!.classes()).toEqual(
         expect.arrayContaining([
-          'rounded-[var(--radius-dialog)]',
+          'paper-surface',
+          'rounded-[var(--radius-sheet)]',
           'shadow-[var(--shadow-paper)]',
         ]),
       );
-      expect(sheets[0]!.get('time').classes()).toContain('text-[#5f6763]');
+      expect(sheets[0]!.get('time').classes()).toContain('text-paper-muted');
       expect(sheets[0]!.get('time').classes()).not.toContain(
-        'text-muted-foreground',
+        'text-[#5f6763]',
       );
-      expect(sheets[0]!.get('[data-state-mark]').attributes('style')).toContain(
-        'color: #5f6763',
-      );
+      expect(
+        sheets[0]!.get('[data-state-mark]').attributes('style'),
+      ).toBeUndefined();
       expect(wrapper.findAll('[data-testid^="resume-slot-"]')).toHaveLength(0);
       expect(
         wrapper.get('[data-testid="create-resume"]').attributes('disabled'),
