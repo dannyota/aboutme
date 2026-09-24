@@ -78,8 +78,8 @@ const copy = computed(() => authCopy[locale.value]);
           data-auth-illustration
         >
           <div
-            class="pointer-events-none absolute -inset-8 -z-10
-              bg-(image:--gradient-hero-glow)"
+            class="pointer-events-none absolute -inset-8 -z-10 rounded-full
+              bg-(image:--gradient-hero-glow) blur-2xl"
           />
           <div
             class="grid aspect-[210/297] w-44 -rotate-3 content-start
