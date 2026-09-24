@@ -423,6 +423,17 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make web-no-eval-check
 
+  # Builds the production Caddy image (compiling Caddy from source) and runs
+  # its routing, origin-pull mTLS, client-IP trust, and maintenance-mode
+  # tests, so a broken build or a config regression fails here instead of
+  # first surfacing in release-images after a tag.
+  caddy-prod-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make caddy-prod-test
+
   # Runs server-test-integration and the DB-backed suites in server-test-db
   # against the primary postgres service, so this job's suites run at the
   # same time as server-resumeapi's rather than one after the other. The
@@ -1054,6 +1065,7 @@ jobs:
       - web-test
       - web-e2e
       - web-build
+      - caddy-prod-test
       - server-integration
       - server-resumeapi
       - passkey-browser-proof
