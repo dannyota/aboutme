@@ -35,8 +35,8 @@ Production moves to providers that store and process data in Vietnam:
   vMonitor.
 
 The current AWS stack stays as a test environment that holds fictional data
-only. After the rollback window, every copy of real data in AWS, Cloudflare, and
-Google Workspace is deleted. The
+only, with no domain of its own. Once the cutover is verified, every copy of
+real data in AWS, Cloudflare, and Google Workspace is deleted. The
 [Vietnam production design](../design/vietnam-production.md) states the rules
 and the migration order.
 
