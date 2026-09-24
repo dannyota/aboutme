@@ -8,11 +8,11 @@
     "docs:fmt": "prettier --write \"**/*.md\" \"!AGENTS.md\" \"!CLAUDE.md\" \"!instructions/**\" \"!docs/plans/**\" \"!.claude/**\" \"!.codex/**\" \"!.worktrees/**\" \"!apps/web/.nuxt/**\" \"!**/.terraform/**\" && markdownlint-cli2 --fix \"**/*.md\" \"#**/node_modules\" \"#.superpowers\" \"#.claude\" \"#.codex\" \"#AGENTS.md\" \"#CLAUDE.md\" \"#instructions\" \"#docs/plans\" \"#.worktrees\" \"#apps/web/public/font-licenses\" \"#apps/web/.nuxt\" \"#apps/web/.output\" \"#**/.terraform\""
   },
   "devDependencies": {
-    "@playwright/mcp": "0.0.78",
-    "@redocly/cli": "2.43.2",
-    "markdownlint-cli2": "0.23.2",
-    "prettier": "3.9.6",
-    "vitest": "4.1.10",
-    "yaml": "2.9.0"
+    "@playwright/mcp": "0.0.82",
+    "@redocly/cli": "2.54.2",
+    "markdownlint-cli2": "0.23.3",
+    "prettier": "3.9.9",
+    "vitest": "4.1.11",
+    "yaml": "2.9.1"
   }
 }
