@@ -2011,4 +2011,59 @@ grep -Fxq 'MODE=totp-disabled' "$BROWSER_LOG" ||
 [ -f "$INSIDE_EVIDENCE/totp-enrollment-disabled-proof.json" ] ||
   fail 'totp-disabled evidence filename drifted'
 
+# totp.spec.ts and check-totp-shard-coverage.mjs each keep their own copy of
+# the shard-to-role map (totp.spec.ts "Enabled-proof sharding"); a shard
+# added to one and not the other would let the coverage job pass without
+# proving it.
+spec_shard_roles=$(sed -n '/^const TOTP_SHARD_ROLES/,/^};/p' "$SOURCE/totp.spec.ts" \
+  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
+coverage_shard_roles=$(sed -n '/^const TOTP_SHARD_ROLES/,/^};/p' \
+  "$SOURCE/check-totp-shard-coverage.mjs" \
+  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
+[ -n "$spec_shard_roles" ] || fail 'could not find TOTP_SHARD_ROLES in totp.spec.ts'
+[ -n "$coverage_shard_roles" ] ||
+  fail 'could not find TOTP_SHARD_ROLES in check-totp-shard-coverage.mjs'
+[ "$spec_shard_roles" = "$coverage_shard_roles" ] ||
+  fail 'totp.spec.ts and check-totp-shard-coverage.mjs disagree on TOTP_SHARD_ROLES'
+
+# second-factor.spec.ts and check-passkey-shard-coverage.mjs each keep their
+# own copy of the shard-to-role map (second-factor.spec.ts "Enabled-proof
+# sharding"); a shard added to one and not the other would let the coverage
+# job pass without proving it.
+passkey_spec_shard_roles=$(sed -n '/^const PASSKEY_SHARD_ROLES/,/^};/p' \
+  "$SOURCE/second-factor.spec.ts" \
+  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
+passkey_coverage_shard_roles=$(sed -n '/^const PASSKEY_SHARD_ROLES/,/^};/p' \
+  "$SOURCE/check-passkey-shard-coverage.mjs" \
+  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
+[ -n "$passkey_spec_shard_roles" ] ||
+  fail 'could not find PASSKEY_SHARD_ROLES in second-factor.spec.ts'
+[ -n "$passkey_coverage_shard_roles" ] ||
+  fail 'could not find PASSKEY_SHARD_ROLES in check-passkey-shard-coverage.mjs'
+[ "$passkey_spec_shard_roles" = "$passkey_coverage_shard_roles" ] ||
+  fail 'second-factor.spec.ts and check-passkey-shard-coverage.mjs disagree on PASSKEY_SHARD_ROLES'
+
+# verify-evidence.mjs and each coverage script keep their own copy of the
+# closed step-name list; a step added to one and not the other could pass
+# the per-shard schema check while the coverage job never proves it.
+totp_verify_steps=$(sed -n '/^const TOTP_STEP_NAMES = new Set(\[/,/\]);/p' \
+  "$SOURCE/verify-evidence.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
+totp_coverage_steps=$(sed -n '/^const TOTP_STEP_NAMES = new Set(\[/,/\]);/p' \
+  "$SOURCE/check-totp-shard-coverage.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
+[ -n "$totp_verify_steps" ] || fail 'could not find TOTP_STEP_NAMES in verify-evidence.mjs'
+[ -n "$totp_coverage_steps" ] ||
+  fail 'could not find TOTP_STEP_NAMES in check-totp-shard-coverage.mjs'
+[ "$totp_verify_steps" = "$totp_coverage_steps" ] ||
+  fail 'verify-evidence.mjs and check-totp-shard-coverage.mjs disagree on TOTP_STEP_NAMES'
+
+passkey_verify_steps=$(sed -n '/^const PASSKEY_STEP_NAMES = new Set(\[/,/\]);/p' \
+  "$SOURCE/verify-evidence.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
+passkey_coverage_steps=$(sed -n '/^const PASSKEY_STEP_NAMES = new Set(\[/,/\]);/p' \
+  "$SOURCE/check-passkey-shard-coverage.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
+[ -n "$passkey_verify_steps" ] || fail 'could not find PASSKEY_STEP_NAMES in verify-evidence.mjs'
+[ -n "$passkey_coverage_steps" ] ||
+  fail 'could not find PASSKEY_STEP_NAMES in check-passkey-shard-coverage.mjs'
+[ "$passkey_verify_steps" = "$passkey_coverage_steps" ] ||
+  fail 'verify-evidence.mjs and check-passkey-shard-coverage.mjs disagree on PASSKEY_STEP_NAMES'
+
 printf '%s\n' 'dev-https-browser static tests: PASS'

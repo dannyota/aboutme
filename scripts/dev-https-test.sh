@@ -1261,40 +1261,10 @@ run_missing_tool_check() (
   [ ! -s "$FAKE_MUTATIONS" ] || fail "missing-tool rejection performed a mutation"
 )
 
-main() {
-  [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
-  [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
-  compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
-  case ${DEV_HTTPS_TEST_CASE-} in
-  manifest) run_happy_path_and_lifecycle_checks; return ;;
-  listener-probe) run_listener_probe_failure_checks; return ;;
-  native-ports) run_normal_native_listener_without_pid_check; return ;;
-  database) run_database_override_check; return ;;
-  identity) run_foreign_ownership_down_check; return ;;
-  identity-tamper) run_identity_field_tamper_check; return ;;
-  group-drain) run_process_group_drain_check; return ;;
-  member-exit-race) run_group_member_exit_race_check; return ;;
-  binary-drift) run_binary_drift_check; return ;;
-  lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
-  rollback) run_partial_startup_rollback_check; return ;;
-  identity-write-rollback) run_identity_write_rollback_check; return ;;
-  launch-completion-rollback) run_launch_completion_failure_rollback_check; return ;;
-  immediate-exit-rollback) run_immediate_precompletion_exit_rollback_check; return ;;
-  absent-completed-launch) run_absent_completed_launch_cleanup_check; return ;;
-  path-integrity) run_state_path_integrity_checks; return ;;
-  build-retry) run_failed_build_retry_check; return ;;
-  mail-capture-rollback) run_mail_capture_failure_rollback_check; return ;;
-  server-after-capture) run_server_after_capture_rollback_check; return ;;
-  mail-capture-drift) run_mail_capture_binary_drift_check; return ;;
-  mail-capture-foreign) run_mail_capture_foreign_listener_check; return ;;
-  mail-capture-group-drain) run_mail_capture_group_drain_check; return ;;
-  secret-reuse) run_secret_reuse_check; return ;;
-  secret-mode) run_secret_mode_check; return ;;
-  passkey-flag) run_passkey_enrollment_flag_check; return ;;
-  totp-flag) run_totp_enrollment_flag_check; return ;;
-  '') ;;
-  *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
-  esac
+# Every check function in this file, in the order an unsharded run uses.
+# DEV_HTTPS_TEST_SHARD=<i>/<n> runs only the checks whose index in this array
+# (0-based) is congruent to i mod n; unset runs every one, in this order.
+readonly CHECKS=(
   run_happy_path_and_lifecycle_checks
   run_foreign_listener_check
   run_listener_probe_failure_checks
@@ -1327,6 +1297,79 @@ main() {
   run_passkey_enrollment_flag_check
   run_totp_enrollment_flag_check
   run_missing_tool_check
+)
+
+# Fails if a run_* function defined in this file is missing from CHECKS, or
+# if CHECKS lists one more than once, so a new check cannot be silently left
+# out of every shard.
+check_checks_array_is_complete() {
+  local defined listed
+  defined=$(declare -F | awk '{print $3}' | grep '^run_' | sort)
+  listed=$(printf '%s\n' "${CHECKS[@]}" | sort)
+  [ "$(printf '%s\n' "${CHECKS[@]}" | sort -u | wc -l)" -eq "${#CHECKS[@]}" ] ||
+    fail 'CHECKS lists a check more than once'
+  [ "$defined" = "$listed" ] ||
+    fail 'CHECKS does not list exactly the run_* checks defined in this script'
+}
+
+# Runs every check, or the slice DEV_HTTPS_TEST_SHARD=<i>/<n> selects. Named
+# without a run_ prefix so it is not itself a check declare -F would collect.
+select_and_run_checks() {
+  local shard=${DEV_HTTPS_TEST_SHARD-} i n idx=0 check
+  if [ -z "$shard" ]; then
+    for check in "${CHECKS[@]}"; do "$check"; done
+    return
+  fi
+  [[ $shard =~ ^([0-9]+)/([0-9]+)$ ]] ||
+    fail 'DEV_HTTPS_TEST_SHARD must be i/n, both non-negative integers'
+  i=${BASH_REMATCH[1]}
+  n=${BASH_REMATCH[2]}
+  [ "$n" -ge 1 ] || fail 'DEV_HTTPS_TEST_SHARD: n must be at least 1'
+  [ "$i" -lt "$n" ] || fail 'DEV_HTTPS_TEST_SHARD: i must be less than n'
+  for check in "${CHECKS[@]}"; do
+    if [ $((idx % n)) -eq "$i" ]; then
+      "$check"
+    fi
+    idx=$((idx + 1))
+  done
+}
+
+main() {
+  [ "${1-}" = --static ] && [ "$#" -eq 1 ] || fail 'usage: scripts/dev-https-test.sh --static'
+  [ -f "$SOURCE_SCRIPT" ] || fail "missing production script: $SOURCE_SCRIPT"
+  compgen -G "$SOURCE_LIB_DIR/dev-https-*.sh" >/dev/null || fail "missing production library files: $SOURCE_LIB_DIR"
+  check_checks_array_is_complete
+  case ${DEV_HTTPS_TEST_CASE-} in
+  manifest) run_happy_path_and_lifecycle_checks; return ;;
+  listener-probe) run_listener_probe_failure_checks; return ;;
+  native-ports) run_normal_native_listener_without_pid_check; return ;;
+  database) run_database_override_check; return ;;
+  identity) run_foreign_ownership_down_check; return ;;
+  identity-tamper) run_identity_field_tamper_check; return ;;
+  group-drain) run_process_group_drain_check; return ;;
+  member-exit-race) run_group_member_exit_race_check; return ;;
+  binary-drift) run_binary_drift_check; return ;;
+  lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
+  rollback) run_partial_startup_rollback_check; return ;;
+  identity-write-rollback) run_identity_write_rollback_check; return ;;
+  launch-completion-rollback) run_launch_completion_failure_rollback_check; return ;;
+  immediate-exit-rollback) run_immediate_precompletion_exit_rollback_check; return ;;
+  absent-completed-launch) run_absent_completed_launch_cleanup_check; return ;;
+  path-integrity) run_state_path_integrity_checks; return ;;
+  build-retry) run_failed_build_retry_check; return ;;
+  mail-capture-rollback) run_mail_capture_failure_rollback_check; return ;;
+  server-after-capture) run_server_after_capture_rollback_check; return ;;
+  mail-capture-drift) run_mail_capture_binary_drift_check; return ;;
+  mail-capture-foreign) run_mail_capture_foreign_listener_check; return ;;
+  mail-capture-group-drain) run_mail_capture_group_drain_check; return ;;
+  secret-reuse) run_secret_reuse_check; return ;;
+  secret-mode) run_secret_mode_check; return ;;
+  passkey-flag) run_passkey_enrollment_flag_check; return ;;
+  totp-flag) run_totp_enrollment_flag_check; return ;;
+  '') ;;
+  *) fail "unknown DEV_HTTPS_TEST_CASE=${DEV_HTTPS_TEST_CASE}" ;;
+  esac
+  select_and_run_checks
   printf '%s\n' 'dev-https static tests: PASS'
 }
 

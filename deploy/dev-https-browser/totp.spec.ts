@@ -122,6 +122,7 @@ type FailureOutcome
 type AccountRole =
   | 'none'
   | 'primary'
+  | 'skew'
   | 'replay'
   | 'concurrent'
   | 'replace'
@@ -133,27 +134,40 @@ type AccountRole =
 
 // --- Enabled-proof sharding --------------------------------------------------
 //
-// CI runs the enabled journey as up to three parallel shards, each its own
+// CI runs the enabled journey as up to six parallel shards, each its own
 // harness and evidence file (ABOUTME_TOTP_SHARD, read by run.sh from the
 // host environment). Unset (every local or single-shard run) proves every
-// role, exactly as before sharding existed. `primary` alone carries most of
-// the account's own step count, so it is its own shard.
-type TotpShard = 'primary' | 'accounts-b' | 'accounts-c';
+// role. `primary` alone carries most of the account's own step count, so it
+// is its own shard.
+type TotpShard =
+  | 'primary'
+  | 'skew'
+  | 'replay-concurrent'
+  | 'replace-recovery'
+  | 'locale-attempts'
+  | 'epoch-disabled';
 
 const TOTP_SHARD_ROLES: Readonly<Record<TotpShard, readonly AccountRole[]>> = {
   'primary': ['primary'],
-  'accounts-b': ['replay', 'concurrent', 'replace'],
-  'accounts-c': ['epoch', 'locale', 'recovery', 'attempts'],
+  'skew': ['skew'],
+  'replay-concurrent': ['replay', 'concurrent'],
+  'replace-recovery': ['replace', 'recovery'],
+  'locale-attempts': ['locale', 'attempts'],
+  'epoch-disabled': ['epoch'],
 };
+
+const TOTP_SHARD_NAMES = Object.keys(TOTP_SHARD_ROLES) as readonly TotpShard[];
+
+function isTotpShard(value: string): value is TotpShard {
+  return (TOTP_SHARD_NAMES as readonly string[]).includes(value);
+}
 
 function activeShardRoles(): ReadonlySet<AccountRole> | null {
   const raw = process.env.ABOUTME_TOTP_SHARD;
   if (raw === undefined || raw === '') return null;
-  if (raw === 'primary' || raw === 'accounts-b' || raw === 'accounts-c') {
-    return new Set(TOTP_SHARD_ROLES[raw]);
-  }
+  if (isTotpShard(raw)) return new Set(TOTP_SHARD_ROLES[raw]);
   throw new Error(
-    `ABOUTME_TOTP_SHARD must be primary, accounts-b, or accounts-c, not ${JSON.stringify(raw)}`,
+    `ABOUTME_TOTP_SHARD must be one of ${TOTP_SHARD_NAMES.join(', ')}, not ${JSON.stringify(raw)}`,
   );
 }
 
@@ -804,14 +818,17 @@ async function passwordSignIn(
 }
 
 /**
- * Signs out if a session exists, and no-ops otherwise without navigating: a
- * sharded run's first role has no session yet, and visiting
+ * Signs out. In a sharded run, no-ops without navigating when no session
+ * exists yet: a shard's first role has no session yet, and visiting
  * /app/settings/sessions while signed out logs unexpected 401s from the API
- * calls the settings page makes on the way to redirecting to /login.
+ * calls the settings page makes on the way to redirecting to /login. The
+ * unsharded default always expects a session and still fails if there is
+ * none, so a broken logout keeps failing an unsharded run.
  */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
-  if (await cookieValue(page.context(), SESSION_COOKIE) === null) return;
+  if (ACTIVE_ROLES !== null
+    && await cookieValue(page.context(), SESSION_COOKIE) === null) return;
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
@@ -1177,6 +1194,8 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
 
   const primaryEmail = runEmail('primary');
   const primaryPassword = runPassword();
+  const skewEmail = runEmail('skew');
+  const skewPassword = runPassword();
   const replayEmail = runEmail('replay');
   const replayPassword = runPassword();
   const concurrentEmail = runEmail('concurrent');
@@ -1193,6 +1212,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
   const attemptsPassword = runPassword();
 
   const primaryTracker = newStepTracker();
+  const skewTracker = newStepTracker();
   const replayTracker = newStepTracker();
   const concurrentTracker = newStepTracker();
   const replaceTracker = newStepTracker();
@@ -1202,6 +1222,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
   const attemptsTracker = newStepTracker();
 
   let primaryCleanupCode = '';
+  let skewCleanupCode = '';
   let replayCleanupCode = '';
   let concurrentCleanupCode = '';
   let replaceCleanupCode = '';
@@ -1453,37 +1474,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(foreignSessionResult.status).toBe(401);
     steps.wrongSessionRejected = true;
 
-    // 8. Previous, current, and next step each complete one pending login,
-    //    each on a fresh sign-in because a step only accepts a code greater
-    //    than the credential's last used step. Three admitted attempts.
-    //    Earlier stages used steps up to the current one, so wait until the
-    //    previous step is newer than any of them.
-    stage('previous-step');
-    await waitForStepAtLeast(page, primaryTracker.last + 2);
-    primaryTracker.last = stepAt(systemClock().nowSeconds()) - 1;
-    await completeWithTotp(page, codePreviousStep(secret, systemClock()));
-    await expectSignedInApp(page);
-    steps.previousStepAccepted = true;
-
-    stage('current-step');
-    await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    await completeWithTotp(page, await freshCode(page, secret, primaryTracker));
-    await expectSignedInApp(page);
-    steps.currentStepAccepted = true;
-
-    stage('next-step');
-    await signOut(page);
-    expect(await passwordSignIn(page, primaryEmail, primaryPassword))
-      .toBe('pending');
-    await waitForStepAtLeast(page, primaryTracker.last);
-    primaryTracker.last = stepAt(systemClock().nowSeconds()) + 1;
-    await completeWithTotp(page, codeNextStep(secret, systemClock()));
-    await expectSignedInApp(page);
-    steps.nextStepAccepted = true;
-
-    // 9. Provider sign-in on the enrolled account also stops at pending, then
+    // 8. Provider sign-in on the enrolled account also stops at pending, then
     //    completes with one admitted attempt.
     stage('provider-pending');
     await signOut(page);
@@ -1499,7 +1490,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await completeWithTotp(page, await freshCode(page, secret, primaryTracker));
     await expectSignedInApp(page);
 
-    // 10. Removing TOTP while a passkey remains is non-final (one admitted
+    // 9. Removing TOTP while a passkey remains is non-final (one admitted
     //     reauthentication attempt); removing the remaining passkey then
     //     turns enforcement off.
     stage('remove-totp');
@@ -1538,8 +1529,64 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       .toBe('session');
     primaryCleanupCode = '';
     steps.finalRemoved = true;
-    // Primary's admitted attempts: 2 (enrollment) + 3 (skew) + 1 (provider
-    // pending) + 1 (remove-totp reauth) = 7.
+    // Primary's admitted attempts: 2 (enrollment) + 1 (provider pending)
+    // + 1 (remove-totp reauth) = 4.
+    }
+
+    // 10. A ninth fictional account carries the previous-step, current-step,
+    //     and next-step tolerance case against its own enrollment: each
+    //     accepts one pending login on a fresh sign-in, since a step only
+    //     accepts a code greater than the credential's last used step.
+    //     Skew's admitted attempts: 1 (enrollment) + 3 (step tolerance) = 4.
+    if (runsRole('skew')) {
+    role('skew');
+    stage('skew-account');
+    await signOut(page);
+    createdAccounts.skew = true;
+    await registerVerified(
+      page,
+      capture,
+      skewEmail,
+      skewPassword,
+      'TOTP Skew Proof',
+    );
+    expect(await passwordSignIn(page, skewEmail, skewPassword))
+      .toBe('session');
+    const skewEnrolled = await enrollFirstTotp(
+      page, skewPassword, skewTracker,
+    );
+    const skewSecret = skewEnrolled.secret;
+    skewCleanupCode = skewEnrolled.codes[9] as string;
+
+    // Earlier stages used steps up to the current one, so wait until the
+    // previous step is newer than any of them.
+    stage('previous-step');
+    await signOut(page);
+    expect(await passwordSignIn(page, skewEmail, skewPassword))
+      .toBe('pending');
+    await waitForStepAtLeast(page, skewTracker.last + 2);
+    skewTracker.last = stepAt(systemClock().nowSeconds()) - 1;
+    await completeWithTotp(page, codePreviousStep(skewSecret, systemClock()));
+    await expectSignedInApp(page);
+    steps.previousStepAccepted = true;
+
+    stage('current-step');
+    await signOut(page);
+    expect(await passwordSignIn(page, skewEmail, skewPassword))
+      .toBe('pending');
+    await completeWithTotp(page, await freshCode(page, skewSecret, skewTracker));
+    await expectSignedInApp(page);
+    steps.currentStepAccepted = true;
+
+    stage('next-step');
+    await signOut(page);
+    expect(await passwordSignIn(page, skewEmail, skewPassword))
+      .toBe('pending');
+    await waitForStepAtLeast(page, skewTracker.last);
+    skewTracker.last = stepAt(systemClock().nowSeconds()) + 1;
+    await completeWithTotp(page, codeNextStep(skewSecret, systemClock()));
+    await expectSignedInApp(page);
+    steps.nextStepAccepted = true;
     }
 
     // 11. A second fictional account carries the same-step replay and
@@ -1934,6 +1981,13 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
         recoveryCode: primaryCleanupCode,
       }));
     }
+    if (createdAccounts.skew) {
+      removed.push(await deleteAccount(page, {
+        email: skewEmail,
+        password: skewPassword,
+        recoveryCode: skewCleanupCode,
+      }));
+    }
     if (createdAccounts.replay) {
       removed.push(await deleteAccount(page, {
         email: replayEmail,
@@ -2015,11 +2069,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
-    // The active shard's own last step, or attemptsExhausted on the
-    // unsharded default (whose last role is always attempts).
+    // The active shard's own last-executed role's completion step, or
+    // attemptsExhausted on the unsharded default (whose last role is always
+    // attempts).
     const journeyDone = ACTIVE_ROLES === null || ACTIVE_ROLES.has('attempts')
       ? steps.attemptsExhausted
-      : ACTIVE_ROLES.has('replace') ? steps.replaced : steps.finalRemoved;
+      : ACTIVE_ROLES.has('recovery') ? steps.recoveryCompletion
+        : ACTIVE_ROLES.has('concurrent') ? steps.concurrentUseRejected
+          : ACTIVE_ROLES.has('epoch') ? steps.wrongEpochRejected
+            : ACTIVE_ROLES.has('skew') ? steps.nextStepAccepted
+              : steps.finalRemoved;
     failOnUnexpectedConsole(journeyDone);
   }
 });
