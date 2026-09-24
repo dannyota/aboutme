@@ -134,6 +134,7 @@ const sectionIndex = (
 const sectionSlice = (
   sections: ReadonlyMap<string, Section>,
   block: BlockRef,
+  wholeEntry = false,
 ): Section => {
   const section = sections.get(block.sectionKey);
   if (section === undefined) {
@@ -152,7 +153,7 @@ const sectionSlice = (
       `Pagination references missing entry ${block.sectionKey}.`,
     );
   }
-  if (block.part !== undefined) {
+  if (block.part !== undefined && !wholeEntry) {
     return entryPartSection(toRaw(section), block.entryIndex, block.part);
   }
   const clone = structuredClone(toRaw(section));
@@ -217,6 +218,24 @@ export default defineComponent({
           ? 'continuation'
           : block.kind,
       })]);
+      // The measurement tree also lays out each split entry whole, so the
+      // measurer can read the space between its body blocks.
+      const renderWholeEntries = (
+        targetModel: ResolvedRenderModel,
+        targetRequest: PaginationRequest,
+        targetSections: ReadonlyMap<string, Section>,
+        blocks: readonly BlockRef[],
+      ) => blocks.flatMap((block) => block.kind === 'entry' && block.part === 0
+        ? [h('div', {
+            'class': 'pagination-whole-entry',
+            'data-pagination-whole-entry': targetRequest.blocks.indexOf(block),
+          }, [h(SectionRenderer, {
+            section: sectionSlice(targetSections, block, true),
+            dateFormat: targetModel.dateFormat,
+            sectionDisplay: targetModel.sectionDisplay,
+            renderPart: 'entry',
+          })])]
+        : []);
       const renderHeader = (
         targetModel: ResolvedRenderModel,
         measurement = false,
@@ -237,35 +256,34 @@ export default defineComponent({
         sidebar: readonly BlockRef[],
         gaps: ReadonlyMap<BlockRef, number>,
         indexed = false,
-      ) => targetModel.columns === 1
-        ? h('div', { class: 'layout-one-column' }, main.map((block) =>
-            renderSection(
-              targetModel,
-              targetSections,
-              block,
-              gaps.get(block) ?? 0,
-              indexed ? targetRequest.blocks.indexOf(block) : undefined,
-            )))
-        : h('div', { class: 'layout-two-columns' }, [
-            h('div', { class: 'resume-main' }, main.map((block) =>
-              renderSection(
+      ) => {
+        const flow = (blocks: readonly BlockRef[]) => [
+          ...blocks.map((block) => renderSection(
+            targetModel,
+            targetSections,
+            block,
+            gaps.get(block) ?? 0,
+            indexed ? targetRequest.blocks.indexOf(block) : undefined,
+          )),
+          ...(indexed
+            ? renderWholeEntries(
                 targetModel,
+                targetRequest,
                 targetSections,
-                block,
-                gaps.get(block) ?? 0,
-                indexed ? targetRequest.blocks.indexOf(block) : undefined,
-              ))),
-            h('aside', {
-              class: 'resume-sidebar',
-              style: targetModel.styles.sidebar,
-            }, sidebar.map((block) => renderSection(
-              targetModel,
-              targetSections,
-              block,
-              gaps.get(block) ?? 0,
-              indexed ? targetRequest.blocks.indexOf(block) : undefined,
-            ))),
-          ]);
+                blocks,
+              )
+            : []),
+        ];
+        return targetModel.columns === 1
+          ? h('div', { class: 'layout-one-column' }, flow(main))
+          : h('div', { class: 'layout-two-columns' }, [
+              h('div', { class: 'resume-main' }, flow(main)),
+              h('aside', {
+                class: 'resume-sidebar',
+                style: targetModel.styles.sidebar,
+              }, flow(sidebar)),
+            ]);
+      };
       const visiblePages = pages.map((placedPage, pageIndex) => {
         const expandedHeightPx = Math.max(
           page.heightPx,

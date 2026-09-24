@@ -209,6 +209,73 @@ describe('PagedResume browser measurement', () => {
     wrapper.unmount();
   });
 
+  it('spaces a split entry\'s parts as the whole entry lays them out',
+    async () => {
+      const fontEvents = new EventTarget();
+      Object.assign(fontEvents, {
+        load: vi.fn(async () => [{} as FontFace]),
+        ready: Promise.resolve(),
+      });
+      Object.defineProperty(document, 'fonts', {
+        configurable: true,
+        value: fontEvents,
+      });
+      vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+      vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      // List items of the whole entry sit 26px apart and are 20px tall, so
+      // the whole entry leaves 6px between them.
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function () {
+          if (this.tagName === 'LI') {
+            const index = Array.from(this.parentElement!.children)
+              .indexOf(this);
+            return {
+              ...layoutRect(20),
+              top: index * 26,
+              bottom: (index * 26) + 20,
+            };
+          }
+          return layoutRect(
+            this.dataset.paginationBlockIndex === undefined ? 40 : 20,
+          );
+        });
+
+      const split = namedFixture('draft-partial');
+      split.content.work!.entries[0]!.description
+        = '<ul><li>First item</li><li>Second item</li></ul>';
+      const wrapper = mount(ResumeDocument, {
+        attachTo: document.body,
+        props: {
+          document: split,
+          context: { lng: 'en', mode: 'paged' },
+        },
+      });
+      await flushPromises();
+      expect(wrapper.attributes('data-pagination-settled')).toBe('true');
+
+      const whole = wrapper.findAll(
+        '.pagination-measurement [data-pagination-whole-entry]',
+      );
+      expect(whole).toHaveLength(1);
+      expect(whole[0]!.attributes('data-pagination-whole-entry')).toBe('1');
+      expect(whole[0]!.findAll('li')).toHaveLength(2);
+
+      const parts = wrapper.findAll(
+        '.resume-page:not(.pagination-measurement) '
+        + '.pagination-atomic[data-block-kind="entry"]',
+      );
+      expect(parts).toHaveLength(2);
+      expect(parts[1]!.text()).toContain('Second item');
+      expect((parts[1]!.element as HTMLElement).style.marginBlockStart)
+        .toBe('6px');
+      expect(wrapper.findAll(
+        '.resume-page:not(.pagination-measurement) '
+        + '[data-pagination-whole-entry]',
+      )).toHaveLength(0);
+      wrapper.unmount();
+    });
+
   it('settles under zoom and reacts to a real resize', async () => {
     const fontEvents = new EventTarget();
     const load = vi.fn(async () => [{} as FontFace]);
