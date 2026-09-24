@@ -1137,6 +1137,12 @@ malformed)
   *) evidence=auth-proof.json ;;
   esac
   printf '%s\n' '{"wrong":true}' >"$FAKE_INSIDE_EVIDENCE/$evidence"
+  # The enabled TOTP mode requires its timing sidecar too, so this scenario
+  # is rejected for the malformed primary file, not a missing sidecar.
+  if [ "$evidence" = totp-second-factor-proof.json ]; then
+    printf '%s\n' '{"schemaVersion":1,"sections":{"none":1}}' \
+      >"$FAKE_INSIDE_EVIDENCE/totp-timing.json"
+  fi
   ;;
 oversized)
   case " $* " in
@@ -1162,6 +1168,12 @@ oversized)
   *) evidence=auth-proof.json ;;
   esac
   head -c 9000 /dev/zero | tr '\0' x >"$FAKE_INSIDE_EVIDENCE/$evidence"
+  # Same reasoning as the malformed scenario above: the sidecar must be
+  # present so the oversized primary file is what gets rejected.
+  if [ "$evidence" = totp-second-factor-proof.json ]; then
+    printf '%s\n' '{"schemaVersion":1,"sections":{"none":1}}' \
+      >"$FAKE_INSIDE_EVIDENCE/totp-timing.json"
+  fi
   ;;
 extra-field)
   # A schema-valid TOTP payload plus one field the schema does not name.
@@ -1175,6 +1187,21 @@ extra-field)
   "schemaVersion": 1,
   "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "cleanup": true, "concurrentUseRejected": true, "currentStepAccepted": true, "enrolled": true, "finalRemoved": true, "invalidCodeRejected": true, "locales": true, "nextStepAccepted": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCoexistence": true, "passwordPending": true, "previousStepAccepted": true, "providerAccount": true, "providerPending": true, "qrIsLocal": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRevealedOnce": true, "replaced": true, "resetPreservesEnforcement": true, "sameStepReplayRejected": true, "supersededEnrollmentRejected": true, "unicodeDigitsRejected": true, "viewports": true, "wrongEpochRejected": true, "wrongSessionRejected": true},
   "unexpectedField": true
+}
+JSON
+  printf '%s\n' '{"schemaVersion":1,"sections":{"none":1}}' \
+    >"$FAKE_INSIDE_EVIDENCE/totp-timing.json"
+  ;;
+totp-timing-missing)
+  # A schema-valid TOTP payload with no timing sidecar at all, proving the
+  # sidecar is required, not merely tolerated when present.
+  cat >"$FAKE_INSIDE_EVIDENCE/totp-second-factor-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "totp-second-factor",
+  "schemaVersion": 1,
+  "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "cleanup": true, "concurrentUseRejected": true, "currentStepAccepted": true, "enrolled": true, "finalRemoved": true, "invalidCodeRejected": true, "locales": true, "nextStepAccepted": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCoexistence": true, "passwordPending": true, "previousStepAccepted": true, "providerAccount": true, "providerPending": true, "qrIsLocal": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRevealedOnce": true, "replaced": true, "resetPreservesEnforcement": true, "sameStepReplayRejected": true, "supersededEnrollmentRejected": true, "unicodeDigitsRejected": true, "viewports": true, "wrongEpochRejected": true, "wrongSessionRejected": true}
 }
 JSON
   ;;
@@ -1300,6 +1327,10 @@ JSON
   "steps": {"agentGranted": true, "agentRevoked": true, "attemptsExhausted": true, "cleanup": true, "concurrentUseRejected": true, "currentStepAccepted": true, "enrolled": true, "finalRemoved": true, "invalidCodeRejected": true, "locales": true, "nextStepAccepted": true, "oneRemoved": true, "otherSessionRevoked": true, "otherSessionStarted": true, "passkeyCoexistence": true, "passwordPending": true, "previousStepAccepted": true, "providerAccount": true, "providerPending": true, "qrIsLocal": true, "reauthRequired": true, "recoveryCompletion": true, "recoveryRevealedOnce": true, "replaced": true, "resetPreservesEnforcement": true, "sameStepReplayRejected": true, "supersededEnrollmentRejected": true, "unicodeDigitsRejected": true, "viewports": true, "wrongEpochRejected": true, "wrongSessionRejected": true}
 }
 JSON
+      # The enabled mode alone carries the timing sidecar (totp-disabled is
+      # already fast and untimed).
+      printf '%s\n' '{"schemaVersion":1,"sections":{"none":1,"primary":2}}' \
+        >"$FAKE_INSIDE_EVIDENCE/totp-timing.json"
       ;;
     esac
     ;;
@@ -1927,6 +1958,22 @@ fi
 if grep -Fq 'amr_' "$INSIDE_EVIDENCE/totp-second-factor-proof.json"; then
   fail 'totp evidence contains recovery-code plaintext'
 fi
+[ -f "$INSIDE_EVIDENCE/totp-timing.json" ] ||
+  fail 'totp timing evidence filename drifted'
+[ "$(stat -c %a "$INSIDE_EVIDENCE/totp-timing.json")" = 600 ] ||
+  fail 'totp timing evidence mode drifted'
+if grep -Eiq '"(code|codes|cookie|credential|csrfToken|email|password|privateKey|provisioningUri|recoveryCodes|secret|token)"[[:blank:]]*:' \
+  "$INSIDE_EVIDENCE/totp-timing.json"; then
+  fail 'totp timing evidence contains secret-bearing fields'
+fi
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=totp-timing-missing PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside totp 2>&1); then
+  fail 'totp evidence without its timing sidecar was accepted'
+fi
+grep -Fq 'browser produced unexpected evidence' <<<"$output" ||
+  fail 'missing totp timing sidecar returned the wrong diagnostic'
 
 reset_inside
 if output=$(FAKE_BROWSER_MODE=malformed PATH="$INSIDE_BIN:$PATH" \
