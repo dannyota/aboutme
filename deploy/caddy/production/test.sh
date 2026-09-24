@@ -68,9 +68,12 @@ start_stack() { # trusted ranges
     localhost/aboutme/caddy:test -c \
     'printf "{\n\tadmin off\n}\n:8080 {\n\trespond \"ip={http.request.header.X-Real-IP}\"\n}\n" >/tmp/echo && exec caddy run --config /tmp/echo --adapter caddyfile' \
     >/dev/null
-  for _ in $(seq 1 60); do
-    podman logs "$name" 2>&1 | grep -q 'serving initial configuration' &&
-      podman logs "$name-echo" 2>&1 | grep -q 'serving initial configuration' && return
+  local main_logs echo_logs
+  for _ in $(seq 1 20); do
+    main_logs=$(podman logs "$name" 2>&1 || true)
+    echo_logs=$(podman logs "$name-echo" 2>&1 || true)
+    grep -q 'serving initial configuration' <<<"$main_logs" &&
+      grep -q 'serving initial configuration' <<<"$echo_logs" && return
     sleep 0.5
   done
   echo "stack did not start" >&2
@@ -148,14 +151,16 @@ podman run -d --name "$name" -p "127.0.0.1:$port:443" --tmpfs /run/caddy \
   -e ORIGIN_PULL_CA="$(cat "$work/ca.pem")" -e CLOUDFLARE_RANGES="192.0.2.0/24 198.51.100.0/24" \
   -e MAINTENANCE=1 \
   localhost/aboutme/caddy:test >/dev/null
-# Up to 30 s: a hosted runner can take about 10 s to start a container on a
-# port that a just-removed container held.
-for _ in $(seq 1 60); do
-  podman logs "$name" 2>&1 | grep -q 'serving initial configuration' && break
+# Capture the logs before grep: under pipefail, `podman logs | grep -q` fails
+# when grep exits early and podman then writes to the closed pipe.
+started=
+for _ in $(seq 1 20); do
+  logs=$(podman logs "$name" 2>&1 || true)
+  grep -q 'serving initial configuration' <<<"$logs" && { started=1; break; }
   sleep 0.5
 done
-podman logs "$name" 2>&1 | grep -q 'serving initial configuration' ||
-  { echo "maintenance stack did not start" >&2; podman logs "$name" >&2 2>&1 || true; exit 1; }
+[ -n "$started" ] ||
+  { echo "maintenance stack did not start" >&2; printf '%s\n' "$logs" >&2; exit 1; }
 
 # The origin still rejects a direct request with no client certificate, and
 # one with a certificate the origin-pull CA did not sign.
