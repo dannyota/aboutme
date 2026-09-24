@@ -26,8 +26,7 @@
  * totp.spec.ts's withheld-log convention.
  *
  * Contract: docs/design/totp-second-factor-contract.md,
- * docs/design/totp-key-management.md, ADR 0049,
- * docs/plans/totp-second-factor.md "Release gate".
+ * docs/design/totp-key-management.md, ADR 0049.
  */
 import { expect, test, type BrowserContext, type Page, type Route } from '@playwright/test';
 import { randomBytes } from 'node:crypto';

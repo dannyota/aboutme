@@ -586,7 +586,9 @@ describe("installed released-schema guards", () => {
   const ciWorkflow = existsSync(ciWorkflowPath)
     ? readFileSync(ciWorkflowPath, "utf8")
     : "";
-  const jobPresent = ciWorkflow.includes("released-schema-append-only:");
+  const jobPresent = ciWorkflow.includes(
+    "name: Reject modified or deleted released schemas",
+  );
 
   it.skipIf(!jobPresent)(
     "keeps ci.yml's job script identical to the script proven here",

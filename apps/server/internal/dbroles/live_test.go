@@ -1,11 +1,13 @@
 package dbroles
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -159,6 +161,129 @@ func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 		if got != c.want {
 			t.Fatalf("%s %s privilege %s = %v, want %v", c.role, c.kind, c.grant, got, c.want)
 		}
+	}
+}
+
+// TestEnsureLiveSerializesConcurrentCatalogWriters runs Ensure from several
+// goroutines while another writer repeatedly grants and revokes CONNECT on
+// the same database. Ensure rewrites the pg_database ACL row on every call
+// (grantDatabaseAndSchema), and PostgreSQL raises "tuple concurrently
+// updated" when two transactions update that row without the shared LockID
+// lock serializing them (ADR 0038). Every call must succeed.
+func TestEnsureLiveSerializesConcurrentCatalogWriters(t *testing.T) {
+	db := livePostgresDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if _, err := Ensure(ctx, db); err != nil {
+		t.Fatalf("prepare roles: %v", err)
+	}
+
+	var dbName string
+	if err := db.QueryRowContext(ctx, `SELECT current_database()`).Scan(&dbName); err != nil {
+		t.Fatal("read current database")
+	}
+	probe := fmt.Sprintf("aboutme_dbroles_concurrent_probe_%d", time.Now().UnixNano())
+	if _, err := db.ExecContext(ctx, `CREATE ROLE `+probe+` NOLOGIN NOINHERIT`); err != nil {
+		t.Fatalf("create probe role: %v", err)
+	}
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cleanupCancel()
+		if _, err := db.ExecContext(cleanupCtx, `DROP ROLE IF EXISTS `+probe); err != nil {
+			t.Errorf("drop probe role: %v", err)
+		}
+	})
+
+	const writers = 8
+	errs := make(chan error, 3*writers)
+	var wg sync.WaitGroup
+
+	wg.Add(writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			defer wg.Done()
+			_, ensureErr := Ensure(ctx, db)
+			errs <- ensureErr
+		}()
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < writers; i++ {
+			grantErr := withCatalogLock(ctx, db, func(tx *sql.Tx) error {
+				_, execErr := tx.ExecContext(ctx, `GRANT CONNECT ON DATABASE `+quoteIdentifier(dbName)+` TO `+probe)
+				return execErr
+			})
+			errs <- grantErr
+			if grantErr != nil {
+				continue
+			}
+			revokeErr := withCatalogLock(ctx, db, func(tx *sql.Tx) error {
+				_, execErr := tx.ExecContext(ctx, `REVOKE CONNECT ON DATABASE `+quoteIdentifier(dbName)+` FROM `+probe)
+				return execErr
+			})
+			errs <- revokeErr
+		}
+	}()
+
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent catalog write failed: %v", err)
+		}
+	}
+}
+
+// TestSetLoginVerifiersLiveSerializesWithinDatabase mirrors
+// TestEnsureLiveSerializesWithinDatabase: SetLoginVerifiers must block while
+// another transaction holds the LockID advisory lock, and complete once it
+// is released.
+func TestSetLoginVerifiersLiveSerializesWithinDatabase(t *testing.T) {
+	db := livePostgresDB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	holder, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal("begin holder")
+	}
+	if _, lockErr := holder.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, LockID); lockErr != nil {
+		t.Fatal("hold db-setup lock")
+	}
+
+	waiter, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal("begin waiter")
+	}
+	// Roll back so the shared cluster's role passwords never change.
+	defer func() {
+		if rollbackErr := waiter.Rollback(); rollbackErr != nil {
+			t.Error(rollbackErr)
+		}
+	}()
+
+	p := LoginPasswords{Migrator: strings.Repeat("m", 32), App: strings.Repeat("p", 32)}
+	done := make(chan error, 1)
+	go func() {
+		done <- setLoginVerifiers(ctx, waiter, p, bytes.NewReader(make([]byte, 64)))
+	}()
+	select {
+	case earlyErr := <-done:
+		t.Fatalf("setLoginVerifiers returned before lock release: %v", earlyErr)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if releaseErr := holder.Rollback(); releaseErr != nil {
+		t.Fatal("release db-setup lock")
+	}
+	select {
+	case doneErr := <-done:
+		if doneErr != nil {
+			t.Fatalf("setLoginVerifiers after release: %v", doneErr)
+		}
+	case <-ctx.Done():
+		t.Fatal("setLoginVerifiers did not finish after lock release")
 	}
 }
 

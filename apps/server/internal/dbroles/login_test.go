@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -14,6 +15,24 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
+
+// withCatalogLock runs fn in a transaction that first takes the shared
+// LockID advisory lock, so a test's own database or role writes serialize
+// with concurrent Ensure and SetLoginVerifiers calls on the same database
+// instead of racing them (ADR 0038).
+func withCatalogLock(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
+	tx, beginErr := db.BeginTx(ctx, nil)
+	if beginErr != nil {
+		return beginErr
+	}
+	if lockErr := lockCatalog(ctx, tx); lockErr != nil {
+		return errors.Join(lockErr, tx.Rollback())
+	}
+	if fnErr := fn(tx); fnErr != nil {
+		return errors.Join(fnErr, tx.Rollback())
+	}
+	return tx.Commit()
+}
 
 func TestScramVerifierMatchesKnownVector(t *testing.T) {
 	salt, err := base64.StdEncoding.DecodeString("W22ZaJ0SNY7soEsUEjb6gQ==")
@@ -169,7 +188,11 @@ func TestScramVerifierAuthenticatesRealLogin(t *testing.T) {
 	// Registered immediately after CREATE ROLE succeeds, so a failure in
 	// any later step still drops the role instead of leaking it.
 	defer func() {
-		if _, revokeErr := admin.ExecContext(context.Background(), `REVOKE ALL ON DATABASE `+quoteIdentifier(dbName)+` FROM `+role); revokeErr != nil {
+		revokeErr := withCatalogLock(context.Background(), admin, func(tx *sql.Tx) error {
+			_, execErr := tx.ExecContext(context.Background(), `REVOKE ALL ON DATABASE `+quoteIdentifier(dbName)+` FROM `+role)
+			return execErr
+		})
+		if revokeErr != nil {
 			t.Error(revokeErr)
 		}
 		if _, dropErr := admin.ExecContext(context.Background(), `DROP ROLE IF EXISTS `+role); dropErr != nil {
@@ -177,8 +200,12 @@ func TestScramVerifierAuthenticatesRealLogin(t *testing.T) {
 		}
 	}()
 	// db-setup revokes CONNECT from PUBLIC, so the test role needs its own
-	// grant.
-	if _, err = admin.ExecContext(ctx, `GRANT CONNECT ON DATABASE `+quoteIdentifier(dbName)+` TO `+role); err != nil {
+	// grant. Both this grant and its cleanup revoke go through the LockID
+	// lock because they rewrite the same pg_database ACL row Ensure writes.
+	if err = withCatalogLock(ctx, admin, func(tx *sql.Tx) error {
+		_, execErr := tx.ExecContext(ctx, `GRANT CONNECT ON DATABASE `+quoteIdentifier(dbName)+` TO `+role)
+		return execErr
+	}); err != nil {
 		t.Fatal(err)
 	}
 	u, err := url.Parse(dsn)

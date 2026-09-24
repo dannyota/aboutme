@@ -67,6 +67,7 @@ const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
 const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
 const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
 const PENDING_COOKIE = '__Host-auth-pending';
+const SESSION_COOKIE = '__Host-session';
 const RECOVERY_INPUT = '#second-factor-recovery-code';
 const PHONE = { height: 844, width: 390 };
 const DESKTOP = { height: 900, width: 1440 };
@@ -138,6 +139,40 @@ type FailureOutcome
     | 'unknown';
 
 type AccountRole = 'none' | 'primary' | 'recovery' | 'attempts' | 'disabled';
+
+// --- Enabled-proof sharding --------------------------------------------------
+//
+// CI runs the enabled journey as up to two parallel shards, each its own
+// harness and evidence file (ABOUTME_PASSKEY_SHARD, read by run.sh from the
+// host environment). Unset (every local or single-shard run) proves every
+// role. The disabled-enrollment phase runs with primary-disabled, restoring
+// the unsharded order (primary, then disabled) that phase's first Vietnamese
+// render depends on: primary's own `locales` stage is what first renders the
+// settings page in `vi` on that harness.
+type PasskeyShard = 'primary-disabled' | 'recovery-attempts';
+
+const PASSKEY_SHARD_ROLES: Readonly<Record<PasskeyShard, readonly AccountRole[]>> = {
+  'primary-disabled': ['primary'],
+  'recovery-attempts': ['recovery', 'attempts'],
+};
+
+function activeShardRoles(): ReadonlySet<AccountRole> | null {
+  const raw = process.env.ABOUTME_PASSKEY_SHARD;
+  if (raw === undefined || raw === '') return null;
+  if (raw === 'primary-disabled' || raw === 'recovery-attempts') {
+    return new Set(PASSKEY_SHARD_ROLES[raw]);
+  }
+  throw new Error(
+    `ABOUTME_PASSKEY_SHARD must be primary-disabled or recovery-attempts, not ${JSON.stringify(raw)}`,
+  );
+}
+
+const ACTIVE_ROLES = activeShardRoles();
+
+/** True when the active shard (or the unsharded default) proves `r`. */
+function runsRole(r: AccountRole): boolean {
+  return ACTIVE_ROLES === null || ACTIVE_ROLES.has(r);
+}
 
 let recordedStage = 'start';
 let recordedRole: AccountRole = 'none';
@@ -886,13 +921,21 @@ async function passwordSignIn(
 
 /**
  * Logs out from the settings page in English, whatever locale the previous
- * step left. The logout response sends `Clear-Site-Data: "cookies"`, which
- * also drops the locale cookie, so the next page would render in the
- * Vietnamese default. English is pinned again afterwards; a caller that wants
- * another locale sets it after this returns.
+ * step left. In a sharded run, no-ops without navigating when no session
+ * exists yet: a shard's first role has no session yet, and visiting
+ * /app/settings/sessions while signed out logs unexpected 401s from the API
+ * calls the settings page makes on the way to redirecting to /login. The
+ * unsharded default always expects a session and still fails if there is
+ * none, so a broken logout keeps failing an unsharded run. The logout
+ * response sends `Clear-Site-Data: "cookies"`, which also drops the locale
+ * cookie, so the next page would render in the Vietnamese default. English
+ * is pinned again afterwards; a caller that wants another locale sets it
+ * after this returns.
  */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
+  if (ACTIVE_ROLES !== null
+    && await cookieValue(page.context(), SESSION_COOKIE) === null) return;
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
@@ -1110,7 +1153,6 @@ test('proves the passkey second factor over native HTTPS', async ({
 
   stage('virtual-authenticator');
   const pool = await AuthenticatorPool.attach(context, page);
-  const authPrimary = await pool.add();
 
   const primaryEmail = runEmail('primary');
   const primaryPassword = runPassword();
@@ -1119,6 +1161,7 @@ test('proves the passkey second factor over native HTTPS', async ({
   const attemptsEmail = runEmail('attempts');
   const attemptsPassword = runPassword();
 
+  let authPrimary = '';
   let authRecovery = '';
   let authAttempts = '';
   let primaryFinalPassword = primaryPassword;
@@ -1126,9 +1169,17 @@ test('proves the passkey second factor over native HTTPS', async ({
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
+  // Set right before each role's registerVerified call, so teardown can tell
+  // a role whose account creation was never attempted (for example a shard's
+  // first role failing before it gets that far) from one whose account
+  // exists and needs deleting.
+  const createdAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
     // 1. A fictional primary account with a password and a linked provider.
+    if (runsRole('primary')) {
+    createdAccounts.primary = true;
+    authPrimary = await pool.add();
     role('primary');
     stage('primary-register');
     await registerVerified(
@@ -1439,9 +1490,12 @@ test('proves the passkey second factor over native HTTPS', async ({
       .toBe('session');
     primaryCleanupCode = '';
     steps.finalRemoved = true;
+    }
 
     // 14. A second fictional account carries the recovery-code and ceremony
     //     cases, which need their own attempt budget.
+    if (runsRole('recovery')) {
+    createdAccounts.recovery = true;
     role('recovery');
     stage('recovery-account');
     await signOut(page);
@@ -1531,9 +1585,12 @@ test('proves the passkey second factor over native HTTPS', async ({
     expect(race.filter((result) => result.status === 204)).toHaveLength(1);
     expect(race.filter((result) => result.status === 401)).toHaveLength(1);
     steps.concurrentCompletion = true;
+    }
 
     // 15. A third fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
+    if (runsRole('attempts')) {
+    createdAccounts.attempts = true;
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
@@ -1568,32 +1625,48 @@ test('proves the passkey second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-sign-in-again')).toBeVisible();
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
+    }
   } finally {
     beginTeardown();
-    const removed = [
-      await deleteAccount(page, pool, {
+    // Deletes only the accounts the active shard created (every account on
+    // the unsharded default), so a shard's cleanup step reports on exactly
+    // its own accounts.
+    const removed: boolean[] = [];
+    if (createdAccounts.primary) {
+      removed.push(await deleteAccount(page, pool, {
         authenticatorId: authPrimary,
         email: primaryEmail,
         password: primaryFinalPassword,
         recoveryCode: primaryCleanupCode,
-      }),
-      await deleteAccount(page, pool, {
+      }));
+    }
+    if (createdAccounts.recovery) {
+      removed.push(await deleteAccount(page, pool, {
         authenticatorId: authRecovery,
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
-      }),
-      await deleteAccount(page, pool, {
+      }));
+    }
+    if (createdAccounts.attempts) {
+      removed.push(await deleteAccount(page, pool, {
         authenticatorId: authAttempts,
         email: attemptsEmail,
         password: attemptsPassword,
         recoveryCode: attemptsCleanupCode,
-      }),
-    ];
-    steps.cleanup = removed.every(Boolean);
+      }));
+    }
+    steps.cleanup = removed.length > 0 && removed.every(Boolean);
     for (const extra of extraContexts) {
       await extra.close().catch(() => undefined);
     }
+    // A shard's evidence lists only the steps it proved: the closed-list
+    // schema check in verify-evidence.mjs accepts any true subset of the
+    // full step set for this scenario and expects every step to be present
+    // and true only once its results are combined across every shard.
+    const provenSteps = Object.fromEntries(
+      Object.entries(steps).filter(([, proved]) => proved === true),
+    );
     await writeFile(
       ENABLED_EVIDENCE_PATH,
       `${JSON.stringify({
@@ -1606,7 +1679,7 @@ test('proves the passkey second factor over native HTTPS', async ({
         origin: ORIGIN,
         scenario: 'passkey-second-factor',
         schemaVersion: 1,
-        steps,
+        steps: provenSteps,
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );

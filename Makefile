@@ -62,8 +62,8 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	scripts/generate-web-e2e-source-manifest.test.sh
 	scripts/web-e2e-source.test.sh
 
-operational-test-dev-https: ## operational-test's dev-https static safety-test suite, its slowest script
-	bash scripts/dev-https-test.sh --static
+operational-test-dev-https: ## operational-test's dev-https static safety-test suite (DEV_HTTPS_TEST_SHARD=i/n runs one shard; unset runs all)
+	DEV_HTTPS_TEST_SHARD=$(DEV_HTTPS_TEST_SHARD) bash scripts/dev-https-test.sh --static
 
 operational-test-deploy: ## operational-test's deploy-script static safety-test suite
 	bash deploy/aws/scripts/deploy_test.sh
@@ -137,8 +137,11 @@ caddy-prod-test: ## Build the production Caddy image and test routing, origin-pu
 server-test-realtime-stress: ## Measure 2,000 real SSE connections and churn locally; run alone
 	@cd apps/server && ABOUTME_REALTIME_STRESS=1 go test ./internal/realtimebench -run TestPublicSSEConnectionChurn -count=1 -v -timeout=70s
 
-server-test-s3: ## Run the fail-closed media conformance suite against aboutme-test-s3 (needs test-s3-up)
-	bash scripts/test-s3.sh run bash -c 'cd apps/server && go test ./internal/media/... -race -count=1 -v -skip "^TestNormalizationBudget$$"'
+SERVER_TEST_S3_RUN ?=
+SERVER_TEST_S3_SKIP ?= ^TestNormalizationBudget$$
+
+server-test-s3: ## Run the fail-closed media conformance suite against aboutme-test-s3 (needs test-s3-up; override SERVER_TEST_S3_RUN/SERVER_TEST_S3_SKIP to select a subset)
+	bash scripts/test-s3.sh run bash -c 'cd apps/server && go test ./internal/media/... -race -count=1 -v $(if $(SERVER_TEST_S3_RUN),-run "$(SERVER_TEST_S3_RUN)") -skip "$(SERVER_TEST_S3_SKIP)"'
 
 server-test-resumeapi: ## Run the fail-closed resume API suite with filesystem media (needs test-db-up)
 	@cd apps/server && REQUIRE_TEST_DB=1 TEST_MEDIA_BACKEND=fs \
