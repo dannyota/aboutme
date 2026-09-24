@@ -10,6 +10,9 @@ export const defaultLocale: Locale = 'vi';
 
 export const localeCookie = 'aboutme-locale';
 
+/** One year, the cookie's `max-age` (docs/design/localization.md). */
+export const localeCookieMaxAgeSeconds = 60 * 60 * 24 * 365;
+
 export const localeNames: Record<Locale, string> = {
   vi: 'Tiếng Việt',
   en: 'English',

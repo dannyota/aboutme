@@ -5,9 +5,11 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { setResponseStatus } from 'h3';
+import { setResponseHeader, setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 import AppShell from '../app/components/app/AppShell.vue';
+import LocaleToggle from '../app/components/app/LocaleToggle.vue';
+import { localeCookie } from '../app/i18n/locale';
 import { setSiteLocale } from './support/locale';
 
 mockNuxtImport('navigateTo', () => vi.fn());
@@ -36,7 +38,14 @@ registerEndpoint('/api/v1/me', {
 registerEndpoint('/api/v1/auth/logout', {
   method: 'POST',
   handler: (event) => {
+    setResponseHeader(event, 'Clear-Site-Data', '"cookies", "storage"');
     setResponseStatus(event, 204);
+    // The real browser applies this header itself and wipes every cookie
+    // for this origin, including `aboutme-locale`, before the client's
+    // response handler runs (docs/design/security.md, session lifecycle).
+    // Simulated here so the reload assertion below is a real regression
+    // check: without useAuth's restore hook, it would fail.
+    document.cookie = `${localeCookie}=; Max-Age=0; Path=/`;
     return null;
   },
 });
@@ -109,5 +118,18 @@ describe('logout state transition', () => {
     );
     expect(meReads).toBe(readsBeforeLogout);
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
+
+    // A reload after logout starts a fresh app instance that reads only
+    // the cookie the restore hook just rewrote, not the in-memory locale
+    // state Clear-Site-Data cannot touch (docs/design/localization.md,
+    // "Two language domains"). Without the hook, the handler above leaves
+    // the cookie cleared and this would render Vietnamese by default.
+    clearNuxtState(localeCookie);
+    const reloaded = await mountSuspended(LocaleToggle, {
+      props: { label: 'Language' },
+    });
+    expect(reloaded.get('[lang="en"]').attributes('aria-pressed')).toBe(
+      'true',
+    );
   });
 });

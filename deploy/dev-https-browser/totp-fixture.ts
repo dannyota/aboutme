@@ -133,12 +133,12 @@ export function mismatchedCode(exclude: string): string {
 
 /** The closed set of section names the enabled TOTP proof times. */
 export type TimingSection =
-  | 'none' | 'primary' | 'replay' | 'concurrent' | 'replace' | 'epoch'
-  | 'locale' | 'recovery' | 'attempts' | 'disabled' | 'cleanup';
+  | 'none' | 'primary' | 'skew' | 'replay' | 'concurrent' | 'replace'
+  | 'epoch' | 'locale' | 'recovery' | 'attempts' | 'disabled' | 'cleanup';
 
 const TIMING_SECTIONS: readonly TimingSection[] = [
-  'none', 'primary', 'replay', 'concurrent', 'replace', 'epoch', 'locale',
-  'recovery', 'attempts', 'disabled', 'cleanup',
+  'none', 'primary', 'skew', 'replay', 'concurrent', 'replace', 'epoch',
+  'locale', 'recovery', 'attempts', 'disabled', 'cleanup',
 ];
 
 /** Accumulates wall-clock milliseconds spent in each closed-list section. */

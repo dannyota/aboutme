@@ -23,84 +23,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Runs docs-lint, lengths-check, and every operational-test lane (fast,
+  # deploy-script, and browser-image/MCP-owner-workflow) in one job: none of
+  # them needs a database, Go, or a browser, so splitting them across jobs
+  # only added queueing and duplicate checkouts. Each check after the first
+  # runs under `if: ${{ !cancelled() }}` so one failure does not hide another.
   docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci
-      - run: make docs-lint
-      - run: make lengths-check
-      - run: make operational-test-fast
-
-  # `make operational-test`'s three slowest scripts, each in its own job
-  # instead of after one another in the sequence docs used to run them in:
-  # dev-https-test.sh --static alone was 185s of docs' 284s total,
-  # deploy_test.sh was 38s, and the browser-image and MCP owner-workflow
-  # suites were 25s and 23s. The Makefile still runs every one of them, in
-  # the same order, from a single `make operational-test`.
-  docs-dev-https:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: make operational-test-dev-https
-
-  docs-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: make operational-test-deploy
-
-  docs-browser:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: deploy/dev-https-browser/package-lock.json
-      # `make operational-test-browser` compiles and lists the trusted-browser
-      # specs through the pinned @playwright/test in this directory; the
-      # list-only check needs the runner, not downloaded browser binaries.
-      - run: npm ci
-        working-directory: deploy/dev-https-browser
-      - run: make operational-test-browser
-
-  schema:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: packages/schema/package-lock.json
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      - run: make schema-check
-      - run: go build ./... && go vet ./... && go test ./...
-        working-directory: packages/schema/gen/go
-
-  api:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -110,375 +38,37 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            apps/web/package-lock.json
+            deploy/dev-https-browser/package-lock.json
       - run: npm ci
-      # The drift gate in `make api-check` runs the generator pinned in
-      # apps/web. --ignore-scripts skips `nuxt prepare`; the gate needs only
-      # the generator binary.
-      - run: npm ci --ignore-scripts
-        working-directory: apps/web
-      - run: make api-check
+      - if: ${{ !cancelled() }}
+        run: make docs-lint
+      - if: ${{ !cancelled() }}
+        run: make lengths-check
+      - if: ${{ !cancelled() }}
+        run: make operational-test-fast
+      - if: ${{ !cancelled() }}
+        run: make operational-test-deploy
+      - if: ${{ !cancelled() }}
+        run: npm ci
+        working-directory: deploy/dev-https-browser
+      - if: ${{ !cancelled() }}
+        run: make operational-test-browser
 
-  server:
+  # dev-https-test.sh --static runs unsharded here: scripts/dev-https-test.sh
+  # still supports DEV_HTTPS_TEST_SHARD=i/n and the CHECKS-array completeness
+  # check, but the 20-concurrent-job budget this workflow already spends on
+  # the browser-proof shards leaves no room for a matrix here too.
+  docs-dev-https:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      - run: make server-build
-      - run: make server-vet
-      - run: make server-test
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          working-directory: apps/server
-          version: v2.13.2
-      - name: go mod tidy is a no-op
-        run: |
-          cd apps/server
-          cp go.mod /tmp/go.mod.before && cp go.sum /tmp/go.sum.before
-          go mod tidy
-          diff /tmp/go.mod.before go.mod && diff /tmp/go.sum.before go.sum \
-            || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
-      - name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          cd apps/server && govulncheck ./...
+      - run: make operational-test-dev-https
 
-  server-media-s3:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      - run: make test-s3-up
-      - run: make server-test-s3
-      - if: always()
-        run: make test-s3-down
-
-  web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-      - run: npm ci
-        working-directory: apps/web
-      - run: make web-lint
-      - run: make web-typecheck
-      - run: make web-test
-      - run: make web-build
-      - run: make web-no-eval-check
-
-  web-e2e:
-    needs: web
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Ignore local E2E result roots
-        run: |
-          grep -qxF '/.dev/' .git/info/exclude ||
-            printf '%s\n' '/.dev/' >> .git/info/exclude
-      - name: Compare pinned browser baselines
-        env:
-          WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
-        run: |
-          test -z "${UPDATE_GOLDEN+x}"
-          test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
-          make web-e2e
-      - name: Upload preview gap report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: preview-gap-report
-          path: .dev/web-e2e-results/*/*/compare/harness/preview-gap-report.json
-          if-no-files-found: warn
-
-  # Runs the synthetic passkey and recovery journey against the exact
-  # candidate through the repository HTTPS harness. This is the only hosted
-  # observation of that flow: GitHub CI cannot see the deployed release
-  # fence, the enrollment flag, live identity providers, or the production
-  # origin, so a compile-only or Playwright-list result never substitutes for
-  # this job. Uploaded evidence covers only fictional accounts.
-  passkey-browser-proof:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      # A go-installed caddy reports version "unknown", which the dev-https
-      # tool check rejects, so this job uses the official release binary.
-      - name: Install the pinned caddy (2.11.4)
-        run: |
-          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
-          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
-          mkdir -p "$RUNNER_TEMP/caddy"
-          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
-          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
-      # The harness preflight requires the pinned Chromium on the host.
-      - name: Install web dependencies and the pinned Chromium
-        run: npm ci && npx playwright install chromium
-        working-directory: apps/web
-      - run: make dev-https
-      - run: make dev-https-browser-image
-      - run: make dev-https-passkey-check
-      - name: Upload passkey proof evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: passkey-browser-proof-evidence
-          path: .dev/native-https/evidence/passkey-*
-          if-no-files-found: ignore
-          retention-days: 14
-          # .dev is a dot-directory; the upload action excludes those by
-          # default and would silently archive nothing without this.
-          include-hidden-files: true
-      - name: Stop the HTTPS harness
-        if: always()
-        run: make dev-https-down
-      - name: Stop the runner-local database
-        if: always()
-        run: make test-db-down
-
-  # Runs the synthetic TOTP enrollment, verification, and recovery journey
-  # against the exact candidate through the repository HTTPS harness. This is
-  # the only hosted observation of that flow: GitHub CI cannot see the
-  # deployed release fence, the enrollment flag, or the production origin, so
-  # a compile-only or Playwright-list result never substitutes for this job.
-  # Uploaded evidence covers only fictional accounts.
-  #
-  # The enabled journey runs as three shards (totp.spec.ts "Enabled-proof
-  # sharding"), each its own harness and its own evidence file; primary alone
-  # carries most of the account's own step count, so it is its own shard.
-  # totp-browser-proof-coverage checks every step is true across all three
-  # shards' evidence once every shard finishes.
-  totp-browser-proof:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [primary, accounts-b, accounts-c]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      # A go-installed caddy reports version "unknown", which the dev-https
-      # tool check rejects, so this job uses the official release binary.
-      - name: Install the pinned caddy (2.11.4)
-        run: |
-          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
-          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
-          mkdir -p "$RUNNER_TEMP/caddy"
-          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
-          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
-      # The harness preflight requires the pinned Chromium on the host.
-      - name: Install web dependencies and the pinned Chromium
-        run: npm ci && npx playwright install chromium
-        working-directory: apps/web
-      - run: make dev-https
-      - run: make dev-https-browser-image
-      - run: make dev-https-totp-check
-        env:
-          ABOUTME_TOTP_SHARD: ${{ matrix.shard }}
-      - name: Upload TOTP proof evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: totp-browser-proof-evidence-${{ matrix.shard }}
-          path: .dev/native-https/evidence/totp-*
-          if-no-files-found: ignore
-          retention-days: 14
-          # .dev is a dot-directory; the upload action excludes those by
-          # default and would silently archive nothing without this.
-          include-hidden-files: true
-      # Timings only (totp.spec.ts "CI section timing"): never covers a code,
-      # secret, email, or URL, and is not part of the verified evidence above.
-      - name: Upload TOTP proof timing
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: totp-browser-proof-timing-${{ matrix.shard }}
-          path: .dev/native-https/evidence/totp-enabled.*/totp-timing.json
-          if-no-files-found: ignore
-          retention-days: 14
-          include-hidden-files: true
-      - name: Stop the HTTPS harness
-        if: always()
-        run: make dev-https-down
-      - name: Stop the runner-local database
-        if: always()
-        run: make test-db-down
-
-  # Each totp-browser-proof shard's own evidence passed the closed-list check
-  # in verify-evidence.mjs when its shard ran; this checks that the three
-  # shards' evidence together still proves every step of the scenario, the
-  # same requirement the job proved alone before it was sharded.
-  totp-browser-proof-coverage:
-    needs: totp-browser-proof
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          pattern: totp-browser-proof-evidence-*
-          path: totp-shard-evidence
-      - run: |
-          mapfile -t evidence_files < <(
-            find totp-shard-evidence -name totp-second-factor-proof.json)
-          [ "${#evidence_files[@]}" -gt 0 ] ||
-            { echo "no shard evidence files were downloaded" >&2; exit 1; }
-          node deploy/dev-https-browser/check-totp-shard-coverage.mjs \
-            "${evidence_files[@]}"
-
-  # The browser-free half of web-e2e: build the Nuxt app from exactly the files
-  # the source manifest lists. A stale manifest fails here quickly and in
-  # parallel, instead of inside the Playwright image (and without being masked
-  # behind a red `web` job).
-  web-source-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: apps/web/package-lock.json
-      - name: Ignore local result roots
-        run: |
-          grep -qxF '/.dev/' .git/info/exclude ||
-            printf '%s\n' '/.dev/' >> .git/info/exclude
-      - run: make web-source-build
-
-  server-integration:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18.4-alpine
-        env:
-          POSTGRES_USER: aboutme
-          POSTGRES_PASSWORD: aboutme_dev
-          POSTGRES_DB: aboutme
-        ports:
-          - 5432:5432
-        # A throwaway database on tmpfs removes disk latency from the suites.
-        options: >-
-          --tmpfs /var/lib/postgresql:rw
-          --health-cmd "pg_isready -U aboutme"
-          --health-interval 5s --health-timeout 5s --health-retries 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      - name: Initialize database roles
-        run: make db-setup
-        env:
-          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - run: make server-test-integration
-        env:
-          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      # Runs the DB-backed auth/store/user suites. Without this, a bare
-      # `go test ./...` reports ok while every DSN-gated case skips — the
-      # acceptance tests for AC-AUTH-001..005 and AC-SEC-002 among them. The
-      # target sets REQUIRE_TEST_DB=1, so a missing DSN fails the job instead
-      # of passing vacuously.
-      - run: make server-test-db
-        env:
-          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - run: make server-test-resumeapi
-        env:
-          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - run: make test-s3-up
-      - run: make server-test-resumeapi-s3
-        env:
-          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - if: always()
-        run: make test-s3-down
-
-  migrations-append-only:
+  # The append-only migration and released-schema guards, gitleaks, and the
+  # schema/API/Tofu contract gates, in one job: the first three need full
+  # history (fetch-depth 0), which is harmless for the rest, and none of the
+  # six needs more than its own setup.
+  contracts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -489,7 +79,7 @@ jobs:
           # Passed through the environment rather than interpolated directly
           # into the script: `${{ }}` expansion happens before the shell sees
           # the line, so event-derived values belong in env: as a rule, even
-          # when — as here — they are commit SHAs.
+          # for a commit SHA like this one.
           BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
@@ -501,27 +91,18 @@ jobs:
             fi
           fi
           bash scripts/check-migrations-append-only.sh --commits "$BASE_SHA" HEAD
-
-  # Released resume schemas are immutable (docs/design/data.md, "Document
-  # versions"): a released resume.v<N>.schema.json is the contract stored
-  # documents and adjacent-version converters are pinned to. A one-time,
-  # owner-approved documentation-citation rewrite is hash-pinned below so it
-  # cannot authorize any other v1 bytes. Parallels
-  # migrations-append-only above; the same name-status logic, a different
-  # immutable artifact. packages/schema/test/released-append-only.test.ts
-  # proves each rejected status against throwaway repositories and pins this
-  # script's text.
-  released-schema-append-only:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Reject modified or deleted released schemas
+      # Released resume schemas are immutable (docs/design/data.md, "Document
+      # versions"): a released resume.v<N>.schema.json is the contract stored
+      # documents and adjacent-version converters are pinned to. A one-time,
+      # owner-approved documentation-citation rewrite is hash-pinned below so
+      # it cannot authorize any other v1 bytes. The same name-status logic as
+      # the migration guard above, over a different immutable artifact.
+      # packages/schema/test/released-append-only.test.ts proves each
+      # rejected status against throwaway repositories and pins this
+      # script's text.
+      - if: ${{ !cancelled() }}
+        name: Reject modified or deleted released schemas
         env:
-          # Passed through the environment rather than interpolated directly
-          # into the script, for the same reason migrations-append-only does
-          # it: `${{ }}` expansion happens before the shell sees the line.
           BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
@@ -559,63 +140,380 @@ jobs:
             echo "$changed"
             exit 1
           fi
-
-  # Token-free secret scanning runs for every push and pull request, including
-  # forks where GitHub correctly withholds the connected Semgrep token.
-  gitleaks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: ${{ !cancelled() }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/web/package-lock.json
+            packages/schema/package-lock.json
+      - if: ${{ !cancelled() }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.1"
           cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - if: ${{ !cancelled() }}
+        name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      # Restored and saved separately: a key ending in the week lets a
+      # cache live past one run instead of being replaced by it, and
+      # restore-keys fall back to the same job's older cache, then to
+      # server's, before building from nothing.
+      - if: ${{ !cancelled() }}
+        id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
           restore-keys: |
             go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      - name: Install the pinned gitleaks (8.30.1)
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      - if: ${{ !cancelled() }}
+        run: make schema-check
+      - if: ${{ !cancelled() }}
+        run: go build ./... && go vet ./... && go test ./...
+        working-directory: packages/schema/gen/go
+      - if: ${{ !cancelled() }}
+        run: npm ci
+      # The drift gate in `make api-check` runs the generator pinned in
+      # apps/web. --ignore-scripts skips `nuxt prepare`; the gate needs only
+      # the generator binary.
+      - if: ${{ !cancelled() }}
+        run: npm ci --ignore-scripts
+        working-directory: apps/web
+      - if: ${{ !cancelled() }}
+        run: make api-check
+      - if: ${{ !cancelled() }}
+        name: Install the pinned gitleaks (8.30.1)
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.30.1
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - run: bash scripts/check-tool-versions.sh gitleaks
-      - run: gitleaks detect --redact --no-banner
+      - if: ${{ !cancelled() }}
+        run: bash scripts/check-tool-versions.sh gitleaks
+      - if: ${{ !cancelled() }}
+        run: gitleaks detect --redact --no-banner
+      - if: ${{ !cancelled() }}
+        uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.6
+          tofu_wrapper: false
+      - if: ${{ !cancelled() }}
+        run: tofu fmt -check -recursive deploy/aws
+      - if: ${{ !cancelled() }}
+        name: Validate each root
+        run: |
+          for root in deploy/aws/probe deploy/aws/bootstrap deploy/aws/prod; do
+            tofu -chdir="$root" init -backend=false -input=false >/dev/null
+            tofu -chdir="$root" validate
+          done
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
 
-  # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
-  # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
-  # Supply Chain covers dependency CVEs for Go and npm. It authenticates with
-  # SEMGREP_APP_TOKEN, which GitHub withholds from FORK pull requests, so run
-  # it on pushes, manual runs, and same-repo PRs only. A fork PR would have no
-  # token and fail.
-  semgrep:
+  # The Go build/vet/test/lint gate, plus the sqlc-drift and route-table
+  # gates: all three need only a Go toolchain and this job's own Go cache, so
+  # folding them in removed two jobs' worth of checkout and cache overhead.
+  server:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          fetch-depth: 0 # semgrep ci is diff-aware; give it history
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+          go-version: "1.27.1"
+          cache: false
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      # Restored and saved separately: see the contracts job for why.
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          python-version: "3.13"
-      - run: pip install semgrep==1.176.0
-      - run: scripts/test/semgrep-sca-inputs-test.sh
-      - run: semgrep ci --code --supply-chain --secrets --no-suppress-errors
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      - run: make server-build
+      - if: ${{ !cancelled() }}
+        run: make server-vet
+      - if: ${{ !cancelled() }}
+        run: make server-test
+      - if: ${{ !cancelled() }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          working-directory: apps/server
+          version: v2.13.2
+      - if: ${{ !cancelled() }}
+        name: go mod tidy is a no-op
+        run: |
+          cd apps/server
+          cp go.mod /tmp/go.mod.before && cp go.sum /tmp/go.sum.before
+          go mod tidy
+          diff /tmp/go.mod.before go.mod && diff /tmp/go.sum.before go.sum \
+            || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
+      - if: ${{ !cancelled() }}
+        name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          cd apps/server && govulncheck ./...
+      # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
+      # migrations/ is the only declared source for BOTH goose and sqlc's
+      # generated data layer. Fails on any drift, including an untracked
+      # generated file, so `make sqlc-check` uses `git status --porcelain`
+      # rather than `git diff --exit-code`. This needs no database: sqlc
+      # parses the migration files statically. sqlc stays pinned so the gate
+      # flags real drift rather than generator formatting changes.
+      - if: ${{ !cancelled() }}
+        name: Install the pinned sqlc (v1.31.1)
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - if: ${{ !cancelled() }}
+        name: Assert sqlc is present and pinned
+        run: sqlc version | grep -q 'v1.31.1'
+      - if: ${{ !cancelled() }}
+        run: make sqlc-check
+      # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005)
+      # through a live caddy process fronting stub backends. Needs a caddy
+      # binary but no database; pinned to 2.11.4 to match
+      # deploy/compose.yml's caddy image tag. The release binary is faster
+      # than `go install`ing and compiling caddy from source.
+      - if: ${{ !cancelled() }}
+        name: Install the pinned caddy (2.11.4)
+        run: |
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
+          mkdir -p "$RUNNER_TEMP/caddy"
+          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
+          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      - if: ${{ !cancelled() }}
+        run: make route-table-test
         env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+          CADDY_BIN: caddy
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
 
-  # The migration suite is the slowest; it runs beside the other database
-  # suites instead of after them.
-  server-migrations:
+  # Runs only ./internal/media/...'s slow normalization corpus test, in its
+  # own job so the much shorter rest of the suite (server-resumeapi's own
+  # server-test-s3 step) is not held behind it. server-test-s3's
+  # SERVER_TEST_S3_RUN/SERVER_TEST_S3_SKIP select the complementary halves so
+  # every test in the package runs exactly once between the two jobs.
+  server-media-s3-corpus:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      - run: make test-s3-up
+      - if: ${{ !cancelled() }}
+        run: make server-test-s3
+        env:
+          SERVER_TEST_S3_RUN: ^TestNormalizeAcceptsFrozenCorpusDeterministically$
+      - if: always()
+        run: make test-s3-down
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
+  web-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: make web-test
+
+  # Runs from its own checkout with no `needs:`: it uses no artifact web-test
+  # or web-build produces, so it runs in parallel with them.
+  web-e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Ignore local E2E result roots
+        run: |
+          grep -qxF '/.dev/' .git/info/exclude ||
+            printf '%s\n' '/.dev/' >> .git/info/exclude
+      - name: Compare pinned browser baselines
+        env:
+          WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          test -z "${UPDATE_GOLDEN+x}"
+          test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
+          make web-e2e
+      - name: Upload preview gap report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: preview-gap-report
+          path: .dev/web-e2e-results/*/*/compare/harness/preview-gap-report.json
+          if-no-files-found: warn
+
+  # make web-source-build first, from the untouched checkout: it builds the
+  # Nuxt app from exactly the files the source manifest lists in an isolated
+  # tarball, but requires a clean working tree and index
+  # (scripts/web-e2e-source.sh), so it runs before any step below that
+  # installs dependencies or writes build output. A stale manifest fails here
+  # quickly and in parallel, instead of inside the Playwright image (and
+  # without being masked behind a red web-test job). The rest of the Nuxt
+  # build/lint/typecheck gate joins this job so its own checkout and Go-free
+  # setup are not paid twice.
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Ignore local result roots
+        run: |
+          grep -qxF '/.dev/' .git/info/exclude ||
+            printf '%s\n' '/.dev/' >> .git/info/exclude
+      - run: make web-source-build
+      - if: ${{ !cancelled() }}
+        run: npm ci
+        working-directory: apps/web
+      - if: ${{ !cancelled() }}
+        run: make web-lint
+      - if: ${{ !cancelled() }}
+        run: make web-typecheck
+      - if: ${{ !cancelled() }}
+        run: make web-build
+      - if: ${{ !cancelled() }}
+        run: make web-no-eval-check
+
+  # Runs server-test-integration and the DB-backed suites in server-test-db
+  # against the primary postgres service, so this job's suites run at the
+  # same time as server-resumeapi's rather than one after the other. The
+  # migration suite, the slowest of the database suites, runs here too but
+  # against its own postgres-migrations service on a different port, so its
+  # schema mutations never share a database with the other suites in this
+  # job or with server-resumeapi.
+  server-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: aboutme
+          POSTGRES_PASSWORD: aboutme_dev
+          POSTGRES_DB: aboutme
+        ports:
+          - 5432:5432
+        # A throwaway database on tmpfs removes disk latency from the suites.
+        options: >-
+          --tmpfs /var/lib/postgresql:rw
+          --health-cmd "pg_isready -U aboutme"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      postgres-migrations:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: aboutme
+          POSTGRES_PASSWORD: aboutme_dev
+          POSTGRES_DB: aboutme
+        ports:
+          - 5433:5432
+        options: >-
+          --tmpfs /var/lib/postgresql:rw
+          --health-cmd "pg_isready -U aboutme"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      - name: Initialize database roles
+        run: make db-setup
+        env:
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      - run: make server-test-integration
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      # Runs the DB-backed auth/store/user suites. Without this, a bare
+      # `go test ./...` reports ok while every DSN-gated case skips, including
+      # the acceptance tests for AC-AUTH-001..005 and AC-SEC-002. The target
+      # sets REQUIRE_TEST_DB=1, so a missing DSN fails the job instead of
+      # passing vacuously.
+      - if: ${{ !cancelled() }}
+        run: make server-test-db
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      - if: ${{ !cancelled() }}
+        name: Initialize database roles (migrations)
+        run: make db-setup
+        env:
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5433/aboutme?sslmode=disable
+      - if: ${{ !cancelled() }}
+        run: make server-migration-test
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5433/aboutme?sslmode=disable
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
+  # Runs the filesystem- and S3-backed resumeapi suites against their own
+  # database service, so they run at the same time as server-integration's
+  # suites rather than one after the other.
+  server-resumeapi:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -637,56 +535,372 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
           restore-keys: |
             go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
       - name: Initialize database roles
         run: make db-setup
         env:
           DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-      - run: make server-migration-test
+      - run: make server-test-resumeapi
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
-
-  # Exercises the real deploy/caddy/Caddyfile route table (AC-OPS-005) through a
-  # live caddy process fronting stub backends. Needs a caddy binary but no
-  # database; pinned to 2.11.4 to match deploy/compose.yml's caddy image tag.
-  route-table:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - if: ${{ !cancelled() }}
+        run: make test-s3-up
+      - if: ${{ !cancelled() }}
+        run: make server-test-resumeapi-s3
+        env:
+          TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5432/aboutme?sslmode=disable
+      # The rest of ./internal/media/..., skipping the two tests
+      # server-media-s3-corpus already ran (its corpus test, and the budget
+      # test neither job runs), so every test in the package runs exactly
+      # once between the two jobs.
+      - if: ${{ !cancelled() }}
+        run: make server-test-s3
+        env:
+          SERVER_TEST_S3_SKIP: ^(TestNormalizationBudget|TestNormalizeAcceptsFrozenCorpusDeterministically)$
+      - if: always()
+        run: make test-s3-down
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
+  # Runs the synthetic passkey and recovery journey against the exact
+  # candidate through the repository HTTPS harness. This is the only hosted
+  # observation of that flow: GitHub CI cannot see the deployed release
+  # fence, the enrollment flag, live identity providers, or the production
+  # origin, so a compile-only or Playwright-list result never substitutes for
+  # this job. Uploaded evidence covers only fictional accounts.
+  #
+  # The enabled journey runs as two shards (second-factor.spec.ts
+  # "Enabled-proof sharding"), each its own harness and its own evidence
+  # file. primary-disabled's shard also runs the disabled-enrollment phase,
+  # restoring the unsharded order (primary, then disabled) that phase's
+  # first Vietnamese render depends on. passkey-browser-proof-coverage checks
+  # every step is true, and the disabled phase ran once, across both shards'
+  # evidence once every shard finishes.
+  passkey-browser-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [primary-disabled, recovery-attempts]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Starts pulling the pinned Playwright base image (the FROM reference
+      # in deploy/dev-https-browser/Dockerfile) in the background so it
+      # overlaps with setup and dev-https instead of blocking
+      # dev-https-browser-image later.
+      - name: Start pulling the pinned Playwright base image in the background
+        run: |
+          image=$(awk '/^FROM /{print $2; exit}' deploy/dev-https-browser/Dockerfile)
+          status_file="$RUNNER_TEMP/playwright-base-pull.status"
+          log_file="$RUNNER_TEMP/playwright-base-pull.log"
+          rm -f "$status_file"
+          nohup bash -c 'podman pull "$0" >"$1" 2>&1; echo $? >"$2"' \
+            "$image" "$log_file" "$status_file" >/dev/null 2>&1 &
+          disown
+          {
+            echo "PLAYWRIGHT_BASE_PULL_STATUS=$status_file"
+            echo "PLAYWRIGHT_BASE_PULL_LOG=$log_file"
+          } >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
           restore-keys: |
             go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      # A go-installed caddy reports version "unknown", which the dev-https
+      # tool check rejects, so this job uses the official release binary.
       - name: Install the pinned caddy (2.11.4)
         run: |
-          go install github.com/caddyserver/caddy/v2/cmd/caddy@v2.11.4
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - run: make route-table-test
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
+          mkdir -p "$RUNNER_TEMP/caddy"
+          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
+          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      # Cached on apps/web/package-lock.json: `npx playwright install`
+      # is a no-op on a hit and still verifies the pinned browser is present.
+      - name: Restore the Playwright browser cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
+      # The harness preflight requires the pinned Chromium on the host.
+      - name: Install web dependencies and the pinned Chromium
+        run: npm ci && npx playwright install chromium
+        working-directory: apps/web
+      - run: make dev-https
+      - name: Wait for the background base-image pull
+        run: |
+          for _ in $(seq 1 600); do
+            [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] && break
+            sleep 1
+          done
+          [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] || {
+            echo "base image pull did not finish in time" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          }
+          status=$(cat "$PLAYWRIGHT_BASE_PULL_STATUS")
+          if [ "$status" -ne 0 ]; then
+            echo "base image pull failed (exit $status)" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          fi
+      - run: make dev-https-browser-image
+      - run: make dev-https-passkey-check
         env:
-          CADDY_BIN: caddy
+          ABOUTME_PASSKEY_SHARD: ${{ matrix.shard }}
+      - name: Upload passkey proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: passkey-browser-proof-evidence-${{ matrix.shard }}
+          path: .dev/native-https/evidence/passkey-*
+          if-no-files-found: ignore
+          retention-days: 14
+          # .dev is a dot-directory; the upload action excludes those by
+          # default and would silently archive nothing without this.
+          include-hidden-files: true
+      - name: Stop the HTTPS harness
+        if: always()
+        run: make dev-https-down
+      - name: Stop the runner-local database
+        if: always()
+        run: make test-db-down
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
+  # Each passkey-browser-proof shard's own evidence passed the closed-list
+  # check in verify-evidence.mjs when its shard ran; this checks that the two
+  # shards' evidence together still proves every step of the scenario, and
+  # that the disabled-enrollment phase ran exactly once.
+  passkey-browser-proof-coverage:
+    needs: passkey-browser-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: passkey-browser-proof-evidence-*
+          path: passkey-shard-evidence
+      - run: |
+          mapfile -t evidence_files < <(
+            find passkey-shard-evidence \
+              \( -name passkey-second-factor-proof.json \
+                 -o -name passkey-enrollment-disabled-proof.json \) )
+          [ "${#evidence_files[@]}" -gt 0 ] ||
+            { echo "no shard evidence files were downloaded" >&2; exit 1; }
+          node deploy/dev-https-browser/check-passkey-shard-coverage.mjs \
+            "${evidence_files[@]}"
+
+  # Runs the synthetic TOTP enrollment, verification, and recovery journey
+  # against the exact candidate through the repository HTTPS harness. This is
+  # the only hosted observation of that flow: GitHub CI cannot see the
+  # deployed release fence, the enrollment flag, or the production origin, so
+  # a compile-only or Playwright-list result never substitutes for this job.
+  # Uploaded evidence covers only fictional accounts.
+  #
+  # The enabled journey runs as six shards (totp.spec.ts "Enabled-proof
+  # sharding"), each its own harness and its own evidence file; primary alone
+  # carries most of the account's own step count, so it is its own shard.
+  # epoch-disabled's shard also runs the disabled-enrollment phase.
+  # totp-browser-proof-coverage checks every step is true, and the disabled
+  # phase ran once, across all six shards' evidence once every shard
+  # finishes.
+  totp-browser-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          [
+            primary,
+            skew,
+            replay-concurrent,
+            replace-recovery,
+            locale-attempts,
+            epoch-disabled,
+          ]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Starts pulling the pinned Playwright base image (the FROM reference
+      # in deploy/dev-https-browser/Dockerfile) in the background so it
+      # overlaps with setup and dev-https instead of blocking
+      # dev-https-browser-image later.
+      - name: Start pulling the pinned Playwright base image in the background
+        run: |
+          image=$(awk '/^FROM /{print $2; exit}' deploy/dev-https-browser/Dockerfile)
+          status_file="$RUNNER_TEMP/playwright-base-pull.status"
+          log_file="$RUNNER_TEMP/playwright-base-pull.log"
+          rm -f "$status_file"
+          nohup bash -c 'podman pull "$0" >"$1" 2>&1; echo $? >"$2"' \
+            "$image" "$log_file" "$status_file" >/dev/null 2>&1 &
+          disown
+          {
+            echo "PLAYWRIGHT_BASE_PULL_STATUS=$status_file"
+            echo "PLAYWRIGHT_BASE_PULL_LOG=$log_file"
+          } >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      # A go-installed caddy reports version "unknown", which the dev-https
+      # tool check rejects, so this job uses the official release binary.
+      - name: Install the pinned caddy (2.11.4)
+        run: |
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
+          mkdir -p "$RUNNER_TEMP/caddy"
+          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
+          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      # Cached on apps/web/package-lock.json: `npx playwright install`
+      # is a no-op on a hit and still verifies the pinned browser is present.
+      - name: Restore the Playwright browser cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
+      # The harness preflight requires the pinned Chromium on the host.
+      - name: Install web dependencies and the pinned Chromium
+        run: npm ci && npx playwright install chromium
+        working-directory: apps/web
+      - run: make dev-https
+      - name: Wait for the background base-image pull
+        run: |
+          for _ in $(seq 1 600); do
+            [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] && break
+            sleep 1
+          done
+          [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] || {
+            echo "base image pull did not finish in time" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          }
+          status=$(cat "$PLAYWRIGHT_BASE_PULL_STATUS")
+          if [ "$status" -ne 0 ]; then
+            echo "base image pull failed (exit $status)" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          fi
+      - run: make dev-https-browser-image
+      - run: make dev-https-totp-check
+        env:
+          ABOUTME_TOTP_SHARD: ${{ matrix.shard }}
+      - name: Upload TOTP proof evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: totp-browser-proof-evidence-${{ matrix.shard }}
+          path: .dev/native-https/evidence/totp-*
+          if-no-files-found: ignore
+          retention-days: 14
+          # .dev is a dot-directory; the upload action excludes those by
+          # default and would silently archive nothing without this.
+          include-hidden-files: true
+      # Timings only (totp.spec.ts "CI section timing"): never covers a code,
+      # secret, email, or URL, and is not part of the verified evidence above.
+      - name: Upload TOTP proof timing
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: totp-browser-proof-timing-${{ matrix.shard }}
+          path: .dev/native-https/evidence/totp-enabled.*/totp-timing.json
+          if-no-files-found: ignore
+          retention-days: 14
+          include-hidden-files: true
+      - name: Stop the HTTPS harness
+        if: always()
+        run: make dev-https-down
+      - name: Stop the runner-local database
+        if: always()
+        run: make test-db-down
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
+  # Each totp-browser-proof shard's own evidence passed the closed-list check
+  # in verify-evidence.mjs when its shard ran; this checks that the six
+  # shards' evidence together still proves every step of the scenario, and
+  # that the disabled-enrollment phase ran exactly once.
+  totp-browser-proof-coverage:
+    needs: totp-browser-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: totp-browser-proof-evidence-*
+          path: totp-shard-evidence
+      - run: |
+          mapfile -t evidence_files < <(
+            find totp-shard-evidence \
+              \( -name totp-second-factor-proof.json \
+                 -o -name totp-enrollment-disabled-proof.json \) )
+          [ "${#evidence_files[@]}" -gt 0 ] ||
+            { echo "no shard evidence files were downloaded" >&2; exit 1; }
+          node deploy/dev-https-browser/check-totp-shard-coverage.mjs \
+            "${evidence_files[@]}"
 
   # Runs the native HTTPS stack for real and proves both MCP paths against it:
   # the raw JSON-RPC client (mcp) and the official SDK owner workflow (mcp-sdk,
@@ -699,6 +913,23 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Starts pulling the pinned Playwright base image (the FROM reference
+      # in deploy/dev-https-browser/Dockerfile) in the background so it
+      # overlaps with setup and dev-https instead of blocking
+      # dev-https-browser-image later.
+      - name: Start pulling the pinned Playwright base image in the background
+        run: |
+          image=$(awk '/^FROM /{print $2; exit}' deploy/dev-https-browser/Dockerfile)
+          status_file="$RUNNER_TEMP/playwright-base-pull.status"
+          log_file="$RUNNER_TEMP/playwright-base-pull.log"
+          rm -f "$status_file"
+          nohup bash -c 'podman pull "$0" >"$1" 2>&1; echo $? >"$2"' \
+            "$image" "$log_file" "$status_file" >/dev/null 2>&1 &
+          disown
+          {
+            echo "PLAYWRIGHT_BASE_PULL_STATUS=$status_file"
+            echo "PLAYWRIGHT_BASE_PULL_LOG=$log_file"
+          } >> "$GITHUB_ENV"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
@@ -708,18 +939,19 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
           restore-keys: |
             go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
       # A go-installed caddy reports version "unknown", which the dev-https
       # tool check rejects, so this job uses the official release binary.
       - name: Install the pinned caddy (2.11.4)
@@ -729,6 +961,13 @@ jobs:
           mkdir -p "$RUNNER_TEMP/caddy"
           tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
           echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      # Cached on apps/web/package-lock.json: `npx playwright install`
+      # is a no-op on a hit and still verifies the pinned browser is present.
+      - name: Restore the Playwright browser cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
       - name: Install web dependencies and the pinned Chromium
         run: npm ci && npx playwright install chromium
         working-directory: apps/web
@@ -740,6 +979,23 @@ jobs:
         env:
           DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable
       - run: make dev-https
+      - name: Wait for the background base-image pull
+        run: |
+          for _ in $(seq 1 600); do
+            [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] && break
+            sleep 1
+          done
+          [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] || {
+            echo "base image pull did not finish in time" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          }
+          status=$(cat "$PLAYWRIGHT_BASE_PULL_STATUS")
+          if [ "$status" -ne 0 ]; then
+            echo "base image pull failed (exit $status)" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          fi
       - run: make dev-https-browser-image
       - run: make dev-https-mcp-check
       - run: make dev-https-mcp-sdk-check
@@ -747,58 +1003,81 @@ jobs:
         run: make dev-https-down
       - if: always()
         run: make test-db-down
-
-  # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
-  # migrations/ is the only declared source for BOTH goose and sqlc's generated
-  # data layer. Fails on any drift, including untracked generated files — which
-  # is why `make sqlc-check` uses `git status --porcelain` rather than
-  # `git diff --exit-code`.
-  #
-  # This needs no database and no DATABASE_URL: sqlc parses the migration files
-  # statically. sqlc stays pinned so the gate flags real drift rather than
-  # generator formatting changes.
-  sqlc-drift:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version: "1.27.1"
-          cache: false
-      # One Go cache per job: a shared key lets whichever job finishes first
-      # save a cache the other jobs cannot use. The commit in the key saves a
-      # fresh cache each run; the prefix restores the newest one.
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
-            go-${{ runner.os }}-${{ github.job }}-
-      - name: Install the pinned sqlc (v1.31.1)
-        run: |
-          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: Assert sqlc is present and pinned
-        run: sqlc version | grep -q 'v1.31.1'
-      - run: make sqlc-check
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
 
-  # Formats and validates the public OpenTofu code without cloud credentials or
-  # a backend. Deploys happen only from the owner's machine.
-  tofu:
+  # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
+  # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
+  # Supply Chain covers dependency CVEs for Go and npm. It authenticates with
+  # SEMGREP_APP_TOKEN, which GitHub withholds from FORK pull requests, so run
+  # it on pushes, manual runs, and same-repo PRs only. A fork PR would have no
+  # token and fail.
+  semgrep:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
         with:
-          tofu_version: 1.12.6
-          tofu_wrapper: false
-      - run: tofu fmt -check -recursive deploy/aws
-      - name: Validate each root
+          fetch-depth: 0 # semgrep ci is diff-aware; give it history
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # Keyed on the pinned version alone: a version bump gets a fresh cache
+      # instead of growing the old one forever.
+      - name: Restore pip cache for Semgrep 1.176.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-semgrep-1.176.0-${{ runner.os }}
+      - run: pip install semgrep==1.176.0
+      - run: scripts/test/semgrep-sca-inputs-test.sh
+      - run: semgrep ci --code --supply-chain --secrets --no-suppress-errors
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # Aggregate gate: the branch protection target. Fails unless every job
+  # above succeeded; semgrep may be `skipped` only through its own `if:`
+  # (a fork pull request withholds SEMGREP_APP_TOKEN), never any other job.
+  ci:
+    if: always()
+    needs:
+      - docs
+      - docs-dev-https
+      - contracts
+      - server
+      - server-media-s3-corpus
+      - web-test
+      - web-e2e
+      - web-build
+      - server-integration
+      - server-resumeapi
+      - passkey-browser-proof
+      - passkey-browser-proof-coverage
+      - totp-browser-proof
+      - totp-browser-proof-coverage
+      - mcp-proofs
+      - semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to succeed (semgrep may be skipped on its own condition)
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          for root in deploy/aws/probe deploy/aws/bootstrap deploy/aws/prod; do
-            tofu -chdir="$root" init -backend=false -input=false >/dev/null
-            tofu -chdir="$root" validate
-          done
+          bad=$(echo "$NEEDS_JSON" | jq -r '
+            to_entries
+            | map(select(.value.result != "success"))
+            | map(select(.key != "semgrep" or .value.result != "skipped"))
+            | .[]
+            | "\(.key)=\(.value.result)"
+          ')
+          if [ -n "$bad" ]; then
+            echo "ci: required job(s) not successful:" >&2
+            echo "$bad" >&2
+            exit 1
+          fi
+          echo "ci: all required jobs succeeded"

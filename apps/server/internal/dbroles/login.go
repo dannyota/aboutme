@@ -92,6 +92,8 @@ func setLoginVerifiers(ctx context.Context, tx *sql.Tx, p LoginPasswords, random
 	if err := ValidatePasswords(p); err != nil {
 		return err
 	}
+	type roleVerifier struct{ name, verifier string }
+	var verifiers []roleVerifier
 	for _, role := range []struct{ name, password string }{
 		{"aboutme_migrator", p.Migrator},
 		{"aboutme_app", p.App},
@@ -109,8 +111,17 @@ func setLoginVerifiers(ctx context.Context, tx *sql.Tx, p LoginPasswords, random
 		if !verifierPattern.MatchString(verifier) {
 			return errors.New("dbroles: malformed verifier")
 		}
-		if _, err := tx.ExecContext(ctx, `ALTER ROLE `+role.name+` PASSWORD '`+verifier+`'`); err != nil {
-			return fmt.Errorf("dbroles: set %s login: %w", role.name, err)
+		verifiers = append(verifiers, roleVerifier{role.name, verifier})
+	}
+	// Every verifier is derived before any SQL runs. The lock then
+	// serializes the role writes with Ensure and other SetLoginVerifiers
+	// calls on this database (ADR 0038).
+	if err := lockCatalog(ctx, tx); err != nil {
+		return fmt.Errorf("dbroles: acquire lock: %w", err)
+	}
+	for _, rv := range verifiers {
+		if _, err := tx.ExecContext(ctx, `ALTER ROLE `+rv.name+` PASSWORD '`+rv.verifier+`'`); err != nil {
+			return fmt.Errorf("dbroles: set %s login: %w", rv.name, err)
 		}
 	}
 	return nil
