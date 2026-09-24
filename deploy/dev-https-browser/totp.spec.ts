@@ -1416,6 +1416,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
     expect(await meStatus(page)).toBe(401);
+    // Each pending-method section can render on its own reactive update
+    // after the page hydrates, so wait for all three before reading their
+    // DOM order instead of racing a single immediate snapshot.
+    await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
+    await expect(page.getByTestId('second-factor-totp')).toBeVisible();
+    await expect(page.getByTestId('second-factor-recovery')).toBeVisible();
     const order = await page.evaluate(() =>
       [...document.querySelectorAll('section[data-testid]')]
         .map((el) => el.getAttribute('data-testid'))
