@@ -415,14 +415,6 @@ apps/web/app/utils/sanitizeRichText.ts
 apps/web/app/utils/userAgent.ts
 apps/web/app/utils/webauthn.ts
 apps/web/e2e/baselines/academic-dense--vn-full--paged.png
-apps/web/e2e/baselines/chrome--home--dark--1440.png
-apps/web/e2e/baselines/chrome--home--dark--390.png
-apps/web/e2e/baselines/chrome--home--light--1440.png
-apps/web/e2e/baselines/chrome--home--light--390.png
-apps/web/e2e/baselines/chrome--login--dark--1440.png
-apps/web/e2e/baselines/chrome--login--dark--390.png
-apps/web/e2e/baselines/chrome--login--light--1440.png
-apps/web/e2e/baselines/chrome--login--light--390.png
 apps/web/e2e/baselines/classic-serif--vn-full--justify--paged.png
 apps/web/e2e/baselines/classic-serif--vn-full--paged.png
 apps/web/e2e/baselines/consulting-formal--vn-full--letter--paged.png
