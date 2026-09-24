@@ -362,14 +362,28 @@ describe('EditorShell', () => {
     expect(design.attributes('aria-pressed')).toBe('true');
     expect(design.classes()).toEqual(
       expect.arrayContaining([
-        'aria-pressed:bg-secondary',
-        'aria-pressed:text-primary',
+        'aria-pressed:bg-surface-blue',
+        'aria-pressed:text-link',
       ]),
     );
     expect(wrapper.get('[data-testid="customization-title"]').text())
       .toBe('Customization');
     expect(wrapper.findAll('[data-testid="customization-title"]'))
       .toHaveLength(1);
+  });
+
+  it('renders the brand link and canvas on the Aurora tokens', () => {
+    const wrapper = mountShell();
+    const brand = wrapper.get('.editor-brand');
+
+    expect(brand.attributes('href')).toBe('/app/resumes');
+    const logos = brand.findAll('svg[role="img"][aria-label="aboutme"]');
+    expect(logos).toHaveLength(2);
+    expect(logos.some((logo) => logo.attributes('viewBox') === '0 0 29 32'))
+      .toBe(true);
+    expect(wrapper.get('.editor-shell').classes()).toContain(
+      'bg-editor-canvas',
+    );
   });
 
   it(

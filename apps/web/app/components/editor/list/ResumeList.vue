@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Ellipsis } from '@lucide/vue';
+import { Ellipsis, Plus } from '@lucide/vue';
 import { nextTick, ref, watch } from 'vue';
 
 import IconButton from '@/components/app/IconButton.vue';
@@ -73,7 +73,7 @@ watch(
   <section
     ref="root"
     aria-labelledby="resume-list-title"
-    class="mx-auto w-full max-w-7xl space-y-8 px-6 py-8"
+    class="mx-auto w-full max-w-7xl space-y-8 px-4 py-10 sm:px-8 sm:py-12"
     data-testid="resume-list"
   >
     <PageHeader
@@ -84,50 +84,53 @@ watch(
         <Button
           data-testid="create-resume"
           :disabled="items.length >= 3"
+          size="lg"
           type="button"
           @click="emit('create')"
         >
+          <Plus aria-hidden="true" />
           {{ copy.create }}
         </Button>
       </template>
     </PageHeader>
     <ul
       :aria-label="copy.listLabel"
-      class="grid gap-6 md:grid-cols-3"
+      class="grid gap-6 md:grid-cols-3 md:gap-8"
     >
       <li
         v-for="item in items"
         :key="item.id"
         :data-testid="`resume-row-${item.id}`"
-        class="sheet relative rounded-[var(--radius-dialog)] bg-white
-          text-[#171a18] shadow-[var(--shadow-paper)]"
+        class="sheet paper-surface relative flex min-h-40 flex-col
+          rounded-[var(--radius-sheet)] shadow-[var(--shadow-paper)]
+          transition-transform duration-200 ease-out hover:-translate-y-1
+          motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
         <NuxtLink
           :to="`/app/resumes/${encodeURIComponent(item.id)}`"
-          class="sheet-face block p-6 after:absolute after:inset-0"
+          class="sheet-face block p-6 pb-3 -outline-offset-4
+            after:absolute after:inset-0"
           data-sheet-link
         >
-          <span class="block text-lg font-semibold">{{ item.title }}</span>
+          <span class="block pr-8 text-lg font-semibold">{{ item.title }}</span>
           <time
-            class="block text-xs tabular-nums text-[#5f6763]"
+            class="block text-xs tabular-nums text-paper-muted"
             :datetime="item.updatedAt"
           >
             {{ copy.updated(formatRelativeTime(item.updatedAt, now, locale)) }}
           </time>
         </NuxtLink>
         <span
-          class="relative z-10 block px-6 pb-4"
+          class="relative z-10 mt-auto block px-6 pb-5"
           :class="{ 'pointer-events-none': !item.live || !item.slug }"
         >
           <StateMark
             v-if="item.live && item.slug"
-            style="color: #5f6763"
             state="public"
             :link="`/${item.slug}`"
           />
           <StateMark
             v-else
-            style="color: #5f6763"
             state="draft"
           />
         </span>
@@ -166,8 +169,8 @@ watch(
         :key="`slot-${n}`"
         :data-testid="`resume-slot-${n}`"
         class="sheet sheet--empty flex min-h-40 flex-col justify-center
-          gap-1 rounded-[var(--radius-dialog)] border border-dashed p-6
-          text-sm text-muted-foreground"
+          gap-1 rounded-[var(--radius-sheet)] border-2 border-dashed
+          border-border bg-card/50 p-6 text-sm text-muted-foreground"
       >
         <!-- Create resume in the header is the one create control. -->
         <template v-if="items.length === 0 && n === 1">
