@@ -1,21 +1,26 @@
-# Passkey second-factor contract
+# Passkey and pending-authentication contract
 
-Status: Approved for v0.4.2 under
-[ADR 0048](../adr/0048-passkey-second-factor-authentication.md).
+This contract fixes the wire shapes for primary login with a second factor, the
+shared pending routes, passkeys, recovery codes, and the shared security-mail
+events ([ADR 0048](../adr/0048-passkey-second-factor-authentication.md)). The
+[second-factor design](second-factor-authentication.md) owns the rules. The
+[authenticator-app contract](totp-second-factor-contract.md) adds the TOTP
+routes. [Numeric budgets](budgets.md) owns every size and rate.
+
+Every response here sends `Cache-Control: no-store, no-transform` and uses the
+standard `{data:...}` or `{error:{code,message}}` envelope. One-time plaintext
+appears only in the response that creates it.
 
 ## Release surface
 
-V0.4.2 adds passkeys and recovery codes only. It adds
-`passkeyEnrollment: boolean` to `GET /api/v1/capabilities`. The field is true
-only when passkey enrollment is enabled. The response has no `totpEnrollment`
-field.
+`GET /api/v1/capabilities` reports `passkeyEnrollment: boolean` and
+`totpEnrollment: boolean`, each true only while that enrollment flag is on.
+While `passkeyEnrollment` is false, registration options return the uniform
+`404 not_found` before any work. Registration completion consumes a matching
+ceremony, stores no credential, and returns the same `404`. Assertion, recovery,
+removal, regeneration, and state routes ignore the flag.
 
-Registration options and completion both recheck the enrollment flag. If the
-flag is false, options create nothing. Completion consumes a matching ceremony,
-stores no credential, and returns the uniform `404 not_found`. Assertion,
-recovery, removal, regeneration, and state routes ignore the enrollment flag.
-
-`GET /api/v1/me/second-factor` has exactly these data fields:
+`GET /api/v1/me/second-factor` returns exactly:
 
 ```json
 {
@@ -28,91 +33,74 @@ recovery, removal, regeneration, and state routes ignore the enrollment flag.
         "lastUsedAt": null
       }
     ],
+    "totpEnabled": false,
     "recoveryCodesRemaining": 10
   }
 }
 ```
 
-`passkeys` uses `(created_at, id)` order. `enabled` is derived from the active
-factor count in the same read-only snapshot as `passkeys` and
-`recoveryCodesRemaining`, never read from stored state on its own. The invariant
-behind it is that the factor-policy row exists exactly while an active factor
-exists, so all three fields describe one consistent instant. An unenrolled
-account returns false, an empty array, and zero. V0.4.2 does not register any
-TOTP verification, enrollment, replacement, or removal route. The state response
-has no `totpEnabled` field, and pending method values never include `totp`. The
-authenticator-app release adds those fields and routes as an additive contract
-change.
-
-Every response in this file uses `Cache-Control: no-store, no-transform`. JSON
-follows the standard `{data:...}` or `{error:{code,message}}` envelope. One-time
-plaintext appears only in the response that creates it.
+`passkeys` uses `(created_at, id)` order. `enabled` comes from the active-factor
+count in the same read-only snapshot as the other fields, never from stored
+state alone. An unenrolled account returns false, an empty array, false, and
+zero. The web treats an absent or malformed `totpEnabled` or `totpEnrollment` as
+false.
 
 ## Primary authentication
 
-`POST /api/v1/auth/password/login` keeps `email` and `password` and adds an
-optional `next` string. The server validates `next` with the provider-login
-return-path parser before storing it. Missing or invalid input becomes
-`/app/resumes`.
+`POST /api/v1/auth/password/login` takes `email`, `password`, and an optional
+`next`. The server validates `next` with the provider-login return-path parser;
+missing or invalid input becomes `/app/resumes`.
 
-Successful primary authentication for an unenrolled account keeps the existing
-`204` response and session cookie. An enrolled account receives no session and
-returns:
+An unenrolled account keeps the `204` response and session cookie. An enrolled
+account gets no session and a `202`:
 
 ```json
 { "data": { "secondFactorRequired": true } }
 ```
 
-The status is `202`. The server sets `__Host-auth-pending` and does not return a
-redirect target. The web navigates to `/login/second-factor`, whose status read
-returns the validated path.
+The server sets `__Host-auth-pending` and returns no redirect target. The web
+navigates to `/login/second-factor`, whose status read returns the validated
+path.
 
 `POST /api/v1/auth/password/reauth` behaves the same for an enrolled account,
-except the pending row has purpose `reauth`, binds the concrete live session,
-and fixes its return path to `/app/settings/sessions`. It does not update either
-verification timestamp before factor completion. An unenrolled account keeps the
-existing `204` response.
+except the pending row has purpose `reauth`, binds the live session, and fixes
+its return path to `/app/settings/sessions`. It changes neither proof time
+before factor completion. An unenrolled account keeps `204`.
 
 A successful provider callback for an enrolled login clears `__Host-oauth-tx`,
-sets the pending cookie, creates no session, and redirects to
-`/login/second-factor` with `302`. The pending row copies the validated return
-path from the consumed provider transaction. For enrolled `purpose=reauth`, it
-binds the current live session, fixes the return path to
-`/app/settings/sessions`, leaves both timestamps unchanged, and redirects to the
-factor page. A callback that cannot create the pending row uses `auth_failed` in
-the existing purpose error redirect and creates no authority.
+sets the pending cookie, creates no session, and redirects with `302` to
+`/login/second-factor`. The pending row copies the return path from the consumed
+provider transaction. For enrolled `purpose=reauth`, it binds the live session,
+fixes the return path to `/app/settings/sessions`, and leaves both proof times
+unchanged. A callback that cannot create the pending row uses `auth_failed` in
+the existing purpose error redirect.
 
-Provider rejection and expired provider transactions keep their existing
-redirects: login goes to `/login?error=<code>`, and reauthentication goes to
-`/app/settings/sessions?error=<code>`. If pending status later returns `401`,
-the web clears its local flow. It redirects to settings with
-`error=authentication_required` when `/me` still succeeds, otherwise to the
-login page with that error.
+Provider rejection and expired transactions keep their redirects:
+`/login?error=<code>` for login and `/app/settings/sessions?error=<code>` for
+reauthentication. When pending status later returns `401`, the web clears its
+flow and redirects to settings with `error=authentication_required` if `/me`
+still succeeds, otherwise to the login page with that error.
 
-After valid primary authentication, a new pending cookie consumes the pending
-row named by the browser's previous valid pending cookie. It does not consume
-pending rows held by other browsers. An unenrolled successful login clears a
-present pending cookie. Primary-authentication failure neither creates nor
-replaces a pending row.
+After valid primary authentication, a new pending cookie consumes the row named
+by the same browser's previous valid pending cookie, not rows held by other
+browsers. A successful unenrolled login clears a present pending cookie. A
+failed primary authentication neither creates nor replaces a pending row.
 
-`sessions.reauthenticated_at` remains the primary-proof timestamp.
-`sessions.second_factor_verified_at` is the factor-proof timestamp. Login
-completion for an enrolled account creates a session with both set to the
-completion time. Reauthentication completion updates both on the bound session
-to the completion time. Unenrolled login and reauthentication leave
-`second_factor_verified_at` null.
+`sessions.reauthenticated_at` is the primary-proof time and
+`sessions.second_factor_verified_at` the factor-proof time. Unenrolled login and
+reauthentication leave factor proof null.
 
 ## Pending status and completion
 
-`GET /api/v1/auth/second-factor` authenticates only the pending cookie. A reauth
-row also requires its bound session cookie to remain live, current-epoch, and
-owned by the same account. A `200` success is:
+`GET /api/v1/auth/second-factor` authenticates only the pending cookie. A
+`reauth` row also requires its bound session cookie to stay live, current-epoch,
+and owned by the same account. Success is `200`:
 
 ```json
 {
   "data": {
     "purpose": "login",
-    "methods": ["passkey", "recovery"],
+    "methods": ["passkey", "totp", "recovery"],
     "expiresAt": "2026-09-20T09:05:00Z",
     "returnPath": "/app/resumes",
     "csrfToken": "43-character-unpadded-base64url-value"
@@ -120,21 +108,18 @@ owned by the same account. A `200` success is:
 }
 ```
 
-`purpose` is `login` or `reauth`. `methods` has fixed order `passkey`, then
-`recovery`. Passkey is present when the account has an active passkey; recovery
-is present only while a code remains. An enrolled v0.4.2 account with no
-available method is corrupt state and returns `503 authentication_unavailable`.
-Times are UTC RFC 3339 strings. The CSRF token is the pending row's 32-byte
-secret encoded as 43-character unpadded base64url.
+`methods` uses the fixed order `passkey`, `totp`, `recovery` and omits a method
+the account lacks: `passkey` needs an active passkey, `totp` an active TOTP
+credential, and `recovery` an unused code. An enrolled account with no method is
+corrupt state and returns `503 authentication_unavailable`. Times are UTC
+RFC 3339. The CSRF token is the row's 32-byte secret as 43-character unpadded
+base64url. A `401 authentication_required` from status or completion clears the
+pending cookie. No route accepts an arbitrary method name.
 
-A `401 authentication_required` status or completion response clears the pending
-cookie. A request to a TOTP path reaches the existing uniform `404 not_found`;
-no pending route accepts an arbitrary method name.
-
-Every pending POST requires `Content-Type: application/json`, exact Origin,
-`X-CSRF-Token`, and the pending cookie. Reauth also requires the bound session
-cookie. The checks run in this order: media type, bounded body, strict JSON,
-pending authentication, Origin and CSRF, rate admission, then method work.
+Every pending `POST` requires `Content-Type: application/json`, exact Origin,
+`X-CSRF-Token`, and the pending cookie; `reauth` also requires the bound session
+cookie. Checks run in this order: media type, body size, strict JSON, pending
+authentication, Origin and CSRF, rate admission, then method work.
 
 | Condition                                                            | Status and error code                 |
 | -------------------------------------------------------------------- | ------------------------------------- |
@@ -144,44 +129,45 @@ pending authentication, Origin and CSRF, rate admission, then method work.
 | Absent, expired, consumed, wrong-epoch, or wrong-session pending row | `401 authentication_required`         |
 | Wrong Origin or pending CSRF                                         | `403 csrf_rejected`                   |
 | Unknown, expired, consumed, foreign, or wrong-purpose ceremony       | `400 challenge_invalid`               |
-| Assertion options for an account with no active passkey              | `404 factor_not_found`                |
-| Well-formed but invalid assertion or recovery code                   | `401 verification_failed`             |
+| A method the account lacks                                           | `404 factor_not_found`                |
+| Well-formed but invalid assertion, code, or recovery code            | `401 verification_failed`             |
 | Rate rejection                                                       | `429 rate_limited` plus `Retry-After` |
 | Dependency or corrupt method state                                   | `503 authentication_unavailable`      |
 
-The fifth failed completion returns `401 verification_failed`, atomically
-consumes the pending row, records its notification, and clears the cookie. From
-the authenticator-app release, that notification obeys a per-account cap of one
-attempt mail per hour; a suppressed mail never suppresses the state change.
-Later use returns `401 authentication_required`. Every successful completion
-returns `204`, consumes the pending row, and clears the cookie. Login completion
-sets the session cookie; reauth completion never issues a different session.
+A `404 factor_not_found` creates no ceremony and leaves the pending row and its
+failure count unchanged. The fifth failed completion returns
+`401 verification_failed`, consumes the pending row, records the exhaustion mail
+subject to the per-account cap, and clears the cookie. Later use returns
+`401 authentication_required`. Success returns `204`, consumes the row, and
+clears the cookie. Login completion sets the session cookie; reauth completion
+never issues a different session.
 
 Creating a pending row or WebAuthn ceremony first makes one best-effort cleanup
-call for each table. Each call deletes at most 200 expired rows in
-`(expires_at, id)` order using database time. Failure writes one fixed warning
-and does not fail the request or readiness because every read still checks
-expiry. Creation is rate-limited, so each admitted request can delete more rows
-than it adds. No traffic adds no expiring rows and therefore needs no timer.
+call per table, deleting at most 200 expired rows in `(expires_at, id)` order by
+database time. A cleanup failure logs one fixed warning and fails neither the
+request nor readiness, because every read checks expiry. Creation is
+rate-limited, so each admitted request can delete more rows than it adds.
+
+Pending passkey verification uses the assertion completion body. Pending
+recovery verification takes exactly `{"code":"<recovery-code>"}`.
 
 ## WebAuthn JSON
 
-All binary WebAuthn values use canonical unpadded base64url strings. Null is
-accepted only for assertion `userHandle`. Fields described as omitted must not
-be sent as null. Objects reject duplicate and unknown fields. Credential `id`
-must be the canonical encoding of the same bytes as `rawId`.
+Binary WebAuthn values are canonical unpadded base64url strings. Null is
+accepted only for assertion `userHandle`. Omitted fields must not be sent as
+null. Objects reject duplicate and unknown fields. Credential `id` must be the
+canonical encoding of the same bytes as `rawId`.
 
-`POST /api/v1/me/second-factor/passkeys/options` returns `200` registration
-options. `POST /api/v1/auth/second-factor/passkey/options` returns `200`
-assertion options. Both accept exactly `{}` as their JSON body. Both responses
-have this outer shape:
+`POST /api/v1/me/second-factor/passkeys/options` returns registration options
+and `POST /api/v1/auth/second-factor/passkey/options` returns assertion options.
+Both take exactly `{}` and return `200`:
 
 ```json
 { "data": { "ceremonyId": "43-character-token", "publicKey": {} } }
 ```
 
 `ceremonyId` is an independent 32-byte random value. A registration `publicKey`
-contains exactly:
+holds exactly:
 
 - `challenge`: 32 random bytes;
 - `rp`: `{name:"aboutme",id:<canonical host>}`;
@@ -189,32 +175,25 @@ contains exactly:
   `{id:<32-byte handle>,name:<canonical email>,displayName:<account name>}`;
 - `pubKeyCredParams`:
   `[{type:"public-key",alg:-7},{type:"public-key",alg:-257}]`;
-- `timeout`: `300000` milliseconds;
+- `timeout`: `300000`;
 - `excludeCredentials`: every active descriptor;
 - `authenticatorSelection`:
   `{residentKey:"required",requireResidentKey:true,userVerification:"required"}`;
-  and
 - `attestation`: `"none"`.
 
-The server asks for `attestation: "none"` but does not require it: with no FIDO
-metadata service configured, go-webauthn cryptographically verifies whichever
-format `attestationObject` declares (`packed`, `tpm`, `android-key`,
-`android-safetynet`, `apple`, `fido-u2f`, `compound`) without checking its
-certificate chain against a trusted root, and accepts any self-consistent
-statement. A non-`none` format is therefore verified and accepted, never
-rejected or normalized to `none`. No attestation format or type is stored.
+The server asks for `none` but does not require it. With no FIDO metadata
+service configured, go-webauthn verifies whichever format the
+`attestationObject` declares without checking its certificate chain, and accepts
+any self-consistent statement. No attestation format is stored.
 
-An assertion `publicKey` contains exactly `challenge`, `timeout: 300000`,
-`rpId`, `allowCredentials`, and `userVerification: "required"`.
-`allowCredentials` contains every active passkey and is never empty. When the
-pending account has no active passkey, for example when another factor type
-enforces it, assertion options return `404 factor_not_found`. That response
-creates no ceremony and leaves the pending row and its failure count unchanged.
+An assertion `publicKey` holds exactly `challenge`, `timeout: 300000`, `rpId`,
+`allowCredentials`, and `userVerification: "required"`. `allowCredentials` lists
+every active passkey and is never empty; an account with no passkey gets
+`404 factor_not_found` instead.
 
-A credential descriptor has required `type: "public-key"` and `id` fields.
-`transports` is omitted when no hint is stored, never null, and otherwise is a
-unique array in the fixed order `usb`, `nfc`, `ble`, `smart-card`, `hybrid`,
-`internal`. Transport never changes authorization. No options object contains
+A descriptor has `type: "public-key"` and `id`. `transports` is omitted when no
+hint is stored, never null, and otherwise is a unique array in the order `usb`,
+`nfc`, `ble`, `smart-card`, `hybrid`, `internal`. No options object contains
 `extensions` or `hints`.
 
 Registration completion accepts exactly:
@@ -236,8 +215,7 @@ Registration completion accepts exactly:
 }
 ```
 
-Assertion completion accepts the same outer credential fields with this response
-instead:
+Assertion completion uses the same outer fields with this `response`:
 
 ```json
 {
@@ -249,11 +227,9 @@ instead:
 ```
 
 `transports` is required on registration and may be empty. `userHandle` is
-required and may be null or at most 64 decoded bytes. An empty `userHandle`
-string decodes exactly like `null`: no handle to compare, so it never matches
-the stored one. `clientExtensionResults` is required and must be an empty object
-because v0.4.2 requests no extensions. The field-size and body limits come from
-[Numeric budgets](budgets.md).
+required and is null or at most 64 decoded bytes; an empty string decodes like
+null and never matches the stored handle. `clientExtensionResults` must be an
+empty object.
 
 ## Management responses and recovery download
 
@@ -272,48 +248,30 @@ First passkey completion returns `201`:
 }
 ```
 
-The real array has ten codes. Completion decides first versus later from factor
-policy existence, not from passkey count. Completion omits `recoveryCodes` when
-the policy already exists and never sends null or an empty array. Passkey
-removal returns `204`; an invalid, missing, foreign, or already removed internal
-ID returns `404 factor_not_found`. Recovery regeneration returns
-`200 {"data":{"recoveryCodes":[...]}}` with ten new codes.
+The real array holds ten codes. `recoveryCodes` is present only when this
+completion created the factor policy, and never null or empty. Recovery
+regeneration returns `200 {"data":{"recoveryCodes":[...]}}` with ten new codes.
+Passkey removal returns `204`; an invalid, missing, foreign, or removed ID
+returns `404 factor_not_found`.
 
-Registration options and registration completion both return
-`409 passkey_limit_reached` once an account already holds five active passkeys,
-the [budgeted](budgets.md) maximum. Options refuses a sixth ceremony before any
-device interaction; completion rechecks the count again at commit, so a race
-between two concurrently started ceremonies cannot create a sixth credential.
-Registration completion returns `400 verification_failed` when WebAuthn
-verification of the submitted credential fails, covering ceremony type, exact
-origin, challenge, RP ID hash, public-key algorithm, user presence and
-verification flags, the backup-eligible/backup-state consistency check, and
-signature validity, and also when the verified credential ID already exists for
-any account. In every `verification_failed` case the claimed ceremony stays
-consumed, so the same ceremony ID cannot be retried.
+Registration options and completion both return `409 passkey_limit_reached` when
+the account already holds the maximum number of passkeys. Completion rechecks
+the count at commit, so two concurrent ceremonies cannot exceed it. Completion
+returns `400 verification_failed` when WebAuthn verification fails (ceremony
+type, origin, challenge, RP ID hash, algorithm, presence and verification flags,
+backup-flag consistency, or signature) or the credential ID already exists on
+any account. The claimed ceremony stays consumed in every failure.
 
-Passkey removal decides final versus non-final only from the shared count of
-active factors of every type, taken under the user lock as
-[Second-factor authentication](second-factor-authentication.md#enrollment-and-management)
-defines. A handler never counts passkeys alone.
+Every successful add, removal, and regeneration delivers the replacement
+`__Host-session` cookie under the proof-time rules of the
+[assurance boundary](second-factor-authentication.md#assurance-boundary). The
+web then refreshes `/me` for the new CSRF token before enabling another session
+mutation. Management mutations use the session CSRF token; pending mutations use
+the pending token.
 
-Every successful passkey add or removal and recovery regeneration delivers the
-replacement `__Host-session` cookie. First enrollment preserves the prior
-primary-proof time and sets factor proof to completion. Later add and
-regeneration preserve both proof times. Removal preserves both while another
-active factor of any type remains. Removal of the final active factor clears
-factor proof. Every replacement preserves the prior session creation time,
-absolute expiry, and device metadata. The web refreshes `/me` for the
-replacement CSRF token before enabling another session mutation.
-
-Pending passkey verification uses the assertion completion body. Pending
-recovery verification uses exactly `{"code":"<recovery-code>"}`. Management
-mutations use the session CSRF token from `/me`; pending mutations use the
-pending token.
-
-The API returns codes only as JSON. The web creates the optional download from
-the array without another request. It selects the heading from the current
-interface locale. English bytes are:
+The API returns codes only as JSON. The web builds the optional download from
+the array without another request and picks the heading from the interface
+locale. English bytes are:
 
 ```text
 aboutme recovery codes
@@ -323,33 +281,27 @@ aboutme recovery codes
 <code 10>
 ```
 
-Vietnamese bytes replace the first line with:
-
-```text
-Mã khôi phục aboutme
-```
-
-Both are UTF-8 without a byte-order mark, use LF, and end with one LF. The MIME
-type is `text/plain;charset=utf-8`; the name is `aboutme-recovery-codes.txt`.
-The web revokes the object URL in a `finally` path. Closing the dialog or
-completing download clears the codes and blob from component state; neither
-enters browser persistence.
+Vietnamese replaces the first line with `Mã khôi phục aboutme`. The file is
+UTF-8 without a byte-order mark, uses LF, and ends with one LF. Its type is
+`text/plain;charset=utf-8` and its name `aboutme-recovery-codes.txt`. The web
+revokes the object URL in a `finally` path. Closing the dialog or finishing the
+download clears the codes and blob; neither enters browser persistence.
 
 ## Transactional mail events
 
-V0.4.2 adds these closed `auth_email_jobs.kind` values:
+These closed `auth_email_jobs.kind` values cover passkeys and shared events:
 
-- `second_factor_enabled` when passkey completion creates the factor policy;
+- `second_factor_enabled` when a completion creates the factor policy;
 - `passkey_added` when enforcement already exists;
-- `passkey_removed` when another active factor of any type remains;
-- `second_factor_disabled` when the removed passkey was the final active factor;
+- `passkey_removed` when another active factor remains;
+- `second_factor_disabled` when the removed factor was the final one;
 - `recovery_codes_regenerated`;
-- `recovery_code_used`; and
-- `second_factor_attempts_exhausted` on the fifth failed completion, at most one
-  per account per hour from the authenticator-app release.
+- `recovery_code_used`;
+- `second_factor_attempts_exhausted` on the fifth failed completion or a TOTP
+  cool-down start, at most one per account per hour.
 
-Each uses `user_id`, no registration or reset scope, no token digest, and an
-expiry exactly 24 hours after the event. The encrypted strict JSON payload is:
+Each job has `user_id`, no registration or reset scope, no token digest, and an
+expiry 24 hours after the event. The encrypted strict JSON payload is:
 
 ```json
 {
@@ -360,50 +312,47 @@ expiry exactly 24 hours after the event. The encrypted strict JSON payload is:
 }
 ```
 
-`remainingRecoveryCodes` is required only for `recovery_code_used` and omitted
-for every other kind. `occurredAt` is the transaction clock rounded to whole UTC
-seconds. Existing verify, reset, and password-change jobs remain payload version
-1; the worker accepts both closed versions. Every security template is fixed
-bilingual copy, Vietnamese first and English second, so no locale field exists.
-No security event contains a link, factor material, passkey identifier, IP, user
-agent, or account ID in plaintext or ciphertext.
+`remainingRecoveryCodes` appears only for `recovery_code_used`. `occurredAt` is
+the transaction clock in whole UTC seconds. Verify, reset, and password-change
+jobs stay payload version 1; the worker accepts both. Templates are fixed
+bilingual copy, Vietnamese first, so there is no locale field. No event carries
+a link, factor material, passkey ID, IP, user agent, or account ID.
 
-The security mutation or terminal failed-attempt update and its outbox insert
-use one transaction. Insert or encryption failure aborts the state change.
+The mutation or terminal failed-attempt update and its outbox insert share one
+transaction; an insert or encryption failure aborts the state change.
 
 ## Counter security events
 
-Migration 00004 adds `authentication_security_events`. It stores `id`, fixed
-kind `passkey_counter_non_increasing`, `user_id`, internal `passkey_id`,
-unsigned 32-bit `stored_counter` and `received_counter` values in SQL `bigint`,
-and `occurred_at`. The user foreign key uses `ON DELETE CASCADE`; passkey ID
-remains an opaque value after factor removal. The table stores no credential ID,
-account address, IP, user agent, challenge, or assertion bytes.
+`authentication_security_events` stores `id`, the fixed kind
+`passkey_counter_non_increasing`, `user_id`, the internal `passkey_id`,
+`stored_counter` and `received_counter` (unsigned 32-bit values in `bigint`),
+and `occurred_at`. The user key cascades on delete; `passkey_id` stays an opaque
+value after removal. The table holds no credential ID, address, IP, user agent,
+challenge, or assertion bytes.
 
-A non-increasing nonzero counter claims and consumes the ceremony, increments
-the pending failure count, leaves the credential counter unchanged, and inserts
-one event in the same transaction. The committed response is
-`401 verification_failed`. Insert failure rolls back all those writes and
-returns `503 authentication_unavailable`; it never authenticates. The existing
-daily privacy-retention command deletes events older than 180 days in its
-bounded 1,000-row pages and 10,000-row run ceiling. Logs name only the event ID
-and fixed kind.
+A non-increasing nonzero counter consumes the ceremony, increments the pending
+failure count, leaves the stored counter unchanged, and inserts one event in the
+same transaction, then returns `401 verification_failed`. A failed insert rolls
+all of it back and returns `503 authentication_unavailable`. The daily privacy
+retention command deletes events older than 180 days. Logs name only the event
+ID and kind.
 
 ## PostgreSQL shape
 
-Migration 00004 uses `bigint` epochs with nonnegative checks. It adds
-`users.auth_epoch`, `sessions.auth_epoch`, nullable
-`sessions.second_factor_verified_at`, `oauth_grants.auth_epoch`, and required
-`oauth_authorization_codes.grant_id` and `.auth_epoch`.
+Migration `00004_passkey_second_factor.sql` adds nonnegative `bigint` epochs:
+`users.auth_epoch`, `sessions.auth_epoch`, `oauth_grants.auth_epoch`, and
+required `oauth_authorization_codes.grant_id` and `.auth_epoch`, plus nullable
+`sessions.second_factor_verified_at`. Its relations are:
 
 - `second_factor_policies`: `user_id` primary key, unique 32-byte
-  `webauthn_user_handle`, and `enabled_at`;
+  `webauthn_user_handle`, `enabled_at`, and nullable `attempt_mail_at` (added by
+  migration 00005);
 - `webauthn_credentials`: UUIDv7 `id`, `user_id`, globally unique 16 to 1,023
-  byte `credential_id`, 1 to 2,048 byte `public_key`, unsigned-32-bit
-  `sign_count` in `bigint`, `backup_eligible`, `backup_state`, closed canonical
-  `transports`, `created_at`, and nullable `last_used_at`;
+  byte `credential_id`, 1 to 2,048 byte `public_key`, `sign_count`,
+  `backup_eligible`, `backup_state`, closed canonical `transports`,
+  `created_at`, and nullable `last_used_at`;
 - `second_factor_recovery_codes`: UUIDv7 `id`, `user_id`, unique 32-byte
-  `code_digest`, and `created_at`; successful use deletes the row;
+  `code_digest`, and `created_at`; use deletes the row;
 - `pending_authentications`: UUIDv7 `id`, unique 32-byte `token_digest`, 32-byte
   `csrf_secret`, `user_id`, purpose `login` or `reauth`, `auth_epoch`, nullable
   `session_id`, `primary_verified_at`, `return_path`, `failed_attempts`,
@@ -412,37 +361,20 @@ Migration 00004 uses `bigint` epochs with nonnegative checks. It adds
   `challenge_digest`, `user_id`, purpose `registration` or `assertion`,
   `auth_epoch`, nullable session and pending bindings, nullable 32-byte
   `proposed_user_handle`, `created_at`, `expires_at`, and nullable
-  `consumed_at`; and
-- `authentication_security_events`: the fields and bounds in Counter security
-  events, with an `(occurred_at,id)` retention index.
+  `consumed_at`;
+- `authentication_security_events` with an `(occurred_at,id)` retention index.
 
-All user foreign keys use `ON DELETE CASCADE`. Pending and ceremony tables have
-`(expires_at,id)` cleanup indexes. Credential listing uses
-`(user_id,created_at,id)`. Recovery lookup uses `(user_id,code_digest)`.
-Database checks enforce byte lengths, closed purposes, expiry after creation,
-failed attempts from zero through five, `backup_state` only when eligible, and
-counters from zero through 4,294,967,295. Login pending rows have no session;
-reauth rows require one. Registration ceremonies require a session and no
-pending row; assertion ceremonies require a pending row and no session. No TOTP
-table is present.
+Every user foreign key cascades on delete. Pending and ceremony tables have
+`(expires_at,id)` cleanup indexes; credential listing uses
+`(user_id,created_at,id)`; recovery lookup uses `(user_id,code_digest)`. Checks
+enforce byte lengths, closed purposes, expiry after creation, failed attempts
+from zero through five, `backup_state` only when eligible, and counters from
+zero through 4,294,967,295. Login pending rows have no session and reauth rows
+require one. Registration ceremonies require a session and no pending row;
+assertion ceremonies require a pending row and no session.
 
-## Migration and mixed versions
-
-Migration `00004_passkey_second_factor.sql` is the only v0.4.2 migration. It
-deletes all outstanding OAuth authorization codes before adding required
-`grant_id` and `auth_epoch` bindings. Existing users, sessions, and grants
-receive epoch zero. The only data loss is authorization codes with at most 60
-seconds of life; clients restart authorization. No grant, token, account,
-session, resume, or mail job is deleted.
-
-The migration's insert trigger fills an omitted code `grant_id` from the unique
-live `(user_id,client_id)` grant and copies the user's epoch. This lets the old
-code issuer run before enrollment despite both columns being `NOT NULL`. New
-code supplies both fields. Mixed-version startup reports passkey enrollment
-false, and no factor may exist before the fence excludes old session issuers.
-
-## Production minimum-release fence
-
-The [passkey release-fence contract](passkey-release-fence.md) owns the DynamoDB
-item, serialized deployment operation, IAM roles, failure order, activation
-sequence, and privileged bypass boundary.
+The migration deleted outstanding authorization codes (60-second lifetime)
+before making `grant_id` and `auth_epoch` required; nothing else was deleted. An
+insert trigger still fills an omitted code `grant_id` from the unique live
+`(user_id, client_id)` grant and copies the user's epoch. Current code supplies
+both fields.

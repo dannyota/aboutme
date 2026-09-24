@@ -153,8 +153,7 @@ The homepage, authentication pages, legal pages, template gallery, resume
 workspace, settings, and agent consent support Vietnamese and English, with
 Vietnamese as the default. These surfaces reuse the `aboutme-locale` cookie.
 Interface language does not change resume content or resume language. See
-[workspace localization](design/editor-localization.md) and
-[account localization](design/account-localization.md).
+[localization](design/localization.md).
 
 The chrome tokens describe a cool-grey desk (`#EDEFEB`) with white paper, ink
 (`#171A18`), pencil text (`#5F6763`), hairlines (`#D8DDD9`), and signature

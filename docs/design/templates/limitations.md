@@ -1,7 +1,5 @@
 # Known template limits
 
-Status: **Draft v2** (2026-08-12). Not approved.
-
 These limits are accepted for the current template contract. The editor must
 warn where noted. Changing a stored field requires the document-version process
 in [ADR 0017](../../adr/0017-resume-document-versioning.md).
@@ -37,23 +35,15 @@ in [ADR 0017](../../adr/0017-resume-document-versioning.md).
    user's chosen icon with no explanation, so in v1 every template renders
    icons. _Cost:_ no template can be icon-free.
 6. **No sidebar width token.** The sidebar ratio is renderer-fixed
-   ([Geometry](geometry.md)). The page-margin half of this item is resolved:
-   `spacing.pageMargin` (0–40 mm per axis, default 15 mm) is now a token, so a
-   user needing one more line can widen margins before touching `baseSizePx`.
-   The fixed ratio is accepted for this release.
+   ([Geometry](geometry.md)). Page margins are a token, `spacing.pageMargin`
+   (0–40 mm per axis, default 15 mm), so a user needing one more line can narrow
+   margins before touching `baseSizePx`.
 7. **`baseSizePx` may be set to 10 (7.5 pt).** The schema's floor permits a
    document too small to read in print, and no publish-policy rule rejects it.
    The template cannot override it without breaking the user-owns-base-size
    boundary. _Cost of leaving it out:_ a user can publish an unreadable resume;
    the containment is an editor-side warning, not a contract change.
-8. **Link distinguishability is resolved.** The renderer owns `text-decoration`,
-   and two independent preset designs proved that color alone cannot carry the
-   distinction: on a monochrome print a link is indistinguishable from body ink,
-   and a preset targeting WCAG AAA text contrast cannot simultaneously satisfy
-   G183's 3:1 link-versus-body requirement — the two constraints are
-   arithmetically incompatible on a white page. **Adopted: a renderer-wide
-   underline on every inline link**, fixed in the codebase and unsettable by any
-   preset ([Geometry](geometry.md)). It is the standard resolution G183 exists
-   to avoid needing, it costs one CSS declaration, and it makes AAA-plus-G183
-   reachable instead of arithmetically impossible. Every template's look changes
-   slightly, which is why this was fixed before the first golden is approved.
+8. **Links are always underlined.** Color alone cannot mark a link: a monochrome
+   print loses it, and WCAG AAA body contrast and G183's 3:1 link-versus-body
+   contrast cannot both hold on a white page. The renderer therefore underlines
+   every inline link, and no preset can unset it ([Geometry](geometry.md)).

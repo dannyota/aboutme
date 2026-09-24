@@ -1,7 +1,5 @@
 # Template print behavior
 
-Status: **Approved v2** (2026-08-12).
-
 How a template behaves under Chromium's print engine, which is the authoritative
 rendering. Everything here applies to every template, because print geometry is
 renderer-owned (`tokens.md` §1).
@@ -19,25 +17,16 @@ The [renderer boundary](../system.md#renderer-boundary) makes editor pagination
 an approximation and Chromium print pagination authoritative. JavaScript
 measurement and the print engine are different algorithms by design.
 
-They are allowed to disagree because they must. The editor measures laid-out DOM
-boxes in a scaled viewport and cuts between entries and between an entry's body
-blocks; Chromium fragments the flow honoring `orphans`, `widows`,
-`break-inside`, and `break-after`, and can also split inside a paragraph. Font
-metric rounding at print resolution, hyphenation, and `@page` margin geometry
-differ as well. A one-line overflow therefore lands on page 2 in the PDF while
-the preview shows it on page 1.
-
-Two obligations follow:
+The editor cuts between entries and body blocks in a scaled viewport, while
+Chromium honors `orphans`, `widows`, and break properties and can split inside a
+paragraph, so a one-line overflow may land on different pages. Two obligations
+follow:
 
 - The editor's page count is **advisory** and must be labelled as an estimate in
   the UI. No product rule — publish policy, quota, pricing, validation — may
   depend on it.
 - The server never accepts a client-supplied page count. A client measurement
   cannot become load-bearing input to a server render.
-
-The [FlowCV rendering research](../../research/flowcv/README.md) is evidence for
-the same preview-and-print split. The project contract remains the renderer
-boundary linked above.
 
 ## 2. Page geometry
 
@@ -77,8 +66,7 @@ exact print-only shapes, substituting the validated `y` and `x` margins:
 
 ## 3. Break rules
 
-Applied by the renderer to the classes it emits. The intent is stated first, the
-declaration second, because the declaration alone reads as arbitrary.
+The renderer applies these rules to the classes it emits.
 
 | Element                                            | Intent                                                         | Declaration                               |
 | -------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------- |
@@ -92,12 +80,9 @@ declaration second, because the declaration alone reads as arbitrary.
 | `.resume-header` (photo, name, headline, contacts) | the identity block is never divided                            | `break-inside: avoid`                     |
 | level widgets (`bar`, `dots`, `tag`)               | a widget is never cut mid-glyph                                | `break-inside: avoid`                     |
 
-Why `.entry` is `auto` rather than `avoid`: a work entry with a long description
-can exceed a page on its own. `break-inside: avoid` on such an element makes
-Chromium push it to a fresh page and overflow it anyway, costing a page and
-gaining nothing. Pinning `.entry-header` instead achieves the real requirement —
-the heading of an entry never appears alone at the foot of a page — without the
-blank-page failure mode.
+`.entry` is `auto` because a long entry can exceed a page, and `avoid` would
+push it to a fresh page that it overflows anyway. Pinning `.entry-header` keeps
+an entry's heading off the foot of a page without that blank page.
 
 The section heading and first entry stay sibling blocks. Chained
 `break-after: avoid` on `.section-heading` and `.entry-header` keeps the
@@ -111,11 +96,8 @@ never split.
 
 ## 4. Widows and orphans
 
-`orphans: 2; widows: 2` on every block container that holds running text — rich
-text paragraphs and list items. Chromium honors both properties in the print
-path, so no template needs its own rule.
-
-Two known limits, stated rather than papered over:
+`orphans: 2; widows: 2` apply to every rich-text paragraph and list item, so no
+template needs its own rule. Two known limits:
 
 - Chromium does not apply `orphans`/`widows` inside a fragmented flex or grid
   item in all cases. In two-column mode the guarantee is therefore best-effort
@@ -144,10 +126,7 @@ Behavior required across a page break:
   fragment ends. `--color-surface-sidebar` and `--color-surface-header` are
   **not** unconditional aliases of `--color-surface`: each resolves to
   `colors.surface` when `effectiveSurfaceTarget` (`colors.md` §4.1) names that
-  region, and falls back to `--color-surface` otherwise (`colors.md` §4). The
-  tint is live today — `modern-sidebar.json` sets `surfaceTarget: "sidebar"`,
-  `executive-band.json` sets `"header"` — so a fragmenting sidebar column with
-  an active tint must repaint it on every page, not only the first.
+  region, and falls back to `--color-surface` otherwise (`colors.md` §4).
 - In one-column mode there is no fragmentation question: `main` sections are
   emitted in order, then `sidebar` sections, in one flow.
 

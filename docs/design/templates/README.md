@@ -1,7 +1,5 @@
 # Resume template system
 
-Status: **Approved v2** (2026-08-12).
-
 Defines what a resume template is in aboutme: the interface every template
 implements against the versioned [data contract](../data.md), the design tokens
 it may control, and how it behaves under Chromium's print engine. It fixes the
@@ -21,10 +19,10 @@ order and fail-closed validation for template placement.
 - [`geometry.md`](geometry.md) — spacing, page geometry, and preset boundaries.
 - [`print.md`](print.md) — `@page` geometry, break and widow rules, two-column
   fragmentation, photo handling, and the determinism snapshot tests depend on.
-- [`presets/`](presets/) — rationale for each preset in the released set.
+- [`process-teardown.md`](process-teardown.md) — how the print browser's
+  processes are stopped and joined.
+- [`presets/`](presets/README.md) — the shared preset rules and how each preset
+  differs from its nearest sibling.
 
 Concrete template designs are written against this contract and add no
-requirements to it.
-
-The preset rationale files record the v1 preset designs. Their JSON has landed
-and is the input the renderer and preset registry build against.
+requirements to it. Preset data lives in `packages/schema/templates/*.json`.

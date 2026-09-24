@@ -26,8 +26,9 @@ event and alert and remains queued until a terminal outcome is recorded.
 
 Public delivery and discovery disclosures are product requirements. The final
 legal wording and any jurisdiction-specific data-residency obligations require
-qualified counsel before production approval. Design documents do not claim that
-a named law has been satisfied merely because infrastructure is in one region.
+qualified counsel before the public announcement. Design documents do not claim
+that a named law has been satisfied merely because infrastructure is in one
+region.
 
 ### Account export and deletion
 
@@ -65,15 +66,11 @@ automatically submits deletion.
 
 ### Scheduled cleanup and audit
 
-The server exposes one-shot `idempotency-expiry-sweep` and
-`media-deletion-sweep` commands hourly, `media-orphan-sweep` weekly, and
-`privacy-retention-sweep` and `release-snapshot-sweep` daily. The database
-commands use PostgreSQL advisory overlap locks; every command has a bounded run
-and fixed numeric result fields. `release-snapshot-sweep` deletes the tagged
-manual snapshots each release takes once they are more than 27 days old, so none
-reaches 30 days even after one missed run. They never start the HTTP listeners
-or Chromium. Local tests execute them directly. In production, EventBridge
-Scheduler runs them and a failed run raises an alarm.
+The server's one-shot cleanup commands run on the schedule in the
+[single-host design](single-host-production.md#scheduled-jobs). Database
+commands take PostgreSQL advisory overlap locks, every command has a bounded run
+and fixed numeric result fields, and none starts the HTTP listeners or Chromium.
+A failed scheduled run raises an alarm.
 
 Session metadata is redacted 90 days after the session's creation. Lifecycle
 events contain only a generated event ID, fixed kind, occurrence time and an
@@ -126,16 +123,10 @@ notification path do not satisfy the gate.
   drift.
 - Hostile-corpus and browser tests cover rich-text and content security policy.
 - Golden and visual tests cover renderer determinism.
-- One author pass per change follows
-  [ADR 0024](../adr/0024-single-pass-delivery-gates.md). Delivery acceptance
-  uses one fresh review per plan or release before push, and GitHub CI is the
-  full gate under [ADR 0046](../adr/0046-github-ci-delivery-gate.md). Local-only
-  and test-only changes skip review.
-- Native HTTPS browser checks prove features locally.
+- GitHub CI is the full delivery gate
+  ([ADR 0046](../adr/0046-github-ci-delivery-gate.md)); native HTTPS browser
+  checks prove features CI cannot cover.
 - Production at `https://aboutme.vn` is where the owner tests the complete
-  product, restore, migration, alarms, real email, and edge behavior before the
-  public announcement. A separate UAT environment returns at about 500 users,
-  per [ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md).
-
-The tracked engineering gates are summarized in
-[`../standards/engineering.md`](../standards/engineering.md).
+  product, restore, migration, alarms, real email, and edge behavior. A separate
+  UAT environment returns at about 500 users
+  ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)).
