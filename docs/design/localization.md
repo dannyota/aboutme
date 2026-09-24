@@ -14,9 +14,10 @@ never the resume, and never an account, session, OAuth, or MCP authority.
 
 The cookie is script-readable, path `/`, `SameSite=Lax`, with a one-year
 lifetime. It holds only `vi` or `en`; a missing or invalid value selects
-Vietnamese. Sign-in, provider round trips, navigation, and reload keep it. There
-is no account language field, server locale, or locale header, so the choice is
-per browser.
+Vietnamese. Sign-in, provider round trips, navigation, and reload keep it.
+Logout keeps the interface language as a device preference, so the next person
+on a shared device inherits it. There is no account language field, server
+locale, or locale header, so the choice is per browser.
 
 Localized routes are the homepage, authentication and recovery pages, legal
 pages, template gallery, the resume workspace (`/app/resumes`, `/app/new`, and
