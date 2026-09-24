@@ -15,6 +15,11 @@ import { verifyScreenshot, waitForImages } from './support';
 // baselines pin it rather than English (gallery.spec.ts uses the same
 // cookie pattern).
 
+// Renderer baselines stay exact (ADR 0029). Chrome captures allow a few
+// hundred pixels: Chromium's software raster anti-aliases the rounded header
+// pill two ways between runs on the tall library page, about 200 pixels.
+const CHROME_PIXEL_TOLERANCE = 400;
+
 const PAGES = [
   { name: 'home', path: '/', thumbnails: 4 },
   { name: 'login', path: '/login', thumbnails: 0 },
@@ -94,6 +99,8 @@ for (const page of PAGES) {
           browserPage,
           `chrome--${page.name}--${theme}--${width}.png`,
           testInfo,
+          undefined,
+          CHROME_PIXEL_TOLERANCE,
         );
 
         if (page.name === 'home') {
@@ -110,6 +117,7 @@ for (const page of PAGES) {
             `chrome--home-templates--${theme}--${width}.png`,
             testInfo,
             templates,
+            CHROME_PIXEL_TOLERANCE,
           );
         }
       });
