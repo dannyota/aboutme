@@ -1,0 +1,104 @@
+[
+  {
+    "templateId": "ats-plain",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "ats-plain-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "ats-plain",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "ats-plain-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "engineer-compact",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "engineer-compact-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "engineer-compact",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "engineer-compact-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "executive-band",
+    "lng": "en",
+    "pages": 2,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "executive-band-en-p1.png",
+      "executive-band-en-p2.png"
+    ]
+  },
+  {
+    "templateId": "executive-band",
+    "lng": "vi",
+    "pages": 2,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "executive-band-vi-p1.png",
+      "executive-band-vi-p2.png"
+    ]
+  },
+  {
+    "templateId": "graduate-friendly",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "graduate-friendly-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "graduate-friendly",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "graduate-friendly-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "modern-sidebar",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "modern-sidebar-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "modern-sidebar",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "modern-sidebar-vi-p1.png"
+    ]
+  }
+]
