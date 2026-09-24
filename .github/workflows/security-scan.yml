@@ -1,0 +1,106 @@
+name: security-scan
+
+# Runs the same dependency and image gates as ci.yml against the default
+# branch and the latest release on a schedule, so a vulnerability disclosed
+# after a release still surfaces. A scheduled run's failure notifies the
+# repository the same way any other workflow failure does; there is no
+# separate alerting path here.
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Monday 03:17 UTC, off-peak
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Install the pinned govulncheck (1.8.0)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: apps/server
+        run: govulncheck ./...
+        working-directory: apps/server
+      - if: ${{ !cancelled() }}
+        name: packages/schema/gen/go
+        run: govulncheck ./...
+        working-directory: packages/schema/gen/go
+      - if: ${{ !cancelled() }}
+        name: deploy/caddy/production/build
+        run: govulncheck ./...
+        working-directory: deploy/caddy/production/build
+        env:
+          GOWORK: "off"
+      - if: failure()
+        run: echo "### govulncheck found a reachable vulnerability" >>"$GITHUB_STEP_SUMMARY"
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: repository root
+        run: npm audit --omit=dev --audit-level=high
+      - if: ${{ !cancelled() }}
+        name: apps/web
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: apps/web
+      - if: ${{ !cancelled() }}
+        name: packages/schema
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: packages/schema
+      - if: ${{ !cancelled() }}
+        name: deploy/dev-https-browser
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: deploy/dev-https-browser
+      - if: failure()
+        run: echo "### npm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
+
+  # Scans the three images published for the latest release tag, and every
+  # pinned base image from the production Dockerfiles, with the same pinned
+  # Trivy install release-images.yml uses. Fails on any fixable HIGH or
+  # CRITICAL finding across every target; scripts/security-scan.sh
+  # weekly-scan continues past a failing target so one run always reports
+  # the complete picture.
+  image-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # scripts/security-scan.sh latest-tag needs full tag history
+      - name: Install Trivy
+        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
+      - name: Scan released and base images
+        run: |
+          scripts/security-scan.sh weekly-scan \
+            "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/reports"
+      - name: Write job summary
+        if: failure()
+        run: |
+          {
+            echo "### Weekly image scan: fixable HIGH/CRITICAL findings"
+            echo
+            echo "Failing images/base images:"
+            echo '```'
+            cat "$RUNNER_TEMP/reports/failed.txt" 2>/dev/null || echo "(none recorded)"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: weekly-image-scan-reports
+          path: ${{ runner.temp }}/reports
+          if-no-files-found: warn
+          retention-days: 7
