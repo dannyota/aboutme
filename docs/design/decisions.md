@@ -64,7 +64,6 @@ accepted.
 | Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added |
 | Product name and trademark review                      | Human owner                               | Before the public announcement |
 | Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before the public announcement |
-| SES production access                                  | Human owner                               | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes.
 [ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md) is the

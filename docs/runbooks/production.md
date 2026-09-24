@@ -136,13 +136,13 @@ the parameters in place.
 
 ## Email sign-up
 
-Email-and-password sign-up sends a verification email through SES. While the SES
-account is in the sandbox, that mail cannot reach most addresses, so turn
-sign-up off: set `password_registration_enabled = false` in `prod.tfvars`, run
+Email-and-password sign-up is on and sends a verification email through SES,
+which has production access. To turn sign-up off, for example during an SES
+incident, set `password_registration_enabled = false` in `prod.tfvars`, run
 `tofu apply`, and redeploy the live tag with `deploy.sh <tag>`. The register
 route then returns 404 and the web hides the sign-up form. Google sign-up,
 login, password reset, and verification of pending registrations keep working.
-Turn it back on the same way with `true` once SES production access is granted.
+Turn it back on the same way with `true`.
 
 ## Deploy
 
