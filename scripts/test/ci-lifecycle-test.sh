@@ -10,7 +10,7 @@ trap 'rm -rf -- "$WORK"' EXIT
 make_fixture() {
   local repo=$1 bin=$2 calls=$3
   mkdir -p "$repo/scripts" "$repo/apps/server" \
-    "$repo/packages/schema/gen/go" "$bin"
+    "$repo/packages/schema/gen/go" "$repo/deploy/caddy/production/build" "$bin"
   cp "$ROOT/scripts/ci.sh" "$repo/scripts/ci.sh"
   cp "$ROOT/scripts/check-migrations-append-only.sh" "$repo/scripts/"
   : >"$repo/apps/server/go.mod"
