@@ -37,6 +37,13 @@ for (const page of PAGES) {
 
         const response = await browserPage.goto(page.path);
         expect(response?.status()).toBe(200);
+        // Chrome transitions (link and chip colors, hover lifts) must not
+        // be mid-flight at capture; the exact-pixel compare has no
+        // tolerance for a partly blended edge.
+        await browserPage.addStyleTag({
+          content: '*, *::before, *::after { transition: none !important; '
+            + 'animation: none !important; }',
+        });
         await expect(browserPage.locator('[data-testid="app-shell"]'))
           .toBeVisible();
         await browserPage.evaluate(() => document.fonts.ready);
@@ -57,6 +64,14 @@ for (const page of PAGES) {
           await expect(
             browserPage.locator('[data-sheet-thumbnail-render]'),
           ).toHaveCount(page.thumbnails);
+          // Mounted thumbnails can change the page height; match the
+          // viewport to the settled height so layout does not move again.
+          const settled = await browserPage.evaluate(() =>
+            document.documentElement.scrollHeight);
+          if (settled !== height) {
+            await browserPage.setViewportSize({ width, height: settled });
+          }
+          await browserPage.evaluate(() => document.fonts.ready);
           await waitForImages(browserPage);
           // Thumbnails measure their width after mounting; let two frames
           // pass so every zoom has settled before the capture.
