@@ -238,7 +238,7 @@ describe('AppShell', () => {
     await flushPromises();
     const found = links(wrapper);
     expect(found['Đăng nhập']).toBe('/login');
-    expect(found['Tạo tài khoản']).toBe('/register');
+    expect(found['Tạo CV của bạn']).toBe('/register');
     const theme = wrapper.get('[aria-label^="Chuyển sang chế độ"]');
     expect(theme.text()).toMatch(/Chế độ (sáng|tối)/);
 
@@ -510,6 +510,6 @@ describe('AppShell', () => {
     await flushPromises();
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
-    expect(found['Create account']).toBe('/register');
+    expect(found['Create your resume']).toBe('/register');
   });
 });

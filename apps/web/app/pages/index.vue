@@ -427,7 +427,9 @@ useHead(computed(() => ({
               <dd
                 v-if="index === 0"
                 class="text-sm font-medium text-foreground"
-              >aboutme.vn{{ sampleLink }}</dd>
+              >
+                aboutme.vn{{ sampleLink }}
+              </dd>
               <dd class="text-sm text-muted-foreground">
                 {{ choice.text }}
               </dd>
