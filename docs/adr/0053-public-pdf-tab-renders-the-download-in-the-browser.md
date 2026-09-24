@@ -1,7 +1,8 @@
 # 0053: The public PDF tab renders the download in the browser
 
-Status: Proposed (2026-09-25). Waits for the owner's approval of the choices
-marked **Owner** in the [public PDF tab design](../design/public-pdf-tab.md).
+Status: Rejected (2026-09-25). The owner dropped the public page PDF tab: public
+pages keep the web view and the Download PDF button. PDF tabs exist only on
+template pages, which show prebuilt sample page images.
 
 ## Context
 

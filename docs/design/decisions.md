@@ -2,7 +2,7 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052 are
-accepted; ADR 0053 is proposed.
+accepted; ADR 0053 is rejected.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -58,7 +58,7 @@ accepted; ADR 0053 is proposed.
 | [0050](../adr/0050-aurora-application-identity.md)                        | Accepted | Aurora chrome: blue-led palette, canvas glows, logo mark; renderer stays white and isolated                            |
 | [0051](../adr/0051-vietnam-hosted-production.md)                          | Accepted | Vietnam-hosted production: GreenNode compute, storage, CDN, DNS; Bizfly mail; AWS becomes test only                    |
 | [0052](../adr/0052-guarded-token-edits-to-generated-primitives.md)        | Accepted | Generated primitives take token-colored variant edits only with a guard test, re-applied after regeneration            |
-| [0053](../adr/0053-public-pdf-tab-renders-the-download-in-the-browser.md) | Proposed | Public PDF tab draws the gated PDF download with pdf.js in the browser; no new route or server raster                  |
+| [0053](../adr/0053-public-pdf-tab-renders-the-download-in-the-browser.md) | Rejected | Public PDF tab draws the gated PDF download with pdf.js in the browser; no new route or server raster                  |
 
 ## Remaining gates
 
