@@ -48,7 +48,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     createResume: 'Tạo CV của bạn',
     signIn: 'Đăng nhập',
     openResumes: 'Mở CV của bạn',
-    browseTemplates: 'Xem các mẫu',
+    browseTemplates: 'Xem thư viện',
     sampleLabel: 'CV mẫu đăng tại aboutme.vn/danny',
     sealLabel: 'Công khai tại aboutme.vn/danny',
     heroChips: {
@@ -80,8 +80,8 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     templatesLead:
       'Mỗi bản xem trước là mẫu thật: đúng trang nhà tuyển dụng mở và bản '
       + 'PDF họ tải về.',
-    templateCategoriesLabel: 'Nhóm mẫu CV',
-    browseAllTemplates: 'Xem tất cả mẫu',
+    templateCategoriesLabel: 'Nhóm trong thư viện',
+    browseAllTemplates: 'Mở thư viện',
     publishTitle: 'Đăng CV gồm ba lựa chọn',
     publishLead:
       'Không gì được công khai cho đến khi bạn đăng. Bạn chọn từng thiết '
@@ -123,7 +123,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     createResume: 'Create your resume',
     signIn: 'Sign in',
     openResumes: 'Open your resumes',
-    browseTemplates: 'Browse templates',
+    browseTemplates: 'Browse the library',
     sampleLabel: 'Sample resume published at aboutme.vn/danny',
     sealLabel: 'Public at aboutme.vn/danny',
     heroChips: {
@@ -155,8 +155,8 @@ export const landingCopy: Record<Locale, LandingCopy> = {
     templatesLead:
       'Each preview is the real template: the same page a recruiter opens '
       + 'and the PDF they download.',
-    templateCategoriesLabel: 'Template categories',
-    browseAllTemplates: 'Browse all templates',
+    templateCategoriesLabel: 'Library categories',
+    browseAllTemplates: 'Open the library',
     publishTitle: 'Publishing is three choices',
     publishLead:
       'Nothing is public until you publish it. You choose each setting for '
