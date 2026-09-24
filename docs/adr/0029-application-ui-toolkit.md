@@ -1,6 +1,7 @@
 # 0029: Tailwind and shadcn-vue as the application UI toolkit
 
-Status: Accepted (2026-09-02)
+Status: Accepted (2026-09-02). Amended in part by
+[ADR 0052](0052-guarded-token-edits-to-generated-primitives.md).
 
 Amends the web and rendering design (Approved v4, section 5) for the application
 chrome: every page and editor panel outside the pure resume renderer.
