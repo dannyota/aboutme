@@ -8,7 +8,7 @@ import {
 } from '@playwright/test';
 import { SAMPLES, type SampleLanguage } from '@aboutme/schema/samples';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -29,9 +29,11 @@ import { denyExternalRequests, waitForImages } from './support';
 
 const TYPICAL_ZOOM = 0.84;
 const FULL_ZOOM = 1;
+// Full zoom runs first so a settle failure at the typical (non-1) zoom, and
+// not at full zoom, points at zoom scaling rather than the fixture itself.
 const ZOOM_VARIANTS = [
-  ['typical', TYPICAL_ZOOM],
   ['full', FULL_ZOOM],
+  ['typical', TYPICAL_ZOOM],
 ] as const;
 type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];
 type Engine = 'chromium-normal' | 'webkit';
@@ -97,6 +99,41 @@ interface CaseResult {
   readonly entryPageStarts: readonly EntryPageStart[];
   readonly knownCauses: readonly string[];
 }
+
+// A case that never rendered, never settled, or drifted past the committed
+// expectation. Recorded instead of thrown, so one broken case never hides
+// the other 39; the test still fails at the end if this list is non-empty.
+interface DiagnosticSnapshot {
+  readonly harnessDataset: Readonly<Record<string, string>> | null;
+  readonly pagedResumeDataset: Readonly<Record<string, string>> | null;
+  readonly resumePageCount: number;
+  readonly visiblePageCount: number;
+  readonly bodySnippet: string;
+}
+
+interface FailedCase {
+  readonly sample: string;
+  readonly lng: SampleLanguage;
+  readonly engine: Engine;
+  readonly zoomLabel: ZoomLabel;
+  readonly zoomValue: number;
+  readonly url: string;
+  readonly error: string;
+  readonly diagnostics: DiagnosticSnapshot | null;
+}
+
+type PreviewResult
+  = | {
+    readonly ok: true;
+    readonly url: string;
+    readonly extraction: Extraction;
+  }
+  | {
+    readonly ok: false;
+    readonly url: string;
+    readonly error: string;
+    readonly diagnostics: DiagnosticSnapshot | null;
+  };
 
 // --- expectation file -------------------------------------------------
 
@@ -584,13 +621,49 @@ async function producePdf(
   return pdf;
 }
 
+async function captureDiagnostics(page: Page): Promise<DiagnosticSnapshot> {
+  return page.evaluate(() => {
+    const harnessRoot = document.querySelector('.harness-render');
+    const pagedResume = document.querySelector('.paged-resume');
+    const resumePages = document.querySelectorAll('.resume-page');
+    const visiblePages = Array.from(resumePages).filter(
+      (el) => !el.classList.contains('pagination-measurement'),
+    );
+    const datasetOf = (el: Element | null) => el === null
+      ? null
+      : { ...(el as HTMLElement).dataset };
+    return {
+      harnessDataset: datasetOf(harnessRoot),
+      pagedResumeDataset: datasetOf(pagedResume),
+      resumePageCount: resumePages.length,
+      visiblePageCount: visiblePages.length,
+      bodySnippet: (document.body.textContent ?? '').slice(0, 500),
+    };
+  });
+}
+
+async function safeCaptureDiagnostics(
+  page: Page,
+): Promise<DiagnosticSnapshot | null> {
+  try {
+    return await captureDiagnostics(page);
+  } catch {
+    return null;
+  }
+}
+
+// The zoom is requested in the URL, not applied after the fact: the harness
+// bakes it into the paper's style before Vue ever mounts, the same way
+// EditorPreview.vue's zoom is set once and not toggled for a stable
+// viewport class. A failure to settle is recorded with a DOM snapshot
+// rather than thrown, so one broken case does not hide the rest.
 async function producePreview(
   browser: Browser,
   baseURL: string,
   templateId: string,
   lng: SampleLanguage,
   zoomValue: number,
-): Promise<Extraction> {
+): Promise<PreviewResult> {
   const context = await browser.newContext({
     colorScheme: 'light',
     locale: 'en-US',
@@ -601,21 +674,24 @@ async function producePreview(
   try {
     const page = await context.newPage();
     const external = await denyExternalRequests(page);
-    // The zoom is requested in the URL, not applied after the fact: the
-    // harness bakes it into the paper's style before Vue ever mounts, the
-    // same way EditorPreview.vue's zoom is set once and not toggled for a
-    // stable viewport class. Mutating the style after the first settle
-    // leaves PagedResume's pagination watcher unable to settle again.
-    const response = await page.goto(
-      `${baseURL}${sampleUrl('paged', templateId, lng, { zoom: zoomValue })}`,
-    );
-    expect(response?.ok()).toBe(true);
-    await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
-    await expect(page.locator('[data-pagination-settled="true"]'))
-      .toHaveCount(1);
+    const url = sampleUrl('paged', templateId, lng, { zoom: zoomValue });
+    try {
+      const response = await page.goto(`${baseURL}${url}`);
+      expect(response?.ok()).toBe(true);
+      await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+      await expect(page.locator('[data-pagination-settled="true"]'))
+        .toHaveCount(1);
+    } catch (error) {
+      return {
+        ok: false,
+        url,
+        error: error instanceof Error ? error.message : String(error),
+        diagnostics: await safeCaptureDiagnostics(page),
+      };
+    }
     const extraction = await page.evaluate(browserExtract);
     expect(external).toEqual([]);
-    return extraction;
+    return { ok: true, url, extraction };
   } finally {
     await context.close();
   }
@@ -623,42 +699,81 @@ async function producePreview(
 
 // --- report ---------------------------------------------------------------
 
-async function writeReport(
-  cases: readonly CaseResult[],
-  webkitCovered: boolean,
-  webkitSkipReason: string,
-): Promise<void> {
+interface ReportSummary {
+  readonly totalCases: number;
+  readonly casesWithDrift: number;
+  readonly failedCases: number;
+  readonly webkitCovered: boolean;
+  readonly webkitSkipReason: string | null;
+}
+
+interface ReportFile {
+  readonly summary: ReportSummary;
+  readonly cases: CaseResult[];
+  readonly failures: FailedCase[];
+}
+
+function reportPath(): string {
   const resultsRoot = process.env.PLAYWRIGHT_RESULTS_DIR;
   if (resultsRoot === undefined) {
     throw new Error('PLAYWRIGHT_RESULTS_DIR is required.');
   }
   const surface = process.env.PLAYWRIGHT_SURFACE ?? 'harness';
-  const target = resolve(resultsRoot, surface, 'preview-gap-report.json');
+  return resolve(resultsRoot, surface, 'preview-gap-report.json');
+}
+
+async function readExistingReport(
+  target: string,
+): Promise<{ cases: CaseResult[]; failures: FailedCase[] }> {
+  try {
+    const raw = JSON.parse(await readFile(target, 'utf8')) as ReportFile;
+    return { cases: [...raw.cases], failures: [...raw.failures] };
+  } catch {
+    return { cases: [], failures: [] };
+  }
+}
+
+// Each test appends its own cases and failures to the shared report file,
+// merged with what earlier tests already wrote. Playwright restarts the
+// worker (re-importing this module) after any test failure, so a
+// module-level accumulator would lose every case written before that.
+async function appendReport(
+  newCases: readonly CaseResult[],
+  newFailures: readonly FailedCase[],
+  webkitCovered: boolean,
+  webkitSkipReason: string,
+): Promise<void> {
+  const target = reportPath();
+  await mkdir(resolve(target, '..'), { recursive: true });
+  const existing = await readExistingReport(target);
+  const cases = [...existing.cases, ...newCases];
+  const failures = [...existing.failures, ...newFailures];
   const casesWithDrift = cases.filter((c) =>
     c.counts.lineBreak > 0
     || c.counts.pageBreak > 0
     || c.counts.missing > 0
     || c.counts.extra > 0
     || c.counts.entryPageMismatches > 0).length;
-  const summary = {
+  const summary: ReportSummary = {
     totalCases: cases.length,
     casesWithDrift,
+    failedCases: failures.length,
     webkitCovered,
     webkitSkipReason: webkitCovered ? null : webkitSkipReason,
   };
-  await mkdir(resolve(target, '..'), { recursive: true });
-  await writeFile(target, JSON.stringify({ summary, cases }, null, 2));
-  // eslint-disable-next-line no-console
+  const report: ReportFile = { summary, cases, failures };
+  await writeFile(target, JSON.stringify(report, null, 2));
+
   console.log(
     `preview-gap: ${summary.totalCases} case(s), `
-    + `${summary.casesWithDrift} with drift; webkit `
+    + `${summary.casesWithDrift} with drift, `
+    + `${summary.failedCases} failed so far; webkit `
     + `${webkitCovered ? 'covered' : `skipped (${webkitSkipReason})`}.`,
   );
 }
 
 // --- test wiring -----------------------------------------------------------
 
-const results: CaseResult[] = [];
 let normalChromium: Browser | undefined;
 let webkitBrowser: Browser | undefined;
 let webkitSkipReason = '';
@@ -679,7 +794,6 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await normalChromium?.close();
   await webkitBrowser?.close();
-  await writeReport(results, webkitBrowser !== undefined, webkitSkipReason);
 });
 
 for (const { templateId, lng } of SAMPLES) {
@@ -696,15 +810,32 @@ for (const { templateId, lng } of SAMPLES) {
       variants.push({ engine: 'webkit', browser: webkitBrowser });
     }
 
+    const caseResults: CaseResult[] = [];
+    const caseFailures: FailedCase[] = [];
+
     for (const { engine, browser } of variants) {
       for (const [zoomLabel, zoomValue] of ZOOM_VARIANTS) {
-        const previewExtraction = await producePreview(
+        const previewResult = await producePreview(
           browser,
           baseURL,
           templateId,
           lng,
           zoomValue,
         );
+        if (!previewResult.ok) {
+          caseFailures.push({
+            sample: templateId,
+            lng,
+            engine,
+            zoomLabel,
+            zoomValue,
+            url: previewResult.url,
+            error: previewResult.error,
+            diagnostics: previewResult.diagnostics,
+          });
+          continue;
+        }
+        const previewExtraction = previewResult.extraction;
         const pairs = alignIndices(
           previewExtraction.words.map((w) => w.text),
           pdfExtraction.words.map((w) => w.text),
@@ -714,7 +845,11 @@ for (const { templateId, lng } of SAMPLES) {
           pdfExtraction,
           pairs,
         );
-        const starts = entryPageStarts(previewExtraction, pdfExtraction, pairs);
+        const starts = entryPageStarts(
+          previewExtraction,
+          pdfExtraction,
+          pairs,
+        );
         const entryPageMismatches = starts.filter((s) => !s.matches).length;
         const result: CaseResult = {
           sample: templateId,
@@ -727,9 +862,33 @@ for (const { templateId, lng } of SAMPLES) {
           entryPageStarts: starts,
           knownCauses: causesFor(engine, zoomLabel),
         };
-        results.push(result);
-        assertWithinExpectation(result);
+        caseResults.push(result);
+        try {
+          assertWithinExpectation(result);
+        } catch (error) {
+          caseFailures.push({
+            sample: templateId,
+            lng,
+            engine,
+            zoomLabel,
+            zoomValue,
+            url: previewResult.url,
+            error: error instanceof Error ? error.message : String(error),
+            diagnostics: null,
+          });
+        }
       }
     }
+
+    await appendReport(
+      caseResults,
+      caseFailures,
+      webkitBrowser !== undefined,
+      webkitSkipReason,
+    );
+    expect(
+      caseFailures,
+      'preview-gap cases failed; see preview-gap-report.json',
+    ).toEqual([]);
   });
 }
