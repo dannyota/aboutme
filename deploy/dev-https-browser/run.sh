@@ -109,10 +109,9 @@ mode_input_diagnostic() {
   esac
 }
 
-# mode_is_totp_production reports whether mode is one of the three
-# production TOTP proof modes, which carry no CA root and never import one
-# (docs/runbooks/totp-keys.md "Production proofs": the real public origin
-# already validates against the image's own system trust store).
+# mode_is_totp_production reports whether mode is one of the three production
+# TOTP proof modes, which carry no CA root and validate against the image's
+# own system trust store instead (docs/runbooks/totp-keys.md "Production proofs").
 mode_is_totp_production() {
   case $1 in
   totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup) return 0 ;;
@@ -120,11 +119,12 @@ mode_is_totp_production() {
   esac
 }
 
-require_valid_totp_shard() {
-  case ${1-} in
-  '' | primary | accounts-b | accounts-c) ;;
-  *) fail 'ABOUTME_TOTP_SHARD must be primary, accounts-b, or accounts-c' ;;
-  esac
+# add_shard_env <array-name> <flag> <key> <value> <valid-shard>...: validates value against the trailing shard list and appends KEY=value (--env KEY=value when <flag> is set) to the named array.
+add_shard_env() {
+  local -n arr=$1; local flag=$2 key=$3 value=$4; shift 4
+  [ -z "$value" ] && return 0
+  [[ " $* " == *" $value "* ]] || fail "$key must be one of: $*"
+  arr+=(${flag:+--env} "$key=$value")
 }
 
 # validate_mode_input_files checks the extra per-mode input files after the
@@ -191,13 +191,16 @@ mount_has_option() {
   esac
 }
 
-inside_container() {
-  [ "$#" -le 2 ] || fail 'container entrypoint accepts at most a mode and a workflow mode'
-  local mode=${1:-auth} workflow_mode=${2:-}
-  case $mode in
+require_valid_mode() {
+  case $1 in
   auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
   *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
   esac
+}
+
+inside_container() {
+  [ "$#" -le 2 ] || fail 'container entrypoint accepts at most a mode and a workflow mode'
+  local mode=${1:-auth} workflow_mode=${2:-}; require_valid_mode "$mode"
   if [ "$mode" = mcp-sdk ]; then
     [[ $workflow_mode = local || $workflow_mode = production ]] ||
       fail 'mcp-sdk mode requires workflow mode local or production'
@@ -466,8 +469,9 @@ inside_container() {
     mode_env+=(ABOUTME_MCP_BROWSER_DIR=/mcp-browser ABOUTME_MCP_WORKFLOW_MODE="$workflow_mode")
   fi
   if [ "$mode" = totp ]; then
-    require_valid_totp_shard "${ABOUTME_TOTP_SHARD-}"
-    [ -n "${ABOUTME_TOTP_SHARD-}" ] && mode_env+=(ABOUTME_TOTP_SHARD="$ABOUTME_TOTP_SHARD")
+    add_shard_env mode_env '' ABOUTME_TOTP_SHARD "${ABOUTME_TOTP_SHARD-}" primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled
+  elif [ "$mode" = second-factor ]; then
+    add_shard_env mode_env '' ABOUTME_PASSKEY_SHARD "${ABOUTME_PASSKEY_SHARD-}" primary-disabled recovery-attempts
   fi
   env "${mode_env[@]}" \
     /opt/aboutme-auth/node_modules/.bin/playwright test \
@@ -519,10 +523,7 @@ host_run() {
     fail 'usage: run.sh <image-ID> <CA-input-directory> <spec-input-directory> <evidence-directory> [mode] [workflow-mode] [MCP-browser-directory] [MCP-credential-file] [MCP-container-name]'
   local image=$1 input=$2 spec_input=$3 evidence=$4 mode=${5:-auth}
   local workflow_mode=${6:-} browser_dir=${7:-} credential=${8:-} container_name=${9:-}
-  case $mode in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
-  esac
+  require_valid_mode "$mode"
   if [ "$mode" = mcp-sdk ]; then
     [[ $workflow_mode = local || $workflow_mode = production ]] ||
       fail 'mcp-sdk mode requires workflow mode local or production'
@@ -653,24 +654,23 @@ host_run() {
   fi
   local -a name_args=()
   [ "$mode" = mcp-sdk ] && name_args=("--name=$container_name")
-  # mcp-sdk caps the container because it runs the browser beside a second
-  # local process (the Go runner) under run_joined's own bound in
-  # scripts/mcp-owner-workflow.sh. The production TOTP modes cap it because
-  # they run directly against a production host, not a hosted CI runner
-  # (docs/runbooks/totp-keys.md "Production proofs"). The other modes' own
-  # long, many-page journeys (for example second-factor) are unbounded on
-  # main and stay that way here: a 2 GiB, 2-CPU ceiling on a shared hosted
-  # runner already busy with the server, web, Caddy, and Postgres processes
-  # can starve Chromium into an uncleanly killed run instead of a classified
-  # test failure.
+  # mcp-sdk caps the container because it shares the runner with a second
+  # local process (scripts/mcp-owner-workflow.sh); the production TOTP modes
+  # cap it because they run against a production host, not a hosted CI runner
+  # (docs/runbooks/totp-keys.md "Production proofs"). Other modes' own
+  # long, many-page journeys (for example second-factor) stay unbounded: a
+  # 2 GiB, 2-CPU ceiling on a runner already busy with the server, web,
+  # Caddy, and Postgres can starve Chromium into an uncleanly killed run
+  # instead of a classified test failure.
   local -a resource_args=()
   if [ "$mode" = mcp-sdk ] || mode_is_totp_production "$mode"; then
     resource_args=(--memory=2g --memory-swap=2g --cpus=2)
   fi
   local -a env_args=()
   if [ "$mode" = totp ]; then
-    require_valid_totp_shard "${ABOUTME_TOTP_SHARD-}"
-    [ -n "${ABOUTME_TOTP_SHARD-}" ] && env_args=(--env "ABOUTME_TOTP_SHARD=$ABOUTME_TOTP_SHARD")
+    add_shard_env env_args --env ABOUTME_TOTP_SHARD "${ABOUTME_TOTP_SHARD-}" primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled
+  elif [ "$mode" = second-factor ]; then
+    add_shard_env env_args --env ABOUTME_PASSKEY_SHARD "${ABOUTME_PASSKEY_SHARD-}" primary-disabled recovery-attempts
   fi
   exec podman run \
     --rm \

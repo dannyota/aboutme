@@ -46,15 +46,18 @@ grep -Fq 'runs-on: ubuntu-24.04' "$WORKFLOW" ||
   fail "hosted S3 conformance does not pin a runner with Podman"
 grep -Fq -- '- run: make test-s3-up' "$WORKFLOW" ||
   fail "hosted S3 conformance does not start the pinned test service"
-grep -Fq -- '- run: make server-test-s3' "$WORKFLOW" ||
-  fail "hosted S3 conformance does not run the fail-closed suite"
+grep -Fq 'SERVER_TEST_S3_RUN: ^TestNormalizeAcceptsFrozenCorpusDeterministically$' "$WORKFLOW" ||
+  fail "hosted S3 conformance does not isolate the slow corpus test"
+grep -Fq 'SERVER_TEST_S3_SKIP: ^(TestNormalizationBudget|TestNormalizeAcceptsFrozenCorpusDeterministically)$' "$WORKFLOW" ||
+  fail "hosted S3 conformance does not run the rest of the suite with both split-off tests skipped"
 grep -Fq 'run: make test-s3-down' "$WORKFLOW" ||
   fail "hosted S3 conformance does not tear down its disposable service"
 
-grep -Fq '  web-e2e:' "$WORKFLOW" ||
-  fail "hosted workflow lacks the pinned browser job"
-grep -Fq '    needs: web' "$WORKFLOW" ||
-  fail "pinned browser job does not wait for the web job"
+WEB_E2E_JOB=$(awk '/^  web-e2e:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
+[ -n "$WEB_E2E_JOB" ] || fail "hosted workflow lacks the pinned browser job"
+if grep -Fq 'needs:' <<<"$WEB_E2E_JOB"; then
+  fail "pinned browser job depends on a job whose artifact it does not use"
+fi
 grep -Fq '        WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}' \
   "$WORKFLOW" || fail "pinned browser job lacks the closed immutable run ID"
 grep -Fq '        test -z "${UPDATE_GOLDEN+x}"' "$WORKFLOW" ||
@@ -119,7 +122,7 @@ grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
   fail "passkey-browser-proof job's stop-database step does not stop the runner-local database"
 
 # The TOTP proof mirrors the passkey job's shape and blocks the release.
-TOTP_JOB=$(sed -n '/^  totp-browser-proof:/,/^  web-source-build:/p' "$WORKFLOW")
+TOTP_JOB=$(sed -n '/^  totp-browser-proof:/,/^  totp-browser-proof-coverage:/p' "$WORKFLOW")
 [ -n "$TOTP_JOB" ] || fail "hosted workflow lacks the totp-browser-proof job"
 grep -Fq '    timeout-minutes: 60' <<<"$TOTP_JOB" ||
   fail "totp-browser-proof job lacks a fixed 60-minute timeout"
