@@ -34,7 +34,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 18/09/2026',
+      'Cập nhật lần cuối ngày 24/09/2026',
     );
     expect(wrapper.text()).toContain('mã băm Argon2id');
     expect(wrapper.text()).toContain('Singapore (ap-southeast-1)');
@@ -44,9 +44,16 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'Bản ghi về việc xoá tài khoản và gỡ liên kết nhà cung cấp',
     );
+    expect(wrapper.text()).toContain(
+      'Việc duy trì phiên đăng nhập không kéo dài thời hạn này.',
+    );
+    expect(wrapper.text()).toContain(
+      'chúng tôi giữ chỗ đường dẫn cũ trong 180 ngày',
+    );
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
-      'aboutme do Danny vận hành. Liên hệ: danny@aboutme.vn.',
+      'aboutme do Danny, một cá nhân, vận hành phi thương mại tại Việt Nam. '
+      + 'Liên hệ: danny@aboutme.vn.',
     );
     expect(operator.get('a').attributes('href')).toBe(
       'mailto:danny@aboutme.vn',
@@ -60,24 +67,32 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated September 18, 2026',
+      'Last updated September 24, 2026',
     );
     expect(wrapper.text()).toContain(
-      'We delete the user-agent and IP 90 days after sign-in.',
+      'We delete the IP address and browser (user agent) recorded for a '
+      + 'sign-in no later than 90 days after that sign-in.',
     );
     expect(wrapper.text()).toContain('It cannot publish or unpublish');
     expect(wrapper.text()).toContain('which does not store copies of them');
     expect(wrapper.text()).toContain(
       'Cookies are used only to keep you signed in, to complete Google '
-      + 'sign-in, and to remember your theme and language.',
+      + 'sign-in, to hold a pending second-factor sign-in for five '
+      + 'minutes, and to remember your theme and language.',
     );
     expect(wrapper.text()).not.toContain('CSRF');
     expect(wrapper.text()).toContain('Have I Been Pwned');
-    expect(wrapper.text()).toContain('transferred abroad, to Singapore');
+    expect(wrapper.text()).toContain(
+      'transferred abroad: mainly to Singapore',
+    );
+    expect(wrapper.text()).toContain(
+      'we keep its old web address reserved for 180 days',
+    );
     expect(wrapper.text()).toContain('Your rights');
     expect(wrapper.text()).toContain('Why we use your data');
     expect(wrapper.get('[data-testid="legal-operator"]').text()).toBe(
-      'aboutme is operated by Danny. Contact: danny@aboutme.vn.',
+      'aboutme is operated by Danny, an individual, on a non-commercial '
+      + 'basis in Vietnam. Contact: danny@aboutme.vn.',
     );
   });
 
@@ -155,8 +170,8 @@ describe('links to the legal pages', () => {
     const wrapper = await mountSuspended(RegisterPage);
     const line = wrapper.get('[data-testid="register-agreement"]');
     expect(line.text()).toBe(
-      'Khi tạo tài khoản, bạn đồng ý với Điều khoản sử dụng và Chính sách '
-      + 'quyền riêng tư.',
+      'Khi tạo tài khoản, bạn xác nhận đủ 16 tuổi và đồng ý với Điều khoản '
+      + 'sử dụng và Chính sách quyền riêng tư.',
     );
     expect(line.find('a[href="/terms"]').exists()).toBe(true);
     expect(line.find('a[href="/privacy"]').exists()).toBe(true);
@@ -165,8 +180,8 @@ describe('links to the legal pages', () => {
     setSiteLocale('en');
     const english = await mountSuspended(RegisterPage);
     expect(english.get('[data-testid="register-agreement"]').text()).toBe(
-      'By creating an account you agree to the Terms of Service and the '
-      + 'Privacy Policy.',
+      'By creating an account you confirm you are at least 16 and agree '
+      + 'to the Terms of Service and the Privacy Policy.',
     );
   });
 
@@ -180,8 +195,8 @@ describe('links to the legal pages', () => {
     await flushPromises();
     const line = wrapper.get('[data-testid="login-agreement"]');
     expect(line.text()).toBe(
-      'Khi tạo tài khoản, bạn đồng ý với Điều khoản sử dụng và Chính sách '
-      + 'quyền riêng tư.',
+      'Khi tạo tài khoản, bạn xác nhận đủ 16 tuổi và đồng ý với Điều khoản '
+      + 'sử dụng và Chính sách quyền riêng tư.',
     );
     expect(line.find('a[href="/terms"]').exists()).toBe(true);
 
