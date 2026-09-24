@@ -321,6 +321,14 @@ unbounded, per-render value set no fixed hash or nonce list could cover.
 The Go API sends its own separate, fully locked-down policy on every JSON,
 media, and event-stream response; it never serves HTML.
 
+The editor validates a fetched resume document in the browser against the resume
+schema. A runtime `ajv.compile()` call emits a `new Function`, which
+`script-src` without `'unsafe-eval'` blocks, so the editor's validator is
+instead an Ajv standalone compile of the schema, generated at build time into a
+plain module with no eval of any kind
+(`apps/web/scripts/generate-document-validator.mjs`,
+`apps/web/app/editor/documentValidator.generated.mjs`).
+
 ## Untrusted document content
 
 Rich text uses one versioned allowlist and shared hostile corpus. Go sanitizes
