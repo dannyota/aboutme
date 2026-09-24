@@ -9,11 +9,8 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decision is
-[ADR 0048](0048-passkey-second-factor-authentication.md), which adds optional
-passkey second-factor authentication, recovery codes, and a release fence.
-
-[ADR 0049](0049-totp-second-factor-authentication.md), which adds optional
-authenticator-app codes as a second factor.
+[ADR 0050](0050-aurora-application-identity.md), which gives the application
+chrome the Aurora identity and logo while the resume renderer stays unchanged.
 
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

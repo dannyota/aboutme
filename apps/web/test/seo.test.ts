@@ -100,7 +100,7 @@ describe('site page search metadata', () => {
           locale === 'vi' ? 'en_US' : 'vi_VN',
         );
         expect(meta('meta[property="og:image"]')).toBe(
-          'https://aboutme.vn/og-image.png',
+          'https://aboutme.vn/og-image.jpg',
         );
         expect(meta('meta[name="twitter:card"]')).toBe('summary_large_image');
         expect(document.head.querySelector('meta[name="robots"]')).toBeNull();

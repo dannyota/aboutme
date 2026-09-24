@@ -11,58 +11,84 @@ const webRoot = resolve(import.meta.dirname, '../..');
 const workspaceRoot = resolve(webRoot, '../..');
 const themePath = resolve(webRoot, 'app/assets/css/theme.css');
 
+// Aurora application chrome tokens (ADR 0050). Resume renderer tokens are
+// covered separately below; they must never move with this palette.
 const lightTokens = {
-  '--radius': '6px',
+  '--radius': '10px',
   '--radius-sheet': '2px',
-  '--radius-dialog': '8px',
-  '--background': '#EDEFEB',
-  '--foreground': '#171A18',
-  '--card': '#FFFFFF',
-  '--card-foreground': '#171A18',
-  '--popover': '#FFFFFF',
-  '--popover-foreground': '#171A18',
-  '--primary': '#1F2A44',
-  '--primary-foreground': '#FFFFFF',
-  '--secondary': '#E3E6E1',
-  '--secondary-foreground': '#171A18',
-  '--muted': '#E3E6E1',
-  '--muted-foreground': '#5F6763',
-  '--accent': '#E3E6E1',
-  '--accent-foreground': '#171A18',
-  '--destructive': '#B42318',
-  '--border': '#D8DDD9',
-  '--input': '#D8DDD9',
-  '--ring': '#1F2A44',
-  '--seal': '#C8102E',
-  '--seal-foreground': '#FFFFFF',
+  '--radius-dialog': '14px',
+  '--radius-feature': '20px',
+  '--background': '#f5f8ff',
+  '--foreground': '#101b3f',
+  '--card': '#ffffff',
+  '--card-foreground': '#101b3f',
+  '--popover': '#ffffff',
+  '--popover-foreground': '#101b3f',
+  '--primary': '#1a5ceb',
+  '--primary-foreground': '#ffffff',
+  '--secondary': '#eaf2ff',
+  '--secondary-foreground': '#101b3f',
+  '--muted': '#edf1fa',
+  '--muted-foreground': '#56648c',
+  '--accent': '#eaf2ff',
+  '--accent-foreground': '#101b3f',
+  '--destructive': '#b42318',
+  '--border': '#dce5f5',
+  '--input': '#7886ae',
+  '--ring': '#1a5ceb',
+  '--seal': '#cc2649',
+  '--seal-foreground': '#ffffff',
+  '--link': '#123edb',
+  '--brand-blue': '#246bfd',
+  '--brand-deep-blue': '#123edb',
+  '--brand-indigo': '#6254ff',
+  '--brand-cyan': '#35c8f5',
+  '--brand-purple': '#a855f7',
+  '--brand-pink': '#f55db1',
+  '--brand-orange': '#ff9c47',
+  '--surface-blue': '#eaf2ff',
+  '--surface-indigo': '#f0eeff',
+  '--surface-pink': '#fff0fa',
   '--shadow-paper':
     '0 1px 2px rgba(23,26,24,0.06),0 12px 32px rgba(23,26,24,0.1)',
 } as const;
 
 const darkTokens = {
-  '--radius': '6px',
+  '--radius': '10px',
   '--radius-sheet': '2px',
-  '--radius-dialog': '8px',
-  '--background': '#121614',
-  '--foreground': '#ECEFEC',
-  '--card': '#1A1F1C',
-  '--card-foreground': '#ECEFEC',
-  '--popover': '#1A1F1C',
-  '--popover-foreground': '#ECEFEC',
-  '--primary': '#D7DEEE',
-  '--primary-foreground': '#171A18',
-  '--secondary': '#242A27',
-  '--secondary-foreground': '#ECEFEC',
-  '--muted': '#242A27',
-  '--muted-foreground': '#9AA39E',
-  '--accent': '#242A27',
-  '--accent-foreground': '#ECEFEC',
-  '--destructive': '#F0736A',
-  '--border': 'rgba(255,255,255,0.12)',
-  '--input': 'rgba(255,255,255,0.12)',
-  '--ring': '#D7DEEE',
-  '--seal': '#C8102E',
-  '--seal-foreground': '#FFFFFF',
+  '--radius-dialog': '14px',
+  '--radius-feature': '20px',
+  '--background': '#071126',
+  '--foreground': '#f4f7ff',
+  '--card': '#0d1935',
+  '--card-foreground': '#f4f7ff',
+  '--popover': '#132244',
+  '--popover-foreground': '#f4f7ff',
+  '--primary': '#72a0ff',
+  '--primary-foreground': '#071126',
+  '--secondary': '#132244',
+  '--secondary-foreground': '#f4f7ff',
+  '--muted': '#132244',
+  '--muted-foreground': '#9eacca',
+  '--accent': '#1a2b52',
+  '--accent-foreground': '#f4f7ff',
+  '--destructive': '#f0736a',
+  '--border': 'rgba(180,200,255,0.16)',
+  '--input': '#5a6a95',
+  '--ring': '#72a0ff',
+  '--seal': '#cc2649',
+  '--seal-foreground': '#ffffff',
+  '--link': '#8fb3ff',
+  '--brand-blue': '#72a0ff',
+  '--brand-deep-blue': '#4c7dff',
+  '--brand-indigo': '#8b80ff',
+  '--brand-cyan': '#54d6ff',
+  '--brand-purple': '#c08bff',
+  '--brand-pink': '#ff7cc4',
+  '--brand-orange': '#ffb067',
+  '--surface-blue': '#10224a',
+  '--surface-indigo': '#1a1a4a',
+  '--surface-pink': '#2a1533',
   '--shadow-paper': '0 1px 2px rgba(0,0,0,0.4),0 12px 32px rgba(0,0,0,0.5)',
 } as const;
 
@@ -71,7 +97,7 @@ afterEach(() => {
 });
 
 describe('application theme', () => {
-  it('defines the exact light and dark stamped-document tokens', () => {
+  it('defines the exact light and dark Aurora tokens', () => {
     const css = readFileSync(themePath, 'utf8');
 
     expect(blockDeclarations(css, ':root')).toMatchObject(
@@ -79,12 +105,6 @@ describe('application theme', () => {
     );
     expect(blockDeclarations(css, 'html[data-theme="dark"]')).toMatchObject(
       normalizedValues(darkTokens),
-    );
-    expect(normalize(lightTokens['--muted'])).toBe(
-      normalize(lightTokens['--secondary']),
-    );
-    expect(normalize(darkTokens['--muted'])).toBe(
-      normalize(darkTokens['--secondary']),
     );
     expect(css).not.toMatch(/--positive(?:-foreground)?\s*:/);
     expect(css).not.toMatch(/--chart-/);
@@ -99,6 +119,17 @@ describe('application theme', () => {
     );
     expect(theme['--color-seal']).toBe('var(--seal)');
     expect(theme['--color-seal-foreground']).toBe('var(--seal-foreground)');
+    expect(theme['--color-link']).toBe('var(--link)');
+    for (const brand of [
+      'blue', 'deep-blue', 'indigo', 'cyan', 'purple', 'pink', 'orange',
+    ]) {
+      expect(theme[`--color-brand-${brand}`]).toBe(`var(--brand-${brand})`);
+    }
+    for (const surface of ['blue', 'indigo', 'pink']) {
+      expect(theme[`--color-surface-${surface}`]).toBe(
+        `var(--surface-${surface})`,
+      );
+    }
     expect(theme['--text-xs']).toBe('0.75rem');
     expect(theme['--text-sm']).toBe('0.8125rem');
     expect(theme['--text-base']).toBe('0.875rem');

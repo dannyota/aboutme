@@ -1,7 +1,7 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. ADRs 0001–0049 are
+supersession record; these pages state the resulting design. ADRs 0001–0050 are
 accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                     |
@@ -35,7 +35,7 @@ accepted.
 | [0027](../adr/0027-provider-login-flag.md)                           | Accepted | Provider login behind `PROVIDER_LOGIN_ENABLED`; web reads capabilities; provider selection amended by 0039             |
 | [0028](../adr/0028-no-operator-surface.md)                           | Accepted | No platform-admin page, privileged role, or operator route in the public app                                           |
 | [0029](../adr/0029-application-ui-toolkit.md)                        | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated                                           |
-| [0030](../adr/0030-stamped-document-visual-identity.md)              | Accepted | Stamped-document identity: seal red only for public state, signature ink actions, Be Vietnam Pro chrome                |
+| [0030](../adr/0030-stamped-document-visual-identity.md)              | Accepted | Stamped-document identity: seal red only for public state, Be Vietnam Pro chrome; palette superseded by 0050           |
 | [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)              | Accepted | AWS cost research, OpenTofu, managed AWS services; hosted UAT superseded by 0037                                       |
 | [0032](../adr/0032-public-share-image.md)                            | Accepted | One live-gated public PNG share image from the continuous resume renderer                                              |
 | [0033](../adr/0033-public-image-builds-private-deployment.md)        | Accepted | Public ARM64 build/smoke; ECR publication superseded by 0037                                                           |
@@ -55,6 +55,7 @@ accepted.
 | [0047](../adr/0047-bilingual-resume-workspace.md)                    | Accepted | Vietnamese and English resume workspace; interface toggles never change resume data or resume language                 |
 | [0048](../adr/0048-passkey-second-factor-authentication.md)          | Accepted | Optional passkey second factor, recovery codes, authority epoch, exact wire contract, and release fence                |
 | [0049](../adr/0049-totp-second-factor-authentication.md)             | Accepted | Optional authenticator-app second factor, sealed secrets with a derived-ID key ring, shared recovery, and floor v0.4.7 |
+| [0050](../adr/0050-aurora-application-identity.md)                   | Accepted | Aurora chrome: blue-led palette, canvas glows, logo mark; renderer stays white and isolated                            |
 
 ## Remaining gates
 
