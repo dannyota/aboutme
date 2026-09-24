@@ -5,8 +5,12 @@
 owner, state, and evidence before independent approval. Acceptance IDs are
 stable and referenced by phase acceptance and UAT reports.
 
-States are `PLANNED`, `LANDED`, `PROVEN`, or `BLOCKED`. A concrete test
-reference is evidence, not a substitute for adjudicating the row. Each phase
+States are `PLANNED`, `LANDED`, `PROVEN`, `BLOCKED`, or `DEFERRED`. `LANDED`
+means the code or configuration ships but no named test or proof asserts the
+whole statement; the row names what is missing. `DEFERRED` means an accepted
+ADR removed the target; the row names the ADR and the condition that brings it
+back. A concrete test reference is evidence, not a substitute for adjudicating
+the row. Each phase
 closes its owned rows before its exit checklist.
 
 ## Ownership
