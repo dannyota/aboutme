@@ -146,16 +146,16 @@ Turn it back on the same way with `true`.
 
 ## Deploy
 
-Public pages link the resume stylesheets and hydration script with a build-time
-content hash (`?v=`), so a release reaches browsers despite the one-year
-immutable cache. Font files under `/_nuxt/fonts/` keep fixed names, so a font
-file change must rename the `.woff2`; the rename changes the font stylesheet and
-with it the public stylesheet hash.
+Public pages link the resume stylesheets and hydration script with a
+build-time content hash (`?v=`), so a release reaches browsers despite the
+one-year immutable cache. A font change must rename the fixed-name `.woff2`
+under `/_nuxt/fonts/`, changing both stylesheet hashes too.
 
-A release is a `v*` tag on `main` with a successful push run of `ci.yml` on that
-exact commit; a `workflow_dispatch` run does not count. The `release-images`
-workflow publishes `ghcr.io/dannyota/aboutme-{server,web,caddy}` for that tag;
-the packages must be public so the host can pull them.
+A release is a `v*` tag on `main` with green `ci.yml`; `workflow_dispatch`
+does not count. `release-images.yml` publishes
+`ghcr.io/dannyota/aboutme-{server,web,caddy}` (public), scanning each with Trivy
+and failing on a fixable HIGH/CRITICAL finding. `security-scan.yml` reruns that
+plus `govulncheck` and `npm audit` weekly on `main` and the latest images.
 
 Before the first deploy after adding maintenance mode, apply the reviewed
 OpenTofu change. It creates `aboutme-prod-maintenance` at desired count zero.

@@ -262,11 +262,6 @@ jobs:
           go mod tidy
           diff /tmp/go.mod.before go.mod && diff /tmp/go.sum.before go.sum \
             || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
-      - if: ${{ !cancelled() }}
-        name: govulncheck
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
-          cd apps/server && govulncheck ./...
       # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
       # migrations/ is the only declared source for BOTH goose and sqlc's
       # generated data layer. Fails on any drift, including an untracked
@@ -308,6 +303,69 @@ jobs:
             ~/.cache/go-build
             ~/go/pkg/mod
           key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
+  # govulncheck in source mode for every Go module in the repository: it
+  # fails only on a vulnerability reachable from the module's own call
+  # graph, not on every dependency with a known advisory. The Caddy build
+  # module lives outside go.work (it pins its own Caddy version), so it
+  # needs GOWORK=off or govulncheck would refuse to run there at all.
+  #
+  # Two module-level advisories are known and not reachable: GO-2026-6094
+  # (cel-go 0.28.1; Caddy 2.11.4 cannot build against cel-go >= 0.29) and
+  # GO-2026-5932 (x/crypto/openpgp; no fix exists). If either ever reports
+  # as reachable, this job fails and the trace must be investigated, not
+  # suppressed.
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Install the pinned govulncheck (1.8.0)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: apps/server
+        run: govulncheck ./...
+        working-directory: apps/server
+      - if: ${{ !cancelled() }}
+        name: packages/schema/gen/go
+        run: govulncheck ./...
+        working-directory: packages/schema/gen/go
+      - if: ${{ !cancelled() }}
+        name: deploy/caddy/production/build
+        run: govulncheck ./...
+        working-directory: deploy/caddy/production/build
+        env:
+          GOWORK: "off"
+
+  # `npm audit` against each lockfile alone, no install: every manifest below
+  # ships a package-lock.json, and npm reads it directly. Fails on a high or
+  # critical advisory in a production dependency; --omit=dev drops
+  # devDependencies, which never ship.
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: repository root
+        run: npm audit --omit=dev --audit-level=high
+      - if: ${{ !cancelled() }}
+        name: apps/web
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: apps/web
+      - if: ${{ !cancelled() }}
+        name: packages/schema
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: packages/schema
+      - if: ${{ !cancelled() }}
+        name: deploy/dev-https-browser
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: deploy/dev-https-browser
 
   # Runs only ./internal/media/...'s slow normalization corpus test, in its
   # own job so the much shorter rest of the suite (server-resumeapi's own
@@ -1061,6 +1119,8 @@ jobs:
       - docs-dev-https
       - contracts
       - server
+      - govulncheck
+      - npm-audit
       - server-media-s3-corpus
       - web-test
       - web-e2e
