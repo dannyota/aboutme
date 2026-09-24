@@ -11,7 +11,9 @@
  *
  * The setup secret, provisioning URI, and every code are computed in this
  * process with `totp-fixture.ts` and never leave it: the evidence file holds
- * only booleans, the fixed scenario name, and the origin.
+ * only booleans, the fixed scenario name, and the origin. CI also runs the
+ * `totp` journey as parallel shards (see "Enabled-proof sharding" below) and
+ * records section timing to a sidecar the evidence schema never covers.
  *
  * Contract: docs/design/totp-second-factor-contract.md,
  * docs/design/totp-key-management.md, and ADR 0049.
@@ -48,6 +50,7 @@ import {
   codeNow,
   codePreviousStep,
   mismatchedCode,
+  newSectionTimer,
   stepAt,
   systemClock,
   toFullwidthDigits,
@@ -62,6 +65,9 @@ const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
 const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const ENABLED_EVIDENCE_PATH = '/evidence/totp-second-factor-proof.json';
 const DISABLED_EVIDENCE_PATH = '/evidence/totp-enrollment-disabled-proof.json';
+// Diagnostic only: per-section wall-clock timing, never covered by
+// verify-evidence.mjs and never read by it.
+const ENABLED_TIMING_PATH = '/evidence/totp-timing.json';
 const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
 const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
 const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
@@ -83,6 +89,10 @@ const WAIT_WARM_MS = 90_000;
 const WAIT_HYDRATE_MS = 30_000;
 const WAIT_LOOPBACK_MS = 20_000;
 const WAIT_MAIL_MS = 45_000;
+// Teardown's own sign-in never needs the full WAIT_LANDING_MS: a real
+// account's post-login navigation is a fast client-side route change, and an
+// account that never existed fails at the password check, not by hanging.
+const CLEANUP_LANDING_MS = 15_000;
 
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me', [401]],
@@ -121,9 +131,45 @@ type AccountRole =
   | 'attempts'
   | 'disabled';
 
+// --- Enabled-proof sharding --------------------------------------------------
+//
+// CI runs the enabled journey as up to three parallel shards, each its own
+// harness and evidence file (ABOUTME_TOTP_SHARD, read by run.sh from the
+// host environment). Unset (every local or single-shard run) proves every
+// role, exactly as before sharding existed. `primary` alone carries most of
+// the account's own step count, so it is its own shard.
+type TotpShard = 'primary' | 'accounts-b' | 'accounts-c';
+
+const TOTP_SHARD_ROLES: Readonly<Record<TotpShard, readonly AccountRole[]>> = {
+  'primary': ['primary'],
+  'accounts-b': ['replay', 'concurrent', 'replace'],
+  'accounts-c': ['epoch', 'locale', 'recovery', 'attempts'],
+};
+
+function activeShardRoles(): ReadonlySet<AccountRole> | null {
+  const raw = process.env.ABOUTME_TOTP_SHARD;
+  if (raw === undefined || raw === '') return null;
+  if (raw === 'primary' || raw === 'accounts-b' || raw === 'accounts-c') {
+    return new Set(TOTP_SHARD_ROLES[raw]);
+  }
+  throw new Error(
+    `ABOUTME_TOTP_SHARD must be primary, accounts-b, or accounts-c, not ${JSON.stringify(raw)}`,
+  );
+}
+
+const ACTIVE_ROLES = activeShardRoles();
+
+/** True when the active shard (or the unsharded default) proves `r`. */
+function runsRole(r: AccountRole): boolean {
+  return ACTIVE_ROLES === null || ACTIVE_ROLES.has(r);
+}
+
 let recordedStage = 'start';
 let recordedRole: AccountRole = 'none';
 let tearingDown = false;
+// CI diagnostics only (see totp-fixture.ts "CI section timing"); never part
+// of the withheld browser output or the verified evidence.
+const timer = newSectionTimer();
 
 function stage(name: string): void {
   if (tearingDown) return;
@@ -132,10 +178,13 @@ function stage(name: string): void {
 }
 
 function role(next: AccountRole): void {
-  if (!tearingDown) recordedRole = next;
+  if (tearingDown) return;
+  timer.enter(next);
+  recordedRole = next;
 }
 
 function beginTeardown(): void {
+  timer.enter('cleanup');
   tearingDown = true;
   console.log(`${MODE}-stage:cleanup-after-${recordedStage}`);
 }
@@ -272,12 +321,16 @@ async function submitState(page: Page): Promise<string> {
   return await submit.isDisabled() ? 'submit-busy' : 'submit-idle';
 }
 
-async function landedAfter(page: Page, from: string): Promise<string> {
+async function landedAfter(
+  page: Page,
+  from: string,
+  timeoutMs: number = WAIT_LANDING_MS,
+): Promise<string> {
   let settled = true;
   try {
     await page.waitForURL(
       (url) => url.origin === ORIGIN && url.pathname !== from,
-      { timeout: WAIT_LANDING_MS },
+      { timeout: timeoutMs },
     );
   } catch {
     settled = false;
@@ -721,6 +774,7 @@ async function passwordSignIn(
   page: Page,
   email: string,
   password: string,
+  landingTimeoutMs: number = WAIT_LANDING_MS,
 ): Promise<'pending' | 'session'> {
   stage('sign-in-open');
   await gotoHydrated(page, '/login');
@@ -737,7 +791,7 @@ async function passwordSignIn(
     .click();
   const status = (await response).status();
   stage('sign-in-landing');
-  const where = await landedAfter(page, '/login');
+  const where = await landedAfter(page, '/login', landingTimeoutMs);
   if (status === 202) {
     expect(where).toBe('landing-second-factor');
     await hydrated(page, WAIT_HYDRATE_MS);
@@ -749,8 +803,15 @@ async function passwordSignIn(
   return 'session';
 }
 
+/**
+ * Signs out if a session exists, and no-ops otherwise without navigating: a
+ * sharded run's first role has no session yet, and visiting
+ * /app/settings/sessions while signed out logs unexpected 401s from the API
+ * calls the settings page makes on the way to redirecting to /login.
+ */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
+  if (await cookieValue(page.context(), SESSION_COOKIE) === null) return;
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
@@ -955,23 +1016,22 @@ function newStepTracker(): StepTracker {
   return { last: -1 };
 }
 
-/** Returns a current-step code newer than every step the tracker has used. */
+/** Returns a code from a step newer than every step the tracker has used, taking the next step without waiting unless it is already spent. */
 async function freshCode(
   page: Page,
   secret: string,
   tracker: StepTracker,
 ): Promise<string> {
-  await waitForStepAtLeast(page, tracker.last + 1);
-  const step = stepAt(systemClock().nowSeconds());
+  let step = stepAt(systemClock().nowSeconds()) + 1;
+  if (step <= tracker.last) {
+    await waitForStepAtLeast(page, tracker.last);
+    step = stepAt(systemClock().nowSeconds()) + 1;
+  }
   tracker.last = step;
   return codeForStep(secret, step);
 }
 
-/**
- * Waits on the real clock until the current 30-second step reaches `step`,
- * so a later code is strictly newer than every step already consumed
- * (totp-second-factor-contract.md, "TOTP profile and code verification").
- */
+/** Waits on the real clock until the current step reaches `step` (totp-second-factor-contract.md, "TOTP profile and code verification"). */
 async function waitForStepAtLeast(page: Page, step: number): Promise<void> {
   const target = step * TOTP_PERIOD_SECONDS;
   const waitMs = (target - Date.now() / 1000) * 1000;
@@ -1151,13 +1211,20 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
+  // Set right before each role's registerVerified call, so teardown can
+  // tell a role whose account creation was never attempted (for example a
+  // shard's first role failing before it gets that far) from one whose
+  // account exists and needs deleting.
+  const createdAccounts: Partial<Record<AccountRole, true>> = {};
 
   try {
     // 1. A fictional primary account with a password and a linked provider,
     //    plus a connected agent and a second session, all created before
     //    enrollment so completion's epoch change can be proved against them.
+    if (runsRole('primary')) {
     role('primary');
     stage('primary-register');
+    createdAccounts.primary = true;
     await registerVerified(
       page,
       capture,
@@ -1349,6 +1416,12 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(await passwordSignIn(page, primaryEmail, primaryPassword))
       .toBe('pending');
     expect(await meStatus(page)).toBe(401);
+    // Each pending-method section can render on its own reactive update
+    // after the page hydrates, so wait for all three before reading their
+    // DOM order instead of racing a single immediate snapshot.
+    await expect(page.getByTestId('second-factor-passkey')).toBeVisible();
+    await expect(page.getByTestId('second-factor-totp')).toBeVisible();
+    await expect(page.getByTestId('second-factor-recovery')).toBeVisible();
     const order = await page.evaluate(() =>
       [...document.querySelectorAll('section[data-testid]')]
         .map((el) => el.getAttribute('data-testid'))
@@ -1467,12 +1540,15 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.finalRemoved = true;
     // Primary's admitted attempts: 2 (enrollment) + 3 (skew) + 1 (provider
     // pending) + 1 (remove-totp reauth) = 7.
+    }
 
     // 11. A second fictional account carries the same-step replay and
     //     invalid-code cases against its own enrollment.
+    if (runsRole('replay')) {
     role('replay');
     stage('replay-account');
     await signOut(page);
+    createdAccounts.replay = true;
     await registerVerified(
       page,
       capture,
@@ -1514,13 +1590,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.invalidCodeRejected = true;
     await completeWithTotp(page, await freshCode(page, replaySecret, replayTracker));
     await expectSignedInApp(page);
+    }
 
     // 13. A third fictional account carries the concurrent-submission case
     //     against its own enrollment. Concurrent's admitted attempts: 1
     //     (enrollment) + 2 (race) + 1 (browser resume) = 4.
+    if (runsRole('concurrent')) {
     role('concurrent');
     stage('concurrent-account');
     await signOut(page);
+    createdAccounts.concurrent = true;
     await registerVerified(
       page,
       capture,
@@ -1566,14 +1645,17 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       page, await freshCode(page, concurrentSecret, concurrentTracker),
     );
     await expectSignedInApp(page);
+    }
 
     // 14. A fourth fictional account carries replacement against its own
     //     enrollment. Replace's admitted attempts: 1 (enrollment) + 1
     //     (reauth) + 1 (replacement completion) + 1 (old-secret rejection)
     //     + 1 (new-secret login) = 5.
+    if (runsRole('replace')) {
     role('replace');
     stage('replace-account');
     await signOut(page);
+    createdAccounts.replace = true;
     await registerVerified(
       page,
       capture,
@@ -1630,13 +1712,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       page, await freshCode(page, replaceSecret, replaceTracker),
     );
     await expectSignedInApp(page);
+    }
 
     // 15. A fifth fictional account carries the wrong-epoch fixture against
     //     its own enrollment. Epoch's admitted attempts: 1 (enrollment) + 1
     //     (reauth) + 1 (bump completion) + 1 (stale attempt) = 4.
+    if (runsRole('epoch')) {
     role('epoch');
     stage('epoch-account');
     await signOut(page);
+    createdAccounts.epoch = true;
     await registerVerified(
       page,
       capture,
@@ -1691,14 +1776,17 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     expect(staleAttempt.status).toBe(401);
     steps.wrongEpochRejected = true;
     await staleContext.close();
+    }
 
     // 16. A sixth fictional account carries both locales and the
     //     password-reset preservation case against its own enrollment.
     //     Locale's admitted attempts: 1 (enrollment) + 2 (locales) + 1
     //     (post-reset completion) = 4.
+    if (runsRole('locale')) {
     role('locale');
     stage('locale-account');
     await signOut(page);
+    createdAccounts.locale = true;
     await registerVerified(
       page,
       capture,
@@ -1753,13 +1841,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     steps.resetPreservesEnforcement = true;
     await completeWithTotp(page, await freshCode(page, localeSecret, localeTracker));
     await expectSignedInApp(page);
+    }
 
     // 18. A seventh fictional account carries the recovery-completion case,
     //     which needs a still-enrolled TOTP credential to remain. Recovery's
     //     admitted attempts: 1 (enrollment) + 1 (recovery completion) = 2.
+    if (runsRole('recovery')) {
     role('recovery');
     stage('recovery-account');
     await signOut(page);
+    createdAccounts.recovery = true;
     await registerVerified(
       page,
       capture,
@@ -1781,13 +1872,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await completeWithRecovery(page, recoveryEnrolled.codes[0] as string);
     await expectSignedInApp(page);
     steps.recoveryCompletion = true;
+    }
 
     // 19. An eighth fictional account carries attempt exhaustion, whose five
     //     failures would otherwise spend another account's whole budget.
     //     Attempts' admitted attempts: 1 (enrollment) + 5 (exhaustion) = 6.
+    if (runsRole('attempts')) {
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
+    createdAccounts.attempts = true;
     await registerVerified(
       page,
       capture,
@@ -1819,6 +1913,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     await expect(page.getByTestId('second-factor-sign-in-again')).toBeVisible();
     expect(await meStatus(page)).toBe(401);
     steps.attemptsExhausted = true;
+    }
   } finally {
     // Snapshot the page before teardown navigates away from the failure.
     try {
@@ -1828,52 +1923,82 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       // A closed page leaves the defaults.
     }
     beginTeardown();
-    const removed = [
-      await deleteAccount(page, {
+    // Deletes only the accounts the active shard created (every account on
+    // the unsharded default), so a shard's cleanup step reports on exactly
+    // its own accounts.
+    const removed: boolean[] = [];
+    if (createdAccounts.primary) {
+      removed.push(await deleteAccount(page, {
         email: primaryEmail,
         password: primaryPassword,
         recoveryCode: primaryCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.replay) {
+      removed.push(await deleteAccount(page, {
         email: replayEmail,
         password: replayPassword,
         recoveryCode: replayCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.concurrent) {
+      removed.push(await deleteAccount(page, {
         email: concurrentEmail,
         password: concurrentPassword,
         recoveryCode: concurrentCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.replace) {
+      removed.push(await deleteAccount(page, {
         email: replaceEmail,
         password: replacePassword,
         recoveryCode: replaceCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.epoch) {
+      removed.push(await deleteAccount(page, {
         email: epochEmail,
         password: epochPassword,
         recoveryCode: epochCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.locale) {
+      removed.push(await deleteAccount(page, {
         email: localeEmail,
         password: localeFinalPassword,
         recoveryCode: localeCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.recovery) {
+      removed.push(await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
-      }),
-      await deleteAccount(page, {
+      }));
+    }
+    if (createdAccounts.attempts) {
+      removed.push(await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
         recoveryCode: attemptsCleanupCode,
-      }),
-    ];
-    steps.cleanup = removed.every(Boolean);
+      }));
+    }
+    steps.cleanup = removed.length > 0 && removed.every(Boolean);
     for (const extra of extraContexts) {
       await extra.close().catch(() => undefined);
     }
+    await writeFile(
+      ENABLED_TIMING_PATH,
+      `${JSON.stringify({ schemaVersion: 1, sections: timer.finish() }, null, 2)}\n`,
+      { flag: 'wx', mode: 0o600 },
+    );
+    // A shard's evidence lists only the steps it proved: the closed-list
+    // schema check in verify-evidence.mjs accepts any true subset of the
+    // full step set for this scenario and expects every step to be present
+    // and true only once its results are combined across every shard.
+    const provenSteps = Object.fromEntries(
+      Object.entries(steps).filter(([, proved]) => proved === true),
+    );
     await writeFile(
       ENABLED_EVIDENCE_PATH,
       `${JSON.stringify({
@@ -1886,11 +2011,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
         origin: ORIGIN,
         scenario: 'totp-second-factor',
         schemaVersion: 1,
-        steps,
+        steps: provenSteps,
       }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
-    failOnUnexpectedConsole(steps.attemptsExhausted);
+    // The active shard's own last step, or attemptsExhausted on the
+    // unsharded default (whose last role is always attempts).
+    const journeyDone = ACTIVE_ROLES === null || ACTIVE_ROLES.has('attempts')
+      ? steps.attemptsExhausted
+      : ACTIVE_ROLES.has('replace') ? steps.replaced : steps.finalRemoved;
+    failOnUnexpectedConsole(journeyDone);
   }
 });
 
@@ -2342,7 +2472,9 @@ async function deleteAccount(
   try {
     await page.context().clearCookies();
     await setLocale(page.context(), 'en');
-    const outcome = await passwordSignIn(page, account.email, account.password);
+    const outcome = await passwordSignIn(
+      page, account.email, account.password, CLEANUP_LANDING_MS,
+    );
     if (outcome === 'pending') {
       if (account.recoveryCode === '') return false;
       await completeWithRecovery(page, account.recoveryCode);
