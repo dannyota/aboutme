@@ -225,12 +225,30 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'en' },
       script: [{ src: '/theme-bootstrap.js' }],
-      // The Aurora document-and-identity mark (DESIGN.md; ADR 0050).
-      // sizes="32x32" keeps Chromium from preferring the ICO over the SVG.
+      // The Aurora document-and-identity mark (DESIGN.md; ADR 0050). Order
+      // matters: a PNG `sizes="32x32"` link goes first so browsers that
+      // pick the first suitable icon (notably iOS/iPadOS Safari, which
+      // does not resolve the SVG for the tab switcher and pinned-tab
+      // grid) get a raster they can use; the SVG follows for scalable
+      // rendering everywhere else; `apple-touch-icon` with an explicit
+      // `sizes="180x180"` is the opaque, full-bleed icon iOS uses for the
+      // home screen and app switcher. The manifest link and theme-color
+      // meta back the same icon set for Android/desktop "add to home
+      // screen" (docs/adr/0050-aurora-application-identity.md).
       link: [
-        { rel: 'icon', href: '/favicon.ico', sizes: '32x32' },
+        {
+          rel: 'icon',
+          type: 'image/png',
+          sizes: '32x32',
+          href: '/icon-32.png',
+        },
         { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
+        {
+          rel: 'apple-touch-icon',
+          sizes: '180x180',
+          href: '/apple-touch-icon.png',
+        },
+        { rel: 'manifest', href: '/site.webmanifest' },
       ],
       meta: [
         // Safari auto-links digit runs such as date ranges into tel: links;
@@ -241,6 +259,9 @@ export default defineNuxtConfig({
           name: 'format-detection',
           content: 'telephone=no, date=no, address=no, email=no',
         },
+        // Matches the manifest's theme_color (ADR 0050's brand blue): the
+        // browser chrome color on Android and the pull-to-refresh tint.
+        { name: 'theme-color', content: '#1a5ceb' },
       ],
     },
   },
