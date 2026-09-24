@@ -91,34 +91,26 @@ report_findings() {
   return 1
 }
 
-# Lists the pinned base images across the production Dockerfiles, so the
-# weekly scan can check them the same way it checks the released images.
-base_images() {
-  grep -hE '^FROM ' \
-    deploy/server.Dockerfile deploy/web.Dockerfile \
-    deploy/caddy/production/Dockerfile |
-    awk '{print $2}' | sort -u
-}
-
 # The most recent released version tag, for the weekly scan's image targets.
 # Needs full tag history (a shallow or single-branch checkout will not do).
 latest_release_tag() {
   git describe --tags --abbrev=0 --match 'v*'
 }
 
-# The weekly scan's full target list in one pass: the three released images
-# at the latest tag, plus every pinned base image, each into its own report
-# under $2. Continues past a failing target instead of stopping at the
-# first one, so one run always shows the complete picture, then exits
-# non-zero if any target had a fixable HIGH/CRITICAL finding or a scan
-# error. summary.txt and failed.txt under the report directory are the job
-# summary's source.
+# The weekly scan's target list: the three released images at the latest
+# tag, each into its own report under $2. Base images are not scanned on their
+# own: the runtime stages remove packages the bases ship (the npm CLI), so a
+# base finding may not reach production, and the released images already show
+# every fixable finding that does. Continues past a failing target so one run
+# shows the complete picture, then exits non-zero if any target had a fixable
+# HIGH/CRITICAL finding or a scan error. summary.txt and failed.txt under the
+# report directory are the job summary's source.
 weekly_scan() {
   local trivy_bin=${1:?weekly-scan needs the trivy binary path}
   local report_dir=${2:?weekly-scan needs a report directory}
   mkdir -p "$report_dir"
   : >"$report_dir/summary.txt"
-  local fail=0 tag name ref report image i=0
+  local fail=0 tag name ref report
 
   tag=$(latest_release_tag)
   printf 'security-scan: scanning released images at %s\n' "$tag"
@@ -131,16 +123,6 @@ weekly_scan() {
       fail=1
     fi
   done
-
-  while read -r image; do
-    i=$((i + 1))
-    report="$report_dir/base-${i}.json"
-    scan_image "$trivy_bin" "$image" linux/arm64 "$report" || fail=1
-    if ! report_findings "$report" >>"$report_dir/summary.txt"; then
-      printf '%s\n' "$image" >>"$report_dir/failed.txt"
-      fail=1
-    fi
-  done < <(base_images)
 
   cat "$report_dir/summary.txt"
   return "$fail"
@@ -159,10 +141,6 @@ report)
   shift
   report_findings "$@"
   ;;
-base-images)
-  shift
-  base_images "$@"
-  ;;
 latest-tag)
   shift
   latest_release_tag "$@"
@@ -172,6 +150,6 @@ weekly-scan)
   weekly_scan "$@"
   ;;
 *)
-  die "usage: $0 {install-trivy|scan-image|report|base-images|latest-tag|weekly-scan} [args...]"
+  die "usage: $0 {install-trivy|scan-image|report|latest-tag|weekly-scan} [args...]"
   ;;
 esac
