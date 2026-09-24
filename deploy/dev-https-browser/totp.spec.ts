@@ -89,6 +89,10 @@ const WAIT_WARM_MS = 90_000;
 const WAIT_HYDRATE_MS = 30_000;
 const WAIT_LOOPBACK_MS = 20_000;
 const WAIT_MAIL_MS = 45_000;
+// Teardown's own sign-in never needs the full WAIT_LANDING_MS: a real
+// account's post-login navigation is a fast client-side route change, and an
+// account that never existed fails at the password check, not by hanging.
+const CLEANUP_LANDING_MS = 15_000;
 
 const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/me', [401]],
@@ -317,12 +321,16 @@ async function submitState(page: Page): Promise<string> {
   return await submit.isDisabled() ? 'submit-busy' : 'submit-idle';
 }
 
-async function landedAfter(page: Page, from: string): Promise<string> {
+async function landedAfter(
+  page: Page,
+  from: string,
+  timeoutMs: number = WAIT_LANDING_MS,
+): Promise<string> {
   let settled = true;
   try {
     await page.waitForURL(
       (url) => url.origin === ORIGIN && url.pathname !== from,
-      { timeout: WAIT_LANDING_MS },
+      { timeout: timeoutMs },
     );
   } catch {
     settled = false;
@@ -766,6 +774,7 @@ async function passwordSignIn(
   page: Page,
   email: string,
   password: string,
+  landingTimeoutMs: number = WAIT_LANDING_MS,
 ): Promise<'pending' | 'session'> {
   stage('sign-in-open');
   await gotoHydrated(page, '/login');
@@ -782,7 +791,7 @@ async function passwordSignIn(
     .click();
   const status = (await response).status();
   stage('sign-in-landing');
-  const where = await landedAfter(page, '/login');
+  const where = await landedAfter(page, '/login', landingTimeoutMs);
   if (status === 202) {
     expect(where).toBe('landing-second-factor');
     await hydrated(page, WAIT_HYDRATE_MS);
@@ -794,11 +803,19 @@ async function passwordSignIn(
   return 'session';
 }
 
+/**
+ * Signs out if a session exists, and no-ops otherwise: a sharded run's first
+ * role has no session yet, so /app/settings/sessions already lands on
+ * /login and there is no Log out button to click.
+ */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
   await gotoHydrated(page, '/app/settings/sessions');
-  await page.getByRole('button', { name: 'Log out', exact: true }).click();
-  await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
+  const logOut = page.getByRole('button', { name: 'Log out', exact: true });
+  if (await logOut.count() > 0) {
+    await logOut.click();
+    await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
+  }
   await setLocale(page.context(), 'en');
 }
 
@@ -1195,6 +1212,11 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
   let recoveryCleanupCode = '';
   let attemptsCleanupCode = '';
   const extraContexts: BrowserContext[] = [];
+  // Set right before each role's registerVerified call, so teardown can
+  // tell a role whose account creation was never attempted (for example a
+  // shard's first role failing before it gets that far) from one whose
+  // account exists and needs deleting.
+  const created: Partial<Record<AccountRole, true>> = {};
 
   try {
     // 1. A fictional primary account with a password and a linked provider,
@@ -1203,6 +1225,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     if (runsRole('primary')) {
     role('primary');
     stage('primary-register');
+    created.primary = true;
     await registerVerified(
       page,
       capture,
@@ -1520,6 +1543,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('replay');
     stage('replay-account');
     await signOut(page);
+    created.replay = true;
     await registerVerified(
       page,
       capture,
@@ -1570,6 +1594,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('concurrent');
     stage('concurrent-account');
     await signOut(page);
+    created.concurrent = true;
     await registerVerified(
       page,
       capture,
@@ -1625,6 +1650,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('replace');
     stage('replace-account');
     await signOut(page);
+    created.replace = true;
     await registerVerified(
       page,
       capture,
@@ -1690,6 +1716,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('epoch');
     stage('epoch-account');
     await signOut(page);
+    created.epoch = true;
     await registerVerified(
       page,
       capture,
@@ -1754,6 +1781,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('locale');
     stage('locale-account');
     await signOut(page);
+    created.locale = true;
     await registerVerified(
       page,
       capture,
@@ -1817,6 +1845,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('recovery');
     stage('recovery-account');
     await signOut(page);
+    created.recovery = true;
     await registerVerified(
       page,
       capture,
@@ -1847,6 +1876,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     role('attempts');
     stage('attempts-account');
     await gotoHydrated(page, '/login');
+    created.attempts = true;
     await registerVerified(
       page,
       capture,
@@ -1892,56 +1922,56 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     // the unsharded default), so a shard's cleanup step reports on exactly
     // its own accounts.
     const removed: boolean[] = [];
-    if (runsRole('primary')) {
+    if (created.primary) {
       removed.push(await deleteAccount(page, {
         email: primaryEmail,
         password: primaryPassword,
         recoveryCode: primaryCleanupCode,
       }));
     }
-    if (runsRole('replay')) {
+    if (created.replay) {
       removed.push(await deleteAccount(page, {
         email: replayEmail,
         password: replayPassword,
         recoveryCode: replayCleanupCode,
       }));
     }
-    if (runsRole('concurrent')) {
+    if (created.concurrent) {
       removed.push(await deleteAccount(page, {
         email: concurrentEmail,
         password: concurrentPassword,
         recoveryCode: concurrentCleanupCode,
       }));
     }
-    if (runsRole('replace')) {
+    if (created.replace) {
       removed.push(await deleteAccount(page, {
         email: replaceEmail,
         password: replacePassword,
         recoveryCode: replaceCleanupCode,
       }));
     }
-    if (runsRole('epoch')) {
+    if (created.epoch) {
       removed.push(await deleteAccount(page, {
         email: epochEmail,
         password: epochPassword,
         recoveryCode: epochCleanupCode,
       }));
     }
-    if (runsRole('locale')) {
+    if (created.locale) {
       removed.push(await deleteAccount(page, {
         email: localeEmail,
         password: localeFinalPassword,
         recoveryCode: localeCleanupCode,
       }));
     }
-    if (runsRole('recovery')) {
+    if (created.recovery) {
       removed.push(await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
       }));
     }
-    if (runsRole('attempts')) {
+    if (created.attempts) {
       removed.push(await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
@@ -2437,7 +2467,9 @@ async function deleteAccount(
   try {
     await page.context().clearCookies();
     await setLocale(page.context(), 'en');
-    const outcome = await passwordSignIn(page, account.email, account.password);
+    const outcome = await passwordSignIn(
+      page, account.email, account.password, CLEANUP_LANDING_MS,
+    );
     if (outcome === 'pending') {
       if (account.recoveryCode === '') return false;
       await completeWithRecovery(page, account.recoveryCode);
