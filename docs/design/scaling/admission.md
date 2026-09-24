@@ -1,274 +1,241 @@
 # Fleet admission, render and realtime
 
 Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
-[scaling index](README.md) records whether it is built.
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). Not built.
+The [scaling index](README.md) holds the shared rules.
 
-## Shared-time model
+With two replicas, every limit in the [policy catalog](policy-catalog.md) must
+hold across the fleet. Rate policies P01 to P24 and claim classes C01 to C05
+move to PostgreSQL. C06 photo intake and the per-task SSE cap stay local. Each
+caller keeps its key construction, order, response and `Retry-After`.
 
-This intentionally changes rate-policy time authority. Current local limiters
-receive an injected process clock and clamp it monotonically in memory. The
-distributed policies use PostgreSQL time and a durable high-water value so all
-replicas make one ordered decision after restart.
+## Shared time
 
-## shared_policy_clocks schema contract
+`shared_policy_clocks` holds one row per policy: `high_water_at`, `last_raw_at`
+and `anomaly_count`. Each rate mutation locks its clock, samples
+`clock_timestamp()` once and uses
+`effective_now = greatest(high_water_at, raw)`. The high-water value never moves
+back. A backward step refills nothing and extends no window. A forward jump
+refills only up to capacity. Anomaly counts are metrics only. This replaces ADR
+0018's injected process clock for fleet policies.
 
-- policy_id text primary key; high_water_at timestamptz not null; last_raw_at
-  timestamptz not null; anomaly_count bigint >= 0.
-- Each admission transaction locks this row and samples clock_timestamp once.
-  effective_now = greatest(high_water_at, raw_now). Update both observations.
-- A backward adjustment stays clamped and cannot extend a window, suppress due
-  cleanup, restore tokens, or reset idle age.
-- A forward adjustment advances refill/expiry only up to the existing bucket
-  capacity. No bucket can hold more than its current burst/limit. The durable
-  high-water never moves backward later. Count and metric any absolute raw jump
-  above an implementation constant selected only for observability.
-- Tests replace the owner-only no-argument sampling helper in disposable
-  databases through the
-  [fixed clock seam](rate-operations.md#database-time-test-seam). Production
-  callers cannot provide or change time. This differs from current local
-  injected-clock behavior under ADR 0035, which supersedes ADR 0018 for fleet
-  time authority.
+Tests replace the owner-only sampling helper only in a disposable database.
+Production has no time input.
 
-## Rate schema contract
+## Rate state
 
-[Rate storage](rate-storage.md) fixes the policy catalog, exact integer state,
-seeds, pending-window assertions, bounded cleanup and SQL results.
-[Rate identities](rate-identities.md) fixes typed canonical keys, distinct
-raw-peer fallback and pinned deployment key versions. These details preserve the
-policy numbers and caller behavior below.
+`shared_rate_policies` is a closed, immutable catalog seeded with P01 to P24:
+algorithm (`token_bucket`, `fixed_window` or `rolling_slug`), capacity, window,
+allowed key shapes, a 24-hour idle horizon and 10,000 keys per partition.
+Success clear exists only for P07 and P22. Denied attempts add debt only for
+P12. Callers supply none of these values.
 
-## shared_rate_partitions
+- `shared_rate_partitions`: rows (policy, 1) and (policy, 2) with `enabled`,
+  capacity generation and `active_keys` from 0 to 10,000. Lifecycle actions
+  toggle all 24 rows of one partition together
+  ([membership](membership.md#lifecycle-actions)). Disabling keeps rows and
+  debt, and an existing key is still charged.
+- `shared_rate_buckets`: primary key (policy, 32-byte key digest), partition,
+  algorithm state and `last_seen`. `active_keys` always equals the row count.
+- `shared_rate_overflow`: one per policy, with the same state and no identity.
+  When no enabled partition can take a new key after legitimate expiry, the
+  request is charged to overflow. Capacity never causes a refusal, and no active
+  key is evicted.
 
-- primary key (policy_id, partition); partition in (1,2); enabled boolean;
-  capacity_generation bigint > 0 and operation_id text not null; active_keys
-  integer check 0..10000; updated_at.
-- First serving activation enables partition 1; second serving activation
-  enables partition 2. Failure and fencing preserve both flags, even with zero
-  survivors; replacement inherits that logical capacity. Proved scale-in
-  disables partition 2 and final shutdown disables both, retaining active rows
-  and debt. Maintenance activation changes neither. These changes use the same
-  expected-generation transaction as the lifecycle action. Stale controller
-  generations cannot toggle a flag.
+The seed creates both partitions disabled, full overflow buckets and no keys.
 
-## shared_rate_buckets
+### Algorithms
 
-- primary key (policy_id, key_digest); partition 1 or 2; algorithm enum
-  ('token_bucket','fixed_window','rolling_slug'); algorithm fields constrained
-  to its policy: token_numerator bigint, refill_at, window_started_at, count,
-  rolling_events and last_seen. Integer numerator units retain the exact
-  accepted rational refill rate at PostgreSQL microsecond precision.
-- unique policy/partition/key; key_digest is HMAC/UUID/IP composite output from
-  the existing canonical caller and contains no bearer/email plaintext.
-- Rows expire only when fully refilled or their algorithm carries no debt, or
-  after the accepted 24-hour idle backstop. A rejected request updates
-  last_seen. Cleanup decrements active_keys in the same locked transaction. No
-  active row is evicted.
+- **Token bucket.** One token is W units of an integer numerator, and a full
+  bucket is C × W, for capacity C and window W in microseconds. Refill is exact
+  at microsecond precision, capped before multiplication so no jump overflows.
+  An allow subtracts W. A denial subtracts nothing and returns a `Retry-After`
+  rounded up to at least one second.
+- **P07 login failures.** The first failure starts a 15-minute window, and later
+  failures do not extend it. Ten failures exhaust it. Reading state only
+  refreshes `last_seen` and never allocates. A successful login deletes an
+  existing private bucket and never clears overflow.
+- **P12 slug changes.** Up to 30 event times per hour. A denial replaces the
+  oldest event with the current one, so denied attempts carry debt.
+  `Retry-After` is 1.
+- **P22 failed OAuth grants.** The caller reserves an attempt UUID before grant
+  validation. Committed failures plus pending reservations are capped at 10 per
+  15 minutes, and the first reservation starts the window. Finish converts the
+  reservation to a failure, releases it as neutral, or on success clears the
+  private bucket. Overflow success releases only its own reservation. Expired
+  reservations resolve as neutral. `shared_admission_attempts` keeps terminal
+  receipts for 24 hours. An exact replay returns the stored outcome, and a
+  different outcome conflicts. The bucket key is SHA-256 over
+  `aboutme.oauth.failed_grant.v1` and the client UUID.
 
-## shared_rate_overflow
+### Allocation and cleanup
 
-- policy_id primary key; same algorithm-state columns and constraints as one
-  ordinary key; no identity column and no identity-specific clear operation.
-- One authoritative overflow bucket exists per distributed policy. When no
-  enabled partition can own a new key after legitimate expiry cleanup, the
-  request is evaluated against overflow. It may admit. Capacity refusal is not
-  an alternative.
+An existing key locks its clock and bucket, even in a disabled partition. A new
+key locks partitions 1 then 2, removes at most one expired row per full
+partition, then takes the lowest enabled partition below 10,000 or falls back to
+overflow.
 
-Policy IDs are fixed enums in Go and database checks: outer API; resume
-read/write/photo; password login IP, login-failure email, register/forgot IP and
-email, verify/reset IP, account mutation; provider starts; owner PDF account and
-IP; account export/delete; public artifact request/render miss; public SSE
-request; OAuth register/token/failed grant; MCP token/user; changed-slug
-attempt. Keep separate policies separate even when keys and numbers match.
+Maintenance calls `runtime_cleanup_rate_buckets(policy, page_size)` and the P22
+receipt cleanup with page sizes 1 to 256. Discovery reads without locking, then
+locks and rechecks each row. A row is removable when it carries no debt or has
+been idle 24 hours. P22 rows with live pending reservations are never removed.
+Overflow is normalized but never deleted. Cleanup returns `policy_idle` only
+when no ordinary bucket, overflow debt or pending reservation remains.
 
-The two current outer API route chains use one shared `api.outer_request`
-policy. This corrects their independent counters to enforce the design's global
-300/client-IP/minute budget. Health and public route bypasses stay unchanged.
-Provider starts retain one `auth.provider_start` policy with the current
-anonymous and authenticated key shapes. No new provider-start split is added.
+## Key identity
 
-## Token-bucket transaction
+Go alone builds keys through a typed encoder, never from a string. It computes
+HMAC-SHA-256 with the admission key over:
 
-1. Follow the
-   [common rate lock order](admission-attempts.md#lock-order-and-time). Lock
-   policy clock and existing private bucket. If absent, lock partitions in
-   numeric order, remove only legitimately expired rows, then claim the first
-   enabled partition with active_keys < 10000. Otherwise lock overflow.
-2. Refill by effective elapsed time, capped at existing Requests burst. A
-   successful admission consumes one token. A denial consumes none and returns
-   positive ceiling-rounded Retry-After of at least one second.
-3. Commit the bucket, last_seen, clock and capacity changes together. Database
-   error returns unavailable and grants no work.
+1. `aboutme.rate-key.v1` and a zero byte;
+2. the policy ID, prefixed by a u16 big-endian length;
+3. a one-byte component count;
+4. per component: a type byte (1 IP, 2 peer IP, 3 account, 4 email digest, 5
+   OAuth client, 6 token, 7 user), a u16 big-endian length and the payload.
 
-## Fixed-window and rolling transaction
+IPs are unmapped once and encoded as a family byte plus 4 or 16 bytes. UUIDs are
+16 bytes and must be non-nil. Email is the existing 32-byte HMAC digest.
+Component order is fixed per policy; `account_ip` is account then IP. When the
+canonical client IP fails, middleware policies charge the socket peer under the
+distinct peer type and keep their current responses. SQL sees only the policy ID
+and the final digest.
 
-- Password failures preserve first-failure 15-minute window, threshold 10,
-  denial without extension, State without mutation except last_seen, failure
-  record, and private-only ClearSuccess. State never allocates or sweeps; it
-  uses committed capacity and refreshes only the selected existing private or
-  overflow bucket. ClearSuccess deletes only an existing private bucket with its
-  active_keys decrement. Overflow clear is a no-op.
-- OAuth failed grants count committed failures plus pending reservations against
-  10/15 minutes. Admit creates a globally unique attempt UUID in
-  shared_admission_attempts. Finish invalid converts pending to failure; neutral
-  resolves its pending debt; success clears a private bucket and its pending
-  debt but never overflow debt. First pending starts the window. Retain terminal
-  receipts for 24 hours after terminal_at, with maintenance pages of at
-  most 256. An exact caller-finish replay is idempotent; a different caller
-  outcome conflicts during that horizon. System-cleared/expired attempts and
-  absent-after-deletion finishes are harmless no-ops. The
-  [attempt contract](admission-attempts.md) fixes schema, lock order, replay and
-  cleanup details.
-- Slug attempts preserve rolling 30/account/hour, including denied attempt debt
-  and its existing caller error without invented Retry-After.
+Every replica pins one deployment tuple: the admission key version and the
+password-email key version. Composition checks the loaded versions before it
+builds any adapter. The controller checks the same tuple before each activation.
+A mixed or unverifiable tuple keeps the replica unready.
 
-## Composite and ambiguous admission
+A key change moves every rate and claim identity. Rotation therefore:
 
-MCP token then user admission preserves current order. Run both in one database
-transaction. If token admits and user denies, commit the token debt and return
-the user denial. Do not refund. Owner PDF account then IP and multi-dimensional
-password policies likewise preserve their current caller order unless existing
-tests prove a different sequence.
+1. closes all application admission and activation on every replica;
+2. joins or fences all work and proves zero running and waiting claims;
+3. runs the bounded cleanups until every policy returns `policy_idle`, letting
+   windows mature at database time;
+4. switches the tuple and recomposes every replica, with no old-key fallback;
+5. reopens only after every activated replica matches the new tuple.
 
-Ambiguous token/fixed-window commit returns the caller's established unavailable
-path and accepts possibly committed restrictive debt. The server does not retry,
-refund, report allowed, or start downstream work. This needs no rate-operation
-result table. A later independent client request is a new admission and may add
-new debt normally; only hidden automatic retry is forbidden.
+Any doubt keeps admission closed.
 
-Claims differ because they authorize concurrent work. Acquire uses a
-caller-generated claim UUID. On an ambiguous response, the caller queries that
-exact UUID after database authority returns. It starts work only after finding a
-matching committed claim and scope. Confirmed absence permits one acquisition
-attempt with the same UUID; unavailable or contradictory state launches no work.
-Release is idempotent by UUID. This gives positive resolution without allowing
-an unknown acquisition to overspend concurrency.
+## Caller behavior
 
-## Exported Go interfaces and caller migration
+- Composite policies keep their order in one transaction and never refund: P13
+  then P14, P23 then P24, and the multi-part password policies. A later denial
+  keeps the earlier debt.
+- An ambiguous rate commit takes the caller's unavailable path. It accepts
+  possible debt, starts no work and never retries.
+- Store failure never runs the protected handler. Ordinary and public routes use
+  their unavailable response. Password returns 503 `authentication_unavailable`.
+  Resume mutation returns 503 `public_state_busy` with `Retry-After: 1`. Account
+  returns 503 `account_unavailable`. MCP returns 503 `agent_access_unavailable`.
+  OAuth register and token return 500 `server_error`.
+- The two outer API chains share one P01 policy: 300 per client IP per minute.
+  Health and public bypasses stay unchanged.
 
-package admission (new) exposes concepts, not pgx:
+## Shared claims
 
-- type RateKey []byte; type Policy string.
-- type Decision struct { Allowed bool; RetryAfterSeconds int }.
-- type RateStore interface { Admit(context.Context, Policy, RateKey) (Decision,
-  error) AdmitComposite(context.Context, []Request) ([]Decision, error)
-  FailureState(context.Context, Policy, RateKey) (FailureState, error)
-  RecordFailure(context.Context, Policy, RateKey) (...)
-  ClearSuccess(context.Context, Policy, RateKey) error
-  FinishAttempt(context.Context, AttemptID, Outcome) error
-  Ready(context.Context) error }.
+Claims authorize concurrent work, so an ambiguous acquire must be resolved
+before work starts.
 
-Exact names may follow repository style, but these operations and context/error
-semantics are fixed. `api.RateLimit` accepts a context-aware RateAdmitter and
-maps denied to its existing 429/Retry-After. Store errors never invoke the
-protected handler and use the caller's current dependency-failure path: ordinary
-API/public routes use their representation-specific unavailable response;
-password uses 503 `authentication_unavailable`; resume mutation uses 503
-`public_state_busy` with Retry-After 1; account uses 503 `account_unavailable`;
-MCP uses 503 `agent_access_unavailable`; OAuth register and token use existing
-500 `server_error`. This adds no status, body field, header or public schema.
-Auth/password/OAuth/MCP, resume/account/public handlers retain current key
-creation and response writers. Their constructors receive narrow policy
-interfaces. Remove caller-provided production clocks; fake store clocks remain
-available to deterministic tests.
+| Policy                 | Scope   | Running | Waiting | Deadline   |
+| ---------------------- | ------- | ------: | ------: | ---------- |
+| `render.global_claim`  | global  |       1 |       8 | 20 seconds |
+| `password.hash`        | global  |       2 |      16 | none       |
+| `mail.send`            | global  |       2 |       0 | none       |
+| `mcp.user_concurrent`  | user    |       4 |       0 | none       |
+| `sse.fleet_account_ip` | ip      |     100 |       0 | none       |
+| `sse.fleet_account_ip` | account |      20 |       0 | none       |
 
-## Shared concurrency schema and algorithm
+Tables: an immutable catalog; `shared_claim_scope_summaries` with running and
+waiting counts and a never-wrapping allocation ordinal; `shared_claim_requests`
+with a caller UUID, replica, state (`waiting`, `running` or `released`), a
+render job UUID for C01 only, a deadline for C01 only, and a release reason
+(`joined`, `canceled`, `expired` or `fenced`); and `shared_claim_scopes`, one or
+two per request. An SSE request charges its IP and optional account scopes
+atomically. A denial leaves no partial charge.
 
-Use the [shared claim schema](shared-claims.md): immutable policy catalog,
-locked scope summaries, one claim parent and one or two scope children. SSE IP
-and optional account charges are atomic. Request order and queue allocation
-order use separate ordinals. Release removes charged capacity while retaining
-terminal receipts for 24 hours; maintenance deletes at most 256 receipts per
-transaction. Live claims are never removed by receipt age.
+Acquisition locks capacity (admission must be on), the caller's `active` replica
+row, the request, catalog rows, then scope summaries in byte order. Promotion
+gives a free running slot to the oldest live waiter. C01's 20 seconds start at
+admission and include waiting. An expired waiter may be released, but a running
+claim is never reclaimed by age.
 
-The [identity and ambiguity contract](claim-identities.md) fixes scope/request
-encoding, replica consistency and operation-local retry permission. After an
-ambiguous acquire, exact positive resolution is required. Confirmed absence
-allows one same-UUID acquisition only at operation age below five minutes with
-the original context and all caller deadlines still live. Restart or lost
-operation state cannot reconstruct that permission.
+Scope digests are HMAC-SHA-256 with the admission key over
+`aboutme.shared-claim.scope.v1`, a zero byte, version `0x01`, then
+length-prefixed policy, kind and value. The request digest is SHA-256 over the
+claim, policy, replica, optional work UUID and ordered scope digests. The pinned
+SSE vector hashes to
+`0733ec593ac2751902ebac6d8175187ea5c2e695f47264b36b1608a2576cbbac`.
 
-Graceful cancellation releases after local work joins. Abrupt claims remain
-until verified EC2 termination proof for their replica. TTL, deadline, lock loss
-and replacement never establish that proof.
+Ambiguity rules:
 
-Policies: render global one running/eight waiting; password hash global two
-running/16 waiting; mail send global two running; MCP four running per user and
-no waiting; SSE 100 per IP and 20 per account with atomic two-dimensional claim.
-The per-task SSE 2,000 and photo intake one/wait one second remain local.
+- An ambiguous acquire starts no work. The caller resolves the exact UUID.
+- Confirmed absence allows one reacquire with the same UUID, only in the same
+  operation, under five minutes old, with the original context and deadlines
+  still live. A restart loses that permission.
+- A late positive result after cancellation releases only after the caller
+  proves local work never started or has joined.
+- Release is idempotent by UUID and digest. Released receipts stay 24 hours, and
+  maintenance deletes at most 256 per transaction.
 
-This classification has no authoritative contradiction. `budgets.md` leaves hash
-two/16 and mail two-send concurrency unqualified, while it explicitly says photo
-intake, SSE task admission, and cache ownership are per task/instance. Current
-password/mail comments describe the one-process implementation, which the
-deferred caller integration replaces; the inventory is evidence, not design
-authority. Each Go task still enforces 512 MiB, so global claims supplement
-local memory safety.
+Graceful cancellation releases after local work joins. After a crash, claims
+stay charged until [EC2 termination proof](membership.md#termination-proof).
+Time, heartbeats and lock loss never release a live claim.
 
-MCP denial retains its current MCP error and Retry-After 1. SSE identity denial
-retains 429 and Retry-After 5; shared-store failure uses existing 503 and 5.
-Render denial remains 503 Retry-After 1 through current owner/public callers.
+## Render affinity
 
-## Strict local render affinity
-
-- Queue may generate an inert job UUID before acquiring its shared render claim.
-  It installs no local job, capability, controller, snapshot or callback until
-  exact positive acquisition. The claim binds that UUID; the UUID alone grants
-  nothing. Its admitted_at starts the unchanged 20-second attempt deadline.
-- All authority remains in that queue. Database stores only claim ID, job ID,
-  replica ID, state, and deadline. It never stores snapshot bytes, capability or
-  controller hashes, artifact bytes, or terminal authority.
-- Queued-to-running promotion atomically checks original deadline and the one
-  global running count. It does not extend deadline.
-- Go Chromium reaches paired Nuxt at the node-local fixed port. Nuxt redeems
-  through Caddy's API-only bridge listener; Caddy forwards only the redemption
-  operation to paired Go loopback. No ALB, public Caddy route, Cloud Map, or
-  arbitrary service discovery participates.
-- Redemption remains one in-memory compare-and-set over job/resume/audience/
-  capability/snapshot digest/expiry. Ambiguous redemption response is consumed
-  and never retried. Controller completion remains unexported and in process;
-  job ID alone grants nothing. Completion recomputes terminal artifact digest.
-- Failure, cancellation, and deadline cancel and join local work, remove local
-  authority, then release claim. Crash does not retry or release until external
-  fence. Caller retry creates a wholly new attempt and authority.
+The render queue may create an inert job UUID first. It installs no job,
+snapshot, capability, controller or callback until the claim is confirmed. The
+database stores only claim, job, replica, state and deadline. Snapshots,
+capabilities, artifacts and completion authority stay in the initiating Go
+process. Redemption stays one in-memory compare-and-set, and an ambiguous
+redemption is consumed, never retried. Failure, cancellation and deadline cancel
+and join local work, then release the claim. A caller retry is a new attempt
+with new authority.
 
 ## Realtime
 
-- Retain one pooled PostgreSQL LISTEN connection per Go replica and local hub.
-  No SSE stream owns a DB connection. Revision NOTIFY stays lossy invalidation.
-- Before local subscription, atomically acquire shared IP and optional account
-  claims, then local per-task/FD admission. On local failure release shared
-  claims. Close releases both idempotently.
-- Keep 2,000 streams per task, 100/IP fleet, 20/account fleet, eight queued
-  events, two-second write deadline, 25-second heartbeat, and 25% FD headroom.
-- Owner session validity is rechecked before every revision and heartbeat.
-  Public streams hold the existing local revoking lease. Fleet transition ack
-  waits their local cancellation/release before revocation success.
-- Listener/shared coordination loss closes subscriptions and rejects admission.
-  Graceful drain rejects new streams and closes existing within one heartbeat;
-  revocation uses five seconds. No final event is added. Reconnect performs
-  unconditional refetch; missed events and abrupt loss repair that way.
+- Each replica keeps one pooled revision `LISTEN` connection and a local hub. No
+  stream holds a database connection. `NOTIFY` stays lossy invalidation, and
+  reconnect refetches.
+- A stream acquires its shared IP and account claims, then local admission. A
+  local failure releases the shared claims.
+- Limits: 2,000 streams per task, 100 per IP and 20 per account across the
+  fleet, eight queued events, a two-second write deadline, a 25-second heartbeat
+  and 25 percent file-descriptor headroom.
+- Owner session validity is rechecked before each revision and heartbeat.
+  Revocation acknowledgement waits for local stream cancellation.
+- Coordination loss closes streams and rejects admission. Drain closes streams
+  within one heartbeat, and revocation within five seconds. No SSE event is
+  added.
 
-## Workers and scheduled UAT boundary
+## Workers
 
-- Auth mail already uses durable jobs/leases. Add global two-send claims. A new
-  worker cannot retry a lease whose old send may still execute until the old
-  replica is fenced; provider ambiguity retains existing terminal/retry rules.
-  Do not run two independent full-concurrency workers by accident.
-- Media deletion/orphan modes retain PostgreSQL advisory overlap locks, exact
-  pages/runs, four object workers, 30-second job lease, five-second I/O, retry
-  and 24-hour removal target. Scheduled tasks, not web replicas, own execution.
-- Privacy, idempotency, OAuth cleanup, and retention commands remain bounded
-  one-shot tasks with existing database locks and deadlines.
-- UAT no-op suppression follows uat-lifecycle.md. It remains disabled until
-  hosted startup and orphan-list evidence satisfy that contract. Missing, stale,
-  ambiguous, due, or backlog proof keeps RDS running.
+- Auth mail keeps its durable leases and gains the fleet `mail.send` claim. A
+  lease whose old send may still run is not retried until that replica is
+  fenced.
+- Media cleanup keeps its advisory locks, four object workers, 30-second lease,
+  five-second I/O and 24-hour removal target.
+- Privacy, idempotency and OAuth cleanup stay bounded one-shot jobs under their
+  existing locks.
 
-## Observability
+## Lock order
 
-Metrics: decisions by policy/outcome/private/overflow; partition active keys;
-overflow saturation; Retry-After; DB latency/error/ambiguous result; raw clock
-jump and clamp; pending attempt age; claims running/waiting/blocked-on-fence;
-render queue/deadline; SSE local/fleet counts and slow disconnects. Labels never
-contain raw IP, account, email, token, capability, job content, or arbitrary
-key.
+Rate mutations lock the policy clock, then partitions 1 then 2 when allocating,
+then a bucket or overflow, then P22 attempts in UUID order. Lifecycle locks
+capacity before partitions and never touches clocks or buckets. Rate functions
+lock no membership, transition or business row. Claims follow the
+[membership lock order](membership.md#lock-order).
+
+## Required proof
+
+- Digest vectors for every key shape, IPv4-mapped equality, IPv6 distinction,
+  and policy, domain and key separation.
+- Exact token boundaries, jump caps and clock clamps for every policy.
+- P07, P12 and P22 window, debt and clear rules, including overflow and
+  concurrent reservations.
+- The 10,000-key boundary, disabled partitions, overflow, and cleanup page
+  limits of 1 and 256.
+- Exact claim caps with two pools, atomic SSE denial, promotion order, late
+  positives, the five-minute boundary, and drain and fence races.
+- Ambiguity and outage fail closed with no automatic retry.
+- Replica counts one and two for every policy and claim class.

@@ -1,98 +1,78 @@
 # Admission policy catalog
 
-This catalog records the current production limiter constructors and the settled
-fleet target for replica-safe admission under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The shared
-store exists; callers still use the process-local limiters until the deferred
-caller integration lands.
+This catalog lists the production rate limiters and concurrency caps and the
+fleet scope each takes under
+[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+current columns describe built behavior. The fleet column is accepted design;
+[admission](admission.md) defines it. Numeric budgets come from
+[`budgets.md`](../budgets.md).
 
-## Scope and shared rules
+## Current rules
 
-There are 24 rate-policy IDs and 25 current production constructor instances.
-P01 has two independent route-selected constructors. Every other ID has one
-production constructor, including P05, whose one middleware serves both
-anonymous and authenticated provider starts. Test-only constructors are not
-counted.
+Every limiter is process-local under
+[ADR 0018](../../adr/0018-bounded-rate-limiter.md). Token buckets use the listed
+limit as burst and refill over the window. Each instance tracks at most 10,000
+keys and sends new keys to one shared overflow bucket when full. Active keys are
+never evicted. Denials consume no token. A denial returns HTTP 429 with a
+positive `Retry-After`, rounded up, unless the row says otherwise.
 
-Current rate limiters are process-local. The target rate policies use the shared
-store described by ADR 0035 and preserve the caller's key construction. Token
-buckets use the listed burst as capacity and refill at the listed rate. The
-current bounded implementations track at most 10,000 ordinary keys per process
-instance and use an overflow bucket after legitimate expiry cleanup; active keys
-are not evicted. Denials consume no token. A denied HTTP request returns 429
-with a positive, ceiling-rounded `Retry-After` unless the row specifies a more
-specific response.
+When `api.RateLimit` middleware cannot derive the canonical client IP, it
+charges a separate bucket keyed on the raw socket peer and returns 400
+`invalid_client_ip`, or 429 once that bucket is empty.
 
-The target P01 policy is one shared fleet budget of 300 requests per canonical
-client IP per minute across both current outer route chains. Health and
-recognized public routes retain their existing bypasses. This removes the
-current doubled cross-chain allowance without putting bypassed routes under P01.
-P05 remains one policy: anonymous starts key by IP, while authenticated link and
-reauthentication starts key by account plus IP.
+P02 to P04 run after route authentication. P13 then P14, and P23 then P24, admit
+in order without refunds. P01 has two route-selected instances in
+`internal/api/router.go`, so a client can spend 300 per minute on each chain.
+The fleet design shares one 300 per minute budget across both chains.
 
 ## Rate policies
 
-| ID                                   | Current constructor and source                                                                                                                      | Current key and algorithm                                                                                                                            | Current limit                                                                         | Response mapping                                                                           | Target scope                                                                                       |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| P01 `api.outer_request`              | Two `api.RateLimit` instances, `otherChain` and `routeOwnedBodyChain`, in `apps/server/internal/api/router.go`                                      | Canonical client IP; malformed trusted-proxy input charges the raw peer. Token bucket; one route chain is selected per request.                      | 300/min, burst 300 per instance                                                       | HTTP 429 JSON `rate_limited` with `Retry-After`                                            | One shared fleet bucket per IP across both chains; preserve health and recognized-public bypasses. |
-| P02 `resume.read`                    | `common(600, time.Minute)` in `apps/server/internal/resumeapi/chain.go`                                                                             | Account then canonical IP composite; token bucket                                                                                                    | 600/min, burst 600                                                                    | HTTP 429 `rate_limited` with `Retry-After`                                                 | Fleet account plus IP                                                                              |
-| P03 `resume.write`                   | `common(240, time.Minute)` in `apps/server/internal/resumeapi/chain.go`                                                                             | Account then canonical IP composite; token bucket                                                                                                    | 240/min, burst 240                                                                    | HTTP 429 `rate_limited` with `Retry-After`                                                 | Fleet account plus IP                                                                              |
-| P04 `resume.photo_upload_rate`       | Upload route uses `common(20, time.Hour)` in `apps/server/internal/resumeapi/chain.go` and `apps/server/internal/resumeapi/photo.go`                | Account then canonical IP composite; token bucket                                                                                                    | 20/hour, burst 20                                                                     | HTTP 429 `rate_limited` with `Retry-After`                                                 | Fleet account plus IP; separate local C06 photo claim remains                                      |
-| P05 `auth.provider_start`            | `startRateLimit` in `apps/server/internal/auth/start.go`, one middleware shared by provider-start routes in `apps/server/internal/auth/handlers.go` | Account component then IP. Anonymous account component is empty, so anonymous is IP-only; authenticated link/reauth is account plus IP. Token bucket | 30/min, burst 30                                                                      | HTTP 429 from API middleware with `Retry-After`                                            | One policy; retain the two key shapes                                                              |
-| P06 `password.login_ip`              | `newAdmissionLimiter` from `NewPasswordRatePolicies` in `apps/server/internal/auth/password_rate.go`                                                | Canonical IP; token bucket                                                                                                                           | 30/min, burst 30                                                                      | HTTP 429 `rate_limited` with password `Retry-After`                                        | Fleet IP                                                                                           |
-| P07 `password.login_failure_email`   | `newFailureLimiter` in `apps/server/internal/auth/password_rate.go`                                                                                 | HMAC digest of canonical email; fixed window                                                                                                         | 10 failures/15 min. First failure starts the window; later failures do not extend it. | Preserve indistinguishable wrong-password response; exhausted state returns positive retry | Fleet email digest; private-only success clear                                                     |
-| P08 `password.register_forgot_ip`    | `newAdmissionLimiter(20, time.Hour)` in `apps/server/internal/auth/password_rate.go`                                                                | Canonical IP; token bucket                                                                                                                           | 20/hour, burst 20                                                                     | HTTP 429 `rate_limited` with `Retry-After`                                                 | Fleet IP                                                                                           |
-| P09 `password.register_forgot_email` | `newAdmissionLimiter(5, time.Hour)` in `apps/server/internal/auth/password_rate.go`                                                                 | HMAC canonical-email digest; token bucket                                                                                                            | 5/hour, burst 5                                                                       | HTTP 429 `rate_limited` with `Retry-After`; preserve anti-enumeration                      | Fleet email digest                                                                                 |
-| P10 `password.verify_reset_ip`       | `newAdmissionLimiter(10, time.Hour)` in `apps/server/internal/auth/password_rate.go`                                                                | Canonical IP; token bucket                                                                                                                           | 10/hour, burst 10                                                                     | HTTP 429 `rate_limited` with `Retry-After`                                                 | Fleet IP                                                                                           |
-| P11 `password.account_mutation`      | `newAdmissionLimiter(10, time.Hour)` in `apps/server/internal/auth/password_rate.go`                                                                | Account then IP composite; token bucket                                                                                                              | 10/hour, burst 10                                                                     | HTTP 429 `rate_limited` with `Retry-After`                                                 | Fleet account plus IP                                                                              |
-| P12 `resume.slug_change`             | `newSlugAttemptLimiter` in `apps/server/internal/resumeapi/routes.go` and `apps/server/internal/resumeapi/slug_limiter.go`                          | Account UUID; rolling window                                                                                                                         | 30/account/hour; denied attempts count; 24-hour idle cleanup                          | Caller maps denial to HTTP 429 `rate_limited`, `Retry-After: 1`                            | Fleet account; preserve denied-attempt debt                                                        |
-| P13 `resume.owner_pdf_account`       | `newOwnerPDFAdmission` in `apps/server/internal/resumeapi/pdf.go`                                                                                   | Account ID; token bucket                                                                                                                             | 10/min, burst 10                                                                      | HTTP 429 with `Retry-After`                                                                | Fleet account                                                                                      |
-| P14 `resume.owner_pdf_ip`            | IP middleware nested by `newOwnerPDFAdmission` in `apps/server/internal/resumeapi/pdf.go`                                                           | Canonical IP; token bucket                                                                                                                           | 10/min, burst 10                                                                      | HTTP 429 with `Retry-After`; render saturation remains HTTP 503, `Retry-After: 1`          | Fleet IP; preserve account-then-IP order and partial debt                                          |
-| P15 `account.export`                 | Route limiter in `apps/server/internal/accountapi/export.go`                                                                                        | Account then IP composite; token bucket                                                                                                              | 5/min, burst 5                                                                        | HTTP 429 with `Retry-After`                                                                | Fleet account plus IP                                                                              |
-| P16 `account.delete`                 | `deleteAdmission` in `apps/server/internal/accountapi/service.go`                                                                                   | Account then IP composite; token bucket                                                                                                              | 5/min, burst 5                                                                        | HTTP 429 with `Retry-After`                                                                | Fleet account plus IP                                                                              |
-| P17 `public.artifact_request`        | Request limiter in `newArtifactHandlers` in `apps/server/internal/publicapi/artifact.go`                                                            | Canonical client IP; token bucket                                                                                                                    | 300/min, burst 300                                                                    | Public representation-specific HTTP 429 with `Retry-After`                                 | Fleet IP                                                                                           |
-| P18 `public.render_miss`             | Render limiter in `apps/server/internal/publicapi/artifact.go`                                                                                      | Canonical client IP; token bucket, consumed after P17 and only on cache miss                                                                         | 20/min, burst 20                                                                      | HTTP 429 with `Retry-After`; render queue saturation is HTTP 503, `Retry-After: 1`         | Fleet IP                                                                                           |
-| P19 `realtime.public_request`        | Default `api.RateLimit` wrapper in `apps/server/internal/realtimeapi/service.go`                                                                    | Canonical client IP; token bucket                                                                                                                    | 300/min, burst 300                                                                    | HTTP 429 with `Retry-After` before SSE admission                                           | Fleet IP; public SSE bypasses P01 and owner SSE uses its selected P01 chain                        |
-| P20 `oauth.register`                 | `NewRatePolicies` wiring in `apps/server/cmd/server/main.go` and register policy in `apps/server/internal/oauthsrv/rate.go`                         | Canonical client IP; token bucket                                                                                                                    | 5/hour, burst 5                                                                       | HTTP 429, `Retry-After`, OAuth JSON `error=invalid_request`                                | Fleet IP                                                                                           |
-| P21 `oauth.token`                    | `NewRatePolicies` wiring in `apps/server/cmd/server/main.go` and token policy in `apps/server/internal/oauthsrv/rate.go`                            | Canonical client IP; token bucket                                                                                                                    | 30/min, burst 30                                                                      | HTTP 429, `Retry-After`, OAuth JSON `error=invalid_request`                                | Fleet IP                                                                                           |
-| P22 `oauth.failed_grant`             | `failedGrantLimiter` in `apps/server/internal/oauthsrv/rate.go`                                                                                     | OAuth client UUID; fixed window with pending attempt leases                                                                                          | 10 failures plus pending attempts/15 min                                              | HTTP 429, `Retry-After`, OAuth JSON `error=invalid_request`                                | Fleet client; globally unique attempt IDs and idempotent finish                                    |
-| P23 `mcp.token`                      | `NewRatePolicies` wiring in `apps/server/cmd/server/main.go` and token policy in `apps/server/internal/mcpapi/rate.go`                              | Durable token UUID; bearer plaintext is never a key. Token bucket                                                                                    | 120/min, burst 120                                                                    | MCP rate error with `Retry-After`                                                          | Fleet token                                                                                        |
-| P24 `mcp.user`                       | `NewRatePolicies` wiring in `apps/server/cmd/server/main.go` and user policy in `apps/server/internal/mcpapi/rate.go`                               | Durable user UUID; token bucket                                                                                                                      | 240/min, burst 240                                                                    | MCP rate error with `Retry-After`                                                          | Fleet user; preserve P23 then P24 order and partial debt                                           |
+Sources are under `apps/server/`.
 
-P02 through P04 run after route authentication, so missing account identity
-fails key derivation. P13/P14 and P23/P24 preserve their current ordered,
-non-refunding composite admission. An ambiguous shared-store rate decision fails
-through the caller's existing unavailable path; it is never retried or refunded
-automatically.
+| ID  | Policy                           | Source                               | Key and algorithm                                   | Limit                            | Fleet scope                   |
+| --- | -------------------------------- | ------------------------------------ | --------------------------------------------------- | -------------------------------- | ----------------------------- |
+| P01 | `api.outer_request`              | `internal/api/router.go`             | Client IP; token                                    | 300/min per chain                | One IP budget for both chains |
+| P02 | `resume.read`                    | `internal/resumeapi/chain.go`        | Account then IP; token                              | 600/min                          | Account plus IP               |
+| P03 | `resume.write`                   | `internal/resumeapi/chain.go`        | Account then IP; token                              | 240/min                          | Account plus IP               |
+| P04 | `resume.photo_upload_rate`       | `internal/resumeapi/chain.go`        | Account then IP; token                              | 20/hour                          | Account plus IP               |
+| P05 | `auth.provider_start`            | `internal/auth/start.go`             | IP when anonymous, account then IP otherwise; token | 30/min                           | One policy, both key shapes   |
+| P06 | `password.login_ip`              | `internal/auth/password_rate.go`     | IP; token                                           | 30/min                           | IP                            |
+| P07 | `password.login_failure_email`   | `internal/auth/password_rate.go`     | Email HMAC digest; fixed window                     | 10 failures/15 min, not extended | Email digest                  |
+| P08 | `password.register_forgot_ip`    | `internal/auth/password_rate.go`     | IP; token                                           | 20/hour                          | IP                            |
+| P09 | `password.register_forgot_email` | `internal/auth/password_rate.go`     | Email HMAC digest; token                            | 5/hour                           | Email digest                  |
+| P10 | `password.verify_reset_ip`       | `internal/auth/password_rate.go`     | IP; token                                           | 10/hour                          | IP                            |
+| P11 | `password.account_mutation`      | `internal/auth/password_rate.go`     | Account then IP; token                              | 10/hour                          | Account plus IP               |
+| P12 | `resume.slug_change`             | `internal/resumeapi/slug_limiter.go` | Account; rolling window                             | 30/hour, denials count           | Account                       |
+| P13 | `resume.owner_pdf_account`       | `internal/resumeapi/pdf.go`          | Account; token                                      | 10/min                           | Account                       |
+| P14 | `resume.owner_pdf_ip`            | `internal/resumeapi/pdf.go`          | IP; token                                           | 10/min                           | IP                            |
+| P15 | `account.export`                 | `internal/accountapi/export.go`      | Account then IP; token                              | 5/min                            | Account plus IP               |
+| P16 | `account.delete`                 | `internal/accountapi/service.go`     | Account then IP; token                              | 5/min                            | Account plus IP               |
+| P17 | `public.artifact_request`        | `internal/publicapi/artifact.go`     | IP; token                                           | 300/min                          | IP                            |
+| P18 | `public.render_miss`             | `internal/publicapi/artifact.go`     | IP; token, after P17, cache miss only               | 20/min                           | IP                            |
+| P19 | `realtime.public_request`        | `internal/realtimeapi/service.go`    | IP; token                                           | 300/min                          | IP                            |
+| P20 | `oauth.register`                 | `internal/oauthsrv/rate.go`          | IP; token                                           | 5/hour                           | IP                            |
+| P21 | `oauth.token`                    | `internal/oauthsrv/rate.go`          | IP; token                                           | 30/min                           | IP                            |
+| P22 | `oauth.failed_grant`             | `internal/oauthsrv/rate.go`          | OAuth client UUID; fixed window with reservations   | 10 failures plus pending/15 min  | Client                        |
+| P23 | `mcp.token`                      | `internal/mcpapi/rate.go`            | Durable token UUID; token                           | 120/min                          | Token                         |
+| P24 | `mcp.user`                       | `internal/mcpapi/rate.go`            | Durable user UUID; token                            | 240/min                          | User                          |
 
-## Concurrency and heavy-work classes
+Responses that differ from the default:
 
-These six classes are separate from the 24 rate policies. The first five are
-fleet claims in the target design. C06 is an explicit per-task local cap.
+- P07 keeps the indistinguishable wrong-password response.
+- P09 keeps the anti-enumeration response.
+- P12 maps a denial to 429 with `Retry-After: 1`.
+- P14 and P18 render saturation returns 503 with `Retry-After: 1`.
+- P17 and P18 use the public representation's own 429.
+- P20 to P22 return OAuth JSON `error=invalid_request`.
+- P23 and P24 return the MCP rate error.
 
-| ID                         | Current constructor and source                                                                                                                       | Current bound and response                                                                                                     | Target scope                                                                                             |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| C01 `render.global_claim`  | `renderjob.New` in `apps/server/internal/renderjob/queue.go`, wired by `apps/server/cmd/server/main.go`                                              | One running and eight waiting; 20-second deadline; full queue maps to HTTP 503, `Retry-After: 1`.                              | Fleet claim: one running/eight waiting; local render authority and strict paired-origin affinity remain. |
-| C02 `password.hash`        | `password.NewAdmission` in `apps/server/internal/password/admission.go`, used by `apps/server/internal/auth/password_auth.go`                        | Two running Argon2 jobs and 16 waiting; denial maps to HTTP 503 `authentication_unavailable` without `Retry-After`.            | Fleet claim: two running/16 waiting                                                                      |
-| C03 `mail.send`            | Two-send semaphore in `apps/server/internal/authmail/worker.go`                                                                                      | At most two sends per worker; durable lease and 30-second lease/10-second send deadline; no HTTP response.                     | Fleet claim: two sends; retain durable job lease and provider ambiguity rules                            |
-| C04 `mcp.user_concurrent`  | `requestSlots` in `apps/server/internal/mcpapi/rate.go`                                                                                              | Four in-flight requests/user; fifth is immediate MCP denial with `Retry-After: 1`; release is idempotent.                      | Fleet per-user claim, no waiting                                                                         |
-| C05 `sse.fleet_account_ip` | `Hub` in `apps/server/internal/realtime/hub.go`                                                                                                      | Local task 2,000 streams, IP 100, account 20, queue 8; limited is HTTP 429 and unavailable is HTTP 503, both `Retry-After: 5`. | Fleet account/IP claims atomically; retain local 2,000, queue, file-descriptor, and heartbeat bounds     |
-| C06 `media.photo_task`     | `taskPhotoAdmission` in `apps/server/internal/resumeapi/photo.go`, created by `media.NewPhotoAdmission` in `apps/server/internal/media/admission.go` | One decoder per task; waits up to one second; busy maps to HTTP 503, `Retry-After: 1`; release is idempotent.                  | Remains an explicit per-task local cap; no fleet claim                                                   |
+## Concurrency caps
 
-The fleet claim implementation and multi-process tests remain pending local
-proof. The proof must cover replica counts one and two, shared-store failure,
-ambiguous acquisition, release, crash fencing, and the declared scope of every
-row. Current process-local behavior is evidence for this catalog, not proof of
-the target design.
-
-## Authorities and verification boundary
-
-Numeric budgets and per-task scope come from [`budgets.md`](../budgets.md).
-Replica coordination, shared admission, ambiguous outcomes, claims, and the UAT
-lifecycle come from
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). ADR 0034
-remains the AWS operating and autoscaling budget authority.
-
-This catalog does not change runtime behavior, schemas, or response contracts.
-The implementation tasks must retain the exact source key shapes and response
-mappings above while adding shared coordination and its local proof.
+| ID  | Class                  | Source                           | Current bound and response                                                    | Fleet scope                                             |
+| --- | ---------------------- | -------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------- |
+| C01 | `render.global_claim`  | `internal/renderjob/queue.go`    | 1 running, 8 waiting, 20-second deadline; full queue is 503, `Retry-After: 1` | Fleet claim, node-local render                          |
+| C02 | `password.hash`        | `internal/password/admission.go` | 2 running, 16 waiting; 503 `authentication_unavailable`, no `Retry-After`     | Fleet claim                                             |
+| C03 | `mail.send`            | `internal/authmail/worker.go`    | 2 sends per worker; 30-second lease, 10-second send                           | Fleet claim, leases kept                                |
+| C04 | `mcp.user_concurrent`  | `internal/mcpapi/rate.go`        | 4 in flight per user; fifth is an MCP denial with `Retry-After: 1`            | Fleet per-user claim, no waiting                        |
+| C05 | `sse.fleet_account_ip` | `internal/realtime/hub.go`       | 2,000 per task, 100 per IP, 20 per account; 429 or 503, `Retry-After: 5`      | Fleet IP and account claims; 2,000 per task stays local |
+| C06 | `media.photo_task`     | `internal/media/admission.go`    | 1 decoder per task, waits up to 1 second; busy is 503, `Retry-After: 1`       | Stays per task                                          |
