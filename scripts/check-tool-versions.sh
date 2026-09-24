@@ -182,6 +182,8 @@ check_repository_contract() {
     docker.io/library/node: "${expected[nodejs]}"
   assert_all_image_versions go deploy/server.Dockerfile \
     docker.io/library/golang: "${expected[golang]}"
+  assert_all_image_versions go deploy/caddy/production/Dockerfile \
+    docker.io/library/golang: "${expected[golang]}"
   assert_all_image_versions caddy deploy/compose.yml \
     docker.io/library/caddy: "${expected[caddy]}"
 
