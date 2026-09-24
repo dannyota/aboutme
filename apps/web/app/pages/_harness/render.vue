@@ -323,6 +323,13 @@ body {
   background: #fff;
 }
 
+/* A print fixture's paper spans the page. The resume is a size container,
+   so a shrink-to-fit paper would collapse to zero width around it. */
+body.resume-print .harness-render,
+body.resume-print .harness-paper {
+  width: auto;
+}
+
 /* The public page spans the viewport, like the real public <main>. */
 .harness-render[data-render-mode="public"] {
   width: auto;

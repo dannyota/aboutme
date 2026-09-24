@@ -3,6 +3,7 @@ import { defineComponent, nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import EditorPreview from '../../app/components/editor/EditorPreview.vue';
+import { editorShellCopy } from '../../app/i18n/editor-shell';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
 
@@ -28,10 +29,12 @@ afterEach(() => {
     value: initialWindowWidth,
   });
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 beforeEach(() => {
   setSiteLocale('en');
+  window.localStorage.clear();
 });
 
 describe('EditorPreview', () => {
@@ -99,7 +102,37 @@ describe('EditorPreview', () => {
       host.remove();
     });
 
-  it('renders the page-count mark under the sheet without a header bar', () => {
+  it(
+    'renders the page-count mark under the sheet, with only the mode '
+    + 'switch in a toolbar above it',
+    () => {
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: {
+          document: accepted.document,
+          lng: accepted.metadata.lng,
+        },
+        global: { stubs: { ResumeDocument: true } },
+      });
+
+      expect(wrapper.find('[data-preview-header]').exists()).toBe(false);
+      expect(wrapper.get('[data-testid="preview-toolbar"]').text()).toBe(
+        wrapper.get('[data-testid="preview-mode-switch"]').text(),
+      );
+      expect(wrapper.get('[data-testid="page-count"]').text()).toMatch(
+        /— pages/,
+      );
+      expect(wrapper.get('[data-testid="preview-sheet"]').classes()).toEqual(
+        expect.arrayContaining([
+          'rounded-[var(--radius-sheet)]',
+          'shadow-[var(--shadow-paper)]',
+          'bg-white',
+        ]),
+      );
+    },
+  );
+
+  it('defaults the preview to PDF mode', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
       props: {
@@ -109,17 +142,126 @@ describe('EditorPreview', () => {
       global: { stubs: { ResumeDocument: true } },
     });
 
-    expect(wrapper.find('[data-preview-header]').exists()).toBe(false);
-    expect(wrapper.get('[data-testid="page-count"]').text()).toMatch(
-      /— pages/,
+    const pdfButton = wrapper.get('[data-mode="pdf"]');
+    const webButton = wrapper.get('[data-mode="web"]');
+    expect(pdfButton.attributes('aria-pressed')).toBe('true');
+    expect(webButton.attributes('aria-pressed')).toBe('false');
+    expect(pdfButton.text()).toBe(editorShellCopy.en.previewModePdf);
+    expect(webButton.text()).toBe(editorShellCopy.en.previewModeWeb);
+    expect(
+      wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
+    ).toEqual({ lng: 'en', mode: 'paged' });
+  });
+
+  it(
+    'switches to the continuous Web document and hides the paged sheet mark',
+    async () => {
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: {
+          document: accepted.document,
+          lng: accepted.metadata.lng,
+        },
+        global: { stubs: { ResumeDocument: true } },
+      });
+
+      await wrapper.get('[data-mode="web"]').trigger('click');
+
+      expect(wrapper.get('[data-mode="web"]').attributes('aria-pressed'))
+        .toBe('true');
+      expect(wrapper.get('[data-mode="pdf"]').attributes('aria-pressed'))
+        .toBe('false');
+      expect(
+        wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
+      ).toEqual({ lng: 'en', mode: 'continuous' });
+      expect(wrapper.find('[data-testid="page-count"]').exists()).toBe(false);
+      const sheet = wrapper.get('[data-testid="preview-sheet"]');
+      expect(sheet.attributes('data-sheet-zoom')).toBeUndefined();
+      expect(sheet.attributes('data-scaled-width')).toBeUndefined();
+      expect(sheet.attributes('style') ?? '').not.toContain('zoom');
+    },
+  );
+
+  it('remembers a chosen mode across mounts in the same browser', async () => {
+    const accepted = acceptedFixture();
+    const first = mount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: accepted.metadata.lng,
+      },
+      global: { stubs: { ResumeDocument: true } },
+    });
+    await first.get('[data-mode="web"]').trigger('click');
+    first.unmount();
+
+    const second = mount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: accepted.metadata.lng,
+      },
+      global: { stubs: { ResumeDocument: true } },
+    });
+    expect(second.get('[data-mode="web"]').attributes('aria-pressed'))
+      .toBe('true');
+    expect(
+      second.getComponent({ name: 'ResumeDocument' }).props('context'),
+    ).toEqual({ lng: 'en', mode: 'continuous' });
+    second.unmount();
+  });
+
+  it(
+    'falls back to PDF and keeps switching modes when storage throws',
+    async () => {
+      const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(
+        () => { throw new Error('blocked'); },
+      );
+      const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(
+        () => { throw new Error('blocked'); },
+      );
+      const accepted = acceptedFixture();
+      const wrapper = mount(EditorPreview, {
+        props: {
+          document: accepted.document,
+          lng: accepted.metadata.lng,
+        },
+        global: { stubs: { ResumeDocument: true } },
+      });
+
+      expect(wrapper.get('[data-mode="pdf"]').attributes('aria-pressed'))
+        .toBe('true');
+
+      await wrapper.get('[data-mode="web"]').trigger('click');
+      expect(wrapper.get('[data-mode="web"]').attributes('aria-pressed'))
+        .toBe('true');
+
+      getItem.mockRestore();
+      setItem.mockRestore();
+      wrapper.unmount();
+    },
+  );
+
+  it('labels the mode switch in Vietnamese too', () => {
+    setSiteLocale('vi');
+    const accepted = acceptedFixture();
+    const wrapper = mount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: accepted.metadata.lng,
+      },
+      global: { stubs: { ResumeDocument: true } },
+    });
+
+    expect(wrapper.get('[data-mode="pdf"]').text()).toBe(
+      editorShellCopy.vi.previewModePdf,
     );
-    expect(wrapper.get('[data-testid="preview-sheet"]').classes()).toEqual(
-      expect.arrayContaining([
-        'rounded-[var(--radius-sheet)]',
-        'shadow-[var(--shadow-paper)]',
-        'bg-white',
-      ]),
+    expect(wrapper.get('[data-mode="web"]').text()).toBe(
+      editorShellCopy.vi.previewModeWeb,
     );
+    expect(
+      wrapper.get('[data-testid="preview-mode-switch"]').attributes(
+        'aria-label',
+      ),
+    ).toBe(editorShellCopy.vi.previewMode);
   });
 
   it('fits the whole A4 sheet inside a 390 px preview', async () => {
