@@ -21,7 +21,11 @@ function accessibleName(svg: Element): string | null {
 }
 
 function svgOf(wrapper: ReturnType<typeof mount>): Element {
-  const svg = wrapper.element.querySelector('svg');
+  // The component root is the svg itself; querySelector never matches it.
+  const root = wrapper.element as Element;
+  const svg = root.tagName.toLowerCase() === 'svg'
+    ? root
+    : root.querySelector('svg');
   if (svg === null) throw new Error('AppLogo did not render an svg root.');
   return svg;
 }
