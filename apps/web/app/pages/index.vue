@@ -144,7 +144,7 @@ useHead(computed(() => ({
         data-testid="landing-sample"
       >
         <div
-          class="landing-stage relative isolate"
+          class="landing-stage relative isolate mx-auto"
           data-testid="landing-stage"
         >
           <div
@@ -502,10 +502,11 @@ useHead(computed(() => ({
 </template>
 
 <style scoped>
-/* The stage takes the zoomed sheet's size explicitly: WebKit does not
-   shrink a zoomed child's contribution to its parent's width, which left
-   the ghost sheet wider than the sheet and the pair off center on iPhone
-   Safari. */
+/* The stage takes the zoomed sheet's size explicitly and centers itself:
+   on phones the chip row below can make the figure wider than the sheet,
+   and WebKit does not shrink a zoomed child's contribution to its parent,
+   so a stage sized by its content left the ghost wider than the sheet and
+   the pair off center. */
 .landing-stage {
   --sheet-zoom: 0.39;
   width: calc(210mm * var(--sheet-zoom));
