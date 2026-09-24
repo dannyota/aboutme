@@ -2,8 +2,9 @@
 # its packages/schema/gen/go workspace dependency.
 
 # ---- build ----
-# Match the exact Go version declared by apps/server/go.mod.
-FROM docker.io/library/golang:1.27.1-alpine3.24 AS build
+# Match the exact Go version declared by apps/server/go.mod. Digest pins the
+# multi-arch index so the same reference resolves on amd64 and arm64.
+FROM docker.io/library/golang:1.27.1-alpine3.24@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
 
 WORKDIR /src
 
@@ -38,13 +39,21 @@ RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com
 FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f2814476b21571c5124a3fca2267d73041f56e7580e AS runtime
 
 USER root
+# Nothing in this image runs npm or corepack at runtime, so they are removed
+# rather than shipped unused; the final check fails the build if a base update
+# moves them. Node itself stays: it is Playwright's base.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
     && rm -rf /var/lib/apt/lists/* \
     && chromium=/ms-playwright/chromium-1234/chrome-linux64 \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1234/chrome-linux; } \
     && ln -s "$chromium" /opt/chromium \
-    && test -x /opt/chromium/chrome
+    && test -x /opt/chromium/chrome \
+    && rm -rf /usr/lib/node_modules/npm /usr/lib/node_modules/corepack \
+    && rm -f /usr/bin/npm /usr/bin/npx /usr/bin/corepack \
+    && for tool in npm npx corepack; do \
+        ! command -v "$tool" >/dev/null || exit 1; \
+    done
 ENV CHROMIUM_PATH=/opt/chromium/chrome TZ=UTC LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 COPY --from=build /out/server /usr/local/bin/server

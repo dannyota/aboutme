@@ -61,6 +61,25 @@ jobs:
                 adapt --config /etc/caddy/Caddyfile.maintenance >/dev/null
               ;;
           esac
+      - name: Install Trivy
+        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
+      # Scans the image built above, before it is pushed anywhere. Fails on a
+      # fixable HIGH or CRITICAL finding; see scripts/security-scan.sh. The
+      # full JSON report is uploaded as a short-retention artifact instead of
+      # printed, since this log is public.
+      - name: Scan for fixable HIGH/CRITICAL vulnerabilities
+        run: |
+          scripts/security-scan.sh scan-image \
+            "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$NAME.json"
+          scripts/security-scan.sh report "trivy-$NAME.json"
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: trivy-report-${{ matrix.name }}
+          path: trivy-${{ matrix.name }}.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Push
         id: push
         env:
