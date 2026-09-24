@@ -151,11 +151,11 @@ content hash (`?v=`), so a release reaches browsers despite the one-year
 immutable cache. A font change must rename the fixed-name `.woff2` under
 `/_nuxt/fonts/`, changing both stylesheet hashes too.
 
-A release is a `v*` tag on `main` with green `ci.yml`; `workflow_dispatch` does
-not count. `release-images.yml` publishes
-`ghcr.io/dannyota/aboutme-{server,web,caddy}` (public), scanning each with Trivy
-and failing on a fixable HIGH/CRITICAL finding. `security-scan.yml` reruns that
-plus `govulncheck` and `npm audit` weekly on `main` and the latest images.
+A release is a `v*` tag on `main` with green `ci.yml` (not `workflow_dispatch`).
+`release-images.yml` publishes and Trivy-scans
+`ghcr.io/dannyota/aboutme-{server,web,caddy}` (public), failing on a fixable
+HIGH/CRITICAL finding. `security-scan.yml` also runs `govulncheck`/`npm audit`
+weekly on `main`/latest images; cron editor alone is alerted; 60d idle drops it.
 
 Before the first deploy after adding maintenance mode, apply the reviewed
 OpenTofu change. It creates `aboutme-prod-maintenance` at desired count zero.

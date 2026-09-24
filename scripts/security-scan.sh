@@ -77,7 +77,19 @@ scan_image() {
 # artifact instead.
 report_findings() {
   local report=${1:?report needs a report path}
-  local count
+  local has_results artifact_name count
+  has_results=$(jq 'has("Results")' "$report")
+  if [ "$has_results" != "true" ]; then
+    printf 'security-scan: %s has no Results array; the image was never scanned\n' \
+      "$report" >&2
+    return 1
+  fi
+  artifact_name=$(jq -r '.ArtifactName // ""' "$report")
+  if [ -z "$artifact_name" ]; then
+    printf 'security-scan: %s has an empty ArtifactName; the image was never scanned\n' \
+      "$report" >&2
+    return 1
+  fi
   count=$(jq '[.Results[]?.Vulnerabilities[]?] | length' "$report")
   if [ "$count" -eq 0 ]; then
     printf 'security-scan: no fixable HIGH/CRITICAL findings in %s\n' "$report"
@@ -118,6 +130,7 @@ weekly_scan() {
     ref="ghcr.io/dannyota/aboutme-${name}:${tag}"
     report="$report_dir/released-${name}.json"
     scan_image "$trivy_bin" "$ref" linux/arm64 "$report" || fail=1
+    printf 'security-scan: findings for %s\n' "$ref" | tee -a "$report_dir/summary.txt"
     if ! report_findings "$report" >>"$report_dir/summary.txt"; then
       printf '%s\n' "$ref" >>"$report_dir/failed.txt"
       fail=1

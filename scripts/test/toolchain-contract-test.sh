@@ -118,6 +118,7 @@ mkdir -p "$CONTRACT/scripts" "$CONTRACT/.github/workflows" \
 cp "$ROOT/.tool-versions" "$CONTRACT/.tool-versions"
 cp "$ROOT/scripts/check-tool-versions.sh" "$CONTRACT/scripts/"
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
+cp "$ROOT/.github/workflows/security-scan.yml" "$CONTRACT/.github/workflows/"
 cp "$ROOT/apps/web/.nvmrc" "$CONTRACT/apps/web/"
 cp "$ROOT/apps/server/go.mod" "$CONTRACT/apps/server/"
 cp "$ROOT/packages/schema/gen/go/go.mod" "$CONTRACT/packages/schema/gen/go/"
