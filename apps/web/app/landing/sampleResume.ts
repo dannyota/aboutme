@@ -7,7 +7,7 @@ export const sampleResume: Resume = {
     fullName: 'Danny',
     headline: 'Software Developer',
     photo: {
-      key: 'landing/danny.jpg',
+      key: 'landing/danny.webp',
     },
     details: [
       {
