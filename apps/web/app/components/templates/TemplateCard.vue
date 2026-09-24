@@ -3,8 +3,9 @@
  * `TemplateCard`: one template in the gallery, with its name, purpose, and a
  * tag naming what is shown. The whole card links to the template page. A
  * template with a sample can show the stored image of the sample's first PDF
- * page instead of a live render (DESIGN.md, Library); the rest, and every
- * card on the homepage, show a live scaled render of the generic filler.
+ * page instead of a live render (DESIGN.md, Library). Without an image, the
+ * card shows a live scaled render of page one of its own sample, or of the
+ * generic filler when it has none.
  */
 import type { Resume } from '@aboutme/schema';
 import { computed, onMounted, ref, watch } from 'vue';
