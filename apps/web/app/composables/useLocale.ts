@@ -6,6 +6,7 @@ import {
   isLocalizedPath,
   type Locale,
   localeCookie,
+  localeCookieMaxAgeSeconds,
 } from '@/i18n/locale';
 
 /**
@@ -17,7 +18,7 @@ export function useLocale() {
     default: () => undefined,
     path: '/',
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 365,
+    maxAge: localeCookieMaxAgeSeconds,
   });
   const state = useState<Locale>(localeCookie, () =>
     isLocale(preference.value) ? preference.value : defaultLocale);
