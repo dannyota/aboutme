@@ -26,8 +26,12 @@ export const HTML_CSP
  * page with its own inline script (the homepage and template pages' JSON-LD)
  * earns a response-specific `'sha256-<hash>'` source at render time instead
  * (server/utils/cspHash.ts, server/plugins/security-headers.ts), the same
- * mechanism public resume HTML uses
- * (apps/server/internal/publicformat/jsonld.go).
+ * mechanism public resume HTML uses (apps/server/internal/publicformat/
+ * jsonld.go). The editor's document validator no longer needs an exception
+ * either: it used to call `ajv.compile()` in the browser, which emits a
+ * `new Function`, so it is now a build-time Ajv standalone compile committed
+ * as a plain module instead (app/editor/documentValidator.generated.mjs,
+ * scripts/generate-document-validator.mjs).
  *
  * `style-src` keeps `'unsafe-inline'`: the resume renderer writes
  * per-document customization as inline `style` attributes

@@ -328,6 +328,8 @@ apps/web/app/editor/coordinatorReconcile.ts
 apps/web/app/editor/coordinatorSettle.ts
 apps/web/app/editor/coordinatorTypes.ts
 apps/web/app/editor/documentValidation.ts
+apps/web/app/editor/documentValidator.generated.d.ts
+apps/web/app/editor/documentValidator.generated.mjs
 apps/web/app/editor/pageCountObserver.ts
 apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
