@@ -45,14 +45,35 @@ const sizeClass = computed(
     xmlns="http://www.w3.org/2000/svg"
   >
     <defs>
-      <linearGradient :id="markFill" x2="1" y2="1">
+      <linearGradient
+        :id="markFill"
+        x2="1"
+        y2="1"
+      >
         <stop stop-color="#35c8f5" />
-        <stop offset=".5" stop-color="#246bfd" />
-        <stop offset="1" stop-color="#4a35f5" />
+        <stop
+          offset=".5"
+          stop-color="#246bfd"
+        />
+        <stop
+          offset="1"
+          stop-color="#4a35f5"
+        />
       </linearGradient>
-      <mask :id="markCut" class="forced-color-adjust-none">
-        <rect fill="#fff" height="32" width="29" />
-        <circle cx="14.3" cy="21.4" r="8.9" />
+      <mask
+        :id="markCut"
+        class="forced-color-adjust-none"
+      >
+        <rect
+          fill="#fff"
+          height="32"
+          width="29"
+        />
+        <circle
+          cx="14.3"
+          cy="21.4"
+          r="8.9"
+        />
       </mask>
       <linearGradient
         v-if="!markOnly"
@@ -61,7 +82,10 @@ const sizeClass = computed(
         x1="101"
         x2="136"
       >
-        <stop class="[stop-color:var(--brand-blue)]" stop-color="#246bfd" />
+        <stop
+          class="[stop-color:var(--brand-blue)]"
+          stop-color="#246bfd"
+        />
         <stop
           class="[stop-color:var(--brand-indigo)]"
           offset="1"

@@ -54,8 +54,8 @@ describe('AppLogo', () => {
       .toBeNull();
   });
 
-  it('gives two instances on one page disjoint gradient ids that each ' +
-    'resolve inside their own svg', () => {
+  it('gives two instances on one page disjoint gradient ids that each '
+    + 'resolve inside their own svg', () => {
     const wrapper = mount({
       components: { AppLogo },
       template: '<div><AppLogo /><AppLogo /></div>',
