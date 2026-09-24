@@ -2529,6 +2529,11 @@ async function deleteAccount(
 ): Promise<boolean> {
   if (account.email === '') return true;
   try {
+    // Leave the app page first. The previous step may have just landed on a
+    // signed-in page whose startup reads (`/me`, then the resume list) are
+    // still running; clearing cookies under it turns the next read into a
+    // 401 that the page logs as a console error.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await setLocale(page.context(), 'en');
     const outcome = await passwordSignIn(
