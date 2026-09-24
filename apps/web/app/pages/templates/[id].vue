@@ -254,8 +254,8 @@ useHead(computed(() => ({
               {{ detail.atsHint }}
             </p>
             <pre
-              class="template-paper whitespace-pre-wrap p-6 font-sans text-sm
-                leading-6"
+              class="template-paper paper-surface whitespace-pre-wrap p-6
+                font-sans text-sm leading-6"
               data-ats-text
             >{{ readingText }}</pre>
           </TabsContent>
