@@ -804,18 +804,17 @@ async function passwordSignIn(
 }
 
 /**
- * Signs out if a session exists, and no-ops otherwise: a sharded run's first
- * role has no session yet, so /app/settings/sessions already lands on
- * /login and there is no Log out button to click.
+ * Signs out if a session exists, and no-ops otherwise without navigating: a
+ * sharded run's first role has no session yet, and visiting
+ * /app/settings/sessions while signed out logs unexpected 401s from the API
+ * calls the settings page makes on the way to redirecting to /login.
  */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
+  if (await cookieValue(page.context(), SESSION_COOKIE) === null) return;
   await gotoHydrated(page, '/app/settings/sessions');
-  const logOut = page.getByRole('button', { name: 'Log out', exact: true });
-  if (await logOut.count() > 0) {
-    await logOut.click();
-    await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
-  }
+  await page.getByRole('button', { name: 'Log out', exact: true }).click();
+  await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
   await setLocale(page.context(), 'en');
 }
 
