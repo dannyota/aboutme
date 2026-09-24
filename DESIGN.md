@@ -2,7 +2,8 @@
 
 This is the living visual record of the implemented web application. The account
 is private; the resume is the public document. The UI makes that distinction
-visible through a desk, a sheet of paper, and a seal applied by the person.
+visible through a colorful Aurora canvas, a calm white sheet of paper, and a
+seal applied by the person.
 
 ## Product principle
 
@@ -33,18 +34,42 @@ the resume's own language, independent of the site language.
 
 ## Visual direction
 
-- The application chrome is a cool grey desk. The resume is a whole white sheet
-  with a paper shadow and stays white in dark theme.
-- Ink is near-black, secondary information is pencil grey, and rules are
-  hairlines. Signature blue-black marks the person’s actions.
-- Seal red marks the public state and the Publish action. Destructive actions
-  use the separate destructive token.
+Colorful product UI. Calm white resume.
+[ADR 0050](docs/adr/0050-aurora-application-identity.md) records the Aurora
+identity.
+
+- The application canvas is a pale blue ground with large, soft radial glows:
+  blue and indigo at the top corners, cyan and a faint pink further down. The
+  glows are CSS gradients on the body background under `data-ui="app"`, scroll
+  with the page, and never animate.
+- The resume is a whole white sheet with a neutral paper shadow. It stays white
+  in dark theme and never takes an Aurora token, gradient, radius, or shadow.
+- Blue leads. Primary actions, links, focus, and the logo are blue. Indigo,
+  purple, and cyan are supporting accents for templates, customization, and
+  product capabilities. Pink and orange are small, rare accents. A section uses
+  a few accents, never all of them.
+- Red means public. Seal red marks the public state, the Publish action, and the
+  seal, and nothing else. Destructive actions use the separate destructive
+  token.
 - State is communicated by a mark or plain text: a pencil tick for saved, text
   for saving and draft, destructive text for failure, and a seal plus link for
   public.
 - Chrome alignment follows an 8 px module. The sheet is never cropped.
 - Copy is sentence case. Controls name the action they perform. English copy
   uses “resume”; Vietnamese localized copy uses “CV”.
+
+## Logo
+
+The logo is lowercase `aboutme`. The mark is a rounded document with a folded
+top-right corner whose body forms a lowercase single-story `a`, filled with a
+cyan to blue to indigo gradient. The `a` is cut out of the body, so the
+background shows through it. The wordmark follows the mark: `about` in the text
+color and `me` in the blue-to-indigo brand gradient, drawn as round-capped
+strokes so it needs no font.
+
+`AppLogo` renders it inline at 24, 32, or 48 px high, or as the mark alone. It
+is one image named “aboutme”. Under `forced-colors: active`, the mark and `me`
+use the text color. `public/favicon.svg` is the mark alone with a plain fold.
 
 ## Typography and tokens
 
@@ -53,26 +78,53 @@ Application chrome uses `Be Vietnam Pro`, then `Inter`, `system-ui`, and
 typography and tokens.
 
 The semantic tokens below are defined on `:root` and switched by
-`html[data-theme="dark"]`.
+`html[data-theme="dark"]`. The dark theme is midnight blue.
 
 | Role                              | Light     | Dark                        |
 | --------------------------------- | --------- | --------------------------- |
-| Page background                   | `#EDEFEB` | `#121614`                   |
-| Foreground ink                    | `#171A18` | `#ECEFEC`                   |
-| Card and popover                  | `#FFFFFF` | `#1A1F1C`                   |
-| Primary action                    | `#1F2A44` | `#D7DEEE`                   |
-| Primary foreground                | `#FFFFFF` | `#171A18`                   |
-| Secondary, muted, accent          | `#E3E6E1` | `#242A27`                   |
-| Secondary/muted/accent foreground | `#171A18` | `#ECEFEC`                   |
-| Muted foreground                  | `#5F6763` | `#9AA39E`                   |
-| Border and input                  | `#D8DDD9` | `rgba(255, 255, 255, 0.12)` |
-| Focus ring                        | `#1F2A44` | `#D7DEEE`                   |
-| Seal                              | `#C8102E` | `#C8102E`                   |
+| Page background                   | `#F5F8FF` | `#071126`                   |
+| Foreground ink                    | `#101B3F` | `#F4F7FF`                   |
+| Card                              | `#FFFFFF` | `#0D1935`                   |
+| Popover                           | `#FFFFFF` | `#132244`                   |
+| Primary action and focus ring     | `#1A5CEB` | `#72A0FF`                   |
+| Primary foreground                | `#FFFFFF` | `#071126`                   |
+| Secondary and accent              | `#EAF2FF` | `#132244`, `#1A2B52`        |
+| Muted                             | `#EDF1FA` | `#132244`                   |
+| Secondary/muted/accent foreground | `#101B3F` | `#F4F7FF`                   |
+| Muted foreground                  | `#56648C` | `#9EACCA`                   |
+| Border                            | `#DCE5F5` | `rgba(180, 200, 255, 0.16)` |
+| Input border                      | `#7886AE` | `#5A6A95`                   |
+| Link                              | `#123EDB` | `#8FB3FF`                   |
+| Seal                              | `#CC2649` | `#CC2649`                   |
 | Destructive                       | `#B42318` | `#F0736A`                   |
 
-The chrome radius is 6 px, the sheet radius is 2 px, and the dialog radius is 8
-px. `--shadow-paper` supplies the soft paper shadow in light and dark themes.
-The theme preference is persisted in the `aboutme-theme` cookie.
+Brand and surface tokens have Tailwind color utilities such as `bg-surface-blue`
+and `text-brand-indigo`:
+
+| Token                                | Light                | Dark                 |
+| ------------------------------------ | -------------------- | -------------------- |
+| `--brand-blue`, `--brand-deep-blue`  | `#246BFD`, `#123EDB` | `#72A0FF`, `#4C7DFF` |
+| `--brand-indigo`, `--brand-cyan`     | `#6254FF`, `#35C8F5` | `#8B80FF`, `#54D6FF` |
+| `--brand-purple`                     | `#A855F7`            | `#C08BFF`            |
+| `--brand-pink`, `--brand-orange`     | `#F55DB1`, `#FF9C47` | `#FF7CC4`, `#FFB067` |
+| `--surface-blue`                     | `#EAF2FF`            | `#10224A`            |
+| `--surface-indigo`, `--surface-pink` | `#F0EEFF`, `#FFF0FA` | `#1A1A4A`, `#2A1533` |
+
+Text on the canvas, a card, or a tinted surface meets WCAG AA: 4.5:1 for normal
+text and 3:1 for large text, input borders, and focus rings, measured over the
+brightest canvas glow. Blue text uses `--link`, not `--primary` or the brand
+colors. Brand colors are for fills, icons, and large text.
+
+`--gradient-brand` runs from brand blue to brand indigo; it colors `me` and at
+most one key phrase or hero action on a page. `--gradient-aurora` holds the
+canvas glows, at 7 to 14 percent opacity in light theme and 10 to 24 percent in
+dark theme.
+
+The standard radius is 10 px, dialogs use 14 px, feature and marketing cards use
+`--radius-feature` (20 px), and the sheet stays at 2 px. Product surfaces use
+`--shadow-product`, a soft blue-tinted shadow. The sheet uses `--shadow-paper`,
+a neutral shadow with no blue. The theme preference is persisted in the
+`aboutme-theme` cookie.
 
 Dialogs share one rhythm: 24 px between the header, the body, and the actions; 6
 px from title to description; and 16 px between fields, with hints 6 px under
@@ -139,14 +191,14 @@ sample; a first resume opens on the samples.
 
 ## Authenticated chrome and editor
 
-The shared application shell has the lowercase `aboutme` brand and a Templates
-link for every visitor. Signed-out navigation also shows Sign in, Create
-account, and a theme toggle. Signed-in navigation also shows Resumes, Settings,
-and an account menu. The account menu contains Settings, theme switching, and
-Log out. On signed-in screens below 640 px, the direct Templates and Settings
-links are hidden; Settings remains in the account menu. On localized routes, the
-shell adds the Vietnamese and English toggle. Below 640 px its visible labels
-shorten to VI and EN while their accessible names remain complete.
+The shared application shell has the `aboutme` logo and a Templates link for
+every visitor. Signed-out navigation also shows Sign in, Create account, and a
+theme toggle. Signed-in navigation also shows Resumes, Settings, and an account
+menu. The account menu contains Settings, theme switching, and Log out. On
+signed-in screens below 640 px, the direct Templates and Settings links are
+hidden; Settings remains in the account menu. On localized routes, the shell
+adds the Vietnamese and English toggle. Below 640 px its visible labels shorten
+to VI and EN while their accessible names remain complete.
 
 The resume list is a desk of up to three white paper cards in a three-column
 grid at medium widths. Each card shows its title, relative updated time, and a
@@ -246,5 +298,5 @@ descendants are excluded so application CSS cannot alter the renderer.
 - Keep the renderer pure and outside application chrome styling. Do not add
   page-specific values that bypass the semantic tokens.
 - Keep the single-meaning color rules: seal red is for public state and Publish,
-  signature ink is for personal actions and focus, and draft/saved states remain
-  pencil marks rather than colored chips.
+  blue is for actions, links, and focus, and draft/saved states remain pencil
+  marks rather than colored chips.

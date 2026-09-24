@@ -52,7 +52,7 @@ Every page title follows `<page> · aboutme`; the homepage uses its own headline
 title, and the editor uses the resume title. Only `/`, `/privacy`, and `/terms`
 are indexable. Each carries a meta description, a canonical link to
 `https://aboutme.vn/<path>`, Open Graph and Twitter card tags, and the shared
-1200 × 630 `/og-image.png`; the homepage also carries a JSON-LD graph of
+1200 × 630 `/og-image.jpg`; the homepage also carries a JSON-LD graph of
 WebSite, Organization, and a free WebApplication, with no ratings, reviews, or
 counts. Every other Nuxt route sends `robots: noindex`, and `/app/**`, whose
 first HTML is a client-rendered shell, also sends the `X-Robots-Tag: noindex`
@@ -85,15 +85,17 @@ suites are the proof that the chrome cannot change the preview. Design tokens
 are defined on the document root and switched by the `data-theme` attribute that
 the theme cookie already controls, so teleported dialogs and menus inherit them.
 
-The chrome is the desk and the resume is the paper. Seal red marks only the
-public state: a round seal on the sheet means "public at this link", pressed by
-a person and never by an agent. The person's own actions use signature ink,
-secondary text and draft or saved states are pencil marks, and the chrome
-typeface is Be Vietnam Pro. The preview sheet keeps its own document background
-in both themes and is never cropped.
-[ADR 0030](../adr/0030-stamped-document-visual-identity.md) owns the identity.
-Copy is sentence case, buttons name the action they perform, an empty state says
-what to do next, and an error says what happened and how to fix it.
+The chrome is a colorful Aurora canvas and the resume is calm white paper. Blue
+leads actions, links, and focus. Seal red marks only the public state: a round
+seal on the sheet means "public at this link", pressed by a person and never by
+an agent. Draft or saved states are pencil marks, and the chrome typeface is Be
+Vietnam Pro. No chrome token, gradient, or shadow reaches the renderer; the
+preview sheet keeps its own document background in both themes and is never
+cropped. [ADR 0050](../adr/0050-aurora-application-identity.md) owns the
+identity, building on
+[ADR 0030](../adr/0030-stamped-document-visual-identity.md). Copy is sentence
+case, buttons name the action they perform, an empty state says what to do next,
+and an error says what happened and how to fix it.
 
 Text fields commit on blur or Enter. A non-empty changed value is set, an empty
 value removes the field, an unchanged value sends nothing, and Escape reverts to

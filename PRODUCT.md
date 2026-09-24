@@ -97,8 +97,9 @@ so.
   shipped behavior. Errors say what happened and how to fix it. Deletion copy
   distinguishes immediate access revocation from delayed physical deletion.
 - License: AGPL-3.0, stated on the landing page with a link to the repository.
-- Application colors and state marks follow [DESIGN.md](DESIGN.md): a cool-grey
-  desk, white paper, signature blue-black actions, and a red public seal.
+- Application colors and state marks follow [DESIGN.md](DESIGN.md): an Aurora
+  blue canvas, white paper, blue primary actions, supporting indigo and cyan
+  accents, and a red public seal.
 
 ## Evidence on Hand
 
