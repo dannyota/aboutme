@@ -142,6 +142,11 @@ test('submitting the login form navigates cleanly under the app CSP', async ({
 }) => {
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
   // A real successful login sets a session cookie and lands on /app/resumes
   // through a full reload (crossing from the SSR /login to the client-only
   // /app/resumes route rule), so /api/v1/me reads as signed in throughout,
@@ -167,6 +172,10 @@ test('submitting the login form navigates cleanly under the app CSP', async ({
     .click();
   await page.waitForURL((url) => url.pathname !== '/login');
   expect(new URL(page.url()).pathname).toBe('/app/resumes');
+  // Check for a real CSP violation before the visibility assertion below,
+  // which throws first (and would otherwise hide it) when the navigation
+  // landed but the destination page failed to render.
+  expect(await probe.violations()).toEqual([]);
   await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
 
   await expectCspClean(probe);
