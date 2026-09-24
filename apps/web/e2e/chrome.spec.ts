@@ -45,6 +45,19 @@ for (const page of PAGES) {
           - document.documentElement.clientWidth);
         expect(overflow).toBe(0);
 
+        if (page.name === 'home') {
+          // Template thumbnails mount only near the viewport, so a full-page
+          // capture of a short viewport shows empty sheets. Grow the viewport
+          // to the whole page and wait for the four showcase renders.
+          const height = await browserPage.evaluate(() =>
+            document.documentElement.scrollHeight);
+          await browserPage.setViewportSize({ width, height });
+          await expect(
+            browserPage.locator('[data-sheet-thumbnail-render]'),
+          ).toHaveCount(4);
+          await waitForImages(browserPage);
+        }
+
         await verifyScreenshot(
           browserPage,
           `chrome--${page.name}--${theme}--${width}.png`,
