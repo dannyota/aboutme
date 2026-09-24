@@ -4,9 +4,9 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
+- `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with "public stream remained open after revocation drain" (`apps/server/internal/realtime/service_test.go:539`); find the race. Evidence: deploy-fixes branch CI, 2026-09-24.
+- The deploy warm-up requests `/danny`; if that resume is unpublished, every deploy fails. Evidence: `deploy/aws/scripts/deploy.sh` (`DEPLOY_WARM_PAGE`).
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
-- The `aboutme-prod-site-down` alarm goes to ALARM during every deploy's maintenance window (missing datapoints) after `deploy.sh` re-enables its actions, so each deploy can email a site-down alert (seen for v0.5.5 and v0.5.6). Re-enable actions only after the alarm returns to OK, or treat missing data as not breaching during the window. Evidence: `deploy/aws/scripts/deploy.sh`, v0.5.6 deploy report.
-- After a deploy, the first public resume request (`/danny`) hung over 100 s and the next few took 11 to 14 s before settling under 1 s (v0.5.5, 2026-09-24); `/healthz` stayed fast. Find the cold-start cost (web render warm-up or first DB or render call) and warm it during the deploy's maintenance smoke. Evidence: v0.5.5 deploy report.
 - App HTML pages (`/`, `/login`, `/app/**`) send no Content-Security-Policy or `frame-ancestors`; only `/_harness/**` gets `HTML_CSP`. Public resume pages and Go routes already send one. Evidence: `apps/web/nuxt.config.ts` `routeRules`, `apps/web/app/utils/csp.ts`.
 
 ## Production acceptance
@@ -23,5 +23,5 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 - backend: TOTP code-step reuse across flows (AC-AUTH-026); TOTP replace or remove racing a code or recovery use, and a TOTP change racing session rotation (AC-AUTH-027).
 - frontend: web test that an absent or malformed `totpEnabled` counts as false (AC-AUTH-029).
-- devops: run `make caddy-prod-test` in CI (AC-INF-001, AC-OPS-002); exact IAM policy tests or a live IAM simulation (AC-INF-004, AC-SEC-008); make `deploy.sh` accept only a green push run on `main` for the tag's commit, not a `workflow_dispatch` run at the same SHA.
+- devops: run `make caddy-prod-test` in CI (AC-INF-001, AC-OPS-002); exact IAM policy tests or a live IAM simulation (AC-INF-004, AC-SEC-008).
 - qa: retained production proof of fence state and TOTP with `scripts/totp-production-proof.sh totp-prod-enabled` (AC-SEC-007, AC-SEC-009); Cloudflare edge probe (AC-OPS-015, AC-INF-002); direct-IP and spoofed-header probe (AC-INF-001, AC-OPS-002).
