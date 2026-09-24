@@ -1,0 +1,37 @@
+name: Baselines
+
+# Produces review-only renderer baseline candidates in the pinned browser
+# image, for a human to inspect and commit. Manual dispatch only: this
+# workflow never runs on push or pull_request, never commits or pushes, and
+# holds no write token, so it cannot itself change a baseline that `ci.yml`'s
+# web-e2e job (make web-e2e, compare only) would then trust unreviewed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-e2e-update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Ignore local E2E result roots
+        run: |
+          grep -qxF '/.dev/' .git/info/exclude ||
+            printf '%s\n' '/.dev/' >> .git/info/exclude
+      - name: Generate candidate baselines
+        env:
+          WEB_E2E_RUN_ID: baselines-${{ github.run_id }}-${{ github.run_attempt }}
+        run: make web-e2e-update
+      - name: Upload candidate baselines
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: candidate-baselines
+          path: .dev/web-e2e-results/*/*/update/candidate-baselines/
+          if-no-files-found: error
+          retention-days: 14
+          # .dev is a dot-directory; the upload action excludes those by
+          # default and would silently archive nothing without this.
+          include-hidden-files: true

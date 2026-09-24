@@ -388,8 +388,12 @@ rules. The ones most often broken:
   justified exception needs both, with reasons. CI enforces errcheck, shadow,
   and US-spelling misspell.
 - Go's `filepath.Glob` negates a class with `[^x]`, not `[!x]`.
-- `make web-e2e-update` refuses a dirty tree; run it in a clean worktree at the
-  commit whose baselines you need.
+- Update pixel baselines by dispatching the `Baselines` workflow
+  (`.github/workflows/baselines.yml`, manual dispatch only) on the branch,
+  downloading its `candidate-baselines` artifact, copying the files into
+  place, and committing. It runs `make web-e2e-update` on a clean hosted
+  checkout (the target itself still refuses a dirty tree) and never commits
+  or pushes.
 - `make docs-lint` runs Prettier over every Markdown file, ignored ones too.
 - `deploy/web.Dockerfile` copies named paths only. When the web app starts
   importing a new directory, add it there too; CI builds from the full checkout
