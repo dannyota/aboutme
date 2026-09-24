@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: "17 3 * * 1" # Monday 03:17 UTC, off-peak
   workflow_dispatch:
+  # Temporary: proves this workflow on its own branch before the schedule can
+  # reach it (a scheduled workflow only fires once its file is on the default
+  # branch). Removed in the next commit once the run is confirmed.
+  push:
+    branches: [security/ci-gates]
 
 permissions:
   contents: read
