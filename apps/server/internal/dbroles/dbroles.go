@@ -12,9 +12,13 @@ import (
 	"time"
 )
 
-// LockID is the advisory lock key that serializes db-setup runs on one
+// LockID is the advisory lock key that serializes catalog writes on one
 // database: the first 8 bytes of sha256("aboutme.db-setup.v1") as a
-// big-endian int64 (TestLockIDMatchesNamespaceDigest).
+// big-endian int64 (TestLockIDMatchesNamespaceDigest). Ensure and
+// SetLoginVerifiers both take it, because PostgreSQL advisory locks are
+// scoped to the database a session is connected to: it only serializes role
+// and pg_database ACL writes that db-setup and its tests make through one
+// database, never across databases.
 const LockID int64 = 1229627785684121947
 
 var (
@@ -183,7 +187,14 @@ func (s sqlCatalog) databaseAndUser(ctx context.Context) (string, string, error)
 	return database, user, err
 }
 func (s sqlCatalog) lock(ctx context.Context) error {
-	_, err := s.tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, LockID)
+	return lockCatalog(ctx, s.tx)
+}
+
+// lockCatalog takes the shared LockID advisory lock for the lifetime of tx,
+// serializing this transaction's role and ACL writes against any other
+// db-setup transaction on the same database.
+func lockCatalog(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock($1)`, LockID)
 	return err
 }
 func (s sqlCatalog) readRoles(ctx context.Context) (map[string]role, error) {
