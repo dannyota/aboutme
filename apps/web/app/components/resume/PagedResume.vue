@@ -393,12 +393,18 @@ export default defineComponent({
       const root = measurementRoot.value;
       if (!active || root === null || observer === undefined) return;
       observer.disconnect();
+      // No seeded sizes: getBoundingClientRect() (border box, in the
+      // zoomed visual frame under a CSS zoom ancestor) is not comparable
+      // to the ResizeObserver callback's entry.contentRect (content box,
+      // in the unzoomed layout frame). Seeding from the former made every
+      // element's first delivery look like a change under zoom, which
+      // rescheduled forever. Each element's own first delivery below sets
+      // its baseline instead, so every later comparison is contentRect
+      // against contentRect.
       observedSizes = new WeakMap<Element, string>();
       for (const element of root.querySelectorAll(
         '[data-pagination-header], [data-pagination-block-index]',
       )) {
-        const rect = element.getBoundingClientRect();
-        observedSizes.set(element, `${rect.width}:${rect.height}`);
         observer.observe(element);
       }
     };
@@ -457,11 +463,14 @@ export default defineComponent({
       const root = measurementRoot.value;
       if (root === null) return;
       observer = new ResizeObserver((entries) => {
+        // Every newly observed element delivers once on the next frame
+        // regardless of whether its size changed (spec-guaranteed), so an
+        // element with no prior baseline is seeding, not changing.
         const changed = entries.some((entry) => {
           const size = `${entry.contentRect.width}:${entry.contentRect.height}`;
-          if (observedSizes.get(entry.target) === size) return false;
+          const previous = observedSizes.get(entry.target);
           observedSizes.set(entry.target, size);
-          return true;
+          return previous !== undefined && previous !== size;
         });
         if (changed) schedule();
       });

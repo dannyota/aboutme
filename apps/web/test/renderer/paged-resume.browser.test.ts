@@ -208,4 +208,83 @@ describe('PagedResume browser measurement', () => {
     ).toHaveLength(2);
     wrapper.unmount();
   });
+
+  it('settles under zoom and reacts to a real resize', async () => {
+    const fontEvents = new EventTarget();
+    const load = vi.fn(async () => [{} as FontFace]);
+    Object.assign(fontEvents, { load, ready: Promise.resolve() });
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: fontEvents,
+    });
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      (callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      },
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function () {
+        return layoutRect(
+          this.dataset.paginationBlockIndex === undefined ? 40 : 20,
+        );
+      });
+
+    const wrapper = mount(ResumeDocument, {
+      attachTo: document.body,
+      props: {
+        document: structuredClone(fixture),
+        context: { lng: 'en', mode: 'paged' },
+      },
+    });
+    await flushPromises();
+    expect(wrapper.attributes('data-pagination-settled')).toBe('true');
+
+    const header = wrapper.get(
+      '.pagination-measurement [data-pagination-header]',
+    ).element;
+    // A CSS zoom ancestor makes the border box (what bindObserver used to
+    // seed from) read differently than the content box the ResizeObserver
+    // callback reports. Every newly observed element delivers once
+    // regardless of a real change, so this first delivery for `header`
+    // carries a "zoomed" content box unlike its own border box below.
+    vi.spyOn(header, 'getBoundingClientRect')
+      .mockReturnValue(layoutRect(33.6));
+    resizeCallback?.(
+      [
+        {
+          target: header,
+          contentRect: { width: 100, height: 40 },
+        } as ResizeObserverEntry,
+      ],
+      {} as ResizeObserver,
+    );
+    await nextTick();
+    expect(frames).toHaveLength(0);
+    expect(wrapper.attributes('data-pagination-settled')).toBe('true');
+
+    // A later, real size change on the same element still re-paginates.
+    resizeCallback?.(
+      [
+        {
+          target: header,
+          contentRect: { width: 100, height: 60 },
+        } as ResizeObserverEntry,
+      ],
+      {} as ResizeObserver,
+    );
+    expect(frames).toHaveLength(1);
+    await nextTick();
+    expect(wrapper.attributes('data-pagination-settled')).toBeUndefined();
+
+    frames.shift()?.(0);
+    await flushPromises();
+    expect(wrapper.attributes('data-pagination-settled')).toBe('true');
+
+    wrapper.unmount();
+  });
 });
