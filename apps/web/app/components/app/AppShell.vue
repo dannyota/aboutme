@@ -49,6 +49,20 @@ const onResumesPath = computed(() => route.path.startsWith('/app/resumes'));
 const onSettingsPath = computed(
   () => route.path.startsWith('/app/settings/sessions'),
 );
+// The gradient CTA reads "Create your resume" on the pages that sell the
+// product; every other route (account flows, settings, authorize) keeps the
+// generic "Create account" label (DESIGN.md; ADR 0050).
+const TEMPLATE_PAGE_PATH = /^\/templates\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
+const onMarketingPath = computed(() => (
+  route.path === '/'
+  || route.path === '/templates'
+  || route.path === '/terms'
+  || route.path === '/privacy'
+  || TEMPLATE_PAGE_PATH.test(route.path)
+));
+const ctaLabel = computed(() => (onMarketingPath.value
+  ? copy.value.createResume
+  : copy.value.createAccount));
 const linkClass = cn(
   'rounded-md px-2.5 py-1.5 text-sm text-muted-foreground',
   'transition-colors hover:bg-accent hover:text-accent-foreground',
@@ -99,25 +113,15 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
           to="/app/settings/sessions"
         >{{ copy.settings }}</NuxtLink>
       </template>
+      <a
+        v-else
+        :class="cn(linkClass, 'max-[56rem]:hidden')"
+        data-testid="app-shell-open-source"
+        href="https://github.com/dannyota/aboutme"
+        rel="noopener noreferrer"
+      >{{ copy.openSource }}</a>
     </nav>
     <div class="ml-auto flex items-center gap-2">
-      <template v-if="!signedIn">
-        <!-- Settings and consent have no in-page account links on phones. -->
-        <NuxtLink
-          :class="cn(
-            buttonVariants({ variant: 'ghost', size: 'sm' }),
-            hidePhoneAccountLinks && 'max-sm:hidden',
-          )"
-          :to="signInLink"
-        >{{ copy.signIn }}</NuxtLink>
-        <NuxtLink
-          :class="cn(
-            buttonVariants({ variant: 'secondary', size: 'sm' }),
-            hidePhoneAccountLinks && 'max-sm:hidden',
-          )"
-          :to="createAccountLink"
-        >{{ copy.createAccount }}</NuxtLink>
-      </template>
       <LocaleToggle
         v-if="localized"
         :label="copy.localeLabel"
@@ -129,6 +133,23 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
         v-else
         :locale="shellLocale"
       />
+      <template v-if="!signedIn">
+        <!-- Settings and consent have no in-page account links on phones. -->
+        <NuxtLink
+          :class="cn(
+            buttonVariants({ variant: 'ghost', size: 'sm' }),
+            hidePhoneAccountLinks && 'max-[44rem]:hidden',
+          )"
+          :to="signInLink"
+        >{{ copy.signIn }}</NuxtLink>
+        <NuxtLink
+          :class="cn(
+            buttonVariants({ variant: 'default', size: 'sm' }),
+            hidePhoneAccountLinks && 'max-[44rem]:hidden',
+          )"
+          :to="createAccountLink"
+        >{{ ctaLabel }}</NuxtLink>
+      </template>
     </div>
   </header>
 </template>
