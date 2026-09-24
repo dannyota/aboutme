@@ -52,9 +52,8 @@ The renderer waits for both process exit and valid completion proof on every
 result path, including version checks, readiness, startup failure and rendering.
 A locally failed supervisor start proves no child was created. Once the
 supervisor starts, EOF, malformed proof, panic, OOM kill or unexpected exit does
-not prove cleanup. Render ownership remains held when proof is missing. Fleet
-claims can then be reclaimed only through the existing exact EC2 termination
-rule; the renderer cannot turn a helper crash into graceful completion.
+not prove cleanup. Render ownership remains held when proof is missing; the
+renderer cannot turn a helper crash into graceful completion.
 
 ## Required proof
 

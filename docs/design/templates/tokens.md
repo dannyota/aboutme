@@ -1,7 +1,5 @@
 # Template design tokens
 
-Status: **Approved v2** (2026-08-12).
-
 The complete token set a template may control, who owns each token, and the
 accessibility floor every template satisfies regardless of what the user picks.
 
@@ -68,37 +66,26 @@ schema's, not this document's.
 | `pageFormat`                    | enum: `a4`, `letter`                            | `a4`                               | user, preset |
 | `dateFormat`                    | enum: `MM/YYYY`, `Mon YYYY`, `YYYY`             | `MM/YYYY`                          | user, preset |
 
-`minimal.json` is the repository's baseline document, not a declared default; no
-canonical default customization exists in code yet. A preset therefore states
-the 15 required author-controlled leaves explicitly, adds its required
-`layout.placement` rule, and never contains the 2 derived `layout.sections`
-arrays. `applyTemplate` computes those arrays. This accounts for all 17 required
-document leaves without inventing preset-owned placement arrays.
+`minimal.json` is a baseline document, not a declared default. A preset states
+the 15 required author-controlled leaves and its `layout.placement` rule, and
+never contains the two derived `layout.sections` arrays, which `applyTemplate`
+computes.
 
-The ten optional leaves work differently. The
-[document-version rule](../data.md#document-versions) requires new fields to
-start optional so adding one does not force an all-document migration.
-`customization` therefore still has exactly the eight required keys
-`contract.md` §1 names, and documents written before the optional fields existed
-stay valid unchanged. A preset may omit any of the eight, and omission is not a
-gap to be filled: the renderer applies the fallback in the "Baseline" column
-above at the point of use, and nothing writes that fallback back into the
-document. Absence means "never entered," so the editor can distinguish a user
-who has never opened the header panel from one who chose `align: "left"`, even
-though the two render identically. `contract.md` §6 records the same
-absent-versus-cleared rule for text fields.
+New fields start optional under the
+[document-version rule](../data.md#document-versions), so `customization` keeps
+exactly the eight required keys of `contract.md` §1. A preset may omit any
+optional leaf. The renderer applies the "Baseline" fallback at the point of use
+and never writes it back, so absence still means "never entered" (`contract.md`
+§6).
 
 Two structures have grouped requirements. `spacing.pageMargin` requires both `x`
 and `y` once present. `customization.header` requires `align`, `detailsLayout`,
 and `iconStyle` together, while `photoPosition` remains optional. A margin or a
 header missing any required child is invalid rather than partially defaulted.
 
-`customization.header` is the **resume header** — the top block of name,
-headline, photo, and contact details (`contract.md` §5.1).
-`customization.heading` is the **section heading** — a section's `displayName`
-and its rule (`contract.md` §5.3). The names are one letter apart and mean
-different blocks of the page; both schema descriptions say so, and so does §3.4
-below.
+`customization.header` is the **resume header**: name, headline, photo, and
+contact details (`contract.md` §5.1). `customization.heading` is the **section
+heading**: a section's `displayName` and its rule (`contract.md` §5.3).
 
 `layout.sections` is marked derived because `applyTemplate` computes it from the
 document's content keys (ADR 0008) and only `PATCH /resumes/{id}/structure` may
@@ -139,7 +126,7 @@ weights, but catalog admission remains license-only.
 
 ### 3.3 Section heading treatment
 
-`heading.style` — the per-**section** heading, not the resume header — maps to:
+`heading.style`, the per-**section** heading, maps to:
 
 | Value       | Transform                    | Letter spacing |
 | ----------- | ---------------------------- | -------------- |
@@ -161,8 +148,8 @@ snapshot determinism (`print.md` §7).
 
 `customization.header` governs the top block only: photo, `fullName`,
 `headline`, then `personalDetails.details` in array order (`contract.md` §5.1).
-It is presentation, never content — no value here adds, removes, reorders, or
-reveals a detail, and `isHidden` still wins in every combination.
+It is presentation, never content: no value adds, removes, reorders, or reveals
+a detail, and `isHidden` always wins.
 
 | Token                  | Value     | Effect                                                                                 |
 | ---------------------- | --------- | -------------------------------------------------------------------------------------- |
@@ -176,10 +163,9 @@ reveals a detail, and `isHidden` still wins in every combination.
 |                        | `left`    | the photo sits left of the text block, which `header.align` aligns                     |
 |                        | `right`   | the photo sits right of the text block, which `header.align` aligns                    |
 
-Absent `header` renders `left` / `inline` / `outline` / `top`, which is what
-every document rendered before the token existed. A side photo keeps
-`--photo-size` and is vertically centered against the text block (`contract.md`
-§5.1).
+Absent `header` renders `left` / `inline` / `outline` / `top`. A side photo
+keeps `--photo-size` and is vertically centered against the text block
+(`contract.md` §5.1).
 
 With `outline`, a typed detail's icon stands in for its default label, which is
 omitted. A non-empty user `label` and a `custom` detail's label still render,
@@ -210,7 +196,6 @@ template:
 Contact icons take `--color-meta`, which holds 4.5:1 against the header surface,
 so the value leads and the icon still prints.
 
-Two boundaries this token must not cross. `header.iconStyle` covers the header's
-contact icons only — it never suppresses a section's `iconKey`, which every
-template renders (`limitations.md` §9.5). And `align: "center"` centres the
-block, not the page: it changes no margin and no column ratio.
+`header.iconStyle` covers only the header's contact icons and never suppresses a
+section's `iconKey` (`limitations.md` §9.5). `align: "center"` centres the
+block, not the page, and changes no margin or column ratio.

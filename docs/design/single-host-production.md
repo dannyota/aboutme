@@ -1,10 +1,10 @@
 # Single-host production
 
-Status: Accepted under
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). This
-document states how the first release runs at `https://aboutme.vn`. It narrows
-the [deployment design](deployment.md) for that release; trust boundaries not
-named here are unchanged.
+Production runs at `https://aboutme.vn` on one host under
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). This page
+narrows the [deployment design](deployment.md); trust boundaries not named here
+are unchanged. The [production runbook](../runbooks/production.md) holds the
+commands.
 
 ## Request path
 
@@ -74,8 +74,9 @@ through SSM.
 | `web` (service)         | bridge  | Nuxt       | Always                                               |
 | `maintenance` (service) | host    | Caddy      | Deploy and recovery only; desired count zero at rest |
 | `migrate`               | bridge  | server     | Normal deploy, before `app` starts                   |
-| `db-admin`              | bridge  | server     | First deploy only                                    |
+| `db-setup`              | bridge  | server     | First deploy only                                    |
 | `jobs`                  | bridge  | server     | EventBridge Scheduler                                |
+| `totp-reencrypt`        | bridge  | server     | TOTP key rotation only                               |
 
 The runtime trust boundaries are:
 
@@ -141,7 +142,7 @@ its password in Secrets Manager. It is not a superuser.
 ```mermaid
 sequenceDiagram
   participant D as deploy.sh
-  participant A as db-admin task (as aboutme)
+  participant A as db-setup task (as aboutme)
   participant M as migrate (as aboutme_migrator)
   participant S as app (as aboutme_app)
   participant P as RDS
@@ -158,16 +159,11 @@ sequenceDiagram
 ```
 
 - `db-setup` (`cmd/db-setup`) is one idempotent command run as the RDS master
-  user `aboutme`, which owns the database but is not a superuser: it creates any
-  missing fixed role, fails closed on attribute or membership drift in an
-  existing one, applies database and schema grants, and, when both
-  `MIGRATOR_PASSWORD` and `APP_PASSWORD` are set, stores their SCRAM-SHA-256
-  verifiers so no plaintext password reaches PostgreSQL logs.
-- Every `db-setup` run re-applies the database and schema grants; a run with
-  both `MIGRATOR_PASSWORD` and `APP_PASSWORD` set rewrites both SCRAM verifiers.
-  It never weakens an existing grant, and it still fails closed on role
-  attribute or membership drift. The deploy script runs it only with
-  `--first-deploy`.
+  user. It creates any missing fixed role, fails closed on attribute or
+  membership drift in an existing one, and re-applies database and schema grants
+  without weakening one. When both `MIGRATOR_PASSWORD` and `APP_PASSWORD` are
+  set, it stores their SCRAM-SHA-256 verifiers, so no plaintext password reaches
+  PostgreSQL logs. The deploy script runs it only with `--first-deploy`.
 - `migrate` always runs as `aboutme_migrator` (see
   [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)): its
   `DATABASE_URL` login already is that role, and the migration runner verifies
@@ -179,13 +175,15 @@ Secret values live in SSM Parameter Store SecureString under `/aboutme/prod/`
 with the AWS-managed key. ECS injects them as container secrets. They never
 enter images, Git, logs or OpenTofu state.
 
-| Value                                         | Reader execution role     |
-| --------------------------------------------- | ------------------------- |
-| RDS master secret (Secrets Manager)           | `db-admin`                |
-| `aboutme_migrator` password                   | `db-admin`, `migrate`     |
-| `aboutme_app` password                        | `db-admin`, `app`, `jobs` |
-| Auth email key and key ID, password-rate HMAC | `app`                     |
-| Origin CA private key                         | `app`, `maintenance`      |
+| Value                                         | Reader execution role                 |
+| --------------------------------------------- | ------------------------------------- |
+| RDS master secret (Secrets Manager)           | `db-admin` (used by `db-setup`)       |
+| `aboutme_migrator` password                   | `db-admin`, `migrate`                 |
+| `aboutme_app` password                        | `db-admin`, `app`, `jobs`             |
+| Auth email key and key ID, password-rate HMAC | `app`                                 |
+| Google client ID and secret                   | `app`                                 |
+| TOTP keys `totp/key-a` and `totp/key-b`       | `app` (also used by `totp-reencrypt`) |
+| Origin CA key and certificate, origin-pull CA | `app`, `maintenance`                  |
 
 `deploy/aws/scripts/secrets.sh` generates each password and key with `openssl`,
 writes it straight to SSM, and never overwrites or prints one. OpenTofu
@@ -203,8 +201,7 @@ directory and deletes it at the end:
 
 The `app` task role may get, put, list and delete objects in the media bucket
 and send mail from the verified SES identity. The `jobs` task role has the same
-bucket access and no mail access. `migrate` and `db-admin` task roles grant
-nothing.
+bucket access and no mail access. `migrate` and `db-setup` have no task role.
 
 The `maintenance` task has no task role. Its execution role can write Caddy logs
 and read only the origin certificate, origin private key, and origin-pull CA
@@ -213,8 +210,10 @@ parameters needed to terminate production TLS.
 Non-secret configuration is plain task definition values: `ENV=prod`,
 `PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
 from the `provider_login_enabled` variable (`false` or `google`),
-`MEDIA_BACKEND=s3` without static keys, and the SES settings. When Google is on,
-its client ID and secret are task secrets from SSM.
+`MEDIA_BACKEND=s3` without static keys, the SES settings,
+`PASSWORD_REGISTRATION_ENABLED`, and both enrollment flags. The TOTP key slot
+variables choose which parameters the app receives as `TOTP_ACTIVE_KEY` and
+`TOTP_PREVIOUS_KEY`.
 
 ## Release and deploy
 
@@ -230,14 +229,13 @@ starts.
 1. Resolve the tag to digests. Require the tag on `main` with green CI.
 2. Take an RDS snapshot named for the tag, tagged
    `aboutme:created-by=deploy.sh`, and wait for it.
-3. Register new task definition revisions by digest. A rollback keeps the
-   current maintenance Caddy image so a tag from before maintenance mode can
-   still serve the handoff page.
+3. Register new task definition revisions by digest, under the
+   [release fence](passkey-release-fence.md).
 4. Disable the job schedules, scale `app` to zero, and prove its tasks stopped.
 5. Start `maintenance` and require the Cloudflare path to return its marked 503
    response before any database task starts.
-6. With `--first-deploy`, run the `db-admin` `db-setup` task. Run `migrate` for
-   a normal deploy and require exit 0.
+6. With `--first-deploy`, run `db-setup`. Otherwise run `migrate` and require
+   exit 0.
 7. Update `web`, then stop `maintenance` and prove its tasks stopped before
    requesting `app` to start.
 8. Wait for `app` steady state, then re-enable the job schedules at the new
@@ -268,24 +266,13 @@ enablement fails; the script reports each schedule that still needs repair. A
 failed first deploy leaves maintenance up because no prior app exists.
 
 `deploy.sh --rollback <tag>` redeploys earlier server, web, and app digests
-without migrating, through the same maintenance handoff. It retains the current
-maintenance-capable Caddy image. Rollback is safe only when the failed release
-applied no migration, because this script does not run the prior-digest
-compatibility test from the deployment design. After a migration, recovery is a
-forward fix or a point-in-time restore.
+without migrating, through the same handoff, and keeps the current maintenance
+Caddy image. It is safe only when the failed release applied no migration;
+otherwise recovery is a forward fix or a point-in-time restore.
 
-`apps/server/migrations/.uat-baseline` freezes the existing migrations; only new
-forward migrations may be added, per
-[ADR 0020](../adr/0020-uat-migration-baseline.md) and
-[ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md).
-
-OpenTofu owns infrastructure and first task definitions and ignores later
-revisions on the services.
-
-Deploy duration depends on ECS task placement and image pulls. Maintenance
-serves its 503 response between successful handoffs. An exclusive host-port 443
-exchange can refuse connections or TLS until ECS releases and reacquires the
-port; the final v0.3.30 handoff gap measured about one minute. A monthly SSM
+OpenTofu owns infrastructure and the first task definitions and ignores later
+service revisions. The exclusive host-port 443 exchange can refuse connections
+for about a minute while ECS releases and reacquires the port. A monthly SSM
 maintenance window applies Bottlerocket updates with
 `apiclient update apply --reboot`.
 
@@ -304,15 +291,16 @@ the one release snapshot taken before tagging began.
 
 All alarms notify one SNS topic that emails the owner.
 
-| Signal   | Mechanism                                                                   |
-| -------- | --------------------------------------------------------------------------- |
-| Logs     | awslogs to CloudWatch Logs, 180-day retention                               |
-| App down | Stopped-task events for `app` and `web`; Route 53 health check on `/readyz` |
-| Host     | EC2 status check with auto-recovery; ECS CPU and memory                     |
-| Database | RDS CPU, credit balance, free storage and connections                       |
-| Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures           |
-| Mail     | SES bounce and complaint alarms from the existing email stack               |
-| Spend    | Budget filtered to `Project=aboutme`, managed outside this repository       |
+| Signal   | Mechanism                                                                      |
+| -------- | ------------------------------------------------------------------------------ |
+| Logs     | awslogs to CloudWatch Logs, 180-day retention                                  |
+| App down | Stopped-task events for `app` and `web`; Route 53 health check on `/readyz`    |
+| Host     | EC2 status check with auto-recovery; ECS CPU and memory                        |
+| Database | RDS CPU, credit balance, free storage and connections                          |
+| Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures              |
+| TOTP     | Log metric filter on `totp_unavailable`, alarm `aboutme-prod-totp-unavailable` |
+| Mail     | SES bounce and complaint alarms from the existing email stack                  |
+| Spend    | Budget filtered to `Project=aboutme`, managed outside this repository          |
 
 Expected monthly cost is about $45–55: EC2 $15.48, RDS $18.25 plus $2.76
 storage, root disk $1.92, Elastic IP $3.65, the state KMS key $1, and a few
@@ -336,8 +324,7 @@ dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
 - Public CI runs `tofu fmt -check` and `tofu validate` without cloud
   credentials. No workflow deploys.
 
-## Launch checks
+## Before the public announcement
 
-Before the first deploy: the tests pass, the image smoke passes, and `tofu plan`
-is reviewed. Before announcing the site: one restore drill from a snapshot to a
-temporary instance, SES production access, and live privacy and terms pages.
+One restore drill from a snapshot to a temporary instance, SES production
+access, and live privacy and terms pages.

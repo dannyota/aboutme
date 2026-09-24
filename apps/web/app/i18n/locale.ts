@@ -1,6 +1,6 @@
 // Site languages. The homepage, account pages, the Privacy Policy and Terms,
 // template gallery, resume workspace, settings, and authorization are
-// bilingual and default to Vietnamese (docs/design/account-localization.md).
+// bilingual and default to Vietnamese (docs/design/localization.md).
 
 export const locales = ['vi', 'en'] as const;
 

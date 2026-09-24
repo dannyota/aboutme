@@ -1,11 +1,10 @@
 # Authenticator-app key management
 
-Status: Accepted for the authenticator-app release with the
-[authenticator-app contract](totp-second-factor-contract.md), which owns every
-other TOTP rule.
-
-This document fixes how TOTP secrets are sealed, how the key ring is configured
-and rotated, and how a key failure stays confined to TOTP.
+This design fixes how TOTP secrets are sealed, how the key ring is configured
+and rotated, and how a key failure stays confined to TOTP. The
+[authenticator-app contract](totp-second-factor-contract.md) owns every other
+TOTP rule, and the [TOTP key runbook](../runbooks/totp-keys.md) holds the
+operator commands.
 
 ## Sealing
 
@@ -50,6 +49,8 @@ exact slot ARNs. Scheduled jobs receive none. `secrets.sh totp-key <a|b>` writes
 a fresh random value without printing it and refuses a slot that the running app
 task definition names.
 
+## Rotation
+
 The one-shot path is `/usr/local/bin/server totp-key-reencrypt` in task family
 `aboutme-prod-totp-reencrypt`, which uses the app execution and task roles and
 the same injection. The
@@ -57,8 +58,6 @@ the same injection. The
 defines its `totp_reencrypt` operation. New credentials, enrollments, and
 replacements use the active key. Verification under the previous key re-encrypts
 the credential under the active key in the same transaction.
-
-## Rotation
 
 Rotation starts only when the running app task definition names no previous slot
 and a re-encryption run reports zero rows off the active key. The steps below

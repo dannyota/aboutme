@@ -4,24 +4,15 @@ Each owning component enforces its rows. Production measurements repeat latency
 and resource checks on the real host. A hard-budget breach fails the gate;
 changing a number requires a reviewed change with evidence.
 
-## AWS operating budget
+## Operating budget
 
-Production runs about $45–55 a month before tax, per
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). Spend
-alerts are managed outside this repository and are delayed, not a hard cap. The
-[single-host design](single-host-production.md#monitoring-and-cost) itemizes the
-estimate from [recorded prices](../research/aws-cost/pricing.csv).
-
-A later second replica must keep per-account and per-IP limits, revocation
-deadlines, and render and media admission bounds. The
-[scaling contract](scaling/README.md) then fixes 60 of at least 100 RDS
-connections: 24 for two app pools, five four-connection auxiliary allowances,
-and 16 for administration. Shared rate policies use database time, preserve debt
-and overflow, and retain at most 10,000 private keys per enabled partition. Two
-outer API chains share one 300/IP/minute policy. The
-[policy catalog](scaling/policy-catalog.md) fixes their identities and scopes.
-Callers use these shared policies only after the caller integration that ADR
-0036 defers.
+Production costs about $45–55 a month before tax
+([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)); the
+[single-host design](single-host-production.md#monitoring-and-cost) itemizes it.
+Spend alerts live outside this repository and are delayed, not a cap. A second
+replica must keep every per-account and per-IP limit, revocation deadline, and
+admission bound; the [scaling contract](scaling/README.md) and
+[policy catalog](scaling/policy-catalog.md) fix its shared pools and policies.
 
 ## Runtime bounds
 
@@ -172,196 +163,49 @@ Callers use these shared policies only after the caller integration that ADR
 | OAuth request bodies                            | ≤ 4,096 bytes                                       | OAuth and MCP routes                                     |
 | Idle-client GC                                  | 24 h idle; ≤ 200 rows/sweep                         | OAuth server                                             |
 
-**Document and idempotency rows.** The
-[data design](data.md#bounds-and-invariants) owns the 512 KiB document limit.
-Title length is enforced in both PostgreSQL and the aggregate validator. The
-`lng` row is the database's coarse stored-length bound. The resume HTTP boundary
-validates and canonicalizes non-empty BCP 47 tags, then rejects a canonical form
-over 35 characters before persistence; read projection maps invalid or overlong
-legacy data to `und`. The 24-hour idempotency lifetime bounds the replay window.
-Request-path cleanup removes at most 200 rows for the caller in deterministic
-oldest-first order without making one request pay for an unbounded backlog. A
-per-user usage row caps every retained record and its stored body and approved
-deterministic headers, so an expired backlog cannot escape the storage bound.
-The hourly privacy sweep is the retention guarantee for inactive users; it
-deletes at most 10,000 expired rows per run in 1,000-row pages and alarms on
-backlog or age. [ADR 0016](../adr/0016-transactional-idempotency.md) owns
-mutation and replay-record atomicity.
+Notes on rows whose reason is not obvious:
 
-**Photo and resume-route rows.** The photo part remains at exactly 2 MiB; the
-request gets 64 KiB of multipart framing allowance. Header inspection precedes
-full decode. Each source edge is at most 8,192 pixels and the overflow-safe
-pixel product is at most 16,777,216. That admits common 4,032×3,024 photos while
-bounding an eight-byte-per-pixel working image at 128 MiB. One task-wide permit
-and a measured 192 MiB peak-RSS delta keep normalization within the 512 MiB
-whole-task limit. Opaque output is at most 2,048 pixels on its longest edge;
-alpha output is at most 1,024. Both remain at or below 2 MiB after canonical
-encoding.
-
-The body-read and object-write limits have cancellable I/O boundaries and are
-request deadlines. The in-process image decoders are synchronous and have no
-general cancellation boundary. Five seconds is therefore measured, not a timer
-that returns while a decoder still runs. The media intake applies it
-provisionally to the frozen hostile and boundary image corpus on a pinned local
-controlled-cgroup profile. A production run repeats the same corpus on the ARM64
-Graviton host and 512 MiB task cgroup as a launch gate. A request returns only
-after normalization stops and releases the task-wide permit. A failing fixture
-blocks launch, or requires a reviewed isolated-worker design; it never creates
-detached work.
-
-Reads at 600/min and writes at 240/min permit several editor tabs above the
-expected one-second autosave cadence without making the limit inert. Photo
-uploads at 20/h contain binary abuse without blocking normal crop and
-replacement work. All three route policies use the account-and-client-IP
-composite key.
-
-The global API limiter permits 300 requests per client IP each minute. Each
-independent limiter instance keeps at most 10,000 ordinary keys and applies the
-shared overflow behavior from ADR 0018. Anonymous login starts add a
-30-per-minute client-IP policy. Authenticated provider-link and reauthentication
-starts use a separate 30-per-minute `(account, client IP)` policy. Resume read,
-write, and upload policies are also separate instances. Each start reaps at most
-200 expired transactions. Structure and customization requests accept at most
-100 ordered operations each; the 256 KiB transport ceiling remains a separate
-byte bound.
-
-Account export allows three 512 KiB documents and three 2 MiB photos after
-base64 expansion within a 12 MiB attachment. Its five-per-minute limit is
-separate from account deletion's five-per-minute limit. Both use the existing
-bounded account-and-client-IP limiter. Deletion may rebuild a stale public
-transition plan at most three times; each drain retains the existing shared
-five-second deadline.
-
-Daily retention uses separate 10,000-row run ceilings for session metadata,
-lifecycle audits and completed media jobs. Expiry uses 90 days from session
-creation and 180 days from event/completion. Existing OAuth cleanup keeps its
-200-row sweep ceiling. All one-shot job commands have a 30-minute run deadline
-and join their work after cancellation. Media calls have five-second deadlines
-inside 30-second claims. Queue retries start at one minute and double up to six
-hours. Orphan retries wait one and two seconds before their second and third
-attempts; each attempt is separately bounded.
-
-**Public render and revocation rows.** `canonicalOrigin` is one normalized ASCII
-`http` or `https` origin with no userinfo, non-root path, query, or fragment.
-Production requires `https`; local development may use configured `http`. The
-532,480-byte request bound is the 524,288-byte document ceiling plus an
-8,192-byte envelope. A boundary test must serialize the largest valid canonical
-document with the exact 512-byte origin and prove the closed request fits. The
-projection contains one document-shaped value, and its only possible growth is
-replacement of one bounded photo key by its authorized absolute URL.
-
-The 2,097,152-byte HTML bound is provisional until minimal, full, and 512 KiB
-renderer fixtures pass beneath it without truncation. A breach blocks the change
-or changes the budget with measured evidence. The direct-render five-second hard
-deadline cancels and joins Nuxt work; it never returns while detached rendering
-continues. The dedicated slug limit applies only when a requested slug differs
-from the stored value. The existing shared five-second revocation bound remains
-one wall-clock deadline across all affected fence drains and fails before the
-mutation transaction.
-
-An orphan object is never public, but retained bytes still need a bound. The
-weekly sweep ignores objects younger than 48 hours, reads at most 1,000 keys per
-page and 10,000 per run, and deletes with concurrency four. It retries each
-object up to three times with capped exponential backoff, exposes backlog and
-failure metrics, and supports dry-run mode. A backlog at the run ceiling alerts
-and continues from a stored cursor on the next run.
-
-Reference-removal transactions enqueue exact-key deletion jobs. The hourly
-worker reads at most 200 jobs per page and 2,000 per run with concurrency four.
-It makes one delete attempt per due job per run and doubles retry delay up to
-six hours. Already-absent objects complete successfully. Jobs older than 24
-hours alert and remain queued. The weekly sweep reconciles objects against both
-live references and outstanding jobs; it is not the normal deletion path.
-
-**Password authentication rows.** The password route body is 4,096 bytes so
-strict JSON, token, and hash inputs all fit with headroom. The canonical email
-accepts 5–254 ASCII bytes and stores lowercase; the migration preflight proves
-every existing row already matches. A password is rejected above 1,024 UTF-8
-bytes before normalization, then must be 15–128 code points after NFC. Argon2id
-uses 64 MiB, 3 iterations, and parallelism 1 at or above the OWASP minimum; the
-release gate benchmarks it on the deployment CPU. Two hashes run and sixteen
-wait; the seventeenth waiter fails closed, and unknown/provider-only login uses
-the same admitted dummy verification.
-
-The bundled blocklist is the pinned NCSC 100k list normalized to sorted SHA-256
-digests; runtime lookup compares digests only. HIBP sends the first five hex
-characters of the SHA-1 digest with padding, caches at most 256 prefixes and 16
-MiB of entries for 24 hours, and fails closed when needed but unavailable.
-Tokens are 32 random bytes stored only as SHA-256 digests; registration expires
-in 24 hours and reset in 30 minutes.
-
-The outbox plaintext is at most 4,096 bytes and encrypts to at most 4,112 bytes
-with AES-256-GCM under a one-active-plus-one-previous key ring. The worker polls
-once per second, claims at most 10 jobs, sends at most two at once with a
-10-second deadline, leases for 30 seconds, retries temporary failures with
-jittered exponential backoff, and marks terminal on expiry or the eighth failed
-attempt. The local capture retains at most 50 messages and 256 KiB total,
-rejects a message over 16 KiB, and binds loopback on the fixed native and HTTPS
-ports. Password rate policies share the 10,000-key bounded store and add the
-login, failure, register/forgot, token, and account-mutation budgets.
-
-**Passkey second-factor rows.** A pending authentication admits five total
-verification failures across methods, then is consumed. Account and IP limits
-apply after primary authentication, while the outer IP limit bounds distributed
-account probes. WebAuthn sizes are decoded-byte ceilings checked before CBOR,
-COSE, or signature work. The 32 KiB route body includes base64url expansion and
-JSON overhead. Five credentials bound every options response. Recovery codes
-carry enough random entropy for digest-only storage; display encoding does not
-reduce that entropy. Each admitted pending or ceremony creation runs both
-bounded expiry cleanups. The 10-per-hour factor-management limit, shared by
-passkey registration options, completion, removal, regeneration, disabled
-completion, and TOTP start, completion, and removal, is what keeps that cleanup
-argument true for a registration ceremony: because the route is rate-limited by
-account and IP, each admitted request can still delete more expired rows than it
-adds. The daily privacy sweep owns security-event retention.
-
-**TOTP rows.** Pending rows bound attempts per login, not per account, because
-each valid password login creates one. The TOTP failure budget lives on the
-credential row, so it holds across client IPs and restarts. The cool-down after
-the k-th group of five failures is 15 minutes times 2^min(k − 1, 7), at most 24
-hours. At the 1,000-failure ceiling each further failure sets 24 hours. It
-admits 35 guesses in the first day and 5 a day after that, under 0.6 percent
-success in a year, and never blocks passkey or recovery completion. A valid code
-resets the count only after 24 hours without a failure, so a user's own sign-ins
-do not restart the escalation during an attack. TOTP enrollment proof skips
-pending rows but uses the shared second-factor attempt limits. The policy-row
-mail cap bounds attempt mail to 24 a day per account.
-
-**Agent access rows.** This table is the enforcement authority for agent access.
-Registration is unauthenticated, so five per hour per IP admits a genuine first
-connection while making bulk client creation useless; garbage collection then
-deletes any client that is 24 hours old with no live grant and no live token, at
-most 200 rows per sweep, so an abandoned registration cannot accumulate. Thirty
-token requests per minute per IP covers refresh rotation for several agents
-behind one address, and the separate ten-failed-grants-per-15-minutes bucket per
-client makes code and verifier guessing expensive without letting one hostile
-client throttle another. Tool calls are capped at 120 per minute per token and
-240 per minute per user so a second agent cannot be starved by the first, with
-at most four concurrent `/mcp` requests per user bounding in-flight database and
-render work. Ten live grants per user is a visible, revocable ceiling; the
-eleventh consent is refused with a closed error rather than silently evicting an
-existing grant.
-
-The OAuth request bodies stay at 4,096 bytes so a strict registration JSON
-document with five 512-byte redirect URIs, and every form-encoded token or
-revocation request, fit with headroom. `/mcp` needs a larger cap than the global
-256 KiB ceiling because `upload_photo` carries base64 content: 4,194,304 bytes
-is the 2 MiB photo bound plus base64 expansion and JSON-RPC envelope, following
-the photo-route precedent. The decoded image is still bounded by the unchanged
-media limits. All rate policies compose the ADR 0018 bounded limiter, share its
-10,000-key store, and key on the canonical Caddy client address, token, user, or
-client as stated.
-
-**Realtime admission rows.** Twenty owner connections allow several editor tabs
-without letting one account exhaust the task. The larger 100-connection IP cap
-supports shared networks. Both are lower than the unchanged 2,000 task ceiling;
-keys disappear when the last subscriber leaves. Eight queued metadata events
-bound a slow consumer independently of document size. Overflow disconnects it so
-the next unconditional read repairs the missed changes. A two-second write
-deadline stays within the five-second revocation drain and is cleared after
-flush, preserving quiet connections. A process FD probe rejects admission when
-25% headroom cannot be established. Tests cover these bounds under churn, and
-resource measurements are repeated on the hosted runtime.
+- **Documents.** The `lng` row is the database's coarse bound; the HTTP boundary
+  canonicalizes BCP 47 tags first ([data design](data.md#relational-model)).
+  Request-path idempotency cleanup is opportunistic; the hourly sweep is the
+  retention guarantee ([ADR 0016](../adr/0016-transactional-idempotency.md)).
+- **Photos.** The edge and pixel caps admit a 4,032×3,024 photo while bounding
+  an eight-byte-per-pixel working image at 128 MiB. The decoders are
+  synchronous, so the five-second normalization ceiling is a measured gate on a
+  frozen hostile corpus, repeated on the production host, not a timer. A failing
+  fixture blocks release; it never creates detached work.
+- **Rate limiters.** Each instance keeps at most 10,000 keys with the shared
+  overflow of [ADR 0018](../adr/0018-bounded-rate-limiter.md). Resume read and
+  write limits leave room for several editor tabs above the one-second autosave
+  cadence. Operation counts per request are separate from the 256 KiB body cap.
+- **Public render.** `canonicalOrigin` is one normalized ASCII origin with no
+  userinfo, path, query, or fragment; production requires `https`. The 532,480
+  byte request is the 524,288-byte document ceiling plus an 8,192-byte envelope.
+  The HTML bound stays provisional until minimal, full, and 512 KiB fixtures
+  pass beneath it. The five-second revocation bound is one deadline across every
+  drain and fails before the mutation transaction.
+- **Slugs and media.** The slug limit applies only when a request changes the
+  slug. Orphan deletion retries each object up to three times, waiting one and
+  then two seconds; queue retries double from one minute to six hours.
+- **Passwords.** Argon2id parameters meet the OWASP minimum; unknown and
+  provider-only logins run the same admitted dummy verification. The blocklist
+  is the pinned NCSC 100k list as sorted SHA-256 digests. HIBP gets a padded
+  five-character SHA-1 prefix and fails closed when needed but unavailable.
+- **Second factor.** WebAuthn sizes are decoded-byte ceilings checked before
+  CBOR, COSE, or signature work; the 32 KiB body covers encoding overhead. The
+  factor-management limit keeps bounded cleanup ahead of creation. The TOTP
+  budget lives on the credential row, so it holds across IPs and restarts: at
+  most 35 guesses the first day and 5 a day after, and it never blocks a passkey
+  or recovery code.
+- **Agent access.** Five registrations an hour per IP admit a real first
+  connection while making bulk clients useless. Per-token and per-user tool
+  limits keep one agent from starving another. The eleventh consent is refused
+  rather than evicting a grant. `/mcp` allows 4 MiB so `upload_photo` fits a
+  base64 2 MiB photo plus the JSON-RPC envelope; decoded media limits still
+  apply.
+- **Realtime.** Queue overflow disconnects a slow consumer so its next
+  unconditional read repairs it. The two-second write deadline fits inside the
+  five-second revocation drain.
 
 ## Benchmark protocol
 
@@ -380,19 +224,10 @@ applicable target under this protocol and retain the raw evidence.
 | Repeatability      | Repeat runs; a target passes only if it holds across runs, not on a best-of                                                                                                                                                                                        |
 | Evidence           | Raw results retained locally and cited by the change that claims the gate                                                                                                                                                                                          |
 
-**Hard safety limits vs measured gates and SLOs.** The 512 MiB cgroup, render
-timeout, queue depth, and pgx pool ceiling are hard runtime limits. The render
-timer is configured for 20 seconds from admission. At timeout the queue cancels
-the job and returns only after browser teardown joins. Scheduler delay and
-joined teardown are measured separately from that configured deadline. Timeout
-failures never count as successful latency samples; a successful result above 20
-seconds fails the render benchmark. Normalization's five-second ceiling is a
-measured provisional gate and a hosted launch gate because its in-process
-decoder cannot be killed safely. The latency numbers are service-level
-objectives (SLOs), measured against the corpus above and not enforced per
-request.
-
-**Baseline before freeze.** The riskiest limits (512 MiB whole-task memory with
-Chromium, 2000 SSE connections) are **baselined with a real measurement by the
-print worker and SSE transport respectively**; if the measurement contradicts
-the number, the number changes and the change cites the evidence.
+The 512 MiB cgroup, render timeout, queue depth, and pgx pool are hard runtime
+limits. The render timer runs 20 seconds from admission; on timeout the queue
+cancels the job and returns only after browser teardown joins. A timed-out job
+never counts as a latency sample, and a success above 20 seconds fails the
+benchmark. The latency rows are service-level objectives (SLOs) measured against
+the corpus above, not enforced per request. When a measurement contradicts a
+number, the number changes and the change cites the evidence.

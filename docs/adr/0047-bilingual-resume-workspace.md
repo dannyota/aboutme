@@ -4,7 +4,7 @@ Status: Accepted (2026-09-20), approved by the owner.
 
 Amends the English-only application boundary in the
 [product design](../design/product.md). The detailed contract is the
-[resume workspace localization design](../design/editor-localization.md).
+[resume workspace localization design](../design/localization.md).
 
 ## Context
 

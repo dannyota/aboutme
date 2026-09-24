@@ -1,7 +1,5 @@
 # Geometry and preset boundaries
 
-Status: **Approved v2** (2026-08-12).
-
 Defines spacing, fixed renderer geometry, link treatment, and the limits on what
 a preset may change.
 
@@ -21,21 +19,13 @@ of `0` really is `0`:
 | `--page-margin-x` | `spacing.pageMargin.x` mm, else `15mm` | left and right page margin          |
 | `--page-margin-y` | `spacing.pageMargin.y` mm, else `15mm` | top and bottom page margin          |
 
-The two page-margin properties are the one place a token reaches `@page`
-geometry: `useResumeStyles` emits
-`margin: var(--page-margin-y) var(--page-margin-x)` into the `@page` rule
-(`print.md` §2), and the editor preview and public page apply the same values as
-ordinary padding on the resume root. When `spacing.pageMargin` is absent both
-fall back to `15mm`, which is what `print.md` §2 fixed before the token existed,
-so an untouched document's geometry is unchanged. The fallback is applied here,
-at the point of use; it is never written into `customization`. The
-[resume aggregate](../data.md#resume-aggregate) preserves absence as "never
-entered." Margins are the primary lever for fitting a resume onto one page, so
-this is the first token a page-count problem should reach for, ahead of
-`baseSizePx`.
+The page margins are the one place a token reaches `@page` geometry (`print.md`
+§2); the editor preview and public page apply the same values as padding on the
+resume root. The `15mm` fallback applies at the point of use and is never
+written into `customization`. Margins are the first lever for fitting a resume
+onto one page, ahead of `baseSizePx`.
 
-Renderer-fixed geometry and inline-link styling. None of it varies by template
-in v1; changing a value here changes every template at once.
+The renderer fixes the geometry below for every template.
 
 | Property          | Value                        | Rationale                                                                |
 | ----------------- | ---------------------------- | ------------------------------------------------------------------------ |
@@ -48,25 +38,15 @@ in v1; changing a value here changes every template at once.
 | `--dot-size`      | `7px`, `4px` gap             | level widget, 5 dots                                                     |
 | `--tag-padding`   | `0.15em 0.5em`, `3px` radius | level widget, `tag` style                                                |
 | `--icon-size`     | `1em`                        | lucide inline SVG, aligned to heading cap height                         |
-| `text-decoration` | `underline` on inline links  | a link stays identifiable without color — see below                      |
+| `text-decoration` | `underline` on inline links  | a link stays identifiable without color                                  |
 
 Rule visibility follows `heading.showRule`: false removes the rule and its
 `--rule-gap` together, so no empty band is left behind.
 
-**Inline links are underlined in every template.** `text-decoration: underline`
-is renderer-fixed on every inline link the renderer emits: the header's contact
-anchors (`contract.md` §5.1), the entry link slots (`employerLink`,
-`schoolLink`, `titleLink`, project `link` — `contract.md` §5.2), and anchors
-inside sanitized rich text. It is not a token, no preset can remove it, and it
-applies identically in preview, SSR, and print. `--color-link` stays the link's
-color role and nothing else.
-
-This resolves the link constraint in `limitations.md` §9.8. With the underline
-present, a link no longer needs a 3:1 color separation from body text to satisfy
-WCAG G183, so a preset may target AAA text contrast and still distinguish its
-links, and a monochrome print keeps them identifiable. The cost is that every
-template now looks slightly more "web": accepted deliberately, because the
-alternative was a constraint no preset could satisfy.
+**Inline links are underlined in every template**: the header's contact anchors
+(`contract.md` §5.1), the entry link slots (`contract.md` §5.2), and anchors in
+rich text, in preview, SSR, and print alike. No preset can remove it
+(`limitations.md` §9.8). `--color-link` is only the link's color.
 
 ## 7. What a preset may not do
 

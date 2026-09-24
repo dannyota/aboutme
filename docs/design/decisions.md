@@ -1,8 +1,8 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. Records 0001–0049
-are accepted.
+supersession record; these pages state the resulting design. ADRs 0001–0049 are
+accepted.
 
 | ADR                                                                  | Status   | Integrated outcome                                                                                                     |
 | -------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -61,30 +61,24 @@ are accepted.
 | Gate                                                   | Owner                                     | Due                            |
 | ------------------------------------------------------ | ----------------------------------------- | ------------------------------ |
 | Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added |
-| Product name and trademark review                      | Human owner                               | Before production launch       |
-| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before production launch       |
+| Product name and trademark review                      | Human owner                               | Before the public announcement |
+| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before the public announcement |
 | SES production access                                  | Human owner                               | Before the public announcement |
 
-The font gate stays per asset because it is a legal check on exact bytes. Name
-and privacy reviews gate the public announcement. ADR 0037 is the production
-approval; hosting cost, topology and the release path follow it.
+The font gate stays per asset because it is a legal check on exact bytes.
+[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md) is the
+production approval; hosting cost, topology, and the release path follow it.
 
-## Proposed v1 limits
-
-The immutable v1 resume schema cannot add template identity, photo visibility,
-section visibility, or a global section-icon toggle. V1 implements those limits
-honestly. A later schema version may add them through the document-version
-process; renderer code does not invent hidden, out-of-contract fields.
-
-Font families are a catalog, not a fixed product identity. The catalog can grow
-through reviewed schema and asset changes when the exact license permits free
-self-hosting, redistribution, and PDF embedding without usage fees. A modified
-asset also requires modification rights and compliance with naming conditions.
+Known document limits, such as no template identity or section visibility, are
+listed in [template limits](templates/limitations.md). A later document version
+may lift one through [ADR 0017](../adr/0017-resume-document-versioning.md); the
+renderer never invents an out-of-contract field.
 
 ## Change process
 
-No line in an accepted ADR is edited to make history look consistent. V4 and its
-accepted amendments through ADR 0048 are approved, so a changed decision needs a
-new ADR or a v5 revision. Status words are exact: “approved” means the decision
-is settled; “landed” describes repository state and does not imply that a gate
-passed.
+A changed decision needs a new ADR; a structural rewrite needs a v5 revision of
+this design. Neither silently rewrites approved text, and no accepted ADR line
+is edited to make history look consistent. A correction that fixes an error,
+ambiguity, or contradiction without changing a decision is an ordinary edit.
+Status words are exact: "approved" means the decision is settled; "landed"
+describes repository state and does not imply that a gate passed.

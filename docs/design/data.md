@@ -42,8 +42,8 @@ intended model, not replacement DDL.
 
 Runtime coordination tables, such as the write barrier, replica membership,
 claims, rate buckets and publication transitions, are not part of the current
-schema. Their design is kept in [the runtime schema](scaling/runtime-schema.md)
-as reference for a later fleet
+schema. Their design is kept in [the scaling contract](scaling/README.md) as
+reference for a later fleet
 ([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
 
 Server-owned relational rows use PostgreSQL UUIDv7 defaults, except the two TOTP
@@ -64,35 +64,12 @@ and tokens. Expired codes and terminal tokens are removed in bounded batches,
 and an idle client with no live grant and no live token is garbage-collected.
 
 Second-factor rows cascade from their account. Pending tokens, recovery codes,
-and challenges are stored only as digests or server-owned random values.
-Migration `00004_passkey_second_factor.sql`, the exact column constraints,
-bounded cleanup, counter-event atomicity, and mixed-version rules follow the
-[passkey second-factor contract](passkey-second-factor-contract.md). The
-migration deletes outstanding 60-second authorization codes before adding their
-required grant and epoch bindings. It deletes no session, grant, token, account,
-resume, or mail job.
-
-Migration `00005_totp_second_factor.sql` adds `totp_credentials`,
-`totp_enrollments`, and nullable `second_factor_policies.attempt_mail_at`. The
-application generates the UUIDv7 IDs of both TOTP tables, because each ID is
-bound into its ciphertext before insert. Both tables cascade from `users`, and
-an enrollment also cascades from its bound session. `totp_credentials.user_id`
-is unique, and so is `totp_enrollments.user_id`: completion, supersession, and
-removal delete the enrollment row. Both key-ID columns are indexed for rotation,
-and enrollment cleanup uses `(expires_at, id)`. Checks enforce every byte
-length, the `tk1_` key-ID shape, format version 1, expiry after creation, a
-nonnegative step, and a failure count from 0 through 1,000. Replacement and
-re-encryption rewrite the credential row in place, keeping its ID and creation
-time. Portable export excludes both tables.
-
-The migration replaces the closed `auth_email_jobs_kind_check` and
-`auth_email_jobs_scope_check` constraints to admit `totp_added`,
-`totp_replaced`, and `totp_removed` with required user scope. It changes no
-existing row and deletes no data. Used and expired enrollments are the only rows
-TOTP ever deletes automatically. The down section refuses to run while any TOTP
-credential exists, so it is supported only before enrollment enablement. The
+ceremony challenges, and enrollment tokens are stored only as digests; TOTP
+secrets are stored only sealed. The
+[passkey contract](passkey-second-factor-contract.md#postgresql-shape) and the
 [authenticator-app contract](totp-second-factor-contract.md#postgresql-shape-and-bounds)
-owns the exact columns, grants, and down section.
+own the exact columns, constraints, cleanup, and grants. Portable export
+excludes every second-factor table.
 
 `public_state` has one checked singleton row and a positive monotonic
 `discovery_generation`. A transaction that changes a resume slug, live state,
@@ -109,15 +86,12 @@ owner row so concurrent callers cannot race past the cap. Reserved slug checks,
 document validation, and write policy run in the Go domain boundary.
 
 `resumes.lng` is nullable draft metadata with a 35-character database bound. An
-HTTP write treats null or `""` as unset. A non-empty value must parse as a
-well-formed BCP 47 language tag. The server canonicalizes it, checks the
-canonical form against the 35-character bound, and only then persists it. The
-read projection maps null, `""`, an invalid legacy value, or a legacy value
-whose canonical form exceeds the bound to `und`; a valid bounded value maps to
-the same canonical form. API responses and every render context use that total
-projection, so the renderer never receives an empty, invalid, or overlong root
-language. This requires no migration because the database remains the coarse
-stored-length boundary and Go owns semantic validation.
+HTTP write treats null or `""` as unset. A non-empty value must be a well-formed
+BCP 47 tag; the server canonicalizes it and checks the canonical form against
+the bound before persisting. The read projection maps null, `""`, invalid, or
+overlong legacy values to `und` and valid ones to their canonical form. API
+responses and every render context use that projection, so the renderer never
+receives an empty, invalid, or overlong root language.
 
 ## Resume aggregate
 

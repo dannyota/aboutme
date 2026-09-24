@@ -6,9 +6,11 @@ without publishing an account profile.
 
 ## Core journeys
 
-1. Sign in with email and password, or with Google. GitHub and LinkedIn sign-in
-   are implemented but disabled. Server configuration may close new password
-   registration without disabling existing password sign-in.
+1. Sign in with email and password, or with an enabled provider. Production can
+   enable only Google; GitHub and LinkedIn exist but stay off. Server
+   configuration may close new password registration without disabling existing
+   password sign-in. An account may add a passkey or authenticator app as a
+   [second factor](second-factor-authentication.md).
 2. Create up to three resumes and edit incomplete drafts without save-time
    completeness errors.
 3. Preview the same layout used by the public page and PDF.
@@ -25,7 +27,7 @@ without publishing an account profile.
 | Resume editor       | Eight section types; rich text; one- or two-column layout; fonts, colors, spacing, headings, and presets |
 | Resume count        | At most three per account, enforced in PostgreSQL                                                        |
 | Public identity     | One globally unique slug per resume; no username or account profile                                      |
-| Authentication      | Email/password and Google; provider login and new password registration are server-configured            |
+| Authentication      | Email/password, providers, and optional second factor; providers and registration are server-configured  |
 | Preview and publish | Instant local preview, granular autosave, public SSR page, and live refresh                              |
 | Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in    |
 | Export              | Owner PDF; optional public PDF                                                                           |
@@ -46,7 +48,7 @@ registration verifies the email before an account exists.
 
 ## Agent access
 
-A person may connect an agent they already use — the product hosts no model and
+A person may connect an agent they already use; the product hosts no model and
 ships no writing assistant of its own. The agent speaks MCP to one remote
 endpoint on the canonical origin and authenticates through the service's own
 OAuth 2.1 authorization server; it never holds a session cookie. Consent is
@@ -73,43 +75,14 @@ no separate handwritten exceptions. A fixed root is added to the registry before
 any route may claim it, and drift between the registry, OpenAPI root paths, the
 Nuxt page manifest, or generated dispatch fails the build.
 
-The registry keys one row per literal top-level segment. Finer paths dispatch
-inside the owning router, so `/api/v1/resumes` and `/oauth/token` need no rows
-of their own. The v8 registry holds these exact roots:
-
-| Root              | Source and dispatch                                                              |
-| ----------------- | -------------------------------------------------------------------------------- |
-| `.well-known`     | RFC 8414 and RFC 9728 agent-authorization metadata; Go                           |
-| `admin`           | Protected future namespace from ADR 0004; reserved-only, with no current handler |
-| `api`             | OpenAPI server root and Caddy `/api/v1/*`; Go                                    |
-| `app`             | Current Nuxt `/app/settings/sessions` page tree; Nuxt                            |
-| `authorize`       | Nuxt agent-consent page; Nuxt                                                    |
-| `forgot-password` | Nuxt `/forgot-password` page; Nuxt                                               |
-| `healthz`         | OpenAPI and Caddy `/healthz`; Go                                                 |
-| `_nuxt`           | Nuxt build-asset namespace; Nuxt                                                 |
-| `internal-render` | Direct Go-to-Nuxt renderer; Caddy denies every viewer request                    |
-| `llms.txt`        | Caddy `/llms.txt`; Go                                                            |
-| `login`           | Current Nuxt `/login` page; Nuxt                                                 |
-| `mcp`             | Remote MCP Streamable HTTP endpoint; Go                                          |
-| `oauth`           | Agent authorization server: authorize, token, register, revoke; Go               |
-| `people`          | Protected future namespace from ADR 0004; reserved-only, with no current handler |
-| `print`           | Caddy `/print` and `/print/*`; denied externally and capability-gated internally |
-| `privacy`         | Nuxt `/privacy` page; Nuxt                                                       |
-| `readyz`          | OpenAPI and Caddy `/readyz`; Go                                                  |
-| `register`        | Nuxt `/register` page; Nuxt                                                      |
-| `reset-password`  | Nuxt `/reset-password` page; Nuxt                                                |
-| `robots.txt`      | Caddy `/robots.txt`; Go                                                          |
-| `sitemap.xml`     | Caddy `/sitemap.xml`; Go                                                         |
-| `templates`       | Nuxt `/templates` gallery and `/templates/{id}` pages; Nuxt                      |
-| `terms`           | Nuxt `/terms` page; Nuxt                                                         |
-| `u`               | Protected future namespace from ADR 0004; reserved-only, with no current handler |
-| `verify-email`    | Nuxt `/verify-email` page; Nuxt                                                  |
-
-The root `/` has no first segment. Dynamic `/{slug}` and `/{slug}.md` routes do
-not add literal entries. The dotted and underscore-prefixed roots cannot pass
-the slug grammar, but stay in the registry so route dispatch and reservation
-parity remain exhaustive. Framework-generated paths that are not fixed product
-or infrastructure routes remain outside this registry and fall through to Nuxt.
+The registry keys one row per literal top-level segment; finer paths dispatch
+inside the owning router. `packages/publicroots/public-roots.v8.json` holds the
+exact roots. `admin`, `people`, and `u` are reserved for future use with no
+handler ([ADR 0004](../adr/0004-resume-slug-only-urls.md)). The dotted and
+underscore-prefixed roots cannot pass the slug grammar but stay in the registry
+so dispatch and reservation parity remain exhaustive. Dynamic `/{slug}` and
+`/{slug}.md` routes add no rows. Framework-generated paths that are not fixed
+product or infrastructure routes fall through to Nuxt outside the registry.
 
 `/authorize` is the Nuxt consent page and `/oauth/authorize` is the Go endpoint
 that validates a request before redirecting to it. They are different roots, so
@@ -123,10 +96,8 @@ account cannot immediately take over an old link.
 
 ## Publish controls
 
-Publishing is a human action taken in the web UI. A connected agent has no
-publish, unpublish, or public-read capability.
-
-The publish dialog exposes three independent choices:
+Publishing is a human action taken in the web UI. The publish dialog exposes
+three independent choices:
 
 1. **Public resume** controls whether any public representation exists.
 2. **PDF download** controls the public PDF. The owner can always export a PDF.
@@ -181,20 +152,11 @@ fence and its 60-second cache trade-off.
 - Deletion copy distinguishes immediate access revocation, private-media removal
   targeted within 24 hours, and expiry from the 30-day backup schedule. An
   overdue physical delete is audited and retried; it does not restore access.
-- The homepage, authentication and recovery pages, legal pages, template
-  gallery, resume workspace, account settings, and agent consent support
-  Vietnamese and English. The resume workspace includes the list, creation,
-  editor, publish, owner PDF export, and shared account-menu chrome. Account
-  settings include sessions, password, identities, privacy, and connected-agent
-  controls. Vietnamese is the default; the English toggle is stored in the
-  `aboutme-locale` cookie. Interface language is independent from resume
-  language and never changes authored or default resume data. Public resume
-  chrome follows resume language. Vietnamese resume content is a first-class
-  fixture and fallback target because the initial community is Vietnamese. Other
-  scripts remain valid content; font choices state measured coverage instead of
-  claiming universal coverage. The contracts live in
-  [the resume workspace localization design](editor-localization.md),
-  [the account localization design](account-localization.md), and
-  [ADR 0047](../adr/0047-bilingual-resume-workspace.md).
+- The homepage, authentication pages, legal pages, template gallery, resume
+  workspace, account settings, and agent consent support Vietnamese and English,
+  with Vietnamese as the default. Interface language never changes resume data
+  or resume language; public resume chrome follows resume language
+  ([localization design](localization.md)). Other scripts remain valid content,
+  and font choices state measured coverage.
 - Accessibility is a release requirement for the editor, publish flow, public
   page, and generated artifacts.

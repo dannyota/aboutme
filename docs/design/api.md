@@ -2,8 +2,8 @@
 
 Product routes use `/api/v1`. Health routes remain unversioned. The current
 implemented contract, including schemas and examples, is
-[`../api/openapi.yaml`](../api/openapi.yaml); this page defines the intended v1
-behavior that future contract changes must implement.
+[`../api/openapi.yaml`](../api/openapi.yaml); this page defines the intended
+behavior that contract changes must keep.
 
 ## Conventions
 
@@ -93,22 +93,12 @@ public error vocabulary is closed and never discloses account state, provider,
 token, or hash detail. `GET /me` adds the non-null Boolean `hasPassword`;
 provider emails are not exposed through linked identities.
 
-The [passkey second-factor contract](passkey-second-factor-contract.md) owns the
-exact pending response, cookie, redirect, CSRF, WebAuthn JSON, completion,
-recovery download, and error shapes. The
-[authenticator-app contract](totp-second-factor-contract.md) adds the TOTP
-verification, enrollment, and removal routes, the `totpEnrollment` capability,
-the required `totpEnabled` state field, and the closed `totp` pending method,
-listed between `passkey` and `recovery`. TOTP bodies are strict JSON of at most
-4,096 bytes. Every second-factor route, TOTP included, sends exact
+The [passkey contract](passkey-second-factor-contract.md) owns the pending
+response, cookies, redirects, CSRF, WebAuthn JSON, recovery download, and
+second-factor errors. The
+[authenticator-app contract](totp-second-factor-contract.md) owns the TOTP
+routes. Every second-factor route sends exact
 `Cache-Control: no-store, no-transform` on success and error.
-
-`TOTP_ENROLLMENT_ENABLED` gates only enrollment start and completion. The web
-treats an absent or malformed `totpEnrollment` or `totpEnabled` field as false.
-An older web client that receives the `totp` method shows a refresh prompt and
-calls no route for it, so it cannot bypass pending authentication. Once
-enrollment is enabled, production runs only v0.4.7 or later, numeric release
-4007, under the [release fence](passkey-release-fence.md).
 
 ### Photo intake
 
@@ -161,13 +151,11 @@ separately closed: `validation_failed`, `revision_conflict`, `not_found`,
 `payload_too_large`, `scope_denied`, `rate_limited`, and
 `agent_access_unavailable`.
 
-**These routes are not part of the OpenAPI contract.** They are agent-facing,
-use non-JSON or JSON-RPC media types, and are specified by the named RFCs and
-the MCP specification; describing them a second time in
-[`../api/openapi.yaml`](../api/openapi.yaml) would create a source that drifts
-from the RFC without adding a generated client. OpenAPI gains only the
-session-authenticated consent and connected-agent operations listed above, so
-code, Caddy, and OpenAPI continue to agree.
+**These routes are not in the OpenAPI contract.** The named RFCs and the MCP
+specification define them. OpenAPI holds only the session-authenticated consent
+and connected-agent operations listed above. The
+[MCP owner workflow](mcp-owner-workflow.md#oauth-server-contract) adds the
+`resource` and native-client registration rules the official SDK needs.
 
 Every tool dispatches through a closed in-process facade to the same handler as
 its REST counterpart. Both protocols therefore execute one validation,
@@ -228,13 +216,10 @@ no intermediate content, layout, or revision change is persisted.
 ## Public absence and caching
 
 All public routes return the same `404` for a missing, private, deleted,
-renamed, tombstoned, or unauthorized resume. Public responses never reveal
-account identity. Unpublish, delete, rename, and material publish-state changes
-advance the public generation and drain old-generation origin leases before
-success. Every affected HTML, markdown, image, PDF, sitemap, and `llms.txt`
-reuse then passes the origin live-state gate; retained old bytes cannot be
-served. Edge invalidation releases those bytes as defense in depth. ETags and
-SSE refetch improve client freshness but are not the revocation authority. Go
-holds a per-resume lease through each public response, including a Nuxt SSR
-response proxied through Go. Sitemap and `llms.txt` use a separate aggregate
-discovery generation; membership-changing mutations drain its old leases too.
+renamed, tombstoned, or unauthorized resume, and never reveal account identity.
+Unpublish, delete, rename, and material publish-state changes advance the public
+generation and drain old-generation origin leases before success; sitemap and
+`llms.txt` use a separate discovery generation drained the same way. Every
+public reuse then passes the origin live-state gate. Edge invalidation, ETags,
+and SSE refetch improve freshness but are not the revocation authority
+([ADR 0022](../adr/0022-public-artifact-revocation.md)).

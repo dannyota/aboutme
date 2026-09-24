@@ -1,7 +1,5 @@
 # Template contract
 
-Status: **Approved v2** (2026-08-12).
-
 What a template is, what it may decide, and how it renders the versioned
 [resume document](../data.md#resume-aggregate).
 
@@ -70,26 +68,16 @@ The boundary in one line each:
   computes it (ADR 0008) and `PATCH /resumes/{id}/structure` is the only
   endpoint that may rewrite it (ADR 0009).
 
-Because the user's customization _is_ the template, applying a template replaces
-it. That is not data loss through carelessness; it is the definition. The
-document content survives; section placement follows the preset's rule (§3). The
-editor is responsible for making the replacement visible and undoable; the
-renderer and the preset schema are not.
+Applying a template therefore replaces the user's customization by definition.
+Content survives and placement follows the preset's rule (§3). The editor makes
+the replacement visible and undoable.
 
 ## 3. Apply semantics — ADR 0008 and placement order
 
-ADR 0008 imposes:
-
-> A preset does not carry section keys. It carries a **placement rule**, and
-> `applyTemplate` computes `layout.sections` as a total function of the
-> document's actual content keys.
-
-and
-
-> Everything else in §5's sentence stands: applying a template replaces the rest
-> of `customization` wholesale, and `content` is untouched.
-
-Consequences a template design must respect:
+Under ADR 0008 a preset carries a **placement rule**, not section keys;
+`applyTemplate` computes `layout.sections` from the document's content keys,
+replaces the rest of `customization` wholesale, and leaves `content` untouched.
+A template design must respect these rules:
 
 - A preset declares `layout.placement` as either `"keep"` (preserve the
   document's current `main`/`sidebar` arrays) or `"byType"` with an ordered
@@ -125,16 +113,11 @@ Consequences a template design must respect:
 
 ## 4. Section order — ADR 0009 is binding
 
-ADR 0009 imposes:
-
-> **`customization.layout.sections` is the sole authority for section order and
-> placement. `content` is an unordered map keyed by section key.**
-
-The renderer iterates `layout.sections.main`, then `layout.sections.sidebar`,
-looking each key up in `content`. It never iterates `content` to emit sections;
-that is the defect the ADR names in advance. Entry order within a section is the
-`entries` array order, which is preserved everywhere and is unaffected by this
-rule.
+Under ADR 0009, `customization.layout.sections` is the sole authority for
+section order and placement, and `content` is an unordered map. The renderer
+iterates `layout.sections.main`, then `layout.sections.sidebar`, looking each
+key up in `content`, and never iterates `content` to emit sections. Entry order
+is the `entries` array order.
 
 A key present in `layout.sections` but absent from `content` renders nothing —
 the store rejects that state on write, and the renderer must not crash on it.
@@ -349,20 +332,15 @@ date, or level.
 
 Rules the above encodes:
 
-- **Absent and `""` render identically.** There is no glyph for "explicitly
-  cleared". The distinction is meaningful in storage and in the editor; it is
-  not observable in output, and the renderer must never normalize one to the
-  other in the document, because the renderer never writes.
-- **Hidden means absent from the HTML, not `display: none`.** A hidden entry
-  under `display: none` still reaches the accessibility tree of some tools, the
-  copy buffer, crawlers, and the `/{slug}.md` variant. `fixtures/full.json`
-  contains a hidden work entry precisely so a snapshot catches this.
-- **No placeholder text, ever.** No "Company Name", no em dash standing in for a
-  missing employer, no "—" for an absent date.
-- **Separators are emitted between two present values, never beside one.**
-  `city` present with `country` absent renders `Hanoi`, not `Hanoi` followed by
-  a trailing comma and space. This is where the sentinel bug reappears as a
-  punctuation bug.
+- **Absent and `""` render identically.** The distinction matters in storage and
+  the editor, not in output, and the renderer never writes.
+- **Hidden means absent from the HTML, not `display: none`**, which would still
+  reach assistive tools, the copy buffer, crawlers, and `/{slug}.md`.
+  `fixtures/full.json` holds a hidden work entry so a snapshot catches this.
+- **No placeholder text, ever**: no "Company Name" and no dash for a missing
+  value.
+- **Separators appear only between two present values.** `city` without
+  `country` renders `Hanoi`, with no trailing comma.
 - Colors and levels have no cleared form: `hexColor` cannot be `""` and `level`
   cannot be `""`. For those, absence is the only unset state. `colors.accent`
   and `colors.surface` are the two optional colors ([Color roles](colors.md)).

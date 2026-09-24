@@ -1,76 +1,17 @@
 # Authenticator-app second-factor contract
 
-Status: Accepted for the authenticator-app release. The owner approved all seven
-product choices below on 2026-09-22 and the failure-budget rules on 2026-09-23.
-
-This contract adds time-based one-time password (TOTP) verification to the
-v0.4.2 pending, recovery, session, and authentication-epoch boundary without
-weakening passkeys. The [key-management design](totp-key-management.md) owns
-sealing, the key ring, rotation, re-encryption, and key failures.
-
-## Owner decisions
-
-The owner approved these product choices on 2026-09-22:
-
-1. Approved: Use the broad-compatibility RFC 6238 profile of HMAC-SHA-1, a
-   20-byte secret, six digits, a 30-second period, and one step of clock skew.
-   TOTP is not phishing-resistant. The settings UI says so and recommends a
-   passkey when the browser supports one.
-2. Approved: Allow one active TOTP credential per account. Starting replacement
-   leaves the current credential active. Successful proof atomically replaces
-   it.
-3. Approved: Show the setup QR code and grouped Base32 secret once. Use the
-   canonical account email in the authenticator label and the canonical origin
-   host as issuer. The browser renders the QR code locally.
-4. Approved: List pending methods in the fixed order passkey, authenticator
-   code, then recovery code. A user may choose any listed method.
-5. Approved: Reuse one recovery-code set across passkeys and TOTP. Adding or
-   replacing TOTP does not regenerate codes. Removing the final active factor
-   deletes the set and disables second-factor enforcement.
-6. Approved: Send bilingual security mail after TOTP addition, replacement,
-   removal, and final disablement. Starting or abandoning setup sends no mail.
-7. Approved: Raise the production minimum-release fence to v0.4.7 before TOTP
-   enrollment is enabled. Once TOTP enrollment can succeed, a supported rollback
-   below v0.4.7 is forbidden.
+This contract adds time-based one-time password (TOTP) codes to the pending,
+recovery, session, and epoch boundary of the
+[second-factor design](second-factor-authentication.md) without weakening
+passkeys. [ADR 0049](../adr/0049-totp-second-factor-authentication.md) records
+the product choices. The [passkey contract](passkey-second-factor-contract.md)
+owns the shared pending, state, recovery, and mail shapes. The
+[key-management design](totp-key-management.md) owns sealing and keys.
+[Numeric budgets](budgets.md) owns every bound.
 
 ## Release surface
 
-The authenticator-app release preserves every v0.4.2 passkey, pending, recovery,
-error, cookie, CSRF, cache, and epoch rule. `GET /api/v1/capabilities` adds
-`totpEnrollment: boolean`, true only when TOTP enrollment and replacement may
-start and complete.
-
-`GET /api/v1/me/second-factor` adds the required Boolean `totpEnabled`:
-
-```json
-{
-  "data": {
-    "enabled": true,
-    "passkeys": [],
-    "totpEnabled": true,
-    "recoveryCodesRemaining": 10
-  }
-}
-```
-
-An unenrolled account returns false, an empty passkey array, false, and zero. No
-state response returns a TOTP credential ID, secret, ciphertext, key ID, nonce,
-last-used step, or provisioning URI.
-
-Pending status keeps the v0.4.2 shape. `methods` gains the closed value `totp`
-when the account has an active TOTP credential. Its fixed order is `passkey`,
-`totp`, then `recovery`, omitting methods the account lacks. An enrolled account
-with no method returns `503 authentication_unavailable`. `totp` stays listed
-during a TOTP cool-down or key failure; verification then returns `429` or `503`
-as defined below. Passkey assertion options on an account with no active passkey
-return `404 factor_not_found` as the passkey contract defines, and TOTP
-verification on an account with no active TOTP credential returns the same
-error. Neither creates state or counts a failure.
-
-Every v0.4.2 and TOTP route, including capabilities, sends the router's exact
-`Cache-Control: no-store, no-transform` on every success and error.
-
-The new routes are:
+The TOTP routes are:
 
 | Method   | Path                                       | Purpose                               |
 | -------- | ------------------------------------------ | ------------------------------------- |
@@ -79,76 +20,79 @@ The new routes are:
 | `PUT`    | `/api/v1/me/second-factor/totp/enrollment` | Prove and install the proposed secret |
 | `DELETE` | `/api/v1/me/second-factor/totp`            | Remove the active TOTP credential     |
 
-No route accepts an arbitrary method name. TOTP adds no resume schema, public
-route, renderer, PDF, MCP tool, OAuth scope, or portable-export field.
+Capabilities report `totpEnrollment`, account state reports `totpEnabled`, and
+pending status lists `totp` while the account has an active TOTP credential.
+`totp` stays listed during a cool-down or key failure; verification then returns
+`429` or `503`. TOTP verification on an account with no TOTP credential returns
+`404 factor_not_found`, creates nothing, and counts no failure. No response
+returns a credential ID, secret, ciphertext, key ID, nonce, last-used step, or
+provisioning URI outside enrollment start.
+
+TOTP adds no resume schema, public route, renderer, PDF, MCP tool, OAuth scope,
+or export field.
 
 ## TOTP profile and code verification
 
 The service implements RFC 6238 with HMAC-SHA-1, a 20-byte random secret, six
 decimal digits, a 30-second period, and `T0=0`. HMAC-SHA-1 is allowed only for
-this interoperability profile. New security hashing continues to use the
-algorithms required by its own contract.
+this interoperability profile.
 
-Input is exactly six ASCII digits. Spaces, hyphens, Unicode digits, signs, or a
-different length fail as `400 request_invalid` before cryptographic or database
+Input is exactly six ASCII digits. Spaces, hyphens, Unicode digits, signs, or
+another length fail as `400 request_invalid` before cryptographic or database
 work.
 
-Verification calculates the previous, current, and next time steps when they are
-nonnegative. It compares all three six-byte candidates in constant time and
-selects the greatest matching step. It accepts a match only when that step is
-greater than the credential's stored `last_used_step`. The transaction locks the
-user and credential before rechecking the account epoch and advancing the step.
-Concurrent verification of one code across login and reauthentication has one
-winner. A replay is `401 verification_failed` and counts as one pending failure.
+Verification computes the previous, current, and next steps that are
+nonnegative, compares all three six-byte candidates in constant time, and picks
+the greatest match. It accepts the match only when that step is greater than the
+stored `last_used_step`. The transaction locks the user and credential, rechecks
+the epoch, and advances the step. Concurrent use of one code across login and
+reauthentication has one winner. A replay is `401 verification_failed` and one
+pending failure.
 
-The service clock is injected. A time before the Unix epoch fails as
-`503 authentication_unavailable`. Dependency, decryption, and clock failures do
-not increment pending failures.
+The clock is injected. A time before the Unix epoch fails as
+`503 authentication_unavailable`. Dependency, decryption, and clock failures
+count no failure.
 
 Enrollment proof has no stored step, so it accepts the greatest matching
-nonnegative step in the window and stores it as the initial `last_used_step`.
-The setup code therefore cannot complete a login. The server never logs or emits
-a code, secret, candidate, matched step, HMAC input, or HMAC output.
+nonnegative step and stores it as the initial `last_used_step`. The server never
+logs or emits a code, secret, candidate, matched step, or HMAC input or output.
 
 ## Provisioning data
 
-Enrollment start generates one 20-byte secret from the server entropy source.
-Its canonical secret is 32 uppercase, unpadded RFC 4648 Base32 characters. The
-JSON `secret` field groups those characters into eight groups of four separated
-by one ASCII space. Input never accepts this secret back from the browser.
+Enrollment start draws a 20-byte secret from the server entropy source. Its
+canonical form is 32 uppercase unpadded RFC 4648 Base32 characters. The JSON
+`secret` shows it as eight groups of four separated by one space. The browser
+never sends the secret back.
 
-The issuer is the lowercase ASCII hostname from `PUBLIC_ORIGIN`, without a port.
-Production therefore uses `aboutme.vn`; local HTTPS uses `localhost`. Startup
-rejects an enabled TOTP enrollment flag when that host is an IP literal or is
-not a canonical ASCII DNS hostname; an internationalized host must use its
-A-label form. The label is `<issuer>:<canonical account email>`. The server
-creates this exact provisioning shape with RFC 3986 percent encoding:
+The issuer is the lowercase ASCII host of `PUBLIC_ORIGIN` without a port:
+`aboutme.vn` in production, and local HTTPS uses `localhost`. Startup rejects an
+enabled TOTP enrollment flag when that host is an IP literal or not a canonical
+ASCII DNS name; an internationalized host must use its A-label. The URI is, with
+RFC 3986 percent encoding:
 
 ```text
 otpauth://totp/<escaped-issuer>:<escaped-email>?secret=<base32>&issuer=<escaped-issuer>&algorithm=SHA1&digits=6&period=30
 ```
 
-The encoder percent-encodes the issuer and email as separate label components
-and keeps only their separator colon literal. Query parameters occur in the
-shown order. Spaces encode as `%20`, never `+`. The complete URI is at most
-2,048 ASCII bytes.
+The issuer and the canonical account email are encoded as separate label parts
+around one literal colon. Query parameters keep the order shown. A space encodes
+as `%20`, never `+`.
 
-The web app renders the QR code without a network request and holds the URI and
-secret only in component memory. Dialog close, navigation, account-state change,
-completion, logout, or unmount clears both. Neither enters a URL, browser
-storage, analytics, logs, traces, screenshots, mail, or account export. The open
-dialog permits secret copy.
+The web renders the QR code locally and holds the URI and secret only in
+component memory. Dialog close, navigation, account-state change, completion,
+logout, or unmount clears both. Neither enters a URL, browser storage,
+analytics, logs, traces, screenshots, mail, or export. The open dialog allows
+copying the secret.
 
 ## Enrollment and replacement API
 
-Both management calls require a live current-epoch cookie session, the session
-CSRF token, exact Origin, exact JSON media type, strict JSON, and recent proof.
-First-factor enrollment requires recent primary proof. Enrollment or replacement
-on an already enrolled account requires recent primary proof and recent proof
-from any active factor or recovery code.
+Both calls need a live current-epoch cookie session, the session CSRF token,
+exact Origin, exact JSON media type, strict JSON, and the recent proof that the
+[management rules](second-factor-authentication.md#enrollment-and-management)
+require.
 
-`POST /api/v1/me/second-factor/totp/enrollment` accepts exactly `{}`. It returns
-`200` with one-time plaintext:
+`POST /api/v1/me/second-factor/totp/enrollment` takes exactly `{}` and returns
+`200`:
 
 ```json
 {
@@ -161,18 +105,14 @@ from any active factor or recovery code.
 }
 ```
 
-`enrollmentId` is 32 random bytes in canonical unpadded base64url. PostgreSQL
-stores only its SHA-256 digest. The ten-minute enrollment binds the account,
-session, epoch, encrypted proposed secret, issuer, timestamps, and format.
-Completion, supersession, and removal delete the enrollment row, so no used row
-keeps ciphertext.
+`enrollmentId` is 32 random bytes as unpadded base64url; PostgreSQL stores its
+SHA-256 digest. The ten-minute enrollment binds account, session, epoch, sealed
+secret, issuer, timestamps, and format. Under the user lock, start deletes the
+account's existing enrollment row, expired or not, and inserts the new one. It
+changes no active credential, recovery code, enforcement, epoch, session, grant,
+or mail, so abandoning a replacement cannot lock the user out.
 
-Under the user lock, start deletes the account's existing enrollment row,
-expired or not, before inserting the new one. It changes no active credential,
-recovery code, enforcement, epoch, session, grant, or mail, so abandoning
-replacement cannot lock out the user.
-
-`PUT /api/v1/me/second-factor/totp/enrollment` accepts exactly:
+`PUT /api/v1/me/second-factor/totp/enrollment` takes exactly:
 
 ```json
 {
@@ -182,28 +122,21 @@ replacement cannot lock out the user.
 ```
 
 Unknown, malformed, foreign, expired, deleted, wrong-session, or wrong-epoch
-enrollment IDs collapse to `400 enrollment_invalid`. A well-shaped invalid or
-replayed code returns `401 verification_failed`. Enrollment proof skips the
-pending-attempt counter and never changes the active credential's failure
-budget. TOTP start, completion, and removal share the existing factor-management
-bucket of 10 per hour per `(account, client IP)` with passkey management and
-regeneration. Completion also uses the shared code limits of 10 per 15 minutes
-per `(account, client IP)`, plus 30 per minute per client IP.
+enrollment IDs return `400 enrollment_invalid`. An invalid or replayed code
+returns `401 verification_failed`. Enrollment proof uses no pending row and
+never touches the active credential's failure budget. Start, completion, and
+removal share the factor-management rate bucket with passkey management.
+Completion also uses the shared code-attempt limits.
 
-Successful completion uses the canonical lock order below, rechecks every proof,
-deletes the enrollment, and inserts or replaces the active credential. When no
-policy exists, it generates a cryptographically random 32-byte
-`webauthn_user_handle` and inserts the policy with it. Each candidate insert
-runs inside its own savepoint, because a unique violation aborts the
-transaction. A collision rolls back to that savepoint and gets at most two fresh
-retries, for three candidates total. Three collisions return
-`503 authentication_unavailable` and create no policy, credential, recovery
-code, epoch change, session, grant revocation, or mail. Later passkey enrollment
-reuses the persisted handle exactly. Completion advances the epoch, revokes
-other sessions and all connected-agent grants and token families, and returns a
-replacement current session. It preserves creation time, absolute expiry, device
-metadata, primary-proof time, and prior factor-proof time. First-factor
-completion sets factor-proof time to its completion time.
+Successful completion takes the lock order below, rechecks every proof, deletes
+the enrollment, and inserts or replaces the credential. When no policy exists,
+it generates a random 32-byte `webauthn_user_handle` and inserts the policy,
+each candidate inside its own savepoint because a unique violation aborts the
+transaction. It tries at most three candidates; three collisions return
+`503 authentication_unavailable` and change nothing. Later passkey enrollment
+reuses the stored handle. Completion then applies the epoch, revocation, and
+session-replacement rules of the
+[assurance boundary](second-factor-authentication.md#assurance-boundary).
 
 Completion returns `200`:
 
@@ -216,235 +149,129 @@ Completion returns `200`:
 }
 ```
 
-The real first-factor response has ten recovery codes. `recoveryCodes` is
-present only when this completion created the account's first active factor. It
-is omitted when a passkey already enabled enforcement and on TOTP replacement.
-It is never null or an empty array. The existing recovery display, download,
-storage, cleanup, and regeneration contract applies unchanged.
+`recoveryCodes` holds ten codes and appears only when this completion created
+the first active factor. It is omitted after a passkey already enabled
+enforcement and on replacement, and is never null or empty.
 
-Enrollment start and completion both recheck `TOTP_ENROLLMENT_ENABLED`. When
-false, start creates nothing and returns the uniform `404 route_not_found`.
-Completion deletes a matching enrollment, installs nothing, and returns the
-same 404. Verification, removal, state reads, and recovery ignore this flag.
+While `TOTP_ENROLLMENT_ENABLED` is false, start returns the uniform
+`404 not_found` before any session or database work. Completion deletes a
+matching enrollment, installs nothing, and returns the same `404`.
 
 ## Pending verification API
 
-`POST /api/v1/auth/second-factor/totp/verify` accepts exactly:
-
-```json
-{ "code": "123456" }
-```
-
-It uses the pending cookie, pending CSRF token, exact Origin, and v0.4.2 check
-order. The body limit is 4,096 bytes. Duplicate, unknown, missing, malformed, or
-noncanonical fields return `400 request_invalid`. An absent, expired, consumed,
-wrong-epoch, or wrong-session pending row returns `401 authentication_required`.
-A valid code returns `204`, consumes the pending row, advances the credential
-step in the same transaction, and clears the pending cookie.
-
-An invalid or replayed code returns `401 verification_failed` and increments the
-shared pending failure count. The fifth total failed passkey, TOTP, or recovery
-attempt consumes the pending row, enqueues the existing exhaustion mail subject
-to the cap below, and clears the cookie. Existing account and client-IP
-second-factor rate limits apply across methods.
+`POST /api/v1/auth/second-factor/totp/verify` takes exactly `{"code":"123456"}`
+under the pending cookie, pending CSRF token, exact Origin, and the shared check
+order. A valid code returns `204`, consumes the pending row, advances the step
+in the same transaction, and clears the cookie. An invalid or replayed code
+returns `401 verification_failed` and counts toward the shared five-failure
+pending limit.
 
 ## Per-account TOTP failure budget
 
-Each valid primary login creates a new pending row, so the TOTP credential
-carries an IP-independent budget in PostgreSQL: `failed_attempts`, from 0
-through 1,000, nullable `cooldown_until`, and nullable `last_failed_at`.
+Every valid primary login creates a new pending row, so the credential row also
+carries an IP-independent budget: `failed_attempts` (0 through 1,000), nullable
+`cooldown_until`, and nullable `last_failed_at`.
 
-Verification locks the credential in the canonical order. When `cooldown_until`
-is later than the transaction time, it returns `429 rate_limited` with
-`Retry-After` set to the remaining whole seconds, at most 86,400. It does no
-decryption, counts no pending failure, and changes no row. Otherwise each
-invalid or replayed code sets `failed_attempts` to the lesser of its value plus
-one and 1,000. When the new value is a multiple of five, `cooldown_until`
+Verification locks the credential in lock order. While `cooldown_until` is later
+than the transaction time, it returns `429 rate_limited` with `Retry-After` set
+to the remaining whole seconds (at most 86,400). It decrypts nothing, counts no
+pending failure, and changes no row. Otherwise each invalid or replayed code
+sets `failed_attempts` to the lesser of its value plus one and 1,000, and sets
+`last_failed_at`. When the new value is a multiple of five, `cooldown_until`
 becomes the transaction time plus 15 minutes times
-`2^min(failed_attempts/5 - 1, 7)`, capped at 24 hours, and the exhaustion mail
-is enqueued subject to the cap. At the 1,000 ceiling every further failure keeps
-the value at 1,000 and sets a 24-hour cool-down. Each failure sets
-`last_failed_at`. A valid code resets all three fields only when it is null or
-24 hours old; replacement and removal always reset them.
+`2^min(failed_attempts/5 - 1, 7)`, capped at 24 hours, and exhaustion mail is
+enqueued subject to its cap. At the ceiling every further failure sets a 24-hour
+cool-down. A valid code resets all three fields only when `last_failed_at` is
+null or at least 24 hours old. Replacement and removal always reset them.
 
-A password holder with any number of client IPs thus gets at most 35 guesses in
-the first day and 5 per day after that, under 0.6 percent success in a year. The
-cool-down covers only TOTP. Passkey and recovery verification never read these
-fields, so the budget cannot lock out another method.
+A password holder therefore gets at most 35 guesses in the first day and 5 a day
+after, from any number of client IPs. The cool-down covers TOTP only; passkey
+and recovery verification never read these fields. A password reset changes
+neither field, so a mailbox holder cannot reset the budget.
 
-Residual risk: a password holder can keep TOTP in cool-down indefinitely. The
-user's ways out are waiting, a passkey, or a recovery code. A completed password
-reset changes neither `cooldown_until` nor `failed_attempts`, so an attacker who
-controls the mailbox cannot reset the budget. The new password still stops the
-attacker from starting another cool-down.
-
-Every `second_factor_attempts_exhausted` job, from any method, obeys one
-per-account cap. Migration 00005 adds nullable
-`second_factor_policies.attempt_mail_at`. Under the policy lock, the job is
-enqueued only when that value is null or at least one hour old, and the same
-transaction sets it to the transaction time. A suppressed mail never suppresses
-the state change. An account receives at most 24 exhaustion mails a day.
+Every `second_factor_attempts_exhausted` job, from any method, is enqueued only
+when `second_factor_policies.attempt_mail_at` is null or at least one hour old,
+and the same transaction sets it to the transaction time, under the policy lock.
+A suppressed mail never suppresses the state change.
 
 ## Removal, recovery, and races
 
-`DELETE /api/v1/me/second-factor/totp` uses no request body. It requires the
-same current session, CSRF, Origin, and recent-proof boundary as other factor
-management. Success is `204`; a missing credential is `404 factor_not_found`.
+`DELETE /api/v1/me/second-factor/totp` has no body and uses the same session,
+CSRF, Origin, and recent-proof boundary as other factor management. Success is
+`204`; a missing credential is `404 factor_not_found`.
 
-Removal deletes any TOTP enrollment. An active factor is an active passkey or
-TOTP credential. This release registers the TOTP counter with the shared
-active-factor count defined in
-[Second-factor authentication](second-factor-authentication.md#enrollment-and-management).
-TOTP removal and passkey removal both decide final versus non-final only from
-that count, taken under the user lock, so no passkey route or handler changes.
-While another factor remains, removal keeps the policy and recovery-code set.
-When TOTP is the final active factor, removal deletes the policy and every
-recovery digest and clears factor proof on the replacement current session.
-Removing the last passkey while TOTP remains is never final. Every removal
-advances the epoch, revokes other sessions and connected-agent authority,
-rotates the current session, and enqueues mail atomically.
-
-The credential being replaced or removed may have supplied the recent factor
-proof. A user who lost TOTP may use a passkey or recovery code instead. Nothing
-else bypasses factor enforcement, and losing every factor and recovery code is
-permanent account loss.
+Removal deletes any TOTP enrollment and decides final versus non-final from the
+shared active-factor count. While another factor remains, the policy and
+recovery codes stay. When TOTP is the final factor, removal deletes the policy
+and every recovery digest and clears factor proof on the replacement session.
+Every removal advances the epoch, revokes other sessions and agent authority,
+rotates the current session, and enqueues mail in one transaction.
 
 Every TOTP path uses one lock order: user, current session when present, factor
-policy, TOTP credential, TOTP enrollment, and pending authentication last when
+policy, TOTP credential, TOTP enrollment, then pending authentication when
 applicable. OAuth grants, codes, tokens, and mail follow as the shared design
 requires. Concurrent start, completion, replacement, removal, code or recovery
-use, session rotation, and deletion have one valid winner and no partial state.
+use, session rotation, and deletion have one winner and leave no partial state.
 
 ## PostgreSQL shape and bounds
 
-Migration `00005_totp_second_factor.sql` adds these relations:
+Migration `00005_totp_second_factor.sql` adds:
 
 - `totp_credentials`: application-generated UUIDv7 `id`, unique `user_id`, key
-  identifier, 12-byte nonce, 36-byte ciphertext, format version 1, nonnegative
+  ID, 12-byte nonce, 36-byte ciphertext, format version 1, nonnegative
   `last_used_step`, `failed_attempts` from 0 through 1,000, nullable
-  `cooldown_until`, nullable `last_failed_at`, `created_at`, and `updated_at`;
+  `cooldown_until` and `last_failed_at`, `created_at`, and `updated_at`;
 - `totp_enrollments`: application-generated UUIDv7 `id`, unique 32-byte token
-  digest, `user_id`, concrete `session_id`, authentication epoch, issuer, key
-  identifier, 12-byte nonce, 36-byte ciphertext, format version 1, and creation
-  and expiry times; and
-- nullable `second_factor_policies.attempt_mail_at` for the exhaustion-mail cap.
+  digest, unique `user_id`, `session_id`, epoch, issuer of 1 to 253 canonical
+  ASCII bytes, key ID, 12-byte nonce, 36-byte ciphertext, format version 1, and
+  creation and expiry times;
+- nullable `second_factor_policies.attempt_mail_at`.
 
-Replacement updates the existing credential row, preserves its ID and creation
-time, and advances `updated_at`. Both user foreign keys use `ON DELETE CASCADE`.
-The enrollment session foreign key also cascades, but only when the session row
-is deleted. Revocation leaves the row, so completion's lock and liveness check
-on the current session, which must equal the bound session, is the guard.
-Credential and enrollment key identifiers have indexes. Enrollment cleanup uses
-`(expires_at,id)`. A unique `totp_enrollments.user_id` permits at most one
-enrollment row per account. Issuer is 1 to 253 canonical ASCII hostname bytes.
+The application generates both IDs because each is bound into its ciphertext
+before insert. Replacement and re-encryption update the credential row in place,
+keeping its ID and creation time. Both user keys cascade on delete. The
+enrollment session key also cascades, but only on session deletion; revocation
+leaves the row, so completion's lock and liveness check on the current session,
+which must equal the bound one, is the guard. Both key-ID columns are indexed.
+Enrollment cleanup uses `(expires_at,id)` and deletes at most 200 expired rows
+per admitted start. Checks enforce every byte length, the 26-byte `tk1_` key-ID
+shape, format version 1, expiry after creation, a nonnegative step, and the
+failure range. Portable export excludes both tables.
 
-Database checks enforce every byte length, the 26-byte `tk1_` key identifier
-shape, closed format version, expiry after creation, nonnegative step, and the
-failure range. Cleanup deletes at most 200 expired enrollment rows per admitted
-start. Account deletion removes all plaintext-derived state. Portable export
-excludes both relations.
-
-Migration 00005 also replaces `auth_email_jobs_kind_check` and
-`auth_email_jobs_scope_check`. The kind constraint adds `totp_added`,
-`totp_replaced`, and `totp_removed` to the complete v0.4.2 set. The scope
-constraint requires `user_id`, forbids registration and reset scope, and keeps
-the existing token-digest rule. `aboutme_app` gets only `SELECT`, `INSERT`,
-`UPDATE`, and `DELETE` on both new tables. The down section deletes only the
-three TOTP job kinds, restores the exact v0.4.2 constraints, and drops both
-tables and the policy column. It first raises an exception when any
-`totp_credentials` row exists, because dropping it would strand a TOTP-only
-policy. Down is supported only before enrollment enablement. Production never
-runs a down migration. TOTP mail insertion stays inside the factor mutation
-transaction.
-
-These are the exact TOTP bounds. [Budgets](budgets.md) repeats each for budget
-tests:
-
-- one active TOTP credential and one enrollment row per account;
-- 20 secret bytes, 32 Base32 characters, and a 39-character grouped display;
-- six digits, 30-second period, and previous/current/next-step verification;
-- ten-minute enrollment lifetime and 32-byte enrollment token;
-- 4,096-byte verification and management request bodies;
-- 2,048-byte provisioning URI;
-- 1 to 253 issuer bytes;
-- three policy-handle candidates per first TOTP completion;
-- 10 factor-management actions per hour per `(account, client IP)`, shared with
-  passkey management;
-- per-account TOTP cool-down every fifth consecutive failure, 15 minutes
-  doubling to at most 24 hours, and a 1,000-failure counter ceiling;
-- one `second_factor_attempts_exhausted` mail per account per hour;
-- one active and at most one previous 32-byte key, and 26-byte derived key IDs;
-- at most three distinct stored key IDs read at startup and every five minutes;
-- 12 nonce bytes and 36 ciphertext bytes;
-- 200-row cleanup and re-encryption batches;
-- 10,000 re-encryption rows and 30 minutes per run;
-- a ten-minute wait after the key switch before the final rotation count; and
-- one `totp_unavailable` log line per reason per minute per process.
+The migration also replaces `auth_email_jobs_kind_check` and
+`auth_email_jobs_scope_check` to admit `totp_added`, `totp_replaced`, and
+`totp_removed` with required user scope, no registration or reset scope, and the
+existing token-digest rule. `aboutme_app` gets `SELECT`, `INSERT`, `UPDATE`, and
+`DELETE` on both tables. The down section raises an exception while any
+`totp_credentials` row exists; production never runs a down migration.
 
 ## Security mail and locales
 
-The authenticator-app release adds closed mail kinds `totp_added`,
-`totp_replaced`, and `totp_removed`. First-factor completion uses
-`second_factor_enabled`. Final factor removal uses `second_factor_disabled`.
-Existing recovery events stay unchanged. The existing attempt event also marks a
-TOTP cool-down start, and every attempt mail obeys the per-account cap.
+`totp_added`, `totp_replaced`, and `totp_removed` use encrypted payload version
+2 with only `to` and `occurredAt`. A first-factor completion sends
+`second_factor_enabled` and a final removal `second_factor_disabled` instead.
+Templates are fixed Vietnamese then English. They name an authenticator app, the
+action, and the UTC time, and advise a password change and session revocation.
+They contain no code, secret, URI, QR image, credential or enrollment ID, key
+ID, nonce, ciphertext, IP, user agent, account ID, or link.
 
-The events use encrypted payload version 2 with only `to` and `occurredAt`.
-Every template contains fixed Vietnamese first and English second. It names an
-authenticator app, the action, and UTC time, then advises password change and
-session revocation. It contains no code, secret, provisioning URI, QR image,
-credential or enrollment ID, key ID, nonce, ciphertext, IP, user agent, account
-ID, or state-changing link.
+The factor mutation and outbox insert commit together. Starting, expiring,
+superseding, or abandoning an enrollment sends no mail.
 
-The factor mutation and outbox insert commit together; insert or encryption
-failure aborts it. Starting, expiring, superseding, or abandoning an enrollment
-sends no mail.
-
-Every new screen, error, label, warning, title, accessible name, and live
-announcement has Vietnamese and English text. Protocol names, codes, issuer,
-account email, and provisioning data remain unchanged when locale changes.
+Every screen, error, label, title, accessible name, and live announcement has
+Vietnamese and English text. Protocol names, codes, issuer, email, and
+provisioning data do not change with locale.
 
 ## Migration, mixed versions, and loss
 
-Migration 00005 is additive and forward-only. It creates no credential or
-enrollment for existing accounts. Its only change to a v0.4.2 relation is the
-nullable policy column, which changes no row value. It changes no passkey,
-policy, recovery, pending, session, grant, authorization-code, token, or mail
-row and deletes no data. Rollback leaves the empty or populated tables in place.
+Migration 00005 is additive. It created no credential or enrollment and changed
+no existing row. The only automatic loss is ephemeral: a new enrollment deletes
+the prior incomplete one, and cleanup removes expired ones. Active credentials
+and recovery codes change only on verified completion or deliberate removal.
 
-Before enrollment enablement, v0.4.2 and v0.4.7 application tasks may overlap
-because no TOTP row can exist. The v0.4.7 web treats absent or malformed new
-capability and state fields as false during that window. The flag stays false
-until every running server and web asset supports TOTP.
-
-After TOTP enrollment can succeed, an older server cannot provide every active
-method or manage a TOTP-only account. A v0.4.2 passkey removal counts only
-passkeys, so it could delete the policy and recovery codes while TOTP stays
-active. The durable production floor must therefore be v0.4.7, numeric release
-4007, before the flag turns on. `deploy.sh` and `fence.sh` refuse any app
-revision with TOTP enrollment on while the fence item is missing or below 4007,
-as the
+An older server cannot count TOTP as an active factor, so production runs v0.4.7
+(numeric 4007) or later whenever TOTP enrollment can succeed. `deploy.sh` and
+`fence.sh` enforce this floor as the
 [release fence](passkey-release-fence.md#authenticator-app-key-re-encryption)
-defines. Older browser assets fail closed: primary login still creates no
-session, and the v0.4.2 pending page shows a refresh prompt for the unknown
-`totp` value, calls no route for it, and grants nothing. Existing recovery may
-still work, but compatibility does not depend on it.
-
-Turning `TOTP_ENROLLMENT_ENABLED` off stops new setup and replacement. It never
-lowers the floor, removes a credential, disables TOTP verification, changes
-recovery, or permits primary-only login. After enablement, rollback means a
-forward fix or an image at or above the v0.4.7 fence.
-
-The only intentional loss is ephemeral: starting a new enrollment deletes the
-prior incomplete enrollment, and cleanup removes expired enrollment rows. Active
-credentials and recovery codes are unchanged until verified completion or
-deliberate removal.
-
-## Verification and release
-
-GitHub CI owns every build, test, lint, database, migration, browser,
-infrastructure, Semgrep, and gitleaks gate. Production deploys valid keys with
-enrollment off, proves compatibility, raises the serialized floor to v0.4.7,
-enables enrollment, and proves the flow with the authorized fictional account.
-The scripted production proof keeps every secret, URI, and code in process
-memory and prints only fixed step outcomes.
+defines. An older browser shows a refresh prompt for the unknown `totp` method,
+calls no route for it, and grants nothing.

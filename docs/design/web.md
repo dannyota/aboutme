@@ -18,30 +18,26 @@ produces the same document everywhere.
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
 
-The login page always shows the email/password form. The registration page shows
-that form when the capabilities read reports `passwordRegistration` true. Each
-page shows one provider link for every name in the capabilities read's
-`providers` list (ADR 0039); an empty or missing list shows none. When
-`passwordRegistration` is false, registration hides its form and shows a short
-note offering the listed providers instead (only the note and a Sign in link
-when none is listed); a register request that answers 404 shows the same note. A
-missing `passwordRegistration` field counts as true, and while the read is
-pending the form holds its space hidden and inert. After registration, a notice
-tells everyone to check spam if the email does not arrive, and offers Google
-when it is listed; an expired or incomplete verification link offers Google the
-same way. Registration, verification, forgot-password, and reset-password are
-separate Nuxt pages. Verification and reset strip the `#token=` fragment before
-any network call and load no third-party resource. Account settings show whether
-a password is set and allow add/change after recent reauthentication. The
-sign-in providers block lists every linked identity with its link date, marks
-one whose provider is not listed as unavailable for sign-in, and offers Unlink
-behind a confirmation. Unlinking keeps every session signed in, so a successful
-unlink offers to sign out the other devices by revoking each non-current
-session. Unlink is disabled, with the reason, when removing that identity would
-leave no password and no other listed identity. The block offers Link only for
-listed providers that are not linked, and provider reauthentication uses only a
-linked provider that is listed. The connected-agents block appears only when
-`agentAccess` is true. Provider emails are never shown as a linkage decision.
+The login page always shows the email and password form. Each auth page shows
+one provider link per name in the capabilities `providers` list
+([ADR 0039](../adr/0039-per-provider-login-enablement.md)). When
+`passwordRegistration` is false, or a register request returns `404`,
+registration shows a short note offering the listed providers instead of its
+form; a missing field counts as true, and the form holds its space hidden while
+the read is pending. After registration, a notice says to check spam and offers
+Google when listed; an expired verification link does the same. Verification and
+reset strip the `#token=` fragment before any network call and load no
+third-party resource.
+
+Account settings show whether a password is set and allow add or change after
+recent reauthentication. The sign-in providers block lists every linked identity
+with its date, marks one whose provider is not listed as unavailable, and offers
+Unlink behind a confirmation. Unlink is disabled, with the reason, when it would
+leave no password and no other listed identity; after an unlink, the page offers
+to revoke the other sessions. Link appears only for listed, unlinked providers,
+and provider reauthentication uses only a linked, listed provider. The
+connected-agents block appears only when `agentAccess` is true. Provider emails
+are never shown.
 
 The application shell renders two variants from the client-side session state:
 signed out shows the brand, Sign in, Create account, and the theme toggle;
@@ -112,42 +108,10 @@ never by tag, class, or index.
 
 ## Interface localization
 
-The interface locale is `vi` or `en`, defaults to Vietnamese, and persists in
-the script-readable `aboutme-locale` cookie for one year at path `/` with
-`SameSite=Lax`. Missing and invalid values select Vietnamese. The homepage,
-authentication and recovery pages, legal pages, template gallery, and resume
-workspace use this locale. The exact account routes `/app/settings/sessions` and
-`/authorize` use it too. No other route joins the locale scope through the
-account localization contract.
-
-The resume workspace comprises the list, blank and sample creation, editor,
-publish dialog, owner PDF export, browser titles, errors, accessible copy, and
-shared account menu. The application shell exposes the language control on the
-list, creation, settings, and consent routes. The editor exposes it in its own
-top bar. Shared menu copy includes its accessible name, Settings link, theme
-action, and logout action.
-
-Each surface owns typed Vietnamese and English copy maps with identical keys.
-Controllers retain semantic states, error codes, field paths, and retry data;
-components choose user-facing copy for the current locale. Editor copy stays out
-of public-render and print worker bundles.
-
-Interface language and resume language are independent. Opening a blank creation
-flow captures the interface locale once as its initial resume language; an
-explicit gallery-sample language wins. Later interface toggles do not change
-resume language, authored content, materialized defaults, public settings,
-unsaved drafts, pending commands, conflicts, or revision state, and do not send
-a resume write. The pure renderer, public page, and PDF content continue to use
-resume language.
-
-The resume list, new-resume page, and generic editor loading title use localized
-page names. A loaded editor title keeps the authored resume title. The page HTML
-`lang` follows interface language, while each preview root keeps resume
-language. [ADR 0047](../adr/0047-bilingual-resume-workspace.md) records the
-choice; the [localization design](editor-localization.md) defines scope,
-compatibility, security, and acceptance. The
-[account localization design](account-localization.md) defines the settings and
-consent extension.
+The interface is Vietnamese or English, chosen by the `aboutme-locale` cookie
+and defaulting to Vietnamese. Interface language never changes resume data or
+resume language. The [localization design](localization.md) owns scope,
+catalogs, state preservation, and security.
 
 ## Agent consent and connected agents
 
@@ -184,18 +148,11 @@ The print browser has no general outbound network access. Fonts and renderer
 assets are local. Its controller supplies an authorized photo as same-origin or
 inline data and waits for every requested font and image to finish loading.
 
-Go freezes the authorized render snapshot and issues a cryptographically random
-one-use capability bound to that resume, snapshot, caller, and the `nuxt-print`
-audience. It expires within 60 seconds and is consumed atomically over a
-loopback or deployment-private internal interface. Chromium sends it in a
-redacted authorization header, never a URL or cookie. A resume ID or direct Nuxt
-access grants no print authority. After redemption, Go retains the consumed job
-binding and a separate controller-handle hash. The controller handle never
-leaves the Go render queue; knowing the job ID is insufficient. The controlling
-Go render job receives the browser output and performs the in-process terminal
-snapshot, digest, and public-generation check. Nuxt and Chromium cannot publish
-the result. [ADR 0023](../adr/0023-private-print-capability.md) defines this
-boundary.
+Print authority is a one-use Go capability sent in a redacted authorization
+header, never a URL or cookie. A resume ID or direct Nuxt access grants nothing,
+and only the controlling Go render job can accept the output.
+[Security](security.md#internal-print-authority) and
+[ADR 0023](../adr/0023-private-print-capability.md) define the protocol.
 
 The server supplies `renderContext.lng` from the total language projection in
 [the data design](data.md#relational-model). Null, empty, and invalid legacy
@@ -203,27 +160,13 @@ values become `und`; valid values use their canonical BCP 47 form. Preview,
 public SSR, and internal print use that same value as the resume root's `lang`
 attribute. Locale-sensitive CSS therefore never depends on the host locale.
 
-The component tree is:
+The component tree is `ResumeDocument`, then `ResumeHeader` and `LayoutColumns`,
+then `SectionRenderer` with section components and renderer primitives.
 
-```mermaid
-graph TD
-    D[ResumeDocument] --> H[ResumeHeader]
-    D --> L[LayoutColumns]
-    L --> S[SectionRenderer]
-    S --> T[Section components]
-    S --> P[Renderer primitives]
-```
-
-`ResumeHeader` displays visible contact details in array order. A non-empty
-custom label replaces the type label. Website, LinkedIn, GitHub, Twitter, and
-custom values link only after an exact lowercase `https://` check, and a
-detail's `display` picks the anchor text. Email and phone values link as
-`mailto:` and `tel:` only after a strict check, with the value as the anchor
-text; location values are plain text. Every inline link is underlined.
-[ADR 0013](../adr/0013-contact-detail-rendering.md),
-[ADR 0040](../adr/0040-contact-labels-beside-icons.md),
-[ADR 0041](../adr/0041-contact-link-display-and-body-justify.md), and
-[ADR 0043](../adr/0043-email-and-phone-links.md) own these rules.
+`ResumeHeader` renders contact details in array order with the link rules of
+[template contract §5.1](templates/contract.md#51-header): web links only after
+an exact lowercase `https://` check, and `mailto:` or `tel:` only after a strict
+check ([ADR 0043](../adr/0043-email-and-phone-links.md)).
 
 `LayoutColumns` reads order only from `customization.layout.sections`. In
 one-column mode it renders `main` then `sidebar`, preserving all sections. No
@@ -237,7 +180,7 @@ preset computes placement against the current document and leaves content
 untouched. [ADR 0008](../adr/0008-template-apply-semantics.md) defines the
 algorithm; the detailed contract lives in [templates/](templates/README.md).
 
-V1 accepts these limits explicitly:
+The template contract accepts these limits:
 
 - The document stores no template identity.
 - A preset cannot hide a present photo, hide a whole section, or globally
@@ -246,8 +189,8 @@ V1 accepts these limits explicitly:
 - The editor warns about very small type and risky print margins; stored drafts
   remain permissive.
 
-These require a later document version after the font-only v2 release; they are
-not silent renderer exceptions.
+Lifting one needs a new document version, never a silent renderer exception
+([limitations](templates/limitations.md)).
 
 The renderer never derives a media URL from `personalDetails.photo.key`.
 Authenticated, public, and local-preview controllers pass the applicable URL in
@@ -260,31 +203,13 @@ exposes the stored key.
 
 ## Font catalog
 
-Fonts are user choices. The catalog may include families with different script
-coverage, styles, and weights; the UI states that coverage instead of claiming
-that every family supports every language.
-
-Every bundled family must meet the license gate:
-
-- No purchase, subscription, usage charge, or per-document fee.
-- Self-hosting, redistribution with the application, and embedding in generated
-  PDFs are permitted. Modification is required only when the asset policy
-  changes the upstream bytes.
-- The exact upstream source, version or commit, license text, available styles,
-  coverage label, and file hashes are committed in a manifest.
-- Required attribution or license files ship with the font.
-
-Vietnamese coverage is preferred because the initial community is Vietnamese. It
-is not used to eliminate otherwise useful font choices. A bundled fallback chain
-covers the declared English, Vietnamese, and renderer-punctuation set. Other
-scripts remain accepted but may reach platform fonts, and the UI states that
-limit. The service loads no third-party font CDN at runtime. Print waits for
-every requested face and fallback to load.
-
-The [font catalog](fonts.md) defines the exact license and provenance gate. It
-expands through a dedicated, reviewed data change. Adding a family updates the
-schema enum, manifest, license files, generated types, UI labels, and
-representative renderer tests together.
+Fonts are user choices from a bundled catalog. The UI states each family's
+measured coverage instead of claiming every family supports every language. The
+service loads no third-party font CDN at runtime, and print waits for every
+requested face and fallback. The [font catalog](fonts.md) owns the license gate,
+provenance, coverage, and fallback rules. Adding a family updates the schema
+enum, manifest, license files, generated types, UI labels, and representative
+renderer tests together.
 
 ## Rich text
 
@@ -352,30 +277,14 @@ screenshot subset cover visual output, including Vietnamese text.
 
 ## Freshness
 
-Normal published HTML uses `Cache-Control: no-cache, must-revalidate` and a
-strong entity tag. Shared caches may retain it for up to 60 seconds, but every
-reuse revalidates through the origin live-state gate. Private render caches key
-artifacts by public generation and use the same maximum lifetime. A cache hit is
-never authorization.
+Published HTML uses `Cache-Control: no-cache, must-revalidate` and a strong
+entity tag. A shared cache may keep it for up to 60 seconds, but every reuse
+revalidates through the origin live-state gate, and private render caches key
+artifacts by public generation. A cache hit is never authorization
+([ADR 0022](../adr/0022-public-artifact-revocation.md)).
 
-Unpublish, delete, and rename advance the public generation under the revocation
-fence and wait for old-generation origin responses before returning success.
-Edge invalidation releases retained bytes but is defense in depth. An open page
-also listens for SSE invalidations, refetches uncached public JSON, and renders
-in place. Clients never treat an SSE event as document data.
-[ADR 0022](../adr/0022-public-artifact-revocation.md) owns the immediate
-revocation rule.
-
-Caddy routes public resume HTML through Go. Go holds the per-resume generation
-lease and origin response, passes a frozen snapshot to Nuxt over the private
-render interface, and releases the lease only after the response finishes or
-aborts. Nuxt remains the sole HTML renderer but never owns the public origin
-response authority. A viewer request already validated before a revocation may
-finish; every request admitted or revalidated afterward sees the new state. Go's
-sitemap and `llms.txt` handlers hold the separate discovery generation lease
-through their aggregate origin responses.
-
-The private public-render interface is exactly Nuxt
-`POST /internal-render/public` on the direct origin listener. It accepts the
-bounded frozen snapshot and performs no ID lookup or ambient fetch. Public Caddy
-denies the root before its default Nuxt handler.
+An open public page listens for SSE invalidations, refetches uncached public
+JSON, and renders in place. A client never treats an SSE event as document data.
+Go controls every public HTML response and Nuxt renders it through
+`POST /internal-render/public`, as the
+[system design](system.md#renderer-boundary) defines.

@@ -1,7 +1,5 @@
 # Color and accessibility tokens
 
-Status: **Approved v2** (2026-08-12).
-
 Defines derived color roles, multi-surface behavior, and the accessibility floor
 for the [template token vocabulary](tokens.md).
 
@@ -29,50 +27,31 @@ mutated.
 
 Notes:
 
-- **`--color-track` carries no contrast floor, and cannot.** Its derivation
-  (accent mixed 80% toward the surface) caps it at 1.61:1 on a white surface
-  even for a pure-black accent — verified independently by two preset designs.
-  This is acceptable because the track is not the meaning-carrier: in a level
-  widget only the FILLED portion asserts anything, and it meets 3:1 against both
-  track and surface. The §5 "meaningful non-text" floor therefore applies to the
-  filled bar, filled dots, and chip fill — never to the track. The renderer
-  first clamps the fill against both the derived track and the surface. If no
-  black-or-white search direction can satisfy both, the track becomes the
-  surface and the fill uses the ordinary single-surface clamp. This fallback may
-  make the track invisible, which is valid because it carries no meaning.
-  Renderer consequence: a level widget must remain correct when the track is
-  invisible. An absent `level` renders no widget. A present level, including
-  zero, emits the exact accessible widget name from contract §5.6; levels 1–5
-  additionally use the visible fill. An empty track is never the sole difference
-  between "rated 0" and "unrated".
+- **`--color-track` has no contrast floor.** Mixing the accent 80% toward the
+  surface caps it at 1.61:1 on white even for a black accent. Only the filled
+  part of a level widget carries meaning, so the §5 non-text floor applies to
+  the filled bar, dots, and chip fill, which the renderer clamps against both
+  track and surface. If no search direction satisfies both, the track becomes
+  the surface and the fill uses the single-surface clamp. A widget must stay
+  correct with an invisible track: an absent `level` renders no widget, and a
+  present level, including zero, carries the accessible name from contract §5.6.
 - `--color-link` is the link's **color** role only. Its underline is
   renderer-fixed ([Geometry](geometry.md)) and no preset can remove it, so a
   link is separable from body text even where the two colors are close.
 - `colors.accent` and `colors.surface` are the only optional colors and neither
-  can be cleared to `""` — `hexColor`'s pattern forbids it. Absent is the only
-  unset state; the accent falls back to `colors.primary` and the surface to
+  can be cleared to `""`, because `hexColor`'s pattern forbids it. Absent is the
+  only unset state; the accent falls back to `colors.primary` and the surface to
   `colors.background`, never to a hard-coded brand color or tint.
-- `--color-surface-sidebar` was reserved as a role in the first draft so that
-  giving the sidebar an independent tint would be a token change rather than a
-  markup change. `colors.surface` plus `layout.surfaceTarget` is that change;
-  the role is no longer an unconditional alias, and `--color-surface-header`
-  joins it on the same footing. Anything below "its surface" in the table above
-  means whichever of the three the element actually paints on.
-- `--color-on-accent` always exists: for any accent, the contrast ratios of
-  black and white against it multiply to exactly 21, so the larger of the two is
-  at least √21 ≈ 4.58 and clears the 4.5:1 floor. (The first draft specified an
-  outline-chip fallback for the case where neither reached 4.5:1; that case is
-  arithmetically unreachable, so the fallback was removed — a `tag` chip always
-  fills.)
+- "Its surface" in the table means whichever of the three surface roles the
+  element paints on.
+- `--color-on-accent` always exists: the contrast ratios of black and white
+  against any color multiply to 21, so the larger is at least √21 ≈ 4.58. A
+  `tag` chip therefore always fills.
 - **Mix space (normative):** every "mixed N% toward the surface" step in the
   table above is a component-wise linear interpolation of the **gamma-encoded
   sRGB channels** (the CSS `color-mix(in srgb, …)` behavior), not a mix in
-  linear light or OKLab. The spaces disagree enough to change conformance:
-  mixing text 25% toward white in linear light darkens the result's computed
-  luminance so far that no text color could reach `--color-meta`'s 4.5:1 target
-  without clamping, while the sRGB mix leaves typical dark text at 6–7:1
-  unclamped. Contrast checks in preset rationale docs and golden tests must use
-  this definition.
+  linear light or OKLab, which would change conformance. Contrast checks and
+  golden tests use this definition.
 
 ### 4.1 The effective surface target
 
@@ -89,13 +68,9 @@ effectiveSurfaceTarget(customization):
   return t
 ```
 
-The two degradations are the point, not an edge case. `contract.md` §7 already
-requires that in one-column mode "any sidebar-specific treatment (tint, narrower
-measure) degrades to the main treatment", and a user reaches exactly that state
-with one click of the columns toggle. Making it a validation error would make a
-document unsaveable that the editor itself produced, so both combinations stay
-stored verbatim: toggling back to two columns, or re-picking a color, restores
-the tint with no rewrite of either field.
+Both degradations follow `contract.md` §7, where sidebar treatment degrades in
+one-column mode. The stored values stay as they are, so toggling back to two
+columns or re-picking a color restores the tint without rewriting either field.
 
 A tinted header band spans the full content measure, inside `--page-margin-x`. A
 tinted sidebar fills its own column, `--sidebar-ratio` wide, and continues
@@ -118,8 +93,6 @@ the page surface. Mix-toward-the-surface steps and the track/solid pair use that
 same region surface. `--color-on-accent` follows because it is chosen against
 `--color-accent-solid`, which is itself per-surface.
 
-Three consequences worth stating outright:
-
 - The floor holds for any of the 16.7 million surfaces a user can pick,
   including a near-black band under `colors.text: #1a1a1a`. The clamp keeps the
   hue and chroma of the text color and moves only its lightness toward the black
@@ -134,12 +107,9 @@ Three consequences worth stating outright:
   on a dark band.
 - It is non-destructive. `customization.colors` keeps the user's hexes; only the
   derived roles differ between the tinted region and the rest of the page.
-- The same text color can therefore resolve to two different values on one page,
-  which is correct and is why §5's "per surface" bullet is a hard rule rather
-  than an optimization note. Code must not hoist a clamped role to the document
-  root, and golden snapshots must cover a document with a tinted region so the
-  second resolution is pinned too — `fixtures/full.json` carries one
-  (`surfaceTarget: "sidebar"` over two columns).
+- One text color may resolve to two values on one page. Code must not hoist a
+  clamped role to the document root, and golden snapshots cover a tinted region
+  through `fixtures/full.json` (`surfaceTarget: "sidebar"` over two columns).
 
 **Rendering regression coverage.** The two artifacts have different scopes
 because their execution costs differ:

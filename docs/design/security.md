@@ -50,9 +50,8 @@ Provider login is gated per provider by `PROVIDER_LOGIN_ENABLED`, default off.
 It takes blank or `false` (none), `true` (all three), or a comma list such as
 `google`. A disabled provider has no start or callback route, so its login,
 settings link, and reauthentication starts return the uniform not-found
-response. In prod and staging only an enabled provider requires its client ID
-and secret. Production can enable only Google; it stays off until
-`provider_login_enabled = "google"`.
+response. With `ENV` set to `prod` or `staging`, only an enabled provider needs
+its client ID and secret, and production can enable only Google.
 [ADR 0027](../adr/0027-provider-login-flag.md) and
 [ADR 0039](../adr/0039-per-provider-login-enablement.md) record the decision.
 
@@ -89,73 +88,17 @@ pending registrations, login, reset, and password add or change still work, and
 provider sign-up is unaffected. The capabilities read reports
 `passwordRegistration` so the web hides the sign-up form.
 
-## Passkey second factor
+## Second factor
 
-An enrolled account requires a primary password or provider proof followed by a
-passkey, an authenticator-app code, or a single-use recovery code. Primary proof
-creates a bounded pending authentication instead of a session. The pending
-cookie grants no access to `/me`, consent, resumes, MCP, or any other session
-route.
-
-The account authentication epoch binds sessions, connected-agent grants,
-authorization codes, pending authentications, and WebAuthn ceremonies. A factor
-change advances the epoch and revokes stale authority in the same transaction.
-Sensitive actions on an enrolled account require a current-epoch concrete
-session with both primary and factor proof inside the 15-minute window.
-[ADR 0048](../adr/0048-passkey-second-factor-authentication.md), the
-[shared design](second-factor-authentication.md), and the
-[v0.4.2 contract](passkey-second-factor-contract.md) own the exact flows and
-invariants.
-
-## Authenticator-app second factor
-
-The authenticator-app release adds time-based one-time password (TOTP) codes
-inside the same boundary without weakening any passkey rule.
-[ADR 0049](../adr/0049-totp-second-factor-authentication.md), the
-[authenticator-app contract](totp-second-factor-contract.md), and the
-[key-management design](totp-key-management.md) own the exact rules.
-
-- **Surface.** `POST /api/v1/auth/second-factor/totp/verify` completes a pending
-  authentication. `POST` and `PUT /api/v1/me/second-factor/totp/enrollment`
-  start and prove enrollment or replacement.
-  `DELETE /api/v1/me/second-factor/totp` removes the credential. Capabilities
-  add `totpEnrollment`, account state adds `totpEnabled`, and pending status
-  adds the closed `totp` method. No response returns a stored secret,
-  ciphertext, key ID, nonce, or last-used step.
-- **Caching.** Every second-factor route, TOTP included, sends exact
-  `Cache-Control: no-store, no-transform` on success and error.
-- **Codes.** A code is exactly six ASCII digits. A matched step is single-use
-  across login, reauthentication, and enrollment proof under the credential row
-  lock.
-- **Guessing.** Pending rows keep the shared five-failure limit. Each credential
-  also carries a per-account failure count and a cool-down that starts at 15
-  minutes after every fifth consecutive failure and doubles to at most 24 hours.
-  The cool-down never blocks a passkey or recovery code, and a password reset
-  does not clear it. Every attempt-exhaustion mail, from any method, is capped
-  at one per account per hour.
-- **Mutations.** Enrollment, replacement, and removal use the current-session,
-  recent-proof, CSRF, exact Origin, epoch, revocation, session-rotation, and
-  lock-order rules of the passkey boundary. The first TOTP completion creates
-  the factor policy and its random WebAuthn user handle in at most three
-  candidates; later passkey enrollment reuses that handle.
-- **Mail.** `totp_added`, `totp_replaced`, and `totp_removed`, plus the shared
-  enabled, disabled, and attempt events, commit with their mutation. Every
-  template is bilingual and carries no code, secret, URI, or identifier.
-- **Key ring.** AES-256-GCM seals each secret with associated data that binds
-  account, row, record kind, format, and derived key ID. Runtime holds one
-  active key and at most one previous key. Only the app ECS execution role reads
-  the two exact key parameters; scheduled jobs get none. Rotation re-encrypts
-  lazily on use and through the one-shot `totp_reencrypt` operation.
-- **Key failure.** A malformed ring fails startup. An unknown key ID or an
-  authentication failure fails closed with `503 authentication_unavailable` for
-  that TOTP row only, counts no failure, and logs the secret-free
-  `totp_unavailable` signal that alarm `aboutme-prod-totp-unavailable` watches.
-  `/readyz` and `internal/publicstate/readiness.go` read no TOTP state, so
-  passkeys, recovery, and accounts without TOTP stay available.
-- **Older clients and floor.** A v0.4.2 browser shows a refresh prompt for the
-  unknown `totp` method and grants nothing. Enrollment stays off until the
-  release fence reaches v0.4.7, numeric release 4007. Turning the flag off never
-  lowers the fence or disables verification, removal, or recovery.
+An account may add passkeys or an authenticator app. An enrolled account needs
+primary proof followed by an active factor or a single-use recovery code.
+Primary proof creates a bounded pending authentication, not a session, and the
+pending cookie reaches no session route. An account authentication epoch binds
+sessions, agent grants, and authorization codes; every factor change advances it
+and revokes stale authority in the same transaction. Sensitive actions on an
+enrolled account need both proofs inside the 15-minute window. TOTP secrets are
+sealed under a runtime key ring, and a key failure disables TOTP only. The
+[second-factor design](second-factor-authentication.md) owns the rules.
 
 ## OAuth transaction
 
@@ -245,7 +188,7 @@ cross-origin resource sharing (CORS) surface.
 
 The application has one configured public origin. Apex and `www` cannot both
 serve the authenticated application; one redirects before auth routes. Provider
-callbacks use that exact origin. Production and user acceptance testing use
+callbacks use that exact origin. Production and the local HTTPS harness use
 HTTPS because `__Host-` cookies are always `Secure`. Plain HTTP native
 development is suitable for non-authenticated work only.
 
@@ -314,22 +257,12 @@ refusal is not an alternative. Policies can key by IP, account, or
 account-and-IP. [ADR 0018](../adr/0018-bounded-rate-limiter.md) records the
 failure model.
 
-Anonymous login starts are limited to 30 per minute per client IP. Authenticated
-provider-link and reauthentication starts are separately limited to 30 per
-minute per `(account, client IP)` pair. Each start deletes only a bounded batch
-of expired OAuth transactions before inserting one row, so unauthenticated
-traffic cannot turn cleanup into unbounded request work.
-
-Password routes add their own bounded policies: login admission and a per-email
-failure budget, registration/forgot per-email and per-IP, verification/reset
-token consumption, and `(account, client IP)` for add/change/reauthentication.
-Exact values live in [the numeric budgets](budgets.md). Unknown, provider-only,
-and wrong-password states stay byte-identical.
-
-Agent routes add registration and token policies per client IP, a failed-grant
-budget per client, tool-call budgets per token and per user, a
-concurrent-request cap per user, and a live-grant cap per account. All compose
-the same bounded limiter and the canonical Caddy client address.
+Anonymous login starts, privileged provider starts, password routes, and agent
+routes each add their own policies on the same limiter and canonical client
+address; [the numeric budgets](budgets.md) list them. Each OAuth start deletes
+only a bounded batch of expired transactions before inserting one row, so
+cleanup never becomes unbounded request work. Unknown, provider-only, and
+wrong-password login states stay byte-identical.
 
 ## No operator surface
 
@@ -341,12 +274,10 @@ owns this boundary.
 
 ## Public artifact revocation
 
-Every public response revalidates current slug, live state, route flags, and
-public generation at the origin before a shared cache can reuse bytes. The
-revocation fence drains old-generation origin responses before unpublish,
-delete, or rename returns success. A cache hit, an object key, and an SSE event
-are never authorization. [ADR 0022](../adr/0022-public-artifact-revocation.md)
-owns this boundary.
+A cache hit, an object key, and an SSE event are never authorization. Every
+public reuse revalidates at the origin, and unpublish, delete, and rename wait
+for the revocation fence
+([ADR 0022](../adr/0022-public-artifact-revocation.md)).
 
 ## Internal print authority
 
@@ -379,32 +310,17 @@ split.
 
 ## Untrusted media
 
-A compressed-byte limit does not bound decoded image memory. Photo intake checks
-dimensions and pixel count before full decode, confirms the decoded bounds,
-rejects animation and malformed containers, and runs under one task-wide permit.
-Body read and object write have cancellable deadlines. Normalization is
-synchronous: its five-second ceiling is a measured release gate, and a request
-never returns while decoder work remains. A busy task rejects before reading the
-body.
-
-Only decoded pixels cross the storage boundary. The normalizer applies one valid
-Exif orientation and re-encodes a static JPEG or PNG. It drops Exif and GPS
-data, XMP, IPTC, comments, thumbnails, ICC profiles, unknown optional chunks,
-and trailing bytes. Decoder details, filenames, and metadata never enter
-responses or logs. Every rejection before object-write dispatch leaves both
-PostgreSQL and object storage unchanged. A remote create with an unknown outcome
-leaves PostgreSQL unchanged and may leave one unreachable private object; the
-request never deletes its uncertain key, and bounded reconciliation later proves
-whether it is unreferenced. [ADR 0019](../adr/0019-private-media-delivery.md)
-owns the storage and failure boundary; [the API design](api.md#photo-intake)
-owns the normalization contract.
-
-Removing a media reference and enqueuing its exact-key deletion job are one
-transaction. Private storage plus reference-gated reads revoke access at commit;
-physical deletion may follow asynchronously and targets completion within 24
-hours. Overdue deletion is audited, alerted, and retried. Weekly orphan
-reconciliation covers crash candidates and queue/accounting gaps without making
-object existence an authority.
+A compressed-byte limit does not bound decoded memory, so photo intake checks
+dimensions and pixel count before full decode, rejects animation and malformed
+containers, and runs under one task-wide permit; a busy task rejects before
+reading the body. Only re-encoded static JPEG or PNG pixels reach storage, with
+every metadata block, profile, and trailing byte dropped. Decoder details,
+filenames, and metadata never enter responses or logs. A rejection before the
+object write leaves PostgreSQL and storage unchanged; an object write with an
+unknown outcome is never deleted by the request and is left to reconciliation.
+[The API design](api.md#photo-intake) owns normalization, the
+[deployment design](deployment.md#media) owns the write and deletion order, and
+[ADR 0019](../adr/0019-private-media-delivery.md) owns the storage boundary.
 
 Secrets never enter source, OpenTofu state where avoidable, URLs, or logs.
 Production fails closed when trusted proxies, provider credentials, origin
