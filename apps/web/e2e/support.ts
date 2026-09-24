@@ -69,3 +69,39 @@ export const FIXTURE_PHOTO_CROP_GEOMETRY: PhotoCropGeometry = {
   overflow: 'hidden',
   objectFit: 'cover',
 };
+
+/**
+ * Puts a harness render (any fixture, `mode=continuous`) into the same print
+ * state the production print worker gives its standalone page: the
+ * `body.resume-print` class, which zeroes the on-screen page padding so only
+ * the injected `@page` margin remains, and the `@page` rule itself, read back
+ * from the geometry the renderer already resolved onto `.resume-document`'s
+ * `--page-margin-x`/`--page-margin-y` custom properties. The harness only
+ * wires this up for its own dedicated print fixtures (`print-fixtures.ts`),
+ * so any other fixture that prints through the harness needs it done here.
+ * Returns the `@page` CSS text to inject with `page.addStyleTag` before
+ * `page.emulateMedia({ media: 'print' })` and `page.pdf(...)`.
+ */
+export async function preparePrintPage(page: Page): Promise<string> {
+  const geometry = await page.evaluate(() => {
+    document.body.classList.add('resume-print');
+    const article = document.querySelector('.resume-document');
+    const paper = document.querySelector('.harness-paper');
+    if (article === null || paper === null) {
+      throw new Error('Harness render did not produce a resume document.');
+    }
+    const style = getComputedStyle(article);
+    return {
+      widthPx: paper.getBoundingClientRect().width,
+      marginXmm: Number.parseFloat(style.getPropertyValue('--page-margin-x')),
+      marginYmm: Number.parseFloat(style.getPropertyValue('--page-margin-y')),
+    };
+  });
+  const widthPx = Math.round(geometry.widthPx);
+  if (widthPx !== 794 && widthPx !== 816) {
+    throw new Error(`Unexpected page width ${geometry.widthPx}px.`);
+  }
+  const size = widthPx === 794 ? '210mm 297mm' : '8.5in 11in';
+  const margin = `${geometry.marginYmm}mm ${geometry.marginXmm}mm`;
+  return `@page {\n  size: ${size};\n  margin: ${margin};\n}`;
+}
