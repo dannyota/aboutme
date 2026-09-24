@@ -34,6 +34,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Numeric budgets](budgets.md)                                   | Hard limits, rate policies, SLOs, and benchmark protocol       |
 | Other   | [Font catalog](fonts.md)                                        | Font license gate, provenance, coverage, and fallback          |
 | Other   | [MCP owner workflow](mcp-owner-workflow.md)                     | Official-SDK client run that copies one resume into Vietnamese |
+| Other   | [Public PDF tab](public-pdf-tab.md)                             | Public page PDF preview drawn in the browser from the download |
 | Other   | [Templates](templates/README.md)                                | Preset data, tokens, colors, geometry, and print behavior      |
 | Other   | [Scaling](scaling/README.md)                                    | What a second serving replica needs                            |
 
