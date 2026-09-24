@@ -46,11 +46,17 @@ function consoleStage(message: { location(): { url: string }; text(): string }):
   return `console-${path}-${/\b[45]\d\d\b/.test(message.text()) ? 'http' : 'other'}`;
 }
 
-async function expectSignedOutShell(page: Page): Promise<void> {
+// The header CTA reads "Create your resume" on marketing routes (the
+// homepage among them) and "Create account" everywhere else (DESIGN.md;
+// ADR 0050).
+async function expectSignedOutShell(
+  page: Page,
+  ctaLabel: 'Create account' | 'Create your resume' = 'Create account',
+): Promise<void> {
   const header = page.getByRole('banner');
   await expect(header.getByRole('link', { name: 'Sign in' })).toBeVisible();
   await expect(
-    header.getByRole('link', { name: 'Create account' }),
+    header.getByRole('link', { name: ctaLabel }),
   ).toBeVisible();
   await expect(header.getByRole('link', { name: 'Resumes' })).toHaveCount(0);
   await expect(header.getByRole('link', { name: 'Settings' })).toHaveCount(0);
@@ -117,7 +123,7 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
   try {
     await auditRouteInBothThemes(page, '/', async () => {
       await expect(page.getByTestId('landing-title')).toHaveText(
-        'CV của bạn. Miễn phí. Không ai thấy nếu bạn không muốn.',
+        'CV của bạn. Chia sẻ theo cách của bạn.',
       );
       await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
     });
@@ -128,20 +134,20 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await page.goto(`${ORIGIN}/`);
     await waitForHydration(page);
     await expect(page.getByTestId('landing-title')).toHaveText(
-      'Your resume. Free. No one sees it unless you want them to.',
+      'Your resume. Your link. Your control.',
     );
     const main = page.getByRole('main');
     await expect(
-      main.getByRole('link', { name: /^(Create account|Sign in)$/ }),
-    ).toHaveText(['Create account', 'Sign in']);
+      main.getByRole('link', { name: /^(Create your resume|Sign in)$/ }),
+    ).toHaveText(['Create your resume', 'Sign in']);
     await expect(main.getByRole('link', { name: 'Sign in' })).toHaveAttribute(
       'href',
       '/login',
     );
     await expect(
-      main.getByRole('link', { name: 'Create account' }),
+      main.getByRole('link', { name: 'Create your resume' }),
     ).toHaveAttribute('href', '/register');
-    await expectSignedOutShell(page);
+    await expectSignedOutShell(page, 'Create your resume');
     steps.landing = true;
 
     stage('login-open');

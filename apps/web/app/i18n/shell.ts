@@ -5,6 +5,8 @@ export type ShellCopy = {
   readonly primaryNavigation: string;
   readonly signIn: string;
   readonly createAccount: string;
+  readonly createResume: string;
+  readonly openSource: string;
   readonly templates: string;
   readonly resumes: string;
   readonly settings: string;
@@ -24,6 +26,8 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     primaryNavigation: 'Điều hướng chính',
     signIn: 'Đăng nhập',
     createAccount: 'Tạo tài khoản',
+    createResume: 'Tạo CV của bạn',
+    openSource: 'Mã nguồn mở',
     templates: 'Mẫu',
     resumes: 'CV',
     settings: 'Cài đặt',
@@ -41,6 +45,8 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     primaryNavigation: 'Primary navigation',
     signIn: 'Sign in',
     createAccount: 'Create account',
+    createResume: 'Create your resume',
+    openSource: 'Open source',
     templates: 'Templates',
     resumes: 'Resumes',
     settings: 'Settings',

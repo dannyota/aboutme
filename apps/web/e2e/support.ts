@@ -1,5 +1,10 @@
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import {
+  expect,
+  type Locator,
+  type Page,
+  type TestInfo,
+} from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -161,8 +166,9 @@ export async function compareRaster(
 }
 
 /**
- * Captures a full-page screenshot and either writes it as an update
- * candidate under `PLAYWRIGHT_RESULTS_DIR/candidate-baselines/baselines`
+ * Captures a full-page screenshot, or an element screenshot when `locator`
+ * is given, and either writes it as an update candidate under
+ * `PLAYWRIGHT_RESULTS_DIR/candidate-baselines/baselines`
  * (`make web-e2e-update`) or compares it against the pinned baseline of the
  * same name in `apps/web/e2e/baselines`.
  */
@@ -170,14 +176,22 @@ export async function verifyScreenshot(
   page: Page,
   filename: string,
   testInfo: TestInfo,
+  locator?: Locator,
 ): Promise<void> {
-  const bytes = await page.screenshot({
-    animations: 'disabled',
-    caret: 'hide',
-    fullPage: true,
-    scale: 'css',
-    type: 'png',
-  });
+  const bytes = locator === undefined
+    ? await page.screenshot({
+      animations: 'disabled',
+      caret: 'hide',
+      fullPage: true,
+      scale: 'css',
+      type: 'png',
+    })
+    : await locator.screenshot({
+      animations: 'disabled',
+      caret: 'hide',
+      scale: 'css',
+      type: 'png',
+    });
   await writeFile(testInfo.outputPath(filename), bytes);
   if (testInfo.config.updateSnapshots !== 'none') {
     const root = process.env.PLAYWRIGHT_RESULTS_DIR;

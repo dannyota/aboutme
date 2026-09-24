@@ -92,8 +92,8 @@ describe('AppShell', () => {
       const createAccount = wrapper.findAll('a')
         .find((link) => link.attributes('href') === '/register');
 
-      expect(signIn?.classes()).not.toContain('max-sm:hidden');
-      expect(createAccount?.classes()).not.toContain('max-sm:hidden');
+      expect(signIn?.classes()).not.toContain('max-[44rem]:hidden');
+      expect(createAccount?.classes()).not.toContain('max-[44rem]:hidden');
       wrapper.unmount();
     },
   );
@@ -108,8 +108,8 @@ describe('AppShell', () => {
       const createAccount = wrapper.findAll('a')
         .find((link) => link.attributes('href') === '/register');
 
-      expect(signIn?.classes()).toContain('max-sm:hidden');
-      expect(createAccount?.classes()).toContain('max-sm:hidden');
+      expect(signIn?.classes()).toContain('max-[44rem]:hidden');
+      expect(createAccount?.classes()).toContain('max-[44rem]:hidden');
       wrapper.unmount();
     },
   );
@@ -458,6 +458,48 @@ describe('AppShell', () => {
       expect(en.text()).toContain('English');
     },
   );
+
+  it.each([
+    ['/', 'Create your resume'],
+    ['/templates', 'Create your resume'],
+    ['/templates/engineer-compact', 'Create your resume'],
+    ['/terms', 'Create your resume'],
+    ['/privacy', 'Create your resume'],
+    ['/login', 'Create account'],
+    ['/register', 'Create account'],
+    ['/authorize', 'Create account'],
+  ])('labels the header CTA %s as %s', async (route, label) => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const wrapper = await mountShell(route);
+    await flushPromises();
+    const createAccount = wrapper.findAll('a')
+      .find((link) => link.attributes('href')?.startsWith('/register'));
+    expect(createAccount?.text()).toBe(label);
+  });
+
+  it('shows the open source link only when signed out', async () => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const signedOut = await mountShell('/');
+    await flushPromises();
+    const openSource = signedOut.get(
+      '[data-testid="app-shell-open-source"]',
+    );
+    expect(openSource.attributes('href')).toBe(
+      'https://github.com/dannyota/aboutme',
+    );
+    expect(openSource.attributes('rel')).toBe('noopener noreferrer');
+    expect(openSource.classes()).toContain('max-[56rem]:hidden');
+    signedOut.unmount();
+
+    meStatus = 200;
+    const signedIn = await mountShell('/');
+    await flushPromises();
+    expect(
+      signedIn.find('[data-testid="app-shell-open-source"]').exists(),
+    ).toBe(false);
+  });
 
   it('ignores next outside /login and /register', async () => {
     meStatus = 401;
