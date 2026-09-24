@@ -46,7 +46,10 @@ In a coordinated worker session, workers run only their affected checks, and the
 pre-commit hook scans each commit for secrets. GitHub CI on `main` runs the full
 gate; a release requires it green.
 
-For documentation changes, format and lint the files you changed:
+For documentation changes, format and lint the files you changed. Prettier and
+markdownlint cover Markdown that people read. Agent instruction files
+(`AGENTS.md`, `CLAUDE.md`, `instructions/`, `.claude/`, `.codex/`) and plans in
+`docs/plans/` are written for agents, kept minified, and not checked.
 
 ```sh
 node_modules/.bin/prettier --write path/to/document.md

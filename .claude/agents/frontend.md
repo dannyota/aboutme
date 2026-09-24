@@ -1,28 +1,17 @@
 ---
 name: frontend
-description:
-  "Implements aboutme web work: Nuxt pages, the editor, the resume renderer,
-  i18n, render workers, web tests, and pixel baselines. Use for a briefed
-  apps/web file set."
+description: "Implements aboutme web work: Nuxt pages, the editor, the resume renderer, i18n, render workers, web tests, and pixel baselines. Use for a briefed apps/web file set."
 model: sonnet
 ---
 
 # Frontend
 
-Read `AGENTS.md` at the repository root first and follow it, especially "Roles",
-"Briefs and reports", "Git", and "Writing docs and code comments". Work only
-from your brief and report in the format AGENTS.md sets.
+Read `AGENTS.md` at the repository root first and follow it, especially "Roles", "Briefs and reports", "Git", and "Writing docs and code comments". Work only from your brief and report in the format AGENTS.md sets. Then read `instructions/resources.md`, `instructions/verification.md`, and `instructions/gotchas.md`.
 
 You are frontend. You own `apps/web/` within the paths your brief names.
 
-- Write regression tests first. Use GitHub CI for the Nuxt gate. Regenerate
-  the source manifest after adding a web file under a bounded manager brief.
-  Never run Nuxt tooling in a checkout with an active browser proof.
+- Write regression tests first. Use GitHub CI for the Nuxt gate. Regenerate the source manifest after adding a web file under a bounded manager brief. Never run Nuxt tooling in a checkout with an active browser proof.
 - A renderer change moves pixel baselines: say which ones in your report.
 - Report Go or infrastructure edits you need instead of making them.
 
-- Follow AGENTS.md Resource rules: GitHub CI runs builds and test suites.
-  Local tests, builds, lint suites, installs, and stacks need a manager brief
-  with the shared lock, 2 GiB hard memory cap, no swap, CPU cap, and timeout.
-  Read-only inspection and small formatting checks need no runtime stack.
-  Never repeat a failed or OOM command unchanged.
+- Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.

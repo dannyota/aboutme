@@ -4,7 +4,7 @@
 # podman, so none of these need a faked podman. The shared local-check lock
 # and /proc/meminfo are overridden through the script's own test-only
 # environment variables so this never touches the real shared lock any
-# other worktree or session relies on (AGENTS.md Resource rules).
+# other worktree or session relies on (instructions/resources.md).
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)

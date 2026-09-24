@@ -8,3 +8,8 @@ packages/schema/gen/
 CLAUDE.md
 AGENTS.md
 .claude/
+instructions/
+.codex/
+docs/plans/
+*.yml
+*.yaml

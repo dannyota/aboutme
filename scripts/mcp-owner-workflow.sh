@@ -115,9 +115,9 @@ take_lock() {
   flock -n "$LOCK_FD" || fail 'another workflow run holds the lock'
 }
 
-# take_local_check_lock takes the shared local-check lock (AGENTS.md Resource
-# rules), so the fixture cleanup of reserved-prefix accounts and captured mail
-# never overlaps the password proof. An inherited descriptor for it is reused.
+# take_local_check_lock takes the shared local-check lock so the fixture cleanup
+# of reserved-prefix accounts and captured mail never overlaps the password
+# proof (instructions/resources.md). An inherited descriptor for it is reused.
 take_local_check_lock() {
   local lock=$GIT_COMMON/aboutme-local-check.lock fd target
   [ ! -L "$lock" ] || fail 'the shared local-check lock is a symbolic link'
