@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { waitForImages } from './support';
+import { verifyScreenshot, waitForImages } from './support';
 
 // Application chrome pixel baselines: the signed-out homepage and the login
 // page, at phone and desktop widths, in both themes (DESIGN.md; ADR 0050).
@@ -17,9 +17,8 @@ const WIDTHS = [390, 1440] as const;
 for (const page of PAGES) {
   for (const theme of THEMES) {
     for (const width of WIDTHS) {
-      test(`chrome ${page.name} ${theme} ${width}px matches its baseline`, async ({
-        page: browserPage,
-      }) => {
+      const title = `chrome ${page.name} ${theme} ${width}px matches baseline`;
+      test(title, async ({ page: browserPage }, testInfo) => {
         await browserPage.setViewportSize({ width, height: 900 });
         await browserPage.context().addCookies([
           {
@@ -46,9 +45,10 @@ for (const page of PAGES) {
           - document.documentElement.clientWidth);
         expect(overflow).toBe(0);
 
-        await expect(browserPage).toHaveScreenshot(
+        await verifyScreenshot(
+          browserPage,
           `chrome--${page.name}--${theme}--${width}.png`,
-          { fullPage: true },
+          testInfo,
         );
       });
     }

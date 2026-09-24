@@ -1,18 +1,11 @@
-import { createCanvas, loadImage } from '@napi-rs/canvas';
-import {
-  expect,
-  test,
-  type Page,
-  type TestInfo,
-} from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
 
 import {
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
   photoCropGeometry,
+  verifyScreenshot,
   waitForImages,
 } from './support';
 
@@ -88,87 +81,6 @@ const PAGE_GEOMETRY = {
   a4: { height: 1123, width: 794 },
   letter: { height: 1056, width: 816 },
 } as const;
-
-async function compareRaster(
-  actual: Buffer,
-  expected: Buffer,
-  diffPath: string,
-): Promise<void> {
-  const [actualImage, expectedImage] = await Promise.all([
-    loadImage(actual),
-    loadImage(expected),
-  ]);
-  expect(actualImage.width).toBe(expectedImage.width);
-  expect(actualImage.height).toBe(expectedImage.height);
-  const width = actualImage.width;
-  const height = actualImage.height;
-  const actualCanvas = createCanvas(width, height);
-  const expectedCanvas = createCanvas(width, height);
-  actualCanvas.getContext('2d').drawImage(actualImage, 0, 0);
-  expectedCanvas.getContext('2d').drawImage(expectedImage, 0, 0);
-  const actualPixels = actualCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  const expectedPixels = expectedCanvas
-    .getContext('2d')
-    .getImageData(0, 0, width, height).data;
-  let changed = 0;
-  const diffCanvas = createCanvas(width, height);
-  const diffContext = diffCanvas.getContext('2d');
-  const diff = diffContext.createImageData(width, height);
-  for (let offset = 0; offset < actualPixels.length; offset += 4) {
-    const differs = actualPixels[offset] !== expectedPixels[offset]
-      || actualPixels[offset + 1] !== expectedPixels[offset + 1]
-      || actualPixels[offset + 2] !== expectedPixels[offset + 2]
-      || actualPixels[offset + 3] !== expectedPixels[offset + 3];
-    if (differs) {
-      changed += 1;
-      diff.data.set([255, 0, 0, 255], offset);
-    } else {
-      diff.data.set([255, 255, 255, 255], offset);
-    }
-  }
-  if (changed > 0) {
-    diffContext.putImageData(diff, 0, 0);
-    await writeFile(diffPath, diffCanvas.toBuffer('image/png'));
-  }
-  expect(changed).toBe(0);
-}
-
-async function verifyScreenshot(
-  page: Page,
-  filename: string,
-  testInfo: TestInfo,
-): Promise<void> {
-  const bytes = await page.screenshot({
-    animations: 'disabled',
-    caret: 'hide',
-    fullPage: true,
-    scale: 'css',
-    type: 'png',
-  });
-  await writeFile(testInfo.outputPath(filename), bytes);
-  if (testInfo.config.updateSnapshots !== 'none') {
-    const root = process.env.PLAYWRIGHT_RESULTS_DIR;
-    if (root === undefined) {
-      throw new Error('PLAYWRIGHT_RESULTS_DIR is required.');
-    }
-    const candidate = resolve(root, 'candidate-baselines/baselines', filename);
-    await mkdir(resolve(candidate, '..'), { recursive: true });
-    await writeFile(candidate, bytes);
-    return;
-  }
-  const expected = await readFile(resolve(
-    import.meta.dirname,
-    'baselines',
-    filename,
-  ));
-  await compareRaster(
-    bytes,
-    expected,
-    testInfo.outputPath(filename.replace(/\.png$/, '-diff.png')),
-  );
-}
 
 test.describe('renderer screenshot subset', () => {
   for (const cell of CELLS) {
