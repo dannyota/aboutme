@@ -150,6 +150,11 @@ test('the executive band PDF tab shows both stored pages', async ({
 test('the engineer compact page renders server-side with one h1', async ({
   page,
 }) => {
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
   const response = await page.request.get('/templates/engineer-compact');
   expect(response.status()).toBe(200);
   const html = await response.text();
@@ -160,11 +165,10 @@ test('the engineer compact page renders server-side with one h1', async ({
 test('the ATS tab keeps dark ink on a white sheet in dark theme', async ({
   page,
 }) => {
-  await page.context().addCookies([{
-    name: 'aboutme-theme',
-    value: 'dark',
-    url: 'http://127.0.0.1:20092',
-  }]);
+  await page.context().addCookies([
+    { name: 'aboutme-locale', value: 'en', url: 'http://127.0.0.1:20092' },
+    { name: 'aboutme-theme', value: 'dark', url: 'http://127.0.0.1:20092' },
+  ]);
   const response = await page.goto('/templates/engineer-compact');
   expect(response?.status()).toBe(200);
   await page.getByRole('tab', { name: 'What an ATS reads' }).click();
