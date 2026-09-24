@@ -253,7 +253,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           working-directory: apps/server
-          version: v2.13.2
+          version: v2.14.0
       - if: ${{ !cancelled() }}
         name: go mod tidy is a no-op
         run: |
@@ -265,7 +265,7 @@ jobs:
       - if: ${{ !cancelled() }}
         name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           cd apps/server && govulncheck ./...
       # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
       # migrations/ is the only declared source for BOTH goose and sqlc's
@@ -1040,12 +1040,12 @@ jobs:
           python-version: "3.13"
       # Keyed on the pinned version alone: a version bump gets a fresh cache
       # instead of growing the old one forever.
-      - name: Restore pip cache for Semgrep 1.176.0
+      - name: Restore pip cache for Semgrep 1.178.0
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/pip
-          key: pip-semgrep-1.176.0-${{ runner.os }}
-      - run: pip install semgrep==1.176.0
+          key: pip-semgrep-1.178.0-${{ runner.os }}
+      - run: pip install semgrep==1.178.0
       - run: scripts/test/semgrep-sca-inputs-test.sh
       - run: semgrep ci --code --supply-chain --secrets --no-suppress-errors
         env:
