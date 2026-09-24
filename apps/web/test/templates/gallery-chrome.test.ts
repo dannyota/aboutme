@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import GalleryPage from '../../app/pages/templates/index.vue';
 import { FILTERS, type GalleryFilter } from '../../app/templates/catalog';
@@ -9,7 +9,6 @@ import { setSiteLocale } from '../support/locale';
 // The gallery header and filter chips (DESIGN.md, template gallery). The
 // dot is decorative: the chip text carries the meaning it names.
 
-setSiteLocale('en');
 
 const FORMAT_FILTERS = new Set<GalleryFilter>([
   'sample',
@@ -19,6 +18,8 @@ const FORMAT_FILTERS = new Set<GalleryFilter>([
 ]);
 
 describe('template gallery chrome', () => {
+  beforeEach(() => setSiteLocale('en'));
+
   it('wraps the title and lead in a gallery-header', async () => {
     const wrapper = await mountSuspended(GalleryPage);
     const header = wrapper.get('[data-testid="gallery-header"]');
