@@ -16,7 +16,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Before the public announcement
 
-- SES production access. Evidence: `docs/runbooks/email.md` (account still in the SES sandbox).
 - Product name and trademark review (owner).
 - Privacy, terms, and disclosure review (qualified privacy counsel and owner).
 

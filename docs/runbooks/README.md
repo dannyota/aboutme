@@ -9,7 +9,7 @@ operations the repository supports now.
 | [Local HTTPS checks](local-uat.md)          | Runnable    | Verify native features before the production deploy          |
 | [Resume exports](exports.md)                | Runnable    | Check PDF/image rendering, public gates, and resource limits |
 | [Realtime](realtime.md)                     | Runnable    | Check stream bounds, recovery, refresh, and revocation       |
-| [Authentication email](email.md)            | SES sandbox | Verify and operate Google Workspace and AWS SES              |
+| [Authentication email](email.md)            | Production  | Verify and operate Google Workspace and AWS SES              |
 | [Production](production.md)                 | Operational | Deploy, rollback, access, edge settings, and secrets         |
 
 The production runbook covers only shipped scripts and current operator steps.
