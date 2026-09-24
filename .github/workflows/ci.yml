@@ -31,18 +31,45 @@ jobs:
         with:
           node-version: 24.21.0
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            deploy/dev-https-browser/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
-      # `make operational-test` compiles and lists the trusted-browser specs
-      # through the pinned @playwright/test in this directory; the list-only
-      # check needs the runner, not downloaded browser binaries.
-      - run: npm ci
-        working-directory: deploy/dev-https-browser
       - run: make docs-lint
       - run: make lengths-check
-      - run: make operational-test
+      - run: make operational-test-fast
+
+  # `make operational-test`'s three slowest scripts, each in its own job
+  # instead of after one another in the sequence docs used to run them in:
+  # dev-https-test.sh --static alone was 185s of docs' 284s total,
+  # deploy_test.sh was 38s, and the browser-image and MCP owner-workflow
+  # suites were 25s and 23s. The Makefile still runs every one of them, in
+  # the same order, from a single `make operational-test`.
+  docs-dev-https:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make operational-test-dev-https
+
+  docs-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: make operational-test-deploy
+
+  docs-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: deploy/dev-https-browser/package-lock.json
+      # `make operational-test-browser` compiles and lists the trusted-browser
+      # specs through the pinned @playwright/test in this directory; the
+      # list-only check needs the runner, not downloaded browser binaries.
+      - run: npm ci
+        working-directory: deploy/dev-https-browser
+      - run: make operational-test-browser
 
   schema:
     runs-on: ubuntu-latest
@@ -217,6 +244,18 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       # A go-installed caddy reports version "unknown", which the dev-https
       # tool check rejects, so this job uses the official release binary.
       - name: Install the pinned caddy (2.11.4)
@@ -257,9 +296,19 @@ jobs:
   # deployed release fence, the enrollment flag, or the production origin, so
   # a compile-only or Playwright-list result never substitutes for this job.
   # Uploaded evidence covers only fictional accounts.
+  #
+  # The enabled journey runs as three shards (totp.spec.ts "Enabled-proof
+  # sharding"), each its own harness and its own evidence file; primary alone
+  # carries most of the account's own step count, so it is its own shard.
+  # totp-browser-proof-coverage checks every step is true across all three
+  # shards' evidence once every shard finishes.
   totp-browser-proof:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [primary, accounts-b, accounts-c]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -271,6 +320,18 @@ jobs:
         with:
           go-version: "1.27.1"
           cache: false
+      # One Go cache per job: a shared key lets whichever job finishes first
+      # save a cache the other jobs cannot use. The commit in the key saves a
+      # fresh cache each run; the prefix restores the newest one.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-${{ github.job }}-
       # A go-installed caddy reports version "unknown", which the dev-https
       # tool check rejects, so this job uses the official release binary.
       - name: Install the pinned caddy (2.11.4)
@@ -287,16 +348,29 @@ jobs:
       - run: make dev-https
       - run: make dev-https-browser-image
       - run: make dev-https-totp-check
+        env:
+          ABOUTME_TOTP_SHARD: ${{ matrix.shard }}
       - name: Upload TOTP proof evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: totp-browser-proof-evidence
+          name: totp-browser-proof-evidence-${{ matrix.shard }}
           path: .dev/native-https/evidence/totp-*
           if-no-files-found: ignore
           retention-days: 14
           # .dev is a dot-directory; the upload action excludes those by
           # default and would silently archive nothing without this.
+          include-hidden-files: true
+      # Timings only (totp.spec.ts "CI section timing"): never covers a code,
+      # secret, email, or URL, and is not part of the verified evidence above.
+      - name: Upload TOTP proof timing
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: totp-browser-proof-timing-${{ matrix.shard }}
+          path: .dev/native-https/evidence/totp-enabled.*/totp-timing.json
+          if-no-files-found: ignore
+          retention-days: 14
           include-hidden-files: true
       - name: Stop the HTTPS harness
         if: always()
@@ -304,6 +378,27 @@ jobs:
       - name: Stop the runner-local database
         if: always()
         run: make test-db-down
+
+  # Each totp-browser-proof shard's own evidence passed the closed-list check
+  # in verify-evidence.mjs when its shard ran; this checks that the three
+  # shards' evidence together still proves every step of the scenario, the
+  # same requirement the job proved alone before it was sharded.
+  totp-browser-proof-coverage:
+    needs: totp-browser-proof
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: totp-browser-proof-evidence-*
+          path: totp-shard-evidence
+      - run: |
+          mapfile -t evidence_files < <(
+            find totp-shard-evidence -name totp-second-factor-proof.json)
+          [ "${#evidence_files[@]}" -gt 0 ] ||
+            { echo "no shard evidence files were downloaded" >&2; exit 1; }
+          node deploy/dev-https-browser/check-totp-shard-coverage.mjs \
+            "${evidence_files[@]}"
 
   # The browser-free half of web-e2e: build the Nuxt app from exactly the files
   # the source manifest lists. A stale manifest fails here quickly and in

@@ -120,6 +120,13 @@ mode_is_totp_production() {
   esac
 }
 
+require_valid_totp_shard() {
+  case ${1-} in
+  '' | primary | accounts-b | accounts-c) ;;
+  *) fail 'ABOUTME_TOTP_SHARD must be primary, accounts-b, or accounts-c' ;;
+  esac
+}
+
 # validate_mode_input_files checks the extra per-mode input files after the
 # entry set already matched.
 validate_mode_input_files() {
@@ -155,6 +162,14 @@ validate_mcp_credential_file() {
     fail 'MCP credential file is not a regular file'
   [ "$(stat -c %u "$path")" = "$uid" ] || fail 'MCP credential file owner mismatch'
   [ "$(stat -c %a "$path")" = 600 ] || fail 'MCP credential file mode must be 0600'
+}
+
+validate_evidence_file() { # <path> <uid> <size-limit> <fail-message-label>
+  local path=$1 uid=$2 limit=$3 label=$4
+  [ -f "$path" ] && [ ! -L "$path" ] || fail "$label is not a regular file"
+  [ "$(stat -c %u "$path")" = "$uid" ] || fail "$label owner mismatch"
+  [ "$(stat -c %a "$path")" = 600 ] || fail "$label mode must be 0600"
+  [ "$(stat -c %s "$path")" -le "$limit" ] || fail "$label exceeds its bound"
 }
 
 validate_mcp_browser_dir() {
@@ -312,7 +327,7 @@ inside_container() {
       fail 'cannot verify the imported Caddy root'
   fi
 
-  local evidence_name evidence_limit proof_name spec
+  local evidence_name evidence_limit proof_name spec evidence_extra_name= evidence_extra_limit=
   case $mode in
   auth)
     evidence_name=auth-proof.json
@@ -395,6 +410,8 @@ inside_container() {
   totp)
     evidence_name=totp-second-factor-proof.json
     evidence_limit=8192
+    evidence_extra_name=totp-timing.json
+    evidence_extra_limit=4096
     proof_name='authenticator-app second factor'
     spec=totp.spec.ts
     ;;
@@ -448,6 +465,10 @@ inside_container() {
   if [ "$mode" = mcp-sdk ]; then
     mode_env+=(ABOUTME_MCP_BROWSER_DIR=/mcp-browser ABOUTME_MCP_WORKFLOW_MODE="$workflow_mode")
   fi
+  if [ "$mode" = totp ]; then
+    require_valid_totp_shard "${ABOUTME_TOTP_SHARD-}"
+    [ -n "${ABOUTME_TOTP_SHARD-}" ] && mode_env+=(ABOUTME_TOTP_SHARD="$ABOUTME_TOTP_SHARD")
+  fi
   env "${mode_env[@]}" \
     /opt/aboutme-auth/node_modules/.bin/playwright test \
     --config "$config" "$spec" \
@@ -476,22 +497,19 @@ inside_container() {
     return 0
   fi
 
-  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n')
-  [ "$evidence_entries" = "$evidence_name" ] ||
+  local -a expected_evidence=("$evidence_name" ${evidence_extra_name:+"$evidence_extra_name"})
+  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+  [ "$evidence_entries" = "$(printf '%s\n' "${expected_evidence[@]}" | sort)" ] ||
     fail 'browser produced unexpected evidence'
   local evidence_path=/evidence/$evidence_name
-  [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ] ||
-    fail 'browser evidence is not a regular file'
-  [ "$(stat -c %u "$evidence_path")" = "$uid" ] ||
-    fail 'browser evidence owner mismatch'
-  [ "$(stat -c %a "$evidence_path")" = 600 ] ||
-    fail 'browser evidence mode must be 0600'
-  [ "$(stat -c %s "$evidence_path")" -le "$evidence_limit" ] ||
-    fail 'browser evidence exceeds its bound'
+  validate_evidence_file "$evidence_path" "$uid" "$evidence_limit" 'browser evidence'
 
   if ! node /opt/aboutme-auth/verify-evidence.mjs "$mode" "$evidence_path"; then
     fail 'browser evidence has invalid schema'
   fi
+
+  [ -z "$evidence_extra_name" ] ||
+    validate_evidence_file "/evidence/$evidence_extra_name" "$uid" "$evidence_extra_limit" 'browser timing evidence'
 
   printf 'dev-https-browser %s proof: PASS\n' "$proof_name"
 }
@@ -649,6 +667,11 @@ host_run() {
   if [ "$mode" = mcp-sdk ] || mode_is_totp_production "$mode"; then
     resource_args=(--memory=2g --memory-swap=2g --cpus=2)
   fi
+  local -a env_args=()
+  if [ "$mode" = totp ]; then
+    require_valid_totp_shard "${ABOUTME_TOTP_SHARD-}"
+    [ -n "${ABOUTME_TOTP_SHARD-}" ] && env_args=(--env "ABOUTME_TOTP_SHARD=$ABOUTME_TOTP_SHARD")
+  fi
   exec podman run \
     --rm \
     --init \
@@ -665,6 +688,7 @@ host_run() {
     --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
     "${name_args[@]}" \
     "${mount_args[@]}" \
+    "${env_args[@]}" \
     "$image" "${mode_args[@]}"
 }
 

@@ -124,3 +124,50 @@ export function mismatchedCode(exclude: string): string {
   const fallback = codeForStep('AAAAAAAAAAAAAAAA', 1);
   return fallback === exclude ? codeForStep('AAAAAAAAAAAAAAAA', 2) : fallback;
 }
+
+// --- CI section timing (diagnostics only) -----------------------------------
+//
+// Wall-clock timing for the browser proof's own CI diagnostics: which part of
+// the run is slow. Holds no code, secret, email, or URL, and is never read by
+// verify-evidence.mjs; it is a sidecar file outside the verified schema.
+
+/** The closed set of section names the enabled TOTP proof times. */
+export type TimingSection =
+  | 'none' | 'primary' | 'replay' | 'concurrent' | 'replace' | 'epoch'
+  | 'locale' | 'recovery' | 'attempts' | 'disabled' | 'cleanup';
+
+const TIMING_SECTIONS: readonly TimingSection[] = [
+  'none', 'primary', 'replay', 'concurrent', 'replace', 'epoch', 'locale',
+  'recovery', 'attempts', 'disabled', 'cleanup',
+];
+
+/** Accumulates wall-clock milliseconds spent in each closed-list section. */
+export interface SectionTimer {
+  /** Closes the current section and opens `next`. */
+  enter(next: TimingSection): void;
+  /** Closes the current section and returns every section's total. */
+  finish(): Record<TimingSection, number>;
+}
+
+/** A section timer starting in `'none'`, backed by the real clock. */
+export function newSectionTimer(nowMs: () => number = Date.now): SectionTimer {
+  let current: TimingSection = 'none';
+  let enteredAt = nowMs();
+  const elapsedMs = Object.fromEntries(
+    TIMING_SECTIONS.map((section) => [section, 0]),
+  ) as Record<TimingSection, number>;
+  const close = (now: number): void => {
+    elapsedMs[current] += now - enteredAt;
+    enteredAt = now;
+  };
+  return {
+    enter(next) {
+      close(nowMs());
+      current = next;
+    },
+    finish() {
+      close(nowMs());
+      return elapsedMs;
+    },
+  };
+}

@@ -350,7 +350,15 @@ if [ "$MODE" = totp ]; then
     "$enabled_evidence" totp || status=$?
 
   disabled_evidence=none
-  if [ "$status" -eq 0 ]; then
+  # The disabled-enrollment phase does not depend on which roles the enabled
+  # phase sharded (totp.spec.ts "Enabled-proof sharding"); only the primary
+  # shard, or an unsharded run, proves it, so the other shards do not repeat
+  # it for no added coverage.
+  run_disabled_phase=1
+  case ${ABOUTME_TOTP_SHARD-} in
+  accounts-b | accounts-c) run_disabled_phase=0 ;;
+  esac
+  if [ "$status" -eq 0 ] && [ "$run_disabled_phase" -eq 1 ]; then
     # The runner-local database keeps its rows across this restart; only the
     # server enrollment flag changes.
     bash "$REPO/scripts/dev-https.sh" down ||
