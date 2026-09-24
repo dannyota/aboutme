@@ -63,6 +63,32 @@ func newArtifactHarnessWithCache(t *testing.T, queue RenderQueue, cacheEntries i
 	return handlers, backing, coordinator, cache
 }
 
+// newArtifactHarnessWithCoordinatorClock is like newArtifactHarnessWithCache
+// but also injects the coordinator's clock, so a test can detect exactly
+// when a revocation transition finishes canceling leases (the only
+// production call to that clock; see publicstate.Transition.Close).
+func newArtifactHarnessWithCoordinatorClock(
+	t *testing.T, queue RenderQueue, cacheEntries int, cacheNow, coordinatorNow func() time.Time,
+) (*artifactHandlers, *publicServiceStore, *publicstate.Coordinator, *publiccache.Cache) {
+	t.Helper()
+	_, reader, coordinator, backing := publicServiceReaderWithCoordinator(
+		t, publicstate.CoordinatorConfig{DiscoveryGeneration: 1, Now: coordinatorNow},
+	)
+	backing.row.DownloadEnabled = true
+	backing.row.SEOGeoEnabled = true
+	cache, err := publiccache.New(cacheEntries, time.Minute, cacheNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlers, err := newArtifactHandlers(ArtifactDependencies{
+		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Clock: cacheNow,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return handlers, backing, coordinator, cache
+}
+
 func TestPublicArtifactsSelectExactResponsesAndCacheAfterLiveGate(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
 	queueCalls := 0
@@ -669,10 +695,23 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 		}
 		return fixedNow
 	}
+	// leaseCanceled fires from the coordinator's clock, which
+	// publicstate.Transition.Close reads only once, right after it has
+	// called cancelLease on every lease in the closing generation
+	// (including the handler's) and before it arms the drain timer. That
+	// is the one deterministic proof that the handler's lease is already
+	// canceled; waiting instead for AcquireResume to observe admission
+	// closed races the same cancellation loop and made this test flaky.
+	leaseCanceled := make(chan struct{})
+	var leaseCanceledOnce sync.Once
+	coordinatorNow := func() time.Time {
+		leaseCanceledOnce.Do(func() { close(leaseCanceled) })
+		return fixedNow
+	}
 	queue := artifactQueueFunc(func(context.Context, renderjob.Request) (renderjob.Result, error) {
 		return renderjob.Result{}, errors.New("cache hit must not render")
 	})
-	handlers, backing, coordinator, cache := newArtifactHarnessWithCache(t, queue, 2, now)
+	handlers, backing, coordinator, cache := newArtifactHarnessWithCoordinatorClock(t, queue, 2, now, coordinatorNow)
 	cached, err := newSelectedResponseWithLimit(
 		http.StatusOK,
 		"application/pdf",
@@ -738,19 +777,10 @@ func TestCanceledPublicArtifactCacheHitReturns503WithoutCachedBytes(t *testing.T
 			}
 		}
 	})
-	admissionCtx, cancelAdmission := context.WithTimeout(t.Context(), time.Second)
-	defer cancelAdmission()
-	for {
-		probe, acquireErr := coordinator.AcquireResume(
-			admissionCtx, backing.row.ID, backing.row.Revision, publicstate.RepresentationPDF,
-		)
-		if errors.Is(acquireErr, publicstate.ErrAdmissionClosed) {
-			break
-		}
-		if acquireErr != nil {
-			t.Fatal(acquireErr)
-		}
-		probe.Release()
+	select {
+	case <-leaseCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("transition did not cancel the leased cache hit")
 	}
 	releaseCache()
 	select {
