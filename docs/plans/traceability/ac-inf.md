@@ -8,11 +8,11 @@ These rows were written for the fleet and hosted-UAT target of
 [ADR 0034](../../adr/0034-scheduled-uat-and-production-autoscaling.md).
 [ADR 0037](../../adr/0037-single-host-production-without-hosted-uat.md) replaces
 that target with the
-[single-host design](../../design/single-host-production.md). Production now
-serves v0.3.29, but these superseded fleet rows have not been remapped to the
-single-host contract. No row is proven by configuration, a healthy service, or
-public health checks alone. The native ARM64 image build adds runtime smoke and
-provenance evidence without adding a row.
+[single-host design](../../design/single-host-production.md). These superseded
+fleet rows are not yet remapped to the single-host contract. No row is proven
+by configuration, a healthy service, or public health checks alone. The native
+ARM64 image build adds runtime smoke and provenance evidence without adding a
+row.
 
 | ID         | Spec clause                                                                           | Statement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Phase/task                 | Test / UAT reference                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
