@@ -15,7 +15,7 @@ A multi-release goal gets one plan file; its task briefs go in a directory of th
 
 ## Shipped
 
-Production runs v0.5.3 on one AWS Singapore host ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)), live since v0.1.1.
+Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELEASE_TAG` on one AWS Singapore host ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)), live since v0.1.1.
 
 |Tag|Shipped|
 |-|-|
@@ -31,6 +31,7 @@ Production runs v0.5.3 on one AWS Singapore host ([ADR 0037](../adr/0037-single-
 |v0.5.1|Homepage sample fits one A4 sheet|
 |v0.5.2|Editor PDF and Web preview modes; gallery sample PDF page images and their CI check|
 |v0.5.3|Preview-to-PDF gap check; zoomed preview re-pagination fix; homepage sample fit|
+|v0.5.4|List spacing kept across a split entry; preview-gap ceilings tightened; CI proofs in parallel shards|
 
 ## Remaining
 
