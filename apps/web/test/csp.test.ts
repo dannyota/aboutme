@@ -8,7 +8,7 @@ import { APP_CSP, HTML_CSP } from '../app/utils/csp';
 // never carry. A regression here is a real security-header gap, so pin exact
 // strings rather than loose substring checks.
 
-describe('HTML_CSP (renderer surfaces: public resume HTML and the harness)', () => {
+describe('HTML_CSP (public resume HTML and the harness)', () => {
   it('locks every directive down to no origin', () => {
     expect(HTML_CSP).toBe(
       'default-src \'none\'; base-uri \'none\'; object-src \'none\'; '
@@ -20,7 +20,7 @@ describe('HTML_CSP (renderer surfaces: public resume HTML and the harness)', () 
   });
 });
 
-describe('APP_CSP (Nuxt-rendered app pages: /, /login, /templates, /app/**)', () => {
+describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
   it('is as strict as the interactive app allows', () => {
     expect(APP_CSP).toBe(
       'default-src \'self\'; base-uri \'self\'; object-src \'none\'; '

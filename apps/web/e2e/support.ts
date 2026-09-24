@@ -51,10 +51,24 @@ export async function trackCsp(page: Page): Promise<CspProbe> {
   };
 }
 
-/** Asserts a tracked page raised no CSP violation, error, or console error. */
-export async function expectCspClean(probe: CspProbe): Promise<void> {
+/**
+ * Asserts a tracked page raised no CSP violation, uncaught error, or
+ * unexpected console error. `allowedConsoleSubstrings` excuses console
+ * errors this app produces on purpose and unrelated to CSP, matched by
+ * substring; a real production visit while signed out already logs the
+ * browser's own "Failed to load resource" message for the expected 401 from
+ * `GET /api/v1/me` (app/composables/useAuth.ts), so a signed-out page test
+ * allows that one.
+ */
+export async function expectCspClean(
+  probe: CspProbe,
+  allowedConsoleSubstrings: readonly string[] = [],
+): Promise<void> {
   expect(await probe.violations()).toEqual([]);
-  expect(probe.consoleErrors).toEqual([]);
+  expect(probe.consoleErrors.filter(
+    (message) => !allowedConsoleSubstrings.some((allowed) =>
+      message.includes(allowed)),
+  )).toEqual([]);
   expect(probe.pageErrors).toEqual([]);
 }
 
@@ -85,6 +99,34 @@ export async function mockSignedInSession(
           identities: [],
         },
       },
+    });
+  });
+  await page.route('**/api/v1/capabilities', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { providerLogin: false, agentAccess: false, ...capabilities },
+      }),
+    });
+  });
+}
+
+/**
+ * Fakes a signed-out `GET /api/v1/me` (401, so `useAuth` resolves to
+ * `anonymous` instead of retrying against a nonexistent backend) and
+ * `GET /api/v1/capabilities` for a public page in this build's
+ * live-backend-free "normal" e2e surface. Every page reads both once on
+ * hydration regardless of its own auth requirement.
+ */
+export async function mockSignedOutSession(
+  page: Page,
+  capabilities: Record<string, unknown> = {},
+): Promise<void> {
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      status: 401,
+      json: { error: { code: 'unauthenticated', message: 'not signed in' } },
     });
   });
   await page.route('**/api/v1/capabilities', async (route) => {

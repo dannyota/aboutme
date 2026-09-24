@@ -13,23 +13,34 @@ import {
   denyExternalRequests,
   expectCspClean,
   mockSignedInSession,
+  mockSignedOutSession,
   trackCsp,
 } from './support';
 
-// A schema-current, photo-free sample document (part of the reviewed e2e
-// source set; packages/schema/samples), used as the editor test's mocked
-// resume body. The client validates it itself on read
-// (app/editor/resumeApi.ts's parseAcceptedResponse), so this file need not
-// duplicate that validation.
-const sampleDocument: unknown = JSON.parse(
+// A real anonymous visit already logs the browser's own "Failed to load
+// resource" message for GET /api/v1/me's expected 401 (useAuth.ts); it is
+// unrelated to CSP, so the signed-out page tests below allow it. Matched by
+// status code, not URL: the browser's message text embeds the mocked
+// response's status line, not always the request path.
+const ANONYMOUS_ME_401 = 'a status of 401';
+
+// The schema-current golden fixture (part of the reviewed e2e source set;
+// packages/schema/fixtures/full.json), used as the editor test's mocked
+// resume body with its photo stripped: the editor watches
+// document.personalDetails.photo?.key and fetches the owner photo when it is
+// present, which this test does not also mock. The client validates the rest
+// itself on read (app/editor/resumeApi.ts's parseAcceptedResponse), so this
+// file need not duplicate that validation.
+const sampleDocument = JSON.parse(
   readFileSync(
     resolvePath(
       import.meta.dirname,
-      '../../../packages/schema/samples/ats-plain.en.json',
+      '../../../packages/schema/fixtures/full.json',
     ),
     'utf8',
   ),
-);
+) as { personalDetails?: { photo?: unknown } };
+delete sampleDocument.personalDetails?.photo;
 
 // Matches app/editor/types.ts's ResumeMetadata; the wire shape
 // app/editor/resumeApi.ts's read() expects nested under `document` and
@@ -85,41 +96,44 @@ test('homepage sends the app CSP with its JSON-LD script hashed', async ({
 }) => {
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
 
   const response = await page.goto('/');
   expect(response?.status()).toBe(200);
   await expectHashedAppCsp(response!.headers(), await response!.text());
   await expect(page.getByTestId('landing')).toBeVisible();
 
-  await expectCspClean(probe);
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
   expect(external).toEqual([]);
 });
 
-test('a template page sends the app CSP with its JSON-LD script hashed', async ({
+test('a template page sends the CSP with its JSON-LD script hashed', async ({
   page,
 }) => {
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
 
   const response = await page.goto('/templates/engineer-compact');
   expect(response?.status()).toBe(200);
   await expectHashedAppCsp(response!.headers(), await response!.text());
   await expect(page.locator('.template-detail__info h1')).toBeVisible();
 
-  await expectCspClean(probe);
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
   expect(external).toEqual([]);
 });
 
 test('the login page sends the plain app CSP', async ({ page }) => {
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
 
   const response = await page.goto('/login');
   expect(response?.status()).toBe(200);
   expectPlainAppCsp(response!.headers());
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
-  await expectCspClean(probe);
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
   expect(external).toEqual([]);
 });
 

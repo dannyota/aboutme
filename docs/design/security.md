@@ -300,13 +300,13 @@ Chromium never publish artifacts.
 ## Content Security Policy and framework headers
 
 Every Nuxt-rendered response carries a Content Security Policy and never
-`X-Powered-By`. Public resume HTML, the internal print route, and the
-render harness use a fully locked-down policy with no origin of its own
-(`default-src 'none'`, `base-uri 'none'`, `form-action 'none'`); every
-other Nuxt page (`/`, `/login`, `/templates/**`, `/app/**`, and anything
-else Nuxt serves) uses a policy scoped to the app's own origin instead
-(`default-src 'self'`, `base-uri 'self'`, `form-action 'self'`). Both
-keep `frame-ancestors 'none'` and `object-src 'none'`, and both forbid
+`X-Powered-By`. Public resume HTML, the internal print route, and the render
+harness use a fully locked-down policy with no origin of its own
+(`default-src 'none'`, `base-uri 'none'`, `form-action 'none'`); every other
+Nuxt page (`/`, `/login`, `/templates/**`, `/app/**`, and anything else Nuxt
+serves) uses a policy scoped to the app's own origin instead
+(`default-src 'self'`, `base-uri 'self'`, `form-action 'self'`). Both keep
+`frame-ancestors 'none'` and `object-src 'none'`, and both forbid
 `'unsafe-eval'` outright. `apps/web/app/utils/csp.ts` holds the exact strings.
 
 `script-src` never carries `'unsafe-inline'` on either policy. Nuxt's own
@@ -315,8 +315,8 @@ response, and a page with its own inline script (the homepage and template
 pages' JSON-LD, public resume HTML's JSON-LD) earns a response-specific
 `'sha256-<hash>'` source for that exact script's bytes instead of a general
 allowance. `style-src` keeps `'unsafe-inline'` on both policies: the resume
-renderer writes per-document customization as inline `style` attributes,
-an unbounded, per-render value set no fixed hash or nonce list could cover.
+renderer writes per-document customization as inline `style` attributes, an
+unbounded, per-render value set no fixed hash or nonce list could cover.
 
 The Go API sends its own separate, fully locked-down policy on every JSON,
 media, and event-stream response; it never serves HTML.
