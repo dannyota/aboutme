@@ -1,26 +1,37 @@
 <script setup lang="ts">
 /**
- * `TemplateCard` — one template in the gallery: page one of its sample (or
- * the generic filler), its name, purpose, and a tag naming what is shown. The
- * whole card links to the template page.
+ * `TemplateCard`: one template in the gallery, with its name, purpose, and a
+ * tag naming what is shown. The whole card links to the template page. A
+ * template with a sample can show the stored image of the sample's first PDF
+ * page instead of a live render (DESIGN.md, Library); the rest, and every
+ * card on the homepage, show a live scaled render of the generic filler.
  */
 import type { Resume } from '@aboutme/schema';
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 
 import type { Locale } from '../../i18n/locale';
 import type { GalleryTemplate } from '../../templates/catalog';
 import { galleryDocument } from '../../templates/documents';
+import { samplePageImage } from '../../templates/pageImages';
 import SheetThumbnail from './SheetThumbnail.vue';
 
 const props = defineProps<{
   readonly template: GalleryTemplate;
   readonly locale: Locale;
   readonly illustrative: string;
+  /** Given, a stored page image replaces the live render when one exists. */
+  readonly pageImageAlt?: (name: string) => string;
+  /** True loads the stored page image eagerly instead of lazily. */
+  readonly eager?: boolean;
 }>();
 
+const image = computed(() => props.pageImageAlt === undefined
+  ? undefined
+  : samplePageImage(props.template.id, props.locale));
 const document = ref<Resume>();
 
 async function load(): Promise<void> {
+  if (image.value !== undefined) return;
   document.value = (await galleryDocument(props.template, props.locale))
     .document;
 }
@@ -38,7 +49,22 @@ watch(() => props.locale, load);
     :data-template="template.id"
     :to="`/templates/${template.id}`"
   >
+    <img
+      v-if="image !== undefined"
+      class="block h-auto w-full rounded-[var(--radius-sheet)] bg-white
+        shadow-[var(--shadow-paper)] transition-transform duration-200
+        ease-out group-hover:-translate-y-1 motion-reduce:transition-none
+        motion-reduce:group-hover:translate-y-0"
+      data-page-image
+      decoding="async"
+      :alt="pageImageAlt!(template.name)"
+      :height="image.height"
+      :loading="eager ? 'eager' : 'lazy'"
+      :src="image.src"
+      :width="image.width"
+    >
     <SheetThumbnail
+      v-else
       class="transition-transform duration-200 ease-out
         group-hover:-translate-y-1 motion-reduce:transition-none
         motion-reduce:group-hover:translate-y-0"
