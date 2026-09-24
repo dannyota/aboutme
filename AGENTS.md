@@ -41,7 +41,7 @@ Other roles take work only from a manager brief and report back to it.
 | architect | `docs/design/`, `docs/adr/`, schema and API contract proposals                              | Implements the slice it designed                         |
 | backend   | `apps/server/`, `packages/schema/` sources and Go output, `docs/api/`, migrations, MCP      | Edits web UI files or production infrastructure          |
 | frontend  | `apps/web/`: pages, editor, renderer, i18n, render workers, web tests and baselines         | Edits Go, migrations, or production infrastructure       |
-| designer  | Visual direction through the Impeccable flow, `DESIGN.md`, renderer CSS and template tokens | Changes behavior or data contracts without a brief       |
+| designer  | Visual direction, `DESIGN.md`, renderer CSS and template tokens                             | Changes behavior or data contracts without a brief       |
 | qa        | E2E and dev-https proofs, pixel baselines, exploratory and production checks                | Fixes the product code it tests                          |
 | devops    | `deploy/`, `.github/workflows/`, Caddy, OpenTofu, Cloudflare, AWS, release scripts          | Reads secret values or applies infrastructure unreviewed |
 | reviewer  | Read-only review of a diff, plan, or release candidate                                      | Edits files, or reviews work it authored                 |
@@ -98,8 +98,7 @@ changed, and the report lists every changed line.
 
 ### designer
 
-Routes UI design through the Impeccable plugin: direction, decision page, build
-review, finish review. It may implement renderer CSS and template tokens when
+Owns UI design: direction, specs, and finish reviews of built pages. It may implement renderer CSS and template tokens when
 the brief says so, and it reviews other roles' UI against its spec.
 
 ### qa

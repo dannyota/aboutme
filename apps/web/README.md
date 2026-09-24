@@ -46,9 +46,8 @@ actions, while seal red is reserved for public state and publishing.
 rail and outline, switches between Edit and Preview, and stacks the inspector;
 the sheet scales to the viewport down to 390 px and is never cropped.
 
-The product and built-surface records are [`PRODUCT.md`](../../PRODUCT.md),
-[`DESIGN.md`](../../DESIGN.md), and the
-[Impeccable surface briefs](../../.impeccable/surfaces/).
+The product and built-surface records are [`PRODUCT.md`](../../PRODUCT.md)
+and [`DESIGN.md`](../../DESIGN.md).
 
 ## UI conventions
 
