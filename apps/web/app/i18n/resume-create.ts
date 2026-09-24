@@ -56,7 +56,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
   vi: {
     invalidTitle: 'Không tìm thấy mẫu',
     invalidDescription: 'Liên kết này không nêu mẫu hoặc CV mẫu có sẵn.',
-    browseTemplates: 'Xem mẫu CV',
+    browseTemplates: 'Xem thư viện',
     loading: 'Đang tải',
     blankHeading: 'Tạo CV trống với mẫu này',
     sampleHeading: 'Tạo CV từ CV mẫu này',
@@ -74,7 +74,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
     createFailed: 'Không thể tạo CV. Hãy thử lại.',
     retryLater: 'Hãy chờ rồi thử lại.',
     sessionLost: 'Phiên đăng nhập đã kết thúc. Hãy đăng nhập lại.',
-    back: 'Quay lại mẫu CV',
+    back: 'Quay lại thư viện',
     creating: 'Đang tạo…',
     createAndOpen: 'Tạo và mở trình chỉnh sửa',
     dialogTitle: 'Tạo CV',
@@ -98,7 +98,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
     languageCode: 'Mã ngôn ngữ',
     refreshList: 'Tải lại danh sách',
     abandon: 'Bỏ qua',
-    browseAll: (count) => `Xem cả ${count} mẫu CV`,
+    browseAll: (count) => `Xem cả ${count} trong thư viện`,
     cancel: 'Hủy',
     close: 'Đóng',
     languageName: (language) =>
@@ -113,7 +113,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
   en: {
     invalidTitle: 'Template not found',
     invalidDescription: 'This link does not name a template or sample we have.',
-    browseTemplates: 'Browse templates',
+    browseTemplates: 'Browse the library',
     loading: 'Loading',
     blankHeading: 'Create a blank resume with this template',
     sampleHeading: 'Create a resume from this sample',
@@ -131,7 +131,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
     createFailed: 'Could not create the resume. Try again.',
     retryLater: 'Please wait, then try again.',
     sessionLost: 'Your session ended. Sign in again.',
-    back: 'Back to templates',
+    back: 'Back to the library',
     creating: 'Creating…',
     createAndOpen: 'Create and open editor',
     dialogTitle: 'Create resume',
@@ -156,7 +156,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
     languageCode: 'Language code',
     refreshList: 'Refresh list',
     abandon: 'Abandon',
-    browseAll: (count) => `Browse all ${count} templates`,
+    browseAll: (count) => `Browse all ${count} in the library`,
     cancel: 'Cancel',
     close: 'Close',
     languageName: (language) =>

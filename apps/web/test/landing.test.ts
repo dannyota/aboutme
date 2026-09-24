@@ -282,7 +282,7 @@ describe('index.vue language', () => {
     ).toBe('/templates');
     expect(
       wrapper.get('[data-testid="landing-browse-templates"]').text(),
-    ).toBe('Xem các mẫu');
+    ).toBe('Xem thư viện');
   });
 
   it('marks the page language for the rendered copy', async () => {

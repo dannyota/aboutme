@@ -154,8 +154,8 @@ The landing page performs no data fetch. It stacks on phones and uses a
 The hero text spans five columns. The headline's last phrase, “theo cách của
 bạn.” or “Your control.”, takes the brand gradient and falls back to the text
 color under `forced-colors: active`. Signed-out visitors see Create your resume,
-Browse templates, and a Sign in text link, in that order. Signed-in visitors see
-Open your resumes and Browse templates. The first action is a 48 px
+Browse the library, and a Sign in text link, in that order. Signed-in visitors
+see Open your resumes and Browse the library. The first action is a 48 px
 brand-gradient button with `--shadow-cta` that shifts to
 `--gradient-brand-strong` on hover. Actions stack full width below 28 rem.
 
@@ -213,7 +213,7 @@ sample; a first resume opens on the samples.
 
 The shared application shell is a card-colored bar with a bottom border, its
 content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
-Templates link for every visitor. Signed-out navigation adds an Open source link
+Library link for every visitor. Signed-out navigation adds an Open source link
 to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
 and a primary create button. The create button reads Create your resume on the
 home page, the gallery, template pages, Terms, and Privacy, and Create account
@@ -221,10 +221,10 @@ elsewhere. On localized routes other than sessions and agent consent, both
 account buttons hide below 44 rem, where the page's own links take over.
 Signed-in navigation also shows Resumes, Settings, and an account menu. The
 account menu contains Settings, theme switching, and Log out. On signed-in
-screens below 640 px, the direct Templates and Settings links are hidden;
-Settings remains in the account menu. On localized routes, the shell adds the
-Vietnamese and English toggle. Below 640 px its visible labels shorten to VI and
-EN while their accessible names remain complete.
+screens below 640 px, the direct Library and Settings links are hidden; Settings
+remains in the account menu. On localized routes, the shell adds the Vietnamese
+and English toggle. Below 640 px its visible labels shorten to VI and EN while
+their accessible names remain complete.
 
 The resume list is a desk of up to three white paper cards in a three-column
 grid at medium widths. Each card shows its title, relative updated time, and a

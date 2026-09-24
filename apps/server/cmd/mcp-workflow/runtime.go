@@ -196,6 +196,18 @@ func (c *runtimeToolClient) Close() error {
 	return c.err
 }
 
+// finishConnect clears the browser-handoff files only after a successful SDK
+// connect. A failed connect must leave browser-result.json in place: the
+// launcher still has to read the browser helper's own result word from it
+// before the launcher's own cleanup removes the whole browser root. See
+// docs/design/mcp-owner-workflow.md#browser-helper-interface.
+func finishConnect(browserRoot string, connected bool) error {
+	if !connected {
+		return nil
+	}
+	return removeBrowserFiles(browserRoot)
+}
+
 // closeListener reports nothing when the callback receiver already closed the
 // listener, so cleanup never masks the failure that ended the run.
 func closeListener(listener loopbackListener) error {
@@ -257,7 +269,7 @@ func newRuntimeDeps(config workflowConfig) (workflowDeps, error) {
 		}
 		observed := observedOAuth{inner: gate, observer: observer}
 		session, connectErr := connectSDKClient(ctx, config.Origin, client, observed)
-		cleanupErr := removeBrowserFiles(config.BrowserRoot)
+		cleanupErr := finishConnect(config.BrowserRoot, connectErr == nil)
 		if connectErr != nil {
 			return nil, errors.Join(errConnect, connectErr, closeListener(listener))
 		}

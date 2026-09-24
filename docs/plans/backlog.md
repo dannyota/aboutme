@@ -4,6 +4,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
+- After a deploy, the first public resume request (`/danny`) hung over 100 s and the next few took 11 to 14 s before settling under 1 s (v0.5.5, 2026-09-24); `/healthz` stayed fast. Find the cold-start cost (web render warm-up or first DB or render call) and warm it during the deploy's maintenance smoke. Evidence: v0.5.5 deploy report.
 - App HTML pages (`/`, `/login`, `/app/**`) send no Content-Security-Policy or `frame-ancestors`; only `/_harness/**` gets `HTML_CSP`. Public resume pages and Go routes already send one. Evidence: `apps/web/nuxt.config.ts` `routeRules`, `apps/web/app/utils/csp.ts`.
 
 ## Production acceptance
