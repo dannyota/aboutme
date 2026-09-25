@@ -51,6 +51,9 @@ const isSample = computed(() => shown.value?.isSample === true);
 const context = computed(() => ({
   lng: sampleLanguage.value,
   mode: 'continuous' as const,
+  // The info column's h1 names the template; the embedded sample's own
+  // name is visual only, so the page keeps a single h1.
+  nameHeading: 'p' as const,
 }));
 // "{name}, {role}", the role named in the sample's tag.
 const persona = computed(() => [

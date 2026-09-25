@@ -73,6 +73,9 @@ const context = computed(() => ({
   mode: previewMode.value === 'web'
     ? 'continuous' as const
     : 'paged' as const,
+  // The editor topbar owns the page's h1 (the resume title); the preview's
+  // resume name is visual only, so the workspace keeps a single h1.
+  nameHeading: 'p' as const,
   ...(props.photoUrl === undefined ? {} : { photoUrl: props.photoUrl }),
 }));
 let stopObserving: (() => void) | undefined;

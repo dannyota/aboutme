@@ -33,4 +33,17 @@ describe('template detail page: what an ATS reads', () => {
       expect(panel.classes()).toContain('paper-surface');
       expect(panel.text()).toContain('Khoa Vu');
     });
+
+  it(
+    'keeps a single h1: the template name, not the embedded sample name',
+    async () => {
+      setSiteLocale('en');
+      const wrapper = await mountSuspended(TemplateDetailPage);
+      await flushPromises();
+
+      expect(wrapper.get('h1').text()).toBe('Engineer Compact');
+      expect(wrapper.findAll('h1')).toHaveLength(1);
+      expect(wrapper.get('.resume-name').element.tagName).toBe('P');
+    },
+  );
 });
