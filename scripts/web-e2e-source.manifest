@@ -532,7 +532,6 @@ apps/web/server/plugins/security-headers.ts
 apps/web/server/routes/internal-render/public.post.ts
 apps/web/server/routes/print/[id].get.ts
 apps/web/server/utils/cspExternalize.ts
-apps/web/server/utils/cspHash.ts
 apps/web/server/utils/print/assets.ts
 apps/web/server/utils/print/envelope.ts
 apps/web/server/utils/print/handler.ts
