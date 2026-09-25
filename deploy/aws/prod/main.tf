@@ -61,17 +61,18 @@ module "tasks" {
   jobs_task_role_arn            = module.identity.jobs_task_role_arn
   log_group_name                = module.identity.log_group_name
   cloudflare_ipv4_cidrs         = local.cloudflare_ipv4
+  edges                         = var.edges
   image_server                  = var.image_server
   image_web                     = var.image_web
   image_caddy                   = var.image_caddy
 }
 
 module "host" {
-  source                 = "../modules/host"
-  name                   = local.name
-  public_subnet_id       = module.network.public_subnet_id
-  host_security_group_id = module.network.host_security_group_id
-  instance_profile_name  = module.identity.instance_profile_name
+  source                = "../modules/host"
+  name                  = local.name
+  public_subnet_id      = module.network.public_subnet_id
+  security_group_ids    = [module.network.host_security_group_id, module.network.cloudfront_origin_security_group_id]
+  instance_profile_name = module.identity.instance_profile_name
   task_definition_arns = {
     app         = module.tasks.app_task_definition_arn
     web         = module.tasks.web_task_definition_arn
@@ -104,6 +105,9 @@ module "edge" {
     aws           = aws
     aws.us_east_1 = aws.us_east_1
   }
-  name             = local.name
-  alerts_topic_arn = module.ops.alerts_topic_arn
+  name                       = local.name
+  alerts_topic_arn           = module.ops.alerts_topic_arn
+  origin_domain_name         = module.host.public_dns
+  alerts_topic_arn_us_east_1 = module.ops.alerts_topic_arn_us_east_1
+  waf_block                  = var.waf_block
 }

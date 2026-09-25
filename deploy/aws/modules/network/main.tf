@@ -80,6 +80,29 @@ resource "aws_vpc_security_group_egress_rule" "host_all" {
   description       = "Image pulls, AWS APIs, mail"
 }
 
+# The CloudFront origin-facing prefix list weighs 55 rules against the
+# default quota of 60 per group (docs/design/cloudfront-edge.md, "Origin
+# access"), so it gets its own group rather than joining aws_security_group.host.
+data "aws_ec2_managed_prefix_list" "cloudfront_origin" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+resource "aws_security_group" "cloudfront_origin" {
+  name        = "${var.name}-cloudfront-origin"
+  description = "aboutme-prod host - HTTPS 8443 from CloudFront origin-facing only"
+  vpc_id      = aws_vpc.main.id
+  tags        = { Name = "${var.name}-cloudfront-origin" }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "cloudfront_origin" {
+  security_group_id = aws_security_group.cloudfront_origin.id
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront_origin.id
+  ip_protocol       = "tcp"
+  from_port         = 8443
+  to_port           = 8443
+  description       = "CloudFront origin-facing"
+}
+
 resource "aws_security_group" "db" {
   name        = "${var.name}-db"
   description = "aboutme-prod database - PostgreSQL from the host only"

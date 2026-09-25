@@ -145,6 +145,9 @@ before "$f" "$maint_up1" "--started-by deploy-migrate"
 before "$f" "$app_up1" "$down_maintenance"
 before "$f" "$app_confirm" "$down_maintenance"
 absent "$f" "deploy-db-setup"
+# EDGES is unset for this release, so the CloudFront distribution check
+# (edge.sh) skips without calling the AWS API.
+absent "$f" "cloudfront list-distributions"
 absent "$f" "$combined_app_start"
 absent "$f" "$combined_maint_start"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "ok: want 8 schedule updates" >&2; exit 1; }
@@ -503,7 +506,7 @@ f=$work/port443_mapped.calls
 absent "$f" "ecs update-service"
 absent "$f" "rds create-db-snapshot"
 absent "$f" "scheduler update-schedule"
-grep -qF "still maps host port 443; run tofu apply first" "$work/port443_mapped.out" ||
+grep -qF "still maps host port 443 or 8443; run tofu apply first" "$work/port443_mapped.out" ||
   { echo "port443_mapped: no port-mapping message" >&2; exit 1; }
 
 # A mapping that names only containerPort, with no explicit hostPort, still
@@ -514,8 +517,80 @@ f=$work/port443_container_only.calls
 absent "$f" "ecs update-service"
 absent "$f" "rds create-db-snapshot"
 absent "$f" "scheduler update-schedule"
-grep -qF "still maps host port 443; run tofu apply first" "$work/port443_container_only.out" ||
+grep -qF "still maps host port 443 or 8443; run tofu apply first" "$work/port443_container_only.out" ||
   { echo "port443_container_only: no port-mapping message" >&2; exit 1; }
+
+# The same guard covers the CloudFront listener's host port 8443.
+run_case port8443_mapped fail v0.1.0
+f=$work/port8443_mapped.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "still maps host port 443 or 8443; run tofu apply first" "$work/port8443_mapped.out" ||
+  { echo "port8443_mapped: no port-mapping message" >&2; exit 1; }
+
+# The CloudFront edge distribution check (edge.sh) runs only when the new
+# app's Caddy lists cloudfront in EDGES, and, like the port-mapping check
+# beside it, refuses before any mutation.
+run_case edge_ok 0 v0.1.0
+f=$work/edge_ok.calls
+grep -qF "[test-base] aws cloudfront list-distributions --output json" "$f" ||
+  { echo "edge_ok: the distribution check did not run as the base caller" >&2; exit 1; }
+
+run_case edge_no_distribution fail v0.1.0
+f=$work/edge_no_distribution.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "expected exactly one CloudFront distribution for aboutme.vn; found 0; run tofu apply first" \
+  "$work/edge_no_distribution.out" ||
+  { echo "edge_no_distribution: no distribution-count message" >&2; exit 1; }
+
+run_case edge_wrong_origin fail v0.1.0
+f=$work/edge_wrong_origin.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "the distribution's origin is ec2-198-51-100-1.ap-southeast-1.compute.amazonaws.com" \
+  "$work/edge_wrong_origin.out" ||
+  { echo "edge_wrong_origin: no wrong-origin message" >&2; exit 1; }
+
+run_case edge_wrong_port fail v0.1.0
+f=$work/edge_wrong_port.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "the distribution's origin HTTPS port is 443, not 8443; run tofu apply first" \
+  "$work/edge_wrong_port.out" ||
+  { echo "edge_wrong_port: no wrong-port message" >&2; exit 1; }
+
+run_case edge_no_mtls fail v0.1.0
+f=$work/edge_no_mtls.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "the distribution's origin has no mTLS client certificate; run tofu apply first" \
+  "$work/edge_no_mtls.out" ||
+  { echo "edge_no_mtls: no missing-mTLS message" >&2; exit 1; }
+
+run_case edge_wrong_protocol fail v0.1.0
+f=$work/edge_wrong_protocol.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "the distribution's origin protocol policy is match-viewer, not https-only; run tofu apply first" \
+  "$work/edge_wrong_protocol.out" ||
+  { echo "edge_wrong_protocol: no wrong-protocol message" >&2; exit 1; }
+
+# With the CloudFront edge on, an unknown origin address stops the deploy
+# before any mutation, not only at the final smoke check.
+run_case edge_no_address fail v0.1.0
+f=$work/edge_no_address.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "cloudfront list-distributions"
+grep -qF "could not resolve the origin address" "$work/edge_no_address.out" ||
+  { echo "edge_no_address: no unresolved-address message" >&2; exit 1; }
 
 # Each release snapshot carries the tag release-snapshot-sweep deletes by.
 f=$work/ok.calls
@@ -536,11 +611,31 @@ run_case smoke_down fail v0.1.0
 grep -q "smoke: /healthz returned 502" "$work/smoke_down.out" || { echo "smoke_down: no failure message" >&2; exit 1; }
 
 # The direct-origin check fails closed: one answer fails the deploy, and an
-# unknown origin address is a failure, never a skip.
+# unknown origin address is a failure, never a skip. It covers both 443 and
+# 8443 (docs/design/cloudfront-edge.md, "Deploys and monitoring").
 run_case origin_open fail v0.1.0
-[[ $(count "$work/origin_open.calls" "https://192.0.2.10/") == 1 ]] ||
+[[ $(count "$work/origin_open.calls" "https://192.0.2.10:443/") == 1 ]] ||
   { echo "origin_open: an answering origin must fail on the first probe" >&2; exit 1; }
-grep -q "the origin answered a direct request" "$work/origin_open.out" || { echo "origin_open: no failure message" >&2; exit 1; }
+grep -q "the origin is reachable directly on port 443 (curl exit 0)" "$work/origin_open.out" ||
+  { echo "origin_open: no failure message" >&2; exit 1; }
+
+# The 443 probe passes (no answer); the 8443 probe still runs and fails the
+# deploy on its own.
+run_case origin_open_8443 fail v0.1.0
+[[ $(count "$work/origin_open_8443.calls" "https://192.0.2.10:443/") == 1 ]] ||
+  { echo "origin_open_8443: the 443 probe must still run once" >&2; exit 1; }
+[[ $(count "$work/origin_open_8443.calls" "https://192.0.2.10:8443/") == 1 ]] ||
+  { echo "origin_open_8443: an answering origin must fail on the first 8443 probe" >&2; exit 1; }
+grep -q "the origin is reachable directly on port 8443 (curl exit 0)" "$work/origin_open_8443.out" ||
+  { echo "origin_open_8443: no failure message" >&2; exit 1; }
+# A refused connection or a TLS rejection is not a closed port: only a
+# timeout passes.
+run_case origin_refused_8443 fail v0.1.0
+grep -q "the origin is reachable directly on port 8443 (curl exit 7)" "$work/origin_refused_8443.out" ||
+  { echo "origin_refused_8443: a refused connection must fail the deploy" >&2; exit 1; }
+run_case origin_tls_rejected fail v0.1.0
+grep -q "the origin is reachable directly on port 443 (curl exit 56)" "$work/origin_tls_rejected.out" ||
+  { echo "origin_tls_rejected: a TLS rejection must fail the deploy" >&2; exit 1; }
 run_case origin_unknown fail v0.1.0
 grep -q "smoke: could not resolve the origin address" "$work/origin_unknown.out" ||
   { echo "origin_unknown: no failure message" >&2; exit 1; }

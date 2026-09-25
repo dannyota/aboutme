@@ -312,11 +312,14 @@ for family in "${families[@]}"; do
     | with_entries(select(.value != null))' >"$work/$family.json"
 done
 
+edge_distribution_check || exit 1
+
 # The handoff runs both Caddy services at once, which ECS refuses to place
 # while either task definition reserves host port 443.
-if jq -e '.containerDefinitions[].portMappings[]? | select((.hostPort // .containerPort) == 443)' \
+if jq -e '.containerDefinitions[].portMappings[]?
+    | select((.hostPort // .containerPort) == 443 or (.hostPort // .containerPort) == 8443)' \
     "$work/app.json" "$work/maintenance.json" >/dev/null; then
-  say "the app or maintenance task definition still maps host port 443; run tofu apply first"
+  say "the app or maintenance task definition still maps host port 443 or 8443; run tofu apply first"
   exit 1
 fi
 
@@ -633,10 +636,8 @@ for path in /healthz /readyz; do
 done
 retry hsts_ok || { say "smoke: HSTS header missing"; exit 1; }
 retry origin_ip || { say "smoke: could not resolve the origin address"; exit 1; }
-if curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$smoke_ip/"; then
-  say "smoke: the origin answered a direct request"
-  exit 1
-fi
+edge_origin_closed "$smoke_ip" 443 || exit 1
+edge_origin_closed "$smoke_ip" 8443 || exit 1
 
 # Warm the new release through Cloudflare before calling the site up. The
 # first requests after a restart can be slow on the Cloudflare-to-origin path,

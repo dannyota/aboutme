@@ -18,7 +18,7 @@ resource "aws_instance" "host" {
   ami                     = data.aws_ssm_parameter.bottlerocket.value
   instance_type           = "t4g.small"
   subnet_id               = var.public_subnet_id
-  vpc_security_group_ids  = [var.host_security_group_id]
+  vpc_security_group_ids  = var.security_group_ids
   iam_instance_profile    = var.instance_profile_name
   disable_api_termination = true
 

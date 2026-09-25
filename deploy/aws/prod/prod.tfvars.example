@@ -33,3 +33,10 @@ totp_enrollment_enabled = false
 # docs/design/totp-key-management.md, "Rotation".
 totp_active_key_slot   = "a"
 totp_previous_key_slot = ""
+
+# Which Caddy edge listeners run; see docs/design/cloudfront-edge.md.
+edges = ["cloudflare", "cloudfront"]
+
+# The WAF web ACL only counts matches until the owner switches it to block
+# after a week of counts.
+waf_block = false
