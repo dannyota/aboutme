@@ -34,7 +34,7 @@ GitHub CI runs every build and test. `main` and other branches run it differentl
 |-|-|-|
 | Trigger | Every push runs `ci.yml` | Nothing runs on push; dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>` |
 | Release gate | A green push run on the exact commit is required to tag and deploy | Never counts as a release gate |
-| Caches | Saves Go and tool caches | Restores caches but never saves them, so the first run can be slower |
+| Caches | Saves Go and tool caches | Restores Go caches but never saves them, so the first run can be slower; the Playwright and pip caches save per branch and never reach `main` |
 | Canceling | A newer push to `main` cancels the older run | A newer dispatch on the same branch cancels the older run |
 
 Before dispatching on a branch:
