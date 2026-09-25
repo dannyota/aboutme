@@ -137,7 +137,7 @@ describe('site page search metadata', () => {
       inLanguage: ['vi', 'en'],
     });
     expect(graph[1]).toMatchObject({
-      logo: 'https://aboutme.vn/apple-touch-icon.png',
+      logo: 'https://aboutme.vn/apple-touch-icon-v2.png',
       sameAs: ['https://github.com/dannyota/aboutme'],
     });
     expect(graph[2]).toMatchObject({

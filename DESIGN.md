@@ -75,7 +75,9 @@ strokes so it needs no font.
 
 `AppLogo` renders it inline at 24, 32, or 48 px high, or as the mark alone. It
 is one image named “aboutme”. Under `forced-colors: active`, the mark and `me`
-use the text color. `public/favicon.svg` is the mark alone with a plain fold.
+use the text color. `public/favicon-v2.svg` is the mark alone with a plain fold.
+The iPhone home-screen and install icons use the glossy square app icon; icon
+files carry a version in their names so browsers fetch a changed icon.
 
 ## Typography and tokens
 
