@@ -26,7 +26,26 @@ The table names required verification, not commands every worker must run locall
 
 Reusable browser automation is scripted headless Playwright. To author it, use the Playwright MCP server to inspect real selectors, requests, and state, then write what you observed as `@playwright/test` specs. MCP never runs the recorded automation.
 
-## When a check fails
+## GitHub CI
+
+GitHub CI runs every build and test. `main` and other branches run it differently:
+
+| | `main` | Other branches |
+|-|-|-|
+| Trigger | Every push runs `ci.yml` | Nothing runs on push; dispatch `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>` |
+| Release gate | A green push run on the exact commit is required to tag and deploy | Never counts as a release gate |
+| Caches | Saves Go and tool caches | Restores caches but never saves them, so the first run can be slower |
+| Canceling | A newer push to `main` cancels the older run | A newer dispatch on the same branch cancels the older run |
+
+Before dispatching on a branch:
+
+1. Merge `origin/main` into the branch (never rewrite pushed commits) so CI tests the branch as it will land.
+2. Pass `base_sha=$(git merge-base origin/main HEAD)`: the full 40-character SHA of a commit that is an ancestor of the branch head. A SHA that is not an ancestor, such as a newer `main`, fails the migration and released-schema guards before they check anything.
+3. Dispatch once and wait; do not dispatch again on the same branch while a run is in progress.
+4. Read results for the exact head SHA (`gh run list --branch <branch>` shows `headSha`); a green run on an older commit proves nothing about the head.
+
+After merging to `main`, the `main` push run is the gate: wait for it before tagging.
+
 
 Find the cause before changing anything. Never rerun a failed job hoping for a pass, add retries or longer timeouts, or loosen a check without evidence that it is the cause.
 
