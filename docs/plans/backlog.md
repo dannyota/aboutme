@@ -12,7 +12,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Template date formats ignore the resume language: the style guide wants `MM/YYYY` for Vietnamese and `Mon YYYY` for English, and international-lang's `YYYY` drops months. Evidence: `docs/design/vietnam-tech-resumes.md`, `packages/schema/samples/international-lang.*`.
 - The Vietnam tech style guide conflicts with the samples on two points (Zalo line in English resumes; fresher awards as their own section). The designer decides and updates the guide or the samples. Evidence: `docs/design/vietnam-tech-resumes.md`.
 - A stray dot sits on the stored Executive Band page 1 image (Vietnamese), about 60 px above the bottom edge; check the print path. Evidence: `apps/web/public/templates/pages/executive-band-vi-p1.png`.
-- `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with "public stream remained open after revocation drain" (`apps/server/internal/realtime/service_test.go:539`); find the race. Evidence: deploy-fixes branch CI, 2026-09-24.
 - The deploy warm-up requests `/danny`; if that resume is unpublished, every deploy fails. Evidence: `deploy/aws/scripts/deploy.sh` (`DEPLOY_WARM_PAGE`).
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
 
@@ -28,7 +27,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Acceptance evidence gaps
 
-- backend: TOTP code-step reuse across flows (AC-AUTH-026); TOTP replace or remove racing a code or recovery use, and a TOTP change racing session rotation (AC-AUTH-027).
 - frontend: web test that an absent or malformed `totpEnabled` counts as false (AC-AUTH-029).
 - devops: run `make caddy-prod-test` in CI (AC-INF-001, AC-OPS-002); exact IAM policy tests or a live IAM simulation (AC-INF-004, AC-SEC-008).
 - qa: retained production proof of fence state and TOTP with `scripts/totp-production-proof.sh totp-prod-enabled` (AC-SEC-007, AC-SEC-009); Cloudflare edge probe (AC-OPS-015, AC-INF-002); direct-IP and spoofed-header probe (AC-INF-001, AC-OPS-002).
