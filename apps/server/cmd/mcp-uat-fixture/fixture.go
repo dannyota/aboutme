@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/google/uuid"
+
+	"github.com/dannyota/aboutme/apps/server/internal/devdb"
 )
 
 const (
@@ -70,7 +71,7 @@ func parseConfig(args []string) (string, Config, error) {
 			return "", Config{}, fmt.Errorf("unknown argument %q", args[i])
 		}
 	}
-	if err := validateDatabaseURL(databaseURL); err != nil {
+	if err := devdb.ValidateURL(databaseURL, fixtureDatabase); err != nil {
 		return "", Config{}, err
 	}
 	if err := validateClientName(clientName); err != nil {
@@ -90,30 +91,6 @@ func validateClientName(name string) error {
 	parsed, err := uuid.Parse(suffix)
 	if err != nil || parsed.String() != suffix || parsed.Version() != 4 || parsed.Variant() != uuid.RFC4122 {
 		return errors.New("--client-name must use the reserved prefix and a lowercase UUIDv4")
-	}
-	return nil
-}
-
-func validateDatabaseURL(raw string) error {
-	if strings.TrimSpace(raw) == "" {
-		return errors.New("--database-url is required")
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("--database-url is not a valid URL: %w", err)
-	}
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return fmt.Errorf("--database-url scheme must be postgres or postgresql, got %q", u.Scheme)
-	}
-	if host := u.Hostname(); host != "127.0.0.1" {
-		return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", host)
-	}
-	name := strings.Trim(u.Path, "/")
-	if name == "" {
-		return errors.New("--database-url must name a database")
-	}
-	if name != fixtureDatabase {
-		return fmt.Errorf("--database-url must target database %q, got %q", fixtureDatabase, name)
 	}
 	return nil
 }
