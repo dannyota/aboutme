@@ -650,3 +650,106 @@ test('the header at 390px never overflows on /app/settings/sessions while '
     '/app/settings/sessions',
   );
 });
+
+// A signed-out visitor who follows a gallery sample's link into /app/new
+// must reach /register even when the session read settles before the
+// navigation commits: Nuxt treats a navigation as processing middleware
+// until it commits, and a redirect the guard (middleware/signed-in.global.ts)
+// starts in that window must still navigate. Holding the page chunks until
+// the guard's own /api/v1/me read has answered puts the 401 there.
+test('a signed-out sample link reaches /register when /me settles before '
+  + 'the page loads', async ({ page }) => {
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  await mockSignedOutSession(page);
+  let clicked = false;
+  let meAnswered!: () => void;
+  const meAfterClick = new Promise<void>((resolve) => {
+    meAnswered = resolve;
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      status: 401,
+      json: { error: { code: 'session_required', message: 'Sign in.' } },
+    });
+    if (clicked) meAnswered();
+  });
+  await page.route('**/_nuxt/**', async (route) => {
+    if (clicked) {
+      await meAfterClick;
+      // Lets the settled read reach the guard before the chunk arrives.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    await route.continue();
+  });
+
+  const response = await page.goto('/templates/engineer-compact');
+  expect(response?.status()).toBe(200);
+  await expect.poll(() => page.evaluate(() =>
+    Boolean((document.getElementById('__nuxt') as HTMLElement & {
+      __vue_app__?: unknown;
+    } | null)?.__vue_app__),
+  )).toBe(true);
+  const link = page.locator('[data-action="use-sample"]');
+  const href = await link.getAttribute('href');
+  expect(href).toBe('/app/new?sample=engineer-compact&lng=en');
+
+  clicked = true;
+  await link.click();
+  await page.waitForURL((url) => url.pathname === '/register');
+  expect(new URL(page.url()).searchParams.get('next')).toBe(href);
+});
+
+// The Create resume dialog opens on the samples for an account with no
+// resumes, and the samples make it taller than a 1280x720 viewport. It must
+// stay inside the viewport and scroll, so its header, the Blank / From a
+// sample toggle, and its actions all stay reachable.
+test('the create resume dialog fits a 1280x720 viewport and scrolls', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'en',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/resumes', async (route) => {
+    await route.fulfill({
+      headers: {
+        'Cache-Control': 'no-store, no-transform',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: { data: [] },
+    });
+  });
+
+  await page.goto('/app/resumes');
+  await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
+  await page.getByTestId('create-resume').click();
+  const dialog = page.getByRole('dialog', { name: 'Create resume' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('[data-create-mode="sample"]'))
+    .toHaveAttribute('aria-pressed', 'true');
+  await dialog.evaluate((element) => Promise.all(
+    element.getAnimations().map((animation) => animation.finished),
+  ));
+
+  const box = await dialog.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(720);
+  await expect(dialog.getByRole('heading', { name: 'Create resume' }))
+    .toBeInViewport();
+
+  const submit = dialog.locator('[data-action="create-submit"]');
+  await submit.scrollIntoViewIfNeeded();
+  await expect(submit).toBeInViewport();
+
+  const blank = dialog.locator('[data-create-mode="blank"]');
+  await blank.click();
+  await expect(blank).toHaveAttribute('aria-pressed', 'true');
+});

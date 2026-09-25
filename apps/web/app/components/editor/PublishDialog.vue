@@ -303,8 +303,7 @@ onBeforeUnmount(resetCopyState);
 <template>
   <FormDialog
     :open="open"
-    class="publish-dialog max-h-[calc(100dvh-2rem)] overflow-y-auto
-      sm:max-w-[38rem]"
+    class="publish-dialog sm:max-w-[38rem]"
     :title="copy.title"
     :description="copy.description"
     :submit-label="primaryAction"

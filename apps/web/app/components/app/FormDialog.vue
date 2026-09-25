@@ -58,8 +58,11 @@ function onCloseAutoFocus(event: Event): void {
     :open="open"
     @update:open="onOpenChange"
   >
+    <!-- Every form dialog stays inside the viewport and scrolls its content,
+         so its header and first controls stay reachable however long the
+         body grows. -->
     <DialogContent
-      :class="cn(props.class)"
+      :class="cn('max-h-[calc(100dvh-2rem)] overflow-y-auto', props.class)"
       :close-label="closeLabel"
       :show-close-button="showCloseButton && !busy"
       @close-auto-focus="onCloseAutoFocus"

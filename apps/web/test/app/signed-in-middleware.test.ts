@@ -1,8 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mockNuxtImport, registerEndpoint } from '@nuxt/test-utils/runtime';
+import {
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
+import { registerEndpoint } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
-import type { RouteLocationNormalized } from 'vue-router';
+import type { RouteLocationNormalized, Router } from 'vue-router';
 import signedInMiddleware from '../../app/middleware/signed-in.global';
 
 const me = {
@@ -28,7 +35,6 @@ function holdMe(): void {
     releaseMe = resolve;
   });
 }
-mockNuxtImport('navigateTo', () => vi.fn());
 registerEndpoint('/api/v1/me', async (event) => {
   await meGate;
   if (meStatus !== 200) {
@@ -46,17 +52,24 @@ function route(
 }
 
 const SESSIONS_LOGIN = '/login?next=%2Fapp%2Fsettings%2Fsessions';
+const SAMPLE_PATH = '/app/new?sample=engineer-compact&lng=en';
+const SAMPLE_REGISTER = `/register?next=${encodeURIComponent(SAMPLE_PATH)}`;
 
 // The shared signed-out route guard (docs/design/web.md, Application
 // surfaces). A router push to an app route runs the registered global guard
 // too; both share one pending watcher.
 describe('signed-in.global middleware', () => {
+  let replace: MockInstance<Router['replace']>;
+
   beforeEach(async () => {
     meStatus = 401;
     meGate = Promise.resolve();
+    vi.restoreAllMocks();
     await useRouter().push('/');
     clearNuxtData();
-    vi.mocked(navigateTo).mockClear();
+    // These tests call the guard directly or navigate with push, never
+    // replace, so every replace is a redirect the guard sent.
+    replace = vi.spyOn(useRouter(), 'replace').mockResolvedValue(undefined);
   });
 
   it('does nothing for a path that requires no session', async () => {
@@ -66,7 +79,7 @@ describe('signed-in.global middleware', () => {
     );
     expect(result).toBeUndefined();
     await flushPromises();
-    expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('re-reads a rejected session on navigation, then redirects',
@@ -78,14 +91,11 @@ describe('signed-in.global middleware', () => {
       holdMe();
       await useRouter().push('/app/settings/sessions');
       expect(auth.authState.value).toBe('loading');
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
 
       releaseMe();
       await vi.waitFor(() => {
-        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-          SESSIONS_LOGIN,
-          { replace: true },
-        );
+        expect(replace).toHaveBeenCalledWith(SESSIONS_LOGIN);
       });
     });
 
@@ -94,14 +104,11 @@ describe('signed-in.global middleware', () => {
       // The router still shows '/': the navigation has not committed.
       holdMe();
       signedInMiddleware(route('/app/settings/sessions'), route('/'));
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
 
       releaseMe();
       await vi.waitFor(() => {
-        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-          SESSIONS_LOGIN,
-          { replace: true },
-        );
+        expect(replace).toHaveBeenCalledWith(SESSIONS_LOGIN);
       });
     });
 
@@ -117,17 +124,14 @@ describe('signed-in.global middleware', () => {
         route('/'),
       );
       expect(result).toBeUndefined();
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
 
       releaseMe();
       await vi.waitFor(() => {
-        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-          SESSIONS_LOGIN,
-          { replace: true },
-        );
+        expect(replace).toHaveBeenCalledWith(SESSIONS_LOGIN);
       });
       await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledTimes(1);
+      expect(replace).toHaveBeenCalledTimes(1);
     });
 
   it('does not redirect when the settling read lands authenticated',
@@ -143,7 +147,7 @@ describe('signed-in.global middleware', () => {
         expect(auth.authState.value).toBe('authenticated');
       });
       await flushPromises();
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
     });
 
   it('skips the redirect when the current route no longer needs a session',
@@ -160,7 +164,7 @@ describe('signed-in.global middleware', () => {
         expect(auth.authState.value).toBe('anonymous');
       });
       await flushPromises();
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
     });
 
   it('does not redirect a session lost after the page settled authenticated',
@@ -174,26 +178,44 @@ describe('signed-in.global middleware', () => {
         route('/app/settings/sessions'),
         route('/app/settings/sessions'),
       );
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
 
       meStatus = 401;
       await auth.refresh();
       expect(auth.authState.value).toBe('anonymous');
       await flushPromises();
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+      expect(replace).not.toHaveBeenCalled();
     });
 
   it('sends an anonymous /app/new visitor to register with next', async () => {
-    const path = '/app/new?sample=engineer-compact&lng=en';
     holdMe();
-    await useRouter().push(path);
+    await useRouter().push(SAMPLE_PATH);
     releaseMe();
 
     await vi.waitFor(() => {
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(path)}`,
-        { replace: true },
-      );
+      expect(replace).toHaveBeenCalledWith(SAMPLE_REGISTER);
     });
   });
+
+  it('redirects when the read settles before the navigation commits',
+    async () => {
+      // A link from a gallery page: Nuxt marks the navigation as processing
+      // middleware from beforeEach until afterEach, while the /app/new page
+      // chunk loads, and the 401 lands inside that window.
+      const nuxtApp = useNuxtApp();
+      holdMe();
+      nuxtApp._processingMiddleware = true;
+      try {
+        signedInMiddleware(
+          route('/app/new', SAMPLE_PATH),
+          route('/templates/engineer-compact'),
+        );
+        releaseMe();
+        await vi.waitFor(() => {
+          expect(replace).toHaveBeenCalledWith(SAMPLE_REGISTER);
+        });
+      } finally {
+        delete nuxtApp._processingMiddleware;
+      }
+    });
 });

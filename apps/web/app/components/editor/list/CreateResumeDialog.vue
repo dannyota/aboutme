@@ -393,6 +393,7 @@ function persona(templateId: string): string {
     width: 100%;
     max-width: none;
     height: 100dvh;
+    max-height: none;
     overflow-y: auto;
     border-radius: 0;
     transform: none;
