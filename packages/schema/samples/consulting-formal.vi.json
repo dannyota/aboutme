@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Bùi Anh Tuấn",
+    "headline": "Security Engineer · OWASP, Burp Suite, SIEM, OSCP",
+    "details": [
+      {
+        "id": "9129a7cf-3b71-516f-b0e3-20c863b883d4",
+        "type": "email",
+        "value": "anhtuan.bui@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "87d83c2e-f535-5dc0-a527-f8805bc61c7c",
+        "type": "phone",
+        "value": "+84 90 000 0644",
+        "isHidden": false
+      },
+      {
+        "id": "8bc98ebd-c193-5e22-9a8e-35fcd5d0b383",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "9837aeb4-d450-5eb4-9813-2b4873a777b1",
+        "type": "location",
+        "value": "TP. Hồ Chí Minh",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Tóm tắt",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "cfd2ac54-4d05-5cb8-a1bc-bbeb0fe96581",
+          "isHidden": false,
+          "text": "<p>Security Engineer với 9 năm: 2 năm developer, 3 năm SOC Analyst tại ngân hàng, 4 năm bảo mật ứng dụng thương mại điện tử. Thế mạnh: pentest OWASP, SIEM, DevSecOps.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "4645c235-1b16-5836-8e00-ea4e6dfef60f",
+          "isHidden": false,
+          "jobTitle": "Security Engineer",
+          "employer": "Công ty thương mại điện tử (2.000 nhân sự)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 9
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Pentest web và API theo OWASP Top 10 bằng Burp Suite: 120 lỗ hổng, 18 mức High trở lên.</li><li>Đưa Semgrep vào GitLab CI cho 40 repository, rút thời gian vá lỗi Critical từ 30 còn 7 ngày.</li><li>Chủ trì phần kỹ thuật đợt đánh giá PCI DSS v4.0, đạt ngay lần đầu, không có phát hiện lớn.</li><li>Cấu hình WAF và rate limiting trên AWS cho 25 dịch vụ, chặn 90% credential stuffing.</li></ul>"
+        },
+        {
+          "id": "bba9c36a-038e-5b9e-add9-bffaee97aa65",
+          "isHidden": false,
+          "jobTitle": "SOC Analyst",
+          "employer": "Ngân hàng thương mại cổ phần",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 6
+            },
+            "end": {
+              "y": 2022,
+              "m": 8
+            },
+            "present": false
+          },
+          "description": "<ul><li>Phân tích cảnh báo SIEM (Splunk) trong ca trực 24/7, trung bình 400 cảnh báo mỗi ngày.</li><li>Viết 60 correlation rule và playbook, giảm cảnh báo giả từ 70% xuống 30%.</li></ul>"
+        },
+        {
+          "id": "0aa0a12d-2ead-5b02-b2ee-f9a816275bdb",
+          "isHidden": false,
+          "jobTitle": "Software Developer",
+          "employer": "Công ty giải pháp phần mềm (150 nhân sự)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2017,
+              "m": 7
+            },
+            "end": {
+              "y": 2019,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Sửa 45 lỗi SQL injection và XSS trong API thanh toán Java, viết checklist secure coding.</li></ul>"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "a94e93fa-eee2-53c7-9ff5-8562e952284b",
+          "isHidden": false,
+          "title": "OffSec Certified Professional (OSCP)",
+          "issuer": "OffSec",
+          "date": {
+            "y": 2023,
+            "m": 6
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "79703454-4df7-506a-8652-3b5cfcff1ea4",
+          "isHidden": false,
+          "name": "OWASP Top 10, Burp Suite, Nmap, SIEM (Splunk), Semgrep, GitLab CI, AWS, Python"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "34d3d5c7-2d3b-50ee-9e4a-b27537f56fc4",
+          "isHidden": false,
+          "name": "Tiếng Anh (IELTS 6.5)"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "81116445-c663-5cd1-a801-cdf7dfb339e6",
+          "isHidden": false,
+          "degree": "Kỹ sư Công nghệ Thông tin",
+          "school": "Trường Đại học Kỹ thuật Tây Nguyên Mới",
+          "city": "Gia Lai",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2012,
+              "m": 9
+            },
+            "end": {
+              "y": 2017,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "inter",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#14304f",
+      "text": "#33383d",
+      "background": "#ffffff",
+      "accent": "#1c4e80"
+    },
+    "spacing": {
+      "sectionGap": 15,
+      "entryGap": 9,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 25,
+        "y": 15
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "certificate",
+          "skill",
+          "language",
+          "education"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

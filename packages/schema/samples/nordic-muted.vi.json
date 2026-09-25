@@ -1,0 +1,293 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Bùi Quang Huy",
+    "headline": "Senior DevOps Engineer · Kubernetes, Terraform, AWS",
+    "details": [
+      {
+        "id": "2c62f37b-4bf3-5322-8977-de3354ec71ce",
+        "type": "email",
+        "value": "huy.bui@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "e64fe768-8abb-5ed4-b858-0a7eac4a5de5",
+        "type": "phone",
+        "value": "+84 90 000 0523",
+        "isHidden": false
+      },
+      {
+        "id": "4b950428-e188-521d-b010-4e94001f0dd6",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "782b2cce-1ce9-5c41-8b3a-db532c1233b9",
+        "type": "location",
+        "value": "Hải Châu, Đà Nẵng",
+        "isHidden": false
+      },
+      {
+        "id": "405e007b-2069-562e-9d5c-c5bdb0a90aa0",
+        "type": "github",
+        "value": "https://example.com/bui-quang-huy",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "73429370-8b37-54ae-8443-3b9c01c6c88c",
+          "isHidden": false,
+          "text": "<p>Senior DevOps Engineer với 10 năm vận hành hạ tầng, đi lên từ quản trị hệ thống. Vận hành Kubernetes trên AWS cho 60 microservices, uptime 99,95%. Có chứng chỉ CKA, quen Terraform và GitOps.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "e944069a-15d4-5ea9-a615-3b10ab87d544",
+          "isHidden": false,
+          "jobTitle": "Senior DevOps Engineer",
+          "employer": "Công ty SaaS phục vụ khách hàng Mỹ (200 nhân sự)",
+          "city": "Đà Nẵng",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Vận hành 4 cluster Kubernetes (EKS) trên AWS cho 60 microservices.</li><li>Viết lại hạ tầng thành 40 module Terraform, rút thời gian dựng môi trường mới từ 3 ngày còn 2 giờ.</li><li>Triển khai GitOps với Argo CD và GitLab CI, tăng số lần deploy từ 5 lên 60 lần/tuần.</li><li>Dựng monitoring bằng Prometheus và Grafana kèm runbook on-call, giảm MTTR từ 50 xuống 12 phút.</li></ul>"
+        },
+        {
+          "id": "1ad8f622-483e-5891-9688-d5cb8e544510",
+          "isHidden": false,
+          "jobTitle": "DevOps Engineer",
+          "employer": "Công ty outsourcing phần mềm (800 nhân sự)",
+          "city": "Đà Nẵng",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 7
+            },
+            "end": {
+              "y": 2022,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>Dự án thương mại điện tử cho khách hàng Úc (14 tháng): chuyển 25 service từ VM lên Kubernetes, không gây downtime.</li><li>Xây dựng pipeline CI/CD dùng chung trên GitLab CI cho 12 dự án, rút ngắn thời gian release từ 2 giờ còn 15 phút.</li></ul>"
+        },
+        {
+          "id": "ea8eabb8-6b68-564f-b7ca-58c6db658374",
+          "isHidden": false,
+          "jobTitle": "System Administrator",
+          "employer": "Nhà cung cấp hosting và data center",
+          "city": "Đà Nẵng",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 8
+            },
+            "end": {
+              "y": 2019,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>Quản trị 300 server Linux và hệ thống backup cho 1.200 khách hàng hosting, uptime 99,9%.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "e4147883-1e11-5e7c-9873-75b68112c51a",
+          "isHidden": false,
+          "degree": "Kỹ sư Mạng máy tính và Truyền thông",
+          "school": "Học viện Công nghệ Thông tin Miền Trung",
+          "city": "Đà Nẵng",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2011,
+              "m": 9
+            },
+            "end": {
+              "y": 2016,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "20896c14-f469-59c7-ae02-52e61cb56ece",
+          "isHidden": false,
+          "name": "Kubernetes"
+        },
+        {
+          "id": "992a931b-a014-54e2-a5d8-504c5d08c205",
+          "isHidden": false,
+          "name": "Terraform"
+        },
+        {
+          "id": "5a38aeef-09a9-5b1c-b3ce-81ca9a9f7933",
+          "isHidden": false,
+          "name": "AWS"
+        },
+        {
+          "id": "6353c050-f55c-53ae-ac28-d2881ae8f55e",
+          "isHidden": false,
+          "name": "Prometheus"
+        },
+        {
+          "id": "c9ec7cc1-e920-5e81-ba3e-d3fa711c1b6f",
+          "isHidden": false,
+          "name": "Grafana"
+        },
+        {
+          "id": "57646f36-d720-5a40-8c43-1d86943aa0aa",
+          "isHidden": false,
+          "name": "Argo CD"
+        },
+        {
+          "id": "aaeae42f-7114-5054-acdd-922c24fe14cb",
+          "isHidden": false,
+          "name": "GitLab CI"
+        },
+        {
+          "id": "735f9c64-c7b1-57bb-b66f-556075292348",
+          "isHidden": false,
+          "name": "Ansible"
+        },
+        {
+          "id": "65eb7783-9e4c-5607-9926-eff18ca24328",
+          "isHidden": false,
+          "name": "Linux"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "ccecefc3-26cb-592e-bd6b-52e8a6b9e378",
+          "isHidden": false,
+          "title": "Certified Kubernetes Administrator (CKA)",
+          "issuer": "The Linux Foundation",
+          "date": {
+            "y": 2023,
+            "m": 4
+          }
+        },
+        {
+          "id": "6fc898b4-6622-50e4-b78b-6fb07cbdf490",
+          "isHidden": false,
+          "title": "HashiCorp Certified: Terraform Associate (003)",
+          "issuer": "HashiCorp",
+          "date": {
+            "y": 2024,
+            "m": 6
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "4f4e0163-8966-5369-8da9-d676b8466285",
+          "isHidden": false,
+          "name": "Tiếng Anh (TOEIC 820, họp hằng ngày với nhóm Mỹ)",
+          "level": 4
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#2f4557",
+      "text": "#333a42",
+      "background": "#ffffff",
+      "accent": "#4a6b80",
+      "surface": "#f1f3f5"
+    },
+    "spacing": {
+      "sectionGap": 22,
+      "entryGap": 11,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

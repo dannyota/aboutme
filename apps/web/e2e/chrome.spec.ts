@@ -6,6 +6,8 @@ import {
   test,
   webkit,
 } from '@playwright/test';
+import { SAMPLES } from '@aboutme/schema/samples';
+import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
   CHROME_PIXEL_TOLERANCE,
@@ -19,10 +21,15 @@ import {
 // baselines pin it rather than English (gallery.spec.ts uses the same
 // cookie pattern).
 
+// Gallery templates with a sample show a stored page image; the others
+// mount a live thumbnail.
+const LIVE_THUMBNAILS = TEMPLATES.length
+  - new Set(SAMPLES.map(({ templateId }) => templateId)).size;
+
 const PAGES = [
   { name: 'home', path: '/', thumbnails: 4 },
   { name: 'login', path: '/login', thumbnails: 0 },
-  { name: 'templates', path: '/templates', thumbnails: 15 },
+  { name: 'templates', path: '/templates', thumbnails: LIVE_THUMBNAILS },
 ] as const;
 const THEMES = ['light', 'dark'] as const;
 const WIDTHS = [390, 1440] as const;
@@ -83,6 +90,16 @@ for (const page of PAGES) {
             await browserPage.setViewportSize({ width, height: settled });
           }
           await browserPage.evaluate(() => document.fonts.ready);
+          // Stored sample page images below the first rows load lazily, and
+          // a lazy image can still be blank at capture on a tall page. Load
+          // every image now so the capture never depends on that timing.
+          await browserPage.locator('img[loading="lazy"]').evaluateAll(
+            (images) => {
+              for (const image of images) {
+                (image as HTMLImageElement).loading = 'eager';
+              }
+            },
+          );
           await waitForImages(browserPage);
           // Thumbnails measure their width after mounting; let two frames
           // pass so every zoom has settled before the capture.

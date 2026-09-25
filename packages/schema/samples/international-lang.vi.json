@@ -1,0 +1,274 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Hoàng Minh Tiến",
+    "headline": "BrSE · JLPT N1, Java, dự án Nhật Bản",
+    "details": [
+      {
+        "id": "e9d1af31-1632-599e-9ebb-d6de35623106",
+        "type": "email",
+        "value": "minhtien.hoang@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "66aed070-9df8-5072-91fc-891928eb4cee",
+        "type": "phone",
+        "value": "+84 90 000 0633",
+        "isHidden": false
+      },
+      {
+        "id": "f6c7e02e-19cd-589e-97f0-a36e5d3f93f2",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "3a6574ad-cc1c-5db6-919b-817ee1b74c0b",
+        "type": "location",
+        "value": "Hà Nội, Việt Nam",
+        "isHidden": false
+      },
+      {
+        "id": "61d8a68f-576c-550e-b127-f0f8f868ed7a",
+        "type": "linkedin",
+        "value": "https://example.com/in/hoang-minh-tien",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Tóm tắt",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "ccf7d153-4f8c-542e-95a2-1ae0db88b5cb",
+          "isHidden": false,
+          "text": "<p>BrSE với 9 năm làm dự án cho khách hàng Nhật Bản: 3 năm Java developer (1 năm onsite tại Tokyo), rồi 6 năm BrSE. Thế mạnh: viết spec tiếng Nhật, quản lý change request, điều phối nhóm offshore 8 đến 12 developer.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "63194bd9-26d5-5619-bb9b-d5ac214c81bc",
+          "isHidden": false,
+          "jobTitle": "BrSE",
+          "employer": "Công ty outsourcing phần mềm thị trường Nhật",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 4
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Dự án hệ thống bảo hiểm nhân thọ cho khách hàng Nhật Bản (3 năm): điều phối 12 developer Java, viết 40 bộ basic design tiếng Nhật, xử lý 150 change request; lỗi UAT giảm từ 45 xuống 18 mỗi đợt.</li><li>Dự án quản lý kho cho khách hàng bán lẻ Nhật Bản (1 năm): chuyển hệ thống lên .NET 8 với nhóm 8 người, bàn giao đúng hạn cả 6 đợt release.</li><li>Dự án ngân hàng số cho khách hàng Nhật Bản (đang tham gia, 2 năm): phân tích yêu cầu và chủ trì họp hằng tuần bằng tiếng Nhật; 90% spec qua review của khách hàng ngay lần đầu.</li><li>Kèm cặp 3 developer chuyển sang vai trò BrSE; sau 1 năm cả 3 tự phụ trách một dự án với khách hàng Nhật Bản.</li></ul>"
+        },
+        {
+          "id": "7a0983ac-83d5-5f99-bb3c-883d6f17f64d",
+          "isHidden": false,
+          "jobTitle": "Java Developer",
+          "employer": "Công ty outsourcing phần mềm (800 nhân sự)",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2017,
+              "m": 7
+            },
+            "end": {
+              "y": 2020,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Phát triển module quản lý hợp đồng bằng Java (Spring Boot) và Oracle Database cho khách hàng bảo hiểm Nhật Bản, theo detail design tiếng Nhật.</li><li>Onsite 1 năm tại Tokyo: làm việc trực tiếp với khách hàng trong giai đoạn UAT, sửa 90 lỗi và viết lại tài liệu vận hành bằng tiếng Nhật.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "cb8f3e6e-5480-5f3e-95f1-5b6dcbaf3c1b",
+          "isHidden": false,
+          "degree": "Kỹ sư Công nghệ Thông tin",
+          "school": "Học viện Kỹ thuật Số Hồng Hà",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2012,
+              "m": 9
+            },
+            "end": {
+              "y": 2017,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "cad085cc-fa49-5837-916f-f043c8e60f94",
+          "isHidden": false,
+          "name": "Tiếng Nhật (JLPT N1)",
+          "level": 4
+        },
+        {
+          "id": "417b33d3-7dad-580c-a1c3-16d529e9aeb8",
+          "isHidden": false,
+          "name": "Tiếng Anh (TOEIC 780)",
+          "level": 3
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "ae44f28b-fda4-576a-a01f-e0109d69b8c6",
+          "isHidden": false,
+          "name": "Java"
+        },
+        {
+          "id": "5b844678-4a76-551a-a6cc-3f84d6adc498",
+          "isHidden": false,
+          "name": "Spring Boot"
+        },
+        {
+          "id": "6e0f2ba4-4ce9-5723-b09c-ad372a454cef",
+          "isHidden": false,
+          "name": ".NET (C#)"
+        },
+        {
+          "id": "03e9c4e1-658f-50c9-8761-2cbbd17e1120",
+          "isHidden": false,
+          "name": "Oracle Database"
+        },
+        {
+          "id": "a0d699b2-11a7-55c1-a266-39c7b3d08c85",
+          "isHidden": false,
+          "name": "SQL Server"
+        },
+        {
+          "id": "b330afa6-17f6-5158-a24c-3a3c8dda0dff",
+          "isHidden": false,
+          "name": "Viết spec (basic design, detail design)"
+        },
+        {
+          "id": "e144d7c2-ac7e-527a-b4dd-1522075ad860",
+          "isHidden": false,
+          "name": "Redmine"
+        },
+        {
+          "id": "beebc904-0c09-565f-84a3-4526f3db09c5",
+          "isHidden": false,
+          "name": "Git"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "d2f33fc0-9343-5d0e-bc1f-d71c6a570558",
+          "isHidden": false,
+          "title": "Oracle Certified Professional, Java SE 11 Developer",
+          "issuer": "Oracle",
+          "date": {
+            "y": 2019,
+            "m": 12
+          }
+        },
+        {
+          "id": "95eab348-da9d-57ff-b5d3-82dbdfc60afa",
+          "isHidden": false,
+          "title": "Fundamental Information Technology Engineer Examination (FE)",
+          "issuer": "VITEC",
+          "date": {
+            "y": 2016,
+            "m": 10
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "be-vietnam-pro",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#191614",
+      "text": "#2a2724",
+      "background": "#ffffff",
+      "accent": "#5a4a3a",
+      "surface": "#f0ede7"
+    },
+    "spacing": {
+      "sectionGap": 18,
+      "entryGap": 9,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 16,
+        "y": 14
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "language",
+          "skill",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "bar"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "YYYY"
+  }
+}
