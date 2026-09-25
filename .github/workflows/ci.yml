@@ -127,8 +127,6 @@ jobs:
       - if: ${{ !cancelled() }}
         run: make operational-test-fast
       - if: ${{ !cancelled() }}
-        run: make operational-test-deploy
-      - if: ${{ !cancelled() }}
         run: make schema-check
       - if: ${{ !cancelled() }}
         run: go build ./... && go vet ./... && go test ./...
@@ -168,26 +166,33 @@ jobs:
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
           cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
 
-  # The dev-https static safety suite, the browser-image and MCP owner-workflow
-  # static tests, and `npm audit` against each lockfile alone. The dev-https
-  # suite runs first, before Node is set up, in the environment it was
-  # written for. `npm audit` needs no install: every manifest ships a
-  # package-lock.json, and npm reads it directly. It fails on a high or
-  # critical advisory in a production dependency; --omit=dev drops
-  # devDependencies, which never ship.
+  # The dev-https static safety suite (as two shards in the background),
+  # the deploy-script, browser-image, and MCP owner-workflow static tests,
+  # and `npm audit` against each lockfile alone. The dev-https shards start
+  # before Node is set up, in the environment the suite was written for.
+  # `npm audit` needs no install: every manifest ships a package-lock.json,
+  # and npm reads it directly. It fails on a high or critical advisory in a
+  # production dependency; --omit=dev drops devDependencies, which never
+  # ship.
   static-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: make operational-test-dev-https
-      - if: ${{ !cancelled() }}
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - name: Start the dev-https static suite shards
+        run: |
+          for shard in 0 1; do
+            bash scripts/ci-background.sh start "dev-https-static-$shard" \
+              make operational-test-dev-https DEV_HTTPS_TEST_SHARD="$shard/2"
+          done
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
           cache: npm
           cache-dependency-path: deploy/dev-https-browser/package-lock.json
+      - run: make operational-test-deploy
       - if: ${{ !cancelled() }}
         run: npm ci
         working-directory: deploy/dev-https-browser
@@ -208,9 +213,16 @@ jobs:
         name: npm audit (deploy/dev-https-browser)
         run: npm audit --omit=dev --audit-level=high
         working-directory: deploy/dev-https-browser
+      - if: ${{ !cancelled() }}
+        name: Wait for dev-https static suite shard 0
+        run: bash scripts/ci-background.sh wait dev-https-static-0
+      - if: ${{ !cancelled() }}
+        name: Wait for dev-https static suite shard 1
+        run: bash scripts/ci-background.sh wait dev-https-static-1
 
   # The Go build/vet/test/lint gate, the sqlc-drift and route-table gates,
-  # govulncheck, and the media package's slow normalization corpus test.
+  # govulncheck, and the media package's slow normalization corpus test,
+  # which runs in the background beside the rest.
   #
   # govulncheck runs in source mode for every Go module in the repository: it
   # fails only on a vulnerability reachable from the module's own call graph,
@@ -230,7 +242,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: go
         uses: ./.github/actions/setup-go
-      - run: make server-build
+      # Only ./internal/media/...'s slow normalization corpus test runs here,
+      # in the background beside the steps below; server-resumeapi's
+      # server-test-s3 step runs the rest of the package.
+      # SERVER_TEST_S3_RUN/SERVER_TEST_S3_SKIP select the complementary halves
+      # so every test in the package runs exactly once between the two jobs.
+      - run: make test-s3-up
+      - name: Start the media corpus test
+        env:
+          SERVER_TEST_S3_RUN: ^TestNormalizeAcceptsFrozenCorpusDeterministically$
+        run: bash scripts/ci-background.sh start media-corpus make server-test-s3
+      - if: ${{ !cancelled() }}
+        run: make server-build
       - if: ${{ !cancelled() }}
         run: make server-vet
       - if: ${{ !cancelled() }}
@@ -294,22 +317,16 @@ jobs:
         working-directory: deploy/caddy/production/build
         env:
           GOWORK: "off"
-      # Only ./internal/media/...'s slow normalization corpus test runs here;
-      # server-resumeapi's server-test-s3 step runs the rest of the package.
-      # SERVER_TEST_S3_RUN/SERVER_TEST_S3_SKIP select the complementary halves
-      # so every test in the package runs exactly once between the two jobs.
       - if: ${{ !cancelled() }}
-        run: make test-s3-up
-      - if: ${{ !cancelled() }}
-        run: make server-test-s3
-        env:
-          SERVER_TEST_S3_RUN: ^TestNormalizeAcceptsFrozenCorpusDeterministically$
+        name: Wait for the media corpus test
+        run: bash scripts/ci-background.sh wait media-corpus 1200
       - if: always()
         run: make test-s3-down
       - uses: ./.github/actions/save-go-cache
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
           cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
 
   # Runs server-test-integration and the DB-backed suites in server-test-db
   # against the primary postgres service, so this job's suites run at the
@@ -386,6 +403,7 @@ jobs:
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
           cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
 
   # Runs the filesystem- and S3-backed resumeapi suites against their own
   # database service, so they run at the same time as server-integration's
@@ -437,6 +455,7 @@ jobs:
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
           cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
 
   # The Nuxt lint, typecheck, unit-test, and build gate, plus the e2e source
   # manifest drift check. The manifest's completeness (every file the build
@@ -518,24 +537,24 @@ jobs:
         include:
           - group: totp-replay-concurrent
             proofs: totp:replay-concurrent
+          - group: totp-locale
+            proofs: totp:locale-attempts
+          - group: totp-replace
+            proofs: totp:replace-recovery
           - group: totp-skew
             proofs: totp:skew
           - group: passkey-primary
-            proofs: passkey:primary-disabled
-          - group: totp-locale
-            proofs: totp:locale-attempts transport
+            proofs: passkey:primary-disabled auth
           - group: totp-epoch
-            proofs: totp:epoch-disabled auth
-          - group: totp-replace
-            proofs: totp:replace-recovery public
+            proofs: totp:epoch-disabled transport
           - group: totp-primary
-            proofs: totp:primary exports
+            proofs: totp:primary password
+          - group: passkey-recovery
+            proofs: passkey:recovery-attempts public exports
           - group: editor
             proofs: editor privacy
           - group: entry
-            proofs: passkey:recovery-attempts entry
-          - group: publish
-            proofs: publish password
+            proofs: entry publish
           - group: mcp
             proofs: mcp mcp-sdk sample-start
     steps:
@@ -582,6 +601,7 @@ jobs:
         with:
           cache-hit: ${{ steps.setup.outputs.go-cache-hit }}
           cache-key: ${{ steps.setup.outputs.go-cache-key }}
+          toolchain-hit: ${{ steps.setup.outputs.go-toolchain-hit }}
 
   # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
   # Chain (SCA for Go + npm), and Secrets — all free for public repositories.

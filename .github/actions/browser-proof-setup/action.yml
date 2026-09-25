@@ -2,8 +2,8 @@ name: Set up the trusted-browser proof harness
 description: >-
   Prepares a runner for the dev-https browser proofs: Node, Go, Caddy, the
   pinned host Chromium, the runner-local database, the native HTTPS harness,
-  and the pinned browser image. Container image pulls run in the background
-  so they overlap the toolchain setup.
+  and the pinned browser image. Container image pulls and the web install
+  run in the background so they overlap the toolchain setup.
 outputs:
   go-cache-hit:
     description: The cache-hit output of setup-go.
@@ -11,37 +11,29 @@ outputs:
   go-cache-key:
     description: The cache-key output of setup-go.
     value: ${{ steps.go.outputs.cache-key }}
+  go-toolchain-hit:
+    description: The toolchain-hit output of setup-go.
+    value: ${{ steps.go.outputs.toolchain-hit }}
 runs:
   using: composite
   steps:
     # Pulls the database image, then the pinned Playwright base image (the
-    # FROM reference in deploy/dev-https-browser/Dockerfile), in one
-    # background process. make test-db-up and dev-https-browser-image then
-    # find them local instead of pulling on the critical path.
+    # FROM reference in deploy/dev-https-browser/Dockerfile), in the
+    # background. make test-db-up and dev-https-browser-image then find them
+    # local instead of pulling on the critical path.
     - name: Start pulling container images in the background
       shell: bash
       run: |
         base=$(awk '/^FROM /{print $2; exit}' deploy/dev-https-browser/Dockerfile)
         db=$(grep -o 'docker.io/library/postgres:[^;[:space:]]*' Makefile | head -n 1)
         [ -n "$base" ] && [ -n "$db" ] || { echo 'cannot find the pinned images' >&2; exit 1; }
-        status_file="$RUNNER_TEMP/image-pull.status"
-        log_file="$RUNNER_TEMP/image-pull.log"
-        rm -f "$status_file"
-        nohup bash -c 'podman pull "$0" >"$2" 2>&1 && podman pull "$1" >>"$2" 2>&1; echo $? >"$3"' \
-          "$db" "$base" "$log_file" "$status_file" >/dev/null 2>&1 &
-        disown
-        {
-          echo "IMAGE_PULL_STATUS=$status_file"
-          echo "IMAGE_PULL_LOG=$log_file"
-        } >> "$GITHUB_ENV"
+        bash scripts/ci-background.sh start image-pulls \
+          bash -c 'podman pull "$0" && podman pull "$1"' "$db" "$base"
     - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: 24.21.0
         cache: npm
         cache-dependency-path: apps/web/package-lock.json
-    - id: go
-      uses: ./.github/actions/setup-go
-    - uses: ./.github/actions/install-caddy
     # Cached on apps/web/package-lock.json: `npx playwright install` is a
     # no-op on a hit and still verifies the pinned browser is present.
     - name: Restore the Playwright browser cache
@@ -49,11 +41,19 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
-    # The harness preflight requires the pinned Chromium on the host.
-    - name: Install web dependencies and the pinned Chromium
+    # The harness preflight requires the pinned Chromium on the host. The
+    # install overlaps the Go and Caddy setup below.
+    - name: Start installing web dependencies and the pinned Chromium
       shell: bash
-      working-directory: apps/web
-      run: npm ci && npx playwright install chromium
+      run: |
+        bash scripts/ci-background.sh start web-deps \
+          bash -c 'cd apps/web && npm ci && npx playwright install chromium'
+    - id: go
+      uses: ./.github/actions/setup-go
+    - uses: ./.github/actions/install-caddy
+    - name: Wait for web dependencies and the pinned Chromium
+      shell: bash
+      run: bash scripts/ci-background.sh wait web-deps
     # Ubuntu 24.04 blocks unprivileged user namespaces for any binary without
     # an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns), so
     # the pinned Chromium dies with "No usable sandbox" and every PDF and
@@ -80,21 +80,6 @@ runs:
       run: make dev-https
     - name: Wait for the background image pulls
       shell: bash
-      run: |
-        for _ in $(seq 1 600); do
-          [ -f "$IMAGE_PULL_STATUS" ] && break
-          sleep 1
-        done
-        [ -f "$IMAGE_PULL_STATUS" ] || {
-          echo "image pulls did not finish in time" >&2
-          cat "$IMAGE_PULL_LOG" >&2 || true
-          exit 1
-        }
-        status=$(cat "$IMAGE_PULL_STATUS")
-        if [ "$status" -ne 0 ]; then
-          echo "image pull failed (exit $status)" >&2
-          cat "$IMAGE_PULL_LOG" >&2 || true
-          exit 1
-        fi
+      run: bash scripts/ci-background.sh wait image-pulls
     - shell: bash
       run: make dev-https-browser-image

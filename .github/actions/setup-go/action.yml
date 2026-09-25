@@ -9,9 +9,20 @@ outputs:
   cache-key:
     description: The job's own cache key, for save-go-cache.
     value: ${{ steps.key.outputs.key }}
+  toolchain-hit:
+    description: Whether the Go toolchain came from the cache.
+    value: ${{ steps.toolchain.outputs.cache-hit }}
 runs:
   using: composite
   steps:
+    # setup-go finds a cached toolchain in the runner tool cache instead of
+    # downloading it. The version in this path and key matches go-version
+    # below, and save-go-cache saves the same path.
+    - id: toolchain
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.tool_cache }}/go/1.27.1
+        key: go-toolchain-1.27.1-${{ runner.os }}-${{ runner.arch }}
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version: "1.27.1"
