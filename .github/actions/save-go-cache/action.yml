@@ -1,0 +1,21 @@
+name: Save the Go cache
+description: >-
+  Saves the job's Go build and module cache on main when setup-go missed its
+  own key. Branch runs restore caches but never save them.
+inputs:
+  cache-hit:
+    description: The cache-hit output of setup-go.
+    required: true
+  cache-key:
+    description: The cache-key output of setup-go.
+    required: true
+runs:
+  using: composite
+  steps:
+    - if: ${{ github.ref == 'refs/heads/main' && inputs.cache-hit != 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ inputs.cache-key }}

@@ -80,23 +80,32 @@ fi
 grep -Fq 'sqlc: want v1.31.1, got v9.9.9' "$WORK/out" ||
   fail "CI tool check did not report the exact sqlc mismatch"
 
-grep -Fq 'node-version: 24.21.0' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'node-version: 24.21.0' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin Node 24.21.0"
-grep -Fq 'go-version: "1.27.1"' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'go-version: "1.27.1"' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin Go 1.27.1"
-grep -Fq 'version: v2.14.0' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'version: v2.14.0' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin golangci-lint v2.14.0"
-grep -Fq 'govulncheck@v1.8.0' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'govulncheck@v1.8.0' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin govulncheck v1.8.0"
-grep -Fq 'semgrep==1.178.0' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'semgrep==1.178.0' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin Semgrep 1.178.0"
-grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin sqlc v1.31.1"
-grep -Fq 'caddyserver/caddy/releases/download/v2.11.4' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'caddyserver/caddy/releases/download/v2.11.4' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin Caddy 2.11.4"
-grep -Fq 'gitleaks/v8@v8.30.1' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'gitleaks/v8@v8.30.1' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not pin gitleaks 8.30.1"
-grep -Fq 'gitleaks detect --redact --no-banner' "$ROOT/.github/workflows/ci.yml" ||
+grep -Fq 'gitleaks detect --redact --no-banner' "$ROOT/.github/workflows/ci.yml" \
+  "$ROOT"/.github/actions/*/action.yml ||
   fail "GitHub CI does not run the full-history gitleaks gate"
 [ -x "$ROOT/scripts/generate-public-roots.mjs" ] ||
   fail "public-root generator is missing or not executable"
@@ -119,6 +128,7 @@ cp "$ROOT/.tool-versions" "$CONTRACT/.tool-versions"
 cp "$ROOT/scripts/check-tool-versions.sh" "$CONTRACT/scripts/"
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
 cp "$ROOT/.github/workflows/security-scan.yml" "$CONTRACT/.github/workflows/"
+cp -R "$ROOT/.github/actions" "$CONTRACT/.github/"
 cp "$ROOT/apps/web/.nvmrc" "$CONTRACT/apps/web/"
 cp "$ROOT/apps/server/go.mod" "$CONTRACT/apps/server/"
 cp "$ROOT/packages/schema/gen/go/go.mod" "$CONTRACT/packages/schema/gen/go/"
@@ -143,5 +153,17 @@ fi
 grep -Fq 'node: .github/workflows/ci.yml has 99.0.0, want 24.21.0' \
   "$WORK/partial-drift.out" ||
   fail "repository contract did not identify the drifted Node job"
+
+# A drifted pin in a composite action the workflow uses is drift too.
+cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
+sed -i 's/go-version: "1.27.1"/go-version: "1.99.0"/' \
+  "$CONTRACT/.github/actions/setup-go/action.yml"
+if PATH="$BIN:/usr/bin:/bin" "$CONTRACT/scripts/check-tool-versions.sh" ci \
+  >"$WORK/action-drift.out" 2>&1; then
+  fail "repository contract accepted a drifted Go pin in a composite action"
+fi
+grep -Fq 'go: .github/actions/setup-go/action.yml has 1.99.0, want 1.27.1' \
+  "$WORK/action-drift.out" ||
+  fail "repository contract did not identify the drifted composite action"
 
 printf 'toolchain contract tests passed\n'
