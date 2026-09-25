@@ -469,3 +469,72 @@ test('settings sends the plain app CSP and hydrates cleanly', async ({
   await expectCspClean(probe);
   expect(external).toEqual([]);
 });
+
+// AppShell.vue keeps the signed-out "Tạo tài khoản" / "Đăng nhập" links
+// unhidden on phones for this route's header (there is no other in-page
+// account affordance), so while its own /api/v1/me read is still in flight,
+// those wider signed-out links must not appear in place of the eventual
+// account menu: at 390px they push the header past the viewport.
+test('the header at 390px never overflows on /app/settings/sessions while '
+  + '/me is still loading', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'vi',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  let releaseMe!: () => void;
+  const meGate = new Promise<void>((resolve) => {
+    releaseMe = resolve;
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    await meGate;
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          user: {
+            id: 'csp-user',
+            email: 'csp@example.invalid',
+            name: 'CSP User',
+            avatarKey: null,
+            hasPassword: true,
+          },
+          csrfToken: 'csp-test-token',
+          identities: [],
+        },
+      },
+    });
+  });
+  await page.route('**/api/v1/sessions', async (route) => {
+    await route.fulfill({ status: 200, json: { data: [] } });
+  });
+  await page.route('**/api/v1/me/second-factor', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          enabled: false,
+          passkeys: [],
+          totpEnabled: false,
+          recoveryCodesRemaining: 0,
+        },
+      },
+    });
+  });
+
+  const response = await page.goto('/app/settings/sessions');
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+  expect(await page.getByTestId('account-menu').isVisible()).toBe(false);
+  expect(await page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth)).toBe(0);
+
+  releaseMe();
+  await expect(page.getByTestId('account-menu')).toBeVisible();
+  expect(await page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth)).toBe(0);
+});

@@ -73,13 +73,68 @@ describe('AppShell', () => {
   it('shows the signed-out shell when /me returns a server error', async () => {
     meStatus = 500;
     const wrapper = await mountShell();
-    await flushPromises();
+    // A 500 retries once (ofetch's default for GET), so settling takes an
+    // extra round trip past a single flushPromises().
+    await vi.waitFor(() => expect(links(wrapper)['Sign in']).toBe('/login'));
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
     expect(found['Create account']).toBe('/register');
     expect(found['Resumes']).toBeUndefined();
     expect(found['Settings']).toBeUndefined();
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
+  });
+  it.each([
+    '/app/settings/sessions',
+    '/authorize',
+    '/app/resumes',
+    '/app/new',
+  ])(
+    'shows no signed-out account links while /me is still loading on %s',
+    async (route) => {
+      // These routes redirect an anonymous visitor to /login, so a
+      // signed-out header is never their real state, only a transient one
+      // while /me is in flight (useAuth.ts's 'loading' authState). A
+      // never-resolving handler holds that transient state still so the
+      // assertion below cannot race the mocked fetch.
+      const unregisterMe = registerEndpoint(
+        '/api/v1/me',
+        () => new Promise(() => {}),
+      );
+      try {
+        const wrapper = await mountShell(route);
+        await flushPromises();
+        const found = links(wrapper);
+        expect(found['Sign in']).toBeUndefined();
+        expect(found['Create account']).toBeUndefined();
+        expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(
+          false,
+        );
+        wrapper.unmount();
+      } finally {
+        // A failed assertion above must not leave this handler active: every
+        // later test's own /me read would hang against it too.
+        unregisterMe();
+      }
+    },
+  );
+  it('keeps signed-out account links immediate on / while /me is still '
+    + 'loading', async () => {
+    const unregisterMe = registerEndpoint(
+      '/api/v1/me',
+      () => new Promise(() => {}),
+    );
+    try {
+      const wrapper = await mountShell('/');
+      await flushPromises();
+      const found = links(wrapper);
+      expect(found['Sign in']).toBe('/login');
+      // '/' is a marketing path (AppShell.vue's onMarketingPath), so the CTA
+      // reads "Create your resume" there, not "Create account".
+      expect(found['Create your resume']).toBe('/register');
+      wrapper.unmount();
+    } finally {
+      unregisterMe();
+    }
   });
   it.each(['/app/settings/sessions', '/authorize'])(
     'keeps signed-out account links visible on phones at %s',
