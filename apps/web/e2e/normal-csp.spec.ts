@@ -163,6 +163,55 @@ test('a 404 page sends the plain app CSP and never x-powered-by', async ({
   expect(external).toEqual([]);
 });
 
+test('an unknown top-level path sends the plain app CSP', async ({ page }) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
+
+  const response = await page.goto('/no-such-page');
+  expect(response?.status()).toBe(404);
+  expectPlainAppCsp(response!.headers());
+
+  const html = await response!.text();
+  const inlineScript
+    = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+  const inlineScripts = [...html.matchAll(inlineScript)]
+    .map((match) => match[0]);
+  expect(inlineScripts).toEqual([]);
+
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
+  expect(external).toEqual([]);
+});
+
+test('a client-side navigation to an unknown template raises no CSP '
+  + 'violation', async ({ page }) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
+
+  const response = await page.goto('/templates/engineer-compact');
+  expect(response?.status()).toBe(200);
+  await expect(page.locator('.template-detail__info h1')).toBeVisible();
+
+  // A client-side route change (no full navigation, so no fresh
+  // Content-Security-Policy header): Nuxt exposes its running app instance
+  // as window.useNuxtApp on every build (not just dev), and the router it
+  // resolves is the one already handling this page, so pushing an unknown
+  // template path here reruns app/pages/templates/[id].vue's setup() and
+  // its createError({ statusCode: 404 }) client-side, which Nuxt then shows
+  // through app/error.vue without a page reload.
+  await page.evaluate(async () => {
+    const nuxtApp = (window as unknown as {
+      useNuxtApp: () => { $router: { push: (path: string) => Promise<void> } };
+    }).useNuxtApp();
+    await nuxtApp.$router.push('/templates/not-a-template');
+  });
+  await expect(page.getByTestId('error-page')).toBeVisible();
+
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
+  expect(external).toEqual([]);
+});
+
 test('submitting the login form navigates cleanly under the app CSP', async ({
   page,
 }) => {

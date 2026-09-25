@@ -347,6 +347,7 @@ apps/web/app/editor/revision.ts
 apps/web/app/editor/templateDiff.ts
 apps/web/app/editor/templateGroup.ts
 apps/web/app/editor/types.ts
+apps/web/app/error.vue
 apps/web/app/i18n/agent-settings.ts
 apps/web/app/i18n/auth.ts
 apps/web/app/i18n/consent.ts
@@ -354,6 +355,7 @@ apps/web/app/i18n/editor-controls.ts
 apps/web/app/i18n/editor-fields.ts
 apps/web/app/i18n/editor-sections.ts
 apps/web/app/i18n/editor-shell.ts
+apps/web/app/i18n/error.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/legal.ts
 apps/web/app/i18n/locale.ts
