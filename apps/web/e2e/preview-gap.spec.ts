@@ -40,10 +40,10 @@ import { denyExternalRequests, waitForImages } from './support';
 
 const TYPICAL_ZOOM = 0.84;
 const FULL_ZOOM = 1;
-// The editor's phone breakpoint scale: (390 - 32) / 794, the same
-// computation EditorPreview.vue's sheetZoom applies below the phone
-// breakpoint. WebKit's minimum font size can break the preview at this low
-// a display scale even though a transform lays text out at full size.
+// The editor's display scale on a 390 px phone, as EditorPreview.vue's
+// sheetZoom computes it. At this scale, text laid out at the scaled size
+// would fall below WebKit's minimum font size and grow; the preview must
+// still lay out at full size and match the PDF.
 const PHONE_ZOOM = (390 - 32) / (210 / 25.4 * 96);
 // Full zoom runs first so a settle failure at the typical (non-1) zoom, and
 // not at full zoom, points at display scale rather than the fixture itself.
