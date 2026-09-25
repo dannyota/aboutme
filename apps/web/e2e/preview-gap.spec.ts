@@ -18,8 +18,9 @@ import { denyExternalRequests, waitForImages } from './support';
 // gallery sample, in both languages. The preview is approximate and the PDF
 // is authoritative (docs/design/templates/print.md §1); this check reports
 // the size of that gap rather than enforcing pixel or text equality. It
-// fails only when a case's drift exceeds preview-gap-expected.json, so a
-// later renderer fix can tighten the file without this spec changing.
+// fails when a case's drift exceeds preview-gap-expected.json, when the
+// preview's page count differs from the PDF's, or when a display scale
+// changes the layout the preview measures at full scale.
 //
 // Comparison unit: words, extracted from the DOM (Range.getBoundingClientRect
 // per word, clustered into visual lines) for the preview, and from pdfjs text
@@ -40,11 +41,17 @@ import { denyExternalRequests, waitForImages } from './support';
 
 const TYPICAL_ZOOM = 0.84;
 const FULL_ZOOM = 1;
+// The editor's display scale on a 390 px phone, as EditorPreview.vue's
+// sheetZoom computes it. At this scale, text laid out at the scaled size
+// would fall below WebKit's minimum font size and grow; the preview must
+// still lay out at full size and match the PDF.
+const PHONE_ZOOM = (390 - 32) / (210 / 25.4 * 96);
 // Full zoom runs first so a settle failure at the typical (non-1) zoom, and
-// not at full zoom, points at zoom scaling rather than the fixture itself.
+// not at full zoom, points at display scale rather than the fixture itself.
 const ZOOM_VARIANTS = [
   ['full', FULL_ZOOM],
   ['typical', TYPICAL_ZOOM],
+  ['phone', PHONE_ZOOM],
 ] as const;
 type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];
 type Engine = 'chromium-normal' | 'webkit';
@@ -128,6 +135,8 @@ interface CaseResult {
   readonly firstDiffs: readonly WordDiff[];
   readonly entryPageStarts: readonly EntryPageStart[];
   readonly knownCauses: readonly string[];
+  readonly previewPages: number;
+  readonly pdfPages: number;
 }
 
 // A case that never rendered, never settled, or drifted past the committed
@@ -189,13 +198,9 @@ const expectations = JSON.parse(
   readFileSync(expectationsPath, 'utf8'),
 ) as ExpectationFile;
 
-function caseKey(
-  sample: string,
-  lng: string,
-  engine: string,
-  zoomLabel: string,
-): string {
-  return `${sample}|${lng}|${engine}|${zoomLabel}`;
+// Keyed without the display scale: every scale must lay out alike.
+function caseKey(sample: string, lng: string, engine: string): string {
+  return `${sample}|${lng}|${engine}`;
 }
 
 const METRIC_CHECKS: ReadonlyArray<
@@ -209,12 +214,7 @@ const METRIC_CHECKS: ReadonlyArray<
 ];
 
 function assertWithinExpectation(result: CaseResult): void {
-  const key = caseKey(
-    result.sample,
-    result.lng,
-    result.engine,
-    result.zoomLabel,
-  );
+  const key = caseKey(result.sample, result.lng, result.engine);
   const metrics = expectations.cases[key];
   for (const [countKey, limitKey] of METRIC_CHECKS) {
     const limit = metrics?.[limitKey] ?? null;
@@ -390,12 +390,11 @@ function entryPageStarts(
   return starts;
 }
 
-function causesFor(engine: Engine, zoomLabel: ZoomLabel): string[] {
+function causesFor(engine: Engine): string[] {
   const causes = [
     'continuous-vs-paged-pagination-model',
     'screen-vs-print-css',
   ];
-  if (zoomLabel === 'typical') causes.push('css-zoom-scaling');
   if (engine === 'webkit') causes.push('webkit-vs-chromium-font-rendering');
   return causes;
 }
@@ -780,9 +779,9 @@ async function safeCaptureDiagnostics(
   }
 }
 
-// The zoom is requested in the URL, not applied after the fact: the harness
-// bakes it into the paper's style before Vue ever mounts, the same way
-// EditorPreview.vue's zoom is set once and not toggled for a stable
+// The zoom is requested in the URL and resolved once from it, never
+// toggled after the fact: the harness scales the paper with the same
+// ScaledSheet transform component EditorPreview.vue uses for a stable
 // viewport class. A failure to settle is recorded with a DOM snapshot
 // rather than thrown, so one broken case does not hide the rest.
 async function producePreview(
@@ -947,6 +946,7 @@ for (const { templateId, lng } of SAMPLES) {
     const caseFailures: FailedCase[] = [];
 
     for (const { engine, browser } of variants) {
+      let fullScale: CaseResult | undefined;
       for (const [zoomLabel, zoomValue] of ZOOM_VARIANTS) {
         const previewResult = await producePreview(
           browser,
@@ -988,6 +988,8 @@ for (const { templateId, lng } of SAMPLES) {
           pairs,
         );
         const entryPageMismatches = starts.filter((s) => !s.matches).length;
+        const previewPageCount = previewExtraction.pages.length;
+        const pdfPageCount = pdfExtraction.pages.length;
         const result: CaseResult = {
           sample: templateId,
           lng,
@@ -997,11 +999,33 @@ for (const { templateId, lng } of SAMPLES) {
           counts: { ...counts, entryPageMismatches },
           firstDiffs: firstOfEachKind(diffs, 10),
           entryPageStarts: starts,
-          knownCauses: causesFor(engine, zoomLabel),
+          knownCauses: causesFor(engine),
+          previewPages: previewPageCount,
+          pdfPages: pdfPageCount,
         };
         caseResults.push(result);
         try {
           assertWithinExpectation(result);
+          // A one-page PDF that spills into two preview pages (or the
+          // reverse) is the capacity gap this spec exists to catch, not a
+          // word-level drift the ceiling file can express.
+          if (previewPageCount !== pdfPageCount) {
+            throw new Error(
+              `preview has ${String(previewPageCount)} page(s), `
+              + `PDF has ${String(pdfPageCount)}`,
+            );
+          }
+          // The sheet is scaled for display with a transform, so the layout
+          // is the same at every scale (docs/design/templates/print.md §1).
+          const scaled = JSON.stringify(result.counts);
+          const full = JSON.stringify(fullScale?.counts ?? result.counts);
+          if (zoomLabel === 'full') {
+            fullScale = result;
+          } else if (scaled !== full) {
+            throw new Error(
+              `${zoomLabel} scale drifts ${scaled}, full scale ${full}`,
+            );
+          }
         } catch (error) {
           caseFailures.push({
             sample: templateId,

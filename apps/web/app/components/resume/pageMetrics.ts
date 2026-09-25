@@ -42,7 +42,14 @@ export function pageContentHeightPx(page: ResolvedPageGeometry): number {
       'Page dimensions and margins must be finite with positive dimensions.',
     );
   }
-  const heightPx = page.heightPx - ((2 * page.marginYmm * 96) / 25.4);
+  // Print's page content box is the exact paper height minus the margins
+  // (docs/design/templates/print.md §2: 297mm A4, 11in Letter), not the
+  // rounded 1123/1056 px editor box: the rounding made the preview's
+  // capacity 0.48 px taller than what the PDF actually fits per page.
+  const paperHeightPx = page.format === 'a4'
+    ? (297 * 96) / 25.4
+    : 11 * 96;
+  const heightPx = paperHeightPx - ((2 * page.marginYmm * 96) / 25.4);
   if (!Number.isFinite(heightPx) || heightPx <= 0) {
     throw new PaginationError(
       'invalid_page_geometry',
