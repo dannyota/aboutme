@@ -64,7 +64,6 @@ const vueSources = [
   'components/editor/EntryCard.vue',
   'components/editor/ErrorSummary.vue',
   'components/editor/PDFDownloadButton.vue',
-  'components/editor/PreviewToolbar.vue',
   'components/editor/PublishDialog.vue',
   'components/editor/PublishPageFields.vue',
   'components/editor/SaveStatus.vue',
@@ -118,10 +117,6 @@ const approvedLiterals: Readonly<Record<string, readonly string[]>> = {
   'components/app/AppShell.vue': ['aboutme'],
   'components/app/StateMark.vue': ['aboutme.vn'],
   'components/editor/EditorShell.vue': ['aboutme', '+'],
-  'components/editor/PreviewToolbar.vue': [
-    '100%',
-    String.fromCodePoint(0x2014),
-  ],
   'components/editor/PublishDialog.vue': ['aboutme.vn/', 'aboutme.vn'],
   'components/editor/photo/CropEditor.vue': ['X', 'Y'],
   'components/editor/templates/TemplatePartialDialog.vue': ['.'],
