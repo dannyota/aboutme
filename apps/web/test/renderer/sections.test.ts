@@ -354,8 +354,16 @@ describe('pure resume renderer', () => {
       expect(source).toMatch(
         /\.section-heading[^{]*\{[^}]*break-after:\s*avoid/s,
       );
-      expect(source).toMatch(/\.entry-header[^{]*\{[^}]*break-after:\s*avoid/s);
+      // Only a header with a body after it keeps with the next block, so a
+      // header-only entry never passes break-after to its entry
+      // (docs/design/templates/print.md §3).
+      expect(source).toMatch(
+        /\.entry-header:not\(:last-child\)\s*\{\s*break-after:\s*avoid;\s*\}/,
+      );
       expect(source.match(/break-after:\s*avoid/g)).toHaveLength(2);
+      expect(source).toMatch(
+        /\.layout-two-columns\s*\{\s*break-before:\s*avoid;\s*\}/,
+      );
     });
 
   it(

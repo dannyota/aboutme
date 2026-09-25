@@ -68,21 +68,31 @@ exact print-only shapes, substituting the validated `y` and `x` margins:
 
 The renderer applies these rules to the classes it emits.
 
-| Element                                            | Intent                                                         | Declaration                               |
-| -------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------- |
-| `.resume-section`                                  | a section longer than a page must split, not push a blank page | `break-inside: auto`                      |
-| `.section-heading`                                 | a heading must never be the last thing on a page               | `break-after: avoid`                      |
-| `.entry`                                           | a long entry must be splittable                                | `break-inside: auto`                      |
-| `.entry-header` (title, subtitle, meta)            | an entry must never orphan its own heading from its body       | `break-inside: avoid; break-after: avoid` |
-| `.entry-body` paragraphs and list items            | no single stranded line                                        | `orphans: 2; widows: 2`                   |
-| `li`                                               | a bullet is an atom                                            | `break-inside: avoid`                     |
-| `ul`, `ol`                                         | a list longer than a page must split between its items         | `break-inside: auto`                      |
-| `.resume-header` (photo, name, headline, contacts) | the identity block is never divided                            | `break-inside: avoid`                     |
-| level widgets (`bar`, `dots`, `tag`)               | a widget is never cut mid-glyph                                | `break-inside: avoid`                     |
+| Element                                                    | Intent                                                         | Declaration             |
+| ---------------------------------------------------------- | -------------------------------------------------------------- | ----------------------- |
+| `.resume-section`                                          | a section longer than a page must split, not push a blank page | `break-inside: auto`    |
+| `.section-heading`                                         | a heading must never be the last thing on a page               | `break-after: avoid`    |
+| `.entry`                                                   | a long entry must be splittable                                | `break-inside: auto`    |
+| `.entry-header` (title, subtitle, meta)                    | an entry header is never divided                               | `break-inside: avoid`   |
+| `.entry-header` with a body after it (`:not(:last-child)`) | an entry must never orphan its own heading from its body       | `break-after: avoid`    |
+| `.entry-body` paragraphs and list items                    | no single stranded line                                        | `orphans: 2; widows: 2` |
+| `li`                                                       | a bullet is an atom                                            | `break-inside: avoid`   |
+| `ul`, `ol`                                                 | a list longer than a page must split between its items         | `break-inside: auto`    |
+| `.resume-header` (photo, name, headline, contacts)         | the identity block is never divided                            | `break-inside: avoid`   |
+| level widgets (`bar`, `dots`, `tag`)                       | a widget is never cut mid-glyph                                | `break-inside: avoid`   |
+| `.layout-two-columns`                                      | the resume header does not end page one alone (§5)             | `break-before: avoid`   |
 
 `.entry` is `auto` because a long entry can exceed a page, and `avoid` would
 push it to a fresh page that it overflows anyway. Pinning `.entry-header` keeps
 an entry's heading off the foot of a page without that blank page.
+
+A header-only entry, such as a skill, language, or certificate without a
+description, has no body to keep. The header is then the entry's last child, and
+CSS propagates a last child's `break-after` to its parent
+([css-break-3 §3.1](https://www.w3.org/TR/css-break-3/#break-propagation)). A
+header rule without `:not(:last-child)` would make every break between two such
+entries an avoided one, so a run of them offers no clean break: one column
+prints an extra page, and two columns lose page one (§5).
 
 The section heading and first entry stay sibling blocks. Chained
 `break-after: avoid` on `.section-heading` and `.entry-header` keeps the
@@ -138,6 +148,17 @@ the rules above, preserve the failing output as review evidence and block the
 release. Do not replace the accepted baseline with the divergent output. The
 correction is a shared print layout or a reviewed design change, never a
 per-template workaround.
+
+Chromium breaks each column where it runs out of room and gives the grid the
+lowest break appeal of the two. When that break violates an avoid rule and the
+break before the grid does not, Chromium breaks before the grid instead and page
+one holds only the resume header
+([fragmentation_utils.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/renderer/core/layout/fragmentation_utils.cc),
+`MovePastBreakpoint`). Two rules prevent it: header-only entries offer clean
+breaks (§3), and `break-before: avoid` on `.layout-two-columns` removes the
+clean break above the grid. The print check also prints long two-column gallery
+samples and requires column content on page one, no blank page, and the same
+page count as the editor preview.
 
 ## 6. Photo and images
 

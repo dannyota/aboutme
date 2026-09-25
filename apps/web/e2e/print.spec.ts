@@ -11,6 +11,16 @@ import {
   waitForImages,
 } from './support';
 
+const LONG_TEMPLATES = [
+  'elegant-serif-two',
+  'engineer-compact',
+  'international-lang',
+  'modern-sidebar',
+  'nordic-muted',
+  'one-page-tight',
+  'executive-band',
+] as const;
+
 interface PrintCase {
   readonly end: string;
   readonly fixture: 'print-main-overflow' | 'print-sidebar-overflow';
@@ -241,4 +251,110 @@ for (const printCase of CASES) {
       await loadingTask.destroy();
     }
   });
+}
+
+function normalizeHeading(text: string | null): string {
+  return (text ?? '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+}
+
+// A long two-column resume must fragment each column in place across a page
+// break rather than lose a column's content to a later page
+// (docs/design/templates/print.md §5). No page may be blank, and the paged
+// preview must estimate the PDF's page count (§1).
+for (const templateId of LONG_TEMPLATES) {
+  for (const lng of ['en', 'vi'] as const) {
+    test(
+      `long ${templateId} (${lng}) fills page one and prints no blank page`,
+      async ({ page }, testInfo) => {
+        test.setTimeout(30_000);
+        const external = await denyExternalRequests(page);
+        const pagedUrl = `/_harness/render?fixture=sample-${templateId}`
+          + `-${lng}&template=${templateId}&mode=paged&repeat=2`;
+        const pagedResponse = await page.goto(pagedUrl);
+        expect(pagedResponse?.ok()).toBe(true);
+        await expect(
+          page.locator('[data-pagination-settled="true"]'),
+        ).toHaveCount(1);
+        const previewPageCount = await page
+          .locator('.resume-page:not(.pagination-measurement)')
+          .count();
+
+        const continuousUrl = `/_harness/render?fixture=sample-${templateId}`
+          + `-${lng}&template=${templateId}&mode=continuous&print=1`
+          + '&repeat=2';
+        const response = await page.goto(continuousUrl);
+        expect(response?.ok()).toBe(true);
+        await expect(
+          page.locator('[data-fonts-ready="true"]'),
+        ).toHaveCount(1);
+        await waitForImages(page);
+
+        const expectedHeadings = templateId === 'executive-band'
+          ? [
+              await page
+                .locator('.layout-one-column .section-heading')
+                .first()
+                .textContent(),
+            ]
+          : await Promise.all([
+              page
+                .locator('.resume-main .section-heading')
+                .first()
+                .textContent(),
+              page
+                .locator('.resume-sidebar .section-heading')
+                .first()
+                .textContent(),
+            ]);
+
+        await page.emulateMedia({ media: 'print' });
+        const pdf = await page.pdf({
+          displayHeaderFooter: false,
+          margin: { bottom: 0, left: 0, right: 0, top: 0 },
+          preferCSSPageSize: true,
+          printBackground: true,
+          scale: 1,
+        });
+        await writeFile(
+          testInfo.outputPath(`long-${templateId}-${lng}.pdf`),
+          pdf,
+        );
+
+        const loadingTask = getDocument({
+          data: new Uint8Array(pdf),
+          isImageDecoderSupported: false,
+          isOffscreenCanvasSupported: false,
+          useSystemFonts: false,
+        });
+        try {
+          const document = await loadingTask.promise;
+          expect(document.numPages).toBeGreaterThanOrEqual(2);
+          expect(document.numPages).toBe(previewPageCount);
+          const pageTexts: string[] = [];
+          for (
+            let pageNumber = 1;
+            pageNumber <= document.numPages;
+            pageNumber += 1
+          ) {
+            const pdfPage = await document.getPage(pageNumber);
+            const text = await pdfPage.getTextContent();
+            pageTexts.push(text.items
+              .map((item) => ('str' in item ? item.str : ''))
+              .join(' '));
+          }
+          for (const pageText of pageTexts) {
+            expect(normalizeHeading(pageText).length).toBeGreaterThan(0);
+          }
+          const firstPage = normalizeHeading(pageTexts[0]);
+          for (const heading of expectedHeadings) {
+            expect(firstPage).toContain(normalizeHeading(heading));
+          }
+        } finally {
+          await loadingTask.destroy();
+        }
+
+        expect(external).toEqual([]);
+      },
+    );
+  }
 }

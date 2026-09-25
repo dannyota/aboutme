@@ -386,7 +386,24 @@ body:has(> #public-resume) {
 
 .resume-document .entry-header {
   break-inside: avoid;
+}
+
+/*
+ * The header keeps its body with it, so the rule applies only when a body
+ * follows. On a header-only entry (a skill, language, or certificate) the
+ * last child's break-after propagates to the entry, which would make every
+ * break between such entries an avoided one; a column of them then has no
+ * clean break, and Chromium pushes the whole column grid to the next page
+ * (docs/design/templates/print.md §3 and §5).
+ */
+.resume-document .entry-header:not(:last-child) {
   break-after: avoid;
+}
+
+/* Avoid the break between the resume header and the columns, so page one
+   does not hold the header alone (print.md §5). */
+.resume-document .layout-two-columns {
+  break-before: avoid;
 }
 
 .resume-document .entry-title {
