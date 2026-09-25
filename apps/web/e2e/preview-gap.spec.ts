@@ -40,11 +40,17 @@ import { denyExternalRequests, waitForImages } from './support';
 
 const TYPICAL_ZOOM = 0.84;
 const FULL_ZOOM = 1;
+// The editor's phone breakpoint scale: (390 - 32) / 794, the same
+// computation EditorPreview.vue's sheetZoom applies below the phone
+// breakpoint. WebKit's minimum font size can break the preview at this low
+// a display scale even though a transform lays text out at full size.
+const PHONE_ZOOM = (390 - 32) / (210 / 25.4 * 96);
 // Full zoom runs first so a settle failure at the typical (non-1) zoom, and
-// not at full zoom, points at zoom scaling rather than the fixture itself.
+// not at full zoom, points at display scale rather than the fixture itself.
 const ZOOM_VARIANTS = [
   ['full', FULL_ZOOM],
   ['typical', TYPICAL_ZOOM],
+  ['phone', PHONE_ZOOM],
 ] as const;
 type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];
 type Engine = 'chromium-normal' | 'webkit';
@@ -128,6 +134,8 @@ interface CaseResult {
   readonly firstDiffs: readonly WordDiff[];
   readonly entryPageStarts: readonly EntryPageStart[];
   readonly knownCauses: readonly string[];
+  readonly previewPages: number;
+  readonly pdfPages: number;
 }
 
 // A case that never rendered, never settled, or drifted past the committed
@@ -390,12 +398,11 @@ function entryPageStarts(
   return starts;
 }
 
-function causesFor(engine: Engine, zoomLabel: ZoomLabel): string[] {
+function causesFor(engine: Engine): string[] {
   const causes = [
     'continuous-vs-paged-pagination-model',
     'screen-vs-print-css',
   ];
-  if (zoomLabel === 'typical') causes.push('css-zoom-scaling');
   if (engine === 'webkit') causes.push('webkit-vs-chromium-font-rendering');
   return causes;
 }
@@ -780,9 +787,9 @@ async function safeCaptureDiagnostics(
   }
 }
 
-// The zoom is requested in the URL, not applied after the fact: the harness
-// bakes it into the paper's style before Vue ever mounts, the same way
-// EditorPreview.vue's zoom is set once and not toggled for a stable
+// The zoom is requested in the URL and resolved once from it, never
+// toggled after the fact: the harness scales the paper with the same
+// ScaledSheet transform component EditorPreview.vue uses for a stable
 // viewport class. A failure to settle is recorded with a DOM snapshot
 // rather than thrown, so one broken case does not hide the rest.
 async function producePreview(
@@ -988,6 +995,8 @@ for (const { templateId, lng } of SAMPLES) {
           pairs,
         );
         const entryPageMismatches = starts.filter((s) => !s.matches).length;
+        const previewPageCount = previewExtraction.pages.length;
+        const pdfPageCount = pdfExtraction.pages.length;
         const result: CaseResult = {
           sample: templateId,
           lng,
@@ -997,11 +1006,22 @@ for (const { templateId, lng } of SAMPLES) {
           counts: { ...counts, entryPageMismatches },
           firstDiffs: firstOfEachKind(diffs, 10),
           entryPageStarts: starts,
-          knownCauses: causesFor(engine, zoomLabel),
+          knownCauses: causesFor(engine),
+          previewPages: previewPageCount,
+          pdfPages: pdfPageCount,
         };
         caseResults.push(result);
         try {
           assertWithinExpectation(result);
+          // A one-page PDF that spills into two preview pages (or the
+          // reverse) is the capacity gap this spec exists to catch, not a
+          // word-level drift the ceiling file can express.
+          if (previewPageCount !== pdfPageCount) {
+            throw new Error(
+              `preview has ${String(previewPageCount)} page(s), `
+              + `PDF has ${String(pdfPageCount)}`,
+            );
+          }
         } catch (error) {
           caseFailures.push({
             sample: templateId,

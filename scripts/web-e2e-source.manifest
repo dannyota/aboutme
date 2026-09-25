@@ -123,6 +123,7 @@ apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
 apps/web/app/components/resume/ResumeDocument.vue
 apps/web/app/components/resume/ResumeHeader.vue
+apps/web/app/components/resume/ScaledSheet.vue
 apps/web/app/components/resume/SectionRenderer.vue
 apps/web/app/components/resume/applyTemplate.ts
 apps/web/app/components/resume/brandIcons.ts

@@ -15,6 +15,7 @@ import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
 import type { PhotoReadState } from '../../stores/resumes';
 import { Button } from '../ui/button';
 import ResumeDocument from '../resume/ResumeDocument.vue';
+import ScaledSheet from '../resume/ScaledSheet.vue';
 import { previewProjection } from './previewProjection';
 import { editorShellCopy } from '../../i18n/editor-shell';
 
@@ -233,9 +234,18 @@ onBeforeUnmount(() => {
             previewMode === 'pdf' ? sheetZoom.toFixed(4) : undefined
           "
           data-testid="preview-sheet"
-          :style="previewMode === 'pdf' ? { zoom: sheetZoom } : undefined"
         >
+          <ScaledSheet
+            v-if="previewMode === 'pdf'"
+            :scale="sheetZoom"
+          >
+            <ResumeDocument
+              :context="context"
+              :document="projected"
+            />
+          </ScaledSheet>
           <ResumeDocument
+            v-else
             :context="context"
             :document="projected"
           />
@@ -280,13 +290,15 @@ onBeforeUnmount(() => {
 <style>
 /* A paged preview shows each A4 page as its own sheet. Without this, the
    pages share one white card and a page break reads as unexplained blank
-   space inside the resume. */
-.preview-sheet:has(> .paged-resume) {
+   space inside the resume. The paged resume sits inside ScaledSheet's own
+   wrapper elements now, so these rules reach through them by descendant
+   combinator instead of a direct child combinator. */
+.preview-sheet:has(.paged-resume) {
   background: transparent;
   box-shadow: none;
 }
 
-.preview-sheet > .paged-resume > .resume-page {
+.preview-sheet .paged-resume > .resume-page {
   border-radius: var(--radius-sheet);
   box-shadow: var(--shadow-paper);
 }
