@@ -33,12 +33,7 @@ const { locale } = useLocale();
 const openingLocale = locale.value;
 const copy = computed(() => resumeCreateCopy[locale.value]);
 useHead({ title: computed(() => workspaceTitles[locale.value].newResume) });
-// A signed-out visitor here came from a public gallery page, not the app, so
-// send them to create an account rather than sign in to one; register.vue
-// carries `next` through Google sign-in and email verification back here.
-const list = useResumeList({
-  loginPath: `/register?next=${encodeURIComponent(route.fullPath)}`,
-});
+const list = useResumeList();
 const request = computed(() => parseNewResumeQuery(route.query, openingLocale));
 const document = ref<Resume>();
 const title = ref('');

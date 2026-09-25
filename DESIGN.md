@@ -277,14 +277,14 @@ Library link for every visitor. Signed-out navigation adds an Open source link
 to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
 and a primary create button. The create button reads Create your resume on the
 home page, the Library, template pages, Terms, and Privacy, and Create account
-elsewhere. On localized routes other than sessions and agent consent, both
-account buttons hide below 44 rem, where the page's own links take over.
-Signed-in navigation also shows Resumes, Settings, and an account menu. The
-account menu contains Settings, theme switching, and Log out. On signed-in
-screens below 640 px, the direct Library and Settings links are hidden; Settings
-remains in the account menu. On localized routes, the shell adds the Vietnamese
-and English toggle. Below 640 px its visible labels shorten to VI and EN while
-their accessible names remain complete.
+elsewhere. On localized routes, both account buttons hide below 44 rem, where
+the page's own links take over. Signed-in navigation also shows Resumes,
+Settings, and an account menu. The account menu contains Settings, theme
+switching, and Log out. On signed-in screens below 640 px, the direct Library
+and Settings links are hidden; Settings remains in the account menu. On
+localized routes, the shell adds the Vietnamese and English toggle. Below 640 px
+its visible labels shorten to VI and EN while their accessible names remain
+complete.
 
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a

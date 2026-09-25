@@ -89,35 +89,22 @@ describe('useResumeList', () => {
     expect(api.list).toHaveBeenCalledTimes(1);
   });
 
-  it('redirects only after auth resolves anonymous', async () => {
-    const authState = ref<'loading' | 'anonymous'>('loading');
-    useResumeList({
-      api: { list: vi.fn() } as never,
-      authState: authState as never,
+  it('leaves a first-visit anonymous state to the shared route guard',
+    async () => {
+      // middleware/signed-in.global.ts owns the signed-out redirect for a
+      // visit that never saw an authenticated state on this page.
+      const authState = ref<'loading' | 'anonymous'>('loading');
+      useResumeList({
+        api: { list: vi.fn() } as never,
+        authState: authState as never,
+      });
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+
+      authState.value = 'anonymous';
+      await nextTick();
+
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
-    expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-
-    authState.value = 'anonymous';
-    await nextTick();
-
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
-  });
-
-  it('redirects to a caller-chosen path instead of the default', async () => {
-    const authState = ref<'loading' | 'anonymous'>('loading');
-    useResumeList({
-      api: { list: vi.fn() } as never,
-      authState: authState as never,
-      loginPath: '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain',
-    });
-
-    authState.value = 'anonymous';
-    await nextTick();
-
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-      '/register?next=%2Fapp%2Fnew%3Fsample%3Dats-plain',
-    );
-  });
 
   it('uses login after an authenticated session ends', async () => {
     const authState = ref<'authenticated' | 'anonymous'>('authenticated');
@@ -127,7 +114,6 @@ describe('useResumeList', () => {
         list: vi.fn().mockResolvedValue({ kind: 'ready', items: [] }),
       } as never),
       authState,
-      loginPath: '/register?next=%2Fapp%2Fnew%3Ftemplate%3Dengineer-compact',
     });
     await nextTick();
 

@@ -56,8 +56,6 @@ export interface ResumeListController {
 }
 
 export interface ResumeListDeps {
-  /** Where a signed-out visitor goes; a page may add `?next=`. */
-  loginPath?: string;
   api?: ResumeApi;
   authState?: Ref<AuthState>;
   ownerId?: Ref<string | null>;
@@ -165,8 +163,10 @@ export function useResumeList(deps: ResumeListDeps = {}): ResumeListController {
       return;
     }
     if (state === 'anonymous') {
-      const path = wasAuthenticated ? '/login' : (deps.loginPath ?? '/login');
-      void navigateTo(path);
+      // A first-visit anonymous state is the shared route guard's job
+      // (middleware/signed-in.global.ts); only a session lost after this
+      // page had already read a resume list is this page's own to send on.
+      if (wasAuthenticated) void navigateTo('/login');
       return;
     }
     view.value = { kind: 'unavailable' };
