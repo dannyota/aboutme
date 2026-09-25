@@ -4,21 +4,16 @@
 # the page can be read as a Caddy placeholder; see maintenance-render.sh for
 # the generated headers this imports, built the same way as routes.caddy.
 #
-# The trust and TLS blocks below are copied from Caddyfile and must stay
-# identical to it: same Cloudflare client-IP trust, same origin-pull mTLS.
-# www still redirects to the apex, as Caddyfile does: the page polls /readyz
-# on its own origin, and a visitor's tab must keep pointing at the apex
-# across the deploy, or the poll becomes a blocked cross-origin fetch once
-# maintenance mode ends and www starts redirecting again.
+# It imports the same edge listeners as Caddyfile (see edges/), so both carry
+# the same client certificate trust and client address rules; only the
+# apex_site snippet differs. www still redirects to the apex, as in
+# Caddyfile: the page polls /readyz on its own origin, and a visitor's tab
+# must keep pointing at the apex across the deploy, or the poll becomes a
+# blocked cross-origin fetch once maintenance mode ends and www starts
+# redirecting again.
 {
 	admin off
-	servers {
-		trusted_proxies static {$CLOUDFLARE_RANGES}
-		trusted_proxies_strict
-		client_ip_headers CF-Connecting-IP
-		# Cloudflare reaches the origin over TCP, so no HTTP/3 listener.
-		protocols h1 h2
-	}
+	import /run/caddy/edges.global
 	# Request logs keep the method, URI, and status but never the visitor's
 	# address or request headers (privacy policy: no IP in request logs).
 	log default {
@@ -33,27 +28,7 @@
 	}
 }
 
-(origin_tls) {
-	tls /run/caddy/origin.pem /run/caddy/origin-key.pem {
-		client_auth {
-			mode require_and_verify
-			trust_pool file /run/caddy/origin-pull-ca.pem
-		}
-	}
-}
-
-www.aboutme.vn {
-	import origin_tls
-	redir https://aboutme.vn{uri} permanent
-}
-
-aboutme.vn {
-	import origin_tls
-
-	request_header -X-Real-IP
-	request_header -X-Forwarded-For
-	request_header -Forwarded
-
+(apex_site) {
 	import /etc/caddy/maintenance.generated.caddy
 	root * /etc/caddy/maintenance-site
 	rewrite * /maintenance.html
@@ -66,3 +41,5 @@ aboutme.vn {
 		status 503
 	}
 }
+
+import /run/caddy/edges.sites

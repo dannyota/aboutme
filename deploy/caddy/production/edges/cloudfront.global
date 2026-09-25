@@ -1,0 +1,7 @@
+# Server options for the CloudFront listener on 8443. entrypoint.sh copies
+# this file into the global options block when EDGES includes cloudfront.
+# No trusted_proxies: cloudfront.sites derives the client address itself.
+servers :8443 {
+	# CloudFront reaches the origin over HTTP/1.1 on TCP.
+	protocols h1 h2
+}

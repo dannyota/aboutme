@@ -1,0 +1,58 @@
+# CloudFront listener on 8443 (docs/design/cloudfront-edge.md, "Origin
+# access" and "Client address"). The security group admits 8443 only from
+# CloudFront's origin-facing prefix list, and Caddy requires the origin mTLS
+# client certificate from our own CA. entrypoint.sh includes this file when
+# EDGES includes cloudfront. The apex_site snippet comes from the Caddyfile
+# that imports this file.
+(cloudfront_tls) {
+	tls /run/caddy/origin.pem /run/caddy/origin-key.pem {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /run/caddy/cloudfront-ca.pem
+		}
+	}
+}
+
+# Caddy, not the edge, sets these, so the rule survives an edge change. A
+# response that already carries HSTS or nosniff keeps its own value. Caddy's
+# own error responses (an upstream that is down) skip this handler and keep
+# Caddy's defaults: a handle_errors block would add the headers but would
+# also demote the upstream error log line to debug, losing it.
+(cloudfront_response_headers) {
+	header {
+		?Strict-Transport-Security "max-age=31536000"
+		?X-Content-Type-Options nosniff
+		-Server
+		defer
+	}
+}
+
+www.aboutme.vn:8443 {
+	import cloudfront_tls
+	import cloudfront_response_headers
+	redir https://aboutme.vn{uri} permanent
+}
+
+aboutme.vn:8443 {
+	import cloudfront_tls
+	import cloudfront_response_headers
+
+	request_header -X-Real-IP
+	request_header -X-Forwarded-For
+	request_header -Forwarded
+	request_header -X-Forwarded-Host
+	request_header -CF-Connecting-IP
+
+	# CloudFront-Viewer-Address is "<address>:<port>", with an IPv6 address
+	# unbracketed, so the address is everything before the last colon. The
+	# placeholder joins repeated fields with a comma, which the pattern
+	# rejects, so exactly one well-formed value sets client_address. Anything
+	# else leaves it empty, and Go rejects an empty X-Real-IP (fails closed).
+	# vars runs before request_header, so the match sees the header before it
+	# is removed.
+	@viewer_address vars_regexp viewer {http.request.header.CloudFront-Viewer-Address} ^([0-9A-Fa-f:.]+):([0-9]{1,5})$
+	vars @viewer_address client_address {re.viewer.1}
+	request_header -CloudFront-Viewer-Address
+
+	import apex_site
+}

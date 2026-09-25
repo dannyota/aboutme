@@ -54,11 +54,11 @@ jobs:
               exit 1
               ;;
             caddy)
-              # adapt parses the full config without the runtime TLS files.
-              docker run --rm --entrypoint caddy -e CLOUDFLARE_RANGES=192.0.2.0/24 "$IMAGE" \
-                adapt --config /etc/caddy/Caddyfile >/dev/null
-              docker run --rm --entrypoint caddy -e CLOUDFLARE_RANGES=192.0.2.0/24 "$IMAGE" \
-                adapt --config /etc/caddy/Caddyfile.maintenance >/dev/null
+              # The entrypoint's adapt mode assembles the edge listeners and
+              # parses both route tables without the runtime TLS files.
+              for edges in cloudflare cloudfront cloudflare,cloudfront; do
+                docker run --rm -e EDGES="$edges" -e CLOUDFLARE_RANGES=192.0.2.0/24 "$IMAGE" adapt
+              done
               ;;
           esac
       - name: Install Trivy
