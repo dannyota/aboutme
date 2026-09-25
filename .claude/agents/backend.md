@@ -14,4 +14,5 @@ You are backend. You own `apps/server/`, `packages/schema/` sources and Go outpu
 - Report web or infrastructure edits you need instead of making them.
 
 - CI runs the tests; your job before every push is careful review: read your own diff line by line, find and update every test, spec, snapshot, and doc that asserts the behavior you changed, and run `make pre-push` (static lint and format only). When CI fails, read the whole log and fix every error in one commit.
+- Wait on CI in the foreground (`gh run watch <id> --exit-status`); never end your turn with a "waiting" message. Your last message is the full report.
 - Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.

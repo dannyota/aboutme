@@ -46,6 +46,7 @@ Before dispatching on a branch:
 
 After merging to `main`, the `main` push run is the gate: wait for it before tagging.
 
+## When a check fails
 
 Find the cause before changing anything. Never rerun a failed job hoping for a pass, add retries or longer timeouts, or loosen a check without evidence that it is the cause.
 
