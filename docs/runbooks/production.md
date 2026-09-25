@@ -173,22 +173,22 @@ It then checks the tag and CI, resolves image digests, compares Cloudflare
 ranges, checks that every secret the new revisions reference exists (by name,
 never reading a value), snapshots RDS, registers task definition revisions,
 disables the `aboutme-prod-site-down` alarm actions and the
-`aboutme-prod-task-stopped` rule when they were enabled, disables the job
-schedules, and stops `app`. It then swaps in the `maintenance` service: the same
-Caddy image, in a mode that serves `deploy/caddy/production/maintenance.html` at
-503 for every path, including `/readyz` and `/api/*`. With the maintenance page
-up, it runs the database steps, starts `web`, swaps `maintenance` back out,
-starts `app`, and re-enables the schedules. It then smoke-tests through
-Cloudflare, using the base caller's own credentials for `ec2:DescribeAddresses`
-and `cloudwatch:GetMetricStatistics` (in `us-east-1`), both outside the deploy
+`aboutme-prod-task-stopped` rule when they were enabled, and disables the job
+schedules. `app` and `maintenance` both listen on 443 at once. Each handoff
+starts the incoming service and confirms its task runs before it stops the
+outgoing one: `maintenance` up, `app` down, the database steps, `web` up, `app`
+up, `maintenance` down, then the schedules re-enable. `maintenance` serves
+`deploy/caddy/production/maintenance.html` at 503 for every path, including
+`/readyz` and `/api/*`. It then smoke-tests through Cloudflare, using the base
+caller's own credentials for `ec2:DescribeAddresses` and
+`cloudwatch:GetMetricStatistics` (in `us-east-1`), both outside the deploy
 role's IAM list. It warms `DEPLOY_WARM_PAGE` (default `/danny`; must stay a
 published resume page) and the homepage, since first requests after a restart
 can be slow on the Cloudflare-to-origin path in a way `/healthz` misses, until
 each answers fast (`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run
-out. The script requires the maintenance page's 503 response through Cloudflare
-before it starts a database task. `app` and `maintenance` both bind host port
-443, so only one runs at once. After maintenance stops, Cloudflare can return
-521 until `app` accepts traffic. Do not promise a bounded downtime window.
+out. The script requires the maintenance page's 503 response before a database
+task starts, and refuses to run while either task definition still maps host
+port 443. Do not promise a bounded downtime window.
 
 The deploy records the prior state of the site-down alarm actions and
 task-stopped rule before it changes either source. On success, it re-enables the
@@ -247,16 +247,16 @@ aws rds copy-db-snapshot --region ap-southeast-1 \
 
 `copy-db-snapshot` copies no tags unless given `--copy-tags`.
 
-A failure before the migration task starts turns the maintenance page back off
-and restores the previous `app` revision and the job schedules' earlier state,
-then exits non-zero. Once the script requests `migrate`, it leaves the
-maintenance page up and keeps `app` and the job schedules stopped. The request
-can succeed even when the client loses its response, and Goose can commit an
-earlier migration before a later migration fails. Fix forward with a new
-release, or restore the snapshot the deploy took. On `--first-deploy`, a failure
-retries the app stop and starts maintenance only after ECS confirms the port is
-free. It leaves every job schedule disabled, because `db-setup` may not have
-created usable application state.
+A failure before the migration task starts brings the previous `app` revision up
+beside `maintenance`, confirms it, stops `maintenance`, and restores the job
+schedules' earlier state, then exits non-zero. Once the script requests
+`migrate`, it leaves the maintenance page up and keeps `app` and the job
+schedules stopped: the request can succeed even when the client loses its
+response, and Goose can commit an earlier migration before a later one fails.
+Fix forward with a new release, or restore the snapshot the deploy took. On
+`--first-deploy`, a failure keeps maintenance up and retries the app stop,
+confirming every task stopped. It leaves every job schedule disabled, because
+`db-setup` may not have created usable application state.
 
 If the script reports that a database task may still be running, it leaves the
 maintenance page, the app, and the schedules exactly as they are: check that

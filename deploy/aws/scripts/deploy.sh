@@ -13,23 +13,24 @@
 # Every mode assumes the operator role, strongly reads the release fence,
 # assumes the deploy role, and holds one operation lock across the run (see
 # the sourced fence.sh). Order: build revisions, check that every task secret
-# exists, snapshot, register revisions, stop jobs and app, swap in the
-# maintenance page, migrate, start web, swap maintenance back out, start app,
-# re-enable jobs, smoke, warm the release, re-enable the task-stopped rule,
-# wait (bounded) for the site-down alarm's post-recovery health, then
-# re-enable its actions. The maintenance and app services bind the same host
-# port, so exactly one of them is ever asked to run at once. The
-# release-snapshot-sweep job deletes this script's tagged snapshots once they
-# are more than 27 days old, before they reach 30.
+# exists, snapshot, register revisions, stop jobs, start maintenance beside
+# the app, stop the app, migrate, start web, start the new app beside
+# maintenance, stop maintenance, re-enable jobs, smoke, warm the release,
+# re-enable the task-stopped rule, wait (bounded) for the site-down alarm's
+# post-recovery health, then re-enable its actions. Each handoff starts the
+# incoming service before it stops the outgoing one, so host port 443 always
+# has a listener (see the sourced handoff.sh). The release-snapshot-sweep job
+# deletes this script's tagged snapshots once they are more than 27 days old,
+# before they reach 30.
 #
-# Any failure after the app stops restores the previous app before a migration,
-# or leaves maintenance up after a database task may have run. A failed ECS
-# state check stops recovery before it starts the competing service. After a
-# migration, if the new app never confirmed healthy, it is scaled back to 0
-# before maintenance comes up; if it did confirm healthy and only the
-# schedule-enable step failed afterward, tearing down a proven-healthy app
-# would be a self-inflicted outage, so it stays up, maintenance stays down,
-# and the script names the schedules to fix by hand.
+# Any failure after the handoff starts restores the previous app before a
+# migration, or leaves maintenance up after a database task may have run.
+# Recovery starts a service before it stops another, as the forward path
+# does. After a migration, if the new app never confirmed healthy, it is
+# scaled back to 0 while maintenance stays up; if it did confirm healthy and
+# only a later step failed, tearing down a proven-healthy app would be a
+# self-inflicted outage, so it stays up, maintenance is stopped, and the
+# script names the schedules to fix by hand.
 set -euo pipefail
 
 region=ap-southeast-1
@@ -92,6 +93,8 @@ source "$script_dir/fence.sh"
 source "$script_dir/totp-reencrypt.sh"
 # shellcheck source=notifications.sh
 source "$script_dir/notifications.sh"
+# shellcheck source=handoff.sh
+source "$script_dir/handoff.sh"
 
 # Shared by the mid-deploy maintenance-page check and the final smoke checks.
 smoke_attempts=5
@@ -110,9 +113,9 @@ retry() { # command...
 # migration task because an accepted request can lose its response.
 # app_start_requested and app_stable track the new app
 # through section 8, so restore() can tell "asked to start, health unknown"
-# from "confirmed healthy" and never leave both app and maintenance wanting
-# host port 443. schedules_enabled tracks the enable loop the same way.
-# site_up_epoch records the moment app_stable is set, so the post-recovery
+# from "confirmed healthy". maintenance_stopped marks the final maintenance
+# stop. schedules_enabled tracks the enable loop the same way.
+# site_up_epoch records the moment maintenance stops, so the post-recovery
 # site-down alarm wait (notifications.sh) never reads Route 53 data from
 # before the site actually came back up. signaled marks a HUP/INT/TERM that
 # arrived before on_exit's cleanup wait, so that wait is skipped entirely; one
@@ -125,6 +128,7 @@ oneshot_task=""
 migration_may_be_applied=0
 app_start_requested=0
 app_stable=0
+maintenance_stopped=0
 site_up_epoch=0
 schedules_enabled=()
 site_alarm_restore=0
@@ -151,7 +155,10 @@ on_exit() {
   # exists to avoid, so it waits the same way a clean finish does. A signal
   # here, or a wait this exit already ran, skips straight to restoring so
   # Ctrl-C is never stuck behind a wait of up to DEPLOY_ALARM_WAIT seconds.
-  if ((status != 0)) && [[ $phase == finished ]] && ((site_alarm_restore && !signaled && !site_alarm_waited)); then
+  # restore() keeping a confirmed app and stopping maintenance counts as a
+  # finished handoff for this wait.
+  if ((status != 0)) && { [[ $phase == finished ]] || ((app_stable && maintenance_stopped)); } &&
+    ((site_alarm_restore && !signaled && !site_alarm_waited)); then
     local wait_s=${DEPLOY_ALARM_WAIT:-900}
     say "waiting up to $wait_s s for the site-down alarm before re-enabling its actions; press Ctrl-C to skip the wait"
     trap 'signaled=1' HUP INT TERM
@@ -198,52 +205,6 @@ current_def() { describe_task_def "aboutme-prod-$1"; }
 describe_task_def() {
   aws_ ecs describe-task-definition --task-definition "$1" --query taskDefinition --output json
 }
-
-# The app and maintenance services both bind host port 443, so only one of
-# them ever runs at once. Scaling a service to zero also waits for its actual
-# tasks to stop, not just for the service to report stable, so the host port
-# is deterministically free before the other service is asked to claim it.
-# A scale-down is never fence-checkpointed: it is always safe to attempt, and
-# gating it could strand a stop half-done. Only the image start that follows
-# is checkpointed, by its own caller.
-scale_to_zero_and_wait() { # service
-  local task running_tasks stopping_tasks
-  local -a tasks=()
-  local -A seen=()
-  # ListTasks defaults to desired RUNNING. Capture those tasks before lowering
-  # the count, then capture desired STOPPED tasks after it. The second list
-  # includes a task that was already stopping or was placed just before the
-  # count update, so every task that could hold the host port is waited out.
-  running_tasks=$(aws_ ecs list-tasks --cluster "$cluster" --service-name "$1" --query 'taskArns[]' --output text) || return 1
-  while IFS= read -r task; do
-    if [[ -n $task && -z ${seen[$task]:-} ]]; then
-      tasks+=("$task")
-      seen[$task]=1
-    fi
-  done < <(tr '\t' '\n' <<<"$running_tasks")
-  aws_ ecs update-service --cluster "$cluster" --service "$1" --desired-count 0 >/dev/null || return 1
-  aws_ ecs wait services-stable --cluster "$cluster" --services "$1" || return 1
-  stopping_tasks=$(aws_ ecs list-tasks --cluster "$cluster" --service-name "$1" --desired-status STOPPED --query 'taskArns[]' --output text) || return 1
-  while IFS= read -r task; do
-    if [[ -n $task && -z ${seen[$task]:-} ]]; then
-      tasks+=("$task")
-      seen[$task]=1
-    fi
-  done < <(tr '\t' '\n' <<<"$stopping_tasks")
-  ((${#tasks[@]} == 0)) || aws_ ecs wait tasks-stopped --cluster "$cluster" --tasks "${tasks[@]}" || return 1
-}
-# maintenance_up starts the just-registered revision (so a release's Caddy
-# image takes effect during the window).
-maintenance_up() {
-  # Never fence-checkpointed: Caddy's maintenance page carries no release or
-  # enrollment logic, and restore() relies on it as a safety net that must
-  # stay reachable even when a genuine lock loss blocks the app itself.
-  aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-maintenance \
-    --task-definition "${revision[maintenance]}" --desired-count 1 >/dev/null || return 1
-  aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-maintenance || return 1
-}
-maintenance_down() { scale_to_zero_and_wait aboutme-prod-maintenance; }
-app_down() { scale_to_zero_and_wait aboutme-prod-app; }
 
 # 1. Candidate checks.
 git fetch -q origin main
@@ -346,6 +307,14 @@ for family in "${families[@]}"; do
        requiresCompatibilities, volumes}
     | with_entries(select(.value != null))' >"$work/$family.json"
 done
+
+# The handoff runs both Caddy services at once, which ECS refuses to place
+# while either task definition reserves host port 443.
+if jq -e '.containerDefinitions[].portMappings[]? | select((.hostPort // .containerPort) == 443)' \
+    "$work/app.json" "$work/maintenance.json" >/dev/null; then
+  say "the app or maintenance task definition still maps host port 443; run tofu apply first"
+  exit 1
+fi
 
 # 3. Every secret the revisions reference must exist, or the app fails to start
 # after migrate has run. This checks names and metadata only, never a value.
@@ -456,90 +425,105 @@ restore() {
       return
     fi
   fi
-  if ((migration_may_be_applied)); then
-    if ((app_stable)); then
-      # The new app is confirmed healthy and already holds host port 443;
-      # only the schedule-enable loop failed partway. Tearing a healthy,
-      # already-migrated app down over an unrelated Scheduler API error would
-      # be a self-inflicted outage, so it stays up and maintenance stays down
-      # (it already is, from before app started). Report the gap instead.
-      say "the app started this release and is healthy; it stays up"
-      say "some job schedules may not be enabled and pinned to this release:"
-      for name in $schedules; do
-        if ! printf '%s\n' "${schedules_enabled[@]:-}" | grep -qxF "$name"; then
-          say "  $name: fix by hand, or rerun deploy.sh to retry the whole release"
-        fi
-      done
-      return
-    fi
-    if ((app_start_requested)); then
-      say "failed while the new app was starting; its health was never confirmed"
-      say "scaling it back to 0 before bringing the maintenance page up"
-      if ! app_down; then
-        say "could not confirm that the app released host port 443"
-        say "the maintenance page was not started; check both services before retrying"
-        return
+  # The released app is confirmed running and answers on port 443; only a
+  # later step failed. In every mode, including a rollback, tearing it down
+  # over an unrelated API error would be a self-inflicted outage, so it stays
+  # up and maintenance, which still shares the port, is stopped.
+  if ((app_stable)); then
+    say "the app started this release and is healthy; it stays up"
+    if ((!maintenance_stopped)); then
+      if maintenance_down; then
+        maintenance_stopped=1
+        site_up_epoch=$EPOCHSECONDS
+      else
+        say "could not confirm that maintenance stopped; scale aboutme-prod-maintenance to 0 by hand"
       fi
     fi
-    say "a migration may have been applied; app and job schedules stay stopped"
+    say "some job schedules may not be enabled and pinned to this release:"
+    for name in $schedules; do
+      if ! printf '%s\n' "${schedules_enabled[@]:-}" | grep -qxF "$name"; then
+        say "  $name: fix by hand, or rerun deploy.sh to retry the whole release"
+      fi
+    done
+    return
+  fi
+  if ((migration_may_be_applied)); then
+    # Maintenance has run since before the migration. It is confirmed (or
+    # started again) first; only a confirmed maintenance page lets restore()
+    # stop a new app that may have started beside it without proving
+    # healthy. That app runs the migrated schema, so when maintenance cannot
+    # be confirmed it is left running rather than leaving port 443 dark.
+    say "a migration may have been applied; job schedules stay stopped"
     say "the previous release is not proven against the migrated schema: fix forward, or restore the snapshot"
     say "leaving the maintenance page up so the site answers 503 instead of nothing"
     if ! maintenance_up; then
-      say "could not confirm that the maintenance page started; check both services before retrying"
+      say "could not confirm that the maintenance page runs; check both services before retrying"
+      ((!app_start_requested)) ||
+        say "the new app stays as it is so port 443 keeps a listener; check aboutme-prod-app by hand"
+      return
+    fi
+    if ((app_start_requested)); then
+      say "failed while the new app was starting; its health was never confirmed; scaling it back to 0"
+      app_down || say "could not confirm that the new app stopped; check aboutme-prod-app before retrying"
     fi
     return
   fi
   if ((first)); then
     say "failed on the first deploy; there is no previous release to restore"
-    if ! app_down; then
-      say "could not confirm that the app released host port 443"
-      say "the maintenance page was not started; check both services before retrying"
-      return
-    fi
     say "leaving the maintenance page up so the site answers 503 instead of nothing"
     if ! maintenance_up; then
-      say "could not confirm that the maintenance page started; check both services before retrying"
+      say "could not confirm that the maintenance page runs; the app stays as it is so port 443 keeps a listener"
+      say "check aboutme-prod-app and aboutme-prod-maintenance by hand before retrying"
+      return
     fi
+    app_down || say "could not confirm that the app stopped; check aboutme-prod-app before retrying"
     return
   fi
-  # One checkpoint covers the whole sequence below: it runs before
-  # maintenance is touched, so a transient checkpoint failure never leaves
-  # maintenance down with no app started to replace it. A genuine
-  # below-the-fence previous release is refused the same way, before either
-  # service changes.
+  # One checkpoint covers the whole sequence below: it runs before either
+  # service changes, so a transient checkpoint failure never stops
+  # maintenance with no app started to replace it. A genuine
+  # below-the-fence previous release is refused the same way.
   if ! fence_checkpoint; then
-    say "operation lock or release floor no longer holds; leaving maintenance up"
+    say "operation lock or release floor no longer holds; leaving both services as they are"
     return
   fi
   local prev_release
   prev_release=$(task_def_release_number "$previous_app") ||
-    { say "could not verify the previous app's release; leaving maintenance up"; return; }
+    { say "could not verify the previous app's release; leaving both services as they are"; return; }
   if ((prev_release < fence_min)); then
-    say "the previous app's release ($prev_release) is below the fence minimum ($fence_min); leaving maintenance up"
+    say "the previous app's release ($prev_release) is below the fence minimum ($fence_min); leaving both services as they are"
     return
   fi
   say "failed; restoring the previous app and job schedules"
-  # Turn the maintenance page off before the app comes back: both bind host
-  # port 443, so bringing the app up first would fail to place.
-  if ! maintenance_down; then
-    say "could not confirm that maintenance released host port 443"
-    say "the previous app was not started; check both services before retrying"
+  # The previous app starts (or is confirmed, if it never stopped) beside
+  # maintenance, and maintenance stops only after that, so port 443 always
+  # has a listener.
+  # A previous app that cannot be confirmed may be unhealthy, so it is not
+  # left serving part of the traffic beside maintenance: once maintenance is
+  # confirmed, the app is scaled back to 0. If maintenance cannot be
+  # confirmed either, the app stays at its count as the only possible
+  # listener.
+  if ! app_up "$previous_app"; then
+    say "could not confirm that the previous app started"
+    if maintenance_up; then
+      say "the maintenance page stays up; scaling the unconfirmed app back to 0"
+      app_down || say "could not confirm that the app stopped; check aboutme-prod-app before retrying"
+    else
+      say "could not confirm that the maintenance page runs either; both services stay as they are; check them by hand"
+    fi
     return 1
   fi
-  if ! aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
-    --task-definition "$previous_app" --desired-count 1 >/dev/null; then
-    say "could not request the previous app start; check both services before retrying"
-    return
-  fi
-  if ! aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app; then
-    say "could not confirm that the previous app started; check both services before retrying"
-    return
+  local failed=0
+  if ! maintenance_down; then
+    say "could not confirm that maintenance stopped; scale aboutme-prod-maintenance to 0 by hand"
+    failed=1
   fi
   for name in $schedules; do
     if [[ ${schedule_state[$name]:-} == ENABLED ]]; then
       set_schedule "$name" ENABLED
     fi
   done
+  return "$failed"
 }
 
 # Do not start the handoff until both notification sources are confirmed
@@ -553,11 +537,12 @@ for name in $schedules; do
   set_schedule "$name" DISABLED
 done
 
-app_down
-say "site down"
-
+# Maintenance starts beside the running app, then the app stops.
 maintenance_up
 say "maintenance up"
+
+app_down
+say "app down"
 
 # Verify through Cloudflare before a database task starts. A slow edge gets the
 # same bounded retries as final smoke checks. If it still does not serve the
@@ -606,19 +591,16 @@ aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-web \
   --task-definition "${revision[web]}" --desired-count 1 >/dev/null
 aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-web
 
-# Maintenance and app both bind host port 443: take maintenance down before
-# starting app, the same way it was taken down before the previous deploy's
-# app came up.
-maintenance_down
-say "maintenance down"
-
+# The new app starts beside maintenance, then maintenance stops.
 app_start_requested=1
 fence_checkpoint || exit 1
-aws_ ecs update-service --cluster "$cluster" --service aboutme-prod-app \
-  --task-definition "${revision[app]}" --desired-count 1 >/dev/null
-aws_ ecs wait services-stable --cluster "$cluster" --services aboutme-prod-app
+app_up "${revision[app]}"
 app_stable=1
+say "app up"
+maintenance_down
+maintenance_stopped=1
 site_up_epoch=$EPOCHSECONDS
+say "maintenance down"
 for name in $schedules; do
   set_schedule "$name" ENABLED "${revision[jobs]}"
   schedules_enabled+=("$name")

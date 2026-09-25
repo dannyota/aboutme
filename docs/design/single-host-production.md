@@ -85,9 +85,13 @@ The runtime trust boundaries are:
 - Caddy trusts `CF-Connecting-IP` only from Cloudflare's published ranges and
   removes forwarding headers from every other peer before setting the header Go
   accepts.
-- `app` and `maintenance` both bind host port 443. The deploy script proves all
-  tasks for one service have stopped before starting the other. A failed proof
-  stops the handoff, so both services are never deliberately started together.
+- `app` and `maintenance` both run Caddy with host networking and declare no ECS
+  port mapping. Caddy binds every TCP listener with `SO_REUSEPORT`, so both
+  services can listen on 443 at once and the kernel spreads new connections
+  across them. Every handoff starts the incoming service and confirms its task
+  before it stops the outgoing one, so something always accepts connections
+  on 443. A failed confirmation stops the handoff before the outgoing service is
+  touched.
 - Nuxt has its own network namespace and is never a trusted proxy. It reaches
   only Go's private print listener on the bridge gateway, where the one-use
   capability still applies.
@@ -226,22 +230,25 @@ starts.
 
 `deploy/aws/scripts/deploy.sh <tag>` runs from the laptop:
 
-1. Resolve the tag to digests. Require the tag on `main` with green CI.
+1. Resolve the tag to digests. Require the tag on `main` with green CI. Refuse
+   to continue if the app or maintenance task definition still maps port 443.
 2. Take an RDS snapshot named for the tag, tagged
    `aboutme:created-by=deploy.sh`, and wait for it.
 3. Register new task definition revisions by digest, under the
    [release fence](passkey-release-fence.md).
-4. Disable the job schedules, scale `app` to zero, and prove its tasks stopped.
-5. Start `maintenance` and require the Cloudflare path to return its marked 503
-   response before any database task starts.
-6. With `--first-deploy`, run `db-setup`. Otherwise run `migrate` and require
+4. Disable the job schedules.
+5. Start `maintenance` beside the running `app`, confirm it, then scale `app` to
+   zero and prove its tasks stopped.
+6. Require the Cloudflare path to return `maintenance`'s marked 503 response
+   before any database task starts.
+7. With `--first-deploy`, run `db-setup`. Otherwise run `migrate` and require
    exit 0.
-7. Update `web`, then stop `maintenance` and prove its tasks stopped before
-   requesting `app` to start.
-8. Wait for `app` steady state, then re-enable the job schedules at the new
-   `jobs` revision.
-9. Smoke through Cloudflare: health, TLS and security headers. A direct request
-   to the Elastic IP must fail.
+8. Update `web`, start `app` beside `maintenance` and confirm it (steady
+   service, one task of the released revision, every container running), then
+   stop `maintenance`.
+9. Re-enable the job schedules at the new `jobs` revision.
+10. Smoke through Cloudflare: health, TLS and security headers. A direct request
+    to the Elastic IP must fail.
 
 Maintenance mode keeps the normal Cloudflare proxy trust and origin-pull mTLS.
 Every apex path, including readiness and API paths, returns the same bilingual
@@ -250,20 +257,21 @@ HTML with status 503, `Cache-Control: no-store`, and `Retry-After: 60`. The
 without caching, backs off from 10 to 60 seconds, and reloads only after a 200.
 Visitors without JavaScript refresh after 60 seconds.
 
-A failure before a migration request could have been accepted stops maintenance,
-restores the previous `app` revision, and restores the earlier job schedule
-states. A migration request is treated as possibly applied before its response
-arrives. A running database task, or a failed, partial, or uncertain migration,
-leaves maintenance up and leaves `app` and the schedules stopped. The operator
-fixes forward or restores the release snapshot because the prior app is not
-proven against the changed database.
+A failure before a migration request could have been accepted starts the
+previous `app` revision beside `maintenance`, confirms it, stops `maintenance`,
+and restores the earlier job schedule states. A migration request is treated as
+possibly applied before its response arrives. A running database task, or a
+failed, partial, or uncertain migration, leaves maintenance up and leaves `app`
+and the schedules stopped. The operator fixes forward or restores the release
+snapshot because the prior app is not proven against the changed database.
 
-If the new app may have started but never reached steady state, recovery first
-proves that every app task stopped and only then starts maintenance. If ECS
-cannot prove that either service released port 443, recovery stops and does not
-start the competing service. A healthy new app stays up when only schedule
-enablement fails; the script reports each schedule that still needs repair. A
-failed first deploy leaves maintenance up because no prior app exists.
+If the new app may have started but never reached steady state, recovery scales
+it back to zero; `maintenance`, already running beside it, stays up. A service
+confirmation that finds the wrong revision, more or fewer than one task, or a
+container not yet running is treated the same as an unconfirmed wait. A healthy
+new app stays up when only schedule enablement fails; the script reports each
+schedule that still needs repair. A failed first deploy leaves maintenance up
+because no prior app exists.
 
 `deploy.sh --rollback <tag>` redeploys earlier server, web, and app digests
 without migrating, through the same handoff, and keeps the current maintenance
@@ -271,9 +279,12 @@ Caddy image. It is safe only when the failed release applied no migration;
 otherwise recovery is a forward fix or a point-in-time restore.
 
 OpenTofu owns infrastructure and the first task definitions and ignores later
-service revisions. The exclusive host-port 443 exchange can refuse connections
-for about a minute while ECS releases and reacquires the port. A monthly SSM
-maintenance window applies Bottlerocket updates with
+service revisions. A handoff keeps something listening on 443 throughout; at
+most a few connections still queued on an outgoing Caddy's listener are reset
+when it closes. A 521 can still come from a host reboot during the monthly
+Bottlerocket update window, from host loss, or from ECS replacing an app task
+that failed its health check, which stops the task before a replacement starts.
+A monthly SSM maintenance window applies Bottlerocket updates with
 `apiclient update apply --reboot`.
 
 ## Scheduled jobs
