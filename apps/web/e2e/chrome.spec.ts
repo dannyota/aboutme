@@ -23,7 +23,7 @@ const CHROME_PIXEL_TOLERANCE = 400;
 const PAGES = [
   { name: 'home', path: '/', thumbnails: 4 },
   { name: 'login', path: '/login', thumbnails: 0 },
-  { name: 'templates', path: '/templates', thumbnails: 20 },
+  { name: 'templates', path: '/templates', thumbnails: 15 },
 ] as const;
 const THEMES = ['light', 'dark'] as const;
 const WIDTHS = [390, 1440] as const;
