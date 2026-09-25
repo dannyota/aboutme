@@ -18,7 +18,6 @@ import {
   parseRole,
   ROLE_MEMBERS,
   ROLES,
-  roleMembers,
   withRole,
 } from '../../app/templates/catalog';
 import { galleryDocument } from '../../app/templates/documents';
@@ -55,8 +54,7 @@ describe('gallery catalog', () => {
   });
 
   it('gives each tech role exactly one real template with a sample', () => {
-    const members = roleMembers();
-    expect(members).toBe(ROLE_MEMBERS);
+    const members = ROLE_MEMBERS;
     const flat = ROLES.flatMap((role) => members[role]);
     expect(flat).toHaveLength(ROLES.length);
     expect(new Set(flat).size).toBe(ROLES.length);

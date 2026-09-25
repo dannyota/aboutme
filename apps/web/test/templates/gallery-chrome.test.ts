@@ -1,6 +1,6 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GalleryPage from '../../app/pages/templates/index.vue';
 import {
@@ -116,18 +116,33 @@ describe('template gallery chrome', () => {
     });
     await flushPromises();
 
-    await wrapper.get('[data-role="mobile"]').trigger('click');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ filter: 'ats', role: 'mobile' });
+    // Navigation settles asynchronously, so assert the replace call, then
+    // wait for the route and the pressed chip to follow.
+    const router = useRouter();
+    const replace = vi.spyOn(router, 'replace');
+    const chip = (role: string) => wrapper.get(`[data-role="${role}"]`);
 
-    await wrapper.get('[data-role="mobile"]').trigger('click');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ filter: 'ats', role: 'mobile' });
+    await chip('mobile').trigger('click');
+    expect(replace).toHaveBeenLastCalledWith({
+      query: { filter: 'ats', role: 'mobile' },
+    });
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.query)
+        .toEqual({ filter: 'ats', role: 'mobile' });
+      expect(chip('mobile').attributes('aria-pressed')).toBe('true');
+    });
 
-    await wrapper.get('[data-role="all"]').trigger('click');
+    replace.mockClear();
+    await chip('mobile').trigger('click');
     await flushPromises();
-    expect(useRouter().currentRoute.value.query).toEqual({ filter: 'ats' });
+    expect(replace).not.toHaveBeenCalled();
+    expect(chip('mobile').attributes('aria-pressed')).toBe('true');
+
+    await chip('all').trigger('click');
+    expect(replace).toHaveBeenLastCalledWith({ query: { filter: 'ats' } });
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.query).toEqual({ filter: 'ats' });
+    });
+    replace.mockRestore();
   });
 });

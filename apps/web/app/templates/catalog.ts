@@ -505,12 +505,6 @@ export function parseRole(value: unknown): GalleryRole | undefined {
   return ROLES.find((role) => role === value);
 }
 
-/** Every template id each role names, for the catalog checks. */
-export function roleMembers():
-  Readonly<Record<GalleryRole, readonly string[]>> {
-  return ROLE_MEMBERS;
-}
-
 /**
  * A copy of a route query with the role chip set, keeping every other key
  * (notably `filter`). Undefined removes the `role` key so "all roles" drops
