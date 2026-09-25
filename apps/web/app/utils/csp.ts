@@ -16,9 +16,12 @@ export const HTML_CSP
  * Baseline CSP for Nuxt-rendered app pages (`/`, `/login`, `/templates/**`,
  * `/app/**`, and every other route `nuxt.config.ts` does not give a more
  * specific policy): as strict as the interactive app allows rather than the
- * fully locked-down `HTML_CSP`. `default-src`, `base-uri`, and `form-action`
- * scope to the app's own origin instead of `'none'` because the app itself
- * is a real origin with same-origin forms and no `<base>` tag to forbid.
+ * fully locked-down `HTML_CSP`. `default-src 'none'` and `base-uri 'none'`
+ * match `HTML_CSP` exactly: the app has no `<iframe>` (the only directives
+ * that would otherwise fall back to `default-src`, `frame-src` and
+ * `child-src`, need it) and injects no `<base>` tag of its own. Only
+ * `form-action` scopes to the app's own origin instead of `'none'`: the app
+ * is a real origin with same-origin form submissions.
  *
  * `script-src 'self'` never carries `'unsafe-inline'` or `'unsafe-eval'`:
  * Nuxt's own hydration payload is already externalized into a same-origin
@@ -33,11 +36,12 @@ export const HTML_CSP
  * as a plain module instead (app/editor/documentValidator.generated.mjs,
  * scripts/generate-document-validator.mjs).
  *
- * `style-src` keeps `'unsafe-inline'`: the resume renderer writes
- * per-document customization as inline `style` attributes
+ * `style-src` keeps `'unsafe-inline'`: it covers both Nuxt's and Vite's own
+ * inlined `<style>` elements and the resume renderer's per-document
+ * customization, written as inline `style` attributes
  * (app/components/resume/ResumeDocument.vue's `:style="rootStyle"` and
- * `:style="model.styles.header"`), an unbounded, per-render value set no
- * fixed hash or nonce list could cover.
+ * `:style="model.styles.header"`). The renderer's values alone are an
+ * unbounded, per-render set no fixed hash or nonce list could cover.
  *
  * `img-src` allows `data:` for the photo crop preview, which reads the
  * locally selected file as a data URL before upload
@@ -55,7 +59,7 @@ export const HTML_CSP
  * `script-src` never need to name Google at all.
  */
 export const APP_CSP
-  = 'default-src \'self\'; base-uri \'self\'; object-src \'none\'; '
+  = 'default-src \'none\'; base-uri \'none\'; object-src \'none\'; '
     + 'frame-ancestors \'none\'; form-action \'self\'; script-src \'self\'; '
     + 'style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; '
     + 'font-src \'self\'; connect-src \'self\'; manifest-src \'self\'; '
