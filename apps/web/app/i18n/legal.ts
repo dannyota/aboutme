@@ -40,7 +40,7 @@ export type LegalCopy = {
 
 export const legalCopy: Record<Locale, LegalCopy> = {
   vi: {
-    updated: 'Cập nhật lần cuối ngày 24/09/2026',
+    updated: 'Cập nhật lần cuối ngày 26/09/2026',
     privacyLink: 'Chính sách quyền riêng tư',
     termsLink: 'Điều khoản sử dụng',
     agreement: [
@@ -137,12 +137,12 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'chỗ này không gắn với tài khoản của bạn, và sẽ bị xoá sau '
             + '180 ngày.',
             'Trang công khai được phân phối qua mạng CDN toàn cầu '
-            + '(Cloudflare) nhưng không được lưu lại trên CDN. Khi CV đang '
-            + 'công khai, bất kỳ ai xem được cũng có thể lưu hoặc chụp lại '
-            + 'trang. Theo mặc định, người xem cũng có thể tải về bản PDF '
-            + 'của CV; bạn có thể tắt tính năng này. Đừng đưa dữ liệu cá '
-            + 'nhân nhạy cảm, như số giấy tờ tuỳ thân, tình trạng sức khoẻ, '
-            + 'hoặc tôn giáo, vào một CV công khai.',
+            + '(Amazon CloudFront) nhưng không được lưu lại trên CDN. '
+            + 'Khi CV đang công khai, bất kỳ ai xem được cũng có thể lưu '
+            + 'hoặc chụp lại trang. Theo mặc định, người xem cũng có thể '
+            + 'tải về bản PDF của CV; bạn có thể tắt tính năng này. Đừng '
+            + 'đưa dữ liệu cá nhân nhạy cảm, như số giấy tờ tuỳ thân, tình '
+            + 'trạng sức khoẻ, hoặc tôn giáo, vào một CV công khai.',
           ],
         },
         {
@@ -150,13 +150,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'Dữ liệu của bạn được lưu tại Amazon Web Services ở Singapore '
             + '(ap-southeast-1): cơ sở dữ liệu, bản sao lưu, kho ảnh, và '
-            + 'việc gửi email qua Amazon SES. Cloudflare (Hoa Kỳ, mạng máy '
-            + 'chủ toàn cầu) phân phối trang web và xử lý địa chỉ IP của '
-            + 'bạn. Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
+            + 'việc gửi email qua Amazon SES. Amazon CloudFront (mạng máy '
+            + 'chủ toàn cầu của Amazon Web Services) phân phối trang web và '
+            + 'xử lý địa chỉ IP của bạn. Cloudflare chỉ cung cấp dịch vụ DNS. '
+            + 'Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
             + 'tài khoản của bạn. Email bạn gửi cho chúng tôi được lưu '
             + 'trong hộp thư Google Workspace. Nếu bạn ở Việt Nam, dữ liệu '
             + 'cá nhân của bạn được chuyển ra nước ngoài: chủ yếu đến '
-            + 'Singapore, và một phần đến Cloudflare và Google.',
+            + 'Singapore, và một phần đến Google.',
             'Kiểm tra mật khẩu dùng dịch vụ Have I Been Pwned.',
           ],
         },
@@ -338,7 +339,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     },
   },
   en: {
-    updated: 'Last updated September 24, 2026',
+    updated: 'Last updated September 26, 2026',
     privacyLink: 'Privacy Policy',
     termsLink: 'Terms of Service',
     agreement: [
@@ -430,13 +431,13 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'keep its old web address reserved for 180 days so no one '
             + 'else can take over your link. The reservation is not linked '
             + 'to your account, and we delete it after the 180 days.',
-            'Public pages are delivered through a global CDN (Cloudflare), '
-            + 'which does not store copies of them. While a resume is '
-            + 'public, anyone who can see it can save or screenshot it. By '
-            + 'default, viewers can also download the resume\'s PDF; you '
-            + 'can turn this off. Avoid putting sensitive personal data, '
-            + 'such as ID numbers, health information, or religion, in a '
-            + 'public resume.',
+            'Public pages are delivered through a global CDN '
+            + '(Amazon CloudFront), which does not store copies of them. '
+            + 'While a resume is public, anyone who can see it can save '
+            + 'or screenshot it. By default, viewers can also download '
+            + 'the resume\'s PDF; you can turn this off. Avoid putting '
+            + 'sensitive personal data, such as ID numbers, health '
+            + 'information, or religion, in a public resume.',
           ],
         },
         {
@@ -444,13 +445,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'Your data is stored with Amazon Web Services in Singapore '
             + '(ap-southeast-1): the database, its backups, photo storage, '
-            + 'and email sending through Amazon SES. Cloudflare (United '
-            + 'States, global network) delivers the site and processes '
-            + 'your IP address. If you sign in with Google, Google (United '
+            + 'and email sending through Amazon SES. Amazon CloudFront '
+            + '(the global network of Amazon Web Services) delivers the '
+            + 'site and processes your IP address. Cloudflare only provides '
+            + 'DNS. If you sign in with Google, Google (United '
             + 'States) verifies your account. Emails you send us are kept '
             + 'in a Google Workspace mailbox. If you are in Vietnam, your '
             + 'personal data is transferred abroad: mainly to Singapore, '
-            + 'and in part to Cloudflare and Google.',
+            + 'and in part to Google.',
             'Password checks use Have I Been Pwned.',
           ],
         },
