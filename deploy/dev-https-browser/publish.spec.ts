@@ -407,13 +407,13 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     const acceptedPublish = await publishResponse;
     statuses.publish = acceptedPublish.status();
     expect(statuses.publish).toBe(200);
+    // The seal never appears on or over the rendered preview; the top bar's
+    // public mark takes the landing stamp (DESIGN.md).
     const publicMark = page.getByTestId("public-mark");
     const previewStamp = page.getByTestId("preview-stamp");
     stage("publish-marks-landing");
-    await Promise.all([
-      expect(publicMark).toHaveAttribute("data-stamp", "landing"),
-      expect(previewStamp).toHaveAttribute("data-stamp", "landing"),
-    ]);
+    await expect(publicMark).toHaveAttribute("data-stamp", "landing");
+    await expect(previewStamp).toHaveCount(0);
     await expect(dialog.getByRole("status")).toHaveText(
       "Đã xuất bản thành công.",
     );
@@ -426,10 +426,8 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     steps.headers = Object.values(headerPresence).slice(0, 5).every(Boolean);
 
     stage("publish-marks");
-    await Promise.all([
-      expect(publicMark).toBeVisible(),
-      expect(previewStamp).toBeVisible(),
-    ]);
+    await expect(publicMark).toBeVisible();
+    await expect(previewStamp).toHaveCount(0);
     stage("publish-marks-visible");
     const publicMarkLink = publicMark.locator("[data-public-link]");
     await expect(publicMarkLink).toHaveCount(1);
@@ -438,16 +436,18 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     stage("publish-mark-link-text");
     await expect(publicMarkLink).toHaveAttribute("href", `/${slug}`);
     stage("publish-mark-link");
-    await expect(previewStamp).toHaveAttribute(
+    // The open publish dialog hides the page behind it from the
+    // accessibility tree, so the seal query includes hidden elements.
+    await expect(
+      publicMark.getByRole("img", { includeHidden: true }),
+    ).toHaveAttribute(
       "aria-label",
-      `Public at aboutme.vn/${slug}`,
+      `Công khai tại aboutme.vn/${slug}`,
     );
     stage("publish-mark-label");
     stage("publish-marks-idle");
-    await Promise.all([
-      expect(publicMark).not.toHaveAttribute("data-stamp"),
-      expect(previewStamp).not.toHaveAttribute("data-stamp"),
-    ]);
+    await expect(publicMark).not.toHaveAttribute("data-stamp");
+    await expect(previewStamp).toHaveCount(0);
 
     const link = dialog.getByRole("link", {
       name: `aboutme.vn/${slug}`,

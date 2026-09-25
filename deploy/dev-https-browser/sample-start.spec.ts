@@ -22,6 +22,24 @@ const EVIDENCE_PATH = '/evidence/sample-start-proof.json';
 const SAMPLE_PATH = '/templates/engineer-compact';
 const NEXT_PATH = '/app/new?sample=engineer-compact&lng=en';
 const NEXT_LOGIN_PATH = `/login?next=${encodeURIComponent(NEXT_PATH)}`;
+// The engineer-compact sample (packages/schema/samples/engineer-compact.*.json).
+// Both languages keep the English headline (docs/design/vietnam-tech-resumes.md),
+// so the location, which each language spells its own way, tells the English
+// and Vietnamese samples apart.
+const SAMPLE_HEADLINE = 'Senior Frontend Engineer · React, TypeScript, Next.js';
+const ENGLISH_SAMPLE_LOCATION = 'Cau Giay, Hanoi';
+const VIETNAMESE_SAMPLE_LOCATION = 'Cầu Giấy, Hà Nội';
+
+// sampleLocation reads the location detail of a submitted sample document.
+function sampleLocation(document: {
+  personalDetails?: { details?: unknown };
+} | undefined): unknown {
+  const details = document?.personalDetails?.details;
+  if (!Array.isArray(details)) return undefined;
+  return (details as { type?: unknown; value?: unknown }[])
+    .find((detail) => detail.type === 'location')?.value;
+}
+
 // Mirrors RESUME_CAP in apps/web/app/composables/useResumeList.ts; the
 // browser proof runs isolated from the web app source.
 const RESUME_CAP = 3;
@@ -281,15 +299,16 @@ test('proves register-to-create from a gallery sample', async ({
   expect(englishBeforeTogglePayload).not.toBeNull();
   expect(created.request().postData()).toBe(englishBeforeTogglePayload);
   const submitted = created.request().postDataJSON() as {
-    document?: { personalDetails?: { headline?: unknown } };
+    document?: { personalDetails?: { headline?: unknown; details?: unknown } };
     lng?: unknown;
     title?: unknown;
   };
   expect(submitted.title).toBe('Sample Start Resume');
   expect(submitted.lng).toBe('en');
   expect(submitted.document?.personalDetails?.headline).toBe(
-    'Senior Backend Engineer · Go, Distributed Systems, Payments',
+    SAMPLE_HEADLINE,
   );
+  expect(sampleLocation(submitted.document)).toBe(ENGLISH_SAMPLE_LOCATION);
   const createdBody = (await created.json()) as { data?: { id?: unknown } };
   const resumeId = createdBody.data?.id;
   if (typeof resumeId !== 'string' || resumeId === '') {
@@ -308,7 +327,7 @@ test('proves register-to-create from a gallery sample', async ({
     .getByRole('button', { name: 'Personal details', exact: true })
     .click();
   await expect(verifyPage.getByLabel('Headline')).toHaveValue(
-    'Senior Backend Engineer · Go, Distributed Systems, Payments',
+    SAMPLE_HEADLINE,
   );
 
   // An authenticated user can begin the Vietnamese sample without changing
@@ -389,7 +408,7 @@ test('proves register-to-create from a gallery sample', async ({
   expect(vietnameseBeforeTogglePayload).not.toBeNull();
   expect(vietnameseCreated.request().postData()).toBe(vietnameseBeforeTogglePayload);
   const vietnameseSubmitted = vietnameseCreated.request().postDataJSON() as {
-    document?: { personalDetails?: { headline?: unknown } };
+    document?: { personalDetails?: { headline?: unknown; details?: unknown } };
     lng?: unknown;
     title?: unknown;
   };
@@ -398,7 +417,10 @@ test('proves register-to-create from a gallery sample', async ({
     title: 'Vietnamese Sample Start Resume',
   });
   expect(vietnameseSubmitted.document?.personalDetails?.headline).toBe(
-    'Kỹ sư Frontend cấp cao · React, TypeScript, hiệu năng web',
+    SAMPLE_HEADLINE,
+  );
+  expect(sampleLocation(vietnameseSubmitted.document)).toBe(
+    VIETNAMESE_SAMPLE_LOCATION,
   );
   const vietnameseCreatedBody = (await vietnameseCreated.json()) as {
     data?: { id?: unknown };

@@ -39,7 +39,9 @@ const secondFactor = mode === 'second-factor'
 // gets a much smaller one. Together with the stack restart between phases,
 // both fit inside the hosted job's own limit. mcp-sdk.spec.ts calls
 // test.setTimeout with its own handoff and step bounds once it runs; this
-// default only covers setup before that call.
+// default only covers setup before that call. The entry journey audits four
+// pages in both themes in one test, which took 22 to 30 seconds on hosted
+// runners, so it gets the multi-page budget too.
 const timeout = mode === 'totp'
   ? 1_800_000
   : mode === 'second-factor'
@@ -49,7 +51,8 @@ const timeout = mode === 'totp'
       ? 420_000
       : mode === 'editor' || mode === 'public' || mode === 'password-auth'
         || mode === 'mcp' || mode === 'publish' || mode === 'exports'
-        || mode === 'privacy' || mode === 'sample-start' ? 120_000 : 30_000;
+        || mode === 'privacy' || mode === 'sample-start' || mode === 'entry'
+        ? 120_000 : 30_000;
 
 // Both second-factor modes run one spec, and both TOTP modes run another.
 // The server enrollment flag, not the spec file, is what differs within
