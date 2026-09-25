@@ -244,11 +244,15 @@ starts.
    to the Elastic IP must fail.
 
 Maintenance mode keeps the normal Cloudflare proxy trust and origin-pull mTLS.
-Every apex path, including readiness and API paths, returns the same bilingual
-HTML with status 503, `Cache-Control: no-store`, and `Retry-After: 60`. The
-`www` host still redirects to the matching apex path. The page polls `/readyz`
-without caching, backs off from 10 to 60 seconds, and reloads only after a 200.
-Visitors without JavaScript refresh after 60 seconds.
+Every apex path, including readiness and API paths, returns the same page with
+status 503, `Cache-Control: no-store`, and `Retry-After: 60`. The `www` host
+still redirects to the matching apex path. The page carries the app's Aurora
+identity, in light or dark to match `prefers-color-scheme`, makes no external
+request, and shows Vietnamese by default, or the language the visitor's
+`aboutme-locale` cookie names (`vi` or `en`); a client-side VI/EN toggle
+switches language and writes that cookie. The page polls `/readyz` without
+caching, backs off from 10 to 60 seconds, and reloads only after a 200. Visitors
+without JavaScript refresh after 60 seconds.
 
 A failure before a migration request could have been accepted stops maintenance,
 restores the previous `app` revision, and restores the earlier job schedule
