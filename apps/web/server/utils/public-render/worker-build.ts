@@ -152,6 +152,3 @@ function buildValidator(
   );
   return output;
 }
-
-export const publicRenderWorkerOutput = (nitroOutputDir: string): string =>
-  resolve(nitroOutputDir, 'server/workers/public-render.mjs');

@@ -53,15 +53,9 @@ export type EditorShellCopy = {
   readonly conflictControl: (control: ConflictControlKind) => string;
   readonly previewLabel: string;
   readonly previewUnavailable: string;
-  readonly estimatedPages: string;
-  readonly estimatedPageCount: string;
   readonly pageCount: (count: number | null) => string;
   readonly photoLoading: string;
   readonly photoUnavailable: string;
-  readonly openPhotoPanel: string;
-  readonly previewZoom: string;
-  readonly fit: string;
-  readonly fullZoom: string;
   readonly previewMode: string;
   readonly previewModePdf: string;
   readonly previewModeWeb: string;
@@ -125,16 +119,10 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
       'Bản xem trước tạm thời không khả dụng.',
       'Bản chỉnh sửa của bạn vẫn an toàn.',
     ].join(' '),
-    estimatedPages: 'Số trang ước tính',
-    estimatedPageCount: 'Số trang ước tính',
     pageCount: (count) => count === 1 ? '1 trang' : `${count ?? '—'} trang`,
     photoLoading: 'Đang tải ảnh. Bản xem trước hiển thị không có ảnh.',
     photoUnavailable:
       'Không thể tải ảnh. Bản xem trước hiển thị không có ảnh.',
-    openPhotoPanel: 'Mở bảng ảnh',
-    previewZoom: 'Thu phóng bản xem trước',
-    fit: 'Vừa khung',
-    fullZoom: '100%',
     previewMode: 'Chế độ xem trước',
     previewModePdf: 'PDF',
     previewModeWeb: 'Web',
@@ -207,15 +195,9 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     previewLabel: 'Resume preview',
     previewUnavailable:
       'Preview is temporarily unavailable. Your edits are still safe.',
-    estimatedPages: 'Estimated pages',
-    estimatedPageCount: 'Estimated page count',
     pageCount: (count) => count === 1 ? '1 page' : `${count ?? '—'} pages`,
     photoLoading: 'Photo is loading. The preview is shown without it.',
     photoUnavailable: 'Photo unavailable. The preview is shown without it.',
-    openPhotoPanel: 'Open photo panel',
-    previewZoom: 'Preview zoom',
-    fit: 'Fit',
-    fullZoom: '100%',
     previewMode: 'Preview mode',
     previewModePdf: 'PDF',
     previewModeWeb: 'Web',

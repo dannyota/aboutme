@@ -10,10 +10,9 @@
 //      artifact and the contract is a separate, non-mutating gate —
 //      scripts/api-drift-check.sh, wired into `make api-check`.
 //   2. Runtime: a real openapi-fetch client, given an injected mock
-//      fetch, is driven through two representative paths (`GET /me`, the
-//      versioned auth surface, and `GET /healthz`, the deliberately
-//      UNversioned ops surface). Method, URL, success envelope decoding
-//      and error envelope decoding are all asserted against the response
+//      fetch, is driven through `GET /me`, the versioned auth surface.
+//      Method, URL, success envelope decoding and error envelope
+//      decoding are all asserted against the response
 //      examples read out of openapi.yaml itself — so a contract example
 //      the client cannot actually decode fails here.
 //   3. Compile-time: a throwaway .ts fixture is type-checked with the
@@ -34,9 +33,7 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
   API_BASE_PATH,
-  OPS_BASE_PATH,
   createApiClient,
-  createOpsClient,
 } from '../app/api/client';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -63,16 +60,6 @@ interface OpenApiDoc {
 }
 
 const doc = parse(readFileSync(openapiPath, 'utf8')) as OpenApiDoc;
-
-/**
- * The origin an operation is served from: the path item's own `servers`
- * override when it has one (`/healthz`, `/readyz`), else the document
- * server. Read from the contract rather than restated, so the client's
- * versioned/unversioned split is checked against openapi.yaml itself.
- */
-function serverUrl(path: string): string {
-  return doc.paths[path]?.servers?.[0]?.url ?? doc.servers[0].url;
-}
 
 /** The documented response example for one operation + status code. */
 function example(path: string, method: string, status: string): unknown {
@@ -190,31 +177,10 @@ describe('typed client (runtime contract)', () => {
     expect(error?.error?.message).toBe('a valid session is required');
   });
 
-  it('keeps /healthz off the versioned base path', async () => {
-    // Health is infrastructure, not product API: openapi.yaml overrides
-    // its server back to the bare root. The client split (ops vs api)
-    // carries that invariant, so no caller can accidentally probe
-    // /api/v1/healthz.
-    const opsOrigin = serverUrl('/healthz');
-    const { fetch, calls } = mockFetch(200, example('/healthz', 'get', '200'));
-    const ops = createOpsClient({ baseUrl: opsOrigin, fetch });
-
-    const { data } = await ops.GET('/healthz');
-
-    expect(calls[0].url).toBe(`${opsOrigin}/healthz`);
-    expect(calls[0].url).not.toContain('/api/v1');
-    expect(data).toEqual({ data: { status: 'ok' } });
-  });
-
-  it('defaults its base paths from the contract, not a literal', () => {
-    // Same-origin in dev/prod, so the defaults are the *paths* of the
-    // contract's servers: /api/v1 for product endpoints, root for ops.
+  it('defaults its base path from the contract, not a literal', () => {
+    // Same-origin in dev/prod, so the default is the *path* of the
+    // contract's server.
     expect(API_BASE_PATH).toBe(new URL(doc.servers[0].url).pathname);
-    // The ops override points at the bare root, so the ops client must
-    // prepend nothing at all.
-    expect(new URL(serverUrl('/readyz')).pathname).toBe('/');
-    expect(serverUrl('/readyz')).not.toBe(doc.servers[0].url);
-    expect(OPS_BASE_PATH).toBe('');
   });
 });
 
@@ -228,7 +194,7 @@ describe('typed client (runtime contract)', () => {
 function compileFixtureSource(): string {
   return [
     'import type { components, paths } from \'../app/api/generated/openapi\';',
-    'import { createApiClient, createOpsClient } from \'../app/api/client\';',
+    'import { createApiClient } from \'../app/api/client\';',
     '',
     '// The generated GET /me payloads, straight off the contract.',
     'type MeResponses = paths[\'/me\'][\'get\'][\'responses\'];',
@@ -258,9 +224,7 @@ function compileFixtureSource(): string {
     'void code;',
     '',
     'const api = createApiClient();',
-    'const ops = createOpsClient();',
     'void api.GET(\'/me\');',
-    'void ops.GET(\'/healthz\');',
     '',
     '// Every password request type is instantiable and closed.',
     'type P = components[\'schemas\'];',
@@ -306,10 +270,6 @@ function compileFixtureSource(): string {
     '// @ts-expect-error /healthz is not part of the versioned surface',
     'void api.GET(\'/healthz\');',
     '',
-    '// Negative: the ops client must NOT accept a versioned path.',
-    '// @ts-expect-error /me is not part of the unversioned ops surface',
-    'void ops.GET(\'/me\');',
-    '',
     '// Negative: a path that is not in the contract at all.',
     '// @ts-expect-error /not-a-real-path is not in openapi.yaml',
     'void api.GET(\'/not-a-real-path\');',
@@ -319,10 +279,10 @@ function compileFixtureSource(): string {
 
 describe('typed client (compile-time contract)', () => {
   it('type-checks the generated request/response contract (tsc)', () => {
-    // The three `@ts-expect-error` lines in the fixture are assertions in
-    // both directions: tsc fails here if any of them stops being an
-    // error, so this also proves the versioned/ops split is enforced and
-    // not merely documented.
+    // The two `@ts-expect-error` lines in the fixture are assertions: tsc
+    // fails here if either stops being an error, so this also proves the
+    // versioned client rejects the unversioned probes and not merely
+    // documents it.
     const fixturePath = join(here, 'api-client-contract.tmp.ts');
     writeFileSync(fixturePath, compileFixtureSource());
     let diagnostics = '';
