@@ -9,6 +9,7 @@ import vnFullSource from '../../../../../packages/schema/fixtures/vn-full.json';
 import type { components } from '../../api/generated/openapi';
 import PublicResumeApp from '../../components/public/PublicResumeApp.vue';
 import ResumeDocument from '../../components/resume/ResumeDocument.vue';
+import ScaledSheet from '../../components/resume/ScaledSheet.vue';
 import { applyTemplate } from '../../components/resume/applyTemplate';
 import type { RenderContext } from '../../components/resume/resolveRenderModel';
 import {
@@ -101,10 +102,9 @@ if (isCorpus) {
   if (requestedPrint !== undefined) {
     if (requestedPrint !== '1' || resolvedMode !== 'continuous') badQuery();
   }
-  // The paged preview's own CSS zoom (EditorPreview.vue's `.preview-sheet`)
-  // is set once, before the first render, and never toggled afterward: it
-  // must be requested the same way here, because PagedResume's pagination
-  // measurement does not settle cleanly if the zoom changes after the fact.
+  // The harness scales its paper with the same ScaledSheet component
+  // EditorPreview.vue uses for the paged preview, so a `zoom` query behaves
+  // like the editor's own display scale rather than CSS `zoom`.
   const requestedZoom = singleton('zoom');
   if (requestedZoom !== undefined) {
     if (resolvedMode !== 'paged' || !/^\d+(\.\d+)?$/u.test(requestedZoom)) {
@@ -247,9 +247,6 @@ const paperStyle = computed(() => {
   return {
     width: `${page.widthPx}px`,
     minHeight: `${page.heightPx}px`,
-    ...(requestedZoomValue === undefined
-      ? {}
-      : { zoom: requestedZoomValue }),
   };
 });
 
@@ -322,6 +319,27 @@ onMounted(async () => {
       home-href="https://aboutme.vn/"
       :public-resume="publicResume"
     />
+    <ScaledSheet
+      v-else-if="requestedZoomValue !== undefined"
+      :scale="requestedZoomValue"
+    >
+      <div
+        class="harness-paper"
+        :style="printMode ? undefined : paperStyle"
+      >
+        <ClientOnly v-if="mode === 'paged'">
+          <ResumeDocument
+            :document="resumeDocument"
+            :context="context"
+          />
+        </ClientOnly>
+        <ResumeDocument
+          v-else
+          :document="resumeDocument"
+          :context="context"
+        />
+      </div>
+    </ScaledSheet>
     <div
       v-else
       class="harness-paper"

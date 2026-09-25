@@ -302,7 +302,7 @@ describe('pageContentHeightPx', () => {
         marginXmm: 15,
         marginYmm: 15,
       },
-      1123 - (30 * pxPerMm),
+      (297 * pxPerMm) - (30 * pxPerMm),
     ],
     [
       'A4 explicit margin',
@@ -313,7 +313,7 @@ describe('pageContentHeightPx', () => {
         marginXmm: 9,
         marginYmm: 12,
       },
-      1123 - (24 * pxPerMm),
+      (297 * pxPerMm) - (24 * pxPerMm),
     ],
     [
       'Letter default margin',
@@ -387,9 +387,9 @@ describe('pageContentHeightPx', () => {
       {
         format: 'a4',
         widthPx: 794,
-        heightPx: 100,
+        heightPx: 1123,
         marginXmm: 15,
-        marginYmm: 20,
+        marginYmm: 150,
       },
     ],
   ])('rejects invalid geometry: %s', (_name, page) => {
