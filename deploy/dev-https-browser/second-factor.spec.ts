@@ -70,6 +70,7 @@ const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
 const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
 const PENDING_COOKIE = '__Host-auth-pending';
 const SESSION_COOKIE = '__Host-session';
+const LOCALE_COOKIE = 'aboutme-locale';
 const RECOVERY_INPUT = '#second-factor-recovery-code';
 const PHONE = { height: 844, width: 390 };
 const DESKTOP = { height: 900, width: 1440 };
@@ -741,7 +742,7 @@ async function setLocale(
   locale: 'en' | 'vi',
 ): Promise<void> {
   await context.addCookies([
-    { name: 'aboutme-locale', url: ORIGIN, value: locale },
+    { name: LOCALE_COOKIE, url: ORIGIN, value: locale },
   ]);
 }
 
@@ -975,11 +976,8 @@ async function passwordSignIn(
  * /app/settings/sessions while signed out logs unexpected 401s from the API
  * calls the settings page makes on the way to redirecting to /login. The
  * unsharded default always expects a session and still fails if there is
- * none, so a broken logout keeps failing an unsharded run. The logout
- * response sends `Clear-Site-Data: "cookies"`, which also drops the locale
- * cookie, so the next page would render in the Vietnamese default. English
- * is pinned again afterwards; a caller that wants another locale sets it
- * after this returns.
+ * none, so a broken logout keeps failing an unsharded run. A caller that
+ * wants another locale sets it after this returns.
  */
 async function signOut(page: Page): Promise<void> {
   await setLocale(page.context(), 'en');
@@ -988,7 +986,13 @@ async function signOut(page: Page): Promise<void> {
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
-  await setLocale(page.context(), 'en');
+  // The logout response's Clear-Site-Data drops every cookie. The app writes
+  // the language choice back before it leaves for /login, so English
+  // survives without the proof pinning it again.
+  await expect.poll(
+    () => cookieValue(page.context(), LOCALE_COOKIE),
+    { timeout: WAIT_RESPONSE_MS },
+  ).toBe('en');
 }
 
 /** Runs the pending passkey ceremony with the present virtual authenticator. */
