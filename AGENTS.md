@@ -60,7 +60,7 @@ Every session starts as the manager (`"agent": "manager"` in `.claude/settings.j
 - Branch CI and `main` CI differ; follow [GitHub CI](instructions/verification.md#github-ci) when running CI on a branch.
 - **Merge to `main` locally and push; no pull requests.** Delete a merged branch locally and on the remote.
 - **Bounded parallel work:** at most four workers across all managers and worktrees. Reading and editing may overlap; local check execution is globally serialized under [resource rules](instructions/resources.md). Do not spawn workers just to repeat verification.
-- **Build and verify in GitHub CI.** Do not repeat the CI gates locally before pushing. There is no hosted UAT until about 500 users; use an approved bounded local browser proof only for behavior CI cannot cover. The owner tests in production.
+- **Build and verify in GitHub CI.** Do not repeat the CI gates locally before pushing; review your diff carefully and run the static `make pre-push` check instead ([resources](instructions/resources.md)). There is no hosted UAT until about 500 users; use an approved bounded local browser proof only for behavior CI cannot cover. The owner tests in production.
 - Match review and checks to risk. Do not invent extra gates.
 
 ## Briefs and reports
