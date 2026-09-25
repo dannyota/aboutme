@@ -23,23 +23,40 @@ concurrency:
   cancel-in-progress: true
 
 # Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
-# job past that limit waits in the queue. This workflow starts exactly 20
-# jobs (7 single jobs, 2 web-e2e shards, 11 proof groups), each sized to
-# finish in about 4.5 minutes, then the ci gate. Short checks join a longer
-# job that already has their setup instead of paying for a runner of their
-# own. Each check after a job's first runs under `if: ${{ !cancelled() }}`
-# so one failure does not hide another.
+# job past that limit waits in the queue, including behind other branches'
+# runs. This workflow starts exactly 20 jobs (6 single jobs, 2 web-e2e
+# shards, 12 proof groups), each sized to finish in about 4 minutes, then
+# the ci gate. Short checks join a longer job that already has their setup
+# instead of paying for a runner of their own, and independent work inside a
+# job overlaps through scripts/ci-background.sh. Each check after a job's
+# first runs under `if: ${{ !cancelled() }}` so one failure does not hide
+# another.
 jobs:
-  # The append-only migration and released-schema guards, gitleaks, the
-  # schema/API/Tofu contract gates, and the docs and operational tests that
-  # need Node or nothing: the guards need full history (fetch-depth 0), which
-  # is harmless for the rest.
+  # Every check that needs no database, browser, or Go test run: the
+  # append-only migration and released-schema guards, gitleaks, the
+  # schema/API/Tofu contract gates, docs lint, the operational static tests,
+  # and `npm audit`. The guards need full history (fetch-depth 0), which is
+  # harmless for the rest. The dev-https static suite (two shards) and the
+  # deploy-script test run in the background beside the other steps.
+  # `npm audit` needs no install: every manifest ships a package-lock.json,
+  # and npm reads it directly. It fails on a high or critical advisory in a
+  # production dependency; --omit=dev drops devDependencies, which never
+  # ship.
   contracts:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # Started before Node is set up, in the environment the suite was
+      # written for.
+      - name: Start the dev-https static suite shards
+        run: |
+          for shard in 0 1; do
+            bash scripts/ci-background.sh start "dev-https-static-$shard" \
+              make operational-test-dev-https DEV_HTTPS_TEST_SHARD="$shard/2"
+          done
       - name: Reject modified or deleted migrations
         env:
           # Passed through the environment rather than interpolated directly
@@ -115,6 +132,10 @@ jobs:
             package-lock.json
             apps/web/package-lock.json
             packages/schema/package-lock.json
+            deploy/dev-https-browser/package-lock.json
+      - if: ${{ !cancelled() }}
+        name: Start the deploy-script static tests
+        run: bash scripts/ci-background.sh start deploy-tests make operational-test-deploy
       - if: ${{ !cancelled() }}
         id: go
         uses: ./.github/actions/setup-go
@@ -162,37 +183,6 @@ jobs:
             tofu -chdir="$root" init -backend=false -input=false >/dev/null
             tofu -chdir="$root" validate
           done
-      - uses: ./.github/actions/save-go-cache
-        with:
-          cache-hit: ${{ steps.go.outputs.cache-hit }}
-          cache-key: ${{ steps.go.outputs.cache-key }}
-          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
-
-  # The dev-https static safety suite (as two shards in the background),
-  # the deploy-script, browser-image, and MCP owner-workflow static tests,
-  # and `npm audit` against each lockfile alone. The dev-https shards start
-  # before Node is set up, in the environment the suite was written for.
-  # `npm audit` needs no install: every manifest ships a package-lock.json,
-  # and npm reads it directly. It fails on a high or critical advisory in a
-  # production dependency; --omit=dev drops devDependencies, which never
-  # ship.
-  static-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Start the dev-https static suite shards
-        run: |
-          for shard in 0 1; do
-            bash scripts/ci-background.sh start "dev-https-static-$shard" \
-              make operational-test-dev-https DEV_HTTPS_TEST_SHARD="$shard/2"
-          done
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-          cache: npm
-          cache-dependency-path: deploy/dev-https-browser/package-lock.json
-      - run: make operational-test-deploy
       - if: ${{ !cancelled() }}
         run: npm ci
         working-directory: deploy/dev-https-browser
@@ -214,11 +204,19 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
         working-directory: deploy/dev-https-browser
       - if: ${{ !cancelled() }}
+        name: Wait for the deploy-script static tests
+        run: bash scripts/ci-background.sh wait deploy-tests
+      - if: ${{ !cancelled() }}
         name: Wait for dev-https static suite shard 0
         run: bash scripts/ci-background.sh wait dev-https-static-0
       - if: ${{ !cancelled() }}
         name: Wait for dev-https static suite shard 1
         run: bash scripts/ci-background.sh wait dev-https-static-1
+      - uses: ./.github/actions/save-go-cache
+        with:
+          cache-hit: ${{ steps.go.outputs.cache-hit }}
+          cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
 
   # The Go build/vet/test/lint gate, the sqlc-drift and route-table gates,
   # govulncheck, and the media package's slow normalization corpus test,
@@ -537,24 +535,26 @@ jobs:
         include:
           - group: totp-replay-concurrent
             proofs: totp:replay-concurrent
+          - group: passkey-primary
+            proofs: passkey:primary-disabled
           - group: totp-locale
             proofs: totp:locale-attempts
-          - group: totp-replace
-            proofs: totp:replace-recovery
           - group: totp-skew
             proofs: totp:skew
-          - group: passkey-primary
-            proofs: passkey:primary-disabled auth
           - group: totp-epoch
-            proofs: totp:epoch-disabled transport
+            proofs: totp:epoch-disabled
+          - group: totp-replace
+            proofs: totp:replace-recovery
           - group: totp-primary
-            proofs: totp:primary password
+            proofs: totp:primary auth
           - group: passkey-recovery
-            proofs: passkey:recovery-attempts public exports
+            proofs: passkey:recovery-attempts password
           - group: editor
-            proofs: editor privacy
+            proofs: editor exports
           - group: entry
             proofs: entry publish
+          - group: privacy
+            proofs: privacy public transport
           - group: mcp
             proofs: mcp mcp-sdk sample-start
     steps:
@@ -643,7 +643,6 @@ jobs:
     if: always()
     needs:
       - contracts
-      - static-tests
       - server
       - server-integration
       - server-resumeapi
