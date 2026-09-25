@@ -221,8 +221,18 @@ shell, the page heading, and the breadcrumb. Its URL stays `/templates`.
 
 `/templates` opens with a header on the `--surface-blue` tint with a border and
 the 20 px feature radius, holding the h1 and a one-line lead. The page lists all
-20 templates: the five with a sample first, then the rest by English preset
-name. The surrounding copy, purpose, and sample tag follow the site language.
+20 templates: the nine tech role samples first, in role chip order, then the
+other four templates with a sample, then the rest by English preset name. The
+surrounding copy, purpose, and sample tag follow the site language.
+
+A role chip row comes first: All roles, then Backend, Frontend, Mobile,
+DevOps/SRE, Data/AI, QA/Tester, Fresher/Intern, BrSE, and Security (Bảo mật in
+Vietnamese). One toggle group, one tab stop: arrow keys move focus, Enter or
+Space selects, and the pressed chip gets `aria-pressed="true"` and the active
+chip look. Each role shows the template whose sample is for that role. The
+choice is kept in the URL (`?role=backend`) and combines with the filter chips.
+Filtered-out cards stay in the HTML, hidden, so the server-rendered page always
+lists every template. The row scrolls sideways like the filter row.
 
 Filter chips are 36 px pills on the card color with a border. All comes first
 with the template count. Format chips (With a sample, ATS-friendly, One page,
