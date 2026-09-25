@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * `ReauthPrompt` — asks the signed-in user to prove it is them again before a
+ * `ReauthPrompt` asks the signed-in user to prove it is them again before a
  * sensitive account change: the current password, or a round trip through one
  * of their linked providers.
  *
