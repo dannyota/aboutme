@@ -182,10 +182,15 @@ export async function denyExternalRequests(page: Page): Promise<string[]> {
 // gallery.spec.ts share it so their chrome captures use one tolerance.
 export const CHROME_PIXEL_TOLERANCE = 400;
 
+// A loaded image is not yet a painted one: `complete` turns true when the
+// bytes arrive, and an image marked `decoding="async"` (the library cards)
+// may still be left out of the next frames until its decode finishes.
+// decode() resolves only once the image is ready to paint, so every image
+// waits for it, loaded or not.
 export async function waitForImages(page: Page): Promise<void> {
   await page.locator('img').evaluateAll(async (images) => {
     await Promise.all(images.map(async (image) => {
-      if (!image.complete || image.naturalWidth === 0) await image.decode();
+      await image.decode();
       if (!image.complete || image.naturalWidth === 0) {
         throw new Error(`Image did not decode: ${image.currentSrc}`);
       }

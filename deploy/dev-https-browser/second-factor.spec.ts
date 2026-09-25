@@ -1845,6 +1845,11 @@ test('proves disabled passkey enrollment answers as an unregistered route',
       await expect(page.getByTestId('second-factor-settings'))
         .toContainText('Chưa có passkey nào.');
       await expect(page.getByTestId('passkey-add')).toHaveCount(0);
+      // The header shows the signed-out account links until its own /me read
+      // settles, and this block's text can arrive first. Those links are
+      // wider than the phone width in Vietnamese, so the width is measured
+      // on the signed-in header.
+      await expect(page.getByTestId('account-menu')).toBeVisible();
       expect(await page.evaluate(() =>
         document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await setLocale(context, 'en');
