@@ -449,13 +449,19 @@ restore() {
   fi
   if ((migration_may_be_applied)); then
     # Maintenance has run since before the migration. It is confirmed (or
-    # started again) first, so port 443 keeps a listener, and only then is a
-    # new app that may have started beside it without proving healthy
-    # stopped.
-    say "a migration may have been applied; app and job schedules stay stopped"
+    # started again) first; only a confirmed maintenance page lets restore()
+    # stop a new app that may have started beside it without proving
+    # healthy. That app runs the migrated schema, so when maintenance cannot
+    # be confirmed it is left running rather than leaving port 443 dark.
+    say "a migration may have been applied; job schedules stay stopped"
     say "the previous release is not proven against the migrated schema: fix forward, or restore the snapshot"
     say "leaving the maintenance page up so the site answers 503 instead of nothing"
-    maintenance_up || say "could not confirm that the maintenance page runs; check both services before retrying"
+    if ! maintenance_up; then
+      say "could not confirm that the maintenance page runs; check both services before retrying"
+      ((!app_start_requested)) ||
+        say "the new app stays as it is so port 443 keeps a listener; check aboutme-prod-app by hand"
+      return
+    fi
     if ((app_start_requested)); then
       say "failed while the new app was starting; its health was never confirmed; scaling it back to 0"
       app_down || say "could not confirm that the new app stopped; check aboutme-prod-app before retrying"
@@ -465,7 +471,11 @@ restore() {
   if ((first)); then
     say "failed on the first deploy; there is no previous release to restore"
     say "leaving the maintenance page up so the site answers 503 instead of nothing"
-    maintenance_up || say "could not confirm that the maintenance page runs; check both services before retrying"
+    if ! maintenance_up; then
+      say "could not confirm that the maintenance page runs; the app stays as it is so port 443 keeps a listener"
+      say "check aboutme-prod-app and aboutme-prod-maintenance by hand before retrying"
+      return
+    fi
     app_down || say "could not confirm that the app stopped; check aboutme-prod-app before retrying"
     return
   fi
@@ -488,9 +498,19 @@ restore() {
   # The previous app starts (or is confirmed, if it never stopped) beside
   # maintenance, and maintenance stops only after that, so port 443 always
   # has a listener.
+  # A previous app that cannot be confirmed may be unhealthy, so it is not
+  # left serving part of the traffic beside maintenance: once maintenance is
+  # confirmed, the app is scaled back to 0. If maintenance cannot be
+  # confirmed either, the app stays at its count as the only possible
+  # listener.
   if ! app_up "$previous_app"; then
-    say "could not confirm that the previous app started; keeping the maintenance page up"
-    maintenance_up || say "could not confirm that the maintenance page runs; check both services before retrying"
+    say "could not confirm that the previous app started"
+    if maintenance_up; then
+      say "the maintenance page stays up; scaling the unconfirmed app back to 0"
+      app_down || say "could not confirm that the app stopped; check aboutme-prod-app before retrying"
+    else
+      say "could not confirm that the maintenance page runs either; both services stay as they are; check them by hand"
+    fi
     return 1
   fi
   local failed=0

@@ -118,6 +118,10 @@ before "$f" "scheduler update-schedule" "$stop_app"
 before "$f" "$stop_app" "--started-by deploy-migrate"
 before "$f" "--started-by deploy-migrate" "$app_point"
 before "$f" "$start_web" "$app_point"
+# The app is pointed at the new revision before it is scaled up: a combined
+# point-and-scale call from a stop would risk starting a task of the previous
+# revision first (handoff.sh's start_service).
+before "$f" "$app_point" "$app_up1"
 # Both Caddy services use host networking with no ECS port mapping and bind
 # 443 with SO_REUSEPORT (docs/design/single-host-production.md, "Deploy"), so
 # each handoff starts the incoming service, beside the outgoing one, and
@@ -615,6 +619,20 @@ absent "$f" "$prev_app_up"
 grep -qF -- "$up_maintenance" "$f" || { echo "first_db_setup_fails: maintenance page not left up" >&2; exit 1; }
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_db_setup_fails: schedules must stay disabled" >&2; exit 1; }
 
+# The first-deploy variant of the same gating: db-setup fails before any
+# migration risk, so restore() takes its first-deploy branch; there,
+# restore()'s own maintenance_up cannot be confirmed either, so the app is
+# left as it is (never scaled to 0) rather than risk port 443 with no
+# listener at all.
+run_case restore_first_maint_fails fail v0.1.0 --first-deploy
+f=$work/restore_first_maint_fails.calls
+absent "$f" "deploy-migrate"
+[[ $(count "$f" "$stop_app") == 1 ]] ||
+  { echo "restore_first_maint_fails: the app was scaled to 0 after the failed restart" >&2; exit 1; }
+grep -qF "the app stays as it is so port 443 keeps a listener" \
+  "$work/restore_first_maint_fails.out" ||
+  { echo "restore_first_maint_fails: no keeps-a-listener message" >&2; exit 1; }
+
 run_case runtask_fails fail v0.1.0
 f=$work/runtask_fails.calls
 # A lost RunTask response does not prove the migration failed to start. Keep
@@ -666,6 +684,21 @@ restore_stop=$(nth "$f" "$stop_app" 2)
 [[ -n $restore_maint && -n $restore_stop && $restore_maint -lt $restore_stop ]] ||
   { echo "app_start_update_fails: restore-time maintenance start did not precede the app stop" >&2; exit 1; }
 
+# Same failure, but restore()'s own maintenance_up cannot be confirmed either:
+# the new app that may have started beside it runs the migrated schema, so it
+# is left as it is (never scaled to 0) rather than risk leaving port 443 with
+# no listener.
+run_case restore_migration_maint_fails fail v0.1.0
+f=$work/restore_migration_maint_fails.calls
+[[ $(count "$f" "$stop_app") == 1 ]] ||
+  { echo "restore_migration_maint_fails: the new app was scaled to 0 after its own start" >&2; exit 1; }
+grep -qF "could not confirm that the maintenance page runs; check both services before retrying" \
+  "$work/restore_migration_maint_fails.out" ||
+  { echo "restore_migration_maint_fails: no maintenance warning" >&2; exit 1; }
+grep -qF "the new app stays as it is so port 443 keeps a listener; check aboutme-prod-app by hand" \
+  "$work/restore_migration_maint_fails.out" ||
+  { echo "restore_migration_maint_fails: no keeps-a-listener message" >&2; exit 1; }
+
 # If maintenance cannot be confirmed stopped once the new app is healthy, do
 # not leave it looking like recovery is still needed: the app stays up and the
 # gap is named for an operator, but the app is never touched again.
@@ -706,6 +739,8 @@ before "$f" "ssm describe-parameters" "ecs register-task-definition"
 # A rollback still starts each incoming service beside the outgoing one.
 before "$f" "$maint_up1" "$stop_app"
 before "$f" "$app_up1" "$down_maintenance"
+# Same point-before-scale ordering as the forward deploy above.
+before "$f" "$app_point" "$app_up1"
 
 # A rollback runs through the same fence-aware script and is rejected the
 # same way a forward deploy is when the target is below the fence minimum.
@@ -758,6 +793,35 @@ grep -q "could not confirm that maintenance stopped; scale aboutme-prod-maintena
 absent "$f" "deploy-migrate"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] ||
   { echo "maint_up_fails: schedules were not disabled and re-enabled" >&2; exit 1; }
+
+# The maintenance smoke check fails before any migration risk, so restore()
+# takes its previous-release branch; there, restoring the previous app itself
+# cannot be confirmed (its task still names a revision confirm_running never
+# expects). Once maintenance is confirmed, the unconfirmed app is scaled back
+# to 0 rather than left running beside a confirmed maintenance page.
+run_case restore_prev_confirm_fails fail v0.1.0
+f=$work/restore_prev_confirm_fails.calls
+[[ $(count "$f" "$stop_app") == 2 ]] ||
+  { echo "restore_prev_confirm_fails: the unconfirmed previous app was not scaled to 0" >&2; exit 1; }
+second_stop=$(nth "$f" "$stop_app" 2)
+up1_line=$(line "$f" "$app_up1")
+[[ -n $second_stop && -n $up1_line && $up1_line -lt $second_stop ]] ||
+  { echo "restore_prev_confirm_fails: the app was scaled to 0 before its own restart attempt" >&2; exit 1; }
+absent "$f" "$down_maintenance"
+grep -qF "the maintenance page stays up; scaling the unconfirmed app back to 0" \
+  "$work/restore_prev_confirm_fails.out" ||
+  { echo "restore_prev_confirm_fails: no scale-back message" >&2; exit 1; }
+
+# Same as above, but maintenance_up also cannot be confirmed in restore(): with
+# no confirmed maintenance page, the unconfirmed app is left as the only
+# possible listener on port 443 rather than scaled to 0.
+run_case restore_prev_and_maint_fail fail v0.1.0
+f=$work/restore_prev_and_maint_fail.calls
+[[ $(count "$f" "$stop_app") == 1 ]] ||
+  { echo "restore_prev_and_maint_fail: the app was scaled to 0 with no confirmed maintenance page" >&2; exit 1; }
+grep -qF "could not confirm that the maintenance page runs either; both services stay as they are; check them by hand" \
+  "$work/restore_prev_and_maint_fail.out" ||
+  { echo "restore_prev_and_maint_fail: no both-services-stay message" >&2; exit 1; }
 
 # confirm_running rejects a task of the wrong revision: the app was pointed at
 # the new release and scaled up, but the running task still names the
