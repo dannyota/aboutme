@@ -31,6 +31,7 @@ const coveredSources = [
   'components/settings/ConnectedAgents.vue',
   'components/settings/LinkedIdentities.vue',
   'components/settings/PrivacySettings.vue',
+  'components/settings/ReauthPrompt.vue',
   'pages/app/settings/sessions.vue',
   'pages/authorize.vue',
 ];

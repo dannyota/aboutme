@@ -13,7 +13,7 @@
 import ConfirmDialog from '../app/ConfirmDialog.vue';
 import LocaleToggle from '../app/LocaleToggle.vue';
 import StatusBanner from '../app/StatusBanner.vue';
-import PasswordField from '../auth/PasswordField.vue';
+import ReauthPrompt from './ReauthPrompt.vue';
 import { Button } from '../ui/button';
 import type { LinkedIdentityActions } from '../../composables/identitySettings';
 import type { AuthIdentity, AuthProvider } from '../../composables/useAuth';
@@ -241,70 +241,25 @@ async function startProviderReauth(provider: AuthProvider): Promise<void> {
       </li>
     </ul>
 
-    <form
-      v-if="mode === 'reauth-password'"
-      class="grid gap-4"
-      data-testid="unlink-reauth-password"
-      novalidate
-      @submit.prevent="submitPasswordReauth"
-    >
-      <p>
-        {{ copy.passwordReauthDescription(targetName) }}
-      </p>
-      <PasswordField
-        id="unlink-current-password"
-        v-model="currentPassword"
-        autocomplete="current-password"
-        :label="copy.currentPassword"
-        :locale="locale"
-      />
-      <div class="flex gap-2">
-        <Button
-          :disabled="pending"
-          type="submit"
-          variant="secondary"
-        >
-          {{ pending ? copy.checking : copy.continue }}
-        </Button>
-        <Button
-          :disabled="pending"
-          type="button"
-          variant="ghost"
-          @click="cancel"
-        >
-          {{ copy.cancel }}
-        </Button>
-      </div>
-    </form>
-
-    <div
-      v-else-if="mode === 'reauth-provider'"
-      class="grid gap-3"
-      data-testid="unlink-reauth-provider"
-    >
-      <p>
-        {{ copy.providerReauthDescription(targetName) }}
-      </p>
-      <div class="flex flex-wrap gap-2">
-        <Button
-          v-for="provider in reauthProviders"
-          :key="provider"
-          :disabled="pending"
-          type="button"
-          @click="startProviderReauth(provider)"
-        >
-          {{ copy.continueWith(providerNames[provider]) }}
-        </Button>
-        <Button
-          :disabled="pending"
-          type="button"
-          variant="ghost"
-          @click="cancel"
-        >
-          {{ copy.cancel }}
-        </Button>
-      </div>
-    </div>
+    <ReauthPrompt
+      v-if="mode === 'reauth-password' || mode === 'reauth-provider'"
+      v-model="currentPassword"
+      :mode="mode === 'reauth-password' ? 'password' : 'provider'"
+      :providers="reauthProviders"
+      :provider-label="(provider) => copy.continueWith(providerNames[provider])"
+      :pending="pending"
+      :locale="locale"
+      password-id="unlink-current-password"
+      :labels="copy"
+      :password-description="copy.passwordReauthDescription(targetName)"
+      :provider-description="copy.providerReauthDescription(targetName)"
+      lock-cancel
+      form-testid="unlink-reauth-password"
+      provider-testid="unlink-reauth-provider"
+      @submit-password="submitPasswordReauth"
+      @provider="startProviderReauth"
+      @cancel="cancel"
+    />
 
     <ConfirmDialog
       :busy="pending"

@@ -19,7 +19,7 @@ import ConfirmDialog from '../app/ConfirmDialog.vue';
 import EmptyState from '../app/EmptyState.vue';
 import LoadingState from '../app/LoadingState.vue';
 import StatusBanner from '../app/StatusBanner.vue';
-import PasswordField from '../auth/PasswordField.vue';
+import ReauthPrompt from './ReauthPrompt.vue';
 import TotpSettings from './TotpSettings.vue';
 import { Button } from '../ui/button';
 import {
@@ -371,85 +371,42 @@ function formatTimestamp(value: string): string {
       testid="second-factor-loading"
     />
 
-    <template v-else-if="reauthMode !== null">
-      <form
-        v-if="reauthMode === 'password'"
-        data-testid="second-factor-reauth-password"
-        class="grid gap-4"
-        novalidate
-        @submit.prevent="submitReauthPassword"
+    <ReauthPrompt
+      v-else-if="reauthMode !== null"
+      v-model="currentPassword"
+      :mode="reauthMode"
+      :providers="providers"
+      :provider-label="(provider) =>
+        copy.continueWithProvider(providerNames[provider])"
+      :pending="reauthPending"
+      :locale="locale"
+      password-id="second-factor-reauth-password"
+      :labels="{
+        currentPassword: copy.currentPassword,
+        continue: copy.continueLabel,
+        checking: copy.checking,
+        cancel: copy.cancel,
+      }"
+      :password-description="copy.reauthPasswordDescription"
+      :provider-description="copy.reauthProviderDescription"
+      form-testid="second-factor-reauth-password"
+      provider-testid="second-factor-reauth-provider"
+      submit-testid="second-factor-reauth-submit"
+      cancel-testid="second-factor-reauth-cancel"
+      provider-button-testid="second-factor-reauth-provider-"
+      @submit-password="submitReauthPassword"
+      @provider="submitReauthProvider"
+      @cancel="cancelReauth"
+    >
+      <StatusBanner
+        v-if="reauthErrorKind"
+        kind="error"
+        testid="second-factor-reauth-error"
+        focus-on-mount
       >
-        <p>{{ copy.reauthPasswordDescription }}</p>
-        <StatusBanner
-          v-if="reauthErrorKind"
-          kind="error"
-          testid="second-factor-reauth-error"
-          focus-on-mount
-        >
-          {{ copy.errors[reauthErrorKind] }}
-        </StatusBanner>
-        <PasswordField
-          id="second-factor-reauth-password"
-          v-model="currentPassword"
-          autocomplete="current-password"
-          :label="copy.currentPassword"
-          :locale="locale"
-        />
-        <div class="flex gap-2">
-          <Button
-            data-testid="second-factor-reauth-submit"
-            :disabled="reauthPending"
-            type="submit"
-            variant="secondary"
-          >
-            {{ reauthPending ? copy.checking : copy.continueLabel }}
-          </Button>
-          <Button
-            data-testid="second-factor-reauth-cancel"
-            type="button"
-            variant="ghost"
-            @click="cancelReauth"
-          >
-            {{ copy.cancel }}
-          </Button>
-        </div>
-      </form>
-      <div
-        v-else
-        class="grid gap-3"
-        data-testid="second-factor-reauth-provider"
-      >
-        <p>{{ copy.reauthProviderDescription }}</p>
-        <StatusBanner
-          v-if="reauthErrorKind"
-          kind="error"
-          testid="second-factor-reauth-error"
-          focus-on-mount
-        >
-          {{ copy.errors[reauthErrorKind] }}
-        </StatusBanner>
-        <div class="flex flex-wrap gap-2">
-          <Button
-            v-for="provider in providers"
-            :key="provider"
-            :data-testid="`second-factor-reauth-provider-${provider}`"
-            :disabled="reauthPending"
-            type="button"
-            @click="submitReauthProvider(provider)"
-          >
-            {{ copy.continueWithProvider(providerNames[provider]) }}
-          </Button>
-          <Button
-            data-testid="second-factor-reauth-cancel"
-            type="button"
-            variant="ghost"
-            @click="cancelReauth"
-          >
-            {{ copy.cancel }}
-          </Button>
-        </div>
-      </div>
-    </template>
+        {{ copy.errors[reauthErrorKind] }}
+      </StatusBanner>
+    </ReauthPrompt>
 
     <template v-else>
       <EmptyState
