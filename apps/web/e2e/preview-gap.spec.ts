@@ -1017,16 +1017,13 @@ for (const { templateId, lng } of SAMPLES) {
           }
           // The sheet is scaled for display with a transform, so the layout
           // is the same at every scale (docs/design/templates/print.md §1).
+          const scaled = JSON.stringify(result.counts);
+          const full = JSON.stringify(fullScale?.counts ?? result.counts);
           if (zoomLabel === 'full') {
             fullScale = result;
-          } else if (
-            fullScale !== undefined
-            && JSON.stringify(result.counts)
-              !== JSON.stringify(fullScale.counts)
-          ) {
+          } else if (scaled !== full) {
             throw new Error(
-              `${zoomLabel} scale drifts ${JSON.stringify(result.counts)}, `
-              + `full scale ${JSON.stringify(fullScale.counts)}`,
+              `${zoomLabel} scale drifts ${scaled}, full scale ${full}`,
             );
           }
         } catch (error) {
