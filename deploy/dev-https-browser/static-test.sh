@@ -35,6 +35,9 @@ readonly -a SPEC_FILES=(
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
+  second-factor-lib.ts
+  second-factor-pages.ts
+  proof-shards.mjs
 )
 for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
   "${SPEC_FILES[@]}"; do
@@ -139,7 +142,7 @@ build)
   grep -Fq '"@playwright/test": "1.62.1"' "$context/package-lock.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package.json"
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
-  ! grep -Eq '\.spec\.ts|network-policy\.ts|editor-fixtures\.ts|harness-lib\.ts|playwright\.config\.ts' \
+  ! grep -Eq '\.spec\.ts|network-policy\.ts|editor-fixtures\.ts|harness-lib\.ts|second-factor-(lib|pages)\.ts|proof-shards\.mjs|playwright\.config\.ts' \
     "$context/Dockerfile"
   grep -Fq 'COPY run.sh verify-evidence.mjs' "$context/Dockerfile"
   [ -f "$context/verify-evidence.mjs" ] && [ ! -L "$context/verify-evidence.mjs" ]
@@ -539,8 +542,12 @@ fi
 # The runner prints only the last stage line and withholds every other byte,
 # so the second-factor proof puts its whole diagnosis on that one line. Keep
 # it assembled from fixed words: no message, URL, body, or account value, and
-# nothing outside the vocabulary the runner's own grep accepts.
-readonly SECOND_FACTOR_SPEC=$SOURCE/second-factor.spec.ts
+# nothing outside the vocabulary the runner's own grep accepts. The proof
+# keeps its harness and page journeys in two modules it shares with the TOTP
+# proof, so these checks read the spec and both modules as one source.
+readonly SECOND_FACTOR_SPEC=$WORK/second-factor-sources.ts
+cat -- "$SOURCE/second-factor.spec.ts" "$SOURCE/second-factor-lib.ts" \
+  "$SOURCE/second-factor-pages.ts" >"$SECOND_FACTOR_SPEC"
 [ "$(grep -c 'console\.log(' "$SECOND_FACTOR_SPEC")" = 4 ] ||
   fail 'second-factor proof does not print exactly its four fixed lines'
 while IFS= read -r template; do
@@ -632,7 +639,8 @@ grep -Fq 'await gotoFirstVisit(page, `${ORIGIN}/reset-password#token=${resetToke
 # Neither page that takes its token from the URL fragment may be warmed
 # without one: each decides its own failure state during setup, on the client
 # only, so a tokenless visit cannot match the server render.
-warm_table=$(sed -n '/^const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")
+warm_table=$(sed -n '/^export const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")
+[ -n "$warm_table" ] || fail 'could not find the warm route table'
 if grep -qE "^  \['/(verify-email|reset-password)', " <<<"$warm_table"; then
   fail 'a tokenless fragment page is warmed again'
 fi
@@ -640,7 +648,7 @@ fi
 # A page that needs a session is warmed with one, not signed out.
 grep -Fq 'const SIGNED_IN_WARM_ROUTES' "$SECOND_FACTOR_SPEC" ||
   fail 'the signed-in warm pass is gone'
-if grep -qE "^  \['/app/[a-z/-]*', '[a-z0-9-]+'\],$" <<<"$(sed -n '/^const WARM_ROUTES/,/^\];$/p' "$SECOND_FACTOR_SPEC")"; then
+if grep -qE "^  \['/app/[a-z/-]*', '[a-z0-9-]+'\],$" <<<"$warm_table"; then
   fail 'an app page is warmed while signed out'
 fi
 # The landing of a sign-in or a completion is named from that closed set, not
@@ -2014,59 +2022,57 @@ grep -Fxq 'MODE=totp-disabled' "$BROWSER_LOG" ||
 [ -f "$INSIDE_EVIDENCE/totp-enrollment-disabled-proof.json" ] ||
   fail 'totp-disabled evidence filename drifted'
 
-# totp.spec.ts and check-totp-shard-coverage.mjs each keep their own copy of
-# the shard-to-role map (totp.spec.ts "Enabled-proof sharding"); a shard
-# added to one and not the other would let the coverage job pass without
-# proving it.
-spec_shard_roles=$(sed -n '/^const TOTP_SHARD_ROLES/,/^};/p' "$SOURCE/totp.spec.ts" \
-  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
-coverage_shard_roles=$(sed -n '/^const TOTP_SHARD_ROLES/,/^};/p' \
-  "$SOURCE/check-totp-shard-coverage.mjs" \
-  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
-[ -n "$spec_shard_roles" ] || fail 'could not find TOTP_SHARD_ROLES in totp.spec.ts'
-[ -n "$coverage_shard_roles" ] ||
-  fail 'could not find TOTP_SHARD_ROLES in check-totp-shard-coverage.mjs'
-[ "$spec_shard_roles" = "$coverage_shard_roles" ] ||
-  fail 'totp.spec.ts and check-totp-shard-coverage.mjs disagree on TOTP_SHARD_ROLES'
+# The shard maps live once, in proof-shards.mjs, and the step lists once, in
+# verify-evidence.mjs. The specs and the coverage check import them, so a
+# shard or step added in one place reaches every side.
+for spec in totp.spec.ts second-factor.spec.ts; do
+  grep -Fq "from './proof-shards.mjs';" "$SOURCE/$spec" ||
+    fail "$spec does not take its shard map from proof-shards.mjs"
+  if grep -Eq '^const (TOTP|PASSKEY)_SHARD_ROLES' "$SOURCE/$spec"; then
+    fail "$spec keeps its own copy of a shard map"
+  fi
+done
+readonly COVERAGE=$SOURCE/check-shard-coverage.mjs
+grep -Fq "from './proof-shards.mjs';" "$COVERAGE" &&
+  grep -Fq "from './verify-evidence.mjs';" "$COVERAGE" ||
+  fail 'the coverage check does not import the shared shard and step lists'
+if grep -Eq '^const (TOTP|PASSKEY)_(STEP_NAMES|SHARD_ROLES)' "$COVERAGE"; then
+  fail 'the coverage check keeps its own copy of a shard or step list'
+fi
 
-# second-factor.spec.ts and check-passkey-shard-coverage.mjs each keep their
-# own copy of the shard-to-role map (second-factor.spec.ts "Enabled-proof
-# sharding"); a shard added to one and not the other would let the coverage
-# job pass without proving it.
-passkey_spec_shard_roles=$(sed -n '/^const PASSKEY_SHARD_ROLES/,/^};/p' \
-  "$SOURCE/second-factor.spec.ts" \
-  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
-passkey_coverage_shard_roles=$(sed -n '/^const PASSKEY_SHARD_ROLES/,/^};/p' \
-  "$SOURCE/check-passkey-shard-coverage.mjs" \
-  | grep -E "^ *'[a-z-]+': \[" | tr -d '[:space:]')
-[ -n "$passkey_spec_shard_roles" ] ||
-  fail 'could not find PASSKEY_SHARD_ROLES in second-factor.spec.ts'
-[ -n "$passkey_coverage_shard_roles" ] ||
-  fail 'could not find PASSKEY_SHARD_ROLES in check-passkey-shard-coverage.mjs'
-[ "$passkey_spec_shard_roles" = "$passkey_coverage_shard_roles" ] ||
-  fail 'second-factor.spec.ts and check-passkey-shard-coverage.mjs disagree on PASSKEY_SHARD_ROLES'
-
-# verify-evidence.mjs and each coverage script keep their own copy of the
-# closed step-name list; a step added to one and not the other could pass
-# the per-shard schema check while the coverage job never proves it.
-totp_verify_steps=$(sed -n '/^const TOTP_STEP_NAMES = new Set(\[/,/\]);/p' \
-  "$SOURCE/verify-evidence.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
-totp_coverage_steps=$(sed -n '/^const TOTP_STEP_NAMES = new Set(\[/,/\]);/p' \
-  "$SOURCE/check-totp-shard-coverage.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
-[ -n "$totp_verify_steps" ] || fail 'could not find TOTP_STEP_NAMES in verify-evidence.mjs'
-[ -n "$totp_coverage_steps" ] ||
-  fail 'could not find TOTP_STEP_NAMES in check-totp-shard-coverage.mjs'
-[ "$totp_verify_steps" = "$totp_coverage_steps" ] ||
-  fail 'verify-evidence.mjs and check-totp-shard-coverage.mjs disagree on TOTP_STEP_NAMES'
-
-passkey_verify_steps=$(sed -n '/^const PASSKEY_STEP_NAMES = new Set(\[/,/\]);/p' \
-  "$SOURCE/verify-evidence.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
-passkey_coverage_steps=$(sed -n '/^const PASSKEY_STEP_NAMES = new Set(\[/,/\]);/p' \
-  "$SOURCE/check-passkey-shard-coverage.mjs" | grep -oE "'[a-zA-Z]+'" | sort -u)
-[ -n "$passkey_verify_steps" ] || fail 'could not find PASSKEY_STEP_NAMES in verify-evidence.mjs'
-[ -n "$passkey_coverage_steps" ] ||
-  fail 'could not find PASSKEY_STEP_NAMES in check-passkey-shard-coverage.mjs'
-[ "$passkey_verify_steps" = "$passkey_coverage_steps" ] ||
-  fail 'verify-evidence.mjs and check-passkey-shard-coverage.mjs disagree on PASSKEY_STEP_NAMES'
+# Each scenario's coverage check passes on one evidence file per shard that
+# together prove every step, and fails when a shard's evidence is missing.
+# The CI jobs still call the two scenario-named entry points.
+coverage_setup=$(cd "$SOURCE" && node --input-type=module -e '
+import { PASSKEY_SHARD_ROLES, TOTP_SHARD_ROLES } from "./proof-shards.mjs";
+import { PASSKEY_STEP_NAMES, TOTP_STEP_NAMES } from "./verify-evidence.mjs";
+const all = (names) => JSON.stringify({ steps: Object.fromEntries([...names].map((n) => [n, true])) });
+console.log(`totp ${all(TOTP_STEP_NAMES)} ${Object.keys(TOTP_SHARD_ROLES).join(" ")}`);
+console.log(`passkey ${all(PASSKEY_STEP_NAMES)} ${Object.keys(PASSKEY_SHARD_ROLES).join(" ")}`);
+') || fail 'the shared shard and step lists do not import'
+while read -r scenario body shards; do
+  dir=$WORK/coverage-$scenario
+  coverage_paths=()
+  for shard in $shards; do
+    install -d "$dir/$scenario-browser-proof-evidence-$shard"
+    printf '%s\n' "$body" \
+      >"$dir/$scenario-browser-proof-evidence-$shard/$scenario-second-factor-proof.json"
+    coverage_paths+=("$dir/$scenario-browser-proof-evidence-$shard/$scenario-second-factor-proof.json")
+  done
+  printf '{}\n' >"$dir/$scenario-enrollment-disabled-proof.json"
+  coverage_paths+=("$dir/$scenario-enrollment-disabled-proof.json")
+  node "$COVERAGE" "$scenario" "${coverage_paths[@]}" >/dev/null ||
+    fail "$scenario coverage rejected full shard evidence"
+  node "$SOURCE/check-$scenario-shard-coverage.mjs" "${coverage_paths[@]}" \
+    >/dev/null || fail "the $scenario coverage entry point rejected full shard evidence"
+  if node "$COVERAGE" "$scenario" "${coverage_paths[@]:1}" 2>/dev/null; then
+    fail "$scenario coverage accepted evidence with a shard missing"
+  fi
+done <<<"$coverage_setup"
+[ "$(wc -l <<<"$coverage_setup")" = 2 ] ||
+  fail 'the coverage check did not cover both scenarios'
+if node "$COVERAGE" unknown "$WORK/none.json" 2>/dev/null; then
+  fail 'the coverage check accepted an unknown scenario'
+fi
 
 printf '%s\n' 'dev-https-browser static tests: PASS'

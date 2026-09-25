@@ -952,6 +952,12 @@ check 'a content change changes the digest' [ "$(digest a.ts b.ts)" != "$base_di
 manifest=$( (source "$SCRIPT" && spec_manifest "$BROWSER/run.sh") | tr '\n' ' ')
 check 'manifest is read from the launcher and sorted' \
   [ "$manifest" = 'harness-lib.ts mcp-sdk.spec.ts mcp.spec.ts network-policy.ts playwright.config.ts ' ]
+printf 'readonly -a SPEC_SOURCES=(\n  b.spec.ts\n  a-shards.mjs\n)\n' >"$T/mjs-run.sh"
+check 'manifest accepts an ES module source' \
+  [ "$( (source "$SCRIPT" && spec_manifest "$T/mjs-run.sh") | tr '\n' ' ')" = 'a-shards.mjs b.spec.ts ' ]
+printf 'readonly -a SPEC_SOURCES=(\n  b.spec.ts\n  a-shards.js\n)\n' >"$T/js-run.sh"
+check 'manifest rejects a source that is neither TypeScript nor an ES module' \
+  [ -z "$( (source "$SCRIPT" && spec_manifest "$T/js-run.sh") || true)" ]
 printf 'readonly -a SPEC_SOURCES=(\n  ../escape.ts\n)\n' >"$T/bad-run.sh"
 check 'manifest rejects a path outside the staging root' \
   [ -z "$( (source "$SCRIPT" && spec_manifest "$T/bad-run.sh") || true)" ]
