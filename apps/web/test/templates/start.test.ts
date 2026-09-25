@@ -74,9 +74,19 @@ describe('starting documents', () => {
       const request = { kind: 'sample', template, lng: 'en' } as const;
       const document = await startDocument(request);
       expect(document).toEqual(await loadSample('engineer-compact', 'en'));
-      expect(suggestedTitle(request)).toBe('Backend engineer resume');
+      expect(suggestedTitle(request)).toBe('Senior Frontend Engineer resume');
       const vi = { kind: 'sample', template, lng: 'vi' } as const;
-      expect(suggestedTitle(vi)).toBe('CV kỹ sư frontend');
+      expect(suggestedTitle(vi)).toBe('CV Senior Frontend Engineer');
+      for (const [id, title] of [
+        ['mono-print', 'CV QA Lead'],
+        ['international-lang', 'CV BrSE'],
+      ] as const) {
+        expect(suggestedTitle({
+          kind: 'sample',
+          template: galleryTemplate(id)!,
+          lng: 'vi',
+        })).toBe(title);
+      }
       const fpa = {
         kind: 'sample',
         template: galleryTemplate('ats-plain')!,
@@ -136,7 +146,7 @@ describe('create dialog samples', () => {
       await settle();
       expect(document.body.querySelector('[data-create-mode="sample"]')
         ?.getAttribute('aria-pressed')).toBe('true');
-      expect(document.body.querySelectorAll('[data-sample]')).toHaveLength(5);
+      expect(document.body.querySelectorAll('[data-sample]')).toHaveLength(13);
       samples.unmount();
       mounted.delete(samples);
       document.body.innerHTML = '';
@@ -158,7 +168,7 @@ describe('create dialog samples', () => {
     const title = document.body.querySelector<HTMLInputElement>(
       '[role="dialog"] input[name="title"]',
     )!;
-    expect(title.value).toBe('Backend engineer resume');
+    expect(title.value).toBe('Senior Frontend Engineer resume');
     await waitForSample();
     document.body.querySelector<HTMLFormElement>('[role="dialog"] form')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
@@ -166,7 +176,7 @@ describe('create dialog samples', () => {
     const [emitted] = wrapper.emitted('submit') as [
       [string, string, Resume],
     ];
-    expect(emitted[0]).toBe('Backend engineer resume');
+    expect(emitted[0]).toBe('Senior Frontend Engineer resume');
     expect(emitted[1]).toBe('en');
     expect(emitted[2]).toEqual(await loadSample('engineer-compact', 'en'));
   });

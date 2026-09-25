@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Lê Minh Khang",
+    "headline": "Fresher Backend Developer · Java, Spring Boot, MySQL",
+    "details": [
+      {
+        "id": "2da46b87-2364-5669-af06-930c3454a3f5",
+        "type": "email",
+        "value": "minhkhang.le@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "a0613c02-758b-5fc1-a6b8-c1939e9a79ec",
+        "type": "phone",
+        "value": "+84 90 000 0622",
+        "isHidden": false
+      },
+      {
+        "id": "9ce29225-844c-59ab-b9b0-d53b3513b7f8",
+        "type": "location",
+        "value": "TP. Hồ Chí Minh",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Mục tiêu nghề nghiệp",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "ca0105ed-8a97-5f5b-977c-9ac2b5a5d734",
+          "isHidden": false,
+          "text": "<p>Mới tốt nghiệp Khoa học Máy tính, 4 tháng thực tập backend; tìm vị trí Fresher Java Backend Developer.</p>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "200cb65e-9fa7-5b80-b159-099f8a9b0e12",
+          "isHidden": false,
+          "degree": "Cử nhân Khoa học Máy tính",
+          "school": "Trường Đại học Khoa học Máy tính Sài Gòn Xanh",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 9
+            },
+            "end": {
+              "y": 2026,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>GPA 3,45/4; học bổng khuyến khích học tập 3 học kỳ.</li><li>Đồ án tốt nghiệp (9,2/10): hệ thống đặt lịch khám; phụ trách backend, 22 REST API bằng Spring Boot.</li><li>Giải Nhì cuộc thi lập trình sinh viên cấp trường.</li></ul>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "ee6bea07-40ce-5e3f-82c5-c9c8c5b1d26f",
+          "isHidden": false,
+          "jobTitle": "Backend Developer Intern",
+          "employer": "Công ty thương mại điện tử (300 nhân sự)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2026,
+              "m": 2
+            },
+            "end": {
+              "y": 2026,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Xây dựng 6 REST API mã giảm giá bằng Spring Boot, lên production.</li><li>Viết 85 unit test JUnit 5, nâng coverage từ 40% lên 78%.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "347fe655-fa13-564d-8599-90a98a4a3a28",
+          "isHidden": false,
+          "name": "Java, Spring Boot, REST API, MySQL, Redis, Docker, Git, JUnit 5"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "e0641193-6f7a-5b5c-9743-18925685a790",
+          "isHidden": false,
+          "name": "Tiếng Anh (TOEIC 750)"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "inter",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#14161a",
+      "text": "#24272c",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 36,
+      "entryGap": 16,
+      "lineHeight": 1.65,
+      "pageMargin": {
+        "x": 30,
+        "y": 24
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "education",
+          "work",
+          "skill",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

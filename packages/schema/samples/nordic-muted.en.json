@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Bùi Quang Huy",
+    "headline": "Senior DevOps Engineer · Kubernetes, Terraform, AWS",
+    "details": [
+      {
+        "id": "3a431820-53e4-5b29-96bb-b0259722a808",
+        "type": "email",
+        "value": "huy.bui@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "43c22c22-0848-5669-9296-805b9c503f41",
+        "type": "phone",
+        "value": "+84 90 000 0523",
+        "isHidden": false
+      },
+      {
+        "id": "3e31d0d3-30b3-5f4b-8b5c-794011d73129",
+        "type": "location",
+        "value": "Hai Chau, Da Nang",
+        "isHidden": false
+      },
+      {
+        "id": "89aca77a-5546-52e8-b536-2a92d166f3dc",
+        "type": "github",
+        "value": "https://example.com/bui-quang-huy",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "dbe26ed4-d8b7-56f7-8ebe-b8e3dc455369",
+          "isHidden": false,
+          "text": "<p>Senior DevOps Engineer with 10 years in infrastructure, starting as a system administrator. Run Kubernetes on AWS for 60 microservices at 99.95% uptime. CKA certified, with deep Terraform and GitOps work.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "66986876-127c-5644-a79a-8daeb0272de1",
+          "isHidden": false,
+          "jobTitle": "Senior DevOps Engineer",
+          "employer": "A SaaS company serving US customers (200 staff)",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 3
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Run 4 Kubernetes (EKS) clusters on AWS for 60 microservices.</li><li>Rebuilt the infrastructure as 40 Terraform modules; a new environment takes 2 hours instead of 3 days.</li><li>Run GitOps with Argo CD and GitLab CI, which raised deploys from 5 to 60 a week.</li><li>Set up Prometheus and Grafana monitoring with on-call runbooks, cutting MTTR from 50 to 12 minutes.</li></ul>"
+        },
+        {
+          "id": "0c95a813-6c9e-580a-9e71-15f192b15cf9",
+          "isHidden": false,
+          "jobTitle": "DevOps Engineer",
+          "employer": "A software outsourcing company (800 staff)",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 7
+            },
+            "end": {
+              "y": 2022,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<ul><li>E-commerce platform for an Australian client (14 months): moved 25 services from VMs to Kubernetes with zero downtime.</li><li>Built a shared GitLab CI pipeline for 12 projects, taking releases from 2 hours to 15 minutes.</li></ul>"
+        },
+        {
+          "id": "41d6acef-4a1d-5c93-9295-ca28d4871c7b",
+          "isHidden": false,
+          "jobTitle": "System Administrator",
+          "employer": "A hosting and data center provider",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 8
+            },
+            "end": {
+              "y": 2019,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>Ran 300 Linux servers and backups for 1,200 hosting customers at 99.9% uptime.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "04af6873-3eb9-5a74-bd32-78123882ed3e",
+          "isHidden": false,
+          "degree": "Bachelor of Engineering in Computer Networks and Communications",
+          "school": "Central Institute of Information Technology",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2011,
+              "m": 9
+            },
+            "end": {
+              "y": 2016,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "ebde8e18-feac-5d4d-804a-f1431710c2f8",
+          "isHidden": false,
+          "name": "Kubernetes"
+        },
+        {
+          "id": "b7daf0d0-4ede-5725-bf3c-7b4f7f316d19",
+          "isHidden": false,
+          "name": "Terraform"
+        },
+        {
+          "id": "ee74e494-a868-5ed5-a0bc-787e3bbdebc8",
+          "isHidden": false,
+          "name": "AWS"
+        },
+        {
+          "id": "831b1464-5e37-5147-8a01-d16534358bdc",
+          "isHidden": false,
+          "name": "Prometheus"
+        },
+        {
+          "id": "72da4c7d-fca8-5395-9837-f379186fcc74",
+          "isHidden": false,
+          "name": "Grafana"
+        },
+        {
+          "id": "376d6cb8-46c4-5507-8b24-cb01c769c980",
+          "isHidden": false,
+          "name": "Argo CD"
+        },
+        {
+          "id": "f17057f6-292f-5027-84c7-2ce5b18fc496",
+          "isHidden": false,
+          "name": "GitLab CI"
+        },
+        {
+          "id": "9cf1c990-4af1-5497-af65-8f1e9a4df832",
+          "isHidden": false,
+          "name": "Ansible"
+        },
+        {
+          "id": "91ec9a94-2c67-55b7-b752-e3ad61f916e1",
+          "isHidden": false,
+          "name": "Linux"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "2ca725a1-0ea8-56ff-a058-2ba2477297fd",
+          "isHidden": false,
+          "title": "Certified Kubernetes Administrator (CKA)",
+          "issuer": "The Linux Foundation",
+          "date": {
+            "y": 2023,
+            "m": 4
+          }
+        },
+        {
+          "id": "b1ba8b98-d240-5966-bb61-ecb2e7e68329",
+          "isHidden": false,
+          "title": "HashiCorp Certified: Terraform Associate (003)",
+          "issuer": "HashiCorp",
+          "date": {
+            "y": 2024,
+            "m": 6
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "d106de7b-541e-55ad-8d81-b652be2f5e02",
+          "isHidden": false,
+          "name": "English (TOEIC 820, daily calls with a US team)",
+          "level": 4
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#2f4557",
+      "text": "#333a42",
+      "background": "#ffffff",
+      "accent": "#4a6b80",
+      "surface": "#f1f3f5"
+    },
+    "spacing": {
+      "sectionGap": 22,
+      "entryGap": 11,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "outline"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

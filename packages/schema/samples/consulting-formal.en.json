@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Bùi Anh Tuấn",
+    "headline": "Security Engineer · OWASP, Burp Suite, SIEM, OSCP",
+    "details": [
+      {
+        "id": "1f7cb4fe-815a-5312-a2e0-001984730eb8",
+        "type": "email",
+        "value": "anhtuan.bui@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "d29157cd-6873-56a7-868c-2bf707f8841e",
+        "type": "phone",
+        "value": "+84 90 000 0644",
+        "isHidden": false
+      },
+      {
+        "id": "7a837603-ef1d-5c2b-aa14-49c05a761237",
+        "type": "location",
+        "value": "Ho Chi Minh City",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "1918a953-4cd1-5278-93bf-36fd68380a65",
+          "isHidden": false,
+          "text": "<p>Security Engineer with 9 years: 2 as a developer, 3 as a SOC analyst at a bank, 4 in e-commerce application security. Strong in OWASP pentesting, SIEM and DevSecOps.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "dd1d550e-6290-5a62-a33c-ddc725216c5c",
+          "isHidden": false,
+          "jobTitle": "Security Engineer",
+          "employer": "An e-commerce company (2,000 staff)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 9
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Pentest web apps and APIs to the OWASP Top 10 with Burp Suite: 120 flaws, 18 High or above.</li><li>Added Semgrep to GitLab CI for 40 repositories; Critical fixes now take 7 days, not 30.</li><li>Led the technical side of a PCI DSS v4.0 audit, passed first time with no major findings.</li><li>Set up WAF and rate limiting on AWS for 25 services, blocking 90% of credential stuffing.</li></ul>"
+        },
+        {
+          "id": "1fbadd14-b68d-51ae-b1a9-b739deb3bd4c",
+          "isHidden": false,
+          "jobTitle": "SOC Analyst",
+          "employer": "A joint-stock commercial bank",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 6
+            },
+            "end": {
+              "y": 2022,
+              "m": 8
+            },
+            "present": false
+          },
+          "description": "<ul><li>Triaged SIEM (Splunk) alerts on a 24/7 rota, about 400 a day.</li><li>Wrote 60 correlation rules and playbooks, cutting false positives from 70% to 30%.</li></ul>"
+        },
+        {
+          "id": "59dcd85b-d535-5af1-9416-30ee0307f9ce",
+          "isHidden": false,
+          "jobTitle": "Software Developer",
+          "employer": "A software solutions company (150 staff)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2017,
+              "m": 7
+            },
+            "end": {
+              "y": 2019,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Fixed 45 SQL injection and XSS flaws in a Java payment API; wrote a secure coding checklist.</li></ul>"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "b4720b36-ec2b-5736-b315-d0a06889117e",
+          "isHidden": false,
+          "title": "OffSec Certified Professional (OSCP)",
+          "issuer": "OffSec",
+          "date": {
+            "y": 2023,
+            "m": 6
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "a8241c62-251e-5ddc-acde-74c71b28906e",
+          "isHidden": false,
+          "name": "OWASP Top 10, Burp Suite, Nmap, SIEM (Splunk), Semgrep, GitLab CI, AWS, Python"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "56e9d01f-eb64-5f5c-a7f5-cfd5b721f80e",
+          "isHidden": false,
+          "name": "English (IELTS 6.5)"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "33614969-c9e0-5bbb-84d4-409a0892548c",
+          "isHidden": false,
+          "degree": "Bachelor of Engineering in Information Technology",
+          "school": "New Highlands University of Engineering",
+          "city": "Gia Lai",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2012,
+              "m": 9
+            },
+            "end": {
+              "y": 2017,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "inter",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#14304f",
+      "text": "#33383d",
+      "background": "#ffffff",
+      "accent": "#1c4e80"
+    },
+    "spacing": {
+      "sectionGap": 15,
+      "entryGap": 9,
+      "lineHeight": 1.45,
+      "pageMargin": {
+        "x": 25,
+        "y": 15
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "certificate",
+          "skill",
+          "language",
+          "education"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

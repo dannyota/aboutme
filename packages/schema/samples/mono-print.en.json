@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Phạm Thu Hà",
+    "headline": "QA Lead · Playwright, Selenium, Postman, ISTQB",
+    "details": [
+      {
+        "id": "416ea7ce-3111-516c-b912-d9e6eb1c9894",
+        "type": "email",
+        "value": "thuha.pham@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "07f455dd-5a1b-5189-8fde-e30915e31f44",
+        "type": "phone",
+        "value": "+84 90 000 0611",
+        "isHidden": false
+      },
+      {
+        "id": "15385aaa-ddda-5261-a5cb-51c52cb0a151",
+        "type": "location",
+        "value": "Cau Giay, Hanoi",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "50470efa-b608-5421-8925-364f5597d9fc",
+          "isHidden": false,
+          "text": "<p>QA Lead with 8 years testing web, mobile and API products; brought Playwright into CI/CD and cut production escapes by 70%.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "a2ca1e48-4a9c-508a-a556-1498447434b9",
+          "isHidden": false,
+          "jobTitle": "QA Lead",
+          "employer": "A fintech startup",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 6
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Lead 5 QA engineers testing an e-wallet app with 2 million users.</li><li>Moved 900 test cases to Playwright, cutting regression from 95 to 25 minutes.</li></ul>"
+        },
+        {
+          "id": "5833a8d5-4fff-5927-8329-c4db7f7de976",
+          "isHidden": false,
+          "jobTitle": "Automation Tester",
+          "employer": "An e-commerce company (500 staff)",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2018,
+              "m": 7
+            },
+            "end": {
+              "y": 2023,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Tested checkout by hand for the first 2 years, running 1,500+ test cases.</li><li>Automated 650 test cases in Selenium and Java, taking regression from 3 days to 4 hours.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "1977dab4-a0b6-5a03-8f66-8da6015e4f79",
+          "isHidden": false,
+          "name": "Playwright, Selenium WebDriver, Postman, k6, TypeScript, Java, SQL, GitLab CI, Jira, Scrum"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "961dae01-3303-5667-989a-55b98030787b",
+          "isHidden": false,
+          "name": "English (TOEIC 820)"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "0235c3bc-1ddd-55e6-9692-10a42ac1fd15",
+          "isHidden": false,
+          "title": "ISTQB Certified Tester Advanced Level Test Manager (CTAL-TM)",
+          "issuer": "ISTQB",
+          "date": {
+            "y": 2024,
+            "m": 8
+          }
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "d12e0b72-1187-5f37-a616-0cd36cc5b5bc",
+          "isHidden": false,
+          "degree": "Bachelor of Science in Information Technology",
+          "school": "Bac Linh University of Information Technology",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2018,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 26,
+      "entryGap": 12,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 20,
+        "y": 18
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "skill",
+          "language",
+          "certificate",
+          "education"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

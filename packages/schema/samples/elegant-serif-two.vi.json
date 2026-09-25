@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Võ Thanh Hương",
+    "headline": "Machine Learning Engineer · Python, Spark, PyTorch",
+    "details": [
+      {
+        "id": "47da7337-3029-5b21-8ef1-fcb0dc0a34d6",
+        "type": "email",
+        "value": "huong.vo@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "62ade4f9-6d9f-5ecf-846d-7a804fa21b9f",
+        "type": "phone",
+        "value": "+84 90 000 0524",
+        "isHidden": false
+      },
+      {
+        "id": "3bf0510c-2c75-5580-ac78-bd3e7b03890a",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "74640e48-b322-5f7b-b6c3-6a44cce8b196",
+        "type": "location",
+        "value": "Thủ Đức, TP. Hồ Chí Minh",
+        "isHidden": false
+      },
+      {
+        "id": "a9e24cf3-34d4-5d10-b0a6-ba77e7c2ef16",
+        "type": "linkedin",
+        "value": "https://example.com/in/vo-thanh-huong",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "b31e6668-6d08-5066-942c-e9dbc71678d9",
+          "isHidden": false,
+          "text": "<p>Machine Learning Engineer với 6 năm làm dữ liệu, đi lên từ Data Analyst và Data Engineer. Xây dựng và vận hành mô hình chấm điểm tín dụng trên production.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "e6667791-6901-5f34-9176-63cfd871418b",
+          "isHidden": false,
+          "jobTitle": "Machine Learning Engineer",
+          "employer": "Công ty fintech cho vay tiêu dùng (400 nhân sự)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 5
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Xây dựng mô hình chấm điểm tín dụng bằng PyTorch và LightGBM, tăng AUC từ 0,71 lên 0,79 và giảm 18% nợ xấu ở khoản vay mới.</li><li>Đưa 6 mô hình lên production với MLflow và Docker, release từ 3 tuần còn 3 ngày.</li><li>Vận hành pipeline feature bằng Spark và Airflow, xử lý 40 triệu bản ghi/ngày.</li></ul>"
+        },
+        {
+          "id": "05b54324-8f60-50fc-8fd3-d3003d3f21bd",
+          "isHidden": false,
+          "jobTitle": "Data Engineer",
+          "employer": "Chuỗi bán lẻ (1.200 cửa hàng)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 8
+            },
+            "end": {
+              "y": 2023,
+              "m": 4
+            },
+            "present": false
+          },
+          "description": "<ul><li>Xây dựng data warehouse bán hàng bằng Airflow và Spark: 15 triệu dòng/ngày.</li><li>Chuyển 120 báo cáo Excel sang dbt và Power BI, tiết kiệm 60 giờ công mỗi tháng.</li></ul>"
+        },
+        {
+          "id": "0c8e6740-ef74-5cf6-9dc6-51cf98ab2b0b",
+          "isHidden": false,
+          "jobTitle": "Data Analyst",
+          "employer": "Công ty bảo hiểm nhân thọ",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2021,
+              "m": 7
+            },
+            "present": false
+          },
+          "description": "<ul><li>Phân tích 300.000 hợp đồng bằng SQL và Python, tìm ra 3 lý do chính khiến khách hủy hợp đồng trong năm đầu.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "f01a1649-a6b8-5d69-a8a4-0407c239b698",
+          "isHidden": false,
+          "degree": "Cử nhân Hệ thống Thông tin",
+          "school": "Trường Đại học Khoa học Kỹ thuật Hải Vân",
+          "city": "Đà Nẵng",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 9
+            },
+            "end": {
+              "y": 2020,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "29bef757-38d5-5f89-9a49-8c5e79556377",
+          "isHidden": false,
+          "title": "AWS Certified Machine Learning Engineer – Associate",
+          "issuer": "Amazon Web Services",
+          "date": {
+            "y": 2025,
+            "m": 3
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "1dbb3f62-9103-53d5-b421-b109358acffd",
+          "isHidden": false,
+          "name": "Python"
+        },
+        {
+          "id": "8050f45b-c33f-569b-a294-3393dd251c95",
+          "isHidden": false,
+          "name": "SQL"
+        },
+        {
+          "id": "5fe5f409-0452-5717-a678-972bc67bfe79",
+          "isHidden": false,
+          "name": "Spark"
+        },
+        {
+          "id": "b18b4578-4d97-51a6-9735-e498a03dfb65",
+          "isHidden": false,
+          "name": "Airflow"
+        },
+        {
+          "id": "fcc608dd-5bac-5f75-a0be-738744efb1dc",
+          "isHidden": false,
+          "name": "PyTorch"
+        },
+        {
+          "id": "ad90e660-1166-5875-85c6-ebe0b51606fc",
+          "isHidden": false,
+          "name": "scikit-learn"
+        },
+        {
+          "id": "631cd2c9-5727-527c-a447-7c63b1228a62",
+          "isHidden": false,
+          "name": "MLflow"
+        },
+        {
+          "id": "dd0c7935-3855-554e-aa2a-d208f550031b",
+          "isHidden": false,
+          "name": "dbt"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "3d0de94f-6f9b-581d-b536-7d051f861746",
+          "isHidden": false,
+          "name": "Tiếng Anh (IELTS 7.5)",
+          "level": 4
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "alegreya",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#6b2737",
+      "text": "#2b2622",
+      "background": "#ffffff",
+      "surface": "#f2ebdf"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 12,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "certificate",
+          "skill",
+          "language"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
