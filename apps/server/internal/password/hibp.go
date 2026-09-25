@@ -41,18 +41,14 @@ type HIBP struct {
 	baseURL string
 	timeout time.Duration
 	cache   *hibpCache
-	now     func() time.Time
 }
 
-// HIBPOption customizes a HIBP client. Tests inject the base URL, clock, and a
-// short timeout; production uses the defaults.
+// HIBPOption customizes a HIBP client. Tests inject the base URL and a short
+// timeout; production uses the defaults.
 type HIBPOption func(*HIBP)
 
 // WithHIBPBaseURL overrides the API origin (test servers use this).
 func WithHIBPBaseURL(u string) HIBPOption { return func(h *HIBP) { h.baseURL = u } }
-
-// WithHIBPClock injects the time source used for cache expiry.
-func WithHIBPClock(now func() time.Time) HIBPOption { return func(h *HIBP) { h.now = now } }
 
 // WithHIBPTimeout overrides the per-request deadline (tests use this to make
 // timeout behavior deterministic; production keeps the 5s default).
@@ -73,7 +69,6 @@ func NewHIBP(client *http.Client, opts ...HIBPOption) *HIBP {
 		baseURL: "https://api.pwnedpasswords.com",
 		timeout: hibpDefaultTimeout,
 		cache:   newHIBPCache(),
-		now:     time.Now,
 	}
 	for _, o := range opts {
 		o(h)
@@ -87,7 +82,7 @@ func (h *HIBP) Breached(ctx context.Context, password string) (bool, error) {
 	digest := sha1.Sum([]byte(password)) //nolint:gosec // HIBP requires SHA-1; the full digest never leaves the process
 	prefix := strings.ToUpper(hex.EncodeToString(digest[:3]))[:hibpPrefixLen]
 
-	if digests, ok := h.cache.get(prefix, h.now()); ok {
+	if digests, ok := h.cache.get(prefix, time.Now()); ok {
 		return containsSHA1(digests, digest), nil
 	}
 
@@ -95,7 +90,7 @@ func (h *HIBP) Breached(ctx context.Context, password string) (bool, error) {
 	if err != nil {
 		return false, ErrBreachUnavailable
 	}
-	h.cache.put(prefix, fetched, h.now())
+	h.cache.put(prefix, fetched, time.Now())
 	return containsSHA1(fetched, digest), nil
 }
 
