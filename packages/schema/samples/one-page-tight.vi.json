@@ -1,0 +1,339 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Trần Đức Thắng",
+    "headline": "Senior Backend Engineer · Go, PostgreSQL, Kafka",
+    "details": [
+      {
+        "id": "58c235dc-f71c-5e8e-8366-d07458ecb406",
+        "type": "email",
+        "value": "thang.tran@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "0e7b3d47-3c37-5aac-941d-73e1254cef9d",
+        "type": "phone",
+        "value": "+84 90 000 0522",
+        "isHidden": false
+      },
+      {
+        "id": "ae76166b-b9d6-5252-8707-da6a81de8fd4",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "a686a707-328a-5bc0-8836-70395f8dc7cd",
+        "type": "location",
+        "value": "TP. Hồ Chí Minh",
+        "isHidden": false
+      },
+      {
+        "id": "333c6c6e-53ea-5090-973f-bfdf07ec1d97",
+        "type": "github",
+        "value": "https://example.com/tran-duc-thang",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "184a0aad-aefe-5522-a352-0e1a4dc63f07",
+          "isHidden": false,
+          "text": "<p>Senior Backend Engineer với 9 năm xây dựng hệ thống thanh toán, ngân hàng và logistics bằng Go và Java. Dẫn dắt nhóm 5 người, quen vận hành on-call và design review.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "beca452a-0152-5015-a627-681df8f28d0d",
+          "isHidden": false,
+          "jobTitle": "Senior Backend Engineer",
+          "employer": "Công ty ví điện tử (8 triệu người dùng)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 6
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Thiết kế và vận hành payment service bằng Go và PostgreSQL, xử lý 3 triệu giao dịch/ngày với uptime 99,95%.</li><li>Chuyển đối soát cuối ngày sang luồng event-driven trên Kafka: từ 4 giờ còn 25 phút.</li><li>Dẫn dắt nhóm 5 người; đưa design review và runbook on-call vào quy trình, giảm MTTR từ 45 xuống 15 phút.</li></ul>"
+        },
+        {
+          "id": "05a3f405-38a4-554c-a876-edd96d8066c6",
+          "isHidden": false,
+          "jobTitle": "Backend Developer",
+          "employer": "Công ty logistics (300 nhân sự)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 4
+            },
+            "end": {
+              "y": 2023,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Xây dựng API theo dõi vận đơn bằng Go, gRPC và Redis cho 20 triệu request/ngày.</li><li>Tách monolith PHP thành 9 microservices bằng Go trên Kubernetes, tăng tần suất release từ 1 lần/tuần lên hằng ngày.</li></ul>"
+        },
+        {
+          "id": "2637471a-42e2-5004-a2a6-276d0dce9572",
+          "isHidden": false,
+          "jobTitle": "Java Developer",
+          "employer": "Ngân hàng thương mại cổ phần",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 1
+            },
+            "end": {
+              "y": 2021,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Viết REST API internet banking bằng Java và Spring Boot cho 1,2 triệu khách hàng.</li></ul>"
+        },
+        {
+          "id": "13e5250b-9939-5d95-964e-b8dc504c8e08",
+          "isHidden": false,
+          "jobTitle": "Junior Java Developer",
+          "employer": "Công ty outsourcing phần mềm thị trường Nhật",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2017,
+              "m": 7
+            },
+            "end": {
+              "y": 2018,
+              "m": 12
+            },
+            "present": false
+          },
+          "description": "<ul><li>Dự án quản lý kho cho khách hàng Nhật Bản (10 tháng): viết 25 REST API bằng Spring Boot, giảm lỗi UAT từ 40 xuống 8 giữa hai đợt bàn giao.</li></ul>"
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Dự án",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "0a0a2827-8600-5aea-8c19-f155e3ede3f4",
+          "isHidden": false,
+          "title": "Thư viện transactional outbox cho Go",
+          "link": "https://example.com/tran-duc-thang/outbox",
+          "description": "<p>Thư viện mã nguồn mở gửi event từ PostgreSQL sang Kafka mà không mất message; 600 sao GitHub, 4 công ty dùng trên production.</p>",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 5
+            },
+            "end": null,
+            "present": true
+          }
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "bed2df26-98d5-53bc-bc3c-9a36b089cdba",
+          "isHidden": false,
+          "degree": "Cử nhân Khoa học Máy tính",
+          "school": "Trường Đại học Công nghệ Phương Nam",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2013,
+              "m": 9
+            },
+            "end": {
+              "y": 2017,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "06489f09-bad9-512b-872c-985384e2bcb4",
+          "isHidden": false,
+          "name": "Go"
+        },
+        {
+          "id": "993dc9d4-ec97-562a-8132-c1fc8e44896a",
+          "isHidden": false,
+          "name": "Java"
+        },
+        {
+          "id": "d84abe13-f4d2-5c50-a2e3-5f88e5dcbf2b",
+          "isHidden": false,
+          "name": "Spring Boot"
+        },
+        {
+          "id": "f4e8ede9-5ce0-5083-b862-50a2d92fb0f8",
+          "isHidden": false,
+          "name": "PostgreSQL"
+        },
+        {
+          "id": "961b5f97-96e3-548f-9bda-447cf2a5ebe2",
+          "isHidden": false,
+          "name": "Redis"
+        },
+        {
+          "id": "f95a8176-5e92-516e-8743-85622bdcd775",
+          "isHidden": false,
+          "name": "Kafka"
+        },
+        {
+          "id": "97a1cd87-e037-5002-af97-608bf0ccbbf9",
+          "isHidden": false,
+          "name": "gRPC"
+        },
+        {
+          "id": "29f60328-197c-5556-b61d-b3424ac4124f",
+          "isHidden": false,
+          "name": "Docker"
+        },
+        {
+          "id": "7b210725-1cf4-5bad-bb9d-cbf850ef8d90",
+          "isHidden": false,
+          "name": "Kubernetes"
+        },
+        {
+          "id": "35caaf68-a23f-5128-995c-f72cdfa247c9",
+          "isHidden": false,
+          "name": "AWS"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "d34339bf-68b2-56f7-94ab-da5e033cd0fa",
+          "isHidden": false,
+          "name": "Tiếng Anh (TOEIC 850)"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "231e663b-7c43-5126-9d9d-526feebc372d",
+          "isHidden": false,
+          "title": "AWS Certified Developer – Associate",
+          "issuer": "Amazon Web Services",
+          "date": {
+            "y": 2022,
+            "m": 8
+          }
+        },
+        {
+          "id": "637d730e-6751-5af6-90dc-d2f20e0bff8d",
+          "isHidden": false,
+          "title": "Oracle Certified Professional: Java SE 11 Developer",
+          "issuer": "Oracle",
+          "date": {
+            "y": 2019,
+            "m": 10
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#22303c",
+      "text": "#1c2126",
+      "background": "#ffffff",
+      "accent": "#2f4858"
+    },
+    "spacing": {
+      "sectionGap": 10,
+      "entryGap": 6,
+      "lineHeight": 1.25,
+      "pageMargin": {
+        "x": 12,
+        "y": 11
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "project",
+          "education"
+        ],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

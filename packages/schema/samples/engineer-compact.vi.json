@@ -2,28 +2,35 @@
   "schemaVersion": 4,
   "personalDetails": {
     "fullName": "Đỗ Hoàng Nam",
-    "headline": "Kỹ sư Frontend cấp cao · React, TypeScript, hiệu năng web",
+    "headline": "Senior Frontend Engineer · React, TypeScript, Next.js",
     "details": [
       {
-        "id": "cf9f57fe-53b1-50d5-ad12-584318c4b74c",
+        "id": "644e0050-c834-5583-a1f2-4398a069d342",
         "type": "email",
-        "value": "dohoangnam@example.com",
+        "value": "nam.do@example.com",
         "isHidden": false
       },
       {
-        "id": "b981daf4-8e78-5e17-9a98-cc5afe80f2a3",
+        "id": "3b10fbd7-e078-55a1-8e31-8661e53b5d6b",
         "type": "phone",
-        "value": "+84 90 000 0404",
+        "value": "+84 90 000 0521",
         "isHidden": false
       },
       {
-        "id": "5c582fc5-4033-5e7a-8a22-48dbd6ea74eb",
+        "id": "64566683-92a4-5f87-ba9d-2773a563346a",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "4eea8928-c61b-56ee-b47c-326f6d13da06",
         "type": "location",
         "value": "Cầu Giấy, Hà Nội",
         "isHidden": false
       },
       {
-        "id": "4a1cb227-348e-5c44-8be7-40475c1dc336",
+        "id": "1753e7cf-02ee-52aa-86ae-01467138c6f8",
         "type": "github",
         "value": "https://example.com/do-hoang-nam",
         "isHidden": false
@@ -37,9 +44,9 @@
       "iconKey": "user",
       "entries": [
         {
-          "id": "63397053-deee-5bed-bf88-475bfff61953",
+          "id": "dbbb38d7-53aa-5118-84b3-af166367acdd",
           "isHidden": false,
-          "text": "<p>5 năm xây dựng giao diện thương mại điện tử cho hơn 2 triệu người dùng mỗi tháng. Thế mạnh: tối ưu hiệu năng, hệ thống thiết kế (design system) và kiểm thử tự động. Đã dẫn dắt nhóm 4 kỹ sư chuyển toàn bộ ứng dụng mua sắm sang Next.js.</p>"
+          "text": "<p>Senior Frontend Engineer với 6 năm làm web thương mại điện tử và SaaS cho hơn 2 triệu người dùng mỗi tháng. Thế mạnh: hiệu năng web, design system, Playwright.</p>"
         }
       ]
     },
@@ -49,47 +56,47 @@
       "iconKey": "briefcase",
       "entries": [
         {
-          "id": "2d560c08-bb29-56c8-b80f-e4695aa9896d",
+          "id": "26999a68-30eb-535a-a671-7018d95c626d",
           "isHidden": false,
-          "jobTitle": "Kỹ sư Frontend cấp cao",
-          "employer": "Công ty CP Công nghệ Chợ Mây",
+          "jobTitle": "Senior Frontend Engineer",
+          "employer": "Công ty thương mại điện tử (500 nhân sự)",
           "city": "Hà Nội",
           "country": "Việt Nam",
           "dates": {
             "start": {
-              "y": 2023,
-              "m": 3
+              "y": 2024,
+              "m": 4
             },
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Dẫn dắt nhóm 4 người chuyển ứng dụng mua sắm sang Next.js, giảm thời gian hiển thị nội dung chính (LCP) từ 4,1 giây xuống 1,9 giây.</li><li>Xây dựng design system 60 thành phần cho 5 nhóm sản phẩm, rút ngắn 30% thời gian phát triển tính năng mới.</li><li>Tối ưu biểu mẫu thanh toán qua 6 thử nghiệm A/B, tăng tỷ lệ chuyển đổi 9%.</li><li>Kèm cặp 3 kỹ sư mới trong chương trình 3 tháng; cả 3 tự nhận tính năng độc lập từ tháng thứ hai.</li></ul>"
+          "description": "<ul><li>Dẫn dắt nhóm 4 người chuyển ứng dụng mua sắm từ React SPA sang Next.js, giảm LCP từ 4,1 giây xuống 1,9 giây.</li><li>Duy trì design system 60 component bằng React và TypeScript cho 5 nhóm sản phẩm, rút ngắn khoảng 30% thời gian làm tính năng mới.</li><li>Chạy 6 A/B test trên luồng thanh toán, tăng tỷ lệ chuyển đổi 9%.</li><li>Giảm bundle JavaScript trang chủ từ 480 KB xuống 210 KB bằng code splitting.</li></ul>"
         },
         {
-          "id": "12351fe2-5296-575d-9de8-4773e55b3d57",
+          "id": "d25c8861-1fa2-5086-b068-81083b0e2602",
           "isHidden": false,
-          "jobTitle": "Kỹ sư Frontend",
-          "employer": "Công ty TNHH Phần mềm Lá Chanh",
+          "jobTitle": "Frontend Developer",
+          "employer": "Công ty SaaS quản lý bán lẻ (120 nhân sự)",
           "city": "Hà Nội",
           "country": "Việt Nam",
           "dates": {
             "start": {
-              "y": 2021,
-              "m": 7
+              "y": 2022,
+              "m": 1
             },
             "end": {
-              "y": 2023,
-              "m": 2
+              "y": 2024,
+              "m": 3
             },
             "present": false
           },
-          "description": "<ul><li>Phát triển bảng điều khiển quản lý kho (React, TypeScript) cho 800 doanh nghiệp bán lẻ.</li><li>Thiết lập kiểm thử đầu cuối bằng Playwright, giảm 70% lỗi hồi quy lọt lên môi trường thật.</li><li>Ảo hóa bảng dữ liệu 10.000 dòng, rút thời gian phản hồi khi cuộn từ 3 giây xuống 0,3 giây.</li></ul>"
+          "description": "<ul><li>Làm dashboard quản lý kho bằng React và GraphQL cho 800 nhà bán lẻ.</li><li>Thiết lập E2E test bằng Playwright trong GitLab CI, giảm 70% lỗi regression lọt lên production.</li><li>Áp dụng virtual scrolling cho bảng 10.000 dòng, giảm độ trễ khi cuộn từ 3 giây xuống 0,3 giây.</li></ul>"
         },
         {
-          "id": "2f8825fc-6422-5423-8b33-2f3cc7a64341",
+          "id": "0432218a-7a97-555a-859c-f5ef154ca838",
           "isHidden": false,
-          "jobTitle": "Thực tập sinh Frontend",
-          "employer": "Công ty TNHH Giải pháp Số Hạt Mầm",
+          "jobTitle": "Junior Frontend Developer",
+          "employer": "Công ty outsourcing phần mềm thị trường Nhật",
           "city": "Hà Nội",
           "country": "Việt Nam",
           "dates": {
@@ -99,25 +106,25 @@
             },
             "end": {
               "y": 2021,
-              "m": 6
+              "m": 12
             },
             "present": false
           },
-          "description": "<ul><li>Xây dựng 12 màn hình quản trị bằng React cho hệ thống đặt lịch khám của 3 phòng khám.</li><li>Viết kiểm thử đơn vị với Jest, nâng độ bao phủ mã từ 35% lên 70%.</li></ul>"
+          "description": "<ul><li>Đặt lịch khám cho chuỗi phòng khám Nhật (8 tháng): 12 màn hình quản trị bằng React.</li><li>Dự án website tuyển dụng cho khách hàng Singapore (6 tháng): làm giao diện responsive bằng Vue.js, đạt 95 điểm Lighthouse trên mobile.</li></ul>"
         }
       ]
     },
     "project": {
       "sectionType": "project",
-      "displayName": "Dự án cá nhân",
+      "displayName": "Dự án",
       "iconKey": "folder",
       "entries": [
         {
-          "id": "112aa94f-5fec-575d-b823-ab813ec98bdb",
+          "id": "01d02e4d-4bb6-5109-83a1-4cf877ad555d",
           "isHidden": false,
           "title": "vn-address-kit",
           "link": "https://example.com/do-hoang-nam/vn-address-kit",
-          "description": "<p>Thư viện mã nguồn mở chuẩn hóa địa chỉ Việt Nam theo danh mục đơn vị hành chính mới nhất; 900 sao GitHub, 12.000 lượt tải mỗi tuần trên npm.</p>",
+          "description": "<p>Thư viện chuẩn hóa địa chỉ Việt Nam: 300 sao GitHub, 3.000 lượt tải npm mỗi tuần.</p>",
           "dates": {
             "start": {
               "y": 2024,
@@ -135,39 +142,51 @@
       "iconKey": "code",
       "entries": [
         {
-          "id": "495b877c-32b1-525c-96bb-48e09be00b9f",
+          "id": "6f7164ee-cfbc-5ccd-84e3-a59f3a2a4281",
           "isHidden": false,
           "name": "React",
           "level": 5
         },
         {
-          "id": "06127192-b9c7-588d-8a53-0982ff2fad0d",
+          "id": "528a561b-4a05-5159-98f7-23a47f9a51f5",
           "isHidden": false,
           "name": "TypeScript",
           "level": 5
         },
         {
-          "id": "bc1ad13f-4888-5e85-a114-366839db5c9c",
+          "id": "e4a1c867-340d-5bac-afd4-8519d1d0b135",
           "isHidden": false,
           "name": "Next.js",
           "level": 4
         },
         {
-          "id": "563bb41f-e226-5bac-87fc-f687278fc28f",
+          "id": "b653cae9-3932-54c2-bd42-708c2ad2a954",
           "isHidden": false,
-          "name": "CSS, Tailwind CSS",
+          "name": "Playwright",
           "level": 4
         },
         {
-          "id": "fd6c62bf-8184-5942-bdf3-1bcd2d2da3db",
+          "id": "2ae72192-7243-5a56-b9ca-88a0739ec9bc",
           "isHidden": false,
-          "name": "Playwright, Vitest",
+          "name": "Tailwind CSS",
           "level": 4
         },
         {
-          "id": "b26f15bb-1ced-5f6b-b0c7-282e7e5b3063",
+          "id": "84539170-c2a9-576b-84c3-adf64902097c",
+          "isHidden": false,
+          "name": "Vitest",
+          "level": 4
+        },
+        {
+          "id": "0d4dbad9-4735-54a3-b157-e7d68f2775bb",
           "isHidden": false,
           "name": "Node.js",
+          "level": 3
+        },
+        {
+          "id": "ad31b042-6765-57e8-8caa-37007c686125",
+          "isHidden": false,
+          "name": "GraphQL",
           "level": 3
         }
       ]
@@ -178,7 +197,7 @@
       "iconKey": "award",
       "entries": [
         {
-          "id": "1f83f874-9906-5226-b31a-ef58acf718b2",
+          "id": "de116ed8-aeee-5689-895b-a5783ab5fb23",
           "isHidden": false,
           "title": "AWS Certified Developer – Associate",
           "issuer": "Amazon Web Services",
@@ -195,7 +214,7 @@
       "iconKey": "languages",
       "entries": [
         {
-          "id": "4ee53f40-f0d8-5652-8fbd-335297a2b3da",
+          "id": "cdab1e70-b785-5f72-9946-1e48cfa9de47",
           "isHidden": false,
           "name": "Tiếng Anh (IELTS 7.0)",
           "level": 4
@@ -208,24 +227,23 @@
       "iconKey": "graduation-cap",
       "entries": [
         {
-          "id": "c52e5094-d1f7-5fd1-8004-72d063058547",
+          "id": "8701860c-c671-5457-82fb-0d62683107ee",
           "isHidden": false,
-          "degree": "Kỹ sư Công nghệ thông tin",
+          "degree": "Kỹ sư Công nghệ Thông tin",
           "school": "Trường Đại học Kỹ thuật Sông Hồng",
           "city": "Hà Nội",
           "country": "Việt Nam",
           "dates": {
             "start": {
-              "y": 2016,
+              "y": 2015,
               "m": 9
             },
             "end": {
-              "y": 2021,
+              "y": 2020,
               "m": 6
             },
             "present": false
-          },
-          "description": "<p>Tốt nghiệp loại Giỏi, GPA 3,4/4.</p>"
+          }
         }
       ]
     }

@@ -89,6 +89,14 @@ const MEMBERS: Readonly<
 const SAMPLE_ORDER = [
   'ats-plain',
   'engineer-compact',
+  'one-page-tight',
+  'nordic-muted',
+  'creative-accent',
+  'elegant-serif-two',
+  'mono-print',
+  'consulting-formal',
+  'international-lang',
+  'minimal-air',
   'graduate-friendly',
   'executive-band',
   'modern-sidebar',
@@ -140,11 +148,31 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
       vi: 'Gọn, trang trọng cho tư vấn, tài chính, quản lý',
       en: 'Tight and formal for consulting, finance and management',
     },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: Security Engineer',
+        en: 'Sample: Security Engineer',
+      },
+      en: {
+        vi: 'CV mẫu: Security Engineer',
+        en: 'Sample: Security Engineer',
+      },
+    },
   },
   'creative-accent': {
     purpose: {
       vi: 'Một màu nhấn nổi bật cho marketing, truyền thông',
       en: 'One bold accent color for marketing and media roles',
+    },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: Senior Mobile Engineer',
+        en: 'Sample: Senior Mobile Engineer',
+      },
+      en: {
+        vi: 'CV mẫu: Senior Mobile Engineer',
+        en: 'Sample: Senior Mobile Engineer',
+      },
     },
   },
   'designer-tag': {
@@ -164,6 +192,16 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
       vi: 'Hai cột chữ có chân, chứng chỉ nổi bật ở cột bên',
       en: 'Two serif columns, credentials first in the sidebar',
     },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: Machine Learning Engineer',
+        en: 'Sample: Machine Learning Engineer',
+      },
+      en: {
+        vi: 'CV mẫu: Machine Learning Engineer',
+        en: 'Sample: Machine Learning Engineer',
+      },
+    },
   },
   'engineer-compact': {
     purpose: {
@@ -172,12 +210,12 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
     },
     sampleTags: {
       vi: {
-        vi: 'CV mẫu: Kỹ sư frontend',
-        en: 'Sample: Frontend engineer',
+        vi: 'CV mẫu: Senior Frontend Engineer',
+        en: 'Sample: Senior Frontend Engineer',
       },
       en: {
-        vi: 'CV mẫu: Kỹ sư backend',
-        en: 'Sample: Backend engineer',
+        vi: 'CV mẫu: Senior Frontend Engineer',
+        en: 'Sample: Senior Frontend Engineer',
       },
     },
   },
@@ -230,11 +268,31 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
       vi: 'Ứng tuyển nước ngoài: ngoại ngữ đứng đầu cột bên',
       en: 'For cross-border roles: languages lead the sidebar',
     },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: BrSE',
+        en: 'Sample: Bridge Software Engineer (BrSE)',
+      },
+      en: {
+        vi: 'CV mẫu: BrSE',
+        en: 'Sample: Bridge Software Engineer (BrSE)',
+      },
+    },
   },
   'minimal-air': {
     purpose: {
       vi: 'Tối giản: không kẻ, không nền, chỉ khoảng trắng',
       en: 'Minimal: no rules, no fills, only white space',
+    },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: Fresher Backend Developer',
+        en: 'Sample: Entry-level Backend Developer',
+      },
+      en: {
+        vi: 'CV mẫu: Fresher Backend Developer',
+        en: 'Sample: Entry-level Backend Developer',
+      },
     },
   },
   'modern-sidebar': {
@@ -258,17 +316,47 @@ const ENTRIES: Readonly<Record<string, CatalogEntry>> = {
       vi: 'Đen trắng, photocopy vẫn rõ',
       en: 'Pure black and white, clear even when photocopied',
     },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: QA Lead',
+        en: 'Sample: QA Lead',
+      },
+      en: {
+        vi: 'CV mẫu: QA Lead',
+        en: 'Sample: QA Lead',
+      },
+    },
   },
   'nordic-muted': {
     purpose: {
       vi: 'Hai cột xanh xám dịu, gọn và nhẹ nhàng',
       en: 'Calm blue-grey two columns, compact and quiet',
     },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: Senior DevOps Engineer',
+        en: 'Sample: Senior DevOps Engineer',
+      },
+      en: {
+        vi: 'CV mẫu: Senior DevOps Engineer',
+        en: 'Sample: Senior DevOps Engineer',
+      },
+    },
   },
   'one-page-tight': {
     purpose: {
       vi: 'Nhiều kinh nghiệm, gói gọn trong một trang A4',
       en: 'A long career on one A4 page',
+    },
+    sampleTags: {
+      vi: {
+        vi: 'CV mẫu: Senior Backend Engineer',
+        en: 'Sample: Senior Backend Engineer',
+      },
+      en: {
+        vi: 'CV mẫu: Senior Backend Engineer',
+        en: 'Sample: Senior Backend Engineer',
+      },
     },
   },
   'startup-bold': {

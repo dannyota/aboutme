@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { SAMPLES } from '@aboutme/schema/samples';
+import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
   CHROME_PIXEL_TOLERANCE,
@@ -10,6 +12,9 @@ import {
 // horizontal page scroll at phone or desktop width, the filter row scrolls on
 // phones, a filter narrows the grid, the template page tabs switch views, and
 // an unknown template is a 404 (DESIGN.md, template gallery).
+
+// Templates with a sample show its stored page image; the rest render live.
+const SAMPLE_TEMPLATES = new Set(SAMPLES.map(({ templateId }) => templateId));
 
 for (const width of [390, 1440]) {
   test(`gallery at ${width} px fits the viewport`, async ({ page }) => {
@@ -37,7 +42,7 @@ for (const width of [390, 1440]) {
       .toHaveAttribute('aria-current', 'page');
   });
 
-  test(`gallery at ${width} px shows the 5 stored sample pages`, async ({
+  test(`gallery at ${width} px shows the stored sample pages`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 900 });
@@ -45,7 +50,7 @@ for (const width of [390, 1440]) {
     expect(response?.status()).toBe(200);
 
     const images = page.locator('img[data-page-image]');
-    await expect(images).toHaveCount(5);
+    await expect(images).toHaveCount(SAMPLE_TEMPLATES.size);
     const count = await images.count();
     for (let index = 0; index < count; index += 1) {
       const image = images.nth(index);
@@ -64,7 +69,8 @@ for (const width of [390, 1440]) {
       }).toPass();
     }
 
-    await expect(page.locator('[data-sheet-thumbnail]')).toHaveCount(15);
+    await expect(page.locator('[data-sheet-thumbnail]'))
+      .toHaveCount(TEMPLATES.length - SAMPLE_TEMPLATES.size);
     await expect(page.locator('h1')).toHaveCount(1);
   });
 }
@@ -112,7 +118,7 @@ test('template page switches between the page and the ATS text', async ({
   await expect(tabs).toHaveText(['Page', 'PDF', 'What an ATS reads']);
 
   await page.getByRole('tab', { name: 'What an ATS reads' }).click();
-  await expect(page.locator('[data-ats-text]')).toContainText('Khoa Vu');
+  await expect(page.locator('[data-ats-text]')).toContainText('Đỗ Hoàng Nam');
   await expect(page.locator('[data-action="use-sample"]'))
     .toHaveAttribute('href', '/app/new?sample=engineer-compact&lng=en');
   await expect(page.locator('h1')).toHaveCount(1);
@@ -161,7 +167,7 @@ test('the engineer compact page renders server-side with one h1', async ({
   const response = await page.request.get('/templates/engineer-compact');
   expect(response.status()).toBe(200);
   const html = await response.text();
-  expect(html).toContain('Khoa Vu');
+  expect(html).toContain('Đỗ Hoàng Nam');
   expect(html.match(/<h1/g)).toHaveLength(1);
 });
 

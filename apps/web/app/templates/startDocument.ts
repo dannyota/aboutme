@@ -89,8 +89,12 @@ export function suggestedTitle(
   if (request.kind === 'template') return `${request.template.name} resume`;
   const role = sampleRole(request.template, request.lng, request.lng);
   if (role === undefined) return `${request.template.name} resume`;
-  // Only the first letter drops to lower case, so FP&A stays FP&A.
-  return request.lng === 'vi'
-    ? `CV ${role.charAt(0).toLocaleLowerCase('vi')}${role.slice(1)}`
-    : `${role} resume`;
+  // A Vietnamese role reads in lower case after "CV" ("CV trưởng nhóm
+  // kho"). A role holding another capital is an English job title or an
+  // acronym ("Senior Frontend Engineer", "BrSE", "QA Lead") and keeps its
+  // case (docs/design/vietnam-tech-resumes.md).
+  if (request.lng !== 'vi') return `${role} resume`;
+  return /\p{Lu}/u.test(role.slice(1))
+    ? `CV ${role}`
+    : `CV ${role.charAt(0).toLocaleLowerCase('vi')}${role.slice(1)}`;
 }
