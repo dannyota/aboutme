@@ -1,7 +1,7 @@
 # Vietnam production
 
-Production at `https://aboutme.vn` moves from AWS Singapore and Cloudflare to
-providers that store and process personal data in Vietnam, under
+Production at `https://aboutme.vn` moves from AWS Singapore and Amazon
+CloudFront to providers that store and process personal data in Vietnam, under
 [ADR 0051](../adr/0051-vietnam-hosted-production.md). This page is the target
 design and the migration order. Until cutover, the
 [single-host design](single-host-production.md) describes what runs. The ADR
@@ -21,21 +21,21 @@ floating IP, Caddy on 443, then Go on `127.0.0.1:8080` or Nuxt on
 in vStorage, and Bizfly Email Transaction by SMTP. pgBackRest ships backups and
 WAL to a second vStorage bucket. Agents send logs and metrics to vMonitor.
 
-| Concern            | Today (AWS, Cloudflare)                      | Vietnam production                                          |
-| ------------------ | -------------------------------------------- | ----------------------------------------------------------- |
-| Edge, TLS, cache   | Cloudflare proxy, Full (strict), origin mTLS | vCDN Web Accelerator; origin allowlist plus secret header   |
-| DNS                | Cloudflare                                   | vDNS                                                        |
-| Compute            | EC2 `t4g.small`, Bottlerocket ECS            | One amd64 vServer, Podman containers under systemd          |
-| Database           | RDS PostgreSQL 18, 30-day PITR               | PostgreSQL 18 on the vServer, pgBackRest to vStorage        |
-| Media              | Private S3, task role                        | Private vStorage bucket, static key for one service account |
-| Secrets            | SSM Parameter Store                          | Root-only host files, age-encrypted copy in `aboutme-infra` |
-| Release fence      | DynamoDB item                                | Root-owned host file plus a start-time check                |
-| Jobs               | EventBridge Scheduler, ECS tasks             | systemd timers running one-shot containers                  |
-| Logs and alarms    | CloudWatch, SNS, Route 53 health check       | vMonitor logs, metrics, alarms, synthetic HTTP checks       |
-| Transactional mail | SES `ap-southeast-1`                         | Bizfly Email Transaction over SMTP                          |
-| Support mailbox    | Google Workspace                             | Bizfly Business Email                                       |
-| Google sign-in     | On                                           | Off (`PROVIDER_LOGIN_ENABLED=false`)                        |
-| Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS        | OpenTofu `deploy/vn/`, vStorage state, passphrase           |
+| Concern            | Today (AWS, CloudFront)                     | Vietnam production                                          |
+| ------------------ | ------------------------------------------- | ----------------------------------------------------------- |
+| Edge, TLS, cache   | CloudFront, public origin cert, origin mTLS | vCDN Web Accelerator; origin allowlist plus secret header   |
+| DNS                | Cloudflare, DNS-only CNAMEs to CloudFront   | vDNS                                                        |
+| Compute            | EC2 `t4g.small`, Bottlerocket ECS           | One amd64 vServer, Podman containers under systemd          |
+| Database           | RDS PostgreSQL 18, 30-day PITR              | PostgreSQL 18 on the vServer, pgBackRest to vStorage        |
+| Media              | Private S3, task role                       | Private vStorage bucket, static key for one service account |
+| Secrets            | SSM Parameter Store                         | Root-only host files, age-encrypted copy in `aboutme-infra` |
+| Release fence      | DynamoDB item                               | Root-owned host file plus a start-time check                |
+| Jobs               | EventBridge Scheduler, ECS tasks            | systemd timers running one-shot containers                  |
+| Logs and alarms    | CloudWatch, SNS, Route 53 health check      | vMonitor logs, metrics, alarms, synthetic HTTP checks       |
+| Transactional mail | SES `ap-southeast-1`                        | Bizfly Email Transaction over SMTP                          |
+| Support mailbox    | Google Workspace                            | Bizfly Business Email                                       |
+| Google sign-in     | On                                          | Off (`PROVIDER_LOGIN_ENABLED=false`)                        |
+| Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS       | OpenTofu `deploy/vn/`, vStorage state, passphrase           |
 
 All GreenNode resources live in one region. **Owner approval:** HCM03 (Ho Chi
 Minh City), where vServer and vStorage both have current docs.
@@ -57,8 +57,7 @@ storage. **Unconfirmed:** Web Accelerator caches HTML and API by default, so a
 rule must bypass everything else, and vCDN must neither cache nor replace 5xx
 responses (the maintenance page is a 503).
 
-vCDN has no equivalent of Authenticated Origin Pulls, so two layers lock the
-origin:
+vCDN has no equivalent of CloudFront origin mTLS, so two layers lock the origin:
 
 1. The security group admits TCP 443 only from vCDN's published origin ranges
    and TCP 22 only from the owner's allowlist. `deploy.sh` stops when vCDN's
@@ -80,9 +79,9 @@ enough, and the two layers above carry origin trust.
 Caddy trusts the vCDN client-IP header only from vCDN ranges
 (`trusted_proxies_strict`), strips every other forwarding header, and sends one
 `X-Real-IP` to Go. Go keeps trusting only loopback and never parses
-`X-Forwarded-For`. Production no longer trusts `CF-Connecting-IP`. If vCDN sends
-only `X-Forwarded-For`, Caddy takes the rightmost address outside its trusted
-ranges. **Unconfirmed:** the header name, and whether vCDN overwrites a
+`X-Forwarded-For`. The vCDN listener ignores `CloudFront-Viewer-Address`. If
+vCDN sends only `X-Forwarded-For`, Caddy takes the rightmost address outside its
+trusted ranges. **Unconfirmed:** the header name, and whether vCDN overwrites a
 viewer-supplied value.
 
 **Unconfirmed, required before cutover:** vCDN streams responses unbuffered; its
@@ -341,9 +340,9 @@ Each ships alone on AWS before cutover:
 
 1. Images for `linux/amd64` and `linux/arm64`.
 2. The SMTP mail sender.
-3. Caddy edge selection: the image carries the Cloudflare and vCDN route tables,
-   `EDGE=cloudflare|vcdn` picks one, and the site host comes from the
-   environment so a rehearsal hostname works.
+3. Caddy edge selection: the `EDGES` list gains `vcdn`, a listener with its own
+   trust and client address rule, and the site host comes from the environment
+   so a rehearsal hostname works.
 4. A notice asking accounts with a Google identity and no password to add one
    while Google sign-in still works. Password reset is a no-op for such an
    account today, so one that misses the notice cannot sign in after cutover;

@@ -290,7 +290,7 @@ Cloudflare's pages give no price, so that figure is unverified.
 
 ## Security parity
 
-| Control              | Cloudflare today                       | CloudFront                                      |
+| Control              | Cloudflare proxy                       | CloudFront                                      |
 | -------------------- | -------------------------------------- | ----------------------------------------------- |
 | Viewer TLS           | Edge certificate, TLS 1.2+             | ACM certificate, `TLSv1.2_2021`                 |
 | Origin reachability  | Security group: Cloudflare ranges      | Security group: CloudFront prefix list, 8443    |
@@ -303,7 +303,7 @@ Cloudflare's pages give no price, so that figure is unverified.
 | Edge cache           | `/_nuxt/*` only                        | `/_nuxt/*` only                                 |
 | Decrypts traffic     | Cloudflare                             | AWS, already the hosting processor              |
 
-Without the WAF, application-layer protection is weaker than today.
+Without the WAF, application-layer protection is weaker than Cloudflare's.
 
 ## Migration
 
