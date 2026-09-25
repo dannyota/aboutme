@@ -11,20 +11,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
 
-func jsonHandler(status int, body string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(status)
-		// A hardcoded literal written to an in-memory test ResponseWriter
-		// cannot realistically fail; a non-nil error here means the test
-		// double itself is broken, which should fail loudly rather than
-		// be silently discarded.
-		if _, err := w.Write([]byte(body)); err != nil {
-			panic(err)
-		}
-	})
-}
-
 func TestNoStoreCache_SetsCacheControlNoStore(t *testing.T) {
 	t.Parallel()
 	const wantCacheControl = "no-store, no-transform"
@@ -65,45 +51,19 @@ func TestNoStoreCache_AppliesToRejectedResponses(t *testing.T) {
 	}
 }
 
-func TestPublicJSONCache_SetsCacheControlAndETag(t *testing.T) {
-	t.Parallel()
-
-	handler := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"danny"}`))
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if got := rec.Header().Get("Cache-Control"); got != api.CacheControlPublicJSON {
-		t.Errorf("Cache-Control = %q, want %q", got, api.CacheControlPublicJSON)
-	}
-	if got := rec.Header().Get("ETag"); got == "" {
-		t.Error("ETag is empty, want a value")
-	}
-	if got := rec.Body.String(); got != `{"slug":"danny"}` {
-		t.Errorf("body = %q, want the handler's original body", got)
-	}
-}
-
 // TestCachePolicy_InnerGroupOverridesOuterDefault proves router.go's
-// outer NoStoreCache default can be overridden. router.go wires it as the
-// outermost DEFAULT on every chain (so rejections carry a cache directive),
-// and its comment relies on a later route group being able to substitute
-// its own policy by wrapping INSIDE the mux. That only holds because
-// PublicJSONCache writes Cache-Control on the real ResponseWriter AFTER the
-// outer NoStoreCache set it — this test pins that ordering so a future
-// public-JSON route's policy can never be silently clobbered back to
-// no-store by the default. It also protects the ETag/304 machinery that
-// only PublicJSONCache provides.
+// outer NoStoreCache default does not clobber a policy set inside the mux.
+// The public API sets its own Cache-Control in the handler, after the outer
+// NoStoreCache ran, and that later write must be the one sent.
 func TestCachePolicy_InnerGroupOverridesOuterDefault(t *testing.T) {
 	t.Parallel()
+	const innerPolicy = "no-cache, must-revalidate"
 
-	// Mirror router.go's layering: NoStoreCache outermost (the default),
-	// a group's PublicJSONCache wrapped inside it.
-	handler := api.NoStoreCache()(api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"danny"}`)))
+	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", innerPolicy)
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := api.NoStoreCache()(inner)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/public", nil)
 	rec := httptest.NewRecorder()
@@ -112,145 +72,8 @@ func TestCachePolicy_InnerGroupOverridesOuterDefault(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != api.CacheControlPublicJSON {
-		t.Errorf("Cache-Control = %q, want %q — the inner group policy must override the outer "+
-			"no-store default, not the reverse", got, api.CacheControlPublicJSON)
-	}
-	if got := rec.Header().Get("Cache-Control"); got == api.CacheControlNoStore {
-		t.Errorf("Cache-Control = %q: the outer no-store default clobbered the inner group's policy", got)
-	}
-	if got := rec.Header().Get("ETag"); got == "" {
-		t.Error("ETag is empty: the inner PublicJSONCache's conditional-request support was lost")
-	}
-}
-
-func TestPublicJSONCache_SetsCacheControlOnNonSuccessButNoETag(t *testing.T) {
-	t.Parallel()
-
-	handler := api.PublicJSONCache()(jsonHandler(http.StatusNotFound, `{"error":{"code":"not_found"}}`))
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotFound)
-	}
-	if got := rec.Header().Get("Cache-Control"); got != api.CacheControlPublicJSON {
-		t.Errorf("Cache-Control = %q, want %q (every response, not just 2xx)", got, api.CacheControlPublicJSON)
-	}
-	if got := rec.Header().Get("ETag"); got != "" {
-		t.Errorf("ETag = %q, want absent on a non-2xx response", got)
-	}
-}
-
-func TestPublicJSONCache_ETagStableForIdenticalBodyDiffersForDifferentBody(t *testing.T) {
-	t.Parallel()
-
-	req := func() *http.Request {
-		return httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	}
-
-	h1 := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"danny"}`))
-	rec1 := httptest.NewRecorder()
-	h1.ServeHTTP(rec1, req())
-
-	h2 := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"danny"}`))
-	rec2 := httptest.NewRecorder()
-	h2.ServeHTTP(rec2, req())
-
-	if rec1.Header().Get("ETag") != rec2.Header().Get("ETag") {
-		t.Errorf("ETag for identical bodies differs: %q vs %q", rec1.Header().Get("ETag"), rec2.Header().Get("ETag"))
-	}
-
-	h3 := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"someone-else"}`))
-	rec3 := httptest.NewRecorder()
-	h3.ServeHTTP(rec3, req())
-
-	if rec1.Header().Get("ETag") == rec3.Header().Get("ETag") {
-		t.Errorf("ETag for different bodies is the same: %q", rec1.Header().Get("ETag"))
-	}
-}
-
-// TestPublicJSONCache_HonorsIfNoneMatch_Returns304NoBody proves the mechanism
-// conditional polling depends on. A client with the current ETag gets a
-// bodyless 304, not a
-// full re-download.
-func TestPublicJSONCache_HonorsIfNoneMatch_Returns304NoBody(t *testing.T) {
-	t.Parallel()
-
-	body := `{"slug":"danny","updated":1}`
-
-	first := api.PublicJSONCache()(jsonHandler(http.StatusOK, body))
-	rec1 := httptest.NewRecorder()
-	rec1Req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	first.ServeHTTP(rec1, rec1Req)
-	etag := rec1.Header().Get("ETag")
-	if etag == "" {
-		t.Fatal("first response has no ETag")
-	}
-
-	second := api.PublicJSONCache()(jsonHandler(http.StatusOK, body))
-	rec2 := httptest.NewRecorder()
-	rec2Req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	rec2Req.Header.Set("If-None-Match", etag)
-	second.ServeHTTP(rec2, rec2Req)
-
-	if rec2.Code != http.StatusNotModified {
-		t.Fatalf("status = %d, want %d", rec2.Code, http.StatusNotModified)
-	}
-	if got := rec2.Body.Len(); got != 0 {
-		t.Errorf("304 body length = %d, want 0", got)
-	}
-	if got := rec2.Header().Get("Cache-Control"); got != api.CacheControlPublicJSON {
-		t.Errorf("Cache-Control on 304 = %q, want %q", got, api.CacheControlPublicJSON)
-	}
-}
-
-func TestPublicJSONCache_MismatchedIfNoneMatch_Returns200WithBody(t *testing.T) {
-	t.Parallel()
-
-	handler := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"danny"}`))
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	req.Header.Set("If-None-Match", `"stale-tag-that-will-never-match"`)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if got := rec.Body.String(); got != `{"slug":"danny"}` {
-		t.Errorf("body = %q, want the full body", got)
-	}
-}
-
-func TestPublicJSONCache_IfNoneMatchWildcard_Returns304(t *testing.T) {
-	t.Parallel()
-
-	handler := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{"slug":"danny"}`))
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	req.Header.Set("If-None-Match", "*")
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotModified {
-		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNotModified)
-	}
-}
-
-func TestPublicJSONCache_PreservesHandlerHeaders(t *testing.T) {
-	t.Parallel()
-
-	handler := api.PublicJSONCache()(jsonHandler(http.StatusOK, `{}`))
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
-		t.Errorf("Content-Type = %q, want the handler's own value preserved", got)
+	if got := rec.Header().Get("Cache-Control"); got != innerPolicy {
+		t.Errorf("Cache-Control = %q, want %q: the inner policy must override the outer no-store default", got, innerPolicy)
 	}
 }
 
