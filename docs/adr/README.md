@@ -9,9 +9,9 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decision is
-[ADR 0052](0052-guarded-token-edits-to-generated-primitives.md), which lets a
-generated UI primitive carry token-colored variant edits when a guard test
-protects them.
+[ADR 0054](0054-cloudfront-edge-for-single-host-production.md), which puts
+production behind Amazon CloudFront instead of Cloudflare until the move to
+Vietnam.
 
 [ADR 0053](0053-public-pdf-tab-renders-the-download-in-the-browser.md) is
 rejected: public pages have no PDF tab.
