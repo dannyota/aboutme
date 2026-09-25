@@ -9,6 +9,7 @@
     "build": "nuxt build",
     "api:gen": "bash scripts/openapi-gen.sh app/api/generated/openapi.ts",
     "api:drift": "bash scripts/api-drift-check.sh",
+    "document-validator:gen": "node scripts/generate-document-validator.mjs",
     "lint": "eslint .",
     "typecheck": "vue-tsc --build --noEmit",
     "test": "vitest run",

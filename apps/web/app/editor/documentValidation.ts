@@ -1,16 +1,12 @@
 import type { Resume } from '@aboutme/schema';
-import currentSchema from '@aboutme/schema/current-schema';
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { validateDocument } from '@aboutme/schema/validation';
-import Ajv2020 from 'ajv/dist/2020.js';
-import addFormats from 'ajv-formats';
 
-const ajv = new Ajv2020({ allErrors: true, strict: true });
-addFormats(ajv);
-// ajv.compile emits a `new Function`, which the strict renderer CSP blocks.
-// Compile lazily so importing this module on a non-editor route (login) does
-// not run it — and thus does not trip a CSP violation — at module load.
-let validateSchema: ReturnType<typeof ajv.compile> | undefined;
+// A build-time Ajv standalone compile of resume.schema.json
+// (documentValidator.generated.mjs), not a runtime `ajv.compile()`: that
+// call emits a `new Function`, which the app-page CSP's script-src blocks
+// (docs/design/security.md; the editor route carries that CSP too).
+import validateSchema from './documentValidator.generated.mjs';
 
 export class UnknownDocumentVersionError extends Error {
   constructor() {
@@ -29,7 +25,6 @@ export function parseCurrentDocument(value: unknown): Resume {
   ) {
     throw new UnknownDocumentVersionError();
   }
-  validateSchema ??= ajv.compile(currentSchema);
   if (
     !validateSchema(value)
     || !isCurrentVersion(value)
