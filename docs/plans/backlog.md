@@ -4,6 +4,10 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
+- The paged editor preview holds less than the PDF on some templates (minimal-air spilled to two pages at 65% print fill while the PDF fit one), so a user can see two preview pages for a one-page PDF. Evidence: Vietnam tech samples work, 2026-09-25; `apps/web/e2e/preview-gap-expected.json`.
+- Template date formats ignore the resume language: the style guide wants `MM/YYYY` for Vietnamese and `Mon YYYY` for English, and international-lang's `YYYY` drops months. Evidence: `docs/design/vietnam-tech-resumes.md`, `packages/schema/samples/international-lang.*`.
+- The Vietnam tech style guide conflicts with the samples on two points (Zalo line in English resumes; fresher awards as their own section). The designer decides and updates the guide or the samples. Evidence: `docs/design/vietnam-tech-resumes.md`.
+- A stray dot sits on the stored Executive Band page 1 image (Vietnamese), about 60 px above the bottom edge; check the print path. Evidence: `apps/web/public/templates/pages/executive-band-vi-p1.png`.
 - `TestRealtimeRoutesDeliverCommittedDatabaseChangesThroughRealSessionMiddleware` failed once with "public stream remained open after revocation drain" (`apps/server/internal/realtime/service_test.go:539`); find the race. Evidence: deploy-fixes branch CI, 2026-09-24.
 - The deploy warm-up requests `/danny`; if that resume is unpublished, every deploy fails. Evidence: `deploy/aws/scripts/deploy.sh` (`DEPLOY_WARM_PAGE`).
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
