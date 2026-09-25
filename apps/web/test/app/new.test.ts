@@ -11,7 +11,9 @@ import { setSiteLocale } from '../support/locale';
 
 // /app/new is reached from a public gallery page, so a signed-out visitor
 // must land on account creation, not sign-in, carrying the sample or
-// template query back with them (register.vue then returns them here).
+// template query back with them (register.vue then returns them here). The
+// shared route guard (middleware/signed-in.global.ts) sends them; the page
+// itself does not.
 
 let meStatus = 401;
 const startDocumentSpy = vi.spyOn(
@@ -33,32 +35,23 @@ describe('/app/new', () => {
     startDocumentSpy.mockClear();
   });
 
-  it(
-    'sends a signed-out sample visitor to register, next the full path',
-    async () => {
-      const route = '/app/new?sample=ats-plain&lng=en';
+  it.each([
+    '/app/new?sample=ats-plain&lng=en',
+    '/app/new?template=classic-serif',
+  ])('sends a signed-out visitor at %s to register, next the full path',
+    async (route) => {
       await mountSuspended(NewResumePage, { route });
-      await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(route)}`,
-      );
-    },
-  );
-
-  it(
-    'sends a signed-out template visitor to register the same way',
-    async () => {
-      const route = '/app/new?template=classic-serif';
-      await mountSuspended(NewResumePage, { route });
-      await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(route)}`,
-      );
+      await vi.waitFor(() => {
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          `/register?next=${encodeURIComponent(route)}`,
+          { replace: true },
+        );
+      });
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
         expect.stringContaining('/login'),
+        expect.anything(),
       );
-    },
-  );
+    });
 
   it('does not restart a blank document when the interface locale changes',
     async () => {

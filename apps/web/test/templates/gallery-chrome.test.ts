@@ -1,9 +1,13 @@
 import { mountSuspended } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import GalleryPage from '../../app/pages/templates/index.vue';
-import { FILTERS, type GalleryFilter } from '../../app/templates/catalog';
+import {
+  FILTERS,
+  type GalleryFilter,
+  GALLERY,
+} from '../../app/templates/catalog';
 import { setSiteLocale } from '../support/locale';
 
 // The gallery header and filter chips (DESIGN.md, template gallery). The
@@ -65,5 +69,80 @@ describe('template gallery chrome', () => {
     for (const kind of kinds) {
       expect(['sample', 'illustrative']).toContain(kind);
     }
+  });
+
+  it('presses the backend chip and hides every other card', async () => {
+    const wrapper = await mountSuspended(GalleryPage, {
+      route: '/templates?role=backend',
+    });
+    await flushPromises();
+
+    expect(wrapper.get('[data-role="backend"]').attributes('aria-pressed'))
+      .toBe('true');
+    expect(wrapper.get('[data-role="all"]').attributes('aria-pressed'))
+      .toBe('false');
+
+    const cards = wrapper.findAll('[data-template]');
+    expect(cards).toHaveLength(GALLERY.length);
+    for (const card of cards) {
+      const isBackend = card.attributes('data-template') === 'one-page-tight';
+      expect(card.element.closest('li')?.hasAttribute('hidden'))
+        .toBe(!isBackend);
+    }
+  });
+
+  it('treats an unknown role as all roles: nothing hidden', async () => {
+    const wrapper = await mountSuspended(GalleryPage, {
+      route: '/templates?role=nope',
+    });
+    await flushPromises();
+
+    expect(wrapper.get('[data-role="all"]').attributes('aria-pressed'))
+      .toBe('true');
+    for (const card of wrapper.findAll('[data-template]')) {
+      expect(card.element.closest('li')?.hasAttribute('hidden')).toBe(false);
+    }
+  });
+
+  it('names the role group with the accessible label', async () => {
+    const wrapper = await mountSuspended(GalleryPage);
+    const group = wrapper.get('[data-testid="gallery-roles"]');
+    expect(group.attributes('aria-label')).toBe('Filter by role');
+  });
+
+  it('combines the role chip with the filter chip in the URL', async () => {
+    const wrapper = await mountSuspended(GalleryPage, {
+      route: '/templates?filter=ats&role=frontend',
+    });
+    await flushPromises();
+
+    // Navigation settles asynchronously, so assert the replace call, then
+    // wait for the route and the pressed chip to follow.
+    const router = useRouter();
+    const replace = vi.spyOn(router, 'replace');
+    const chip = (role: string) => wrapper.get(`[data-role="${role}"]`);
+
+    await chip('mobile').trigger('click');
+    expect(replace).toHaveBeenLastCalledWith({
+      query: { filter: 'ats', role: 'mobile' },
+    });
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.query)
+        .toEqual({ filter: 'ats', role: 'mobile' });
+      expect(chip('mobile').attributes('aria-pressed')).toBe('true');
+    });
+
+    replace.mockClear();
+    await chip('mobile').trigger('click');
+    await flushPromises();
+    expect(replace).not.toHaveBeenCalled();
+    expect(chip('mobile').attributes('aria-pressed')).toBe('true');
+
+    await chip('all').trigger('click');
+    expect(replace).toHaveBeenLastCalledWith({ query: { filter: 'ats' } });
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.query).toEqual({ filter: 'ats' });
+    });
+    replace.mockRestore();
   });
 });
