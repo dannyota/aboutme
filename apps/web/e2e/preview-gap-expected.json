@@ -1,1093 +1,365 @@
 {
-  "version": 1,
-  "note": "Word-level drift ceilings per sample|lng|engine|zoom key. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese executive-band and modern-sidebar samples, whose PDF text layer splits a few diacritic words differently from the DOM. Line-break ceilings hold the differences that font hinting (Chromium without the print flags) causes; they change only with the browser or font build. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
+  "version": 2,
+  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese executive-band and modern-sidebar samples, whose PDF text layer splits a few diacritic words differently from the DOM. Line-break ceilings hold the differences that font hinting (Chromium without the print flags) causes; they change only with the browser or font build. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
   "cases": {
-    "ats-plain|en|chromium-normal|typical": {
+    "ats-plain|en|chromium-normal": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "ats-plain|en|webkit": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "ats-plain|vi|chromium-normal": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "ats-plain|vi|webkit": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "consulting-formal|en|chromium-normal": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "consulting-formal|en|webkit": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "consulting-formal|vi|chromium-normal": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "consulting-formal|vi|webkit": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "creative-accent|en|chromium-normal": {
       "maxLineBreak": 2,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "ats-plain|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|en|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|en|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|vi|chromium-normal|typical": {
+    "creative-accent|en|webkit": {
       "maxLineBreak": 2,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "ats-plain|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|vi|chromium-normal|full": {
+    "creative-accent|vi|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "ats-plain|vi|webkit|typical": {
+    "creative-accent|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "ats-plain|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "ats-plain|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|en|chromium-normal|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|en|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|en|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|vi|chromium-normal|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|vi|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|vi|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "consulting-formal|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|en|chromium-normal|typical": {
-      "maxLineBreak": 4,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|en|chromium-normal|full": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|en|webkit|typical": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|en|webkit|full": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|vi|chromium-normal|typical": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|vi|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|vi|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "creative-accent|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|en|chromium-normal|typical": {
-      "maxLineBreak": 5,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|en|chromium-normal|full": {
+    "elegant-serif-two|en|chromium-normal": {
       "maxLineBreak": 6,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "elegant-serif-two|en|webkit|typical": {
+    "elegant-serif-two|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "elegant-serif-two|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|vi|chromium-normal|typical": {
+    "elegant-serif-two|vi|chromium-normal": {
       "maxLineBreak": 6,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "elegant-serif-two|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|vi|chromium-normal|full": {
-      "maxLineBreak": 6,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|vi|webkit|typical": {
+    "elegant-serif-two|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "elegant-serif-two|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "elegant-serif-two|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|en|chromium-normal|typical": {
-      "maxLineBreak": 3,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|en|chromium-normal|full": {
+    "engineer-compact|en|chromium-normal": {
       "maxLineBreak": 1,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "engineer-compact|en|webkit|typical": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|en|webkit|full": {
+    "engineer-compact|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "engineer-compact|vi|chromium-normal|typical": {
-      "maxLineBreak": 1,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|vi|chromium-normal|full": {
-      "maxLineBreak": 11,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|vi|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "engineer-compact|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|en|chromium-normal|typical": {
-      "maxLineBreak": 8,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|en|chromium-normal|full": {
-      "maxLineBreak": 6,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|en|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|vi|chromium-normal|typical": {
-      "maxLineBreak": 12,
-      "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|vi|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|vi|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
-      "maxEntryPageMismatches": 0
-    },
-    "executive-band|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|en|chromium-normal|typical": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|en|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|en|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|vi|chromium-normal|typical": {
+    "engineer-compact|vi|chromium-normal": {
       "maxLineBreak": 3,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "graduate-friendly|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "graduate-friendly|vi|chromium-normal|full": {
+    "engineer-compact|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "graduate-friendly|vi|webkit|typical": {
+    "executive-band|en|chromium-normal": {
+      "maxLineBreak": 6,
+      "maxPageBreak": 0,
+      "maxMissing": 0,
+      "maxExtra": 0,
+      "maxEntryPageMismatches": 0
+    },
+    "executive-band|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "graduate-friendly|vi|webkit|phone": {
-      "maxLineBreak": null,
+    "executive-band|vi|chromium-normal": {
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
+      "maxMissing": 2,
+      "maxExtra": 2,
       "maxEntryPageMismatches": 0
     },
-    "graduate-friendly|vi|webkit|full": {
+    "executive-band|vi|webkit": {
+      "maxLineBreak": 0,
+      "maxPageBreak": 0,
+      "maxMissing": 2,
+      "maxExtra": 2,
+      "maxEntryPageMismatches": 0
+    },
+    "graduate-friendly|en|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "international-lang|en|chromium-normal|typical": {
-      "maxLineBreak": 12,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "international-lang|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "international-lang|en|chromium-normal|full": {
+    "graduate-friendly|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "international-lang|en|webkit|typical": {
+    "graduate-friendly|vi|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "international-lang|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "international-lang|en|webkit|full": {
+    "graduate-friendly|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "international-lang|vi|chromium-normal|typical": {
-      "maxLineBreak": 10,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "international-lang|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "international-lang|vi|chromium-normal|full": {
+    "international-lang|en|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "international-lang|vi|webkit|typical": {
+    "international-lang|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "international-lang|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "international-lang|vi|webkit|full": {
+    "international-lang|vi|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|en|chromium-normal|typical": {
+    "international-lang|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "minimal-air|en|chromium-normal|full": {
+    "minimal-air|en|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|en|webkit|typical": {
+    "minimal-air|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "minimal-air|en|webkit|full": {
+    "minimal-air|vi|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|vi|chromium-normal|typical": {
+    "minimal-air|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "minimal-air|vi|chromium-normal|full": {
+    "modern-sidebar|en|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|vi|webkit|typical": {
+    "modern-sidebar|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "minimal-air|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "minimal-air|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|en|chromium-normal|typical": {
-      "maxLineBreak": 4,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|en|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|en|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|vi|chromium-normal|typical": {
-      "maxLineBreak": 12,
-      "maxPageBreak": 0,
-      "maxMissing": 1,
-      "maxExtra": 1,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 1,
-      "maxExtra": 1,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|vi|chromium-normal|full": {
+    "modern-sidebar|vi|chromium-normal": {
       "maxLineBreak": 4,
       "maxPageBreak": 0,
       "maxMissing": 1,
       "maxExtra": 1,
       "maxEntryPageMismatches": 0
     },
-    "modern-sidebar|vi|webkit|typical": {
+    "modern-sidebar|vi|webkit": {
       "maxLineBreak": 2,
       "maxPageBreak": 0,
       "maxMissing": 1,
       "maxExtra": 1,
       "maxEntryPageMismatches": 0
     },
-    "modern-sidebar|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 1,
-      "maxExtra": 1,
-      "maxEntryPageMismatches": 0
-    },
-    "modern-sidebar|vi|webkit|full": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 1,
-      "maxExtra": 1,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|en|chromium-normal|typical": {
+    "mono-print|en|chromium-normal": {
       "maxLineBreak": 2,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "mono-print|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|en|chromium-normal|full": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|en|webkit|typical": {
+    "mono-print|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "mono-print|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|en|webkit|full": {
+    "mono-print|vi|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "mono-print|vi|chromium-normal|typical": {
+    "mono-print|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "mono-print|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|vi|chromium-normal|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|vi|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "mono-print|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|en|chromium-normal|typical": {
-      "maxLineBreak": 7,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|en|chromium-normal|full": {
+    "nordic-muted|en|chromium-normal": {
       "maxLineBreak": 9,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "nordic-muted|en|webkit|typical": {
+    "nordic-muted|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "nordic-muted|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|vi|chromium-normal|typical": {
-      "maxLineBreak": 2,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|vi|chromium-normal|full": {
+    "nordic-muted|vi|chromium-normal": {
       "maxLineBreak": 6,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "nordic-muted|vi|webkit|typical": {
+    "nordic-muted|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "nordic-muted|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "nordic-muted|vi|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|en|chromium-normal|typical": {
+    "one-page-tight|en|chromium-normal": {
       "maxLineBreak": 5,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "one-page-tight|en|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|en|chromium-normal|full": {
-      "maxLineBreak": 5,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|en|webkit|typical": {
+    "one-page-tight|en|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "one-page-tight|en|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|en|webkit|full": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|vi|chromium-normal|typical": {
+    "one-page-tight|vi|chromium-normal": {
       "maxLineBreak": 5,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
-    "one-page-tight|vi|chromium-normal|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|vi|chromium-normal|full": {
-      "maxLineBreak": 5,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|vi|webkit|typical": {
-      "maxLineBreak": 0,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|vi|webkit|phone": {
-      "maxLineBreak": null,
-      "maxPageBreak": 0,
-      "maxMissing": 0,
-      "maxExtra": 0,
-      "maxEntryPageMismatches": 0
-    },
-    "one-page-tight|vi|webkit|full": {
+    "one-page-tight|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,

@@ -18,8 +18,9 @@ import { denyExternalRequests, waitForImages } from './support';
 // gallery sample, in both languages. The preview is approximate and the PDF
 // is authoritative (docs/design/templates/print.md §1); this check reports
 // the size of that gap rather than enforcing pixel or text equality. It
-// fails only when a case's drift exceeds preview-gap-expected.json, so a
-// later renderer fix can tighten the file without this spec changing.
+// fails when a case's drift exceeds preview-gap-expected.json, when the
+// preview's page count differs from the PDF's, or when a display scale
+// changes the layout the preview measures at full scale.
 //
 // Comparison unit: words, extracted from the DOM (Range.getBoundingClientRect
 // per word, clustered into visual lines) for the preview, and from pdfjs text
@@ -197,13 +198,9 @@ const expectations = JSON.parse(
   readFileSync(expectationsPath, 'utf8'),
 ) as ExpectationFile;
 
-function caseKey(
-  sample: string,
-  lng: string,
-  engine: string,
-  zoomLabel: string,
-): string {
-  return `${sample}|${lng}|${engine}|${zoomLabel}`;
+// Keyed without the display scale: every scale must lay out alike.
+function caseKey(sample: string, lng: string, engine: string): string {
+  return `${sample}|${lng}|${engine}`;
 }
 
 const METRIC_CHECKS: ReadonlyArray<
@@ -217,12 +214,7 @@ const METRIC_CHECKS: ReadonlyArray<
 ];
 
 function assertWithinExpectation(result: CaseResult): void {
-  const key = caseKey(
-    result.sample,
-    result.lng,
-    result.engine,
-    result.zoomLabel,
-  );
+  const key = caseKey(result.sample, result.lng, result.engine);
   const metrics = expectations.cases[key];
   for (const [countKey, limitKey] of METRIC_CHECKS) {
     const limit = metrics?.[limitKey] ?? null;
@@ -954,6 +946,7 @@ for (const { templateId, lng } of SAMPLES) {
     const caseFailures: FailedCase[] = [];
 
     for (const { engine, browser } of variants) {
+      let fullScale: CaseResult | undefined;
       for (const [zoomLabel, zoomValue] of ZOOM_VARIANTS) {
         const previewResult = await producePreview(
           browser,
@@ -1020,6 +1013,20 @@ for (const { templateId, lng } of SAMPLES) {
             throw new Error(
               `preview has ${String(previewPageCount)} page(s), `
               + `PDF has ${String(pdfPageCount)}`,
+            );
+          }
+          // The sheet is scaled for display with a transform, so the layout
+          // is the same at every scale (docs/design/templates/print.md §1).
+          if (zoomLabel === 'full') {
+            fullScale = result;
+          } else if (
+            fullScale !== undefined
+            && JSON.stringify(result.counts)
+              !== JSON.stringify(fullScale.counts)
+          ) {
+            throw new Error(
+              `${zoomLabel} scale drifts ${JSON.stringify(result.counts)}, `
+              + `full scale ${JSON.stringify(fullScale.counts)}`,
             );
           }
         } catch (error) {
