@@ -449,6 +449,12 @@ apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
 apps/web/e2e/baselines/public--classic-serif--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--390.png
+apps/web/e2e/baselines/template-ats--dark--1440.png
+apps/web/e2e/baselines/template-ats--dark--390.png
+apps/web/e2e/baselines/template-pdf--dark--1440.png
+apps/web/e2e/baselines/template-pdf--dark--390.png
+apps/web/e2e/baselines/template-pdf--light--1440.png
+apps/web/e2e/baselines/template-pdf--light--390.png
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/fonts-offline.spec.ts

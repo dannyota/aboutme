@@ -176,6 +176,12 @@ export async function denyExternalRequests(page: Page): Promise<string[]> {
   return attempted;
 }
 
+// Renderer baselines stay exact (ADR 0029). Chrome captures allow a few
+// hundred pixels: Chromium's software raster anti-aliases rounded corners
+// two ways between runs on a tall page, about 200 pixels. chrome.spec.ts and
+// gallery.spec.ts share it so their chrome captures use one tolerance.
+export const CHROME_PIXEL_TOLERANCE = 400;
+
 export async function waitForImages(page: Page): Promise<void> {
   await page.locator('img').evaluateAll(async (images) => {
     await Promise.all(images.map(async (image) => {
