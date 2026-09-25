@@ -33,33 +33,38 @@ describe('application icon links', () => {
       const wrapper = await mountSuspended(AppRoot, { route: '/' });
       await flushPromises();
 
-      const links = [...document.head.querySelectorAll(
-        'link[rel="icon"], link[rel="apple-touch-icon"], '
-        + 'link[rel="manifest"]',
-      )];
-      expect(links.map((link) => ({
-        rel: link.getAttribute('rel'),
-        type: link.getAttribute('type'),
-        sizes: link.getAttribute('sizes'),
-        href: link.getAttribute('href'),
-      }))).toEqual([
-        {
-          rel: 'icon', type: 'image/png', sizes: '32x32',
-          href: '/icon-32-v2.png',
-        },
-        {
-          rel: 'icon', type: 'image/svg+xml', sizes: null,
-          href: '/favicon-v2.svg',
-        },
-        {
-          rel: 'apple-touch-icon', type: null, sizes: '180x180',
-          href: '/apple-touch-icon-v2.png',
-        },
-        {
-          rel: 'manifest', type: null, sizes: null,
-          href: '/site-v2.webmanifest',
-        },
-      ]);
+      // @unhead/vue's client renderer debounces the actual DOM write with
+      // setTimeout(0), so a single flushPromises() (a microtask) races it;
+      // wait for the settled link set instead of asserting it immediately.
+      await vi.waitFor(() => {
+        const links = [...document.head.querySelectorAll(
+          'link[rel="icon"], link[rel="apple-touch-icon"], '
+          + 'link[rel="manifest"]',
+        )];
+        expect(links.map((link) => ({
+          rel: link.getAttribute('rel'),
+          type: link.getAttribute('type'),
+          sizes: link.getAttribute('sizes'),
+          href: link.getAttribute('href'),
+        }))).toEqual([
+          {
+            rel: 'icon', type: 'image/png', sizes: '32x32',
+            href: '/icon-32-v2.png',
+          },
+          {
+            rel: 'icon', type: 'image/svg+xml', sizes: null,
+            href: '/favicon-v2.svg',
+          },
+          {
+            rel: 'apple-touch-icon', type: null, sizes: '180x180',
+            href: '/apple-touch-icon-v2.png',
+          },
+          {
+            rel: 'manifest', type: null, sizes: null,
+            href: '/site-v2.webmanifest',
+          },
+        ]);
+      });
       expect(
         document.head.querySelector('meta[name="theme-color"]')
           ?.getAttribute('content'),
@@ -141,14 +146,18 @@ describe('the chrome font preload', () => {
     const wrapper = await mountSuspended(AppRoot, { route: '/' });
     await flushPromises();
 
-    const preload = document.head.querySelector(
-      'link[rel="preload"][as="font"]',
-    );
-    expect(preload?.getAttribute('type')).toBe('font/woff2');
-    expect(preload?.getAttribute('crossorigin')).toBe('anonymous');
-    // Vite's hashed build path for the vendored file, not a second copy.
-    expect(preload?.getAttribute('href'))
-      .toMatch(/be-vietnam-pro-var[\w.-]*\.woff2$/u);
+    // Same debounced DOM write as above: wait for the settled tag instead
+    // of racing flushPromises() against unhead's setTimeout(0) flush.
+    await vi.waitFor(() => {
+      const preload = document.head.querySelector(
+        'link[rel="preload"][as="font"]',
+      );
+      expect(preload?.getAttribute('type')).toBe('font/woff2');
+      expect(preload?.getAttribute('crossorigin')).toBe('anonymous');
+      // Vite's hashed build path for the vendored file, not a second copy.
+      expect(preload?.getAttribute('href'))
+        .toMatch(/be-vietnam-pro-var[\w.-]*\.woff2$/u);
+    });
     wrapper.unmount();
   });
 

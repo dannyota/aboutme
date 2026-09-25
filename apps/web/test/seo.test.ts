@@ -152,9 +152,12 @@ describe('site page search metadata', () => {
 
   it('keeps structured data off the other site pages', async () => {
     await visit('/privacy');
-    expect(
+    // The homepage's ld+json entry is disposed on unmount, and that
+    // removal reaches the DOM through the same debounced setTimeout(0)
+    // flush as a new push; wait for it instead of racing flushPromises().
+    await vi.waitFor(() => expect(
       document.head.querySelector('script[type="application/ld+json"]'),
-    ).toBeNull();
+    ).toBeNull());
   });
 });
 
