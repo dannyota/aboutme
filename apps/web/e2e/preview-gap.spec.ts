@@ -39,18 +39,17 @@ import { denyExternalRequests, waitForImages } from './support';
 //   preview's first page reports. Without this, a PDF line that crosses both
 //   columns interleaves main and sidebar words and misaligns them.
 
-const TYPICAL_ZOOM = 0.84;
 const FULL_ZOOM = 1;
 // The editor's display scale on a 390 px phone, as EditorPreview.vue's
 // sheetZoom computes it. At this scale, text laid out at the scaled size
 // would fall below WebKit's minimum font size and grow; the preview must
-// still lay out at full size and match the PDF.
+// still lay out at full size and match the PDF. It is smaller than the
+// desktop scale (0.84), so a font that grows at desktop also grows here.
 const PHONE_ZOOM = (390 - 32) / (210 / 25.4 * 96);
-// Full zoom runs first so a settle failure at the typical (non-1) zoom, and
-// not at full zoom, points at display scale rather than the fixture itself.
+// Full zoom runs first so a settle failure at the phone zoom, and not at
+// full zoom, points at display scale rather than the fixture itself.
 const ZOOM_VARIANTS = [
   ['full', FULL_ZOOM],
-  ['typical', TYPICAL_ZOOM],
   ['phone', PHONE_ZOOM],
 ] as const;
 type ZoomLabel = (typeof ZOOM_VARIANTS)[number][0];

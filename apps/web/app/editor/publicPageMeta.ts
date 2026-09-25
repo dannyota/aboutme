@@ -73,12 +73,6 @@ export function changedPublicPageFields(
   };
 }
 
-export const PUBLIC_PAGE_ISSUE_MESSAGES: Readonly<Record<string, string>> = {
-  too_long: `Use ${PUBLIC_TITLE_MAX} characters or fewer.`,
-  invalid_characters: 'Remove hidden or control characters.',
-  invalid_emoji: 'Enter exactly one emoji.',
-};
-
 /** The field a server issue belongs to, from its path's last segment. */
 export function publicPageIssueField(
   path: string,
