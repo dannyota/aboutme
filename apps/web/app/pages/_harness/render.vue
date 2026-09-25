@@ -79,8 +79,8 @@ if (isCorpus) {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'mode', 'paper', 'print', 'template',
-        'zoom',
+        'align', 'fixture', 'font', 'mode', 'paper', 'print', 'repeat',
+        'template', 'zoom',
       ],
     ),
   );
@@ -142,6 +142,32 @@ if (isCorpus) {
     sampleLanguage = sample.lng;
   }
   printMode = printFixture || requestedPrint === '1';
+
+  const requestedRepeat = singleton('repeat');
+  if (requestedRepeat !== undefined) {
+    if (
+      resumeDocument === undefined
+      || !fixture.startsWith('sample-')
+      || (requestedRepeat !== '2' && requestedRepeat !== '3')
+    ) {
+      badQuery();
+    }
+    const times = Number(requestedRepeat);
+    // Repeats every section's entries to build multi-page content for the
+    // print check.
+    const content = resumeDocument.content as unknown as Record<
+      string, { entries: Array<{ id: string }> }>;
+    for (const section of Object.values(content)) {
+      const base = section.entries;
+      section.entries = Array.from({ length: times }, (_, copy) =>
+        base.map((entry) => ({
+          ...structuredClone(entry),
+          id: copy === 0
+            ? entry.id
+            : `${entry.id.slice(0, -2)}${String(copy).padStart(2, '0')}`,
+        }))).flat();
+    }
+  }
 
   const resolvedDocument = resumeDocument ?? badQuery();
   // The fixture owner already prints on the preset's paper; a template switch

@@ -4,7 +4,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
-- Print bug (release-blocking per `docs/design/templates/print.md` section 5): when a two-column resume runs past one page, Chromium moves the whole column grid to page 2, leaving page 1 with only the header, so the PDF has an extra page (elegant-serif-two, international-lang, nordic-muted in both languages; modern-sidebar vi; executive-band prints a near-empty page 3 and a blank page 5 with repeated content). Evidence: preview capacity work, CI run 36108473045.
 - `SheetThumbnail.vue`, `TemplateThumbnail.vue`, and the homepage sample still scale with CSS `zoom`; WebKit shows them with enlarged text. Move them to `ScaledSheet`.
 - `docs/design/vietnam-production.md` contradicts itself: lines 150-151 say the two Caddy units conflict in systemd, while steps 5 and 8 run them side by side (SO_REUSEPORT). Also cover ACME HTTP-01 with two Caddy processes on port 80 (shared certificate storage), same-user units, and check `/readyz` on the server directly in step 8. Evidence: deploy handoff review, 2026-09-25.
 - `docs/design/single-host-production.md:268` and `docs/runbooks/production.md:257` omit the new recovery exceptions: an unconfirmed new app is left running when maintenance cannot be confirmed, and the failed previous-app restart path. Evidence: `deploy/aws/scripts/deploy.sh` restore.
