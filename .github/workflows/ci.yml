@@ -1083,6 +1083,174 @@ jobs:
             ~/go/pkg/mod
           key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
 
+  # Runs every other trusted-browser proof against the exact candidate through
+  # the repository HTTPS harness. Proofs are grouped so the setup cost is paid
+  # once per group and the whole workflow stays under the 20 concurrent jobs
+  # GitHub Free allows. Each proof after a group's first gets a freshly
+  # restarted harness (same database and image), so no proof inherits another
+  # proof's in-memory server state such as rate limits. A failing proof does
+  # not stop the rest of its group; the step fails after all of them ran and
+  # the job summary lists each proof's result. No screenshot, trace, video, or
+  # artifact upload.
+  dev-https-proofs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: entry
+            proofs: entry sample-start auth
+          - group: editor
+            proofs: editor
+          - group: publish
+            proofs: publish public transport
+          - group: account
+            proofs: password exports privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Starts pulling the pinned Playwright base image (the FROM reference
+      # in deploy/dev-https-browser/Dockerfile) in the background so it
+      # overlaps with setup and dev-https instead of blocking
+      # dev-https-browser-image later.
+      - name: Start pulling the pinned Playwright base image in the background
+        run: |
+          image=$(awk '/^FROM /{print $2; exit}' deploy/dev-https-browser/Dockerfile)
+          status_file="$RUNNER_TEMP/playwright-base-pull.status"
+          log_file="$RUNNER_TEMP/playwright-base-pull.log"
+          rm -f "$status_file"
+          nohup bash -c 'podman pull "$0" >"$1" 2>&1; echo $? >"$2"' \
+            "$image" "$log_file" "$status_file" >/dev/null 2>&1 &
+          disown
+          {
+            echo "PLAYWRIGHT_BASE_PULL_STATUS=$status_file"
+            echo "PLAYWRIGHT_BASE_PULL_LOG=$log_file"
+          } >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache: false
+      - name: Compute the Go cache week
+        id: go-cache-week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: go-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+            go-${{ runner.os }}-server-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-
+      # A go-installed caddy reports version "unknown", which the dev-https
+      # tool check rejects, so this job uses the official release binary.
+      - name: Install the pinned caddy (2.11.4)
+        run: |
+          curl -fsSL -o /tmp/caddy.tar.gz https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+          echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  /tmp/caddy.tar.gz" | sha512sum -c -
+          mkdir -p "$RUNNER_TEMP/caddy"
+          tar -xzf /tmp/caddy.tar.gz -C "$RUNNER_TEMP/caddy" caddy
+          echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"
+      # Cached on apps/web/package-lock.json: `npx playwright install`
+      # is a no-op on a hit and still verifies the pinned browser is present.
+      - name: Restore the Playwright browser cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package-lock.json') }}
+      - name: Install web dependencies and the pinned Chromium
+        run: npm ci && npx playwright install chromium
+        working-directory: apps/web
+      # dev-https starts the one shared database container itself, so the
+      # job has no service container. Start it first to set up its roles.
+      - run: make test-db-up
+      - name: Initialize database roles
+        run: make db-setup
+        env:
+          DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable
+      # Ubuntu 24.04 blocks unprivileged user namespaces for any binary
+      # without an AppArmor profile (kernel.apparmor_restrict_unprivileged_userns),
+      # so the pinned Chromium dies with "No usable sandbox" and every PDF and
+      # share-image render returns 503. This profile grants the namespace right
+      # to that one binary so the renderer keeps its sandbox, as Chromium's
+      # docs/security/apparmor-userns-restrictions.md recommends.
+      - name: Let the pinned Chromium create its sandbox namespaces
+        run: |
+          chromium=$(node scripts/chromium-path.mjs)
+          printf 'abi <abi/4.0>,\ninclude <tunables/global>\nprofile aboutme-ci-chromium %s flags=(unconfined) {\n  userns,\n}\n' "$chromium" |
+            sudo tee /etc/apparmor.d/aboutme-ci-chromium >/dev/null
+          sudo apparmor_parser -r /etc/apparmor.d/aboutme-ci-chromium
+      - run: make dev-https
+      - name: Wait for the background base-image pull
+        run: |
+          for _ in $(seq 1 600); do
+            [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] && break
+            sleep 1
+          done
+          [ -f "$PLAYWRIGHT_BASE_PULL_STATUS" ] || {
+            echo "base image pull did not finish in time" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          }
+          status=$(cat "$PLAYWRIGHT_BASE_PULL_STATUS")
+          if [ "$status" -ne 0 ]; then
+            echo "base image pull failed (exit $status)" >&2
+            cat "$PLAYWRIGHT_BASE_PULL_LOG" >&2 || true
+            exit 1
+          fi
+      - run: make dev-https-browser-image
+      - name: Run each proof in the group
+        env:
+          PROOFS: ${{ matrix.proofs }}
+        run: |
+          failed=()
+          first=1
+          {
+            echo "| Proof | Result | Seconds |"
+            echo "|-|-|-|"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for proof in $PROOFS; do
+            target="dev-https-$proof-check"
+            echo "::group::$target"
+            start=$SECONDS
+            status=0
+            if [ "$first" -eq 0 ]; then
+              { make dev-https-down && make dev-https; } || status=$?
+            fi
+            first=0
+            [ "$status" -ne 0 ] || make "$target" || status=$?
+            echo "::endgroup::"
+            if [ "$status" -eq 0 ]; then
+              result=passed
+            else
+              result="failed (exit $status)"
+              failed+=("$target")
+              echo "::error title=$target::$target failed with exit $status"
+            fi
+            echo "| $target | $result | $((SECONDS - start)) |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [ "${#failed[@]}" -ne 0 ]; then
+            echo "failed proofs: ${failed[*]}" >&2
+            exit 1
+          fi
+      - if: always()
+        run: make dev-https-down
+      - if: always()
+        run: make test-db-down
+      - if: ${{ github.ref == 'refs/heads/main' && steps.go-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ github.job }}-${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}-${{ steps.go-cache-week.outputs.week }}
+
   # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
   # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
   # Supply Chain covers dependency CVEs for Go and npm. It authenticates with
@@ -1136,6 +1304,7 @@ jobs:
       - totp-browser-proof
       - totp-browser-proof-coverage
       - mcp-proofs
+      - dev-https-proofs
       - semgrep
     runs-on: ubuntu-latest
     steps:

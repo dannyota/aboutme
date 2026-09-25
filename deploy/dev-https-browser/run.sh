@@ -654,17 +654,17 @@ host_run() {
   fi
   local -a name_args=()
   [ "$mode" = mcp-sdk ] && name_args=("--name=$container_name")
-  # mcp-sdk caps the container because it shares the runner with a second
-  # local process (scripts/mcp-owner-workflow.sh); the production TOTP modes
-  # cap it because they run against a production host, not a hosted CI runner
-  # (docs/runbooks/totp-keys.md "Production proofs"). Other modes' own
-  # long, many-page journeys (for example second-factor) stay unbounded: a
-  # 2 GiB, 2-CPU ceiling on a runner already busy with the server, web,
-  # Caddy, and Postgres can starve Chromium into an uncleanly killed run
-  # instead of a classified test failure.
+  # mcp-sdk (it shares the runner with scripts/mcp-owner-workflow.sh) and the
+  # production TOTP modes (docs/runbooks/totp-keys.md "Production proofs") are
+  # capped; a 2 GiB ceiling would starve other modes' long journeys (such as
+  # second-factor) on a runner busy with the stack. Chromium keeps its shared
+  # memory in /tmp (Playwright passes --disable-dev-shm-usage): at 256 MiB, dev
+  # web app module fetches failed with net::ERR_INSUFFICIENT_RESOURCES.
   local -a resource_args=()
+  local tmp_bytes=1073741824
   if [ "$mode" = mcp-sdk ] || mode_is_totp_production "$mode"; then
     resource_args=(--memory=2g --memory-swap=2g --cpus=2)
+    tmp_bytes=268435456
   fi
   local -a env_args=()
   if [ "$mode" = totp ]; then
@@ -685,7 +685,7 @@ host_run() {
     --cap-drop=all \
     --cap-add=SYS_CHROOT \
     "${resource_args[@]}" \
-    --tmpfs=/tmp:rw,nosuid,nodev,mode=1777,size=268435456 \
+    --tmpfs="/tmp:rw,nosuid,nodev,mode=1777,size=$tmp_bytes" \
     "${name_args[@]}" \
     "${mount_args[@]}" \
     "${env_args[@]}" \
