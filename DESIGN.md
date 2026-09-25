@@ -170,8 +170,10 @@ right-aligned from 640 px up and stack full-width below it, primary first.
 `StateMark` exposes six states: Saved (pencil tick), Unsaved (an edit held or
 queued but not yet sent), Saving…, Save failed, Draft, and Public (the small
 seal with the link). Public state requires a link. The editor top bar shows the
-small public mark beside the resume title when the resume is public. The preview
-and successful publish response show the large stamp.
+small public mark beside the resume title when the resume is public, and a
+successful publish response shows the large stamp on its own. The seal never
+appears on or over a rendered resume: the homepage sample and the editor preview
+show none, so neither can read as an already-public document.
 
 ## Landing
 
@@ -191,10 +193,10 @@ columns with a sidebar and a photo, on A4 page metadata rather than a Library
 preset. It sits on a whole white sheet, 210 mm by at least 297 mm with
 `--shadow-paper`, in front of a translucent ghost sheet and a
 `--gradient-hero-glow`. From 42 rem the ghost sheet is offset and rotated 2
-degrees. A 96 px seal names `aboutme.vn/danny`. The sheet zooms 0.39 on phones,
-0.5 from 28 rem, 0.6 from 42 rem, and 0.64 from 80 rem. Three decorative chips,
-Private by default, PDF, and the link, float at the sheet edges from 42 rem and
-wrap in a centered row under it below that. Screen readers skip them.
+degrees. The sheet carries no seal. The sheet zooms 0.39 on phones, 0.5 from 28
+rem, 0.6 from 42 rem, and 0.64 from 80 rem. Three decorative chips, Private by
+default, PDF, and the link, float at the sheet edges from 42 rem and wrap in a
+centered row under it below that. Screen readers skip them.
 
 Four sections follow the hero:
 
@@ -383,11 +385,11 @@ value. Selects, checkboxes, switches, colors, and numbers commit on change. An
 edit that cannot save yet, such as a date range with a start and no end, is held
 in memory, shows Unsaved, and survives the field remounting.
 
-Publishing stamps the preview in a single 180 ms press from scale 1.12 to 1 with
-the ink fading in. Unpublishing lifts the stamp in 120 ms. Primitive controls
-use short color, focus, and open/close transitions. Nothing animates on page
-load. Reduced motion disables the stamp and reduces application animation and
-transition durations to an instant effect.
+Publishing stamps the top bar's public mark in a single 180 ms press from scale
+1.12 to 1 with the ink fading in. Unpublishing lifts it in 120 ms. Primitive
+controls use short color, focus, and open/close transitions. Nothing animates on
+page load. Reduced motion disables the stamp and reduces application animation
+and transition durations to an instant effect.
 
 ## Accessibility
 

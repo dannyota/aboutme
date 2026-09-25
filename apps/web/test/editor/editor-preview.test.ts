@@ -290,28 +290,21 @@ describe('EditorPreview', () => {
     expect(Number(sheet.attributes('data-scaled-width'))).toBeLessThan(390);
   });
 
-  it('overlays the accepted canonical stamp outside renderer output', () => {
+  it('never stamps the sheet, published or not (DESIGN.md seal rules)', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
       props: {
         document: accepted.document,
         lng: accepted.metadata.lng,
-        publicLink: '/ada-lovelace',
-        stampState: 'landing',
       },
       global: { stubs: { ResumeDocument: true } },
     });
 
     const sheet = wrapper.get('[data-testid="preview-sheet"]');
-    const stamp = sheet.get('[data-testid="preview-stamp"]');
-    expect(stamp.attributes('aria-label')).toBe(
-      'Public at aboutme.vn/ada-lovelace',
+    expect(sheet.find('[data-app-seal]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+      false,
     );
-    expect(stamp.attributes('data-stamp')).toBe('landing');
-    expect(
-      wrapper.getComponent({ name: 'ResumeDocument' })
-        .find('[data-testid="preview-stamp"]').exists(),
-    ).toBe(false);
   });
 
   it('passes only the optimistic document and paged render context', () => {
