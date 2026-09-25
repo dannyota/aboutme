@@ -12,8 +12,9 @@
  * The setup secret, provisioning URI, and every code are computed in this
  * process with `totp-fixture.ts` and never leave it: the evidence file holds
  * only booleans, the fixed scenario name, and the origin. CI also runs the
- * `totp` journey as parallel shards (see "Enabled-proof sharding" below) and
- * records section timing to a sidecar the evidence schema never covers.
+ * `totp` journey as shards that run in parallel against one harness (see
+ * "Enabled-proof sharding" below) and records section timing to a sidecar
+ * the evidence schema never covers.
  *
  * Contract: docs/design/totp-second-factor-contract.md,
  * docs/design/totp-key-management.md, and ADR 0049.
@@ -21,13 +22,14 @@
 import {
   expect,
   test,
+  type Browser,
   type BrowserContext,
   type ConsoleMessage,
   type Page,
   type Request,
 } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { freshCSRF } from './editor-fixtures';
 import {
   installExternalRequestFirewall,
@@ -45,12 +47,13 @@ import {
 } from './network-policy';
 import { TOTP_SHARD_ROLES } from './proof-shards.mjs';
 import {
+  activateRoles,
   AuthenticatorPool,
   CA_PATH,
   callbackCategory,
   CAPTURE_TOKEN_PATH,
   captureClient,
-  configureProof,
+  configureShardList,
   cookieValue,
   DESKTOP,
   DISABLED_ACCOUNT_LABEL,
@@ -123,11 +126,11 @@ import {
 } from './totp-fixture';
 
 const MODE = process.env.ABOUTME_BROWSER_MODE ?? 'totp';
-const ENABLED_EVIDENCE_PATH = '/evidence/totp-second-factor-proof.json';
+const ENABLED_EVIDENCE_NAME = 'totp-second-factor-proof.json';
 const DISABLED_EVIDENCE_PATH = '/evidence/totp-enrollment-disabled-proof.json';
 // Diagnostic only: per-section wall-clock timing, never covered by
 // verify-evidence.mjs and never read by it.
-const ENABLED_TIMING_PATH = '/evidence/totp-timing.json';
+const ENABLED_TIMING_NAME = 'totp-timing.json';
 const TOTP_LOGIN_INPUT = '#second-factor-totp-code';
 const TOTP_SETUP_INPUT = '#totp-code';
 
@@ -165,16 +168,21 @@ type AccountRole =
 
 // --- Enabled-proof sharding --------------------------------------------------
 //
-// CI runs the enabled journey as up to six parallel shards, each its own
-// harness and evidence file (ABOUTME_TOTP_SHARD, read by run.sh from the
-// host environment). Unset (every local or single-shard run) proves every
-// role. `primary` alone carries most of the account's own step count, so it
-// is its own shard.
-// The shard map itself lives in proof-shards.mjs, shared with the coverage
-// check.
-const ACTIVE_ROLES = configureProof(
+// CI splits the enabled journey into six shards (proof-shards.mjs, shared
+// with the coverage check) and runs several in one job: ABOUTME_TOTP_SHARD
+// (read by run.sh from the host environment) lists them, comma-separated.
+// Each listed shard is its own test in its own Playwright worker, and all of
+// them run at the same time against one harness. Each proves only its own
+// fictional accounts, and each writes its evidence to /evidence/<shard>/.
+// Unset (every local run) keeps one test that proves every role and writes
+// its evidence to /evidence itself. `primary` alone carries most of the
+// account's own step count, so it is its own shard.
+const SHARDS = configureShardList(
   MODE, 'ABOUTME_TOTP_SHARD', TOTP_SHARD_ROLES,
 );
+if (SHARDS !== null && SHARDS.length > 1) {
+  test.describe.configure({ mode: 'parallel' });
+}
 
 // --- Failure reporting (see second-factor-lib.ts) ---------------------------
 
@@ -545,12 +553,36 @@ async function enrollFirstTotp(
 
 // --- Enabled-enrollment journey ------------------------------------------
 
-test('proves the authenticator-app second factor over native HTTPS', async ({
-  browser,
-  context,
-  page,
-}) => {
-  test.skip(MODE !== 'totp', 'enabled enrollment mode only');
+const ENABLED_TITLE = 'proves the authenticator-app second factor over native HTTPS';
+const SHARD_ROLES: Readonly<Record<string, readonly string[]>> = TOTP_SHARD_ROLES;
+
+for (const shard of SHARDS ?? [null]) {
+  test(shard === null ? ENABLED_TITLE : `${ENABLED_TITLE} (${shard})`, async ({
+    browser,
+    context,
+    page,
+  }) => {
+    test.skip(MODE !== 'totp', 'enabled enrollment mode only');
+    await provesEnabledJourney(browser, context, page, shard);
+  });
+}
+
+/**
+ * Walks the enabled journey for one shard's roles, or for every role when
+ * `shard` is null, and writes that run's evidence and timing.
+ */
+async function provesEnabledJourney(
+  browser: Browser,
+  context: BrowserContext,
+  page: Page,
+  shard: string | null,
+): Promise<void> {
+  const activeRoles = shard === null
+    ? null
+    : new Set(SHARD_ROLES[shard]);
+  activateRoles(activeRoles);
+  const evidenceDir = shard === null ? '/evidence' : `/evidence/${shard}`;
+  if (shard !== null) await mkdir(evidenceDir, { mode: 0o700 });
 
   const steps = {
     agentGranted: false,
@@ -599,12 +631,14 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
 
   await warmRoutes(page, WARM_ROUTES, counters);
 
-  stage('capture-reset');
+  // The host clears captured mail before the run. Parallel shards share the
+  // capture and read only mail sent to their own addresses, so none clears
+  // it again under another shard's pending mail.
+  stage('capture-open');
   const ca = await readFile(CA_PATH);
   const capture = captureClient(
     (await readFile(CAPTURE_TOKEN_PATH, 'utf8')).trim(),
   );
-  await capture.reset();
 
   const primaryEmail = runEmail('primary');
   const primaryPassword = runPassword();
@@ -1457,7 +1491,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       await extra.close().catch(() => undefined);
     }
     await writeFile(
-      ENABLED_TIMING_PATH,
+      `${evidenceDir}/${ENABLED_TIMING_NAME}`,
       `${JSON.stringify({ schemaVersion: 1, sections: timer.finish() }, null, 2)}\n`,
       { flag: 'wx', mode: 0o600 },
     );
@@ -1469,7 +1503,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
       Object.entries(steps).filter(([, proved]) => proved === true),
     );
     await writeFile(
-      ENABLED_EVIDENCE_PATH,
+      `${evidenceDir}/${ENABLED_EVIDENCE_NAME}`,
       `${JSON.stringify({
         errors: {
           certificate: counters.certificateErrors,
@@ -1487,16 +1521,16 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     // The active shard's own last-executed role's completion step, or
     // attemptsExhausted on the unsharded default (whose last role is always
     // attempts).
-    const journeyDone = ACTIVE_ROLES === null || ACTIVE_ROLES.has('attempts')
+    const journeyDone = activeRoles === null || activeRoles.has('attempts')
       ? steps.attemptsExhausted
-      : ACTIVE_ROLES.has('recovery') ? steps.recoveryCompletion
-        : ACTIVE_ROLES.has('concurrent') ? steps.concurrentUseRejected
-          : ACTIVE_ROLES.has('epoch') ? steps.wrongEpochRejected
-            : ACTIVE_ROLES.has('skew') ? steps.nextStepAccepted
+      : activeRoles.has('recovery') ? steps.recoveryCompletion
+        : activeRoles.has('concurrent') ? steps.concurrentUseRejected
+          : activeRoles.has('epoch') ? steps.wrongEpochRejected
+            : activeRoles.has('skew') ? steps.nextStepAccepted
               : steps.finalRemoved;
     failOnUnexpectedConsole(journeyDone);
   }
-});
+}
 
 // --- Disabled-enrollment journey -----------------------------------------
 

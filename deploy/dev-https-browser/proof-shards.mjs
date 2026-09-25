@@ -2,8 +2,10 @@
 // each shard name mapped to the account roles it proves. The specs pick their
 // roles from these maps ("Enabled-proof sharding" in totp.spec.ts and
 // second-factor.spec.ts) and check-shard-coverage.mjs checks every shard's
-// evidence against them. run.sh and scripts/dev-https-check.sh validate the
-// shard names in shell with their own lists.
+// evidence against them. run.sh validates the shard names in shell with its
+// own lists. A CI job runs one passkey shard, or several TOTP shards as
+// parallel tests against one harness; each TOTP shard's roles use only their
+// own fictional accounts, so shards never share an account.
 
 export const TOTP_SHARD_ROLES = Object.freeze({
   'primary': ['primary'],

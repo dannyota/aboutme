@@ -83,6 +83,14 @@ for (const name of ['UPDATE_GOLDEN', 'PLAYWRIGHT_UPDATE_SNAPSHOTS']) {
 const actionTimeout = secondFactor ? 20_000 : 0;
 const navigationTimeout = secondFactor ? 120_000 : 0;
 
+// The enabled TOTP journey runs each shard ABOUTME_TOTP_SHARD lists as its
+// own test (totp.spec.ts "Enabled-proof sharding"), all at the same time, so
+// it gets one worker per listed shard. Every other mode runs one worker.
+const totpShards = process.env.ABOUTME_TOTP_SHARD ?? '';
+const workers = mode === 'totp' && totpShards !== ''
+  ? totpShards.split(',').length
+  : 1;
+
 export default defineConfig({
   forbidOnly: true,
   fullyParallel: false,
@@ -108,5 +116,5 @@ export default defineConfig({
     trace: 'off',
     video: 'off',
   },
-  workers: 1,
+  workers,
 });
