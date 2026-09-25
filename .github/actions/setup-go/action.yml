@@ -1,0 +1,43 @@
+name: Set up Go
+description: >-
+  Installs the pinned Go toolchain and restores the calling job's Go build and
+  module cache. Pair it with save-go-cache at the end of the job.
+outputs:
+  cache-hit:
+    description: Whether the job's own cache key matched exactly.
+    value: ${{ steps.restore.outputs.cache-hit }}
+  cache-key:
+    description: The job's own cache key, for save-go-cache.
+    value: ${{ steps.key.outputs.key }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: "1.27.1"
+        cache: false
+    # A key ending in the ISO week lets a cache live past one run instead of
+    # being replaced by it. Restore keys fall back to the same job's older
+    # cache, then to the server job's, before building from nothing.
+    - id: key
+      shell: bash
+      env:
+        SUMS: ${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}
+        JOB: ${{ github.job }}
+      run: |
+        week=$(date -u +%G-%V)
+        {
+          echo "key=go-$RUNNER_OS-$JOB-$SUMS-$week"
+          echo "job-prefix=go-$RUNNER_OS-$JOB-$SUMS-"
+          echo "server-prefix=go-$RUNNER_OS-server-$SUMS-"
+        } >> "$GITHUB_OUTPUT"
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          ${{ steps.key.outputs.job-prefix }}
+          ${{ steps.key.outputs.server-prefix }}

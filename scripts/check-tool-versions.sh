@@ -155,6 +155,37 @@ assert_all_yaml_values() {
   done
 }
 
+# Hosted CI pins tools in ci.yml and in the local composite actions it uses.
+ci_files() {
+  local path
+  printf '%s\n' .github/workflows/ci.yml
+  for path in .github/actions/*/action.yml; do
+    [ -f "$path" ] && printf '%s\n' "$path"
+  done
+}
+
+# assert_ci_yaml_values checks every KEY value in every hosted CI file and
+# requires at least one.
+assert_ci_yaml_values() {
+  local label=$1 key=$2 wanted=$3 path found=0
+  while IFS= read -r path; do
+    awk -v key="$key:" '$1 == key { found = 1 } END { exit !found }' "$path" ||
+      continue
+    found=1
+    assert_all_yaml_values "$label" "$path" "$key" "$wanted"
+  done < <(ci_files)
+  [ "$found" -eq 1 ] || die "$label: hosted CI has no '$key' values"
+}
+
+# assert_ci_text requires WANTED in at least one hosted CI file.
+assert_ci_text() {
+  local label=$1 wanted=$2 path
+  while IFS= read -r path; do
+    grep -Fq "$wanted" "$path" && return 0
+  done < <(ci_files)
+  die "$label: hosted CI must contain '$wanted'"
+}
+
 assert_all_image_versions() {
   local label=$1 path=$2 marker=$3 wanted=$4 actual
   local -a values=()
@@ -187,18 +218,13 @@ check_repository_contract() {
   assert_all_image_versions caddy deploy/compose.yml \
     docker.io/library/caddy: "${expected[caddy]}"
 
-  assert_all_yaml_values node .github/workflows/ci.yml node-version \
-    "${expected[nodejs]}"
-  assert_all_yaml_values go .github/workflows/ci.yml go-version \
-    "${expected[golang]}"
-  assert_file_text golangci-lint .github/workflows/ci.yml \
-    "version: v${expected[golangci-lint]}"
-  assert_file_text govulncheck .github/workflows/ci.yml \
-    "govulncheck@v${expected[govulncheck]}"
-  assert_file_text semgrep .github/workflows/ci.yml \
-    "semgrep==${expected[semgrep]}"
-  assert_file_text sqlc .github/workflows/ci.yml "sqlc@v${expected[sqlc]}"
-  assert_file_text caddy .github/workflows/ci.yml \
+  assert_ci_yaml_values node node-version "${expected[nodejs]}"
+  assert_ci_yaml_values go go-version "${expected[golang]}"
+  assert_ci_text golangci-lint "version: v${expected[golangci-lint]}"
+  assert_ci_text govulncheck "govulncheck@v${expected[govulncheck]}"
+  assert_ci_text semgrep "semgrep==${expected[semgrep]}"
+  assert_ci_text sqlc "sqlc@v${expected[sqlc]}"
+  assert_ci_text caddy \
     "caddyserver/caddy/releases/download/v${expected[caddy]}"
 
   assert_all_yaml_values node .github/workflows/security-scan.yml \

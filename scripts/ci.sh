@@ -91,7 +91,7 @@ go_tidy() {
 }
 
 go_vuln() {
-  # Mirrors ci.yml's govulncheck job: every Go module in the repository, with
+  # Mirrors ci.yml's govulncheck steps: every Go module in the repository, with
   # the Caddy build module (outside go.work) forced to GOWORK=off.
   (cd "$ROOT/apps/server" && govulncheck ./...) &&
     (cd "$ROOT/packages/schema/gen/go" && govulncheck ./...) &&
@@ -107,7 +107,7 @@ migrations_append_only() {
 }
 
 released_schema_append_only() {
-  # Mirrors ci.yml's released-schema-append-only job: released resume schemas
+  # Mirrors ci.yml's released-schema guard: released resume schemas
   # are immutable; only a new version file may be added. The two hashes permit
   # one owner-approved documentation-citation rewrite and no other v1 bytes.
   local base status

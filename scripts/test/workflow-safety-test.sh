@@ -44,7 +44,7 @@ grep -Fq -- '- run: scripts/test/semgrep-sca-inputs-test.sh' "$WORKFLOW" ||
 
 grep -Fq 'runs-on: ubuntu-24.04' "$WORKFLOW" ||
   fail "hosted S3 conformance does not pin a runner with Podman"
-grep -Fq -- '- run: make test-s3-up' "$WORKFLOW" ||
+grep -Fq 'run: make test-s3-up' "$WORKFLOW" ||
   fail "hosted S3 conformance does not start the pinned test service"
 grep -Fq 'SERVER_TEST_S3_RUN: ^TestNormalizeAcceptsFrozenCorpusDeterministically$' "$WORKFLOW" ||
   fail "hosted S3 conformance does not isolate the slow corpus test"
@@ -73,19 +73,74 @@ if grep -Fq -- '--update-snapshots' "$WORKFLOW"; then
   fail "hosted workflow passes a browser baseline update flag"
 fi
 
-PASSKEY_JOB=$(sed -n '/^  passkey-browser-proof:/,/^  totp-browser-proof:/p' "$WORKFLOW")
-[ -n "$PASSKEY_JOB" ] || fail "hosted workflow lacks the passkey-browser-proof job"
-grep -Fq '    timeout-minutes: 45' <<<"$PASSKEY_JOB" ||
-  fail "passkey-browser-proof job lacks a fixed 45-minute timeout"
-grep -Fq -- '- run: make dev-https' <<<"$PASSKEY_JOB" ||
-  fail "passkey-browser-proof job does not start the repository HTTPS harness"
-grep -Fq -- '- run: make dev-https-browser-image' <<<"$PASSKEY_JOB" ||
-  fail "passkey-browser-proof job does not build the pinned browser image"
-grep -Fq -- '- run: make dev-https-passkey-check' <<<"$PASSKEY_JOB" ||
-  fail "passkey-browser-proof job does not run the passkey proof target"
-if grep -Fq 'secrets.' <<<"$PASSKEY_JOB"; then
-  fail "passkey-browser-proof job references a repository secret"
+grep -Fq '        shard: [preview-gap, rest]' <<<"$WEB_E2E_JOB" ||
+  fail "pinned browser job does not run both shards that cover every spec"
+grep -Fq '          WEB_E2E_SHARD: ${{ matrix.shard }}' <<<"$WEB_E2E_JOB" ||
+  fail "pinned browser job does not pass its shard to make web-e2e"
+
+PROOF_JOB=$(awk '/^  dev-https-proofs:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
+[ -n "$PROOF_JOB" ] || fail "hosted workflow lacks the dev-https-proofs job"
+PROOF_SETUP=$ROOT/.github/actions/browser-proof-setup/action.yml
+[ -f "$PROOF_SETUP" ] || fail "the browser-proof-setup action is missing"
+PROOF_RUNNER=$ROOT/scripts/ci-browser-proofs.sh
+grep -Fq '    runs-on: ubuntu-24.04' <<<"$PROOF_JOB" ||
+  fail "dev-https-proofs job does not pin a runner with Podman"
+grep -Fq '    timeout-minutes: 40' <<<"$PROOF_JOB" ||
+  fail "dev-https-proofs job lacks a fixed 40-minute timeout"
+! grep -Fq 'continue-on-error' <<<"$PROOF_JOB" ||
+  fail "dev-https-proofs job must block the release"
+grep -Fq 'uses: ./.github/actions/browser-proof-setup' <<<"$PROOF_JOB" ||
+  fail "dev-https-proofs job does not use the shared proof setup"
+grep -Fxq '      run: make test-db-up' "$PROOF_SETUP" ||
+  fail "proof setup does not start the shared database container"
+grep -Fxq '      run: make dev-https' "$PROOF_SETUP" ||
+  fail "proof setup does not start the repository HTTPS harness"
+grep -Fxq '      run: make dev-https-browser-image' "$PROOF_SETUP" ||
+  fail "proof setup does not build the pinned browser image"
+grep -Fq 'bash scripts/ci-browser-proofs.sh "${proofs[@]}"' <<<"$PROOF_JOB" ||
+  fail "dev-https-proofs job does not run its group through the proof runner"
+grep -Fq 'ABOUTME_TOTP_SHARD=$shard make "$target"' "$PROOF_RUNNER" ||
+  fail "proof runner does not run a TOTP shard through its make target"
+grep -Fq 'ABOUTME_PASSKEY_SHARD=$shard make "$target"' "$PROOF_RUNNER" ||
+  fail "proof runner does not run a passkey shard through its make target"
+if grep -Fq 'secrets.' <<<"$PROOF_JOB" || grep -Fq 'secrets.' "$PROOF_SETUP"; then
+  fail "dev-https-proofs job references a repository secret"
 fi
+if grep -Fq '    services:' <<<"$PROOF_JOB"; then
+  fail "dev-https-proofs job must not add a second database service beside dev-https"
+fi
+if grep -Eq 'ABOUTME_RELEASE_APP_IMAGE|ABOUTME_RELEASE_WEB_IMAGE|owner-test\.env' \
+  <<<"$PROOF_JOB"; then
+  fail "dev-https-proofs job leaks a release image or owner credential input"
+fi
+
+# Every proof the hosted workflow ran before grouping still runs exactly
+# once: each dev-https check, and every TOTP and passkey shard
+# (totp.spec.ts and second-factor.spec.ts "Enabled-proof sharding").
+expected_proofs='auth
+editor
+entry
+exports
+mcp
+mcp-sdk
+passkey:primary-disabled
+passkey:recovery-attempts
+password
+privacy
+public
+publish
+sample-start
+totp:epoch-disabled
+totp:locale-attempts
+totp:primary
+totp:replace-recovery
+totp:replay-concurrent
+totp:skew
+transport'
+actual_proofs=$(awk '$1 == "proofs:" { for (i = 2; i <= NF; i++) print $i }' \
+  <<<"$PROOF_JOB" | LC_ALL=C sort)
+[ "$actual_proofs" = "$expected_proofs" ] ||
+  fail "dev-https-proofs groups do not run every proof exactly once: $(tr '\n' ' ' <<<"$actual_proofs")"
 
 # Each cleanup step's own if: always() is asserted against its own named
 # block, not a job-wide count, so a check cannot pass by attaching every
@@ -98,98 +153,41 @@ step_block() { # step-name job-body
   ' <<<"$2"
 }
 
-UPLOAD_STEP=$(step_block "Upload passkey proof evidence" "$PASSKEY_JOB")
-[ -n "$UPLOAD_STEP" ] || fail "passkey-browser-proof job lacks the named upload step"
+UPLOAD_STEP=$(step_block "Upload shard proof evidence" "$PROOF_JOB")
+[ -n "$UPLOAD_STEP" ] || fail "dev-https-proofs job lacks the named upload step"
 grep -Fq 'if: always()' <<<"$UPLOAD_STEP" ||
-  fail "passkey-browser-proof job's upload step does not run on every exit"
-grep -Fq 'path: .dev/native-https/evidence/passkey-*' <<<"$UPLOAD_STEP" ||
-  fail "passkey-browser-proof job does not upload the bounded passkey evidence path"
+  fail "dev-https-proofs job's upload step does not run on every exit"
+grep -Fq 'path: .dev/proof-evidence/' <<<"$UPLOAD_STEP" ||
+  fail "dev-https-proofs job does not upload the bounded shard evidence path"
 grep -Fq 'include-hidden-files: true' <<<"$UPLOAD_STEP" ||
-  fail "passkey-browser-proof job's upload step excludes the hidden .dev evidence path by default"
+  fail "dev-https-proofs job's upload step excludes the hidden .dev evidence path by default"
+grep -Fq 'staging=.dev/proof-evidence' "$PROOF_RUNNER" ||
+  fail "proof runner does not stage shard evidence where the job uploads it"
 
-STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness" "$PASSKEY_JOB")
-[ -n "$STOP_HARNESS_STEP" ] || fail "passkey-browser-proof job lacks the named stop-harness step"
+STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness" "$PROOF_JOB")
+[ -n "$STOP_HARNESS_STEP" ] || fail "dev-https-proofs job lacks the named stop-harness step"
 grep -Fq 'if: always()' <<<"$STOP_HARNESS_STEP" ||
-  fail "passkey-browser-proof job's stop-harness step does not run on every exit"
+  fail "dev-https-proofs job's stop-harness step does not run on every exit"
 grep -Fq -- 'run: make dev-https-down' <<<"$STOP_HARNESS_STEP" ||
-  fail "passkey-browser-proof job's stop-harness step does not stop the HTTPS harness"
+  fail "dev-https-proofs job's stop-harness step does not stop the HTTPS harness"
 
-STOP_DB_STEP=$(step_block "Stop the runner-local database" "$PASSKEY_JOB")
-[ -n "$STOP_DB_STEP" ] || fail "passkey-browser-proof job lacks the named stop-database step"
+STOP_DB_STEP=$(step_block "Stop the runner-local database" "$PROOF_JOB")
+[ -n "$STOP_DB_STEP" ] || fail "dev-https-proofs job lacks the named stop-database step"
 grep -Fq 'if: always()' <<<"$STOP_DB_STEP" ||
-  fail "passkey-browser-proof job's stop-database step does not run on every exit"
+  fail "dev-https-proofs job's stop-database step does not run on every exit"
 grep -Fq -- 'run: make test-db-down' <<<"$STOP_DB_STEP" ||
-  fail "passkey-browser-proof job's stop-database step does not stop the runner-local database"
+  fail "dev-https-proofs job's stop-database step does not stop the runner-local database"
 
-# The TOTP proof mirrors the passkey job's shape and blocks the release.
-TOTP_JOB=$(sed -n '/^  totp-browser-proof:/,/^  totp-browser-proof-coverage:/p' "$WORKFLOW")
-[ -n "$TOTP_JOB" ] || fail "hosted workflow lacks the totp-browser-proof job"
-grep -Fq '    timeout-minutes: 60' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job lacks a fixed 60-minute timeout"
-! grep -Fq 'continue-on-error' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job must block the release"
-grep -Fq -- '- run: make dev-https' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job does not start the repository HTTPS harness"
-grep -Fq -- '- run: make dev-https-browser-image' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job does not build the pinned browser image"
-grep -Fq -- '- run: make dev-https-totp-check' <<<"$TOTP_JOB" ||
-  fail "totp-browser-proof job does not run the TOTP proof target"
-if grep -Fq 'secrets.' <<<"$TOTP_JOB"; then
-  fail "totp-browser-proof job references a repository secret"
-fi
-
-TOTP_UPLOAD_STEP=$(step_block "Upload TOTP proof evidence" "$TOTP_JOB")
-[ -n "$TOTP_UPLOAD_STEP" ] || fail "totp-browser-proof job lacks the named upload step"
-grep -Fq 'if: always()' <<<"$TOTP_UPLOAD_STEP" ||
-  fail "totp-browser-proof job's upload step does not run on every exit"
-grep -Fq 'path: .dev/native-https/evidence/totp-*' <<<"$TOTP_UPLOAD_STEP" ||
-  fail "totp-browser-proof job does not upload the bounded TOTP evidence path"
-grep -Fq 'include-hidden-files: true' <<<"$TOTP_UPLOAD_STEP" ||
-  fail "totp-browser-proof job's upload step excludes the hidden .dev evidence path by default"
-
-TOTP_STOP_HARNESS_STEP=$(step_block "Stop the HTTPS harness" "$TOTP_JOB")
-[ -n "$TOTP_STOP_HARNESS_STEP" ] || fail "totp-browser-proof job lacks the named stop-harness step"
-grep -Fq 'if: always()' <<<"$TOTP_STOP_HARNESS_STEP" ||
-  fail "totp-browser-proof job's stop-harness step does not run on every exit"
-grep -Fq -- 'run: make dev-https-down' <<<"$TOTP_STOP_HARNESS_STEP" ||
-  fail "totp-browser-proof job's stop-harness step does not stop the HTTPS harness"
-
-TOTP_STOP_DB_STEP=$(step_block "Stop the runner-local database" "$TOTP_JOB")
-[ -n "$TOTP_STOP_DB_STEP" ] || fail "totp-browser-proof job lacks the named stop-database step"
-grep -Fq 'if: always()' <<<"$TOTP_STOP_DB_STEP" ||
-  fail "totp-browser-proof job's stop-database step does not run on every exit"
-grep -Fq -- 'run: make test-db-down' <<<"$TOTP_STOP_DB_STEP" ||
-  fail "totp-browser-proof job's stop-database step does not stop the runner-local database"
-
-grep -Fq '  mcp-proofs:' "$WORKFLOW" ||
-  fail "hosted workflow lacks the MCP proofs job"
-grep -Fq '    runs-on: ubuntu-24.04' "$WORKFLOW" ||
-  fail "MCP proofs job does not pin a runner with Podman"
-grep -Fq '    timeout-minutes: 40' "$WORKFLOW" ||
-  fail "MCP proofs job lacks a bounded timeout"
-grep -Fxq '      - run: make test-db-up' "$WORKFLOW" ||
-  fail "MCP proofs job does not start the shared database container"
-grep -Fq '        run: make test-db-down' "$WORKFLOW" ||
-  fail "MCP proofs job does not remove its database container"
-grep -Fxq '      - run: make dev-https' "$WORKFLOW" ||
-  fail "MCP proofs job does not start the native HTTPS harness"
-grep -Fq '      - run: make dev-https-browser-image' "$WORKFLOW" ||
-  fail "MCP proofs job does not build the pinned browser image"
-grep -Fq '      - run: make dev-https-mcp-check' "$WORKFLOW" ||
-  fail "MCP proofs job does not run the raw JSON-RPC MCP proof"
-grep -Fq '      - run: make dev-https-mcp-sdk-check' "$WORKFLOW" ||
-  fail "MCP proofs job does not run the SDK owner workflow proof"
-grep -Fq '        run: make dev-https-down' "$WORKFLOW" ||
-  fail "MCP proofs job does not tear down its native HTTPS harness"
-mcp_proofs_body=$(awk '/^  mcp-proofs:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
-[ -n "$mcp_proofs_body" ] || fail "MCP proofs job body is missing"
-printf '%s\n' "$mcp_proofs_body" | grep -Fq 'if: always()' ||
-  fail "MCP proofs job does not always tear down the stack"
-if printf '%s\n' "$mcp_proofs_body" | grep -Fq '    services:'; then
-  fail "MCP proofs job must not add a second database service beside dev-https"
-fi
-if printf '%s\n' "$mcp_proofs_body" | grep -Eq 'upload-artifact|ABOUTME_RELEASE_APP_IMAGE|ABOUTME_RELEASE_WEB_IMAGE|owner-test\.env'; then
-  fail "MCP proofs job leaks an artifact, release image, or owner credential input"
-fi
+# The gate checks that the shards' evidence together proves every step.
+CI_JOB=$(awk '/^  ci:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
+[ -n "$CI_JOB" ] || fail "hosted workflow lacks the ci gate job"
+grep -Fq 'pattern: shard-evidence-*' <<<"$CI_JOB" ||
+  fail "ci gate does not download every group's shard evidence"
+grep -Fq 'node deploy/dev-https-browser/check-totp-shard-coverage.mjs' <<<"$CI_JOB" ||
+  fail "ci gate does not check TOTP shard coverage"
+grep -Fq 'node deploy/dev-https-browser/check-passkey-shard-coverage.mjs' <<<"$CI_JOB" ||
+  fail "ci gate does not check passkey shard coverage"
+grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
+  fail "ci gate does not require the dev-https-proofs job"
 
 printf 'hosted workflow safety tests passed\n'

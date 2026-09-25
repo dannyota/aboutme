@@ -1,0 +1,15 @@
+name: Install Caddy
+description: >-
+  Installs the pinned Caddy release binary and puts it on PATH. A
+  go-installed caddy reports version "unknown", which the dev-https tool
+  check rejects, and the release binary is faster than compiling Caddy.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        curl -fsSL -o "$RUNNER_TEMP/caddy.tar.gz" https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz
+        echo "8220d1f013b6f27510247b2360c9e0ca9f018feebd82515f07635318b34ff9777ccc8fd0b6e6f2486ce3a33fe389fbb7db12d05baa474f4587509fb4f5ebf1c9  $RUNNER_TEMP/caddy.tar.gz" | sha512sum -c -
+        mkdir -p "$RUNNER_TEMP/caddy"
+        tar -xzf "$RUNNER_TEMP/caddy.tar.gz" -C "$RUNNER_TEMP/caddy" caddy
+        echo "$RUNNER_TEMP/caddy" >> "$GITHUB_PATH"

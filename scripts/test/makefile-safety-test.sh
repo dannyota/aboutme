@@ -82,6 +82,9 @@ assert_web_e2e_rejected update-golden-present web-e2e \
 assert_web_e2e_rejected playwright-update-present web-e2e \
   'PLAYWRIGHT_UPDATE_SNAPSHOTS must be absent' \
   WEB_E2E_RUN_ID=valid PLAYWRIGHT_UPDATE_SNAPSHOTS=
+assert_web_e2e_rejected unknown-shard web-e2e \
+  'WEB_E2E_SHARD must be all, preview-gap, or rest' \
+  WEB_E2E_RUN_ID=valid WEB_E2E_SHARD=harness
 
 : >"$CALLS"
 if (
