@@ -16,6 +16,7 @@ import { galleryCopy } from '@/i18n/templates';
 import { atsText } from '@/templates/atsText';
 import { galleryTemplate, sampleRole } from '@/templates/catalog';
 import { galleryDocument } from '@/templates/documents';
+import { samplePageImages } from '@/templates/pageImages';
 import { templateStructuredData } from '@/templates/structuredData';
 
 const route = useRoute();
@@ -55,6 +56,8 @@ const context = computed(() => ({
   // name is visual only, so the page keeps a single h1.
   nameHeading: 'p' as const,
 }));
+const pdfPages = computed(() =>
+  samplePageImages(template.id, sampleLanguage.value));
 // "{name}, {role}", the role named in the sample's tag.
 const persona = computed(() => [
   shown.value?.document.personalDetails.fullName,
@@ -239,6 +242,9 @@ useHead(computed(() => ({
             <TabsTrigger value="page">
               {{ detail.pageTab }}
             </TabsTrigger>
+            <TabsTrigger value="pdf">
+              {{ detail.pdfTab }}
+            </TabsTrigger>
             <TabsTrigger value="ats">
               {{ detail.atsTab }}
             </TabsTrigger>
@@ -251,6 +257,39 @@ useHead(computed(() => ({
                 :document="shown.document"
               />
             </div>
+          </TabsContent>
+          <TabsContent value="pdf">
+            <p class="mb-3 text-sm text-muted-foreground">
+              {{ detail.pdfHint }}
+            </p>
+            <ol class="template-detail__pdf-pages grid gap-6">
+              <li
+                v-for="page in pdfPages"
+                :key="page.src"
+              >
+                <figure class="m-0">
+                  <div class="template-paper">
+                    <img
+                      :alt="detail.pdfPageAlt(
+                        page.number,
+                        pdfPages.length,
+                        template.name,
+                      )"
+                      class="block h-auto w-full"
+                      data-pdf-page
+                      decoding="async"
+                      :height="page.height"
+                      :loading="page.number === 1 ? 'eager' : 'lazy'"
+                      :src="page.src"
+                      :width="page.width"
+                    >
+                  </div>
+                  <figcaption class="mt-2 text-sm text-muted-foreground">
+                    {{ detail.pdfPageCaption(page.number, pdfPages.length) }}
+                  </figcaption>
+                </figure>
+              </li>
+            </ol>
           </TabsContent>
           <TabsContent value="ats">
             <p class="mb-3 text-sm text-muted-foreground">

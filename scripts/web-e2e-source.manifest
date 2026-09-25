@@ -328,6 +328,8 @@ apps/web/app/editor/coordinatorReconcile.ts
 apps/web/app/editor/coordinatorSettle.ts
 apps/web/app/editor/coordinatorTypes.ts
 apps/web/app/editor/documentValidation.ts
+apps/web/app/editor/documentValidator.generated.d.ts
+apps/web/app/editor/documentValidator.generated.mjs
 apps/web/app/editor/pageCountObserver.ts
 apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
@@ -345,6 +347,7 @@ apps/web/app/editor/revision.ts
 apps/web/app/editor/templateDiff.ts
 apps/web/app/editor/templateGroup.ts
 apps/web/app/editor/types.ts
+apps/web/app/error.vue
 apps/web/app/i18n/agent-settings.ts
 apps/web/app/i18n/auth.ts
 apps/web/app/i18n/consent.ts
@@ -352,6 +355,7 @@ apps/web/app/i18n/editor-controls.ts
 apps/web/app/i18n/editor-fields.ts
 apps/web/app/i18n/editor-sections.ts
 apps/web/app/i18n/editor-shell.ts
+apps/web/app/i18n/error.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/legal.ts
 apps/web/app/i18n/locale.ts
@@ -445,6 +449,12 @@ apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
 apps/web/e2e/baselines/public--classic-serif--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--390.png
+apps/web/e2e/baselines/template-ats--dark--1440.png
+apps/web/e2e/baselines/template-ats--dark--390.png
+apps/web/e2e/baselines/template-pdf--dark--1440.png
+apps/web/e2e/baselines/template-pdf--dark--390.png
+apps/web/e2e/baselines/template-pdf--light--1440.png
+apps/web/e2e/baselines/template-pdf--light--390.png
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/fonts-offline.spec.ts
@@ -518,9 +528,11 @@ apps/web/public/templates/pages/modern-sidebar-vi-p1.png
 apps/web/public/theme-bootstrap.js
 apps/web/server/plugins/csp-externalize.ts
 apps/web/server/plugins/public-render-worker.ts
+apps/web/server/plugins/security-headers.ts
 apps/web/server/routes/internal-render/public.post.ts
 apps/web/server/routes/print/[id].get.ts
 apps/web/server/utils/cspExternalize.ts
+apps/web/server/utils/cspHash.ts
 apps/web/server/utils/print/assets.ts
 apps/web/server/utils/print/envelope.ts
 apps/web/server/utils/print/handler.ts
