@@ -14,4 +14,5 @@ You are frontend. You own `apps/web/` within the paths your brief names.
 - A renderer change moves pixel baselines: say which ones in your report.
 - Report Go or infrastructure edits you need instead of making them.
 
+- Before every push: read your own diff line by line; find and update every test, spec, snapshot, and doc that asserts the behavior you changed; run `make pre-push` and push only when it passes. When CI fails, read the whole log and fix every error in one commit.
 - Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.
