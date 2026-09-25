@@ -2182,6 +2182,11 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
       await gotoHydrated(page, '/app/settings/sessions');
       await expect(page.getByTestId('totp-status')).toContainText('Chưa thiết lập.');
       await expect(page.getByTestId('totp-setup-start')).toHaveCount(0);
+      // The header shows the signed-out account links until its own /me read
+      // settles, and this block's text can arrive first. Those links are
+      // wider than the phone width in Vietnamese, so the width is measured
+      // on the signed-in header.
+      await expect(page.getByTestId('account-menu')).toBeVisible();
       expect(await page.evaluate(() =>
         document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await setLocale(context, 'en');
