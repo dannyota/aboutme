@@ -115,13 +115,15 @@ resource "aws_ecs_task_definition" "app" {
       logConfiguration = local.logs["server"]
     },
     {
-      name         = "caddy"
-      image        = var.image_caddy
-      memory       = 128
-      cpu          = 128
-      essential    = true
-      portMappings = [{ containerPort = 443, hostPort = 443, protocol = "tcp" }]
-      environment  = [{ name = "CLOUDFLARE_RANGES", value = join(" ", var.cloudflare_ipv4_cidrs) }]
+      name      = "caddy"
+      image     = var.image_caddy
+      memory    = 128
+      cpu       = 128
+      essential = true
+      # No port mapping: Caddy binds host port 443 through host networking with
+      # SO_REUSEPORT, and ECS must place this task beside a running maintenance
+      # task during a deploy handoff (deploy/aws/scripts/handoff.sh).
+      environment = [{ name = "CLOUDFLARE_RANGES", value = join(" ", var.cloudflare_ipv4_cidrs) }]
       secrets = [
         { name = "ORIGIN_KEY", valueFrom = "${local.param}/tls/origin-key" },
         { name = "ORIGIN_CERT", valueFrom = "${local.param}/tls/origin-cert" },
@@ -141,12 +143,12 @@ resource "aws_ecs_task_definition" "maintenance" {
   execution_role_arn       = var.exec_role_arns["maintenance"]
   container_definitions = jsonencode([
     {
-      name         = "caddy"
-      image        = var.image_caddy
-      memory       = 128
-      cpu          = 128
-      essential    = true
-      portMappings = [{ containerPort = 443, hostPort = 443, protocol = "tcp" }]
+      name      = "caddy"
+      image     = var.image_caddy
+      memory    = 128
+      cpu       = 128
+      essential = true
+      # No port mapping, for the same reason as the app's Caddy container.
       environment = [
         { name = "CLOUDFLARE_RANGES", value = join(" ", var.cloudflare_ipv4_cidrs) },
         { name = "MAINTENANCE", value = "1" },

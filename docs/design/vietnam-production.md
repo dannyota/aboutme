@@ -293,14 +293,14 @@ order:
 2. Take the fence lock on the host. A lower tag or a held lock stops here.
 3. Pull images by digest while the old release serves.
 4. Run a pgBackRest incremental backup annotated with the tag.
-5. Stop the job timers, pause the app-down check, stop Caddy and the server, and
-   prove port 443 is free.
-6. Start maintenance and require the marked 503 through vCDN.
+5. Stop the job timers and the app-down check. Start maintenance beside Caddy
+   (both bind 443 with `SO_REUSEPORT`), then stop Caddy and the server.
+6. Require the marked 503 through vCDN.
 7. Run `db-setup` with `--first-deploy`; otherwise run `migrate` and require
    exit 0.
-8. Restart web at the new digest, stop maintenance, prove it stopped, and start
-   the server and Caddy.
-9. Wait for `/readyz`, start the timers, and resume the check once it passes.
+8. Restart web at the new digest, start the server and Caddy beside maintenance,
+   wait for `/readyz`, then stop maintenance and prove it stopped.
+9. Start the timers and resume the app-down check.
 10. Smoke through vCDN: health, TLS, and security headers. From the host, a
     request without the edge secret gets 403. Release the lock.
 

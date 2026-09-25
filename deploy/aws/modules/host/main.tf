@@ -83,7 +83,8 @@ resource "aws_eip_association" "host" {
 
 # Both services start at zero tasks; deploy.sh sets the task definition and
 # the count, so OpenTofu ignores both afterwards. Maximum 100% with minimum 0%
-# lets the single host-port task stop before its replacement starts.
+# keeps one task per service; deploy.sh overlaps the app and maintenance
+# services instead (deploy/aws/scripts/handoff.sh).
 resource "aws_ecs_service" "service" {
   for_each                           = var.task_definition_arns
   name                               = "${var.name}-${each.key}"
