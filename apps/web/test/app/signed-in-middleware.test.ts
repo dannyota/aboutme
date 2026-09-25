@@ -19,8 +19,18 @@ const me = {
   },
 };
 let meStatus = 401;
+// Holds every /me response until released, so a test can observe the
+// guard while the session read is still loading.
+let meGate: Promise<void> = Promise.resolve();
+let releaseMe: () => void = () => {};
+function holdMe(): void {
+  meGate = new Promise((resolve) => {
+    releaseMe = resolve;
+  });
+}
 mockNuxtImport('navigateTo', () => vi.fn());
-registerEndpoint('/api/v1/me', (event) => {
+registerEndpoint('/api/v1/me', async (event) => {
+  await meGate;
   if (meStatus !== 200) {
     setResponseStatus(event, meStatus);
     return { error: { code: 'session_required', message: 'Sign in.' } };
@@ -35,9 +45,16 @@ function route(
   return { path, fullPath } as unknown as RouteLocationNormalized;
 }
 
+const SESSIONS_LOGIN = '/login?next=%2Fapp%2Fsettings%2Fsessions';
+
+// The shared signed-out route guard (docs/design/web.md, Application
+// surfaces). A router push to an app route runs the registered global guard
+// too; both calls share one pending watcher, so each case counts redirects.
 describe('signed-in.global middleware', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     meStatus = 401;
+    meGate = Promise.resolve();
+    await useRouter().push('/');
     clearNuxtData();
     vi.mocked(navigateTo).mockClear();
   });
@@ -55,7 +72,7 @@ describe('signed-in.global middleware', () => {
   it('redirects at once when the session is already settled anonymous',
     async () => {
       const auth = useAuth();
-      await flushPromises();
+      await auth.refresh();
       expect(auth.authState.value).toBe('anonymous');
 
       signedInMiddleware(
@@ -64,17 +81,17 @@ describe('signed-in.global middleware', () => {
       );
 
       expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        '/login?next=%2Fapp%2Fsettings%2Fsessions',
+        SESSIONS_LOGIN,
         { replace: true },
       );
     });
 
-  it(
-    'does not block navigation while loading, then redirects once settled '
-      + 'anonymous',
+  it('waits without blocking, then redirects once settled anonymous',
     async () => {
-      const router = useRouter();
-      await router.push('/app/settings/sessions');
+      holdMe();
+      await useRouter().push('/app/settings/sessions');
+      const auth = useAuth();
+      expect(auth.authState.value).toBe('loading');
 
       const result = signedInMiddleware(
         route('/app/settings/sessions'),
@@ -83,53 +100,55 @@ describe('signed-in.global middleware', () => {
       expect(result).toBeUndefined();
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
 
+      releaseMe();
+      await vi.waitFor(() => {
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          SESSIONS_LOGIN,
+          { replace: true },
+        );
+      });
       await flushPromises();
-
       expect(vi.mocked(navigateTo)).toHaveBeenCalledTimes(1);
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        '/login?next=%2Fapp%2Fsettings%2Fsessions',
-        { replace: true },
-      );
-    },
-  );
+    });
 
   it('does not redirect when the settling read lands authenticated',
     async () => {
       meStatus = 200;
-      const router = useRouter();
-      await router.push('/app/settings/sessions');
+      holdMe();
+      await useRouter().push('/app/settings/sessions');
+      const auth = useAuth();
+      signedInMiddleware(route('/app/settings/sessions'), route('/'));
 
-      const result = signedInMiddleware(
-        route('/app/settings/sessions'),
-        route('/'),
-      );
-      expect(result).toBeUndefined();
-
+      releaseMe();
+      await vi.waitFor(() => {
+        expect(auth.authState.value).toBe('authenticated');
+      });
       await flushPromises();
-
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
 
-  it(
-    'does not redirect when the current route no longer requires a session '
-      + 'once the read settles',
+  it('skips the redirect when the current route no longer needs a session',
     async () => {
+      holdMe();
       const router = useRouter();
       await router.push('/app/settings/sessions');
-
+      const auth = useAuth();
       signedInMiddleware(route('/app/settings/sessions'), route('/'));
       await router.push('/templates');
-      await flushPromises();
 
+      releaseMe();
+      await vi.waitFor(() => {
+        expect(auth.authState.value).toBe('anonymous');
+      });
+      await flushPromises();
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-    },
-  );
+    });
 
   it('does not redirect a session lost after the page settled authenticated',
     async () => {
       meStatus = 200;
       const auth = useAuth();
-      await flushPromises();
+      await auth.refresh();
       expect(auth.authState.value).toBe('authenticated');
 
       signedInMiddleware(
@@ -141,12 +160,13 @@ describe('signed-in.global middleware', () => {
       meStatus = 401;
       await auth.refresh();
       expect(auth.authState.value).toBe('anonymous');
+      await flushPromises();
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     });
 
   it('sends an anonymous /app/new visitor to register with next', async () => {
     const auth = useAuth();
-    await flushPromises();
+    await auth.refresh();
     expect(auth.authState.value).toBe('anonymous');
 
     signedInMiddleware(

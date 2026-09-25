@@ -9,10 +9,11 @@ import { setResponseStatus } from 'h3';
 import NewResumePage from '../../app/pages/app/new.vue';
 import { setSiteLocale } from '../support/locale';
 
-// A signed-out visit to /app/new is the shared route guard's job
-// (middleware/signed-in.global.ts sends it to /register, not /login, and
-// carries the sample or template query back with it); this page itself no
-// longer redirects a signed-out visitor.
+// /app/new is reached from a public gallery page, so a signed-out visitor
+// must land on account creation, not sign-in, carrying the sample or
+// template query back with them (register.vue then returns them here). The
+// shared route guard (middleware/signed-in.global.ts) sends them; the page
+// itself does not.
 
 let meStatus = 401;
 const startDocumentSpy = vi.spyOn(
@@ -34,25 +35,23 @@ describe('/app/new', () => {
     startDocumentSpy.mockClear();
   });
 
-  it(
-    'does not navigate away from a signed-out sample visit itself',
-    async () => {
-      const route = '/app/new?sample=ats-plain&lng=en';
+  it.each([
+    '/app/new?sample=ats-plain&lng=en',
+    '/app/new?template=classic-serif',
+  ])('sends a signed-out visitor at %s to register, next the full path',
+    async (route) => {
       await mountSuspended(NewResumePage, { route });
-      await flushPromises();
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-    },
-  );
-
-  it(
-    'does not navigate away from a signed-out template visit itself',
-    async () => {
-      const route = '/app/new?template=classic-serif';
-      await mountSuspended(NewResumePage, { route });
-      await flushPromises();
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
-    },
-  );
+      await vi.waitFor(() => {
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          `/register?next=${encodeURIComponent(route)}`,
+          { replace: true },
+        );
+      });
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
+        expect.stringContaining('/login'),
+        expect.anything(),
+      );
+    });
 
   it('does not restart a blank document when the interface locale changes',
     async () => {
