@@ -548,13 +548,13 @@ jobs:
           - group: totp-primary
             proofs: totp:primary auth
           - group: passkey-recovery
-            proofs: passkey:recovery-attempts password
+            proofs: passkey:recovery-attempts public
           - group: editor
             proofs: editor exports
           - group: entry
             proofs: entry publish
-          - group: privacy
-            proofs: privacy public transport
+          - group: account
+            proofs: password privacy transport
           - group: mcp
             proofs: mcp mcp-sdk sample-start
     steps:
