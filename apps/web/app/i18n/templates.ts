@@ -23,8 +23,7 @@ export interface GalleryCopy {
     readonly pageTab: string;
     readonly pdfTab: string;
     readonly pdfHint: string;
-    readonly pdfPageAlt: (number: number, total: number, name: string)
-      => string;
+    readonly pdfPageAlt: (page: number, total: number, name: string) => string;
     readonly pdfPageCaption: (number: number, total: number) => string;
     readonly atsTab: string;
     readonly atsHint: string;
