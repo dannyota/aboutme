@@ -15,5 +15,5 @@ replace() {
 }
 replace 'reverse_proxy server:8080' 'reverse_proxy 127.0.0.1:8080' 2
 replace 'reverse_proxy web:3000' 'reverse_proxy 127.0.0.1:3000' 1
-replace '{http.request.remote.host}' '{client_ip}' 2
+replace '{http.request.remote.host}' '{vars.client_address}' 2
 printf '%s\n' "$content"

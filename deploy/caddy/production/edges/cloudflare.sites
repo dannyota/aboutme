@@ -1,0 +1,28 @@
+# Cloudflare listener on 443: origin-pull mTLS and the client address from
+# CF-Connecting-IP (see cloudflare.global). entrypoint.sh includes this file
+# when EDGES includes cloudflare. The apex_site snippet comes from the
+# Caddyfile that imports this file.
+(cloudflare_tls) {
+	tls /run/caddy/origin.pem /run/caddy/origin-key.pem {
+		client_auth {
+			mode require_and_verify
+			trust_pool file /run/caddy/origin-pull-ca.pem
+		}
+	}
+}
+
+www.aboutme.vn:443 {
+	import cloudflare_tls
+	redir https://aboutme.vn{uri} permanent
+}
+
+aboutme.vn:443 {
+	import cloudflare_tls
+
+	request_header -X-Real-IP
+	request_header -X-Forwarded-For
+	request_header -Forwarded
+	vars client_address {client_ip}
+
+	import apex_site
+}

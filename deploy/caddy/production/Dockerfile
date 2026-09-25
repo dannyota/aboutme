@@ -31,6 +31,7 @@ ENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
 COPY --from=caddy-build /out/caddy /usr/bin/caddy
 COPY deploy/caddy/production/Caddyfile /etc/caddy/Caddyfile
 COPY deploy/caddy/production/Caddyfile.maintenance /etc/caddy/Caddyfile.maintenance
+COPY deploy/caddy/production/edges/ /etc/caddy/edges/
 COPY --from=render /routes.caddy /etc/caddy/routes.caddy
 COPY --from=render /maintenance.generated.caddy /etc/caddy/maintenance.generated.caddy
 # file_server's root holds nothing but this one file: no other config or
