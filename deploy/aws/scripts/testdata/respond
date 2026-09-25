@@ -140,7 +140,8 @@ case "$cmd $args" in
     fi
     echo 200 ;;
   "curl -s -m 10 -w "*)
-    if [[ $STUB_CASE == maintenance_smoke_fails || $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails ]]; then
+    if [[ $STUB_CASE == maintenance_smoke_fails || $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails || \
+      $STUB_CASE == restore_prev_confirm_fails || $STUB_CASE == restore_prev_and_maint_fail ]]; then
       printf 'unavailable\n502\n'
     else
       printf '<!-- aboutme:maintenance -->\n503\n'
@@ -363,7 +364,8 @@ case "$cmd $args" in
     if [[ $svc == aboutme-prod-web ]]; then
       : >"$STUB_DIR/web-started.$STUB_CASE"
     fi
-    if [[ $svc == aboutme-prod-app && $count == 1 && $STUB_CASE == app_start_update_fails ]]; then
+    if [[ $svc == aboutme-prod-app && $count == 1 ]] &&
+      [[ $STUB_CASE == app_start_update_fails || $STUB_CASE == restore_migration_maint_fails ]]; then
       exit 255
     fi ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-web"*)
@@ -385,7 +387,21 @@ case "$cmd $args" in
       ! [[ -e $STUB_DIR/maint-down-wait-failed-once.$STUB_CASE ]]; then
       : >"$STUB_DIR/maint-down-wait-failed-once.$STUB_CASE"
       exit 255
-    fi ;;
+    fi
+    case $STUB_CASE in
+      restore_prev_and_maint_fail | restore_migration_maint_fails | restore_first_maint_fails)
+        # The forward maintenance_up must succeed so the run gets far enough
+        # to fail later for its own reason. That first call itself makes two
+        # of these wait calls (maintenance starts at a different revision, so
+        # start_service points it at the new one, waits, then waits again
+        # after scaling to 1); only the 3rd call, restore()'s own
+        # maintenance_up (already at the right revision, so a single wait),
+        # fails, so restore()'s own gating on it is exercised rather than the
+        # earlier, unrelated failure.
+        n=$(($(cat "$STUB_DIR/maint-wait-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+        echo "$n" >"$STUB_DIR/maint-wait-count.$STUB_CASE"
+        ((n != 3)) || exit 255 ;;
+    esac ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-app"*)
     if [[ $STUB_CASE == first_app_down_fails ]] && ! [[ -e $STUB_DIR/first-app-wait.once ]]; then
       : >"$STUB_DIR/first-app-wait.once"
@@ -412,6 +428,11 @@ case "$cmd $args" in
       confirm_wrong_revision:aboutme-prod-app)
         td="arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3" ;;
       confirm_container_not_running:aboutme-prod-app) cstatus=PENDING ;;
+      restore_prev_confirm_fails:aboutme-prod-app | restore_prev_and_maint_fail:aboutme-prod-app)
+        # restore()'s own app_up(previous_app) call: the previous app's task
+        # still names a revision confirm_running never expects, so restoring
+        # it fails the same way a fresh app start's wrong-revision task would.
+        td="arn:aws:ecs:ap-southeast-1:1:task-definition/wrong:99" ;;
     esac
     printf '{"tasks":[{"taskDefinitionArn":"%s","lastStatus":"RUNNING","containers":[{"lastStatus":"%s"}]}]}' \
       "$td" "$cstatus" ;;
@@ -420,6 +441,7 @@ case "$cmd $args" in
   "aws "*"ecs describe-tasks"*)
     if [[ $STUB_CASE == *migrate_fails && $args == *deploy-migrate* ]]; then echo 1;
     elif [[ $STUB_CASE == *db_setup_fails && $args == *deploy-db-setup* ]]; then echo 1;
+    elif [[ $STUB_CASE == restore_first_maint_fails && $args == *deploy-db-setup* ]]; then echo 1;
     elif [[ $STUB_CASE == totp_reencrypt_task_fails && $args == *deploy-totp-reencrypt* ]]; then echo 1;
     else echo 0; fi ;;
   "aws "*"cloudwatch describe-alarms"*"--output json"*)
@@ -531,8 +553,7 @@ case "$cmd $args" in
     # loop's second schedule (of a, b, c, d) fails after the app is already
     # confirmed healthy; the first stays enabled, the rest are never
     # attempted this pass. The counter is per case so a restore()-time retry
-    # loop (rollback_schedule_enable_fails, under the pre-fix script) does not
-    # share it with the forward loop's count.
+    # loop does not share it with the forward loop's count.
     if [[ $STUB_CASE == schedule_enable_fails || $STUB_CASE == rollback_schedule_enable_fails ]] &&
       grep -q '"State": "ENABLED"' "$file"; then
       n=$(($(cat "$STUB_DIR/enable-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
