@@ -21,7 +21,13 @@ Leads are lane managers on Opus at medium effort, one per lane:
 | `devops-lead` | The devops row's paths | devops |
 | `qa-lead` | Proofs, baselines, release checks | qa, user, recruiter |
 
-A lead takes a brief from the manager, splits it into tasks, briefs its workers at the tier in [Models](#models), and verifies each result by reading the diff and the CI evidence. It reports exact file sets upward and never commits, pushes, tags, or deploys unless its brief allows commits on a named branch. It writes code itself only when a change takes one or two tool calls. Leads settle contract details with each other directly and tell the manager about every cross-lane file. The worker limit in [How we work](../AGENTS.md#how-we-work) counts every lead's workers together.
+A lead is the lane's technical lead, not only a coordinator. It takes a brief from the manager, splits it into tasks, briefs its workers at the tier in [Models](#models), and verifies each result by reading the diff line by line and the CI evidence. It reports exact file sets upward and never commits, pushes, tags, or deploys unless its brief allows commits on a named branch.
+
+A lead owns the hard technical work of its lane:
+- Root cause. When a check fails or a worker is stuck, the lead diagnoses it itself, following "When a check fails" in [verification](verification.md): reads the logs and code, adds diagnostics, bisects, and researches docs and issues with citations. It does not hand a failure back to a worker to retry.
+- Design of the fix. The lead decides the approach and gives the worker the cause, the evidence, and the exact change to make, so workers implement and do not guess.
+- Working with engineers. The lead answers worker questions, reviews each commit before the next task starts, and takes over a task after two failed attempts.
+- Code. The lead writes the tricky or security-critical part itself when that is faster or safer than briefing it; routine volume goes to workers. Leads settle contract details with each other directly and tell the manager about every cross-lane file. The worker limit in [How we work](../AGENTS.md#how-we-work) counts every lead's workers together.
 
 ## architect
 
