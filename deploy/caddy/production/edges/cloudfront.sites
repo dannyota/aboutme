@@ -14,15 +14,18 @@
 }
 
 # Caddy, not the edge, sets these, so the rule survives an edge change. A
-# response that already carries HSTS or nosniff keeps its own value. Caddy's
-# own error responses (an upstream that is down) skip this handler and keep
-# Caddy's defaults: a handle_errors block would add the headers but would
-# also demote the upstream error log line to debug, losing it.
+# response that already carries HSTS or nosniff keeps its own value. Server
+# and reverse_proxy's own "Via: 1.1 Caddy" are removed, so no response names
+# the origin software; CloudFront adds its own Via. Caddy's own error
+# responses (an upstream that is down) skip this handler and keep Caddy's
+# defaults: a handle_errors block would add the headers but would also
+# demote the upstream error log line to debug, losing it.
 (cloudfront_response_headers) {
 	header {
 		?Strict-Transport-Security "max-age=31536000"
 		?X-Content-Type-Options nosniff
 		-Server
+		-Via
 		defer
 	}
 }

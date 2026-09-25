@@ -56,21 +56,15 @@ resource "aws_default_security_group" "main" {
   vpc_id = aws_vpc.main.id
 }
 
+# The host group admits no inbound traffic; the database group trusts it.
+# CloudFront reaches the host through aws_security_group.cloudfront_origin.
+# Its description is stale but kept: changing it replaces the group, which
+# the database rule references.
 resource "aws_security_group" "host" {
   name        = "${var.name}-host"
   description = "aboutme-prod host - HTTPS from Cloudflare only"
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${var.name}-host" }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "cloudflare" {
-  for_each          = toset(var.cloudflare_ipv4_cidrs)
-  security_group_id = aws_security_group.host.id
-  cidr_ipv4         = each.value
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
-  description       = "Cloudflare edge"
 }
 
 resource "aws_vpc_security_group_egress_rule" "host_all" {

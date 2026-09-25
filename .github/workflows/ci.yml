@@ -392,7 +392,7 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://aboutme:aboutme_dev@127.0.0.1:5433/aboutme?sslmode=disable
       # Builds the production Caddy image (compiling Caddy from source) and
-      # runs its routing, origin-pull mTLS, client-IP trust, and
+      # runs its routing, origin mTLS, client-IP trust, and
       # maintenance-mode tests, so a broken build or a config regression
       # fails here instead of first surfacing in release-images after a tag.
       - if: ${{ !cancelled() }}

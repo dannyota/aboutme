@@ -14,7 +14,9 @@ locals {
   # Parameters each execution role may read, and nothing else. maintenance
   # runs only the caddy container, so its role needs exactly the origin TLS
   # parameters: it cannot reuse the app role, which also needs the server
-  # container's secrets.
+  # container's secrets. tls/origin-pull-ca stays readable while a registered
+  # app or maintenance revision still references it: deploy.sh's restore
+  # path can restart the previous app revision.
   exec_params = {
     app         = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "tls/cloudfront-client-ca", "oauth/google-client-id", "oauth/google-client-secret", "totp/key-a", "totp/key-b"]
     web         = []

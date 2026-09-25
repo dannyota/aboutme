@@ -4,15 +4,15 @@
 deployment. The intended environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
-| Path                 | Purpose                                                  |
-| -------------------- | -------------------------------------------------------- |
-| `compose.yml`        | Podman Compose services and isolated networks            |
-| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle     |
-| `web.Dockerfile`     | Nuxt production image                                    |
-| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary    |
-| `caddy/production/`  | Production Caddy image: Cloudflare trust and origin mTLS |
-| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof     |
-| `aws/`               | Production OpenTofu roots, modules, and deploy scripts   |
+| Path                 | Purpose                                                |
+| -------------------- | ------------------------------------------------------ |
+| `compose.yml`        | Podman Compose services and isolated networks          |
+| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle   |
+| `web.Dockerfile`     | Nuxt production image                                  |
+| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary  |
+| `caddy/production/`  | Production Caddy image: CloudFront origin mTLS trust   |
+| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof   |
+| `aws/`               | Production OpenTofu roots, modules, and deploy scripts |
 
 `deploy/aws/` holds the production OpenTofu code and deploy scripts. GitHub
 Actions builds the images on `ubuntu-24.04-arm` for `linux/arm64`. See the
@@ -142,7 +142,8 @@ database URL. This preserves passwords containing URI delimiters.
 
 The current Caddyfile is a development trust boundary. Do not expose it to the
 Internet or place it unchanged behind another proxy. Production uses
-`caddy/production/`, which trusts only Cloudflare and requires origin-pull mTLS.
+`caddy/production/`, which trusts only Amazon CloudFront's origin mTLS client
+certificate on 8443.
 
 The [self-hosting guide](../docs/guides/self-hosting.md) states the current
 operator scope and TLS limits.

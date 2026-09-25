@@ -145,9 +145,10 @@ before "$f" "$maint_up1" "--started-by deploy-migrate"
 before "$f" "$app_up1" "$down_maintenance"
 before "$f" "$app_confirm" "$down_maintenance"
 absent "$f" "deploy-db-setup"
-# EDGES is unset for this release, so the CloudFront distribution check
-# (edge.sh) skips without calling the AWS API.
-absent "$f" "cloudfront list-distributions"
+# The CloudFront distribution check (edge.sh) runs on every deploy, as the
+# base caller.
+grep -qF "[test-base] aws cloudfront list-distributions --output json" "$f" ||
+  { echo "ok: the distribution check did not run as the base caller" >&2; exit 1; }
 absent "$f" "$combined_app_start"
 absent "$f" "$combined_maint_start"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "ok: want 8 schedule updates" >&2; exit 1; }
@@ -244,7 +245,7 @@ start_epoch_tz=$(date -u -d "$start_time_tz" +%s)
 ((start_epoch_tz >= before_tz_epoch && start_epoch_tz <= before_tz_epoch + 120)) ||
   { echo "ok_tz: the metric read's start time is not close to this run's own site-up minute" >&2; exit 1; }
 
-# Both warm paths are requested through Cloudflare after the existing smoke
+# Both warm paths are requested through CloudFront after the existing smoke
 # checks and before the site-down alarm wait, each in one attempt.
 f=$work/ok.calls
 before_re "$f" "https://aboutme\.vn/readyz" "$warm_danny_re"
@@ -529,9 +530,8 @@ absent "$f" "scheduler update-schedule"
 grep -qF "still maps host port 443 or 8443; run tofu apply first" "$work/port8443_mapped.out" ||
   { echo "port8443_mapped: no port-mapping message" >&2; exit 1; }
 
-# The CloudFront edge distribution check (edge.sh) runs only when the new
-# app's Caddy lists cloudfront in EDGES, and, like the port-mapping check
-# beside it, refuses before any mutation.
+# The CloudFront edge distribution check (edge.sh) runs on every deploy, and,
+# like the port-mapping check beside it, refuses before any mutation.
 run_case edge_ok 0 v0.1.0
 f=$work/edge_ok.calls
 grep -qF "[test-base] aws cloudfront list-distributions --output json" "$f" ||
@@ -582,7 +582,7 @@ grep -qF "the distribution's origin protocol policy is match-viewer, not https-o
   "$work/edge_wrong_protocol.out" ||
   { echo "edge_wrong_protocol: no wrong-protocol message" >&2; exit 1; }
 
-# With the CloudFront edge on, an unknown origin address stops the deploy
+# An unknown origin address stops the deploy
 # before any mutation, not only at the final smoke check.
 run_case edge_no_address fail v0.1.0
 f=$work/edge_no_address.calls
@@ -610,6 +610,31 @@ run_case smoke_down fail v0.1.0
   { echo "smoke_down: want exactly 5 /healthz attempts" >&2; exit 1; }
 grep -q "smoke: /healthz returned 502" "$work/smoke_down.out" || { echo "smoke_down: no failure message" >&2; exit 1; }
 
+# Headers with HSTS but no CloudFront Via (as if DNS still pointed elsewhere)
+# fail the deploy after the bounded attempts, once the /healthz and /readyz
+# smoke already ran.
+run_case via_missing fail v0.1.0
+f=$work/via_missing.calls
+before "$f" "https://aboutme.vn/readyz" "curl -fsSI https://aboutme.vn/"
+[[ $(count "$f" "curl -fsSI https://aboutme.vn/") == 5 ]] ||
+  { echo "via_missing: want exactly 5 header-probe attempts" >&2; exit 1; }
+grep -qF "smoke: Via does not name CloudFront; check the DNS records for aboutme.vn" "$work/via_missing.out" ||
+  { echo "via_missing: no Via failure message" >&2; exit 1; }
+
+# Cloudflare's proxy in front of CloudFront passes the Via check alone; its
+# CF-Ray fails the deploy.
+run_case cloudflare_proxied fail v0.1.0
+[[ $(count "$work/cloudflare_proxied.calls" "curl -fsSI https://aboutme.vn/") == 5 ]] ||
+  { echo "cloudflare_proxied: want exactly 5 header-probe attempts" >&2; exit 1; }
+grep -qF "smoke: Cloudflare proxies the response; check the DNS records for aboutme.vn" \
+  "$work/cloudflare_proxied.out" || { echo "cloudflare_proxied: no proxy failure message" >&2; exit 1; }
+
+# A header request that keeps failing is reported as such, not as a missing
+# header.
+run_case headers_down fail v0.1.0
+grep -qF "smoke: the header request failed" "$work/headers_down.out" ||
+  { echo "headers_down: no request failure message" >&2; exit 1; }
+
 # The direct-origin check fails closed: one answer fails the deploy, and an
 # unknown origin address is a failure, never a skip. It covers both 443 and
 # 8443 (docs/design/cloudfront-edge.md, "Deploys and monitoring").
@@ -636,6 +661,8 @@ grep -q "the origin is reachable directly on port 8443 (curl exit 7)" "$work/ori
 run_case origin_tls_rejected fail v0.1.0
 grep -q "the origin is reachable directly on port 443 (curl exit 56)" "$work/origin_tls_rejected.out" ||
   { echo "origin_tls_rejected: a TLS rejection must fail the deploy" >&2; exit 1; }
+# The preflight resolved the address, but the smoke check cannot: a failure,
+# never a skip.
 run_case origin_unknown fail v0.1.0
 grep -q "smoke: could not resolve the origin address" "$work/origin_unknown.out" ||
   { echo "origin_unknown: no failure message" >&2; exit 1; }
@@ -752,7 +779,7 @@ before "$f" "$maint_up1" "$stop_app"
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_app_down_fails: schedules must stay disabled" >&2; exit 1; }
 absent "$f" "deploy-migrate"
 
-# The maintenance page must prove it is live through Cloudflare before a
+# The maintenance page must prove it is live through CloudFront before a
 # database task can start. Otherwise the rollback path restores the app and
 # schedules without any migration risk.
 run_case maintenance_smoke_fails fail v0.1.0
@@ -779,7 +806,7 @@ f=$work/first_migrate_fails.calls
 absent "$f" "$start_app"
 absent "$f" "$prev_app_up"
 # There is no previous release on a first deploy, so restore leaves the
-# maintenance page up rather than leaving nothing answering port 443.
+# maintenance page up rather than leaving nothing answering port 8443.
 grep -qF -- "$up_maintenance" "$f" || { echo "first_migrate_fails: maintenance page not left up" >&2; exit 1; }
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_migrate_fails: schedules must stay disabled" >&2; exit 1; }
 
@@ -794,14 +821,14 @@ grep -qF -- "$up_maintenance" "$f" || { echo "first_db_setup_fails: maintenance 
 # The first-deploy variant of the same gating: db-setup fails before any
 # migration risk, so restore() takes its first-deploy branch; there,
 # restore()'s own maintenance_up cannot be confirmed either, so the app is
-# left as it is (never scaled to 0) rather than risk port 443 with no
+# left as it is (never scaled to 0) rather than risk port 8443 with no
 # listener at all.
 run_case restore_first_maint_fails fail v0.1.0 --first-deploy
 f=$work/restore_first_maint_fails.calls
 absent "$f" "deploy-migrate"
 [[ $(count "$f" "$stop_app") == 1 ]] ||
   { echo "restore_first_maint_fails: the app was scaled to 0 after the failed restart" >&2; exit 1; }
-grep -qF "the app stays as it is so port 443 keeps a listener" \
+grep -qF "the app stays as it is so port 8443 keeps a listener" \
   "$work/restore_first_maint_fails.out" ||
   { echo "restore_first_maint_fails: no keeps-a-listener message" >&2; exit 1; }
 
@@ -830,14 +857,14 @@ f=$work/start_fails.calls
 absent "$f" "$prev_app_up"
 absent "$f" "$start_app"
 # Migrations were applied: the maintenance page must still be up (or come
-# back up) rather than leaving nothing answering port 443.
+# back up) rather than leaving nothing answering port 8443.
 grep -qF -- "$up_maintenance" "$f" || { echo "start_fails: maintenance page not left up" >&2; exit 1; }
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "start_fails: schedules must stay disabled after a migration" >&2; exit 1; }
 grep -q "migration may have been applied" "$work/start_fails.out" || { echo "start_fails: no migration warning" >&2; exit 1; }
 
 # An update-service response can be lost after ECS accepted it. The deploy
 # marks the app start before the request, reconfirms maintenance runs, then
-# scales the app back to zero. It never assumes port 443 stayed free.
+# scales the app back to zero. It never assumes port 8443 stayed free.
 run_case app_start_update_fails fail v0.1.0
 f=$work/app_start_update_fails.calls
 grep -qF -- "$stop_app" "$f" || { echo "app_start_update_fails: app was not scaled to zero" >&2; exit 1; }
@@ -848,7 +875,7 @@ grep -qF -- "$stop_app" "$f" || { echo "app_start_update_fails: app was not scal
 [[ $(count "$f" "$app_up1") == 1 ]] || { echo "app_start_update_fails: the app start was retried" >&2; exit 1; }
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "app_start_update_fails: schedules must stay disabled" >&2; exit 1; }
 # restore()'s migration branch starts (or reconfirms) maintenance before it
-# stops an app whose health was never confirmed, so port 443 always keeps a
+# stops an app whose health was never confirmed, so port 8443 always keeps a
 # listener; the 2nd occurrence of each pattern is the restore-time one, since
 # the forward path already sent one of each before the app start failed.
 restore_maint=$(nth "$f" "$maint_up1" 2)
@@ -858,7 +885,7 @@ restore_stop=$(nth "$f" "$stop_app" 2)
 
 # Same failure, but restore()'s own maintenance_up cannot be confirmed either:
 # the new app that may have started beside it runs the migrated schema, so it
-# is left as it is (never scaled to 0) rather than risk leaving port 443 with
+# is left as it is (never scaled to 0) rather than risk leaving port 8443 with
 # no listener.
 run_case restore_migration_maint_fails fail v0.1.0
 f=$work/restore_migration_maint_fails.calls
@@ -867,7 +894,7 @@ f=$work/restore_migration_maint_fails.calls
 grep -qF "could not confirm that the maintenance page runs; check both services before retrying" \
   "$work/restore_migration_maint_fails.out" ||
   { echo "restore_migration_maint_fails: no maintenance warning" >&2; exit 1; }
-grep -qF "the new app stays as it is so port 443 keeps a listener; check aboutme-prod-app by hand" \
+grep -qF "the new app stays as it is so port 8443 keeps a listener; check aboutme-prod-app by hand" \
   "$work/restore_migration_maint_fails.out" ||
   { echo "restore_migration_maint_fails: no keeps-a-listener message" >&2; exit 1; }
 
@@ -986,7 +1013,7 @@ grep -qF "the maintenance page stays up; scaling the unconfirmed app back to 0" 
 
 # Same as above, but maintenance_up also cannot be confirmed in restore(): with
 # no confirmed maintenance page, the unconfirmed app is left as the only
-# possible listener on port 443 rather than scaled to 0.
+# possible listener on port 8443 rather than scaled to 0.
 run_case restore_prev_and_maint_fail fail v0.1.0
 f=$work/restore_prev_and_maint_fail.calls
 [[ $(count "$f" "$stop_app") == 1 ]] ||

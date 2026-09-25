@@ -33,7 +33,7 @@ edge_origin_cert_check() {
     say "could not read the origin key fingerprint"
     return 1
   }
-  # Absent until the first tls.sh export or tls.sh origin run writes it.
+  # Absent until the first tls.sh export run writes it.
   if [[ $want == None ]]; then
     say "no origin key fingerprint stored yet; skipping the key match check"
     return 0
@@ -49,20 +49,11 @@ edge_origin_cert_check() {
   }
 }
 
-# Runs only when the new app revision's Caddy container lists cloudfront in
-# EDGES (docs/design/cloudfront-edge.md; ADR 0054). Reads $work/app.json,
-# which deploy.sh's step 2 loop writes, and checks the live distribution with
-# the base caller's own credentials, as origin_ip does: cloudfront:List* and
-# ec2:DescribeAddresses are outside the deploy role's closed list.
+# Runs on every deploy: production's only edge is CloudFront
+# (docs/design/cloudfront-edge.md; ADR 0054). Checks the live distribution
+# with the base caller's own credentials, as origin_ip does: cloudfront:List*
+# and ec2:DescribeAddresses are outside the deploy role's closed list.
 edge_distribution_check() {
-  local edges
-  edges=$(jq -r '.containerDefinitions[] | select(.name == "caddy") | (.environment // [])[]
-    | select(.name == "EDGES") | .value' "$work/app.json")
-  case ",$edges," in
-    *,cloudfront,*) ;;
-    *) return 0 ;;
-  esac
-
   local ip domain dists count origin https_port protocol mtls_arn origin_domain
   ip=$(aws --region "$region" ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
     --query 'Addresses[0].PublicIp' --output text) &&

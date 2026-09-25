@@ -4,17 +4,16 @@
 # its environment. MAINTENANCE=1 selects the maintenance-mode route table
 # instead of the normal one; both import the same edge listeners.
 #
-# EDGES is a comma-separated list of cloudflare (443, origin-pull mTLS,
-# CF-Connecting-IP from CLOUDFLARE_RANGES) and cloudfront (8443, origin mTLS
-# from CLOUDFRONT_CLIENT_CA, CloudFront-Viewer-Address). Unset means
-# cloudflare; an empty list is an error. See docs/design/cloudfront-edge.md.
+# EDGES is a comma-separated list of cloudfront (8443, origin mTLS from
+# CLOUDFRONT_CLIENT_CA, CloudFront-Viewer-Address). Unset means cloudfront; an
+# empty list is an error. See docs/design/cloudfront-edge.md.
 #
 #   aboutme-caddy         run Caddy
 #   aboutme-caddy adapt   assemble the edges and check that both route
 #                         tables parse, without TLS material
 set -eu
 umask 077
-edges=${EDGES-cloudflare}
+edges=${EDGES-cloudfront}
 case ",$edges," in
   *[!a-z,]* | *,,*) echo "aboutme-caddy: malformed EDGES '$edges'" >&2; exit 1 ;;
 esac
@@ -24,7 +23,6 @@ mkdir -p /run/caddy
 seen=,
 for edge in $(printf '%s' "$edges" | tr ',' ' '); do
   case $edge in
-    cloudflare) : "${CLOUDFLARE_RANGES:?}" ;;
     cloudfront) ;;
     *) echo "aboutme-caddy: unknown edge '$edge'" >&2; exit 1 ;;
   esac
@@ -46,11 +44,6 @@ fi
 printf '%s\n' "$ORIGIN_CERT" >/run/caddy/origin.pem
 printf '%s\n' "$ORIGIN_KEY" >/run/caddy/origin-key.pem
 unset ORIGIN_KEY
-case $seen in
-  *,cloudflare,*)
-    : "${ORIGIN_PULL_CA:?}"
-    printf '%s\n' "$ORIGIN_PULL_CA" >/run/caddy/origin-pull-ca.pem ;;
-esac
 case $seen in
   *,cloudfront,*)
     : "${CLOUDFRONT_CLIENT_CA:?}"

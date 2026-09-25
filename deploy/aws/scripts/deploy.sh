@@ -18,7 +18,7 @@
 # maintenance, stop maintenance, re-enable jobs, smoke, warm the release,
 # re-enable the task-stopped rule, wait (bounded) for the site-down alarm's
 # post-recovery health, then re-enable its actions. Each handoff starts the
-# incoming service before it stops the outgoing one, so host port 443 always
+# incoming service before it stops the outgoing one, so host port 8443 always
 # has a listener (see the sourced handoff.sh). The release-snapshot-sweep job
 # deletes this script's tagged snapshots once they are more than 27 days old,
 # before they reach 30.
@@ -271,11 +271,6 @@ done
 
 edge_origin_cert_check || exit 1
 
-live=$(curl -fsS https://api.cloudflare.com/client/v4/ips | jq -r '.result.ipv4_cidrs | sort | join(" ")')
-deployed=$(current_def app | jq -r '.containerDefinitions[] | select(.name == "caddy")
-  | .environment[] | select(.name == "CLOUDFLARE_RANGES") | .value | split(" ") | sort | join(" ")')
-[[ -n $live && $live == "$deployed" ]] || { say "Cloudflare ranges changed; run tofu apply first"; exit 1; }
-
 # The maintenance service must already exist (tofu apply creates it); fail
 # clearly here rather than with a raw AWS error from the family loop below.
 maintenance_status=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-maintenance \
@@ -315,7 +310,7 @@ done
 edge_distribution_check || exit 1
 
 # The handoff runs both Caddy services at once, which ECS refuses to place
-# while either task definition reserves host port 443.
+# while either task definition reserves host port 443 or 8443.
 if jq -e '.containerDefinitions[].portMappings[]?
     | select((.hostPort // .containerPort) == 443 or (.hostPort // .containerPort) == 8443)' \
     "$work/app.json" "$work/maintenance.json" >/dev/null; then
@@ -432,7 +427,7 @@ restore() {
       return
     fi
   fi
-  # The released app is confirmed running and answers on port 443; only a
+  # The released app is confirmed running and answers on port 8443; only a
   # later step failed. In every mode, including a rollback, tearing it down
   # over an unrelated API error would be a self-inflicted outage, so it stays
   # up and maintenance, which still shares the port, is stopped.
@@ -459,14 +454,14 @@ restore() {
     # started again) first; only a confirmed maintenance page lets restore()
     # stop a new app that may have started beside it without proving
     # healthy. That app runs the migrated schema, so when maintenance cannot
-    # be confirmed it is left running rather than leaving port 443 dark.
+    # be confirmed it is left running rather than leaving port 8443 dark.
     say "a migration may have been applied; job schedules stay stopped"
     say "the previous release is not proven against the migrated schema: fix forward, or restore the snapshot"
     say "leaving the maintenance page up so the site answers 503 instead of nothing"
     if ! maintenance_up; then
       say "could not confirm that the maintenance page runs; check both services before retrying"
       ((!app_start_requested)) ||
-        say "the new app stays as it is so port 443 keeps a listener; check aboutme-prod-app by hand"
+        say "the new app stays as it is so port 8443 keeps a listener; check aboutme-prod-app by hand"
       return
     fi
     if ((app_start_requested)); then
@@ -479,7 +474,7 @@ restore() {
     say "failed on the first deploy; there is no previous release to restore"
     say "leaving the maintenance page up so the site answers 503 instead of nothing"
     if ! maintenance_up; then
-      say "could not confirm that the maintenance page runs; the app stays as it is so port 443 keeps a listener"
+      say "could not confirm that the maintenance page runs; the app stays as it is so port 8443 keeps a listener"
       say "check aboutme-prod-app and aboutme-prod-maintenance by hand before retrying"
       return
     fi
@@ -503,7 +498,7 @@ restore() {
   fi
   say "failed; restoring the previous app and job schedules"
   # The previous app starts (or is confirmed, if it never stopped) beside
-  # maintenance, and maintenance stops only after that, so port 443 always
+  # maintenance, and maintenance stops only after that, so port 8443 always
   # has a listener.
   # A previous app that cannot be confirmed may be unhealthy, so it is not
   # left serving part of the traffic beside maintenance: once maintenance is
@@ -551,7 +546,7 @@ say "maintenance up"
 app_down
 say "app down"
 
-# Verify through Cloudflare before a database task starts. A slow edge gets the
+# Verify through CloudFront before a database task starts. A slow edge gets the
 # same bounded retries as final smoke checks. If it still does not serve the
 # maintenance page, restore before migration can change the database.
 maintenance_marker='aboutme:maintenance'
@@ -565,7 +560,7 @@ maintenance_smoke_ok() {
 if retry maintenance_smoke_ok; then
   say "maintenance smoke: ok"
 else
-  say "maintenance smoke: could not confirm the maintenance page through Cloudflare"
+  say "maintenance smoke: could not confirm the maintenance page through CloudFront"
   exit 1
 fi
 
@@ -615,15 +610,36 @@ done
 phase=finished
 say "app started; job schedules enabled"
 
-# 9. Smoke through Cloudflare, and prove the origin rejects direct requests.
-# Right after Caddy restarts, Cloudflare can see a TLS reset or serve a 525, so
-# each positive check gets a few attempts. The direct-origin check never
-# retries into a pass: one answer from the origin fails the deploy.
+# 9. Smoke through CloudFront, and prove the origin rejects direct requests.
+# Right after Caddy restarts, CloudFront can return 502 on a bad origin
+# certificate or TLS handshake or 504 when the origin does not answer in time
+# (docs/design/cloudfront-edge.md, "Deploys and monitoring"), so each positive
+# check gets a few attempts. The direct-origin check never retries into a
+# pass: one answer from the origin fails the deploy.
 status_ok() { # path
   smoke_code=$(curl -s -o /dev/null -w '%{http_code}' "https://aboutme.vn$1")
   [[ $smoke_code == 200 ]]
 }
-hsts_ok() { curl -fsSI https://aboutme.vn/ | grep -qi '^strict-transport-security:'; }
+# One HEAD request checks the edge headers, so a retried attempt never sends
+# more than one call. smoke_headers names the last attempt's problem for the
+# message after retry() gives up. The response must come from CloudFront
+# (its Via) and not through Cloudflare's proxy (no CF-Ray), which would still
+# pass CloudFront's Via along.
+smoke_headers=
+edge_headers_ok() {
+  local headers
+  headers=$(curl -fsSI https://aboutme.vn/) || { smoke_headers="the header request failed"; return 1; }
+  if ! grep -qi '^strict-transport-security:' <<<"$headers"; then
+    smoke_headers="HSTS header missing"
+  elif ! grep -qiE '^via:.*\(cloudfront\)' <<<"$headers"; then
+    smoke_headers="Via does not name CloudFront; check the DNS records for aboutme.vn"
+  elif grep -qi '^cf-ray:' <<<"$headers"; then
+    smoke_headers="Cloudflare proxies the response; check the DNS records for aboutme.vn"
+  else
+    return 0
+  fi
+  return 1
+}
 origin_ip() {
   # ec2:DescribeAddresses is outside the deploy role's closed list; this
   # smoke-only read uses the base caller's own credentials instead.
@@ -634,13 +650,13 @@ origin_ip() {
 for path in /healthz /readyz; do
   retry status_ok "$path" || { say "smoke: $path returned $smoke_code"; exit 1; }
 done
-retry hsts_ok || { say "smoke: HSTS header missing"; exit 1; }
+retry edge_headers_ok || { say "smoke: $smoke_headers"; exit 1; }
 retry origin_ip || { say "smoke: could not resolve the origin address"; exit 1; }
 edge_origin_closed "$smoke_ip" 443 || exit 1
 edge_origin_closed "$smoke_ip" 8443 || exit 1
 
-# Warm the new release through Cloudflare before calling the site up. The
-# first requests after a restart can be slow on the Cloudflare-to-origin path,
+# Warm the new release through CloudFront before calling the site up. The
+# first requests after a restart can be slow on the CloudFront-to-origin path,
 # which /healthz does not exercise, so request a public resume page (Go, the
 # database, and the Nuxt render) and the homepage (Nuxt) until each answers
 # 200 quickly, within a bounded number of attempts.

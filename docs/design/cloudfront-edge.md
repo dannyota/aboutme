@@ -1,16 +1,16 @@
 # CloudFront edge
 
-Production at `https://aboutme.vn` moves its edge from Cloudflare (free plan,
-proxied) to Amazon CloudFront in front of the same EC2 host, with no load
-balancer, under
-[ADR 0054](../adr/0054-cloudfront-edge-for-single-host-production.md). The move
-is interim: [ADR 0051](../adr/0051-vietnam-hosted-production.md) still governs
-the later move to Vietnam, which replaces this edge with vCDN. Until cutover,
-the [single-host design](single-host-production.md) describes what runs.
+Production at `https://aboutme.vn` runs behind Amazon CloudFront, in front of
+the same EC2 host, with no load balancer, under
+[ADR 0054](../adr/0054-cloudfront-edge-for-single-host-production.md).
+Cloudflare answers DNS only; see the
+[production runbook's Cloudflare DNS section](../runbooks/production.md#cloudflare-dns).
+This edge is interim: [ADR 0051](../adr/0051-vietnam-hosted-production.md) still
+governs the later move to Vietnam, which replaces this edge with vCDN.
 
-Status: proposed. **Owner approval** marks a choice the owner makes before the
-work that depends on it starts. **Verify** marks a fact from documentation or
-community sources that devops confirms on the account before cutover
+Status: built and serving production. **Owner approval** marks a choice the
+owner makes before the work that depends on it starts. **Verify** marks a fact
+from documentation or community sources that devops confirms on the account
 ([facts to verify](#facts-to-verify)).
 
 ## Why
@@ -64,13 +64,13 @@ Two layers replace Cloudflare's ranges and Authenticated Origin Pulls:
    as Cloudflare's ranges admit every Cloudflare customer.
 2. **Origin mTLS.** CloudFront presents a client certificate from our own
    private CA, and Caddy requires and verifies it on 8443 ([origin
-   mTLS][cf-mtls]). This is the counterpart of today's zone-level origin pull
-   certificate. The certificate is ECDSA P-256 with the TLS client
+   mTLS][cf-mtls]). This is the counterpart of Cloudflare's zone-level origin
+   pull certificate. The certificate is ECDSA P-256 with the TLS client
    authentication extended key usage, imported into ACM in `us-east-1`
-   ([requirements][cf-mtls-cert]). `tls.sh` gains a mode that generates it the
-   way `tls.sh pull` does today: the CA key is discarded, the CA certificate
-   goes to SSM, and the client certificate and key go from the per-user tmpfs to
-   ACM, then are deleted. Another distribution cannot present it. Origin mTLS is
+   ([requirements][cf-mtls-cert]). `tls.sh client-ca` generates it: the CA key
+   is discarded, the CA certificate goes to SSM, and `tls.sh client-import`
+   moves the client certificate and key from the per-user tmpfs to ACM, then
+   deletes them. Another distribution cannot present it. Origin mTLS is
    available on pay-as-you-go, Business, and Premium, not on the Free plan
    ([enable mTLS][cf-mtls-enable]).
 
@@ -79,11 +79,12 @@ every request and sits in the distribution config and OpenTofu state. It stays
 the fallback if origin mTLS fails on the account.
 
 Caddy runs one listener per edge, each with its own client certificate trust
-pool and client address rule: Cloudflare keeps 443 and CloudFront uses 8443, so
-a header one edge sets is never trusted on the other's listener. After
-Cloudflare is removed, 443 closes. The origin domain name is the Elastic IP's
-public DNS name (`ec2-…ap-southeast-1.compute.amazonaws.com`), read from
-OpenTofu, so no DNS record points at the origin ([origin domain][cf-origin]).
+pool and client address rule: only the CloudFront listener on 8443 runs today,
+and 443 is closed. A future edge, such as vCDN, gets its own listener, so a
+header one edge sets is never trusted on another's. The origin domain name is
+the Elastic IP's public DNS name (`ec2-…ap-southeast-1.compute.amazonaws.com`),
+read from OpenTofu, so no DNS record points at the origin ([origin
+domain][cf-origin]).
 
 ## Origin certificate
 
@@ -206,10 +207,10 @@ rejects a duplicate either way.
 Origin headers pass through: both CSPs, `Clear-Site-Data`, `__Host-` cookies,
 `ETag`, `Cache-Control`, and `Retry-After`. CloudFront sets its own `Via` and
 adds `X-Cache`, `X-Amz-Cf-Pop`, and `X-Amz-Cf-Id` ([custom origins][cf-custom]).
-Cloudflare adds `Strict-Transport-Security` and `X-Content-Type-Options` to Nuxt
-pages today. Caddy now sets `Strict-Transport-Security: max-age=31536000` (no
-subdomains, no preload, as today) and `X-Content-Type-Options: nosniff` when the
-upstream did not, and removes `Server`, so the rule survives the move to vCDN.
+Caddy sets `Strict-Transport-Security: max-age=31536000` (no subdomains, no
+preload) and `X-Content-Type-Options: nosniff` when the upstream did not, and
+removes `Server` and its own `Via: 1.1 Caddy`, so no response names the origin
+software and the rule survives the move to vCDN.
 
 ## DDoS and WAF
 
@@ -364,8 +365,8 @@ Before cutover with pinned hostnames and again after; evidence under
    cache apart; `/`, `/healthz`, `/api/*`, a public page, its PDF, and its photo
    always miss; unpublish gives 404 at once; `If-None-Match` gets 304.
 7. **Headers:** CSPs, `Clear-Site-Data`, HSTS, `nosniff`, and `__Host-` cookies
-   present; `Server: Caddy` and `CF-Ray` absent from served responses (Caddy's
-   own empty 502 and 504 keep its defaults); `www` redirects.
+   present; `Server: Caddy`, `Via: 1.1 Caddy`, and `CF-Ray` absent from served
+   responses (Caddy's own empty 502 and 504 keep its defaults); `www` redirects.
 8. **Deploy:** a one-second poll of `/` and `/healthz` through a deploy and a
    `--rollback` sees only 200 or the marked 503, never 502, 504, or a timeout.
 9. **Latency:** the origin latency poll from Vietnam and one distant network

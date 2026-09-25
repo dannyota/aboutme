@@ -121,21 +121,33 @@ case "$cmd $args" in
     exit 0 ;;
   "curl "*"ghcr.io/token"*) echo '{"token":"stub"}' ;;
   "curl "*"/manifests/"*) printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
-  "curl "*"api.cloudflare.com/client/v4/ips"*) echo '{"success":true,"result":{"ipv4_cidrs":["198.51.100.0/24","192.0.2.0/24"]}}' ;;
   "curl -fsSI https://aboutme.vn/")
-    # smoke_flaky: the first HSTS probe hits a TLS reset, as right after a
+    # smoke_flaky: the first headers probe hits a TLS reset, as right after a
     # Caddy restart.
     if [[ $STUB_CASE == smoke_flaky ]] && ! [[ -e $STUB_DIR/hsts.once ]]; then
       : >"$STUB_DIR/hsts.once"
       exit 35
     fi
-    printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\n' ;;
+    # via_missing: the response carries HSTS (as Caddy always sets it) but no
+    # CloudFront Via, as if DNS still pointed somewhere else.
+    if [[ $STUB_CASE == via_missing ]]; then
+      printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\nserver: cloudflare\r\n'
+    # cloudflare_proxied: Cloudflare's proxy in front of CloudFront passes
+    # CloudFront's Via along and adds CF-Ray.
+    elif [[ $STUB_CASE == cloudflare_proxied ]]; then
+      printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\nvia: 1.1 abc.cloudfront.net (CloudFront)\r\ncf-ray: 0123456789abcdef-SIN\r\n'
+    # headers_down: every header request fails, as with a 502 from the edge.
+    elif [[ $STUB_CASE == headers_down ]]; then
+      exit 22
+    else
+      printf 'HTTP/2 200\r\nstrict-transport-security: max-age=31536000\r\nvia: 1.1 abc.cloudfront.net (CloudFront)\r\n'
+    fi ;;
   "curl "*"https://aboutme.vn/healthz"*)
     if [[ $STUB_CASE == smoke_down || $STUB_CASE == signal_during_cleanup ]]; then echo 502; exit 0; fi
-    # smoke_flaky: Cloudflare serves one 525 first.
+    # smoke_flaky: CloudFront serves one 502 first.
     if [[ $STUB_CASE == smoke_flaky ]] && ! [[ -e $STUB_DIR/healthz.once ]]; then
       : >"$STUB_DIR/healthz.once"
-      echo 525
+      echo 502
       exit 0
     fi
     echo 200 ;;
@@ -218,11 +230,11 @@ case "$cmd $args" in
     esac ;;
   "aws "*"ecs describe-task-definition"*)
     if [[ $STUB_CASE == fence_missing_enrolled || $STUB_CASE == fence_running_revision_differs ]]; then
-      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","environment":[{"name":"PASSKEY_ENROLLMENT_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}'
+      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","environment":[{"name":"PASSKEY_ENROLLMENT_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}'
       exit 0
     fi
     if [[ $STUB_CASE == fence_new_revision_totp_enrolled ]]; then
-      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","environment":[{"name":"TOTP_ENROLLMENT_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}'
+      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","environment":[{"name":"TOTP_ENROLLMENT_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"}]}]}'
       exit 0
     fi
     case $STUB_CASE in
@@ -239,35 +251,36 @@ case "$cmd $args" in
     esac
     if [[ $STUB_CASE == totp_key_secret_missing ]]; then
       # No TOTP_ACTIVE_KEY: OpenTofu has not been applied for the TOTP key yet.
-      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
       exit 0
     fi
     if [[ $STUB_CASE == port443_mapped ]]; then
       # OpenTofu has not dropped the app's host port mapping yet.
-      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"hostPort":443,"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[],"portMappings":[{"hostPort":443,"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
       exit 0
     fi
     if [[ $STUB_CASE == port443_container_only ]]; then
       # A mapping that names only containerPort (no explicit hostPort) still
       # reserves the host port under host networking.
-      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[],"portMappings":[{"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
       exit 0
     fi
     if [[ $STUB_CASE == port8443_mapped ]]; then
       # OpenTofu has not dropped the CloudFront listener's host port mapping
       # yet either.
-      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"hostPort":8443,"containerPort":8443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[],"portMappings":[{"hostPort":8443,"containerPort":8443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
       exit 0
     fi
     case $STUB_CASE in
       edge_ok | edge_no_distribution | edge_wrong_origin | edge_wrong_port | edge_no_mtls | edge_wrong_protocol | edge_no_address)
-        # The new app revision's Caddy runs both edges; edge_distribution_check
-        # (edge.sh) checks the live distribution before any mutation.
-        echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"},{"name":"EDGES","value":"cloudflare,cloudfront"}],"secrets":[{"name":"CLOUDFRONT_CLIENT_CA","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/tls/cloudfront-client-ca"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+        # The new app revision's Caddy runs the CloudFront edge;
+        # edge_distribution_check (edge.sh) checks the live distribution
+        # before any mutation.
+        echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"EDGES","value":"cloudfront"}],"secrets":[{"name":"CLOUDFRONT_CLIENT_CA","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/tls/cloudfront-client-ca"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
         exit 0 ;;
     esac
     # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
-    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"}]}]}' ;;
+    echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"}]}]}' ;;
   "aws "*"ssm get-parameters --names /aboutme/prod/tls/origin-key-sha256"*)
     # edge_origin_cert_check's key match: deploy_test.sh stores the 100-day
     # certificate's public key fingerprint at $STUB_DIR/origin-cert-100.sha256.
@@ -608,16 +621,19 @@ case "$cmd $args" in
       fi
     fi ;;
   "aws "*"ec2 describe-addresses"*)
-    if [[ $STUB_CASE == origin_unknown || $STUB_CASE == edge_no_address ]]; then echo None; exit 0; fi
+    if [[ $STUB_CASE == edge_no_address ]]; then echo None; exit 0; fi
+    # origin_unknown: the distribution preflight resolves the address, and the
+    # address is gone by the final smoke check.
+    if [[ $STUB_CASE == origin_unknown && -e $STUB_DIR/address.once ]]; then echo None; exit 0; fi
+    [[ $STUB_CASE != origin_unknown ]] || : >"$STUB_DIR/address.once"
     echo 192.0.2.10 ;;
   "aws "*"cloudfront list-distributions"*)
-    # edge_distribution_check (edge.sh): the live distribution for
-    # aboutme.vn, its origin's HTTPS port, protocol policy, mTLS client
-    # certificate, and domain name (192.0.2.10, as ec2 describe-addresses
-    # above answers).
+    # edge_distribution_check (edge.sh) runs unconditionally: the live
+    # distribution for aboutme.vn, its origin's HTTPS port, protocol policy,
+    # mTLS client certificate, and domain name (192.0.2.10, as ec2
+    # describe-addresses above answers). The default case is a valid
+    # distribution, so every case not testing this check still passes.
     case $STUB_CASE in
-      edge_ok)
-        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn","www.aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
       edge_no_distribution)
         echo '{"DistributionList":{"Items":[]}}' ;;
       edge_wrong_origin)
@@ -629,7 +645,7 @@ case "$cmd $args" in
       edge_no_mtls)
         echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only"}}]}}]}}' ;;
       *)
-        echo '{"DistributionList":{"Items":[]}}' ;;
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn","www.aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
     esac ;;
   # The snapshot name's time is fixed at 2026-10-20T00:00Z.
   "date -u +%Y%m%d%H%M") echo 202610200000 ;;
