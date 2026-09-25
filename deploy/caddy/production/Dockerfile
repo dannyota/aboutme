@@ -22,7 +22,7 @@ RUN bash /maintenance-render.sh /maintenance.html >/maintenance.generated.caddy
 # Same base and packages the upstream caddy:2.11.4-alpine image runs on, minus
 # curl and libcap: curl is not used by our entrypoint or config, and libcap's
 # setcap grant is only useful for a non-root process binding a privileged
-# port, but this image always runs as root (ECS maps host port 443).
+# port, but this image always runs as root.
 FROM docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 RUN apk add --no-cache ca-certificates mailcap \
     && mkdir -p /config/caddy /data/caddy /etc/caddy \

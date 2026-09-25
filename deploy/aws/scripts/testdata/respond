@@ -3,6 +3,32 @@
 cmd=$1
 shift
 args="$*"
+
+# aboutme-prod-app and aboutme-prod-maintenance carry state across the calls
+# of one deploy.sh run: a revision and a desired count, read by
+# start_service's describe-services and updated by every ecs update-service
+# call that names one of them. Kept one file per case so parallel `run_case`
+# invocations never share state.
+svc_state_file() { printf '%s/svc-state.%s.%s' "$STUB_DIR" "$STUB_CASE" "$1"; }
+svc_state() { # service
+  local f
+  f=$(svc_state_file "$1")
+  if [[ ! -e $f ]]; then
+    case "$1" in
+      aboutme-prod-app)
+        if [[ $STUB_CASE == fence_first_already_running ]]; then
+          printf 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3\t0' >"$f"
+        elif [[ $STUB_CASE == *first* ]]; then
+          printf 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app-placeholder:1\t0' >"$f"
+        else
+          printf 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3\t1' >"$f"
+        fi ;;
+      aboutme-prod-maintenance)
+        printf 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-maintenance:2\t0' >"$f" ;;
+    esac
+  fi
+  cat "$f"
+}
 case "$cmd $args" in
   "git fetch"*) exit 0 ;;
   "git rev-list"*) echo 0123456789abcdef0123456789abcdef01234567 ;;
@@ -85,8 +111,10 @@ case "$cmd $args" in
   "aws "*"dynamodb update-item"*"operation_checked_at=:s"*)
     case $STUB_CASE in
       fence_checkpoint_fails) echo "ConditionalCheckFailedException" >&2; exit 254 ;;
-      checkpoint_fails_after_maintenance_down)
-        if [[ -e $STUB_DIR/maintenance-scaled-down.$STUB_CASE ]]; then echo "ConditionalCheckFailedException" >&2; exit 254; fi ;;
+      checkpoint_fails_before_app_start)
+        # The checkpoint guarding app_up, not the earlier one guarding the
+        # web start: fails only once web is already up.
+        if [[ -e $STUB_DIR/web-started.$STUB_CASE ]]; then echo "ConditionalCheckFailedException" >&2; exit 254; fi ;;
       checkpoint_fails_after_migration)
         if [[ -e $STUB_DIR/migrated.$STUB_CASE ]]; then echo "ConditionalCheckFailedException" >&2; exit 254; fi ;;
     esac
@@ -205,6 +233,17 @@ case "$cmd $args" in
       echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
       exit 0
     fi
+    if [[ $STUB_CASE == port443_mapped ]]; then
+      # OpenTofu has not dropped the app's host port mapping yet.
+      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"hostPort":443,"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      exit 0
+    fi
+    if [[ $STUB_CASE == port443_container_only ]]; then
+      # A mapping that names only containerPort (no explicit hostPort) still
+      # reserves the host port under host networking.
+      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      exit 0
+    fi
     # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
     echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"}]}]}' ;;
   "aws "*"ssm describe-parameters"*)
@@ -215,6 +254,10 @@ case "$cmd $args" in
       exit 254
     fi
     echo 'arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12' ;;
+  "aws "*"ecs describe-services"*"taskDefinition,desiredCount"*)
+    # start_service's own state read.
+    svc=$(sed -E 's/.*--services ([^ ]+).*/\1/' <<<"$args")
+    printf '%s\n' "$(svc_state "$svc")" ;;
   "aws "*"ecs describe-services"*"--output json"*)
     # fence_read's fresh-vs-deployed proof and --activate's stability and
     # release-match check both read this shape: stable is
@@ -240,8 +283,23 @@ case "$cmd $args" in
       echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3'
     elif [[ $STUB_CASE == *first* ]]; then echo None
     else echo 'arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3'; fi ;;
+  "aws "*"ecs list-tasks"*"--desired-status RUNNING"*)
+    # confirm_running's own listing, distinct from scale_to_zero_and_wait's
+    # bare (desired-status-less) RUNNING listing below. The returned ARN
+    # names the service so the matching describe-tasks case (below) can
+    # answer for the right one without seeing the service name itself.
+    svc=$(sed -E 's/.*--service-name ([^ ]+).*/\1/' <<<"$args")
+    if [[ $STUB_CASE == confirm_two_running_tasks && $svc == aboutme-prod-app ]]; then
+      # A second task wanting to run (a placement race, or the previous
+      # revision not yet fully stopped): confirm_running must count both and
+      # refuse, rather than reading only the first.
+      printf 'arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/task-%s\tarn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/task-%s-2' \
+        "$svc" "$svc"
+    else
+      printf 'arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/task-%s' "$svc"
+    fi ;;
   "aws "*"ecs list-tasks"*)
-    if [[ $STUB_CASE == list_running_fails && $args == *"--service-name aboutme-prod-app"* && $args != *"--desired-status STOPPED"* ]]; then
+    if [[ $STUB_CASE == list_running_fails && $args == *"--service-name aboutme-prod-app"* && $args != *"--desired-status"* ]]; then
       exit 255
     fi
     if [[ $STUB_CASE == list_stopped_fails && $args == *"--service-name aboutme-prod-app"* && $args == *"--desired-status STOPPED"* ]]; then
@@ -279,18 +337,54 @@ case "$cmd $args" in
       exit 255
     fi
     echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/$by" ;;
-  "aws "*"ecs update-service"*"aboutme-prod-maintenance"*"desired-count 0"*)
-    : >"$STUB_DIR/maintenance-scaled-down.$STUB_CASE" ;;
-  "aws "*"ecs update-service"*"aboutme-prod-app"*"desired-count 1"*)
-    [[ $STUB_CASE != app_start_update_fails ]] || exit 255 ;;
+  "aws "*"ecs update-service"*)
+    # Every service mutation start_service and scale_to_zero_and_wait can
+    # send: a revision only, a count only, both together, or (aboutme-prod-web)
+    # a plain start. Apply whichever pieces this call carries to the tracked
+    # state before deciding whether the call itself fails, since a lost
+    # response can still mean ECS applied the change.
+    svc=$(sed -E 's/.*--service ([^ ]+).*/\1/' <<<"$args")
+    td=""
+    [[ $args != *"--task-definition "* ]] || td=$(sed -E 's/.*--task-definition ([^ ]+).*/\1/' <<<"$args")
+    count=""
+    [[ $args != *"--desired-count "* ]] || count=$(sed -E 's/.*--desired-count ([^ ]+).*/\1/' <<<"$args")
+    case "$svc" in
+      aboutme-prod-app | aboutme-prod-maintenance)
+        cur=$(svc_state "$svc")
+        cur_td=${cur%%$'\t'*}
+        cur_count=${cur##*$'\t'}
+        [[ -z $td ]] || cur_td=$td
+        [[ -z $count ]] || cur_count=$count
+        printf '%s\t%s' "$cur_td" "$cur_count" >"$(svc_state_file "$svc")" ;;
+    esac
+    if [[ $svc == aboutme-prod-maintenance && $count == 0 ]]; then
+      : >"$STUB_DIR/maintenance-scaled-down.$STUB_CASE"
+    fi
+    if [[ $svc == aboutme-prod-web ]]; then
+      : >"$STUB_DIR/web-started.$STUB_CASE"
+    fi
+    if [[ $svc == aboutme-prod-app && $count == 1 && $STUB_CASE == app_start_update_fails ]]; then
+      exit 255
+    fi ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-web"*)
     if [[ $STUB_CASE == start_fails || $STUB_CASE == restore_below_fence ]]; then exit 255; fi ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-maintenance"*)
     if [[ $STUB_CASE == maint_up_fails ]]; then exit 255; fi
-    if [[ $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails ]]; then
-      n=$(($(cat "$STUB_DIR/$STUB_CASE.maint-wait-count" 2>/dev/null || echo 0) + 1))
-      echo "$n" >"$STUB_DIR/$STUB_CASE.maint-wait-count"
-      ((n != 2)) || exit 255
+    # maintenance-scaled-down.$STUB_CASE is touched by the preceding
+    # update-service call exactly when it carries maintenance's
+    # desired-count-0: this is scale_to_zero_and_wait's own wait, not one of
+    # start_service's, however many of those already ran this case.
+    if [[ $STUB_CASE == maintenance_down_fails || $STUB_CASE == alerts_recovery_fails ]] &&
+      [[ -e $STUB_DIR/maintenance-scaled-down.$STUB_CASE ]]; then
+      exit 255
+    fi
+    # maint_down_wait_once_fails: the first scale-to-zero wait after the app
+    # is already up fails once (an ECS wait timeout), then a retry (restore()
+    # confirming maintenance stopped) succeeds.
+    if [[ $STUB_CASE == maint_down_wait_once_fails ]] && [[ -e $STUB_DIR/maintenance-scaled-down.$STUB_CASE ]] &&
+      ! [[ -e $STUB_DIR/maint-down-wait-failed-once.$STUB_CASE ]]; then
+      : >"$STUB_DIR/maint-down-wait-failed-once.$STUB_CASE"
+      exit 255
     fi ;;
   "aws "*"ecs wait services-stable"*"aboutme-prod-app"*)
     if [[ $STUB_CASE == first_app_down_fails ]] && ! [[ -e $STUB_DIR/first-app-wait.once ]]; then
@@ -306,6 +400,21 @@ case "$cmd $args" in
   "aws "*"ecs wait tasks-stopped"*)
     if [[ $STUB_CASE == wait_timeout && $args == *deploy-migrate* ]]; then exit 255; fi
     if [[ $STUB_CASE == totp_reencrypt_wait_timeout && $args == *deploy-totp-reencrypt* ]]; then exit 255; fi ;;
+  "aws "*"ecs describe-tasks"*"--output json"*)
+    # confirm_running's task-detail read. The task ARN (from the list-tasks
+    # case above) names the service; its tracked revision is normally
+    # correct, since start_service updates it before calling confirm_running.
+    svc=$(sed -E 's#.*/task-([a-zA-Z0-9-]+).*#\1#' <<<"$args")
+    cur=$(svc_state "$svc")
+    td=${cur%%$'\t'*}
+    cstatus=RUNNING
+    case "$STUB_CASE:$svc" in
+      confirm_wrong_revision:aboutme-prod-app)
+        td="arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3" ;;
+      confirm_container_not_running:aboutme-prod-app) cstatus=PENDING ;;
+    esac
+    printf '{"tasks":[{"taskDefinitionArn":"%s","lastStatus":"RUNNING","containers":[{"lastStatus":"%s"}]}]}' \
+      "$td" "$cstatus" ;;
   "aws "*"ecs describe-tasks"*"lastStatus"*)
     if [[ $STUB_CASE == wait_timeout || $STUB_CASE == totp_reencrypt_wait_timeout ]]; then echo RUNNING; else echo STOPPED; fi ;;
   "aws "*"ecs describe-tasks"*)
@@ -418,12 +527,16 @@ case "$cmd $args" in
   "aws "*"scheduler update-schedule"*)
     file=$(sed -E 's#.*file://([^ ]+).*#\1#' <<<"$args")
     cp "$file" "$STUB_DIR/last-schedule.json"
-    # schedule_enable_fails: the enable loop's second schedule (of a, b, c, d)
-    # fails after the app is already confirmed healthy; the first stays
-    # enabled, the rest are never attempted.
-    if [[ $STUB_CASE == schedule_enable_fails ]] && grep -q '"State": "ENABLED"' "$file"; then
-      n=$(($(cat "$STUB_DIR/enable-count" 2>/dev/null || echo 0) + 1))
-      echo "$n" >"$STUB_DIR/enable-count"
+    # schedule_enable_fails / rollback_schedule_enable_fails: the enable
+    # loop's second schedule (of a, b, c, d) fails after the app is already
+    # confirmed healthy; the first stays enabled, the rest are never
+    # attempted this pass. The counter is per case so a restore()-time retry
+    # loop (rollback_schedule_enable_fails, under the pre-fix script) does not
+    # share it with the forward loop's count.
+    if [[ $STUB_CASE == schedule_enable_fails || $STUB_CASE == rollback_schedule_enable_fails ]] &&
+      grep -q '"State": "ENABLED"' "$file"; then
+      n=$(($(cat "$STUB_DIR/enable-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+      echo "$n" >"$STUB_DIR/enable-count.$STUB_CASE"
       if ((n == 2)); then
         echo "scheduler throttled" >&2
         exit 254
