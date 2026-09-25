@@ -7,15 +7,24 @@ import { requiresSession, signedOutRedirect } from '@/utils/returnPath';
  * Global route guard: every `/app/**` route and `/authorize` require a
  * signed-in session (docs/design/web.md, "Application surfaces" and "Agent
  * consent and connected agents"). `/app/**` is a client application whose
- * authenticated fetches never run in SSR, so this guard must not block the
- * initial render while the session read is in flight: the shell has to
- * appear at once. An anonymous state that has already settled redirects
- * immediately; a `'loading'` state is left to `redirectWhenSettled`, which
- * waits for the read to leave `'loading'` and redirects only if it lands
- * anonymous. This runs once per page load. A session lost later, after the
- * page has already rendered authenticated, is left to the page
+ * authenticated fetches never run in SSR, so this guard never blocks a
+ * navigation on the session read: the shell has to appear at once. A read
+ * already settled anonymous redirects at once. A read in flight (including
+ * the re-read `useAuth` starts after an earlier rejection) is left to
+ * `redirectWhenSettled`, which redirects only if it lands anonymous. A
+ * session lost after the page settled signed in is left to the page
  * (`useResumeList.ts`, `pages/app/resumes/[id].vue`).
  */
+
+interface Target {
+  readonly path: string;
+  readonly fullPath: string;
+}
+
+// The latest navigation this guard saw. The read can settle before that
+// navigation commits, so the router's current route may still be the
+// previous page; the latest target is where the visitor is going.
+let latest: Target | null = null;
 
 // At most one watcher runs at a time: a later navigation while one is
 // pending must not stack a second redirect for the same settling read.
@@ -23,7 +32,6 @@ let watching = false;
 
 function redirectWhenSettled(
   authState: Ref<AuthState>,
-  router: ReturnType<typeof useRouter>,
   nuxtApp: ReturnType<typeof useNuxtApp>,
 ): void {
   if (watching) return;
@@ -32,26 +40,26 @@ function redirectWhenSettled(
     if (state === 'loading') return;
     stop();
     watching = false;
-    if (state !== 'anonymous') return;
-    // The visitor may have navigated away from the route that triggered
-    // this watcher while the read was in flight, so redirect based on the
-    // router's current route rather than the one the middleware captured.
-    const current = router.currentRoute.value;
-    if (!requiresSession(current.path)) return;
-    // A watcher callback runs outside the Nuxt context that navigateTo
-    // needs.
+    const target = latest;
+    if (state !== 'anonymous' || target === null) return;
+    // The visitor may have moved on to a public page while the read was in
+    // flight.
+    if (!requiresSession(target.path)) return;
+    // A watcher callback runs outside the Nuxt context navigateTo needs.
     void nuxtApp.runWithContext(() =>
-      navigateTo(signedOutRedirect(current.fullPath), { replace: true }));
+      navigateTo(signedOutRedirect(target.fullPath), { replace: true }));
   });
 }
 
 export default defineNuxtRouteMiddleware((to) => {
-  if (import.meta.server || !requiresSession(to.path)) return;
+  if (import.meta.server) return;
+  latest = { path: to.path, fullPath: to.fullPath };
+  if (!requiresSession(to.path)) return;
   const { authState } = useAuth();
   if (authState.value === 'anonymous') {
     return navigateTo(signedOutRedirect(to.fullPath), { replace: true });
   }
   if (authState.value === 'loading') {
-    redirectWhenSettled(authState, useRouter(), useNuxtApp());
+    redirectWhenSettled(authState, useNuxtApp());
   }
 });

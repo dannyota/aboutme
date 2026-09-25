@@ -49,7 +49,7 @@ const SESSIONS_LOGIN = '/login?next=%2Fapp%2Fsettings%2Fsessions';
 
 // The shared signed-out route guard (docs/design/web.md, Application
 // surfaces). A router push to an app route runs the registered global guard
-// too; both calls share one pending watcher, so each case counts redirects.
+// too; both share one pending watcher.
 describe('signed-in.global middleware', () => {
   beforeEach(async () => {
     meStatus = 401;
@@ -69,21 +69,40 @@ describe('signed-in.global middleware', () => {
     expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
   });
 
-  it('redirects at once when the session is already settled anonymous',
+  it('re-reads a rejected session on navigation, then redirects',
     async () => {
       const auth = useAuth();
       await auth.refresh();
       expect(auth.authState.value).toBe('anonymous');
 
-      signedInMiddleware(
-        route('/app/settings/sessions'),
-        route('/app/settings/sessions'),
-      );
+      holdMe();
+      await useRouter().push('/app/settings/sessions');
+      expect(auth.authState.value).toBe('loading');
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
 
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        SESSIONS_LOGIN,
-        { replace: true },
-      );
+      releaseMe();
+      await vi.waitFor(() => {
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          SESSIONS_LOGIN,
+          { replace: true },
+        );
+      });
+    });
+
+  it('redirects to the navigation target when the read settles first',
+    async () => {
+      // The router still shows '/': the navigation has not committed.
+      holdMe();
+      signedInMiddleware(route('/app/settings/sessions'), route('/'));
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
+
+      releaseMe();
+      await vi.waitFor(() => {
+        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+          SESSIONS_LOGIN,
+          { replace: true },
+        );
+      });
     });
 
   it('waits without blocking, then redirects once settled anonymous',
@@ -165,20 +184,16 @@ describe('signed-in.global middleware', () => {
     });
 
   it('sends an anonymous /app/new visitor to register with next', async () => {
-    const auth = useAuth();
-    await auth.refresh();
-    expect(auth.authState.value).toBe('anonymous');
+    const path = '/app/new?sample=engineer-compact&lng=en';
+    holdMe();
+    await useRouter().push(path);
+    releaseMe();
 
-    signedInMiddleware(
-      route('/app/new', '/app/new?sample=engineer-compact&lng=en'),
-      route('/templates'),
-    );
-
-    expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-      `/register?next=${
-        encodeURIComponent('/app/new?sample=engineer-compact&lng=en')
-      }`,
-      { replace: true },
-    );
+    await vi.waitFor(() => {
+      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+        `/register?next=${encodeURIComponent(path)}`,
+        { replace: true },
+      );
+    });
   });
 });
