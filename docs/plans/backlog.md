@@ -4,8 +4,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
-- `/app/settings/sessions` has no redirect of its own for an anonymous visitor; it leaves only because `ConnectedAgents.vue` mounts when agent access is on. Give app routes one shared signed-out redirect. Evidence: `apps/web/app/pages/app/settings/sessions.vue`, `apps/web/app/composables/useResumeList.ts`.
-- `hidePhoneAccountLinks` in `apps/web/app/components/app/AppShell.vue` keeps an exception for `/app/settings/sessions` and `/authorize` that can no longer be reached; remove it and update `DESIGN.md` if it mentions it.
 - `docs/design/vietnam-production.md` contradicts itself: lines 150-151 say the two Caddy units conflict in systemd, while steps 5 and 8 run them side by side (SO_REUSEPORT). Also cover ACME HTTP-01 with two Caddy processes on port 80 (shared certificate storage), same-user units, and check `/readyz` on the server directly in step 8. Evidence: deploy handoff review, 2026-09-25.
 - `docs/design/single-host-production.md:268` and `docs/runbooks/production.md:257` omit the new recovery exceptions: an unconfirmed new app is left running when maintenance cannot be confirmed, and the failed previous-app restart path. Evidence: `deploy/aws/scripts/deploy.sh` restore.
 - The paged editor preview holds less than the PDF on some templates (minimal-air spilled to two pages at 65% print fill while the PDF fit one), so a user can see two preview pages for a one-page PDF. Evidence: Vietnam tech samples work, 2026-09-25; `apps/web/e2e/preview-gap-expected.json`.

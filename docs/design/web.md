@@ -18,6 +18,12 @@ produces the same document everywhere.
 Authenticated fetches are client-only. A server-side fetch could rotate a
 session and lose the successor cookie inside the SSR process.
 
+Every `/app/**` route and `/authorize` share one client route guard. Once the
+session read settles anonymous, it replaces the route with
+`/login?next=<validated path>`, or `/register?next=` for `/app/new`. It never
+waits on the read, so the shell can render before the read settles; a session
+lost later is left to the page.
+
 The login page always shows the email and password form. Each auth page shows
 one provider link per name in the capabilities `providers` list
 ([ADR 0039](../adr/0039-per-provider-login-enablement.md)). When

@@ -378,6 +378,7 @@ apps/web/app/landing/sampleResume.ts
 apps/web/app/landing/showcase.ts
 apps/web/app/landing/structuredData.ts
 apps/web/app/lib/utils.ts
+apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/_harness/justify-fixture.ts
 apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
