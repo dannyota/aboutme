@@ -192,12 +192,26 @@ async function installGuards(
   await installExternalWebSocketFirewall(context, counters);
 }
 
+// Armed forced rejections per page. The page reads GET /api/v1/me on its own
+// schedule, so only a DELETE may use one up. The route stays installed for
+// the page's life: when a page's last route expires or is removed, Playwright
+// continues every request still in that route a second time, and the context
+// firewall then fails with "Route is already handled!".
+const forcedDeleteRejections = new WeakMap<Page, { armed: boolean }>();
+
 async function forceNextDeleteReauth(page: Page): Promise<void> {
-  const pattern = `${ORIGIN}/api/v1/me`;
-  const handler = async (route: Route) => {
+  const existing = forcedDeleteRejections.get(page);
+  if (existing !== undefined) {
+    existing.armed = true;
+    return;
+  }
+  const state = { armed: true };
+  forcedDeleteRejections.set(page, state);
+  await page.route(`${ORIGIN}/api/v1/me`, async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (
+      !state.armed ||
       request.method() !== "DELETE" ||
       url.origin !== ORIGIN ||
       url.pathname !== "/api/v1/me" ||
@@ -206,6 +220,7 @@ async function forceNextDeleteReauth(page: Page): Promise<void> {
       await route.fallback();
       return;
     }
+    state.armed = false;
     await route.fulfill({
       body: JSON.stringify({
         error: {
@@ -217,8 +232,7 @@ async function forceNextDeleteReauth(page: Page): Promise<void> {
       headers: { "Cache-Control": "no-store, no-transform" },
       status: 403,
     });
-  };
-  await page.route(pattern, handler, { times: 1 });
+  });
 }
 
 async function prepareResume(page: Page): Promise<ValidResume> {
@@ -656,6 +670,11 @@ test("proves account export, reauthentication, and deletion", async ({
     stage("reauth");
     deleting = true;
     await forceNextDeleteReauth(page);
+    // The settings page reads GET /api/v1/me on its own schedule after
+    // hydration. A read between arming and the delete must reach the server
+    // and leave the forced rejection for the delete.
+    stage("reauth-session-read");
+    await freshCSRF(page);
     stage("reauth-forced-rejection");
     await confirmAccountDeletion(page, 403);
     stage("reauth-provider-prompt");
