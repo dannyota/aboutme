@@ -75,6 +75,7 @@ const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
 const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
 const PENDING_COOKIE = '__Host-auth-pending';
 const SESSION_COOKIE = '__Host-session';
+const LOCALE_COOKIE = 'aboutme-locale';
 const RECOVERY_INPUT = '#second-factor-recovery-code';
 const TOTP_LOGIN_INPUT = '#second-factor-totp-code';
 const TOTP_SETUP_INPUT = '#totp-code';
@@ -638,7 +639,7 @@ async function setLocale(
   locale: 'en' | 'vi',
 ): Promise<void> {
   await context.addCookies([
-    { name: 'aboutme-locale', url: ORIGIN, value: locale },
+    { name: LOCALE_COOKIE, url: ORIGIN, value: locale },
   ]);
 }
 
@@ -835,7 +836,13 @@ async function signOut(page: Page): Promise<void> {
   await gotoHydrated(page, '/app/settings/sessions');
   await page.getByRole('button', { name: 'Log out', exact: true }).click();
   await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
-  await setLocale(page.context(), 'en');
+  // The logout response's Clear-Site-Data drops every cookie. The app writes
+  // the language choice back before it leaves for /login, so English
+  // survives without the proof pinning it again.
+  await expect.poll(
+    () => cookieValue(page.context(), LOCALE_COOKIE),
+    { timeout: WAIT_RESPONSE_MS },
+  ).toBe('en');
 }
 
 /** Submits one TOTP code on the pending login page and returns the status. */

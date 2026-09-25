@@ -102,23 +102,40 @@ function isRecoveredMeEnvelope(
     && recovered.csrfToken !== '';
 }
 
+/** The browser's current interface language choice, if it holds one. */
+function readLocaleCookie(): Locale | undefined {
+  const prefix = `${localeCookie}=`;
+  const value = document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(prefix))
+    ?.slice(prefix.length);
+  return isLocale(value) ? value : undefined;
+}
+
 /**
  * Logout, logout-everywhere, revoking the caller's own session, and account
  * deletion all send `Clear-Site-Data: "cookies", "storage"`
  * (docs/design/security.md, session lifecycle). The browser wipes every
- * cookie for this origin, including `aboutme-locale`, before this response
- * reaches `mutate`'s caller, so the next render falls back to Vietnamese.
- * Rewriting it from the in-memory locale state keeps the interface language
- * a device preference across that response (docs/design/localization.md,
- * "Two language domains"). `useCookie` can skip writing an unchanged value,
- * so this writes `document.cookie` directly, with the same attributes
- * `useLocale` sets. A state that never held a valid locale writes nothing,
- * so a browser that never chose a language still gets none.
+ * cookie for this origin, including `aboutme-locale`, before the response
+ * reaches `mutate`'s caller, so the next page load would fall back to
+ * Vietnamese. Chromium does not expose `Clear-Site-Data` to page scripts, so
+ * the response cannot say whether it cleared anything. Instead, when a
+ * browser held a language choice as the request started and holds none once
+ * a successful response arrives, the choice is rewritten from the in-memory
+ * locale state that Clear-Site-Data cannot touch. That keeps the interface
+ * language a device preference (docs/design/localization.md, "Two language
+ * domains"). Writing it before the caller navigates also keeps the next
+ * page's `useCookie` readers from finding no cookie and deleting it again.
+ * `useCookie` can skip writing an unchanged value, so this writes
+ * `document.cookie` directly, with the same attributes `useLocale` sets. A
+ * browser that never chose a language still gets none, and a cookie that is
+ * still present, such as one another tab just changed, is left alone.
  */
-function restoreLocaleCookie(): void {
+function restoreLocaleCookie(chosen: Locale): void {
+  if (readLocaleCookie() !== undefined) return;
   const state = useState<Locale | undefined>(localeCookie);
-  if (!isLocale(state.value)) return;
-  document.cookie = `${localeCookie}=${state.value}; Path=/; `
+  const value = isLocale(state.value) ? state.value : chosen;
+  document.cookie = `${localeCookie}=${value}; Path=/; `
     + `Max-Age=${localeCookieMaxAgeSeconds}; SameSite=Lax`;
 }
 
@@ -184,17 +201,17 @@ export function useAuth(): UseAuthReturn {
     url: string,
     options: MutateOptions,
   ): Promise<T> {
-    const attempt = (): Promise<T> =>
-      $fetch<T, string>(url, {
+    const attempt = (): Promise<T> => {
+      const chosen = readLocaleCookie();
+      return $fetch<T, string>(url, {
         ...options,
         credentials: 'include',
         headers: csrfHeaders(csrfToken.value, options.body !== undefined),
         onResponse: ({ response }) => {
-          if (response.ok && response.headers.has('clear-site-data')) {
-            restoreLocaleCookie();
-          }
+          if (response.ok && chosen !== undefined) restoreLocaleCookie(chosen);
         },
       });
+    };
 
     try {
       return await attempt();

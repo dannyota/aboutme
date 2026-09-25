@@ -5,7 +5,7 @@ import {
   registerEndpoint,
 } from '@nuxt/test-utils/runtime';
 import { flushPromises } from '@vue/test-utils';
-import { setResponseHeader, setResponseStatus } from 'h3';
+import { setResponseStatus } from 'h3';
 import { defineComponent, h } from 'vue';
 import AppShell from '../app/components/app/AppShell.vue';
 import LocaleToggle from '../app/components/app/LocaleToggle.vue';
@@ -38,13 +38,14 @@ registerEndpoint('/api/v1/me', {
 registerEndpoint('/api/v1/auth/logout', {
   method: 'POST',
   handler: (event) => {
-    setResponseHeader(event, 'Clear-Site-Data', '"cookies", "storage"');
     setResponseStatus(event, 204);
-    // The real browser applies this header itself and wipes every cookie
-    // for this origin, including `aboutme-locale`, before the client's
-    // response handler runs (docs/design/security.md, session lifecycle).
-    // Simulated here so the reload assertion below is a real regression
-    // check: without useAuth's restore hook, it would fail.
+    // The real logout response sends `Clear-Site-Data: "cookies",
+    // "storage"`, and the browser wipes every cookie for this origin,
+    // including `aboutme-locale`, before the client's response handler runs
+    // (docs/design/security.md, session lifecycle). Chromium never shows the
+    // header to page scripts, so this endpoint omits it and clears the cookie
+    // on the browser's behalf. The reload assertion below is then a real
+    // regression check: without useAuth's restore hook, it would fail.
     document.cookie = `${localeCookie}=; Max-Age=0; Path=/`;
     return null;
   },
