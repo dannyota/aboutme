@@ -34,8 +34,10 @@ import { freshCSRF } from './editor-fixtures';
 import {
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
+  locatorStateWord,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
+  pageStateWords,
   type DiagnosticCounters,
   signInWithGoogle,
 } from './harness-lib';
@@ -248,6 +250,7 @@ function waitedFor(message: string): string {
 
 let failureSeen = 'none';
 let failurePage = 'unknown';
+let failurePageState = 'page-unread';
 
 /** Lists which closed test ids are visible on the page right now. */
 async function visibleWords(page: Page): Promise<string> {
@@ -279,7 +282,7 @@ test.afterEach(({}, testInfo) => {
     `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
       + `-verify-${verifyTrace}-error-${errorKind}`
       + `-waited-${waitedFor(message)}-page-${failurePage}`
-      + `-seen-${failureSeen}`,
+      + `-seen-${failureSeen}-${failurePageState}-${locatorStateWord(message)}`,
   );
 });
 
@@ -1966,6 +1969,7 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
     try {
       failureSeen = await visibleWords(page);
       failurePage = landingCategory(page.url());
+      failurePageState = await pageStateWords(page);
     } catch {
       // A closed page leaves the defaults.
     }
@@ -2196,6 +2200,14 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
       steps.locales = true;
       steps.viewports = true;
     } finally {
+      // Snapshot the page before teardown navigates away from the failure.
+      try {
+        failureSeen = await visibleWords(page);
+        failurePage = landingCategory(page.url());
+        failurePageState = await pageStateWords(page);
+      } catch {
+        // A closed page leaves the defaults.
+      }
       beginTeardown();
       steps.cleanup = await deleteSignedInAccount(page).catch(() => false);
       await writeFile(

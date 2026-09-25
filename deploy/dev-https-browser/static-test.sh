@@ -549,7 +549,7 @@ while IFS= read -r template; do
 done <<'TEMPLATES'
 `${MODE}-stage:${name}`
 `${MODE}-stage:cleanup-after-${recordedStage}`
-`${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`
+`${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}-${detail}`
 `${MODE}-stage:${recordedStage}`
 = `console-unexpected-${unexpectedConsole.slice(0, 2).join('-')}`;
 TEMPLATES

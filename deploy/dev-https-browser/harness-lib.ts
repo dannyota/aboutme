@@ -182,3 +182,75 @@ export async function waitForHydration(
     rootId),
   ).toBe(true);
 }
+
+// --- Failure diagnosis in closed words ---------------------------------------
+//
+// The browser runner prints only a proof's last stage line, so a failed
+// locator step has to name its own cause there. These helpers reduce the page
+// and Playwright's call log to fixed words that match the runner's
+// [a-z0-9-] filter. They never return page text, a URL, a selector, or an
+// account value.
+
+/**
+ * The page's language, whether the header shows the signed-in account menu or
+ * the signed-out account links, and whether the app has hydrated, as
+ * `lang-<vi|en|other>-header-<signedin|signedout|none>-hydrated-<yes|no>`.
+ * Read while the failed page is still open, before any teardown navigates.
+ */
+export async function pageStateWords(page: Page): Promise<string> {
+  try {
+    const state = await page.evaluate(() => {
+      const header = document.querySelector('[data-testid="app-shell"]');
+      const signedIn = document.querySelector('[data-testid="account-menu"]')
+        !== null;
+      const signedOut = header?.querySelector(
+        'a[href^="/login"], a[href^="/register"]',
+      ) != null;
+      return {
+        header: signedIn ? 'signedin' : signedOut ? 'signedout' : 'none',
+        hydrated: Boolean((document.getElementById('__nuxt') as HTMLElement & {
+          __vue_app__?: unknown;
+        } | null)?.__vue_app__),
+        lang: document.documentElement.lang,
+      };
+    });
+    const lang = state.lang === 'vi' || state.lang === 'en'
+      ? state.lang
+      : 'other';
+    return `lang-${lang}-header-${state.header}`
+      + `-hydrated-${state.hydrated ? 'yes' : 'no'}`;
+  } catch {
+    return 'lang-unread-header-unread-hydrated-unread';
+  }
+}
+
+// Call-log lines Playwright writes while an action retries, mapped to one
+// word each. The last match wins: it is the element's state when the action
+// gave up.
+const LOCATOR_STATE_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/locator resolved to /u, 'found'],
+  [/element is not visible/u, 'hidden'],
+  [/element is not enabled|element is disabled/u, 'disabled'],
+  [/element is not editable/u, 'readonly'],
+  [/intercepts pointer events/u, 'covered'],
+  [/element is not stable/u, 'unstable'],
+  [/element is outside of the viewport/u, 'offscreen'],
+  [/element was detached from the DOM/u, 'detached'],
+];
+
+/**
+ * What the failed action's target was doing when it gave up, as
+ * `el-<word>`: `notfound` when no element ever matched, `strict` when more
+ * than one did, `none` when the failure was not a locator wait.
+ */
+export function locatorStateWord(message: string): string {
+  if (/strict mode violation/u.test(message)) return 'el-strict';
+  if (!/waiting for /u.test(message)) return 'el-none';
+  let word = 'notfound';
+  for (const line of message.split('\n')) {
+    for (const [pattern, state] of LOCATOR_STATE_PATTERNS) {
+      if (pattern.test(line)) word = state;
+    }
+  }
+  return `el-${word}`;
+}
