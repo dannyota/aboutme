@@ -57,7 +57,7 @@ Every session starts as the manager (`"agent": "manager"` in `.claude/settings.j
 
 - **Small releases.** One feature per patch release (`v0.x.y`). Ship a feature as soon as it is done and green; do not batch features.
 - **GitHub CI is the full gate.** Locally, each commit runs only the pre-commit `gitleaks` scan; builds and test suites run in GitHub CI. CI runs `make ci`, Semgrep, and full-history gitleaks. A red run is fixed forward at once. A tag and a deploy need green CI on that exact commit.
-- For a reviewed candidate that is not ready for `main`, the manager may push its branch and run `gh workflow run ci.yml --ref <branch> -f base_sha=<sha>`. Supply the full trusted ancestor commit SHA. Inspect results for the exact candidate; a manual run does not replace the release's green `main` run.
+- Branch CI and `main` CI differ; follow [GitHub CI](instructions/verification.md#github-ci) when running CI on a branch.
 - **Merge to `main` locally and push; no pull requests.** Delete a merged branch locally and on the remote.
 - **Bounded parallel work:** at most four workers across all managers and worktrees. Reading and editing may overlap; local check execution is globally serialized under [resource rules](instructions/resources.md). Do not spawn workers just to repeat verification.
 - **Build and verify in GitHub CI.** Do not repeat the CI gates locally before pushing. There is no hosted UAT until about 500 users; use an approved bounded local browser proof only for behavior CI cannot cover. The owner tests in production.
