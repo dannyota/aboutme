@@ -1,0 +1,270 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Võ Thanh Hương",
+    "headline": "Machine Learning Engineer · Python, Spark, PyTorch",
+    "details": [
+      {
+        "id": "a380e69f-a849-550f-9dac-840d95a61feb",
+        "type": "email",
+        "value": "huong.vo@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "978a17cb-308b-5e23-baa3-aac830432571",
+        "type": "phone",
+        "value": "+84 90 000 0524",
+        "isHidden": false
+      },
+      {
+        "id": "8db5dc99-5fc3-53d8-9fe2-2cfd0195bf7a",
+        "type": "location",
+        "value": "Thu Duc, Ho Chi Minh City",
+        "isHidden": false
+      },
+      {
+        "id": "5acda8dd-e53c-513b-8be8-5f16693e784d",
+        "type": "linkedin",
+        "value": "https://example.com/in/vo-thanh-huong",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "ca51ba02-af37-513f-b5f8-a5b0cefe45bb",
+          "isHidden": false,
+          "text": "<p>Machine Learning Engineer with 6 years in data, starting as a Data Analyst and then a Data Engineer. Build and run credit-scoring models in production.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "282b8c3c-afdc-52be-b144-d886f87f63ca",
+          "isHidden": false,
+          "jobTitle": "Machine Learning Engineer",
+          "employer": "A consumer-lending fintech (400 staff)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 5
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Build credit-scoring models in PyTorch and LightGBM; AUC rose from 0.71 to 0.79 and bad debt on new loans fell 18%.</li><li>Ship 6 models with MLflow and Docker; a release takes 3 days, not 3 weeks.</li><li>Run the Spark and Airflow feature pipelines, which process 40 million records a day.</li></ul>"
+        },
+        {
+          "id": "b3fe121e-de04-5853-b4b2-17909f9221f7",
+          "isHidden": false,
+          "jobTitle": "Data Engineer",
+          "employer": "A retail chain (1,200 stores)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 8
+            },
+            "end": {
+              "y": 2023,
+              "m": 4
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built a sales data warehouse on Airflow and Spark: 15 million rows a day.</li><li>Moved 120 Excel reports to dbt and Power BI, saving 60 hours of work a month.</li></ul>"
+        },
+        {
+          "id": "684d0fb1-d89c-5e9e-9f90-17c770c79a90",
+          "isHidden": false,
+          "jobTitle": "Data Analyst",
+          "employer": "A life insurance company",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 7
+            },
+            "end": {
+              "y": 2021,
+              "m": 7
+            },
+            "present": false
+          },
+          "description": "<ul><li>Analyzed 300,000 policies in SQL and Python and found the 3 main reasons customers cancel in the first year.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "341e7ad1-ed36-5958-8625-3192d2383124",
+          "isHidden": false,
+          "degree": "Bachelor of Science in Information Systems",
+          "school": "Hai Van University of Science and Engineering",
+          "city": "Da Nang",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2016,
+              "m": 9
+            },
+            "end": {
+              "y": 2020,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "22e8a1d9-101c-51b5-aa5d-75a77dc44705",
+          "isHidden": false,
+          "title": "AWS Certified Machine Learning Engineer – Associate",
+          "issuer": "Amazon Web Services",
+          "date": {
+            "y": 2025,
+            "m": 3
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "789f6ed7-9918-55e8-b0d1-0062e9ce61fa",
+          "isHidden": false,
+          "name": "Python"
+        },
+        {
+          "id": "c606d2a3-c65c-5fce-8793-8aab5240ad1a",
+          "isHidden": false,
+          "name": "SQL"
+        },
+        {
+          "id": "729b53cc-0804-5728-a48e-b37e42fea333",
+          "isHidden": false,
+          "name": "Spark"
+        },
+        {
+          "id": "0f8dc958-8a46-56b1-b283-c42f06407986",
+          "isHidden": false,
+          "name": "Airflow"
+        },
+        {
+          "id": "2e15d10d-c6eb-5fb9-9f2c-3d61afbd6f24",
+          "isHidden": false,
+          "name": "PyTorch"
+        },
+        {
+          "id": "1c44dadd-e5f2-5cac-a7ea-fa361a3c7c0a",
+          "isHidden": false,
+          "name": "scikit-learn"
+        },
+        {
+          "id": "a037133c-827a-5483-9710-641b5fa127fd",
+          "isHidden": false,
+          "name": "MLflow"
+        },
+        {
+          "id": "c702c294-3471-574b-b2ec-3a57593497fe",
+          "isHidden": false,
+          "name": "dbt"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "633dabbb-b3de-57c4-98f7-b8de61f85218",
+          "isHidden": false,
+          "name": "English (IELTS 7.5)",
+          "level": 4
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "alegreya",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#6b2737",
+      "text": "#2b2622",
+      "background": "#ffffff",
+      "surface": "#f2ebdf"
+    },
+    "spacing": {
+      "sectionGap": 24,
+      "entryGap": 12,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 18,
+        "y": 16
+      }
+    },
+    "heading": {
+      "style": "titlecase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "sidebar",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "certificate",
+          "skill",
+          "language"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "dots"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

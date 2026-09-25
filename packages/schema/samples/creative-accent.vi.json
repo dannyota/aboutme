@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Đinh Công Khánh",
+    "headline": "Senior Mobile Engineer · Flutter, Kotlin, Swift",
+    "details": [
+      {
+        "id": "7a3a746f-631d-5169-8e54-17db544dbc42",
+        "type": "email",
+        "value": "khanh.dinh@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "4452949f-ddf9-51f7-b475-e87f65f547bd",
+        "type": "phone",
+        "value": "+84 90 000 0525",
+        "isHidden": false
+      },
+      {
+        "id": "544a0dce-43ee-55f5-b1d8-4e6261f3273f",
+        "type": "custom",
+        "value": "cùng số",
+        "isHidden": false,
+        "label": "Zalo"
+      },
+      {
+        "id": "b760749d-db91-5071-b7ea-d3aa4d8c5969",
+        "type": "location",
+        "value": "Bình Thạnh, TP. Hồ Chí Minh",
+        "isHidden": false
+      },
+      {
+        "id": "35dca12d-9386-5037-aec4-142ee2f3dd1d",
+        "type": "github",
+        "value": "https://example.com/dinh-cong-khanh",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Giới thiệu",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "cf10e668-075f-519b-9311-e37398ba2475",
+          "isHidden": false,
+          "text": "<p>Senior Mobile Engineer, 7 năm làm app Android và iOS cho tới 2 triệu người dùng.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "d1e8d9c1-b6f0-5cfc-bf0b-6b6d8218893b",
+          "isHidden": false,
+          "jobTitle": "Senior Mobile Engineer",
+          "employer": "Công ty fintech khởi nghiệp",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 2
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Dẫn dắt nhóm 4 người viết lại app chứng khoán bằng Flutter; crash-free sessions từ 97,2% lên 99,6%.</li><li>Giảm thời gian khởi động app từ 3,8 giây xuống 1,6 giây; điểm App Store tăng từ 3,9 lên 4,6.</li></ul>"
+        },
+        {
+          "id": "695b6408-8d76-57fe-82cd-feb5d47fd9f8",
+          "isHidden": false,
+          "jobTitle": "Mobile Developer",
+          "employer": "Công ty giao đồ ăn (2 triệu người dùng)",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 9
+            },
+            "end": {
+              "y": 2023,
+              "m": 1
+            },
+            "present": false
+          },
+          "description": "<ul><li>Xây dựng tính năng theo dõi đơn hàng realtime bằng Kotlin và Firebase cho 2 triệu người dùng Android.</li></ul>"
+        },
+        {
+          "id": "2b822a6a-2338-5c3b-8b9e-78bc317b84ce",
+          "isHidden": false,
+          "jobTitle": "Junior Mobile Developer",
+          "employer": "Công ty outsourcing phần mềm thị trường Nhật",
+          "city": "TP. Hồ Chí Minh",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 7
+            },
+            "end": {
+              "y": 2020,
+              "m": 8
+            },
+            "present": false
+          },
+          "description": "<ul><li>App bán lẻ cho khách hàng Nhật Bản (12 tháng): 20 màn hình iOS bằng Swift, qua UAT không lỗi nghiêm trọng.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "1e39fece-6574-5eb8-a2fe-6eb371b5a68e",
+          "isHidden": false,
+          "name": "Flutter, Dart, Kotlin, Swift, Jetpack Compose, Firebase, Fastlane, GitHub Actions"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "b4610613-2452-5de6-8d1c-b9323d54c9d1",
+          "isHidden": false,
+          "degree": "Kỹ sư Công nghệ Thông tin",
+          "school": "Trường Đại học Bách khoa Sông Tiền",
+          "city": "Cần Thơ",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2019,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "5815401c-7575-5ac5-a18f-d3567940b148",
+          "isHidden": false,
+          "name": "Tiếng Anh (TOEIC 780)"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#c23a14",
+      "text": "#1f1a17",
+      "background": "#ffffff",
+      "accent": "#c23a14",
+      "surface": "#fff0eb"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 22,
+        "y": 18
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "skill",
+          "education",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "tag"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
