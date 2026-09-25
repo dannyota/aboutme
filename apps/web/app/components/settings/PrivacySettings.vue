@@ -2,7 +2,7 @@
 import ConfirmDialog from '../app/ConfirmDialog.vue';
 import LocaleToggle from '../app/LocaleToggle.vue';
 import StatusBanner from '../app/StatusBanner.vue';
-import PasswordField from '../auth/PasswordField.vue';
+import ReauthPrompt from './ReauthPrompt.vue';
 import { Button } from '../ui/button';
 import type { AuthProvider } from '../../composables/useAuth';
 import {
@@ -193,66 +193,26 @@ function asPrivacyFailure(error: unknown): PrivacySettingsFailure {
       </Button>
     </div>
 
-    <form
-      v-if="deleteMode === 'reauth-password'"
-      data-testid="account-delete-reauth-password"
-      class="grid gap-4"
-      novalidate
-      @submit.prevent="submitPasswordReauth"
-    >
-      <p>{{ copy.passwordReauthDescription }}</p>
-      <PasswordField
-        id="account-delete-current-password"
-        v-model="currentPassword"
-        :label="copy.currentPassword"
-        :locale="locale"
-        autocomplete="current-password"
-      />
-      <div class="flex gap-2">
-        <Button
-          :disabled="deletePending"
-          type="submit"
-          variant="secondary"
-        >
-          {{ deletePending ? copy.checking : copy.continue }}
-        </Button>
-        <Button
-          :disabled="deletePending"
-          type="button"
-          variant="ghost"
-          @click="cancelDelete"
-        >
-          {{ copy.cancel }}
-        </Button>
-      </div>
-    </form>
-
-    <div
-      v-else-if="deleteMode === 'reauth-provider'"
-      class="grid gap-3"
-      data-testid="account-delete-reauth-provider"
-    >
-      <p>{{ copy.providerReauthDescription }}</p>
-      <div class="flex flex-wrap gap-2">
-        <Button
-          v-for="provider in providers"
-          :key="provider"
-          :disabled="deletePending"
-          type="button"
-          @click="startProviderReauth(provider)"
-        >
-          {{ copy.providerContinue(providerNames[provider]) }}
-        </Button>
-        <Button
-          :disabled="deletePending"
-          type="button"
-          variant="ghost"
-          @click="cancelDelete"
-        >
-          {{ copy.cancel }}
-        </Button>
-      </div>
-    </div>
+    <ReauthPrompt
+      v-if="deleteMode.startsWith('reauth-')"
+      v-model="currentPassword"
+      :mode="deleteMode === 'reauth-password' ? 'password' : 'provider'"
+      :providers="providers"
+      :provider-label="(provider) =>
+        copy.providerContinue(providerNames[provider])"
+      :pending="deletePending"
+      :locale="locale"
+      password-id="account-delete-current-password"
+      :labels="copy"
+      :password-description="copy.passwordReauthDescription"
+      :provider-description="copy.providerReauthDescription"
+      lock-cancel
+      form-testid="account-delete-reauth-password"
+      provider-testid="account-delete-reauth-provider"
+      @submit-password="submitPasswordReauth"
+      @provider="startProviderReauth"
+      @cancel="cancelDelete"
+    />
 
     <ConfirmDialog
       :busy="deletePending"
