@@ -1,7 +1,7 @@
 // The template gallery (/templates) and template pages (/templates/<id>) in
 // both site languages. Purpose lines and sample tags per template live in
 // app/templates/catalog.ts.
-import type { GalleryFilter } from '../templates/catalog';
+import type { GalleryFilter, GalleryRole } from '../templates/catalog';
 import type { Locale } from './locale';
 
 export interface GalleryCopy {
@@ -11,6 +11,9 @@ export interface GalleryCopy {
   readonly filtersLabel: string;
   readonly all: (count: number) => string;
   readonly filters: Readonly<Record<GalleryFilter, string>>;
+  readonly rolesLabel: string;
+  readonly allRoles: string;
+  readonly roles: Readonly<Record<GalleryRole, string>>;
   readonly illustrative: string;
   readonly pageImageAlt: (name: string) => string;
   readonly noMatch: string;
@@ -63,6 +66,19 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       'first-job': 'Mới tốt nghiệp',
       'technical': 'Kỹ thuật',
       'management': 'Quản lý',
+    },
+    rolesLabel: 'Lọc theo vị trí',
+    allRoles: 'Mọi vị trí',
+    roles: {
+      'backend': 'Backend',
+      'frontend': 'Frontend',
+      'mobile': 'Mobile',
+      'devops': 'DevOps/SRE',
+      'data-ai': 'Data/AI',
+      'qa': 'QA/Tester',
+      'fresher': 'Fresher/Intern',
+      'brse': 'BrSE',
+      'security': 'Bảo mật',
     },
     illustrative: 'Nội dung minh họa',
     pageImageAlt: (name) => `Trang 1 của CV mẫu ${name}`,
@@ -121,6 +137,19 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       'first-job': 'First job',
       'technical': 'Technical',
       'management': 'Management',
+    },
+    rolesLabel: 'Filter by role',
+    allRoles: 'All roles',
+    roles: {
+      'backend': 'Backend',
+      'frontend': 'Frontend',
+      'mobile': 'Mobile',
+      'devops': 'DevOps/SRE',
+      'data-ai': 'Data/AI',
+      'qa': 'QA/Tester',
+      'fresher': 'Fresher/Intern',
+      'brse': 'BrSE',
+      'security': 'Security',
     },
     illustrative: 'Illustrative content',
     pageImageAlt: (name) => `Page 1 of the ${name} sample resume`,

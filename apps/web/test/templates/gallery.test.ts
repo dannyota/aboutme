@@ -13,7 +13,13 @@ import {
   GALLERY,
   galleryTemplate,
   matchesFilter,
+  matchesRole,
   parseFilter,
+  parseRole,
+  ROLE_MEMBERS,
+  ROLES,
+  roleMembers,
+  withRole,
 } from '../../app/templates/catalog';
 import { galleryDocument } from '../../app/templates/documents';
 import {
@@ -27,25 +33,40 @@ import {
 const ids = TEMPLATES.map((template) => template.id);
 
 describe('gallery catalog', () => {
-  it('lists all 20 templates, samples first in the set order', () => {
+  it('lists all 20 templates, tech role samples first, then the rest', () => {
     expect(GALLERY.map(({ id }) => id).sort()).toEqual([...ids].sort());
     expect(GALLERY.slice(0, 13).map(({ id }) => id)).toEqual([
-      'ats-plain',
-      'engineer-compact',
       'one-page-tight',
-      'nordic-muted',
+      'engineer-compact',
       'creative-accent',
+      'nordic-muted',
       'elegant-serif-two',
       'mono-print',
-      'consulting-formal',
-      'international-lang',
       'minimal-air',
+      'international-lang',
+      'consulting-formal',
+      'ats-plain',
       'graduate-friendly',
       'executive-band',
       'modern-sidebar',
     ]);
     const rest = GALLERY.slice(13).map(({ name }) => name);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b, 'en')));
+  });
+
+  it('gives each tech role exactly one real template with a sample', () => {
+    const members = roleMembers();
+    expect(members).toBe(ROLE_MEMBERS);
+    const flat = ROLES.flatMap((role) => members[role]);
+    expect(flat).toHaveLength(ROLES.length);
+    expect(new Set(flat).size).toBe(ROLES.length);
+    expect(flat).toEqual(GALLERY.slice(0, ROLES.length).map(({ id }) => id));
+    for (const role of ROLES) {
+      const [id] = members[role];
+      const template = galleryTemplate(id!);
+      expect(template, role).toBeDefined();
+      expect(template?.sampleLanguages.length, role).toBeGreaterThan(0);
+    }
   });
 
   it('names only real templates in every filter', () => {
@@ -85,6 +106,40 @@ describe('gallery catalog', () => {
       expect(galleryCopy.en.filters[filter]).not.toBe('');
     }
     expect(galleryTemplate('constructor')).toBeUndefined();
+  });
+
+  it('filters by one tech role chip at a time from the query', () => {
+    for (const role of ROLES) {
+      expect(parseRole(role)).toBe(role);
+    }
+    expect(parseRole('nope')).toBeUndefined();
+    expect(parseRole(['backend'])).toBeUndefined();
+    expect(parseRole(undefined)).toBeUndefined();
+
+    const backendMatches = GALLERY.filter((template) =>
+      matchesRole(template, 'backend'));
+    expect(backendMatches.map(({ id }) => id)).toEqual(['one-page-tight']);
+
+    for (const role of ROLES) {
+      expect(galleryCopy.vi.roles[role]).not.toBe('');
+      expect(galleryCopy.en.roles[role]).not.toBe('');
+    }
+    expect(galleryCopy.vi.allRoles).not.toBe('');
+    expect(galleryCopy.en.allRoles).not.toBe('');
+    expect(galleryCopy.vi.rolesLabel).not.toBe('');
+    expect(galleryCopy.en.rolesLabel).not.toBe('');
+  });
+
+  it('keeps the filter and sets or clears the role in the query', () => {
+    const original = { filter: 'ats' };
+    expect(withRole(original, 'backend')).toEqual({
+      filter: 'ats',
+      role: 'backend',
+    });
+    expect(withRole({ filter: 'ats', role: 'backend' }, undefined))
+      .toEqual({ filter: 'ats' });
+    expect(withRole({}, 'frontend')).toEqual({ role: 'frontend' });
+    expect(original).toEqual({ filter: 'ats' });
   });
 
   it('serves the gallery pages in the site language and to search', () => {
@@ -168,7 +223,7 @@ describe('gallery search data', () => {
     expect(data['@type']).toBe('CollectionPage');
     expect(data.mainEntity.itemListElement).toHaveLength(20);
     expect(data.mainEntity.itemListElement[0].url)
-      .toBe('https://aboutme.vn/templates/ats-plain');
+      .toBe('https://aboutme.vn/templates/one-page-tight');
     const detail = templateStructuredData(
       galleryTemplate('ats-plain')!,
       '</script><script>',

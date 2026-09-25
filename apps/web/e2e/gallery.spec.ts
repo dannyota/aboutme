@@ -37,9 +37,62 @@ for (const width of [390, 1440]) {
     expect(scrolls).toBe(width === 390);
 
     await page.goto('/templates?filter=ats');
-    await expect(page.locator('[data-template]')).toHaveCount(7);
+    await expect(page.locator('[data-template]:visible')).toHaveCount(7);
     await expect(page.locator('[data-filter="ats"]'))
       .toHaveAttribute('aria-current', 'page');
+  });
+
+  test(`gallery at ${width} px filters by role`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.context().addCookies([{
+      name: 'aboutme-locale',
+      value: 'vi',
+      url: 'http://127.0.0.1:20092',
+    }]);
+
+    const response = await page.goto('/templates?role=backend');
+    expect(response?.status()).toBe(200);
+    await expect(page.locator('[data-template]:visible')).toHaveCount(1);
+    await expect(page.locator('[data-template]:visible'))
+      .toHaveAttribute('data-template', 'one-page-tight');
+    await expect(page.locator('[data-template]')).toHaveCount(20);
+    await expect(page.locator('[data-role="backend"]'))
+      .toHaveAttribute('aria-pressed', 'true');
+
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth
+      - document.documentElement.clientWidth);
+    expect(overflow).toBe(0);
+
+    if (width === 390) {
+      // The group itself is as wide as its chips; its parent scrolls.
+      const roles = page.locator('[data-testid="gallery-roles"]');
+      const scrolls = await roles.evaluate((element) => {
+        const row = element.parentElement!;
+        return row.scrollWidth > row.clientWidth;
+      });
+      expect(scrolls).toBe(true);
+    }
+
+    await page.getByRole('button', { name: 'Frontend' }).click();
+    await expect(page).toHaveURL(/\?role=frontend$/);
+    await expect(page.locator('[data-template]:visible'))
+      .toHaveAttribute('data-template', 'engineer-compact');
+
+    const frontendChip = page.getByRole('button', { name: 'Frontend' });
+    await frontendChip.focus();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\?role=mobile$/);
+    const mobileChip = page.getByRole('button', { name: 'Mobile' });
+    await expect(mobileChip).toHaveAttribute('aria-pressed', 'true');
+    const outlineStyle = await mobileChip.evaluate((element) =>
+      getComputedStyle(element).outlineStyle);
+    expect(outlineStyle).not.toBe('none');
+
+    await page.getByRole('button', { name: 'Mọi vị trí' }).click();
+    await expect(page).toHaveURL(/\/templates$/);
+    await expect(page.locator('[data-template]:visible')).toHaveCount(20);
   });
 
   test(`gallery at ${width} px shows the stored sample pages`, async ({
@@ -196,6 +249,16 @@ test('an unknown template is not found', async ({ page }) => {
   const response = await page.goto('/templates/not-a-template');
   expect(response?.status()).toBe(404);
 });
+
+test('the role-filtered gallery still lists every template server-side',
+  async ({ page }) => {
+    const response = await page.request.get('/templates?role=backend');
+    expect(response.status()).toBe(200);
+    const html = await response.text();
+    for (const template of TEMPLATES) {
+      expect(html).toContain(`href="/templates/${template.id}"`);
+    }
+  });
 
 // Pixel baselines for the executive band PDF tab (two stored pages) and the
 // ATS tab in dark theme (DESIGN.md, Library), at phone and desktop widths.
