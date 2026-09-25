@@ -1,14 +1,10 @@
+import { createCanvas } from '@napi-rs/canvas';
 import { expect, test } from '@playwright/test';
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 import { readFileSync } from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 
 import { APP_CSP } from '../app/utils/csp';
-import {
-  jsonLdScriptContent,
-  scriptHashSource,
-  withScriptSource,
-} from '../server/utils/cspHash';
 import {
   denyExternalRequests,
   expectCspClean,
@@ -29,13 +25,11 @@ const ANONYMOUS_ME_401 = 'a status of 401';
 const DOCUMENT_404 = 'a status of 404';
 
 // The schema-current golden fixture (part of the reviewed e2e source set;
-// packages/schema/fixtures/full.json), used as the editor test's mocked
-// resume body with its photo stripped: the editor watches
-// document.personalDetails.photo?.key and fetches the owner photo when it is
-// present, which this test does not also mock. The client validates the rest
-// itself on read (app/editor/resumeApi.ts's parseAcceptedResponse), so this
-// file need not duplicate that validation.
-const sampleDocument = JSON.parse(
+// packages/schema/fixtures/full.json), used as the editor tests' mocked
+// resume body. The client validates the rest itself on read
+// (app/editor/resumeApi.ts's parseAcceptedResponse), so this file need not
+// duplicate that validation.
+const fixtureDocument = JSON.parse(
   readFileSync(
     resolvePath(
       import.meta.dirname,
@@ -43,7 +37,14 @@ const sampleDocument = JSON.parse(
     ),
     'utf8',
   ),
-) as { personalDetails?: { photo?: unknown } };
+) as { personalDetails?: { photo?: { key: string } } };
+
+// A clone with the photo stripped: the editor watches
+// document.personalDetails.photo?.key and fetches the owner photo when it is
+// present, which the plain editor test below does not also mock.
+const sampleDocument = JSON.parse(JSON.stringify(fixtureDocument)) as {
+  personalDetails?: { photo?: unknown };
+};
 delete sampleDocument.personalDetails?.photo;
 
 // Matches app/editor/types.ts's ResumeMetadata; the wire shape
@@ -68,34 +69,21 @@ const sampleMetadata = {
 // (nuxt.config.ts routeRules) and never x-powered-by
 // (server/plugins/security-headers.ts), and no real interaction on any of
 // them trips a CSP violation. docs/design/security.md and the CSP itself
-// (app/utils/csp.ts) own the policy this proves.
+// (app/utils/csp.ts) own the policy this proves. The homepage and the
+// template pages each render their JSON-LD as a
+// `<script type="application/ld+json">` data block (app/landing/
+// structuredData.ts, app/templates/structuredData.ts); per the HTML spec, the
+// browser never executes a data block
+// (https://html.spec.whatwg.org/multipage/scripting.html#data-block), so
+// those pages send this same, unmodified policy too.
 
-/** The CSP header a page with no inline script sends: APP_CSP unchanged. */
+/** The CSP header every app page sends: APP_CSP unchanged. */
 function expectPlainAppCsp(headers: Record<string, string>): void {
   expect(headers['content-security-policy']).toBe(APP_CSP);
   expect(headers['x-powered-by']).toBeUndefined();
 }
 
-/**
- * The CSP header a page with one inline JSON-LD script sends: APP_CSP with
- * that exact script's own hash added to script-src, computed the same way
- * server/plugins/security-headers.ts computes it.
- */
-async function expectHashedAppCsp(
-  headers: Record<string, string>,
-  html: string,
-): Promise<void> {
-  const content = jsonLdScriptContent(html);
-  expect(content).not.toBeNull();
-  const expected = withScriptSource(
-    APP_CSP,
-    scriptHashSource(content as string),
-  );
-  expect(headers['content-security-policy']).toBe(expected);
-  expect(headers['x-powered-by']).toBeUndefined();
-}
-
-test('homepage sends the app CSP with its JSON-LD script hashed', async ({
+test('homepage sends the plain app CSP with its JSON-LD present', async ({
   page,
 }) => {
   const probe = await trackCsp(page);
@@ -104,23 +92,43 @@ test('homepage sends the app CSP with its JSON-LD script hashed', async ({
 
   const response = await page.goto('/');
   expect(response?.status()).toBe(200);
-  await expectHashedAppCsp(response!.headers(), await response!.text());
+  expectPlainAppCsp(response!.headers());
+  const html = await response!.text();
+  expect(html).toContain('application/ld+json');
   await expect(page.getByTestId('landing')).toBeVisible();
 
   await expectCspClean(probe, [ANONYMOUS_ME_401]);
   expect(external).toEqual([]);
 });
 
-test('a template page sends the CSP with its JSON-LD script hashed', async ({
-  page,
-}) => {
+test('the template gallery sends the plain app CSP with its JSON-LD '
+  + 'present', async ({ page }) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
+
+  const response = await page.goto('/templates');
+  expect(response?.status()).toBe(200);
+  expectPlainAppCsp(response!.headers());
+  const html = await response!.text();
+  expect(html).toContain('application/ld+json');
+  await expect(page.getByTestId('template-gallery')).toBeVisible();
+
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
+  expect(external).toEqual([]);
+});
+
+test('a template page sends the plain app CSP with its JSON-LD '
+  + 'present', async ({ page }) => {
   const probe = await trackCsp(page);
   const external = await denyExternalRequests(page);
   await mockSignedOutSession(page);
 
   const response = await page.goto('/templates/engineer-compact');
   expect(response?.status()).toBe(200);
-  await expectHashedAppCsp(response!.headers(), await response!.text());
+  expectPlainAppCsp(response!.headers());
+  const html = await response!.text();
+  expect(html).toContain('application/ld+json');
   await expect(page.locator('.template-detail__info h1')).toBeVisible();
 
   await expectCspClean(probe, [ANONYMOUS_ME_401]);
@@ -358,6 +366,73 @@ test('the editor sends the plain app CSP and hydrates cleanly', async ({
   expect(response?.status()).toBe(200);
   expectPlainAppCsp(response!.headers());
   await expect(page.getByTestId('save-status')).toBeVisible();
+
+  await expectCspClean(probe);
+  expect(external).toEqual([]);
+});
+
+test('the editor with a photo present sends the plain app CSP and shows '
+  + 'the photo under it', async ({ page }) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedInSession(page);
+  await page.route('**/api/v1/events', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: '',
+    });
+  });
+  await page.route('**/api/v1/resumes/resume-1', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-transform',
+        'ETag': '"r1"',
+        'X-Resume-Schema-Version': String(CURRENT_VERSION),
+      },
+      json: {
+        data: {
+          ...sampleMetadata,
+          revision: '1',
+          document: fixtureDocument,
+        },
+      },
+    });
+  });
+  // The owner photo the editor fetches for the fixture's
+  // personalDetails.photo.key and converts to a `data:` URL
+  // (pages/app/resumes/[id].vue's bytesToDataURL) for the preview and photo
+  // panel: this exercises img-src's `data:` source, which the plain editor
+  // test above never does because it strips the photo.
+  await page.route('**/api/v1/resumes/resume-1/photo', async (route) => {
+    const canvas = createCanvas(64, 64);
+    canvas.getContext('2d').fillRect(0, 0, 64, 64);
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/png',
+      headers: {
+        'Cache-Control': 'no-store, no-transform',
+        'ETag': '"photo-1"',
+      },
+      body: canvas.toBuffer('image/png'),
+    });
+  });
+
+  const response = await page.goto('/app/resumes/resume-1');
+  expect(response?.status()).toBe(200);
+  expectPlainAppCsp(response!.headers());
+  await expect(page.getByTestId('save-status')).toBeVisible();
+
+  await page.locator('[data-action="open-photo"]').click();
+  const photoImage = page.locator('[data-photo-image]');
+  await expect(photoImage).toBeVisible();
+  await expect(photoImage).toHaveAttribute('src', /^data:image\/png;base64,/);
 
   await expectCspClean(probe);
   expect(external).toEqual([]);

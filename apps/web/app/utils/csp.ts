@@ -23,15 +23,19 @@ export const HTML_CSP
  *
  * `script-src 'self'` never carries `'unsafe-inline'` or `'unsafe-eval'`:
  * Nuxt's own hydration payload is already externalized into a same-origin
- * script file for every response (server/utils/cspExternalize.ts), and a
- * page with its own inline script (the homepage and template pages' JSON-LD)
- * earns a response-specific `'sha256-<hash>'` source at render time instead
- * (server/utils/cspHash.ts, server/plugins/security-headers.ts), the same
- * mechanism public resume HTML uses (apps/server/internal/publicformat/
- * jsonld.go). The editor's document validator no longer needs an exception
- * either: it used to call `ajv.compile()` in the browser, which emits a
- * `new Function`, so it is now a build-time Ajv standalone compile committed
- * as a plain module instead (app/editor/documentValidator.generated.mjs,
+ * script file for every response (server/utils/cspExternalize.ts). The
+ * homepage, the template gallery, and template detail pages each render one
+ * inline `<script type="application/ld+json">` block
+ * (app/landing/structuredData.ts, app/templates/structuredData.ts). Per the
+ * HTML spec, a script with that type is a data block: the browser parses it
+ * but never executes it
+ * (https://html.spec.whatwg.org/multipage/scripting.html#data-block), so
+ * `script-src` does not govern it and these pages send this same policy with
+ * no source added for it. The editor's document validator no longer needs an
+ * exception either: it used to call `ajv.compile()` in the browser, which
+ * emits a `new Function`, so it is now a build-time Ajv standalone compile
+ * committed as a plain module instead
+ * (app/editor/documentValidator.generated.mjs,
  * scripts/generate-document-validator.mjs).
  *
  * `style-src` keeps `'unsafe-inline'`: it covers both Nuxt's and Vite's own
@@ -41,12 +45,15 @@ export const HTML_CSP
  * `:style="model.styles.header"`). The renderer's values alone are an
  * unbounded, per-render set no fixed hash or nonce list could cover.
  *
- * `img-src` allows `data:` for the photo crop preview, which reads the
- * locally selected file as a data URL before upload
- * (app/editor/photoController.ts); no page uses a `blob:` image, so it is
- * not listed. Every download (PDF, the privacy data export, TOTP recovery
- * codes) revokes a `blob:` object URL through a synthetic anchor click,
- * which CSP's fetch directives do not govern.
+ * `img-src` allows `data:` because `pages/app/resumes/[id].vue`'s
+ * `bytesToDataURL` converts the owner's photo, fetched from the API, into a
+ * `data:` URL for the editor's preview, photo panel, and crop editor
+ * (app/editor/photoController.ts; app/components/editor/EditorPreview.vue;
+ * app/components/editor/photo/PhotoPanel.vue and CropEditor.vue), not for a
+ * locally selected file; no page uses a `blob:` image, so it is not listed.
+ * Every download (PDF, the privacy data export, TOTP recovery codes) revokes
+ * a `blob:` object URL through a synthetic anchor click, which CSP's fetch
+ * directives do not govern.
  *
  * `connect-src 'self'` covers every fetch, EventSource, and WebAuthn call
  * the app makes; none of it crosses origins. Google sign-in never loads a
