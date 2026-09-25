@@ -11,11 +11,10 @@ USD before tax. These are workload estimates, not a measured bill or a promise
 that arbitrary traffic fits the range.
 
 [ADR 0034](../../adr/0034-scheduled-uat-and-production-autoscaling.md) records
-the decision. The operating plan replaces the proposed
-$100, 14-day UAT
-campaign and separate $8/month retained-resource allowance. Use
-**$30/month** as the UAT operating ceiling, including retained and allocated
-shared costs. Production launch still requires Phase 11 approval under
+the decision. The operating plan replaces the proposed $100, 14-day UAT campaign
+and separate $8/month retained-resource allowance. Use **$30/month** as the UAT
+operating ceiling, including retained and allocated shared costs. Production
+launch still requires Phase 11 approval under
 [ADR 0031](../../adr/0031-aws-cost-research-and-hosted-uat.md). This research
 has not provisioned resources or purchased a plan.
 
@@ -87,16 +86,13 @@ Phase 10 checks actual shared allowance use before activation. If those
 allowances are consumed by other workloads, use the gross result and reduce
 optional work to fit the ceiling.
 
-The selected 40-hour UAT case is about
-$22/month. Expected production is about
-$163/month, and their combined account
-estimate is about $187/month. The
-160-hour UAT sensitivity exceeds both the $30
-UAT ceiling and, with expected production, the $200 combined range. Dashboard
-charges are gross because their free-allowance eligibility is unproven. The
-model also reserves a full month of root-disk and node-address cost for UAT;
-those are conservative cost reserves, not resources retained by the normal
-shutdown path.
+The selected 40-hour UAT case is about $22/month. Expected production is about
+$163/month, and their combined account estimate is about $187/month. The
+160-hour UAT sensitivity exceeds both the $30 UAT ceiling and, with expected
+production, the $200 combined range. Dashboard charges are gross because their
+free-allowance eligibility is unproven. The model also reserves a full month of
+root-disk and node-address cost for UAT; those are conservative cost reserves,
+not resources retained by the normal shutdown path.
 
 The original [comparison](comparison.md), [scenarios](scenarios.json), and
 [results](results.csv) retain the gross 14-day, production, and alternative
@@ -162,11 +158,9 @@ environment. These operations have different costs and data-loss effects.
    `delete_automated_backups = true`. Verify no owned restore target or manual
    backup remains. Preserve the shared email stack and Google DNS.
 6. Reconcile the remaining state, keys, release images, and 180-day logs against
-   their retention requirements. Their cost remains inside the same
-   $30/month
-   ceiling; the previous separate $8 allowance does not apply.
-   Review retained resources after 30 days and remove eligible expired
-   resources.
+   their retention requirements. Their cost remains inside the same $30/month
+   ceiling; the previous separate $8 allowance does not apply. Review retained
+   resources after 30 days and remove eligible expired resources.
 
 ## GitHub and mail handoff
 

@@ -31,8 +31,8 @@ if [ "${1:-}" = env ] && [ "${2:-}" = GOVERSION ]; then
 fi
 if [ "${1:-}" = version ] && [ "${2:-}" = -m ]; then
   case ${3##*/} in
-  golangci-lint) module=github.com/golangci/golangci-lint/v2 version=v2.13.2 ;;
-  govulncheck) module=golang.org/x/vuln version=v1.7.0 ;;
+  golangci-lint) module=github.com/golangci/golangci-lint/v2 version=v2.14.0 ;;
+  govulncheck) module=golang.org/x/vuln version=v1.8.0 ;;
   gitleaks) module=github.com/zricethezav/gitleaks/v8 version=v8.30.1 ;;
   *) exit 2 ;;
   esac
@@ -49,7 +49,7 @@ EOF
 
 cat >"$BIN/semgrep" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' 1.176.0
+printf '%s\n' 1.178.0
 EOF
 
 cat >"$BIN/caddy" <<'EOF'
@@ -84,12 +84,12 @@ grep -Fq 'node-version: 24.21.0' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin Node 24.21.0"
 grep -Fq 'go-version: "1.27.1"' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin Go 1.27.1"
-grep -Fq 'version: v2.13.2' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin golangci-lint v2.13.2"
-grep -Fq 'govulncheck@v1.7.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin govulncheck v1.7.0"
-grep -Fq 'semgrep==1.176.0' "$ROOT/.github/workflows/ci.yml" ||
-  fail "GitHub CI does not pin Semgrep 1.176.0"
+grep -Fq 'version: v2.14.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin golangci-lint v2.14.0"
+grep -Fq 'govulncheck@v1.8.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin govulncheck v1.8.0"
+grep -Fq 'semgrep==1.178.0' "$ROOT/.github/workflows/ci.yml" ||
+  fail "GitHub CI does not pin Semgrep 1.178.0"
 grep -Fq 'sqlc@v1.31.1' "$ROOT/.github/workflows/ci.yml" ||
   fail "GitHub CI does not pin sqlc v1.31.1"
 grep -Fq 'caddyserver/caddy/releases/download/v2.11.4' "$ROOT/.github/workflows/ci.yml" ||
@@ -114,16 +114,18 @@ chmod +x "$BIN/sqlc"
 CONTRACT=$WORK/contract
 mkdir -p "$CONTRACT/scripts" "$CONTRACT/.github/workflows" \
   "$CONTRACT/apps/web" "$CONTRACT/apps/server" \
-  "$CONTRACT/packages/schema/gen/go" "$CONTRACT/deploy"
+  "$CONTRACT/packages/schema/gen/go" "$CONTRACT/deploy/caddy/production"
 cp "$ROOT/.tool-versions" "$CONTRACT/.tool-versions"
 cp "$ROOT/scripts/check-tool-versions.sh" "$CONTRACT/scripts/"
 cp "$ROOT/.github/workflows/ci.yml" "$CONTRACT/.github/workflows/"
+cp "$ROOT/.github/workflows/security-scan.yml" "$CONTRACT/.github/workflows/"
 cp "$ROOT/apps/web/.nvmrc" "$CONTRACT/apps/web/"
 cp "$ROOT/apps/server/go.mod" "$CONTRACT/apps/server/"
 cp "$ROOT/packages/schema/gen/go/go.mod" "$CONTRACT/packages/schema/gen/go/"
 cp "$ROOT/go.work" "$CONTRACT/"
 cp "$ROOT/deploy/web.Dockerfile" "$ROOT/deploy/server.Dockerfile" \
   "$ROOT/deploy/compose.yml" "$CONTRACT/deploy/"
+cp "$ROOT/deploy/caddy/production/Dockerfile" "$CONTRACT/deploy/caddy/production/"
 
 awk '
   $1 == "node-version:" {

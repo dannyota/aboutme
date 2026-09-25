@@ -103,6 +103,9 @@ test('template page switches between the page and the ATS text', async ({
   expect(response?.status()).toBe(200);
   await expect(page.locator('.template-detail__info h1'))
     .toHaveText('Engineer Compact');
+  // The embedded sample's name renders as a p, not an h1, so the page
+  // keeps exactly one h1: the template name.
+  await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('.resume-document')).toHaveCount(1);
 
   const tabs = page.getByRole('tab');

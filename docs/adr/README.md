@@ -13,5 +13,8 @@ The most recent accepted decision is
 generated UI primitive carry token-colored variant edits when a guard test
 protects them.
 
+[ADR 0053](0053-public-pdf-tab-renders-the-download-in-the-browser.md) is
+rejected: public pages have no PDF tab.
+
 The design's [decision index](../design/decisions.md) maps every ADR to the rule
 it establishes.

@@ -198,6 +198,14 @@ func publicServiceReader(t *testing.T) (string, *publicresume.Reader, *publicsta
 
 func publicServiceReaderWithStore(t *testing.T) (string, *publicresume.Reader, *publicstate.Coordinator, *publicServiceStore) {
 	t.Helper()
+	return publicServiceReaderWithCoordinator(t, publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+}
+
+// publicServiceReaderWithCoordinator builds the same fixture as
+// publicServiceReaderWithStore but lets a test inject its own coordinator
+// clock, for example to observe when a revocation transition cancels leases.
+func publicServiceReaderWithCoordinator(t *testing.T, config publicstate.CoordinatorConfig) (string, *publicresume.Reader, *publicstate.Coordinator, *publicServiceStore) {
+	t.Helper()
 	slug, lng, name := "ada-lovelace", "en", "Ada"
 	document := schema.Resume{SchemaVersion: schema.CurrentVersion, PersonalDetails: schema.PersonalDetails{FullName: &name}, Content: map[string]schema.Section{}}
 	personal, err := json.Marshal(document.PersonalDetails)
@@ -212,7 +220,7 @@ func publicServiceReaderWithStore(t *testing.T) (string, *publicresume.Reader, *
 	if err != nil {
 		t.Fatal(err)
 	}
-	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+	coordinator, err := publicstate.NewCoordinator(config)
 	if err != nil {
 		t.Fatal(err)
 	}

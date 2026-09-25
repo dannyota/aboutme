@@ -90,7 +90,13 @@ go_tidy() {
   rm -rf "$tmp"
 }
 
-go_vuln() { cd "$ROOT/apps/server" && govulncheck ./...; }
+go_vuln() {
+  # Mirrors ci.yml's govulncheck job: every Go module in the repository, with
+  # the Caddy build module (outside go.work) forced to GOWORK=off.
+  (cd "$ROOT/apps/server" && govulncheck ./...) &&
+    (cd "$ROOT/packages/schema/gen/go" && govulncheck ./...) &&
+    (cd "$ROOT/deploy/caddy/production/build" && GOWORK=off govulncheck ./...)
+}
 
 sqlc_drift() { make sqlc-check; }
 
