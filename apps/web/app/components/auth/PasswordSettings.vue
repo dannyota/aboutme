@@ -15,6 +15,7 @@
  */
 import PasswordField from './PasswordField.vue';
 import StatusBanner from '../app/StatusBanner.vue';
+import ReauthPrompt from '../settings/ReauthPrompt.vue';
 import { Button } from '../ui/button';
 import {
   PasswordSettingsActionsKey,
@@ -260,65 +261,25 @@ async function submitProviderReauth(provider: AuthProvider): Promise<void> {
       </div>
     </form>
 
-    <form
-      v-else-if="mode === 'reauth-password'"
-      data-testid="password-form"
-      class="grid gap-4"
-      novalidate
-      @submit.prevent="submitReauth"
-    >
-      <PasswordField
-        id="password-current"
-        v-model="currentPassword"
-        :label="copy.currentPassword"
-        autocomplete="current-password"
-        :locale="locale"
-      />
-      <div class="flex gap-2">
-        <Button
-          data-testid="password-reauth-submit"
-          :disabled="pending"
-          variant="secondary"
-          type="submit"
-        >
-          {{ pending ? copy.checking : copy.continue }}
-        </Button>
-        <Button
-          data-testid="password-cancel"
-          type="button"
-          variant="ghost"
-          @click="cancel"
-        >
-          {{ copy.cancel }}
-        </Button>
-      </div>
-    </form>
-
-    <div
-      v-else-if="mode === 'reauth-provider'"
-      class="grid gap-3"
-    >
-      <p>{{ copy.providerReauth }}</p>
-      <div class="flex flex-wrap gap-2">
-        <Button
-          v-for="provider in providers"
-          :key="provider"
-          :data-testid="`password-provider-reauth-${provider}`"
-          :disabled="pending"
-          type="button"
-          @click="submitProviderReauth(provider)"
-        >
-          {{ copy.continueWithProvider(providerNames[provider]) }}
-        </Button>
-        <Button
-          data-testid="password-cancel"
-          type="button"
-          variant="ghost"
-          @click="cancel"
-        >
-          {{ copy.cancel }}
-        </Button>
-      </div>
-    </div>
+    <ReauthPrompt
+      v-else-if="mode === 'reauth-password' || mode === 'reauth-provider'"
+      v-model="currentPassword"
+      :mode="mode === 'reauth-password' ? 'password' : 'provider'"
+      :providers="providers"
+      :provider-label="(provider) =>
+        copy.continueWithProvider(providerNames[provider])"
+      :pending="pending"
+      :locale="locale"
+      password-id="password-current"
+      :labels="copy"
+      :provider-description="copy.providerReauth"
+      form-testid="password-form"
+      submit-testid="password-reauth-submit"
+      cancel-testid="password-cancel"
+      provider-button-testid="password-provider-reauth-"
+      @submit-password="submitReauth"
+      @provider="submitProviderReauth"
+      @cancel="cancel"
+    />
   </div>
 </template>

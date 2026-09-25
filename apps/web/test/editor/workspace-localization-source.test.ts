@@ -1,7 +1,5 @@
-import { parse as parseTemplate } from '@vue/compiler-dom';
-import { parse as parseSfc } from '@vue/compiler-sfc';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, test } from 'vitest';
 
@@ -16,29 +14,16 @@ import { resumeCreateCopy } from '../../app/i18n/resume-create';
 import { resumeListCopy } from '../../app/i18n/resume-list';
 import { shellCopy } from '../../app/i18n/shell';
 import { workspaceCopy } from '../../app/i18n/workspace';
+import {
+  appRoot,
+  filesBelow,
+  literalGuard,
+  parityViolations,
+  resolvedImport,
+  scriptContents,
+  source,
+} from '../support/localizationSource';
 
-const appRoot = resolve(process.cwd(), 'app');
-const displayKeys = new Set([
-  'ariaLabel',
-  'description',
-  'help',
-  'hint',
-  'label',
-  'message',
-  'placeholder',
-  'text',
-  'title',
-]);
-const guardedAttributes = new Set([
-  'aria-label',
-  'cancel-label',
-  'close-label',
-  'confirm-label',
-  'description',
-  'label',
-  'placeholder',
-  'title',
-]);
 const catalogs = [
   'i18n/editor-controls.ts',
   'i18n/editor-fields.ts',
@@ -64,7 +49,6 @@ const vueSources = [
   'components/editor/EntryCard.vue',
   'components/editor/ErrorSummary.vue',
   'components/editor/PDFDownloadButton.vue',
-  'components/editor/PreviewToolbar.vue',
   'components/editor/PublishDialog.vue',
   'components/editor/PublishPageFields.vue',
   'components/editor/SaveStatus.vue',
@@ -118,10 +102,6 @@ const approvedLiterals: Readonly<Record<string, readonly string[]>> = {
   'components/app/AppShell.vue': ['aboutme'],
   'components/app/StateMark.vue': ['aboutme.vn'],
   'components/editor/EditorShell.vue': ['aboutme', '+'],
-  'components/editor/PreviewToolbar.vue': [
-    '100%',
-    String.fromCodePoint(0x2014),
-  ],
   'components/editor/PublishDialog.vue': ['aboutme.vn/', 'aboutme.vn'],
   'components/editor/photo/CropEditor.vue': ['X', 'Y'],
   'components/editor/templates/TemplatePartialDialog.vue': ['.'],
@@ -180,315 +160,8 @@ const functionFixtures: Readonly<Record<string, readonly unknown[]>> = {
 const workspaceCatalogNames = new Set(
   catalogs.map((path) => path.slice(5, -3)),
 );
-
-type TemplateProp = {
-  readonly type: number;
-  readonly name: string;
-  readonly value?: { readonly content: string };
-  readonly arg?: { readonly content: string };
-  readonly exp?: { readonly content: string };
-};
-type TemplateNode = {
-  readonly type: number;
-  readonly content?: string;
-  readonly props?: readonly TemplateProp[];
-  readonly children?: readonly TemplateNode[];
-  readonly branches?: readonly TemplateNode[];
-};
-
-function source(path: string): string {
-  return readFileSync(join(appRoot, path), 'utf8');
-}
-
-function literalTexts(node: ts.Node): readonly string[] {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return node.text === '' ? [] : [node.text];
-  }
-  if (ts.isTemplateExpression(node)) {
-    return [
-      node.head.text,
-      ...node.templateSpans.map((span) => span.literal.text),
-    ]
-      .filter((text) => text.trim() !== '');
-  }
-  return [];
-}
-
-function propertyName(
-  name: ts.PropertyName | ts.BindingName,
-): string | undefined {
-  if (ts.isIdentifier(name) || ts.isStringLiteral(name)) return name.text;
-  return undefined;
-}
-
-function allowed(path: string, text: string): boolean {
-  return approvedLiterals[path]?.includes(text) ?? false;
-}
-
-function expressionLiterals(input: string): readonly string[] {
-  const file = ts.createSourceFile(
-    'template.ts',
-    input,
-    ts.ScriptTarget.Latest,
-  );
-  const literals: string[] = [];
-  const expression = file.statements[0];
-  if (expression === undefined || !ts.isExpressionStatement(expression)) {
-    return literals;
-  }
-  const walk = (node: ts.Expression): void => {
-    literals.push(...literalTexts(node));
-    if (ts.isParenthesizedExpression(node)) {
-      walk(node.expression);
-    } else if (ts.isConditionalExpression(node)) {
-      walk(node.whenTrue);
-      walk(node.whenFalse);
-    } else if (
-      ts.isBinaryExpression(node)
-      && [
-        ts.SyntaxKind.PlusToken,
-        ts.SyntaxKind.QuestionQuestionToken,
-        ts.SyntaxKind.BarBarToken,
-      ].includes(node.operatorToken.kind)
-    ) {
-      walk(node.left);
-      walk(node.right);
-    }
-  };
-  walk(expression.expression);
-  return literals;
-}
-
-function templateViolations(path: string, input: string): string[] {
-  const parsed = parseTemplate(input, { comments: false });
-  const violations: string[] = [];
-  const walk = (node: TemplateNode): void => {
-    if (
-      node.type === 2
-      && node.content.trim() !== ''
-      && !allowed(path, node.content.trim())
-    ) {
-      violations.push(`static text ${JSON.stringify(node.content.trim())}`);
-    }
-    if (node.type === 1) {
-      for (const prop of node.props ?? []) {
-        if (
-          prop.type === 6
-          && guardedAttributes.has(prop.name)
-          && prop.value?.content.trim() !== ''
-        ) {
-          violations.push(
-            `static ${prop.name} ${JSON.stringify(prop.value.content)}`,
-          );
-        }
-        if (
-          prop.type === 7
-          && prop.name === 'bind'
-          && prop.arg !== undefined
-          && guardedAttributes.has(prop.arg.content)
-          && prop.exp !== undefined
-        ) {
-          for (const text of expressionLiterals(prop.exp.content)) {
-            if (!allowed(path, text)) {
-              violations.push(
-                `bound ${prop.arg.content} ${JSON.stringify(text)}`,
-              );
-            }
-          }
-        }
-      }
-      for (const child of node.children ?? []) walk(child);
-    } else if (node.type === 0) {
-      for (const child of node.children ?? []) walk(child);
-    } else if (node.type === 9) {
-      for (const branch of node.branches ?? []) walk(branch);
-    } else if (node.type === 5) {
-      const content = (node as unknown as { content?: { content?: string } })
-        .content?.content;
-      if (content !== undefined) {
-        for (const text of expressionLiterals(content)) {
-          if (!allowed(path, text)) {
-            violations.push(`interpolation ${JSON.stringify(text)}`);
-          }
-        }
-      }
-    } else if (node.type === 10 || node.type === 11) {
-      for (const child of node.children ?? []) walk(child);
-    }
-  };
-  walk(parsed as unknown as TemplateNode);
-  return violations.map((violation) => `${path}: ${violation}`);
-}
-
-function scriptViolations(path: string, input: string): string[] {
-  const file = ts.createSourceFile(path, input, ts.ScriptTarget.Latest, true);
-  const violations: string[] = [];
-  const report = (node: ts.Node, text: string): void => {
-    if (!allowed(path, text)) {
-      const line = file.getLineAndCharacterOfPosition(node.getStart()).line + 1;
-      violations.push(`${path}:${line}: ${JSON.stringify(text)}`);
-    }
-  };
-  const isDisplayFunction = (node: ts.Node): boolean => {
-    if (!ts.isFunctionDeclaration(node) || node.name === undefined) {
-      return false;
-    }
-    return displayKeys.has(node.name.text)
-      || /(?:label|message|text)$/iu.test(node.name.text);
-  };
-  const hasDisplayContext = (node: ts.Node): boolean => {
-    let current: ts.Node = node;
-    while (current.parent !== undefined && !ts.isSourceFile(current.parent)) {
-      const parent = current.parent;
-      if (ts.isPropertyAssignment(parent)) {
-        const name = propertyName(parent.name);
-        return current === parent.initializer
-          && name !== undefined
-          && displayKeys.has(name);
-      }
-      if (ts.isVariableDeclaration(parent)) {
-        const name = propertyName(parent.name);
-        return current === parent.initializer
-          && name !== undefined
-          && displayKeys.has(name);
-      }
-      if (ts.isReturnStatement(parent)) {
-        let owner: ts.Node | undefined = parent.parent;
-        while (owner !== undefined && !ts.isFunctionDeclaration(owner)) {
-          owner = owner.parent;
-        }
-        return owner !== undefined && isDisplayFunction(owner);
-      }
-      if (ts.isConditionalExpression(parent) && current === parent.condition) {
-        return false;
-      }
-      if (ts.isCallExpression(parent) || ts.isArrayLiteralExpression(parent)) {
-        return false;
-      }
-      current = parent;
-    }
-    return false;
-  };
-  const walk = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && promptCall(node)) {
-      const [message] = node.arguments;
-      if (message !== undefined) {
-        for (const text of literalTexts(message)) report(message, text);
-      }
-    }
-    for (const text of literalTexts(node)) {
-      if (hasDisplayContext(node)) report(node, text);
-    }
-    ts.forEachChild(node, walk);
-  };
-  walk(file);
-  return violations;
-}
-
-function promptCall(node: ts.CallExpression): boolean {
-  const expression = node.expression;
-  if (ts.isIdentifier(expression)) {
-    return ['alert', 'confirm', 'prompt'].includes(expression.text);
-  }
-  if (!ts.isPropertyAccessExpression(expression)) return false;
-  const receiver = expression.expression;
-  return ts.isIdentifier(receiver)
-    && ['globalThis', 'window'].includes(receiver.text)
-    && ['alert', 'confirm', 'prompt'].includes(expression.name.text);
-}
-
-function sourceViolations(path: string, input = source(path)): string[] {
-  if (path.endsWith('.vue')) {
-    const descriptor = parseSfc(input, { filename: path }).descriptor;
-    return [
-      ...(descriptor.template === null || descriptor.template === undefined
-        ? []
-        : templateViolations(path, descriptor.template.content)),
-      ...descriptor.scriptSetup === null || descriptor.scriptSetup === undefined
-        ? []
-        : scriptViolations(path, descriptor.scriptSetup.content),
-      ...descriptor.script === null || descriptor.script === undefined
-        ? []
-        : scriptViolations(path, descriptor.script.content),
-    ];
-  }
-  return scriptViolations(path, input);
-}
-
-function plainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function parityViolations(
-  vietnamese: unknown,
-  english: unknown,
-  path = 'copy',
-): string[] {
-  if (typeof vietnamese === 'function' || typeof english === 'function') {
-    if (typeof vietnamese !== typeof english) {
-      return [`${path}: function shape`];
-    }
-    const fixture = functionFixtures[path];
-    if (fixture === undefined) return [`${path}: missing function fixture`];
-    const vi = (vietnamese as (...args: unknown[]) => unknown)(...fixture);
-    const en = (english as (...args: unknown[]) => unknown)(...fixture);
-    return typeof vi === 'string' && vi.trim() !== ''
-      && typeof en === 'string' && en.trim() !== ''
-      ? []
-      : [`${path}: empty function value`];
-  }
-  if (Array.isArray(vietnamese) || Array.isArray(english)) {
-    if (!Array.isArray(vietnamese) || !Array.isArray(english)) {
-      return [`${path}: array shape`];
-    }
-    if (vietnamese.length !== english.length) {
-      return [`${path}: array length`];
-    }
-    return vietnamese.flatMap((value, index) =>
-      parityViolations(value, english[index], `${path}[${index}]`),
-    );
-  }
-  if (!plainObject(vietnamese) || !plainObject(english)) {
-    if (typeof vietnamese !== typeof english) return [`${path}: value shape`];
-    return typeof vietnamese === 'string' && vietnamese.trim() === ''
-      ? [`${path}: empty Vietnamese value`]
-      : typeof english === 'string' && english.trim() === ''
-        ? [`${path}: empty English value`]
-        : [];
-  }
-  const viKeys = Object.keys(vietnamese).sort();
-  const enKeys = Object.keys(english).sort();
-  if (viKeys.join('\0') !== enKeys.join('\0')) {
-    return [`${path}: keys ${viKeys.join(',')} !== ${enKeys.join(',')}`];
-  }
-  return viKeys.flatMap((key) =>
-    parityViolations(vietnamese[key], english[key], `${path}.${key}`),
-  );
-}
-
-function filesBelow(directory: string): string[] {
-  if (!existsSync(directory)) return [];
-  if (!statSync(directory).isDirectory()) return [directory];
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const file = join(directory, entry.name);
-    return entry.isDirectory() ? filesBelow(file) : [file];
-  });
-}
-
-function scriptContents(path: string, input: string): string {
-  if (!path.endsWith('.vue')) return input;
-  const descriptor = parseSfc(input, { filename: path }).descriptor;
-  return [descriptor.script?.content, descriptor.scriptSetup?.content]
-    .filter((content): content is string => content !== undefined)
-    .join('\n');
-}
-
-function resolvedImport(file: string, specifier: string): string {
-  const target = specifier.startsWith('@/') || specifier.startsWith('~/')
-    ? join(appRoot, specifier.slice(2))
-    : resolve(join(appRoot, file, '..'), specifier);
-  return relative(appRoot, target).replace(/\\/gu, '/').replace(/\.ts$/u, '');
-}
+const { templateViolations, scriptViolations, sourceViolations }
+  = literalGuard(approvedLiterals);
 
 function isWorkspaceCatalog(file: string, specifier: string): boolean {
   return workspaceCatalogNames.has(
@@ -633,7 +306,8 @@ describe('workspace localization source guard', () => {
     ];
     for (const [name, copy] of copies) {
       expect(Object.keys(copy).sort()).toEqual(['en', 'vi']);
-      expect(parityViolations(copy.vi, copy.en, name)).toEqual([]);
+      expect(parityViolations(copy.vi, copy.en, name, functionFixtures))
+        .toEqual([]);
     }
   });
 

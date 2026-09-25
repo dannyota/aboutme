@@ -38,11 +38,6 @@ export function marginLabel(
   return editorControlsCopy[locale].page.marginLabels[choice];
 }
 
-export const PAGE_SIZE_LABELS: Readonly<Record<PageFormat, string>> = {
-  a4: 'A4 · 210 × 297 mm',
-  letter: 'Letter · 8.5 × 11 in',
-};
-
 export const PAGE_SIZE_SHORT: Readonly<Record<PageFormat, string>> = {
   a4: 'A4',
   letter: 'Letter',
