@@ -1,7 +1,7 @@
 name: Save the Go cache
 description: >-
-  Saves the job's Go build and module cache on main when setup-go missed its
-  own key. Branch runs restore caches but never save them.
+  Saves the Go toolchain and the job's Go build and module cache on main when
+  setup-go missed their keys. Branch runs restore caches but never save them.
 inputs:
   cache-hit:
     description: The cache-hit output of setup-go.
@@ -9,9 +9,17 @@ inputs:
   cache-key:
     description: The cache-key output of setup-go.
     required: true
+  toolchain-hit:
+    description: The toolchain-hit output of setup-go.
+    required: true
 runs:
   using: composite
   steps:
+    - if: ${{ github.ref == 'refs/heads/main' && inputs.toolchain-hit != 'true' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.tool_cache }}/go/1.27.1
+        key: go-toolchain-1.27.1-${{ runner.os }}-${{ runner.arch }}
     - if: ${{ github.ref == 'refs/heads/main' && inputs.cache-hit != 'true' }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
