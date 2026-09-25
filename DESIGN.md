@@ -221,8 +221,18 @@ shell, the page heading, and the breadcrumb. Its URL stays `/templates`.
 
 `/templates` opens with a header on the `--surface-blue` tint with a border and
 the 20 px feature radius, holding the h1 and a one-line lead. The page lists all
-20 templates: the five with a sample first, then the rest by English preset
-name. The surrounding copy, purpose, and sample tag follow the site language.
+20 templates: the nine tech role samples first, in role chip order, then the
+other four templates with a sample, then the rest by English preset name. The
+surrounding copy, purpose, and sample tag follow the site language.
+
+A role chip row comes first: All roles, then Backend, Frontend, Mobile,
+DevOps/SRE, Data/AI, QA/Tester, Fresher/Intern, BrSE, and Security (Bảo mật in
+Vietnamese). One toggle group, one tab stop: arrow keys move focus, Enter or
+Space selects, and the pressed chip gets `aria-pressed="true"` and the active
+chip look. Each role shows the template whose sample is for that role. The
+choice is kept in the URL (`?role=backend`) and combines with the filter chips.
+Filtered-out cards stay in the HTML, hidden, so the server-rendered page always
+lists every template. The row scrolls sideways like the filter row.
 
 Filter chips are 36 px pills on the card color with a border. All comes first
 with the template count. Format chips (With a sample, ATS-friendly, One page,
@@ -277,14 +287,14 @@ Library link for every visitor. Signed-out navigation adds an Open source link
 to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
 and a primary create button. The create button reads Create your resume on the
 home page, the Library, template pages, Terms, and Privacy, and Create account
-elsewhere. On localized routes other than sessions and agent consent, both
-account buttons hide below 44 rem, where the page's own links take over.
-Signed-in navigation also shows Resumes, Settings, and an account menu. The
-account menu contains Settings, theme switching, and Log out. On signed-in
-screens below 640 px, the direct Library and Settings links are hidden; Settings
-remains in the account menu. On localized routes, the shell adds the Vietnamese
-and English toggle. Below 640 px its visible labels shorten to VI and EN while
-their accessible names remain complete.
+elsewhere. On localized routes, both account buttons hide below 44 rem, where
+the page's own links take over. Signed-in navigation also shows Resumes,
+Settings, and an account menu. The account menu contains Settings, theme
+switching, and Log out. On signed-in screens below 640 px, the direct Library
+and Settings links are hidden; Settings remains in the account menu. On
+localized routes, the shell adds the Vietnamese and English toggle. Below 640 px
+its visible labels shorten to VI and EN while their accessible names remain
+complete.
 
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a

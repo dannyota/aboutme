@@ -6,7 +6,7 @@ import {
 } from '@/i18n/locale';
 import { shellCopy } from '@/i18n/shell';
 import { cn } from '@/lib/utils';
-import { validateReturnPath } from '@/utils/returnPath';
+import { requiresSession, validateReturnPath } from '@/utils/returnPath';
 import AccountMenu from './AccountMenu.vue';
 import AppLogo from './AppLogo.vue';
 import LocaleToggle from './LocaleToggle.vue';
@@ -15,33 +15,20 @@ import ThemeToggle from './ThemeToggle.vue';
 const { authState } = useAuth();
 const route = useRoute();
 const signedIn = computed(() => authState.value === 'authenticated');
-// `/app/**` and `/authorize` redirect an anonymous visitor to /login
-// (useResumeList.ts, pages/app/resumes/[id].vue, pages/authorize.vue), so a
-// signed-out header is never this route's real state: it is either
-// authenticated, waiting on `/me`, or already on its way to /login. Showing
-// the signed-out links there at all, even for the one render after `/me`
-// settles and before that redirect lands, would widen the header past the
-// viewport at phone width, so this hides them unconditionally rather than
-// only while loading.
-const authRequiredPath = computed(() => (
-  route.path.startsWith('/app/') || route.path === '/authorize'
-));
+// `/app/**` and `/authorize` redirect an anonymous visitor away
+// (middleware/signed-in.global.ts), so a signed-out header is never this
+// route's real state: it is either authenticated, waiting on `/me`, or
+// already on its way out. Showing the signed-out links there at all, even
+// for the one render after `/me` settles and before that redirect lands,
+// would widen the header past the viewport at phone width, so this hides
+// them unconditionally rather than only while loading.
+const authRequiredPath = computed(() => requiresSession(route.path));
 const showSignedOutLinks = computed(() => (
   authState.value !== 'authenticated' && !authRequiredPath.value
 ));
 // Localized routes show the language control (app/i18n/locale.ts).
 const localized = computed(() => isLocalizedPath(route.path));
-// /app/settings/sessions and /authorize never reach showSignedOutLinks
-// above, so this exception no longer widens anything there; every other
-// localized route still compacts these links on phones (DESIGN.md).
-const hidePhoneAccountLinks = computed(() => {
-  const path = route.path.length > 1
-    ? route.path.replace(/\/+$/, '')
-    : route.path;
-  return localized.value
-    && path !== '/app/settings/sessions'
-    && path !== '/authorize';
-});
+const hidePhoneAccountLinks = localized;
 // On the account pages themselves, carry a validated next along so a click
 // on the header's other link does not drop it (login.vue and register.vue
 // carry it the same way on their own cross-link).

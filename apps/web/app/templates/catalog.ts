@@ -1,5 +1,6 @@
 import { SAMPLES, type SampleLanguage } from '@aboutme/schema/samples';
 import { TEMPLATES, type TemplatePreset } from '@aboutme/schema/templates';
+import type { LocationQuery } from 'vue-router';
 
 import fontCatalog from '../assets/fonts/catalog.json';
 import type { Locale } from '../i18n/locale';
@@ -24,6 +25,38 @@ export const FILTERS = [
 ] as const;
 
 export type GalleryFilter = (typeof FILTERS)[number];
+
+/** The gallery's tech role chips, in chip order (DESIGN.md, Library). */
+export const ROLES = [
+  'backend',
+  'frontend',
+  'mobile',
+  'devops',
+  'data-ai',
+  'qa',
+  'fresher',
+  'brse',
+  'security',
+] as const;
+
+export type GalleryRole = (typeof ROLES)[number];
+
+/**
+ * The one template whose sample is for each role. Membership is an
+ * editorial judgment, kept here, not in the schema; it matches the
+ * `sampleTags` given to each template below.
+ */
+export const ROLE_MEMBERS: Readonly<Record<GalleryRole, readonly string[]>> = {
+  'backend': ['one-page-tight'],
+  'frontend': ['engineer-compact'],
+  'mobile': ['creative-accent'],
+  'devops': ['nordic-muted'],
+  'data-ai': ['elegant-serif-two'],
+  'qa': ['mono-print'],
+  'fresher': ['minimal-air'],
+  'brse': ['international-lang'],
+  'security': ['consulting-formal'],
+};
 
 /**
  * Which templates each filter shows, besides "sample", which follows the
@@ -85,18 +118,13 @@ const MEMBERS: Readonly<
   ],
 };
 
-/** The templates with a sample lead the gallery, in this order. */
+/**
+ * The templates with a sample lead the gallery: the nine tech role samples
+ * in role chip order, then the other four with a sample.
+ */
 const SAMPLE_ORDER = [
+  ...ROLES.flatMap((role) => ROLE_MEMBERS[role]),
   'ats-plain',
-  'engineer-compact',
-  'one-page-tight',
-  'nordic-muted',
-  'creative-accent',
-  'elegant-serif-two',
-  'mono-print',
-  'consulting-formal',
-  'international-lang',
-  'minimal-air',
   'graduate-friendly',
   'executive-band',
   'modern-sidebar',
@@ -386,7 +414,10 @@ const fontNames = new Map(
   fontCatalog.entries.map((entry) => [entry.id, entry.displayName]),
 );
 
-/** The 20 templates in gallery order: those with a sample first. */
+/**
+ * The 20 templates in gallery order: the nine tech role samples first, then
+ * the other samples, then the rest (DESIGN.md, Library).
+ */
 export const GALLERY: readonly GalleryTemplate[] = Object.freeze(
   TEMPLATES.map((preset): GalleryTemplate => {
     const entry = ENTRIES[preset.id];
@@ -459,4 +490,35 @@ export function parseFilter(value: unknown): GalleryFilter | undefined {
 /** Every template id each filter names, for the catalog checks. */
 export function filterMembers(): Readonly<Record<string, readonly string[]>> {
   return MEMBERS;
+}
+
+/** Whether a template is the sample shown for a tech role chip. */
+export function matchesRole(
+  template: GalleryTemplate,
+  role: GalleryRole,
+): boolean {
+  return ROLE_MEMBERS[role].includes(template.id);
+}
+
+/** The role named in a query value, or undefined for "all roles". */
+export function parseRole(value: unknown): GalleryRole | undefined {
+  return ROLES.find((role) => role === value);
+}
+
+/**
+ * A copy of a route query with the role chip set, keeping every other key
+ * (notably `filter`). Undefined removes the `role` key so "all roles" drops
+ * it from the URL (DESIGN.md, Library).
+ */
+export function withRole(
+  query: LocationQuery,
+  role: GalleryRole | undefined,
+): LocationQuery {
+  const next = { ...query };
+  if (role === undefined) {
+    delete next.role;
+  } else {
+    next.role = role;
+  }
+  return next;
 }

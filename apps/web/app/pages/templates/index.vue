@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 
 import TemplateCard from '@/components/templates/TemplateCard.vue';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { pageTitle } from '@/i18n/meta';
 import { galleryCopy } from '@/i18n/templates';
 import {
@@ -9,22 +10,38 @@ import {
   GALLERY,
   type GalleryFilter,
   matchesFilter,
+  matchesRole,
   parseFilter,
+  parseRole,
+  ROLES,
+  withRole,
 } from '@/templates/catalog';
 import { galleryStructuredData } from '@/templates/structuredData';
 
 const route = useRoute();
+const router = useRouter();
 const { locale } = useLocale();
 const copy = computed(() => galleryCopy[locale.value]);
 const active = computed(() => parseFilter(route.query.filter));
-const shown = computed(() => {
+const activeRole = computed(() => parseRole(route.query.role));
+
+function visible(template: (typeof GALLERY)[number]): boolean {
   const filter = active.value;
-  return filter === undefined
-    ? GALLERY
-    : GALLERY.filter((template) => matchesFilter(template, filter));
-});
+  const role = activeRole.value;
+  if (filter !== undefined && !matchesFilter(template, filter)) return false;
+  if (role !== undefined && !matchesRole(template, role)) return false;
+  return true;
+}
+
+const visibleIds = computed(() =>
+  GALLERY.filter(visible).map((template) => template.id));
 const sampleCount = GALLERY.filter((template) =>
   matchesFilter(template, 'sample')).length;
+
+function eager(id: string): boolean {
+  const rank = visibleIds.value.indexOf(id);
+  return rank >= 0 && rank < 2;
+}
 
 function label(filter: GalleryFilter): string {
   const name = copy.value.filters[filter];
@@ -35,9 +52,19 @@ function filterLink(filter: GalleryFilter | undefined) {
   return { path: '/templates', query: filter === undefined ? {} : { filter } };
 }
 
+// Reka's single toggle group emits undefined when the pressed item is
+// pressed again; a role stays selected, like a radio (DESIGN.md, Library).
+function onRole(value: unknown): void {
+  if (value === undefined) return;
+  const role = value === 'all' ? undefined : parseRole(value);
+  if (value !== 'all' && role === undefined) return;
+  router.replace({ query: withRole(route.query, role) });
+}
+
 // The chip dot's color names what the chip narrows: format (what the
 // document looks like) or the audience it suits. The dot is decorative;
-// the chip text carries the meaning (DESIGN.md, template gallery).
+// the chip text carries the meaning. Role chips carry no dot (DESIGN.md,
+// Library).
 const FORMAT_FILTERS = new Set<GalleryFilter>([
   'sample',
   'ats',
@@ -84,9 +111,39 @@ useHead(computed(() => ({
         {{ copy.lead }}
       </p>
     </header>
+    <div
+      class="gallery-filters -mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+    >
+      <ToggleGroup
+        :aria-label="copy.rolesLabel"
+        class="flex w-max items-center gap-2"
+        data-testid="gallery-roles"
+        :model-value="activeRole ?? 'all'"
+        :spacing="2"
+        type="single"
+        @update:model-value="onRole"
+      >
+        <ToggleGroupItem
+          class="gallery-chip"
+          data-role="all"
+          value="all"
+        >
+          {{ copy.allRoles }}
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          v-for="role in ROLES"
+          :key="role"
+          class="gallery-chip"
+          :data-role="role"
+          :value="role"
+        >
+          {{ copy.roles[role] }}
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </div>
     <nav
       :aria-label="copy.filtersLabel"
-      class="gallery-filters -mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0"
+      class="gallery-filters -mx-4 mt-3 overflow-x-auto px-4 sm:mx-0 sm:px-0"
     >
       <ul class="flex w-max items-center gap-2">
         <li>
@@ -126,16 +183,14 @@ useHead(computed(() => ({
         </template>
       </ul>
     </nav>
-    <ul
-      v-if="shown.length > 0"
-      class="gallery-grid mt-8"
-    >
+    <ul class="gallery-grid mt-8">
       <li
-        v-for="(template, index) in shown"
+        v-for="template in GALLERY"
         :key="template.id"
+        :hidden="!visible(template)"
       >
         <TemplateCard
-          :eager="index < 2"
+          :eager="eager(template.id)"
           :illustrative="copy.illustrative"
           :locale="locale"
           :page-image-alt="copy.pageImageAlt"
@@ -144,7 +199,7 @@ useHead(computed(() => ({
       </li>
     </ul>
     <p
-      v-else
+      v-if="visibleIds.length === 0"
       class="mt-8 text-muted-foreground"
     >
       {{ copy.noMatch }}
@@ -177,11 +232,12 @@ useHead(computed(() => ({
   transition: background-color 150ms, border-color 150ms;
 }
 
-.gallery-chip:not([aria-current="page"]):hover {
+.gallery-chip:not([aria-current="page"]):not([aria-pressed="true"]):hover {
   background: var(--surface-indigo);
 }
 
-.gallery-chip[aria-current="page"] {
+.gallery-chip[aria-current="page"],
+.gallery-chip[aria-pressed="true"] {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
