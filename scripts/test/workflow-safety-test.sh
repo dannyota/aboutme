@@ -114,29 +114,21 @@ if grep -Eq 'ABOUTME_RELEASE_APP_IMAGE|ABOUTME_RELEASE_WEB_IMAGE|owner-test\.env
   fail "dev-https-proofs job leaks a release image or owner credential input"
 fi
 
-# Every proof the hosted workflow ran before grouping still runs exactly
-# once: each dev-https check, and every TOTP and passkey shard
-# (totp.spec.ts and second-factor.spec.ts "Enabled-proof sharding").
-expected_proofs='auth
-editor
-entry
-exports
-mcp
-mcp-sdk
-passkey:primary-disabled
-passkey:recovery-attempts
-password
-privacy
-public
-publish
-sample-start
-totp:epoch-disabled
-totp:locale-attempts
-totp:primary
-totp:replace-recovery
-totp:replay-concurrent
-totp:skew
-transport'
+# Every proof runs exactly once: each dev-https check below, and every shard
+# of the two sharded second-factor journeys, read from their shard maps.
+shard_proofs=$(
+  cd "$ROOT/deploy/dev-https-browser" &&
+    node --input-type=module -e "
+      import { PASSKEY_SHARD_ROLES, TOTP_SHARD_ROLES } from './proof-shards.mjs';
+      for (const shard of Object.keys(TOTP_SHARD_ROLES)) console.log('totp:' + shard);
+      for (const shard of Object.keys(PASSKEY_SHARD_ROLES)) console.log('passkey:' + shard);
+    "
+) || fail "cannot read the proof shard maps"
+[ -n "$shard_proofs" ] || fail "the proof shard maps are empty"
+expected_proofs=$(
+  printf '%s\n' auth editor entry exports mcp mcp-sdk password privacy public \
+    publish sample-start transport "$shard_proofs" | LC_ALL=C sort
+)
 actual_proofs=$(awk '$1 == "proofs:" { for (i = 2; i <= NF; i++) print $i }' \
   <<<"$PROOF_JOB" | LC_ALL=C sort)
 [ "$actual_proofs" = "$expected_proofs" ] ||
@@ -183,9 +175,9 @@ CI_JOB=$(awk '/^  ci:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
 [ -n "$CI_JOB" ] || fail "hosted workflow lacks the ci gate job"
 grep -Fq 'pattern: shard-evidence-*' <<<"$CI_JOB" ||
   fail "ci gate does not download every group's shard evidence"
-grep -Fq 'node deploy/dev-https-browser/check-totp-shard-coverage.mjs' <<<"$CI_JOB" ||
+grep -Fq 'node deploy/dev-https-browser/check-shard-coverage.mjs totp \' <<<"$CI_JOB" ||
   fail "ci gate does not check TOTP shard coverage"
-grep -Fq 'node deploy/dev-https-browser/check-passkey-shard-coverage.mjs' <<<"$CI_JOB" ||
+grep -Fq 'node deploy/dev-https-browser/check-shard-coverage.mjs passkey \' <<<"$CI_JOB" ||
   fail "ci gate does not check passkey shard coverage"
 grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
   fail "ci gate does not require the dev-https-proofs job"

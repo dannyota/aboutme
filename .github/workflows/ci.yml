@@ -668,7 +668,7 @@ jobs:
                  -o -name passkey-enrollment-disabled-proof.json \) )
           [ "${#evidence_files[@]}" -gt 0 ] ||
             { echo "no passkey shard evidence files were downloaded" >&2; exit 1; }
-          node deploy/dev-https-browser/check-passkey-shard-coverage.mjs \
+          node deploy/dev-https-browser/check-shard-coverage.mjs passkey \
             "${evidence_files[@]}"
       - if: ${{ needs.dev-https-proofs.result == 'success' }}
         name: Check TOTP shard coverage
@@ -679,7 +679,7 @@ jobs:
                  -o -name totp-enrollment-disabled-proof.json \) )
           [ "${#evidence_files[@]}" -gt 0 ] ||
             { echo "no TOTP shard evidence files were downloaded" >&2; exit 1; }
-          node deploy/dev-https-browser/check-totp-shard-coverage.mjs \
+          node deploy/dev-https-browser/check-shard-coverage.mjs totp \
             "${evidence_files[@]}"
       - name: Require every job to succeed (semgrep may be skipped on its own condition)
         if: always()
