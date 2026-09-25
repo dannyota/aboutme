@@ -15,6 +15,20 @@ import ThemeToggle from './ThemeToggle.vue';
 const { authState } = useAuth();
 const route = useRoute();
 const signedIn = computed(() => authState.value === 'authenticated');
+// `/app/**` and `/authorize` redirect an anonymous visitor to /login
+// (useResumeList.ts, pages/app/resumes/[id].vue, pages/authorize.vue), so a
+// signed-out header is never this route's real state, only a transient one
+// while `/me` is still in flight. On the phone-width exceptions below,
+// showing the signed-out links there anyway widens the header past the
+// viewport, since those two routes are the ones hidePhoneAccountLinks lets
+// keep full width (DESIGN.md).
+const authRequiredPath = computed(() => (
+  route.path.startsWith('/app/') || route.path === '/authorize'
+));
+const showSignedOutLinks = computed(() => (
+  authState.value !== 'authenticated'
+  && !(authRequiredPath.value && authState.value === 'loading')
+));
 // Localized routes show the language control (app/i18n/locale.ts).
 const localized = computed(() => isLocalizedPath(route.path));
 const hidePhoneAccountLinks = computed(() => {
@@ -133,7 +147,7 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
         v-else
         :locale="shellLocale"
       />
-      <template v-if="!signedIn">
+      <template v-if="showSignedOutLinks">
         <!-- Settings and consent have no in-page account links on phones. -->
         <NuxtLink
           :class="cn(
