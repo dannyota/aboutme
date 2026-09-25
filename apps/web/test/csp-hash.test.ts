@@ -46,6 +46,33 @@ describe('jsonLdScriptContent', () => {
       'Page has 2 JSON-LD scripts; expected at most one.',
     );
   });
+
+  // A hash covers whatever bytes are between the tags, so a script whose
+  // real type the browser reads as executable must never earn one: that
+  // would let an unrelated HTML-injection bug turn this CSP backstop into
+  // an allowlist for its own payload. Content that is not valid JSON can
+  // never be legitimate JSON-LD, so it is never a match, regardless of how
+  // the surrounding tag is written.
+  it('never matches a script whose first type attribute is executable', () => {
+    const html = '<script type="module" type="application/ld+json">'
+      + 'window.alert(1)</script>';
+    expect(jsonLdScriptContent(html)).toBeNull();
+  });
+
+  it('never matches the ld+json type string sitting inside another '
+    + 'attribute value', () => {
+    const html = '<script data-x=\'type="application/ld+json"\'>'
+      + 'window.alert(1)</script>';
+    expect(jsonLdScriptContent(html)).toBeNull();
+  });
+
+  it('still matches a real JSON-LD script alongside a non-JSON decoy', () => {
+    const json = '{"@type":"WebSite"}';
+    const html = `<script type="application/ld+json">${json}</script>`
+      + '<script type="module" type="application/ld+json">'
+      + 'window.alert(1)</script>';
+    expect(jsonLdScriptContent(html)).toBe(json);
+  });
 });
 
 describe('scriptHashSource', () => {

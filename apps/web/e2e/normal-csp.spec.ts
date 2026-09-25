@@ -137,6 +137,21 @@ test('the login page sends the plain app CSP', async ({ page }) => {
   expect(external).toEqual([]);
 });
 
+test('a 404 page sends the plain app CSP and never x-powered-by', async ({
+  page,
+}) => {
+  const probe = await trackCsp(page);
+  const external = await denyExternalRequests(page);
+  await mockSignedOutSession(page);
+
+  const response = await page.goto('/templates/not-a-template');
+  expect(response?.status()).toBe(404);
+  expectPlainAppCsp(response!.headers());
+
+  await expectCspClean(probe, [ANONYMOUS_ME_401]);
+  expect(external).toEqual([]);
+});
+
 test('submitting the login form navigates cleanly under the app CSP', async ({
   page,
 }) => {

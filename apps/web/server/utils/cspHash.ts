@@ -8,6 +8,17 @@ import { createHash } from 'node:crypto';
 const JSON_LD_SCRIPT
   = /<script(?=[^>]*\btype="application\/ld\+json")[^>]*>([\s\S]*?)<\/script>/g;
 
+/** Whether `value` parses as JSON: the only content this module ever hashes. */
+function isJson(value: string | undefined): value is string {
+  if (value === undefined) return false;
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The exact UTF-8 bytes of a rendered page's one inline JSON-LD script, or
  * null when the page has none. The homepage and template pages each render
@@ -15,9 +26,19 @@ const JSON_LD_SCRIPT
  * app/templates/structuredData.ts), the same "exactly one deterministic
  * JSON-LD script" invariant public resume HTML already proves
  * (apps/server/internal/publicformat/jsonld.go; docs/design/web.md).
+ *
+ * A hash this module returns gets allowlisted in script-src, so a tag whose
+ * content is not valid JSON is never treated as a match, no matter how its
+ * own `type` attribute reads: an unrelated HTML-injection bug that landed an
+ * executable `<script>` on the page must never earn that script a CSP
+ * exception just because it also contains the substring
+ * `type="application/ld+json"`. Valid JSON can hold no side-effecting
+ * syntax, so accepting only content that parses as JSON costs nothing on a
+ * real JSON-LD script and closes that path.
  */
 export function jsonLdScriptContent(html: string): string | null {
-  const matches = [...html.matchAll(JSON_LD_SCRIPT)];
+  const matches = [...html.matchAll(JSON_LD_SCRIPT)]
+    .filter((match) => isJson(match[1]));
   if (matches.length === 0) return null;
   if (matches.length > 1) {
     throw new Error(
