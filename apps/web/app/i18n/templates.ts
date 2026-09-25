@@ -12,6 +12,7 @@ export interface GalleryCopy {
   readonly all: (count: number) => string;
   readonly filters: Readonly<Record<GalleryFilter, string>>;
   readonly illustrative: string;
+  readonly pageImageAlt: (name: string) => string;
   readonly noMatch: string;
   readonly detail: {
     readonly breadcrumb: string;
@@ -60,6 +61,7 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       'management': 'Quản lý',
     },
     illustrative: 'Nội dung minh họa',
+    pageImageAlt: (name) => `Trang 1 của CV mẫu ${name}`,
     noMatch: 'Không có mẫu nào khớp với bộ lọc này.',
     detail: {
       breadcrumb: 'Thư viện',
@@ -112,6 +114,7 @@ export const galleryCopy: Readonly<Record<Locale, GalleryCopy>> = {
       'management': 'Management',
     },
     illustrative: 'Illustrative content',
+    pageImageAlt: (name) => `Page 1 of the ${name} sample resume`,
     noMatch: 'No template matches this filter.',
     detail: {
       breadcrumb: 'Library',

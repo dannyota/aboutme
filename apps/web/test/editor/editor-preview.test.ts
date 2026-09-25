@@ -150,7 +150,7 @@ describe('EditorPreview', () => {
     expect(webButton.text()).toBe(editorShellCopy.en.previewModeWeb);
     expect(
       wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
-    ).toEqual({ lng: 'en', mode: 'paged' });
+    ).toEqual({ lng: 'en', mode: 'paged', nameHeading: 'p' });
   });
 
   it(
@@ -173,7 +173,7 @@ describe('EditorPreview', () => {
         .toBe('false');
       expect(
         wrapper.getComponent({ name: 'ResumeDocument' }).props('context'),
-      ).toEqual({ lng: 'en', mode: 'continuous' });
+      ).toEqual({ lng: 'en', mode: 'continuous', nameHeading: 'p' });
       expect(wrapper.find('[data-testid="page-count"]').exists()).toBe(false);
       const sheet = wrapper.get('[data-testid="preview-sheet"]');
       expect(sheet.attributes('data-sheet-zoom')).toBeUndefined();
@@ -205,7 +205,7 @@ describe('EditorPreview', () => {
       .toBe('true');
     expect(
       second.getComponent({ name: 'ResumeDocument' }).props('context'),
-    ).toEqual({ lng: 'en', mode: 'continuous' });
+    ).toEqual({ lng: 'en', mode: 'continuous', nameHeading: 'p' });
     second.unmount();
   });
 
@@ -290,28 +290,21 @@ describe('EditorPreview', () => {
     expect(Number(sheet.attributes('data-scaled-width'))).toBeLessThan(390);
   });
 
-  it('overlays the accepted canonical stamp outside renderer output', () => {
+  it('never stamps the sheet, published or not (DESIGN.md seal rules)', () => {
     const accepted = acceptedFixture();
     const wrapper = mount(EditorPreview, {
       props: {
         document: accepted.document,
         lng: accepted.metadata.lng,
-        publicLink: '/ada-lovelace',
-        stampState: 'landing',
       },
       global: { stubs: { ResumeDocument: true } },
     });
 
     const sheet = wrapper.get('[data-testid="preview-sheet"]');
-    const stamp = sheet.get('[data-testid="preview-stamp"]');
-    expect(stamp.attributes('aria-label')).toBe(
-      'Public at aboutme.vn/ada-lovelace',
+    expect(sheet.find('[data-app-seal]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+      false,
     );
-    expect(stamp.attributes('data-stamp')).toBe('landing');
-    expect(
-      wrapper.getComponent({ name: 'ResumeDocument' })
-        .find('[data-testid="preview-stamp"]').exists(),
-    ).toBe(false);
   });
 
   it('passes only the optimistic document and paged render context', () => {
@@ -326,7 +319,11 @@ describe('EditorPreview', () => {
 
     const renderer = wrapper.getComponent({ name: 'ResumeDocument' });
     expect(renderer.props('document')).toStrictEqual(accepted.document);
-    expect(renderer.props('context')).toEqual({ lng: 'en', mode: 'paged' });
+    expect(renderer.props('context')).toEqual({
+      lng: 'en',
+      mode: 'paged',
+      nameHeading: 'p',
+    });
   });
 
   it('renders without the photo while the read is pending', () => {
@@ -345,7 +342,11 @@ describe('EditorPreview', () => {
 
     const renderer = wrapper.getComponent({ name: 'ResumeDocument' });
     expect(renderer.props('document').personalDetails.photo).toBeUndefined();
-    expect(renderer.props('context')).toEqual({ lng: 'en', mode: 'paged' });
+    expect(renderer.props('context')).toEqual({
+      lng: 'en',
+      mode: 'paged',
+      nameHeading: 'p',
+    });
     expect(wrapper.html()).not.toContain('private-object.jpg');
   });
 
@@ -433,6 +434,7 @@ describe('EditorPreview', () => {
     ).toEqual({
       lng: 'en',
       mode: 'paged',
+      nameHeading: 'p',
       photoUrl: 'data:image/jpeg;base64,AA==',
     });
     expect(wrapper.html()).not.toContain('private-object.jpg');

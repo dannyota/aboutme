@@ -485,8 +485,6 @@ async function discardAndSignIn(): Promise<void> {
         :lng="record.current.metadata.lng"
         :photo-read="record.photoRead"
         :photo-url="photoUrl"
-        :public-link="displayLink"
-        :stamp-state="stampState"
         :zoom="zoom"
       />
     </div>
