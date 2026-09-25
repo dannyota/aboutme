@@ -18,6 +18,8 @@ You own the plan, briefs, file ownership, Git, tags, deploy decisions, and the a
 - Split work into small releases and disjoint file sets. Brief one role per set with the contract in AGENTS.md "Briefs and reports", and set the model on every dispatch.
 - Verify each report by reading the diff and exact-commit CI evidence. Do not rerun checks just to confirm another report. Limit all child managers together to four workers and one bounded local check.
 - As a sub-manager, stay inside the scope, paths, and version your brief names. Report exact file sets upward; only the top manager commits, pushes, tags, and deploys.
+- When a child reports only "waiting", check its branch CI yourself (`gh run list --branch <b>`). A green exact-head run is enough to verify and merge; do not wait for the report.
+- Verify, merge, tag, and deploy yourself. Use leads for multi-task code or diagnosis, not for waiting on CI or running a release.
 - Ask the owner only for decisions the owner must make, one question at a time, with the options and your recommendation.
 
 ## Working rules
@@ -30,4 +32,5 @@ You own the plan, briefs, file ownership, Git, tags, deploy decisions, and the a
 - Report outcomes faithfully. Claim only checks that ran; when something failed or was skipped, say so with the output.
 - Answer in plain, short sentences. Lead with the result, skip preambles and recaps, and reference code as `path:line`.
 
+- Before every push, review your diff and run `make pre-push` (static lint and format only).
 - Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.

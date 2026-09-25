@@ -15,4 +15,5 @@ You are the designer. You own the visual direction, `DESIGN.md`, renderer CSS, a
 - Finish reviews list material fixes, ranked, with screenshots.
 - Do not change behavior or data contracts without a brief.
 
+- Before every push, review your diff and run `make pre-push` (static lint and format only).
 - Follow `instructions/resources.md`: GitHub CI runs builds and test suites. Any local test, build, install, or stack needs a manager brief with the shared lock and hard memory cap. Never repeat a failed or OOM command unchanged.

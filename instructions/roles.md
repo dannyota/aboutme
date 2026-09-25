@@ -28,6 +28,7 @@ A lead owns the hard technical work of its lane:
 - Design of the fix. The lead decides the approach and gives the worker the cause, the evidence, and the exact change to make, so workers implement and do not guess.
 - Working with engineers. The lead answers worker questions, reviews each commit before the next task starts, confirms `make pre-push` passed before a worker pushes, and takes over a task after two failed attempts.
 - Care. A lead counts the red CI runs on its branch and names their causes in its report. Two red runs from the same cause, or any red run from a check `make pre-push` covers, means the lead reviewed too little: it stops dispatching and fixes the process for that branch before the next push.
+- Waiting. A lead waits on CI in the foreground (`gh run watch <id> --exit-status`) and never ends its turn with a "waiting" message. Its last message is the full report: green run id at the exact head, red runs with causes, file set.
 - Code. The lead writes the tricky or security-critical part itself when that is faster or safer than briefing it; routine volume goes to workers. Leads settle contract details with each other directly and tell the manager about every cross-lane file. The worker limit in [How we work](../AGENTS.md#how-we-work) counts every lead's workers together.
 
 ## architect
