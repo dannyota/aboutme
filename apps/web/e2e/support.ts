@@ -8,6 +8,155 @@ import {
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
+export interface CspViolation {
+  readonly blockedURI: string;
+  readonly effectiveDirective: string;
+  readonly sourceFile: string;
+  readonly sample: string;
+}
+
+export interface CspProbe {
+  readonly violations: () => Promise<readonly CspViolation[]>;
+  readonly consoleErrors: readonly string[];
+  readonly pageErrors: readonly string[];
+}
+
+/**
+ * Installs listeners a CSP regression would trip: a real
+ * `securitypolicyviolation` event, a console error, or an uncaught page
+ * error. Violations reach Node through a page binding, so the probe keeps
+ * those of every document the page loads, including one it has since
+ * navigated away from. Call before the first `page.goto`, since
+ * `addInitScript` only applies to documents created after it runs.
+ */
+export async function trackCsp(page: Page): Promise<CspProbe> {
+  const violations: CspViolation[] = [];
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.exposeFunction(
+    '__reportCspViolation',
+    (violation: CspViolation) => {
+      violations.push(violation);
+    },
+  );
+  await page.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', (event) => {
+      const report = (window as Window & {
+        __reportCspViolation?: (violation: CspViolation) => Promise<void>;
+      }).__reportCspViolation;
+      void report?.({
+        blockedURI: event.blockedURI,
+        effectiveDirective: event.effectiveDirective,
+        sourceFile: event.sourceFile,
+        sample: event.sample.slice(0, 80),
+      });
+    });
+  });
+  return {
+    violations: async () => {
+      // Lets a binding call from a violation raised just before this check
+      // reach Node first.
+      await page.evaluate(() => undefined).catch(() => undefined);
+      return [...violations];
+    },
+    consoleErrors,
+    pageErrors,
+  };
+}
+
+/**
+ * Asserts a tracked page raised no CSP violation, uncaught error, or
+ * unexpected console error. `allowedConsoleSubstrings` excuses console
+ * errors this app produces on purpose and unrelated to CSP, matched by
+ * substring; a real production visit while signed out already logs the
+ * browser's own "Failed to load resource" message for the expected 401 from
+ * `GET /api/v1/me` (app/composables/useAuth.ts), so a signed-out page test
+ * allows that one.
+ */
+export async function expectCspClean(
+  probe: CspProbe,
+  allowedConsoleSubstrings: readonly string[] = [],
+): Promise<void> {
+  expect(await probe.violations()).toEqual([]);
+  expect(probe.consoleErrors.filter(
+    (message) => !allowedConsoleSubstrings.some((allowed) =>
+      message.includes(allowed)),
+  )).toEqual([]);
+  expect(probe.pageErrors).toEqual([]);
+}
+
+/**
+ * Fakes a signed-in `GET /api/v1/me` and `GET /api/v1/capabilities` for an
+ * `/app/**` page in this build's live-backend-free "normal" e2e surface.
+ * Every optional capability defaults closed, matching how a real deployment
+ * degrades on a missing or malformed field
+ * (app/composables/useCapabilities.ts).
+ */
+export async function mockSignedInSession(
+  page: Page,
+  capabilities: Record<string, unknown> = {},
+): Promise<void> {
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        data: {
+          user: {
+            id: 'csp-user',
+            email: 'csp@example.invalid',
+            name: 'CSP User',
+            avatarKey: null,
+            hasPassword: true,
+          },
+          csrfToken: 'csp-test-token',
+          identities: [],
+        },
+      },
+    });
+  });
+  await page.route('**/api/v1/capabilities', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { providerLogin: false, agentAccess: false, ...capabilities },
+      }),
+    });
+  });
+}
+
+/**
+ * Fakes a signed-out `GET /api/v1/me` (401, so `useAuth` resolves to
+ * `anonymous` instead of retrying against a nonexistent backend) and
+ * `GET /api/v1/capabilities` for a public page in this build's
+ * live-backend-free "normal" e2e surface. Every page reads both once on
+ * hydration regardless of its own auth requirement.
+ */
+export async function mockSignedOutSession(
+  page: Page,
+  capabilities: Record<string, unknown> = {},
+): Promise<void> {
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      status: 401,
+      json: { error: { code: 'unauthenticated', message: 'not signed in' } },
+    });
+  });
+  await page.route('**/api/v1/capabilities', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { providerLogin: false, agentAccess: false, ...capabilities },
+      }),
+    });
+  });
+}
+
 export async function denyExternalRequests(page: Page): Promise<string[]> {
   const attempted: string[] = [];
   await page.route('**/*', async (route) => {
