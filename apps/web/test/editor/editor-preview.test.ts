@@ -153,6 +153,26 @@ describe('EditorPreview', () => {
     ).toEqual({ lng: 'en', mode: 'paged', nameHeading: 'p' });
   });
 
+  it('scales the PDF sheet with a transform, not CSS zoom', () => {
+    const accepted = acceptedFixture();
+    const wrapper = mount(EditorPreview, {
+      props: {
+        document: accepted.document,
+        lng: accepted.metadata.lng,
+      },
+      global: { stubs: { ResumeDocument: true } },
+    });
+
+    const sheet = wrapper.get('[data-testid="preview-sheet"]');
+    expect(sheet.attributes('style') ?? '').not.toContain('zoom');
+    const scaledContent = sheet.get('.scaled-sheet-content');
+    const zoom = Number(sheet.attributes('data-sheet-zoom'));
+    const transformStyle = scaledContent.attributes('style') ?? '';
+    const match = /scale\(([^)]+)\)/u.exec(transformStyle);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBeCloseTo(zoom, 4);
+  });
+
   it(
     'switches to the continuous Web document and hides the paged sheet mark',
     async () => {
@@ -179,6 +199,7 @@ describe('EditorPreview', () => {
       expect(sheet.attributes('data-sheet-zoom')).toBeUndefined();
       expect(sheet.attributes('data-scaled-width')).toBeUndefined();
       expect(sheet.attributes('style') ?? '').not.toContain('zoom');
+      expect(sheet.find('.scaled-sheet').exists()).toBe(false);
     },
   );
 
