@@ -25,3 +25,13 @@ The table names required verification, not commands every worker must run locall
 | Security-sensitive or release | CI's Semgrep and gitleaks jobs; diagnose their hosted logs without a local scan |
 
 Reusable browser automation is scripted headless Playwright. To author it, use the Playwright MCP server to inspect real selectors, requests, and state, then write what you observed as `@playwright/test` specs. MCP never runs the recorded automation.
+
+## When a check fails
+
+Find the cause before changing anything. Never rerun a failed job hoping for a pass, add retries or longer timeouts, or loosen a check without evidence that it is the cause.
+
+1. Read the failing log and name the exact failing step. If the log hides the cause (for example the browser proofs withhold console output), add a diagnostic that records it (to a CI artifact, never secrets) on a debug branch that is never merged, and run that.
+2. Bisect when a failure starts at a known point: find the first bad commit by CI runs on earlier commits.
+3. Read the code on both sides and research the tool's docs and issues; cite sources in the report.
+4. Fix the root cause, add a test that fails without the fix, and prove it with green CI on the exact head (twice for intermittent failures).
+5. If only a local session can show the cause, stop and ask the manager with the exact commands and why CI cannot show it.
