@@ -131,12 +131,14 @@ useHead(computed(() => ({
       class="gallery-grid mt-8"
     >
       <li
-        v-for="template in shown"
+        v-for="(template, index) in shown"
         :key="template.id"
       >
         <TemplateCard
+          :eager="index < 2"
           :illustrative="copy.illustrative"
           :locale="locale"
+          :page-image-alt="copy.pageImageAlt"
           :template="template"
         />
       </li>

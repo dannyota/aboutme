@@ -1,6 +1,6 @@
 // Site languages. The homepage, account pages, the Privacy Policy and Terms,
-// template gallery, resume workspace, settings, and authorization are
-// bilingual and default to Vietnamese (docs/design/localization.md).
+// the Library, resume workspace, settings, and authorization are bilingual
+// and default to Vietnamese (docs/design/localization.md).
 
 export const locales = ['vi', 'en'] as const;
 
@@ -44,7 +44,7 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/authorize',
 ]);
 
-/** The template gallery, /templates, and its template pages. */
+/** The Library, /templates, and its template pages. */
 const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;
 const WORKSPACE_PATH = /^\/app\/(?:new|resumes(?:\/[^/.\\?#%][^/\\?#%]*|))$/u;
 

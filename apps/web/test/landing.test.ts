@@ -83,6 +83,19 @@ describe('index.vue', () => {
     expect(wrapper.findAll('h1')).toHaveLength(1);
   });
 
+  it(
+    'never stamps the hero sample so it cannot read as an already-public '
+    + 'resume (DESIGN.md seal rules)',
+    async () => {
+      const wrapper = await mountLanding('en');
+      const sample = wrapper.get('[data-testid="landing-sample"]');
+      expect(sample.find('[data-app-seal]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="landing-seal"]').exists()).toBe(
+        false,
+      );
+    },
+  );
+
   it('sets the emphasized suffix apart from the rest of the headline',
     async () => {
       for (const locale of ['en', 'vi'] as const) {
