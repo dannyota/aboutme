@@ -470,11 +470,11 @@ test('settings sends the plain app CSP and hydrates cleanly', async ({
   expect(external).toEqual([]);
 });
 
-// AppShell.vue keeps the signed-out "Tạo tài khoản" / "Đăng nhập" links
-// unhidden on phones for this route's header (there is no other in-page
-// account affordance), so while its own /api/v1/me read is still in flight,
-// those wider signed-out links must not appear in place of the eventual
-// account menu: at 390px they push the header past the viewport.
+// AppShell.vue hides the signed-out "Tạo tài khoản" / "Đăng nhập" links
+// outright on this authRequiredPath route, so while its own /api/v1/me read
+// is still in flight, those wider signed-out links must not appear in place
+// of the eventual account menu: at 390px they push the header past the
+// viewport.
 test('the header at 390px never overflows on /app/settings/sessions while '
   + '/me is still loading', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
@@ -541,11 +541,11 @@ test('the header at 390px never overflows on /app/settings/sessions while '
 
 // AppShell.vue's showSignedOutLinks must stay hidden on an authRequiredPath
 // route for every authState but 'authenticated', not just 'loading': once
-// /api/v1/me settles to a rejected session, useResumeList.ts's
-// anonymous-state watcher redirects to /login, but only after that settling
-// is itself a render. A header that shows the signed-out links for that one
-// render pushes past the viewport at 390px, the same way it did for the
-// still-loading case above.
+// /api/v1/me settles to a rejected session, the shared route guard
+// (middleware/signed-in.global.ts) redirects to /login, but only after that
+// settling is itself a render. A header that shows the signed-out links for
+// that one render pushes past the viewport at 390px, the same way it did
+// for the still-loading case above.
 test('the header at 390px never overflows on /app/resumes while /me settles '
   + 'to a 401 and the page redirects to /login', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 });
@@ -587,4 +587,66 @@ test('the header at 390px never overflows on /app/resumes while /me settles '
   }
   expect(await overflow()).toBe(0);
   expect(new URL(page.url()).pathname).toBe('/login');
+});
+
+// /app/settings/sessions had no redirect of its own before the shared route
+// guard (middleware/signed-in.global.ts): it left only because
+// ConnectedAgents.vue mounts when agent access is on. This covers it the
+// same way as /app/resumes above, with agent access off, so the redirect
+// comes from the guard alone.
+test('the header at 390px never overflows on /app/settings/sessions while '
+  + '/me settles to a 401 and the page redirects to /login', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'vi',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  await page.route('**/api/v1/capabilities', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { providerLogin: false, agentAccess: false },
+      }),
+    });
+  });
+  let releaseMe!: () => void;
+  const meGate = new Promise<void>((resolve) => {
+    releaseMe = resolve;
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    await meGate;
+    await route.fulfill({
+      status: 401,
+      json: { error: { code: 'session_required', message: 'Sign in.' } },
+    });
+  });
+
+  const response = await page.goto('/app/settings/sessions');
+  expect(response?.status()).toBe(200);
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+
+  const overflow = () => page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth);
+  expect(await overflow()).toBe(0);
+
+  releaseMe();
+  // Sample continuously instead of only before and after the redirect: the
+  // regression this guards is a transient render between the settled 401
+  // and the navigation, not a settled state of its own.
+  const deadline = Date.now() + 5000;
+  while (
+    new URL(page.url()).pathname !== '/login' && Date.now() < deadline
+  ) {
+    expect(await overflow()).toBe(0);
+  }
+  expect(await overflow()).toBe(0);
+  expect(new URL(page.url()).pathname).toBe('/login');
+  expect(new URL(page.url()).searchParams.get('next')).toBe(
+    '/app/settings/sessions',
+  );
 });
