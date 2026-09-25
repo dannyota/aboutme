@@ -7,6 +7,7 @@ import {
   type Page,
   type Request,
   type Response,
+  type Route,
 } from "@playwright/test";
 import { writeFile } from "node:fs/promises";
 
@@ -789,12 +790,38 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     await deleteRecordedResume(page, resumeID);
     steps.cleanup = true;
     stage("cleanup");
+    // Log out stays disabled until the `/me` read brings the CSRF token, and
+    // the session list often renders first. `press` only focuses, and a
+    // disabled button takes no focus, so an Enter in that window is lost.
+    // Holding every `/me` read opens the window on every run.
+    let releaseMe = (): void => {};
+    const meHeld = new Promise<void>((resolve) => {
+      releaseMe = resolve;
+    });
+    const isMe = (url: URL): boolean => url.pathname === "/api/v1/me";
+    const holdMe = async (route: Route): Promise<void> => {
+      await meHeld;
+      try {
+        await route.continue();
+      } catch (error) {
+        // The page can abandon a held read for a newer one; Playwright then
+        // refuses to continue the abandoned read.
+        if (!String(error).includes("Route is already handled")) throw error;
+      }
+    };
+    await page.route(isMe, holdMe);
     await page.goto(`${ORIGIN}/app/settings/sessions`);
-    await page
+    const logOut = page
       .getByTestId("settings-page")
-      .getByRole("button", { name: "Log out", exact: true })
-      .press("Enter");
+      .getByRole("button", { name: "Log out", exact: true });
+    await expect(logOut).toBeDisabled();
+    setTimeout(releaseMe, 1_000);
+    await expect(logOut).toBeEnabled();
+    await logOut.press("Enter");
     await expect(page).toHaveURL(`${ORIGIN}/login`);
+    // Keep the route until the sign-out ends: removing it earlier can let
+    // the held reads through before the press and hide a missing wait.
+    await page.unroute(isMe, holdMe);
     steps.signOut = true;
     loggedIn = false;
     stage("signed-out");
