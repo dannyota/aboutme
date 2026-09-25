@@ -29,7 +29,7 @@ run_case() { # name expected-exit|fail args...
     AWS_CONFIG_FILE="$work/no-such-aws-config" AWS_PROFILE=test-base \
     DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 \
     DEPLOY_ALARM_WAIT="${DEPLOY_ALARM_WAIT:-3}" DEPLOY_ALARM_POLL="${DEPLOY_ALARM_POLL:-0}" \
-    DEPLOY_WARM_ATTEMPTS="${DEPLOY_WARM_ATTEMPTS:-8}" \
+    DEPLOY_WARM_ATTEMPTS="${DEPLOY_WARM_ATTEMPTS:-8}" DEPLOY_HANDOFF_HOLD=0 \
     bash "$here/deploy.sh" "$@" >"$work/$name.out" 2>&1 &
   echo $! >"$work/$name.pid"
   wait $!
@@ -80,12 +80,33 @@ before_re() { # file first-regex second-regex
 
 count() { grep -c -F -- "$2" "$1" || true; }
 
+# nth prints the line number of the N'th match of TEXT in FILE, or empty.
+nth() { { grep -n -F -- "$2" "$1" || true; } | sed -n "${3}p" | cut -d: -f1; }
+
 stop_app="--service aboutme-prod-app --desired-count 0"
-start_app="--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1"
+app_point="--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4"
+app_up1="--service aboutme-prod-app --desired-count 1"
+app_confirm="--tasks arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/task-aboutme-prod-app --output json"
 start_web="--service aboutme-prod-web --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1"
-up_maintenance="--service aboutme-prod-maintenance --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1"
+maint_up1="--service aboutme-prod-maintenance --desired-count 1"
 down_maintenance="--service aboutme-prod-maintenance --desired-count 0"
-prev_app_up="--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3 --desired-count 1"
+# A stopped service pointed at a new revision and scaled up in the same call:
+# the old-revision regression (a bare "update-service --task-definition X
+# --desired-count 1" starts a task of the previous revision first, see
+# handoff.sh's start_service). Neither app nor maintenance ever starts this
+# way from a stop.
+combined_app_start="--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1"
+combined_maint_start="--service aboutme-prod-maintenance --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 --desired-count 1"
+# The previous app is already the app's own running (or last-set) revision in
+# every restore scenario here, so restoring it only ever asks for
+# desired-count 1: the same literal a fresh app start's own final call uses.
+# The two never appear in the same run (see the case comments below).
+prev_app_up="$app_up1"
+# Aliases for call sites below that only care whether the service reached its
+# target count, not whether that came with a revision change in the same
+# call.
+start_app="$app_up1"
+up_maintenance="$maint_up1"
 warm_danny_re='-w %\{http_code\} %\{time_total\} https://aboutme\.vn/danny$'
 warm_home_re='-w %\{http_code\} %\{time_total\} https://aboutme\.vn/$'
 
@@ -95,17 +116,27 @@ f=$work/ok.calls
 before "$f" "rds create-db-snapshot" "$stop_app"
 before "$f" "scheduler update-schedule" "$stop_app"
 before "$f" "$stop_app" "--started-by deploy-migrate"
-before "$f" "--started-by deploy-migrate" "$start_app"
-before "$f" "$start_web" "$start_app"
-# The maintenance page covers the window between the app stopping and
-# starting again: up right after site-down, down only once web is back and
-# right before app starts, since maintenance and app share host port 443.
-before "$f" "$stop_app" "$up_maintenance"
-before "$f" "$up_maintenance" "--started-by deploy-migrate"
-before "$f" "$start_web" "$down_maintenance"
-before "$f" "$down_maintenance" "$start_app"
+before "$f" "--started-by deploy-migrate" "$app_point"
+before "$f" "$start_web" "$app_point"
+# Both Caddy services use host networking with no ECS port mapping and bind
+# 443 with SO_REUSEPORT (docs/design/single-host-production.md, "Deploy"), so
+# each handoff starts the incoming service, beside the outgoing one, and
+# confirms it before the outgoing one stops: maintenance up before the app
+# stops, and the new app confirmed running before maintenance stops.
+before "$f" "$maint_up1" "$stop_app"
+before "$f" "$maint_up1" "--started-by deploy-migrate"
+before "$f" "$app_up1" "$down_maintenance"
+before "$f" "$app_confirm" "$down_maintenance"
 absent "$f" "deploy-db-setup"
+absent "$f" "$combined_app_start"
+absent "$f" "$combined_maint_start"
 [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "ok: want 8 schedule updates" >&2; exit 1; }
+# The 4 disables run before either service changes; the 4 enables run only
+# after maintenance stops.
+down_line=$(nth "$f" "$down_maintenance" 1)
+enable_line=$(nth "$f" "scheduler update-schedule" 5)
+[[ -n $down_line && -n $enable_line && $down_line -lt $enable_line ]] ||
+  { echo "ok: maintenance did not stop before the schedules were re-enabled" >&2; exit 1; }
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "ok: schedules not enabled at the end" >&2; exit 1; }
 jq -e '.Target.EcsParameters.TaskDefinitionArn == "arn:aws:ecs:ap-southeast-1:1:task-definition/new:4"' \
   "$work/last-schedule.json" >/dev/null || { echo "ok: schedules not pinned to the released revision" >&2; exit 1; }
@@ -275,7 +306,7 @@ grep -qF "last read error: AccessDeniedException: user is not authorized to perf
 run_case alarm_never_ok fail v0.1.0
 f=$work/alarm_never_ok.calls
 [[ $(count "$f" "$stop_app") == 1 ]] || { echo "alarm_never_ok: app was stopped again" >&2; exit 1; }
-absent "$f" "$prev_app_up"
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "alarm_never_ok: the app was started again" >&2; exit 1; }
 [[ $(count "$f" "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down") == 1 ]] ||
   { echo "alarm_never_ok: site-down actions were not re-enabled exactly once" >&2; exit 1; }
 grep -qF "REMOVE operation_id" "$f" || { echo "alarm_never_ok: lock was not released" >&2; exit 1; }
@@ -313,8 +344,7 @@ grep -qF -- "events enable-rule --name aboutme-prod-task-stopped" "$f" ||
 run_case alerts_restore_fails fail v0.1.0
 f=$work/alerts_restore_fails.calls
 [[ $(count "$f" "$stop_app") == 1 ]] || { echo "alerts_restore_fails: app was stopped again" >&2; exit 1; }
-[[ $(count "$f" "$start_app") == 1 ]] || { echo "alerts_restore_fails: app start changed" >&2; exit 1; }
-absent "$f" "$prev_app_up"
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "alerts_restore_fails: app start changed" >&2; exit 1; }
 
 # A failed service-recovery step must not bypass notification cleanup. The
 # original deployment failure remains the process result, and no unsafe ECS
@@ -325,7 +355,7 @@ grep -qF -- "events enable-rule --name aboutme-prod-task-stopped" "$f" ||
   { echo "alerts_recovery_fails: task-stopped rule was not restored" >&2; exit 1; }
 grep -qF -- "cloudwatch enable-alarm-actions --alarm-names aboutme-prod-site-down" "$f" ||
   { echo "alerts_recovery_fails: site-down actions were not restored" >&2; exit 1; }
-absent "$f" "$prev_app_up"
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "alerts_recovery_fails: the app was started again" >&2; exit 1; }
 grep -q "service recovery did not complete; restoring deployment notifications" "$work/alerts_recovery_fails.out" ||
   { echo "alerts_recovery_fails: recovery failure was not reported" >&2; exit 1; }
 
@@ -384,6 +414,28 @@ grep -q -F "missing secret /aboutme/prod/oauth/google-client-id" "$work/secret_m
 grep -q -F "missing secret arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12" "$work/secretsmanager_missing.out" ||
   { echo "secretsmanager_missing: the missing secret is not named" >&2; exit 1; }
 
+# A task definition that still maps host port 443 (tofu apply not run yet)
+# refuses before any mutation: the app and maintenance handoff needs both
+# services free of a port mapping to run side by side.
+run_case port443_mapped fail v0.1.0
+f=$work/port443_mapped.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "still maps host port 443; run tofu apply first" "$work/port443_mapped.out" ||
+  { echo "port443_mapped: no port-mapping message" >&2; exit 1; }
+
+# A mapping that names only containerPort, with no explicit hostPort, still
+# reserves host port 443 under host networking (ECS defaults hostPort to
+# containerPort), so the guard must catch it too, before any mutation.
+run_case port443_container_only fail v0.1.0
+f=$work/port443_container_only.calls
+absent "$f" "ecs update-service"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "scheduler update-schedule"
+grep -qF "still maps host port 443; run tofu apply first" "$work/port443_container_only.out" ||
+  { echo "port443_container_only: no port-mapping message" >&2; exit 1; }
+
 # Each release snapshot carries the tag release-snapshot-sweep deletes by.
 f=$work/ok.calls
 grep -q -F -- "rds create-db-snapshot --db-instance-identifier aboutme-prod --db-snapshot-identifier aboutme-prod-v0-1-0-202610200000 --tags Key=aboutme:created-by,Value=deploy.sh" "$f" ||
@@ -428,7 +480,7 @@ DEPLOY_WARM_ATTEMPTS=3 run_case warm_never_fast fail v0.1.0
 f=$work/warm_never_fast.calls
 [[ $(count "$f" "https://aboutme.vn/danny") == 3 ]] ||
   { echo "warm_never_fast: want exactly 3 warm attempts for /danny" >&2; exit 1; }
-absent "$f" "$prev_app_up"
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "warm_never_fast: the app was started again" >&2; exit 1; }
 grep -qF "warm-up: /danny did not answer 200 within 3 s in 3 attempts (last: 200 in 5.0 s)" \
   "$work/warm_never_fast.out" ||
   { echo "warm_never_fast: no warm-up failure message" >&2; exit 1; }
@@ -492,14 +544,17 @@ f=$work/first.calls
 before "$f" "--started-by deploy-db-setup" "--started-by deploy-migrate"
 grep -q '"State": "ENABLED"' "$work/last-schedule.json" || { echo "first: schedules not enabled at the end" >&2; exit 1; }
 
-# ListTasks failures must stop the deploy before a database task. The recovery
-# path must not start maintenance when it cannot prove that app stopped.
+# ListTasks failures must stop the deploy before a database task. Maintenance
+# is already up by then (it starts before the app stops), so recovery brings
+# the previous app back and stops maintenance, in that order.
 for list_failure in list_running_fails list_stopped_fails; do
   run_case "$list_failure" fail v0.1.0
   f=$work/$list_failure.calls
   absent "$f" "deploy-migrate"
-  absent "$f" "$up_maintenance"
+  absent "$f" "$app_point"
   grep -qF -- "$prev_app_up" "$f" || { echo "$list_failure: previous app not restored" >&2; exit 1; }
+  grep -qF -- "$down_maintenance" "$f" || { echo "$list_failure: maintenance not stopped" >&2; exit 1; }
+  before "$f" "$prev_app_up" "$down_maintenance"
   [[ $(count "$f" "scheduler update-schedule") == 8 ]] || { echo "$list_failure: schedules not restored" >&2; exit 1; }
 done
 
@@ -509,13 +564,15 @@ run_case stopping_task 0 v0.1.0
 f=$work/stopping_task.calls
 grep -q -- "ecs wait tasks-stopped.*running-task.*stopping-task" "$f" || { echo "stopping_task: not all tasks were waited" >&2; exit 1; }
 
-# On the first deploy, an uncertain app stop must be retried and confirmed
-# before maintenance starts. Job schedules remain disabled because db-setup
-# may not have created usable application state.
+# On the first deploy, maintenance starts, then an uncertain app stop must be
+# retried and confirmed before a database task can run. Job schedules remain
+# disabled because db-setup may not have created usable application state.
 run_case first_app_down_fails fail v0.1.0 --first-deploy
 f=$work/first_app_down_fails.calls
-before "$f" "$stop_app" "$up_maintenance"
+before "$f" "$maint_up1" "$stop_app"
 [[ $(count "$f" "$stop_app") == 2 ]] || { echo "first_app_down_fails: app stop was not retried" >&2; exit 1; }
+[[ $(count "$f" "$maint_up1") == 2 ]] ||
+  { echo "first_app_down_fails: maintenance was not reconfirmed during recovery" >&2; exit 1; }
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "first_app_down_fails: schedules must stay disabled" >&2; exit 1; }
 absent "$f" "deploy-migrate"
 
@@ -527,7 +584,7 @@ f=$work/maintenance_smoke_fails.calls
 absent "$f" "deploy-migrate"
 grep -qF -- "$prev_app_up" "$f" || { echo "maintenance_smoke_fails: previous app not restored" >&2; exit 1; }
 grep -qF -- "$down_maintenance" "$f" || { echo "maintenance_smoke_fails: maintenance page not turned off" >&2; exit 1; }
-before "$f" "$down_maintenance" "$prev_app_up"
+before "$f" "$prev_app_up" "$down_maintenance"
 [[ $(count "$f" "https://aboutme.vn/") == 5 ]] || { echo "maintenance_smoke_fails: want 5 checks" >&2; exit 1; }
 
 run_case migrate_fails fail v0.1.0
@@ -589,21 +646,51 @@ grep -qF -- "$up_maintenance" "$f" || { echo "start_fails: maintenance page not 
 grep -q "migration may have been applied" "$work/start_fails.out" || { echo "start_fails: no migration warning" >&2; exit 1; }
 
 # An update-service response can be lost after ECS accepted it. The deploy
-# marks the app start before the request, scales the app back to zero, then
-# starts maintenance. It never assumes port 443 stayed free.
+# marks the app start before the request, reconfirms maintenance runs, then
+# scales the app back to zero. It never assumes port 443 stayed free.
 run_case app_start_update_fails fail v0.1.0
 f=$work/app_start_update_fails.calls
 grep -qF -- "$stop_app" "$f" || { echo "app_start_update_fails: app was not scaled to zero" >&2; exit 1; }
 [[ $(count "$f" "$up_maintenance") == 2 ]] || { echo "app_start_update_fails: maintenance was not restored" >&2; exit 1; }
-absent "$f" "$prev_app_up"
+# The app was pointed at the new release (its response was lost, not
+# refused) but never got a second desired-count-1 request: recovery scales it
+# back down rather than retrying the request.
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "app_start_update_fails: the app start was retried" >&2; exit 1; }
 [[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "app_start_update_fails: schedules must stay disabled" >&2; exit 1; }
+# restore()'s migration branch starts (or reconfirms) maintenance before it
+# stops an app whose health was never confirmed, so port 443 always keeps a
+# listener; the 2nd occurrence of each pattern is the restore-time one, since
+# the forward path already sent one of each before the app start failed.
+restore_maint=$(nth "$f" "$maint_up1" 2)
+restore_stop=$(nth "$f" "$stop_app" 2)
+[[ -n $restore_maint && -n $restore_stop && $restore_maint -lt $restore_stop ]] ||
+  { echo "app_start_update_fails: restore-time maintenance start did not precede the app stop" >&2; exit 1; }
 
-# If maintenance cannot be confirmed stopped during restoration, do not start
-# the previous app and create a host-port collision.
+# If maintenance cannot be confirmed stopped once the new app is healthy, do
+# not leave it looking like recovery is still needed: the app stays up and the
+# gap is named for an operator, but the app is never touched again.
 run_case maintenance_down_fails fail v0.1.0
 f=$work/maintenance_down_fails.calls
-absent "$f" "$prev_app_up"
-grep -q "maintenance released host port 443" "$work/maintenance_down_fails.out" || { echo "maintenance_down_fails: no port warning" >&2; exit 1; }
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "maintenance_down_fails: the app was scaled again" >&2; exit 1; }
+grep -q "could not confirm that maintenance stopped; scale aboutme-prod-maintenance to 0 by hand" \
+  "$work/maintenance_down_fails.out" || { echo "maintenance_down_fails: no maintenance warning" >&2; exit 1; }
+
+# The forward handoff's own maintenance-down wait can fail once even though
+# the app is already up and healthy (an ECS wait timeout, not a real
+# failure): restore() retries the scale-down and, once it confirms
+# maintenance stopped, that counts as a finished handoff for the bounded
+# site-down alarm wait, the same as a clean finish.
+DEPLOY_ALARM_WAIT=3 run_case maint_down_wait_once_fails fail v0.1.0
+f=$work/maint_down_wait_once_fails.calls
+[[ $(count "$f" "$down_maintenance") == 2 ]] ||
+  { echo "maint_down_wait_once_fails: maintenance scale-down was not retried in restore()" >&2; exit 1; }
+stop_line=$(nth "$f" "$stop_app" 1)
+confirm_line=$(line "$f" "$app_confirm")
+[[ -n $stop_line && -n $confirm_line && $stop_line -lt $confirm_line && $(count "$f" "$stop_app") == 1 ]] ||
+  { echo "maint_down_wait_once_fails: the app was scaled to 0 after its own start" >&2; exit 1; }
+grep -qF "waiting up to 3 s for the site-down alarm before re-enabling its actions" \
+  "$work/maint_down_wait_once_fails.out" ||
+  { echo "maint_down_wait_once_fails: no bounded alarm-wait message" >&2; exit 1; }
 
 run_case bad_flag 2 v0.1.0 --first_deploy
 [[ ! -s $work/bad_flag.calls ]] || { echo "bad_flag: commands ran" >&2; exit 1; }
@@ -616,9 +703,9 @@ f=$work/rollback.calls
 absent "$f" "deploy-migrate"
 absent "$f" "create-db-snapshot"
 before "$f" "ssm describe-parameters" "ecs register-task-definition"
-# A rollback still swaps the maintenance page in and out around host port 443.
-before "$f" "$stop_app" "$up_maintenance"
-before "$f" "$down_maintenance" "$start_app"
+# A rollback still starts each incoming service beside the outgoing one.
+before "$f" "$maint_up1" "$stop_app"
+before "$f" "$app_up1" "$down_maintenance"
 
 # A rollback runs through the same fence-aware script and is rejected the
 # same way a forward deploy is when the target is below the fence minimum.
@@ -630,6 +717,23 @@ grep -qF "below the release fence minimum" "$work/rollback_below_fence.out" ||
 # A rollback target equal to the fence minimum is accepted.
 run_case rollback_equal_fence 0 --rollback v0.0.9
 
+# A rollback has no migration, so restore()'s app_stable branch (not its
+# migration branch) must be the one that keeps a confirmed app up when only
+# the schedule-enable loop fails afterward: it never restarts the previous
+# (pre-rollback) app over an unrelated Scheduler API error, and it stops
+# maintenance rather than leaving it up beside the now-healthy app.
+run_case rollback_schedule_enable_fails fail --rollback v0.0.9
+f=$work/rollback_schedule_enable_fails.calls
+absent "$f" "--service aboutme-prod-app --task-definition arn:aws:ecs:ap-southeast-1:1:task-definition/aboutme-prod-app:3"
+[[ $(count "$f" "$stop_app") == 1 ]] ||
+  { echo "rollback_schedule_enable_fails: the app was scaled to 0 after its own start" >&2; exit 1; }
+grep -q "the app started this release and is healthy; it stays up" \
+  "$work/rollback_schedule_enable_fails.out" ||
+  { echo "rollback_schedule_enable_fails: no stays-up message" >&2; exit 1; }
+grep -q "fix by hand, or rerun deploy.sh to retry the whole release" \
+  "$work/rollback_schedule_enable_fails.out" ||
+  { echo "rollback_schedule_enable_fails: no schedule-gap message" >&2; exit 1; }
+
 # restore() refuses a previous_app below the current fence minimum instead of
 # restarting a release the fence no longer allows; maintenance stays up.
 run_case restore_below_fence fail --rollback v0.5.0
@@ -639,16 +743,67 @@ absent "$f" "$down_maintenance"
 grep -qF "is below the fence minimum" "$work/restore_below_fence.out" ||
   { echo "restore_below_fence: no below-fence message" >&2; exit 1; }
 
-# Bringing the maintenance page up can lose its steady-state confirmation. The
-# recovery path must not start the previous app if it cannot prove that
-# maintenance released host port 443.
+# Bringing maintenance up can lose its steady-state confirmation before the
+# app ever stops: the app is never touched, and recovery still reconfirms the
+# previous app and tries to stop maintenance, naming the gap if that also
+# cannot be confirmed.
 run_case maint_up_fails fail v0.1.0
 f=$work/maint_up_fails.calls
-absent "$f" "$prev_app_up"
-grep -qF -- "$down_maintenance" "$f" || { echo "maint_up_fails: maintenance was not stopped" >&2; exit 1; }
-grep -q "maintenance released host port 443" "$work/maint_up_fails.out" || { echo "maint_up_fails: no port warning" >&2; exit 1; }
+absent "$f" "$stop_app"
+absent "$f" "$app_point"
+grep -qF -- "$prev_app_up" "$f" || { echo "maint_up_fails: previous app not reconfirmed" >&2; exit 1; }
+grep -qF -- "$down_maintenance" "$f" || { echo "maint_up_fails: maintenance was not scaled to zero" >&2; exit 1; }
+grep -q "could not confirm that maintenance stopped; scale aboutme-prod-maintenance to 0 by hand" \
+  "$work/maint_up_fails.out" || { echo "maint_up_fails: no maintenance warning" >&2; exit 1; }
 absent "$f" "deploy-migrate"
-[[ $(count "$f" "scheduler update-schedule") == 4 ]] || { echo "maint_up_fails: schedules must stay disabled" >&2; exit 1; }
+[[ $(count "$f" "scheduler update-schedule") == 8 ]] ||
+  { echo "maint_up_fails: schedules were not disabled and re-enabled" >&2; exit 1; }
+
+# confirm_running rejects a task of the wrong revision: the app was pointed at
+# the new release and scaled up, but the running task still names the
+# previous one. Recovery scales the app back down and reconfirms maintenance,
+# the same as an unconfirmed wait.
+run_case confirm_wrong_revision fail v0.1.0
+f=$work/confirm_wrong_revision.calls
+grep -qF -- "$app_point" "$f" || { echo "confirm_wrong_revision: app was never pointed at the new release" >&2; exit 1; }
+[[ $(count "$f" "$app_up1") == 1 ]] || { echo "confirm_wrong_revision: the app start was retried" >&2; exit 1; }
+[[ $(count "$f" "$stop_app") == 2 ]] || { echo "confirm_wrong_revision: app was not scaled back down" >&2; exit 1; }
+[[ $(count "$f" "$maint_up1") == 2 ]] ||
+  { echo "confirm_wrong_revision: maintenance was not reconfirmed" >&2; exit 1; }
+grep -qF "is not running its task of arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 with every container up" \
+  "$work/confirm_wrong_revision.out" || { echo "confirm_wrong_revision: no confirmation-failure message" >&2; exit 1; }
+grep -q "failed while the new app was starting; its health was never confirmed" \
+  "$work/confirm_wrong_revision.out" || { echo "confirm_wrong_revision: no health-unconfirmed message" >&2; exit 1; }
+[[ $(count "$f" "scheduler update-schedule") == 4 ]] ||
+  { echo "confirm_wrong_revision: schedules must stay disabled" >&2; exit 1; }
+
+# confirm_running rejects a task whose containers are not all RUNNING (the
+# app's Caddy has not yet seen the server container turn healthy). Same
+# recovery as a wrong revision.
+run_case confirm_container_not_running fail v0.1.0
+f=$work/confirm_container_not_running.calls
+grep -qF -- "$app_point" "$f" || { echo "confirm_container_not_running: app was never pointed at the new release" >&2; exit 1; }
+[[ $(count "$f" "$stop_app") == 2 ]] ||
+  { echo "confirm_container_not_running: app was not scaled back down" >&2; exit 1; }
+grep -qF "is not running its task of arn:aws:ecs:ap-southeast-1:1:task-definition/new:4 with every container up" \
+  "$work/confirm_container_not_running.out" ||
+  { echo "confirm_container_not_running: no confirmation-failure message" >&2; exit 1; }
+
+# confirm_running rejects a service reporting two RUNNING tasks for the app
+# (a placement race, or the previous revision not yet fully stopped), not
+# just a wrong revision or an unready container. Same recovery.
+run_case confirm_two_running_tasks fail v0.1.0
+f=$work/confirm_two_running_tasks.calls
+grep -qF -- "$app_point" "$f" || { echo "confirm_two_running_tasks: app was never pointed at the new release" >&2; exit 1; }
+[[ $(count "$f" "$stop_app") == 2 ]] ||
+  { echo "confirm_two_running_tasks: app was not scaled back down" >&2; exit 1; }
+[[ $(count "$f" "$maint_up1") == 2 ]] ||
+  { echo "confirm_two_running_tasks: maintenance was not reconfirmed" >&2; exit 1; }
+grep -qF "aboutme-prod-app has 2 tasks wanting to run, want 1" "$work/confirm_two_running_tasks.out" ||
+  { echo "confirm_two_running_tasks: no confirmation-failure message" >&2; exit 1; }
+grep -q "failed while the new app was starting; its health was never confirmed" \
+  "$work/confirm_two_running_tasks.out" ||
+  { echo "confirm_two_running_tasks: no health-unconfirmed message" >&2; exit 1; }
 
 # deploy.sh never deletes a snapshot; release-snapshot-sweep owns that.
 for calls in "$work"/*.calls; do
@@ -747,19 +902,19 @@ absent "$f" "rds create-db-snapshot"
 grep -qF "REMOVE operation_id" "$f" ||
   { echo "fence_checkpoint_fails: lock was not released" >&2; exit 1; }
 
-# A checkpoint failure right after maintenance comes down (section 8, just
-# before the app start it guards) must not leave the site fully dark:
-# recovery brings maintenance back up rather than leaving both it and the
-# app at zero.
-run_case checkpoint_fails_after_maintenance_down fail v0.1.0
-f=$work/checkpoint_fails_after_maintenance_down.calls
-grep -qF -- "$down_maintenance" "$f" ||
-  { echo "checkpoint_fails_after_maintenance_down: maintenance never came down" >&2; exit 1; }
+# A checkpoint failure right after web comes up (section 8, just before the
+# app start it guards) must not leave the app stopped with no recovery: the
+# app is confirmed stopped (it already was) and maintenance is reconfirmed,
+# rather than attempting an unguarded app start.
+run_case checkpoint_fails_before_app_start fail v0.1.0
+f=$work/checkpoint_fails_before_app_start.calls
+grep -qF -- "$start_web" "$f" ||
+  { echo "checkpoint_fails_before_app_start: web never started" >&2; exit 1; }
 [[ $(count "$f" "$up_maintenance") == 2 ]] ||
-  { echo "checkpoint_fails_after_maintenance_down: maintenance was not restored after coming down" >&2; exit 1; }
-absent "$f" "$start_app"
+  { echo "checkpoint_fails_before_app_start: maintenance was not reconfirmed" >&2; exit 1; }
+absent "$f" "$app_point"
 grep -qF "REMOVE operation_id" "$f" ||
-  { echo "checkpoint_fails_after_maintenance_down: lock was not released" >&2; exit 1; }
+  { echo "checkpoint_fails_before_app_start: lock was not released" >&2; exit 1; }
 
 # A checkpoint failure right after a migration leaves the maintenance page up
 # rather than attempting an unproved app start.
