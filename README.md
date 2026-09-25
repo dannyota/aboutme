@@ -30,7 +30,7 @@ supports Vietnamese and English.
 
 ## Project status
 
-Production runs on AWS in Singapore behind Cloudflare. See
+Production runs on AWS in Singapore behind Amazon CloudFront. See
 [tags](https://github.com/dannyota/aboutme/tags) for published versions,
 [Actions](https://github.com/dannyota/aboutme/actions) for build results, and
 the [production runbook](docs/runbooks/production.md) for operations.

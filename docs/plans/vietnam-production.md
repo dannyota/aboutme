@@ -40,7 +40,7 @@ Code, comments, tests, and living docs cite the design or ADR 0051, never this p
 |1 Verify on the account|owner, devops|Accounts verified and topped up; credentials files exist; devops has tested Q1 to Q22 on the account and recorded results; no cutover blocker open (Q1, Q3, Q5, Q6, Q11). Q10 blocks only the NS move.|
 |2a amd64 images|devops|Release workflow publishes `linux/amd64` and `linux/arm64` manifests; smoke on both; deploy/aws unchanged in behavior.|
 |2b SMTP sender|backend|`AUTH_EMAIL_MODE=smtp` with config validation, TLS verification, outcome classification, stub-server tests; SES mode unchanged.|
-|2c Caddy edge selection|devops|`EDGE` selects cloudflare or vcdn, host from environment, edge-secret check with two values, vCDN client-IP trust; Caddy tests cover forged headers and missing secret.|
+|2c Caddy edge selection|devops|`EDGES` gains a `vcdn` listener, host from environment, edge-secret check with two values, vCDN client-IP trust; Caddy tests cover forged headers and missing secret.|
 |2d Google-only accounts|backend, frontend|Notice sent; reset rule per owner decision, with tests; count of Google-only accounts recorded without identifiers.|
 |2e Legal text|frontend|Privacy notice and terms name GreenNode and Bizfly in Vietnam; reviewed; first deployed at cutover.|
 |3 Build|devops|`deploy/vn/` per design layout; tofu applied after adversarial review; buckets, host, PostgreSQL, pgBackRest, agents, alarms; probe passes.|

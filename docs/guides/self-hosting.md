@@ -8,7 +8,7 @@ private-bucket initializer.
 This artifact is not ready for direct Internet exposure. Its Caddy listener is
 HTTP-only and its client-IP rule assumes the viewer connects directly to Caddy.
 Use the native HTTPS harness for authenticated local checks. The hosted service
-uses the separate AWS and Cloudflare deployment.
+uses the separate AWS and CloudFront deployment.
 
 ## Prerequisites
 

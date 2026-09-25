@@ -7,16 +7,16 @@ sharing one renderer across every visual output.
 
 | Component      | Responsibility                                                                                   |
 | -------------- | ------------------------------------------------------------------------------------------------ |
-| Caddy          | One origin, route dispatch, canonical client IP, origin-pull certificate check, and edge headers |
+| Caddy          | One origin, route dispatch, canonical client IP, origin mTLS check, and edge headers             |
 | Go server      | Authentication, sessions, resume API, public-state gates, media, and authorized render jobs      |
 | Nuxt           | Public server-side rendering (SSR), editor application, capability-gated print, and Vue renderer |
 | PostgreSQL     | Accounts, sessions, resume aggregates, slug state, idempotency, and operational records          |
 | Object storage | Private account avatars and resume photos; Go controls every read and write                      |
-| Cloudflare     | Production viewer edge, TLS entry, cache bypass for everything except hashed assets              |
+| CloudFront     | Production viewer edge, TLS entry, cache bypass for everything except hashed assets              |
 
 ```mermaid
 graph TD
-    U[Browser] --> CF[Cloudflare]
+    U[Browser] --> CF[CloudFront]
     R[Crawler] --> CF
     CF --> CA[Caddy]
     CA --> GO[Go server]

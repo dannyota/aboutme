@@ -9,6 +9,10 @@ changing a number requires a reviewed change with evidence.
 Production costs about $45–55 a month before tax
 ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)); the
 [single-host design](single-host-production.md#monitoring-and-cost) itemizes it.
+The CloudFront edge adds about $11, mostly WAF and the exportable origin
+certificate. CloudFront is pay-as-you-go: its free tier covers 1 TB and 10
+million requests a month, and beyond it Vietnam and Singapore cost $0.120 per GB
+and $0.0120 per 10,000 HTTPS requests ([edge cost](cloudfront-edge.md#cost)).
 Spend alerts live outside this repository and are delayed, not a cap. A second
 replica must keep every per-account and per-IP limit, revocation deadline, and
 admission bound; the [scaling contract](scaling/README.md) and
@@ -38,7 +42,7 @@ admission bound; the [scaling contract](scaling/README.md) and
 | SSE concurrent connections per account          | ≤ 20                                                | SSE admission                                            |
 | SSE queued notifications per connection         | ≤ 8, then disconnect                                | Local hub                                                |
 | SSE write deadline                              | ≤ 2 s per flush                                     | SSE writer                                               |
-| SSE heartbeat interval                          | 25 s (< Cloudflare 100 s idle timeout)              | SSE transport; production edge check                     |
+| SSE heartbeat interval                          | 25 s (< CloudFront 60 s origin read timeout)        | SSE transport; production edge check                     |
 | Request body                                    | ≤ 256 KB                                            | API middleware                                           |
 | Global API requests per client IP               | ≤ 300/min                                           | API middleware                                           |
 | In-memory rate-limiter keys per instance        | ≤ 10,000                                            | Every rate-limiter instance                              |

@@ -12,7 +12,7 @@ in [`../architecture.md`](../architecture.md) and operator guides.
 | Native development  | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
 | Native HTTPS checks | Shared DB, native processes, and disposable browser                                         | `https://localhost:20443`         |
 | Self-hosted         | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
-| Production          | Cloudflare proxy, one Bottlerocket ECS host (Caddy, Go, Nuxt), RDS PostgreSQL, private S3   | `https://aboutme.vn`              |
+| Production          | CloudFront, one Bottlerocket ECS host (Caddy, Go, Nuxt), RDS PostgreSQL, private S3         | `https://aboutme.vn`              |
 
 Native development uses ports `20432` (PostgreSQL), `20081` (Go), `20030`
 (Nuxt), and `20080` (Caddy). The test and development databases are separate
@@ -44,8 +44,8 @@ Chromium and fonts. OpenTofu lives in `deploy/aws/`, state and environment
 values stay out of Git, and GitHub holds no cloud credentials. The owner applies
 infrastructure and deploys from the laptop by image digest, never a moving tag.
 
-Production is Cloudflare in front of one EC2 host running Caddy, Go, and Nuxt,
-with private single-AZ RDS PostgreSQL and private S3
+Production is Amazon CloudFront in front of one EC2 host running Caddy, Go, and
+Nuxt, with private single-AZ RDS PostgreSQL and private S3
 ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)). The
 [single-host design](single-host-production.md) owns its details. One serving
 replica runs under
@@ -56,24 +56,23 @@ process-local until the [scaling contract](scaling/README.md) lands.
 
 ## Client-IP boundary
 
-Cloudflare sets `CF-Connecting-IP`. Caddy trusts it only from Cloudflare's
-published ranges, rejects duplicate or invalid values, strips every other
-forwarding header, and emits one `X-Real-IP`. Go accepts that canonical header
-only from the colocated Caddy on loopback, normalizes it with `netip`, and fails
-closed in production when its trusted-proxy set is empty. Go never parses
-`X-Forwarded-For`. Tests cover forged viewer headers and direct requests to the
-origin address.
+CloudFront sets `CloudFront-Viewer-Address`. Caddy's CloudFront listener rejects
+duplicate or invalid values, strips every other forwarding header, and emits one
+`X-Real-IP`. Go accepts that canonical header only from the colocated Caddy on
+loopback, normalizes it with `netip`, and fails closed in production when its
+trusted-proxy set is empty. Go never parses `X-Forwarded-For`. Tests cover
+forged viewer headers and direct requests to the origin address.
 
 ## Edge behavior
 
-Cloudflare terminates viewer TLS; the
-[single-host design](single-host-production.md#edge) lists its settings. Apex is
-the sole application origin and `www` redirects before any authentication route.
-The origin accepts only Cloudflare's ranges with its origin-pull client
-certificate. Every path except hashed `/_nuxt/*` assets bypasses the edge cache,
-so edge storage is never publication authority: each public request reaches the
-origin, which checks slug, live state, route flag, and public generation before
-a strong ETag can validate retained bytes
+CloudFront terminates viewer TLS; the
+[CloudFront edge design](cloudfront-edge.md) lists its settings. Apex is the
+sole application origin and `www` redirects before any authentication route. The
+origin accepts only CloudFront's origin-facing prefix list with its origin mTLS
+client certificate. Every path except hashed `/_nuxt/*` assets bypasses the edge
+cache, so edge storage is never publication authority: each public request
+reaches the origin, which checks slug, live state, route flag, and public
+generation before a strong ETag can validate retained bytes
 ([ADR 0022](../adr/0022-public-artifact-revocation.md)).
 
 Go reaches Nuxt on the host's private network, and at the native Nuxt address in

@@ -41,7 +41,7 @@ Current behavior lives in code, deployment configuration, and
 
 ```mermaid
 graph LR
-    B[Browser or crawler] --> C[Cloudflare proxy and Caddy]
+    B[Browser or crawler] --> C[CloudFront and Caddy]
     A[Connected agent] --> C
     C --> N[Nuxt SSR and Vue renderer]
     C --> G[Go API]

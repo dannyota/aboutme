@@ -11,15 +11,15 @@ commands.
 ```mermaid
 flowchart TD
   U[Browser or MCP client] -->|HTTPS aboutme.vn| CF
-  subgraph CF[Cloudflare, proxied]
-    CFE[Edge TLS, WAF, DDoS<br/>cache bypass except /_nuxt/*<br/>adds CF-Connecting-IP]
+  subgraph CF[Amazon CloudFront]
+    CFE[Viewer TLS, WAF, Shield Standard<br/>cache only /_nuxt/*<br/>adds CloudFront-Viewer-Address]
   end
-  CF -->|Full strict TLS to Origin CA cert<br/>plus Authenticated Origin Pulls| EIP
+  CF -->|HTTPS :8443, public certificate<br/>plus origin mTLS| EIP
   subgraph AWS[AWS ap-southeast-1]
-    EIP[Elastic IP<br/>SG: 443 from Cloudflare ranges only]
+    EIP[Elastic IP<br/>SG: 8443 from CloudFront prefix list only]
     subgraph HOST[EC2 t4g.small, Bottlerocket ECS, IMDSv2 hop limit 1]
       subgraph APP[task app, host network]
-        C[Caddy :443]
+        C[Caddy :8443]
         G[Go 127.0.0.1:8080<br/>print listener 172.17.0.1:8081]
       end
       subgraph WEB[task web, bridge network]
@@ -42,24 +42,20 @@ flowchart TD
 
 ## Edge
 
-- Cloudflare proxies `aboutme.vn` in Full (strict) mode. Caddy presents a
-  Cloudflare Origin CA certificate.
-- Zone-level Authenticated Origin Pulls uses our own client certificate, and
-  Caddy accepts only that certificate. The global Cloudflare certificate is
-  shared by every Cloudflare account, so it proves only that a request came
-  through some Cloudflare zone.
-- A cache rule bypasses the cache for every path except `/_nuxt/*`. Public PDF
-  and image exports have extensions Cloudflare caches by default, and a cached
-  copy would survive unpublish or deletion.
-- Bot Fight Mode is off. It cannot exempt paths, and it would block MCP clients,
-  API calls and the health check. DDoS protection and Go's rate limits remain.
-  Cloudflare passes `Authorization` unchanged.
-- Cloudflare's IP ranges feed both the security group and Caddy's trusted proxy
-  list. `deploy.sh` compares the live ranges with the deployed ones and stops on
-  a difference until `tofu apply` refreshes them.
-- SSE heartbeats every 25 seconds stay under Cloudflare's 100-second idle
-  timeout.
-- Cloudflare decrypts all traffic. The privacy notice states this.
+Amazon CloudFront serves `aboutme.vn` and `www.aboutme.vn`. The
+[CloudFront edge design](cloudfront-edge.md) owns the distribution, cache,
+origin access, client address, and WAF rules. Cloudflare answers DNS only, with
+DNS-only CNAMEs to the distribution.
+
+- Caddy presents an ACM exportable public certificate on 8443 and requires
+  CloudFront's origin mTLS client certificate from our own CA.
+- CloudFront caches only `/_nuxt/*`. Public PDF and image exports always reach
+  the origin, so no cached copy survives unpublish or deletion.
+- Caddy derives the client address from `CloudFront-Viewer-Address` and sets
+  HSTS and `nosniff`.
+- CloudFront's 60-second origin read timeout bounds the gap between packets; SSE
+  heartbeats every 25 seconds stay inside it.
+- AWS decrypts all traffic at the edge. The privacy notice states this.
 
 ## Host and networking
 
@@ -82,22 +78,21 @@ The runtime trust boundaries are:
 
 - Go's public listener binds `127.0.0.1:8080` and trusts only `127.0.0.1`. Only
   Caddy shares that loopback. Bridge containers cannot reach it.
-- Caddy trusts `CF-Connecting-IP` only from Cloudflare's published ranges and
-  removes forwarding headers from every other peer before setting the header Go
-  accepts.
+- Caddy removes every viewer forwarding header and sets the header Go accepts
+  only from one well-formed `CloudFront-Viewer-Address`.
 - `app` and `maintenance` both run Caddy with host networking and declare no ECS
   port mapping. Caddy binds every TCP listener with `SO_REUSEPORT`, so both
-  services can listen on 443 at once and the kernel spreads new connections
+  services can listen on 8443 at once and the kernel spreads new connections
   across them. Every handoff starts the incoming service and confirms its task
   before it stops the outgoing one, so something always accepts connections
-  on 443. A failed confirmation stops the handoff before the outgoing service is
-  touched.
+  on 8443. A failed confirmation stops the handoff before the outgoing service
+  is touched.
 - Nuxt has its own network namespace and is never a trusted proxy. It reaches
   only Go's private print listener on the bridge gateway, where the one-use
   capability still applies.
-- The security group admits only TCP 443 from Cloudflare ranges, read by
-  OpenTofu from Cloudflare's public IP list. Host port 3000 is unreachable from
-  outside.
+- A security group admits only TCP 8443 from the AWS-managed CloudFront
+  origin-facing prefix list. The host's other group admits nothing. Host port
+  3000 is unreachable from outside.
 - IMDSv2 with hop limit one keeps bridge containers away from the instance role.
   Host-mode containers can still reach instance metadata, so the instance role
   holds only ECS agent and SSM permissions and an explicit deny on every
@@ -179,37 +174,36 @@ Secret values live in SSM Parameter Store SecureString under `/aboutme/prod/`
 with the AWS-managed key. ECS injects them as container secrets. They never
 enter images, Git, logs or OpenTofu state.
 
-| Value                                         | Reader execution role                 |
-| --------------------------------------------- | ------------------------------------- |
-| RDS master secret (Secrets Manager)           | `db-admin` (used by `db-setup`)       |
-| `aboutme_migrator` password                   | `db-admin`, `migrate`                 |
-| `aboutme_app` password                        | `db-admin`, `app`, `jobs`             |
-| Auth email key and key ID, password-rate HMAC | `app`                                 |
-| Google client ID and secret                   | `app`                                 |
-| TOTP keys `totp/key-a` and `totp/key-b`       | `app` (also used by `totp-reencrypt`) |
-| Origin CA key and certificate, origin-pull CA | `app`, `maintenance`                  |
+| Value                                            | Reader execution role                 |
+| ------------------------------------------------ | ------------------------------------- |
+| RDS master secret (Secrets Manager)              | `db-admin` (used by `db-setup`)       |
+| `aboutme_migrator` password                      | `db-admin`, `migrate`                 |
+| `aboutme_app` password                           | `db-admin`, `app`, `jobs`             |
+| Auth email key and key ID, password-rate HMAC    | `app`                                 |
+| Google client ID and secret                      | `app`                                 |
+| TOTP keys `totp/key-a` and `totp/key-b`          | `app` (also used by `totp-reencrypt`) |
+| Origin key and certificate, CloudFront client CA | `app`, `maintenance`                  |
 
 `deploy/aws/scripts/secrets.sh` generates each password and key with `openssl`,
 writes it straight to SSM, and never overwrites or prints one. OpenTofu
 references parameter names only.
 
-`deploy/aws/scripts/tls.sh` generates the TLS keys in a private temporary
-directory and deletes it at the end:
+`deploy/aws/scripts/tls.sh` handles the TLS material in a private temporary
+directory and deletes it at the end; the
+[CloudFront runbook](../runbooks/cloudfront.md) has the commands:
 
-- The Origin CA key goes straight to SSM. Only the public certificate signing
-  request leaves the script; Cloudflare issues the certificate from it.
-- The origin-pull CA signs a client certificate, and the CA key is discarded.
-  The owner uploads the client certificate and key once in the Cloudflare
-  dashboard as the zone-level origin-pull certificate. Caddy receives only the
-  CA certificate.
+- `export` writes the ACM origin certificate's key and chain to SSM.
+- `client-ca` creates a CA that signs the origin mTLS client certificate, then
+  discards the CA key. Caddy receives only the CA certificate. `client-import`
+  moves the client certificate and key into ACM for CloudFront.
 
 The `app` task role may get, put, list and delete objects in the media bucket
 and send mail from the verified SES identity. The `jobs` task role has the same
 bucket access and no mail access. `migrate` and `db-setup` have no task role.
 
 The `maintenance` task has no task role. Its execution role can write Caddy logs
-and read only the origin certificate, origin private key, and origin-pull CA
-parameters needed to terminate production TLS.
+and read only the origin certificate, origin private key, and CloudFront client
+CA parameters needed to terminate production TLS.
 
 Non-secret configuration is plain task definition values: `ENV=prod`,
 `PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
@@ -225,13 +219,14 @@ A version tag triggers a public workflow on `ubuntu-24.04-arm`. It builds the
 server, web and Caddy images for `linux/arm64`, runs smoke checks, pushes to
 `ghcr.io/dannyota/aboutme-{server,web,caddy}`, attests build provenance and
 prints the digests. The Caddy image carries the Caddyfile and generated route
-table; its entrypoint writes the Origin CA key to a tmpfs file before Caddy
-starts.
+table; its entrypoint writes the origin key to a tmpfs file before Caddy starts.
 
 `deploy/aws/scripts/deploy.sh <tag>` runs from the laptop:
 
 1. Resolve the tag to digests. Require the tag on `main` with green CI. Refuse
-   to continue if the app or maintenance task definition still maps port 443.
+   to continue if the app or maintenance task definition still maps port 443
+   or 8443. Check the CloudFront distribution's origin and require at least 21
+   days on the origin certificate.
 2. Take an RDS snapshot named for the tag, tagged
    `aboutme:created-by=deploy.sh`, and wait for it.
 3. Register new task definition revisions by digest, under the
@@ -239,23 +234,23 @@ starts.
 4. Disable the job schedules.
 5. Start `maintenance` beside the running `app`, confirm it, then scale `app` to
    zero and prove its tasks stopped.
-6. Require the Cloudflare path to return `maintenance`'s marked 503 response
-   before any database task starts.
+6. Require CloudFront to return `maintenance`'s marked 503 response before any
+   database task starts.
 7. With `--first-deploy`, run `db-setup`. Otherwise run `migrate` and require
    exit 0.
 8. Update `web`, start `app` beside `maintenance` and confirm it (steady
    service, one task of the released revision, every container running), then
    stop `maintenance`.
 9. Re-enable the job schedules at the new `jobs` revision.
-10. Smoke through Cloudflare: health, TLS and security headers. A direct request
-    to the Elastic IP must fail.
+10. Smoke through CloudFront: health, HSTS, and a `Via` naming CloudFront. A
+    direct request to the Elastic IP on 443 or 8443 must time out.
 
-Maintenance mode keeps the normal Cloudflare proxy trust and origin-pull mTLS.
-Every apex path, including readiness and API paths, returns the same page with
-status 503, `Cache-Control: no-store`, and `Retry-After: 60`. The `www` host
-still redirects to the matching apex path. The page carries the app's Aurora
-identity, in light or dark to match `prefers-color-scheme`, makes no external
-request, and shows Vietnamese by default, or the language the visitor's
+Maintenance mode keeps the same CloudFront listener, origin mTLS, and client
+address rule. Every apex path, including readiness and API paths, returns the
+same page with status 503, `Cache-Control: no-store`, and `Retry-After: 60`. The
+`www` host still redirects to the matching apex path. The page carries the app's
+Aurora identity, in light or dark to match `prefers-color-scheme`, makes no
+external request, and shows Vietnamese by default, or the language the visitor's
 `aboutme-locale` cookie names (`vi` or `en`); a client-side VI/EN toggle
 switches language and writes that cookie. The page polls `/readyz` without
 caching, backs off from 10 to 60 seconds, and reloads only after a 200. Visitors
@@ -283,12 +278,12 @@ Caddy image. It is safe only when the failed release applied no migration;
 otherwise recovery is a forward fix or a point-in-time restore.
 
 OpenTofu owns infrastructure and the first task definitions and ignores later
-service revisions. A handoff keeps something listening on 443 throughout; at
+service revisions. A handoff keeps something listening on 8443 throughout; at
 most a few connections still queued on an outgoing Caddy's listener are reset
-when it closes. A 521 can still come from a host reboot during the monthly
-Bottlerocket update window, from host loss, or from ECS replacing an app task
-that failed its health check, which stops the task before a replacement starts.
-A monthly SSM maintenance window applies Bottlerocket updates with
+when it closes. A CloudFront 502 or 504 can still come from a host reboot during
+the monthly Bottlerocket update window, from host loss, or from ECS replacing an
+app task that failed its health check, which stops the task before a replacement
+starts. A monthly SSM maintenance window applies Bottlerocket updates with
 `apiclient update apply --reboot`.
 
 ## Scheduled jobs
@@ -320,7 +315,8 @@ All alarms notify one SNS topic that emails the owner.
 Expected monthly cost is about $45–55: EC2 $15.48, RDS $18.25 plus $2.76
 storage, root disk $1.92, Elastic IP $3.65, the state KMS key $1, and a few
 dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
-[recorded prices](../research/aws-cost/pricing.csv).
+[recorded prices](../research/aws-cost/pricing.csv). The CloudFront edge adds
+about $11 ([edge cost](cloudfront-edge.md#cost)).
 
 ## Infrastructure code
 
@@ -329,13 +325,11 @@ dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
 - State lives in a versioned, encrypted S3 bucket with OpenTofu's lock file and
   client-side state encryption through KMS. A small bootstrap root creates the
   bucket.
-- OpenTofu manages AWS only; there is no Cloudflare API token. The Cloudflare
-  settings are applied through the owner's authenticated Cloudflare connection
-  and listed in the production runbook: the two proxied DNS records, Full
-  (strict) SSL, HTTPS redirect, minimum TLS 1.2, HSTS, Bot Fight Mode off, the
-  cache rule, zone-level origin pulls (enabled before the first deploy, because
-  Caddy requires the client certificate from its first start), and the Origin CA
-  certificate. A change to any of them updates the runbook in the same change.
+- OpenTofu manages AWS only, including the CloudFront distribution and WAF;
+  there is no Cloudflare API token. The owner applies the Cloudflare DNS records
+  through an authenticated Cloudflare connection, and the
+  [production runbook](../runbooks/production.md#cloudflare-dns) lists them. A
+  change to any record updates the runbook in the same change.
 - Public CI runs `tofu fmt -check` and `tofu validate` without cloud
   credentials. No workflow deploys.
 
