@@ -122,16 +122,23 @@ mode_is_totp_production() {
   esac
 }
 
-# add_shard_env <array-name> <flag> <mode>: for a sharded mode, validates its shard variable against the mode's shard names and appends KEY=value (--env KEY=value when <flag> is set) to the named array.
+# add_shard_env <array-name> <flag> <mode>: for a sharded mode, validates its shard variable against the mode's shard names and appends KEY=value (--env KEY=value when <flag> is set) to the named array. The TOTP variable may list several distinct names, comma-separated; each runs as its own parallel test.
 add_shard_env() {
-  local -n arr=$1; local flag=$2 key value names
+  local -n arr=$1; local flag=$2 key value names name seen=' ' more=
+  local -a parts=()
   case $3 in
-  totp) key=ABOUTME_TOTP_SHARD value=${ABOUTME_TOTP_SHARD-} names='primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled' ;;
+  totp) key=ABOUTME_TOTP_SHARD value=${ABOUTME_TOTP_SHARD-} names='primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled' more='(,[a-z-]+)*' ;;
   second-factor) key=ABOUTME_PASSKEY_SHARD value=${ABOUTME_PASSKEY_SHARD-} names='primary-disabled recovery-attempts' ;;
   *) return 0 ;;
   esac
   [ -z "$value" ] && return 0
-  [[ " $names " == *" $value "* ]] || fail "$key must be one of: $names"
+  [[ $value =~ ^[a-z-]+$more$ ]] || fail "$key must be one of: $names"
+  IFS=, read -ra parts <<<"$value"
+  for name in "${parts[@]}"; do
+    [[ " $names " == *" $name "* && $seen != *" $name "* ]] ||
+      fail "$key must name distinct shards from: $names"
+    seen+="$name "
+  done
   arr+=(${flag:+--env} "$key=$value")
 }
 
@@ -340,98 +347,21 @@ inside_container() {
 
   local evidence_name evidence_limit proof_name spec evidence_extra_name= evidence_extra_limit=
   case $mode in
-  auth)
-    evidence_name=auth-proof.json
-    evidence_limit=4096
-    proof_name=authentication
-    spec=auth.spec.ts
-    ;;
-  transport)
-    evidence_name=transport-proof.json
-    evidence_limit=4096
-    proof_name=transport
-    spec=transport.spec.ts
-    ;;
-  editor)
-    evidence_name=editor-proof.json
-    evidence_limit=8192
-    proof_name=editor
-    spec=editor.spec.ts
-    ;;
-  public)
-    evidence_name=public-proof.json
-    evidence_limit=4096
-    proof_name=public
-    spec=public.spec.ts
-    ;;
-  password-auth)
-    evidence_name=password-proof.json
-    evidence_limit=4096
-    proof_name=password-authentication
-    spec=password-auth.spec.ts
-    ;;
-  mcp)
-    evidence_name=mcp-proof.json
-    evidence_limit=4096
-    proof_name='MCP agent access'
-    spec=mcp.spec.ts
-    ;;
-  entry)
-    evidence_name=entry-proof.json
-    evidence_limit=4096
-    proof_name='entry flow'
-    spec=entry.spec.ts
-    ;;
-  publish)
-    evidence_name=publish-proof.json
-    evidence_limit=8192
-    proof_name='native HTTPS publish, discovery, and revocation'
-    spec=publish.spec.ts
-    ;;
-  exports)
-    evidence_name=exports-proof.json
-    evidence_limit=8192
-    proof_name=exports
-    spec=exports.spec.ts
-    ;;
-  privacy)
-    evidence_name=privacy-proof.json
-    evidence_limit=8192
-    proof_name='account privacy'
-    spec=privacy.spec.ts
-    ;;
-  sample-start)
-    evidence_name=sample-start-proof.json
-    evidence_limit=4096
-    proof_name='register and start a resume from a sample'
-    spec=sample-start.spec.ts
-    ;;
-  second-factor)
-    evidence_name=passkey-second-factor-proof.json
-    evidence_limit=8192
-    proof_name='passkey second factor'
-    spec=second-factor.spec.ts
-    ;;
-  second-factor-disabled)
-    evidence_name=passkey-enrollment-disabled-proof.json
-    evidence_limit=8192
-    proof_name='disabled passkey enrollment'
-    spec=second-factor.spec.ts
-    ;;
-  totp)
-    evidence_name=totp-second-factor-proof.json
-    evidence_limit=8192
-    evidence_extra_name=totp-timing.json
-    evidence_extra_limit=4096
-    proof_name='authenticator-app second factor'
-    spec=totp.spec.ts
-    ;;
-  totp-disabled)
-    evidence_name=totp-enrollment-disabled-proof.json
-    evidence_limit=8192
-    proof_name='disabled authenticator-app enrollment'
-    spec=totp.spec.ts
-    ;;
+  auth) evidence_name=auth-proof.json evidence_limit=4096 proof_name=authentication spec=auth.spec.ts ;;
+  transport) evidence_name=transport-proof.json evidence_limit=4096 proof_name=transport spec=transport.spec.ts ;;
+  editor) evidence_name=editor-proof.json evidence_limit=8192 proof_name=editor spec=editor.spec.ts ;;
+  public) evidence_name=public-proof.json evidence_limit=4096 proof_name=public spec=public.spec.ts ;;
+  password-auth) evidence_name=password-proof.json evidence_limit=4096 proof_name=password-authentication spec=password-auth.spec.ts ;;
+  mcp) evidence_name=mcp-proof.json evidence_limit=4096 proof_name='MCP agent access' spec=mcp.spec.ts ;;
+  entry) evidence_name=entry-proof.json evidence_limit=4096 proof_name='entry flow' spec=entry.spec.ts ;;
+  publish) evidence_name=publish-proof.json evidence_limit=8192 proof_name='native HTTPS publish, discovery, and revocation' spec=publish.spec.ts ;;
+  exports) evidence_name=exports-proof.json evidence_limit=8192 proof_name=exports spec=exports.spec.ts ;;
+  privacy) evidence_name=privacy-proof.json evidence_limit=8192 proof_name='account privacy' spec=privacy.spec.ts ;;
+  sample-start) evidence_name=sample-start-proof.json evidence_limit=4096 proof_name='register and start a resume from a sample' spec=sample-start.spec.ts ;;
+  second-factor) evidence_name=passkey-second-factor-proof.json evidence_limit=8192 proof_name='passkey second factor' spec=second-factor.spec.ts ;;
+  second-factor-disabled) evidence_name=passkey-enrollment-disabled-proof.json evidence_limit=8192 proof_name='disabled passkey enrollment' spec=second-factor.spec.ts ;;
+  totp) evidence_name=totp-second-factor-proof.json evidence_limit=8192 evidence_extra_name=totp-timing.json evidence_extra_limit=4096 proof_name='authenticator-app second factor' spec=totp.spec.ts ;;
+  totp-disabled) evidence_name=totp-enrollment-disabled-proof.json evidence_limit=8192 proof_name='disabled authenticator-app enrollment' spec=totp.spec.ts ;;
   totp-prod-flag-off)
     # No fixed /evidence schema: only fixed step names and outcomes reach
     # the runner's own output (docs/runbooks/totp-keys.md "Production
@@ -439,14 +369,8 @@ inside_container() {
     proof_name='production TOTP flag-off proof'
     spec=totp-production.spec.ts
     ;;
-  totp-prod-enabled)
-    proof_name='production TOTP enabled proof'
-    spec=totp-production.spec.ts
-    ;;
-  totp-prod-cleanup)
-    proof_name='production TOTP cleanup'
-    spec=totp-production.spec.ts
-    ;;
+  totp-prod-enabled) proof_name='production TOTP enabled proof' spec=totp-production.spec.ts ;;
+  totp-prod-cleanup) proof_name='production TOTP cleanup' spec=totp-production.spec.ts ;;
   mcp-sdk)
     # No fixed /evidence schema: /mcp-browser carries the result instead.
     proof_name='MCP SDK owner workflow browser handoff'
@@ -482,17 +406,21 @@ inside_container() {
     --config "$config" "$spec" \
     >"$log_file" 2>&1 || status=$?
   if [ "$status" -ne 0 ]; then
-    if [ "$mode" = public ] || [ "$mode" = editor ] || [ "$mode" = mcp ] || [ "$mode" = publish ] ||
-      [ "$mode" = entry ] || [ "$mode" = exports ] || [ "$mode" = privacy ] ||
-      [ "$mode" = sample-start ] || [ "$mode" = second-factor ] ||
-      [ "$mode" = second-factor-disabled ] || [ "$mode" = totp ] ||
-      [ "$mode" = totp-disabled ] || mode_is_totp_production "$mode" ||
-      [ "$mode" = mcp-sdk ]; then
-      local -a bounded_stages=()
+    # Every mode but these three prints stage lines.
+    if [ "$mode" != auth ] && [ "$mode" != transport ] && [ "$mode" != password-auth ]; then
+      local -a bounded_stages=() failed_stages=()
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
       )
-      if [ "${#bounded_stages[@]}" -gt 0 ]; then
+      # Parallel TOTP shards interleave their stage lines, so the last one
+      # can belong to a shard that passed; print each failing test's own
+      # fail- line instead, which names its role.
+      [ "$mode" != totp ] || mapfile -t failed_stages < <(
+        grep -E '^totp-stage:fail-[a-z0-9-]+$' "$log_file" | head -n 6 || true
+      )
+      if [ "${#failed_stages[@]}" -gt 0 ]; then
+        printf 'dev-https-browser: %s\n' "${failed_stages[@]}" >&2
+      elif [ "${#bounded_stages[@]}" -gt 0 ]; then
         printf 'dev-https-browser: %s\n' \
           "${bounded_stages[${#bounded_stages[@]} - 1]}" >&2
       fi
@@ -506,18 +434,30 @@ inside_container() {
   fi
 
   local -a expected_evidence=("$evidence_name" ${evidence_extra_name:+"$evidence_extra_name"})
-  evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
-  [ "$evidence_entries" = "$(printf '%s\n' "${expected_evidence[@]}" | sort)" ] ||
-    fail 'browser produced unexpected evidence'
-  local evidence_path=/evidence/$evidence_name
-  validate_evidence_file "$evidence_path" "$uid" "$evidence_limit" 'browser evidence'
-
-  if ! node /opt/aboutme-auth/verify-evidence.mjs "$mode" "$evidence_path"; then
-    fail 'browser evidence has invalid schema'
+  # A sharded TOTP run writes each listed shard's evidence to its own
+  # /evidence/<shard>/ (totp.spec.ts "Enabled-proof sharding"); every other
+  # run writes to /evidence itself. add_shard_env already checked the names.
+  local -a shards=('')
+  local shard dir
+  if [ "$mode" = totp ] && [ -n "${ABOUTME_TOTP_SHARD-}" ]; then
+    IFS=, read -ra shards <<<"$ABOUTME_TOTP_SHARD"
+    evidence_entries=$(find /evidence -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    [ "$evidence_entries" = "$(printf '%s\n' "${shards[@]}" | sort)" ] ||
+      fail 'browser produced unexpected evidence'
   fi
-
-  [ -z "$evidence_extra_name" ] ||
-    validate_evidence_file "/evidence/$evidence_extra_name" "$uid" "$evidence_extra_limit" 'browser timing evidence'
+  for shard in "${shards[@]}"; do
+    dir=/evidence${shard:+/$shard}
+    [ -d "$dir" ] && [ ! -L "$dir" ] && [ "$(stat -c %u "$dir")" = "$uid" ] &&
+      [ "$(stat -c %a "$dir")" = 700 ] || fail 'invalid browser evidence directory'
+    evidence_entries=$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    [ "$evidence_entries" = "$(printf '%s\n' "${expected_evidence[@]}" | sort)" ] ||
+      fail 'browser produced unexpected evidence'
+    validate_evidence_file "$dir/$evidence_name" "$uid" "$evidence_limit" 'browser evidence'
+    node /opt/aboutme-auth/verify-evidence.mjs "$mode" "$dir/$evidence_name" ||
+      fail 'browser evidence has invalid schema'
+    [ -z "$evidence_extra_name" ] ||
+      validate_evidence_file "$dir/$evidence_extra_name" "$uid" "$evidence_extra_limit" 'browser timing evidence'
+  done
 
   printf 'dev-https-browser %s proof: PASS\n' "$proof_name"
 }
@@ -670,8 +610,13 @@ host_run() {
     resource_args=(--memory=2g --memory-swap=2g --cpus=2)
     tmp_bytes=268435456
   fi
-  local -a env_args=()
+  local -a env_args=() listed=()
   add_shard_env env_args --env "$mode"
+  # Parallel TOTP shards each run a Chromium: one browser's /tmp per shard.
+  if [ "$mode" = totp ] && [ -n "${ABOUTME_TOTP_SHARD-}" ]; then
+    IFS=, read -ra listed <<<"$ABOUTME_TOTP_SHARD"
+    tmp_bytes=$((tmp_bytes * ${#listed[@]}))
+  fi
   exec podman run \
     --rm \
     --init \

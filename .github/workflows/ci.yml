@@ -531,24 +531,24 @@ jobs:
     timeout-minutes: 40
     strategy:
       fail-fast: false
+      # Each TOTP group runs its listed shards as parallel tests against one
+      # harness (totp.spec.ts "Enabled-proof sharding"): most of each
+      # shard's time is waiting for fresh 30-second codes, so they overlap.
+      # Two shards per group keep each group within the other groups' time;
+      # epoch-disabled pairs with a short shard because its disabled phase
+      # starts only after both finish.
       matrix:
         include:
-          - group: totp-replay-concurrent
-            proofs: totp:replay-concurrent
+          - group: totp-replay-primary
+            proofs: totp:replay-concurrent,primary
+          - group: totp-skew-locale
+            proofs: totp:skew,locale-attempts
+          - group: totp-replace-epoch
+            proofs: totp:replace-recovery,epoch-disabled
           - group: passkey-primary
             proofs: passkey:primary-disabled
-          - group: totp-locale
-            proofs: totp:locale-attempts
-          - group: totp-skew
-            proofs: totp:skew
-          - group: totp-epoch
-            proofs: totp:epoch-disabled
-          - group: totp-replace
-            proofs: totp:replace-recovery
-          - group: totp-primary
-            proofs: totp:primary auth
           - group: passkey-recovery
-            proofs: passkey:recovery-attempts public
+            proofs: passkey:recovery-attempts public auth
           - group: editor
             proofs: editor exports
           - group: entry

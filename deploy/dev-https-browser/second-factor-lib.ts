@@ -6,8 +6,8 @@
  * virtual authenticators. Page journeys live in `second-factor-pages.ts`.
  *
  * Each proof runs in its own Playwright worker, so the stage and role this
- * module records belong to that one proof. A spec calls `configureProof`
- * once, at load, before any test body runs.
+ * module records belong to that one proof. A spec calls `configureProof` or
+ * `configureShardList` once, at load, before any test body runs.
  */
 import { expect, type BrowserContext, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
@@ -108,6 +108,46 @@ export function configureProof<R extends string>(
   const roles = new Set(shardRoles[raw]);
   activeRoles = roles;
   return roles;
+}
+
+/**
+ * Sets the browser mode that prefixes every stage line and reads the list of
+ * enabled-proof shards this run proves: one or more comma-separated names
+ * from `shardRoles` in `shardVariable` (read by run.sh from the host
+ * environment). Several shards run as parallel tests, one per Playwright
+ * worker, against one harness. Unset or empty returns null: one test proves
+ * every role. The caller activates each test's roles with `activateRoles`.
+ */
+export function configureShardList(
+  mode: string,
+  shardVariable: string,
+  shardRoles: Readonly<Record<string, readonly string[]>>,
+): readonly string[] | null {
+  MODE = mode;
+  activeRoles = null;
+  const raw = process.env[shardVariable];
+  if (raw === undefined || raw === '') return null;
+  const names = raw.split(',');
+  for (const name of names) {
+    if (!Object.hasOwn(shardRoles, name)) {
+      throw new Error(
+        `${shardVariable} must list names from ${Object.keys(shardRoles).join(', ')}, not ${JSON.stringify(raw)}`,
+      );
+    }
+  }
+  if (new Set(names).size !== names.length) {
+    throw new Error(`${shardVariable} lists a shard twice: ${JSON.stringify(raw)}`);
+  }
+  return names;
+}
+
+/**
+ * Makes `roles` the roles this worker's test proves, or every role for null.
+ * Each shard's test runs in its own worker process, so this module's state
+ * belongs to that one test.
+ */
+export function activateRoles(roles: ReadonlySet<string> | null): void {
+  activeRoles = roles;
 }
 
 /** True when the active shard (or the unsharded default) proves `r`. */

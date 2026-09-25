@@ -985,6 +985,17 @@ for totp_mode in totp totp-disabled; do
     fi
   done
 done
+# A listed set of TOTP shards becomes one enabled test per shard.
+totp_list=$(ABOUTME_BROWSER_MODE=totp ABOUTME_TOTP_SHARD=primary,skew \
+  "$SOURCE/node_modules/.bin/playwright" test --list \
+  --config "$CONTEXT/playwright.config.ts")
+for shard in primary skew; do
+  grep -Fq "proves the authenticator-app second factor over native HTTPS ($shard)" \
+    <<<"$totp_list" || fail "the sharded totp listing lacks the $shard test"
+done
+if grep -Fq '(replay-concurrent)' <<<"$totp_list"; then
+  fail 'the sharded totp listing includes an unlisted shard'
+fi
 
 readonly INSIDE_ROOT=$WORK/inside
 readonly INSIDE_INPUT=$INSIDE_ROOT/uat-input
@@ -1123,6 +1134,37 @@ publish-fail)
   printf '%s\n' 'publish-stage:login-form'
   printf '%s\n' 'publish-stage:credentials-filled'
   exit 1
+  ;;
+totp-shards-fail)
+  # Two parallel shards interleave their stage lines; the one that failed is
+  # not the one that printed last.
+  printf '%s\n' 'browser-secret-must-not-escape'
+  printf '%s\n' 'totp-stage:register-open'
+  printf '%s\n' 'totp-stage:fail-assertion-at-previous-step-for-skew'
+  printf '%s\n' 'totp-stage:sign-in-open'
+  exit 1
+  ;;
+totp-shards | totp-shards-missing)
+  # One evidence directory per listed shard, the last one left out when a
+  # shard's evidence is missing.
+  IFS=, read -ra fake_shards <<<"$ABOUTME_TOTP_SHARD"
+  [ "${FAKE_BROWSER_MODE}" = totp-shards ] ||
+    unset "fake_shards[$((${#fake_shards[@]} - 1))]"
+  for fake_shard in "${fake_shards[@]}"; do
+    install -d -m 0700 "$FAKE_INSIDE_EVIDENCE/$fake_shard"
+    cat >"$FAKE_INSIDE_EVIDENCE/$fake_shard/totp-second-factor-proof.json" <<'JSON'
+{
+  "errors": {"certificate": 0, "console": 0, "externalRequest": 0, "page": 0},
+  "origin": "https://localhost:20443",
+  "scenario": "totp-second-factor",
+  "schemaVersion": 1,
+  "steps": {"cleanup": true, "enrolled": true}
+}
+JSON
+    printf '%s\n' '{"schemaVersion":1,"sections":{"none":1}}' \
+      >"$FAKE_INSIDE_EVIDENCE/$fake_shard/totp-timing.json"
+    chmod 0600 "$FAKE_INSIDE_EVIDENCE/$fake_shard/"*
+  done
   ;;
 malformed)
   case " $* " in
@@ -2009,6 +2051,60 @@ if output=$(FAKE_BROWSER_MODE=extra-field PATH="$INSIDE_BIN:$PATH" \
 fi
 grep -Fq 'browser evidence has invalid schema' <<<"$output" ||
   fail 'totp evidence with an extra field returned the wrong diagnostic'
+
+# Listed TOTP shards run as parallel tests that each write their own
+# /evidence/<shard>/ directory, all of which must be present and valid.
+reset_inside
+readonly TOTP_SHARDS_OUTPUT=$(FAKE_BROWSER_MODE=totp-shards \
+  ABOUTME_TOTP_SHARD=skew,primary run_inside totp)
+grep -Fq 'dev-https-browser authenticator-app second factor proof: PASS' \
+  <<<"$TOTP_SHARDS_OUTPUT" ||
+  fail 'inside-container sharded totp success did not complete'
+for shard in skew primary; do
+  [ -f "$INSIDE_EVIDENCE/$shard/totp-second-factor-proof.json" ] &&
+    [ -f "$INSIDE_EVIDENCE/$shard/totp-timing.json" ] ||
+    fail "sharded totp evidence for $shard drifted"
+done
+
+reset_inside
+if output=$(FAKE_BROWSER_MODE=totp-shards-missing ABOUTME_TOTP_SHARD=skew,primary \
+  PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside totp 2>&1); then
+  fail 'sharded totp evidence with a shard missing was accepted'
+fi
+grep -Fq 'browser produced unexpected evidence' <<<"$output" ||
+  fail 'sharded totp evidence with a shard missing returned the wrong diagnostic'
+
+# A failing shard's own fail- line is printed, not the last stage line, which
+# another shard may have printed.
+reset_inside
+if output=$(FAKE_BROWSER_MODE=totp-shards-fail ABOUTME_TOTP_SHARD=skew,primary \
+  PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside totp 2>&1); then
+  fail 'a failing sharded totp run was accepted'
+fi
+grep -Fxq 'dev-https-browser: totp-stage:fail-assertion-at-previous-step-for-skew' \
+  <<<"$output" || fail 'a failing sharded totp run did not name its failing shard'
+if grep -Fq 'sign-in-open' <<<"$output" ||
+  grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
+  fail 'a failing sharded totp run printed more than its fail line'
+fi
+
+for bad in nope primary,primary 'primary,' ',skew' 'primary skew'; do
+  reset_inside
+  if output=$(FAKE_BROWSER_MODE=totp-shards ABOUTME_TOTP_SHARD=$bad \
+    PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside totp 2>&1); then
+    fail "TOTP shard list '$bad' was accepted"
+  fi
+  grep -Fq 'ABOUTME_TOTP_SHARD must' <<<"$output" ||
+    fail "TOTP shard list '$bad' returned the wrong diagnostic"
+  [ ! -s "$BROWSER_LOG" ] || fail "TOTP shard list '$bad' reached the browser"
+done
+reset_inside
+if output=$(FAKE_BROWSER_MODE=good ABOUTME_PASSKEY_SHARD=primary-disabled,recovery-attempts \
+  PATH="$INSIDE_BIN:$PATH" "$INSIDE_RUN" --inside second-factor 2>&1); then
+  fail 'a passkey shard list was accepted'
+fi
+grep -Fq 'ABOUTME_PASSKEY_SHARD must' <<<"$output" ||
+  fail 'a passkey shard list returned the wrong diagnostic'
 rm -- "$INSIDE_INPUT/mail-capture-token" "$INSIDE_INPUT/mcp-client-name"
 
 reset_inside

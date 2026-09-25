@@ -129,8 +129,10 @@ expected_proofs=$(
   printf '%s\n' auth editor entry exports mcp mcp-sdk password privacy public \
     publish sample-start transport "$shard_proofs" | LC_ALL=C sort
 )
-actual_proofs=$(awk '$1 == "proofs:" { for (i = 2; i <= NF; i++) print $i }' \
-  <<<"$PROOF_JOB" | LC_ALL=C sort)
+# A TOTP proof may list several shards, comma-separated; each counts once.
+actual_proofs=$(awk '$1 == "proofs:" { for (i = 2; i <= NF; i++) {
+    if ($i ~ /^totp:/) { n = split(substr($i, 6), s, ","); for (j = 1; j <= n; j++) print "totp:" s[j] }
+    else print $i } }' <<<"$PROOF_JOB" | LC_ALL=C sort)
 [ "$actual_proofs" = "$expected_proofs" ] ||
   fail "dev-https-proofs groups do not run every proof exactly once: $(tr '\n' ' ' <<<"$actual_proofs")"
 

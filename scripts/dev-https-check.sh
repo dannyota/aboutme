@@ -362,12 +362,15 @@ if [ "$MODE" = totp ]; then
 
   disabled_evidence=none
   # The disabled-enrollment phase does not depend on which roles the enabled
-  # phase sharded (totp.spec.ts "Enabled-proof sharding"); only the
-  # epoch-disabled shard, or an unsharded run, proves it, so the other shards
-  # do not repeat it for no added coverage.
+  # phase sharded (totp.spec.ts "Enabled-proof sharding"); only a run whose
+  # comma-separated shard list includes epoch-disabled, or an unsharded run,
+  # proves it, so the other shards do not repeat it for no added coverage.
+  # It restarts the harness, so it starts only after every listed shard's
+  # parallel enabled test has finished.
   run_disabled_phase=1
-  case ${ABOUTME_TOTP_SHARD-} in
-  primary | skew | replay-concurrent | replace-recovery | locale-attempts) run_disabled_phase=0 ;;
+  case ,${ABOUTME_TOTP_SHARD-}, in
+  ,, | *,epoch-disabled,*) ;;
+  *) run_disabled_phase=0 ;;
   esac
   if [ "$status" -eq 0 ] && [ "$run_disabled_phase" -eq 1 ]; then
     # The runner-local database keeps its rows across this restart; only the
