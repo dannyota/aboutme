@@ -21,10 +21,14 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
 
+// EditorPreview.vue's own storage key for the PDF/Web mode toggle.
+const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   setSiteLocale(undefined);
+  window.localStorage.removeItem(PREVIEW_MODE_STORAGE_KEY);
 });
 
 beforeEach(() => {
@@ -136,6 +140,25 @@ describe('EditorShell', () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
 
+  it(
+    'keeps a single h1 when the real preview renders the resume name',
+    () => {
+      window.localStorage.setItem(PREVIEW_MODE_STORAGE_KEY, 'web');
+      const record = editorRecord();
+      const wrapper = mount(EditorShell, {
+        props: { actions: actionsFor(record), record },
+        global: { stubs: heavyStubs({ preview: 'real' }) },
+      });
+
+      // The topbar names the resume in its own h1; the real preview below
+      // renders the resume name as a p, so the workspace keeps one h1.
+      expect(wrapper.get('[data-resume-title]').element.tagName).toBe('H1');
+      expect(wrapper.findAll('h1')).toHaveLength(1);
+      expect(wrapper.get('.resume-name').element.tagName).toBe('P');
+      wrapper.unmount();
+    },
+  );
+
   it('shows Unsaved while a field holds an edit it has not saved', () => {
     const drafts = createFieldDrafts();
     const record = editorRecord();
@@ -177,56 +200,66 @@ describe('EditorShell', () => {
     },
   );
 
-  it('lands and lifts both accepted canonical marks together', async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('matchMedia', vi.fn(() => ({
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })));
-    const record = editorRecord();
-    const wrapper = mount(EditorShell, {
-      props: { actions: actionsFor(record), record },
-      global: { stubs: heavyStubs({ preview: false }) },
-    });
+  it(
+    'lands and lifts the title public mark without ever stamping the '
+    + 'preview (DESIGN.md seal rules)',
+    async () => {
+      vi.useFakeTimers();
+      vi.stubGlobal('matchMedia', vi.fn(() => ({
+        matches: false,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })));
+      const record = editorRecord();
+      const wrapper = mount(EditorShell, {
+        props: { actions: actionsFor(record), record },
+        global: { stubs: heavyStubs({ preview: false }) },
+      });
+      expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+        false,
+      );
 
-    const published = editorRecord();
-    published.accepted.metadata.live = true;
-    published.accepted.metadata.slug = 'canonical-slug';
-    published.current.metadata.live = true;
-    published.current.metadata.slug = 'canonical-slug';
-    await wrapper.setProps({ record: published });
+      const published = editorRecord();
+      published.accepted.metadata.live = true;
+      published.accepted.metadata.slug = 'canonical-slug';
+      published.current.metadata.live = true;
+      published.current.metadata.slug = 'canonical-slug';
+      await wrapper.setProps({ record: published });
 
-    const titleMark = wrapper.get('[data-testid="public-mark"]');
-    const previewMark = wrapper.get('[data-testid="preview-stamp"]');
-    expect(titleMark.get('[data-public-link]').attributes('href'))
-      .toBe('/canonical-slug');
-    expect(titleMark.attributes('data-stamp')).toBe('landing');
-    expect(previewMark.attributes('data-stamp')).toBe('landing');
+      const titleMark = wrapper.get('[data-testid="public-mark"]');
+      expect(titleMark.get('[data-public-link]').attributes('href'))
+        .toBe('/canonical-slug');
+      expect(titleMark.attributes('data-stamp')).toBe('landing');
+      expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+        false,
+      );
 
-    vi.advanceTimersByTime(180);
-    await wrapper.vm.$nextTick();
-    expect(titleMark.attributes('data-stamp')).toBeUndefined();
-    expect(previewMark.attributes('data-stamp')).toBeUndefined();
+      vi.advanceTimersByTime(180);
+      await wrapper.vm.$nextTick();
+      expect(titleMark.attributes('data-stamp')).toBeUndefined();
 
-    const unpublished = editorRecord();
-    unpublished.accepted.metadata.slug = 'canonical-slug';
-    unpublished.current.metadata.slug = 'canonical-slug';
-    await wrapper.setProps({ record: unpublished });
-    expect(wrapper.get('[data-testid="public-mark"]').attributes('data-stamp'))
-      .toBe('lifting');
-    expect(wrapper.get('[data-testid="preview-stamp"]').attributes(
-      'data-stamp',
-    )).toBe('lifting');
+      const unpublished = editorRecord();
+      unpublished.accepted.metadata.slug = 'canonical-slug';
+      unpublished.current.metadata.slug = 'canonical-slug';
+      await wrapper.setProps({ record: unpublished });
+      expect(
+        wrapper.get('[data-testid="public-mark"]').attributes('data-stamp'),
+      ).toBe('lifting');
+      expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+        false,
+      );
 
-    vi.advanceTimersByTime(120);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find('[data-testid="public-mark"]').exists()).toBe(false);
-    expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
-      false,
-    );
-    wrapper.unmount();
-  });
+      vi.advanceTimersByTime(120);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find('[data-testid="public-mark"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.find('[data-testid="preview-stamp"]').exists()).toBe(
+        false,
+      );
+      wrapper.unmount();
+    },
+  );
 
   it('opens the publish dialog from the editor topbar', async () => {
     const wrapper = mountShell({}, { attachTo: document.body });
@@ -672,11 +705,13 @@ function downloadController(): PdfDownloadController {
   };
 }
 
-function heavyStubs(options: { preview?: boolean } = {}) {
+function heavyStubs(options: { preview?: boolean | 'real' } = {}) {
   return {
-    ...(options.preview === false
-      ? { ResumeDocument: { name: 'ResumeDocument', template: '<div />' } }
-      : { EditorPreview: { name: 'EditorPreview', template: '<div />' } }),
+    ...(options.preview === 'real'
+      ? {}
+      : options.preview === false
+        ? { ResumeDocument: { name: 'ResumeDocument', template: '<div />' } }
+        : { EditorPreview: { name: 'EditorPreview', template: '<div />' } }),
     PersonalDetailsPanel: {
       name: 'PersonalDetailsPanel',
       template: '<div />',

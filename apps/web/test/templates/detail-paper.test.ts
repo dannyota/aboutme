@@ -71,11 +71,16 @@ describe('template detail page: tabs', () => {
       expect(wrapper.text()).toContain('Page 1 of 1');
     });
 
-  it('keeps exactly one h1 on the mounted page', async () => {
-    setSiteLocale('en');
-    const wrapper = await mountSuspended(TemplateDetailPage);
-    await flushPromises();
+  it(
+    'keeps a single h1: the template name, not the embedded sample name',
+    async () => {
+      setSiteLocale('en');
+      const wrapper = await mountSuspended(TemplateDetailPage);
+      await flushPromises();
 
-    expect(wrapper.findAll('h1')).toHaveLength(1);
-  });
+      expect(wrapper.get('h1').text()).toBe('Engineer Compact');
+      expect(wrapper.findAll('h1')).toHaveLength(1);
+      expect(wrapper.get('.resume-name').element.tagName).toBe('P');
+    },
+  );
 });

@@ -172,13 +172,6 @@ useHead(computed(() => ({
               :document="sampleResume"
             />
           </div>
-          <AppSeal
-            :label="copy.sealLabel"
-            :link="sampleLink"
-            class="landing-seal"
-            data-testid="landing-seal"
-            size="stamp"
-          />
         </div>
         <ul
           aria-hidden="true"
@@ -535,20 +528,6 @@ useHead(computed(() => ({
 @media (min-width: 80rem) {
   .landing-stage {
     --sheet-zoom: 0.64;
-  }
-}
-
-.landing-seal {
-  position: absolute;
-  left: 30%;
-  bottom: 16px;
-}
-
-@media (min-width: 42rem) {
-  .landing-seal {
-    left: auto;
-    right: -32px;
-    bottom: 24px;
   }
 }
 
