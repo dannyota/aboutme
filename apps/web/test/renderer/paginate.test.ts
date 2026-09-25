@@ -387,9 +387,9 @@ describe('pageContentHeightPx', () => {
       {
         format: 'a4',
         widthPx: 794,
-        heightPx: 100,
+        heightPx: 1123,
         marginXmm: 15,
-        marginYmm: 20,
+        marginYmm: 150,
       },
     ],
   ])('rejects invalid geometry: %s', (_name, page) => {
