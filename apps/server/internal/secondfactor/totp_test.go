@@ -91,6 +91,26 @@ func TestVerifyTOTPCode_StepBoundary(t *testing.T) {
 	}
 }
 
+// TestVerifyTOTPCode_PreviousStepWindow proves a code from the previous
+// 30-second step is accepted and reports that step, and a code from two steps
+// back is rejected. The codes are the RFC 6238 SHA-1 secret's values around
+// the 1111111109 vector, whose own code is 081804 at step 37037036.
+func TestVerifyTOTPCode_PreviousStepWindow(t *testing.T) {
+	now := time.Unix(1111111109, 0).UTC() // current step 37037036
+
+	step, matched, err := VerifyTOTPCode(rfc6238SHA1Secret, "731029", now) // step 37037035
+	if err != nil || !matched || step != 37037035 {
+		t.Fatalf("previous step: step=%d matched=%v err=%v, want step 37037035 matched", step, matched, err)
+	}
+	_, matched, err = VerifyTOTPCode(rfc6238SHA1Secret, "150727", now) // step 37037034
+	if err != nil {
+		t.Fatalf("two steps back: %v", err)
+	}
+	if matched {
+		t.Fatal("two steps back: a code outside the previous, current, and next window matched")
+	}
+}
+
 // TestVerifyTOTPCode_DuplicateMatches proves that when the same code is valid
 // for two candidate steps, VerifyTOTPCode returns the greater one. Steps
 // 418590 and 418591 both produce code "903848" under the all-zero secret.
