@@ -1,8 +1,8 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. ADRs 0001–0052 are
-accepted; ADR 0053 is rejected.
+supersession record; these pages state the resulting design. ADRs 0001–0052 and
+0054 are accepted; ADR 0053 is rejected.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -42,7 +42,7 @@ accepted; ADR 0053 is rejected.
 | [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)           | Accepted | Scheduled UAT and autoscaling; superseded by 0036 and 0037                                                             |
 | [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)             | Accepted | Fleet coordination contract retained for a later second replica; runtime and hosted UAT superseded by 0037 and 0038    |
 | [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)      | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired            |
-| [0037](../adr/0037-single-host-production-without-hosted-uat.md)          | Accepted | First release deploys straight to single-host production behind Cloudflare; no hosted UAT until about 500 users        |
+| [0037](../adr/0037-single-host-production-without-hosted-uat.md)          | Accepted | First release deploys to single-host production, no hosted UAT until about 500 users; edge superseded by 0054          |
 | [0038](../adr/0038-single-baseline-and-plain-migrator.md)                 | Accepted | One baseline migration with explicit app grants; plain goose migrator; replica runtime removed until a second replica  |
 | [0039](../adr/0039-per-provider-login-enablement.md)                      | Accepted | `PROVIDER_LOGIN_ENABLED` enables providers one at a time; production can enable only Google                            |
 | [0040](../adr/0040-contact-labels-beside-icons.md)                        | Accepted | Icons replace default contact labels; linked addresses display without scheme or trailing slash                        |
@@ -59,6 +59,7 @@ accepted; ADR 0053 is rejected.
 | [0051](../adr/0051-vietnam-hosted-production.md)                          | Accepted | Vietnam-hosted production: GreenNode compute, storage, CDN, DNS; Bizfly mail; AWS becomes test only                    |
 | [0052](../adr/0052-guarded-token-edits-to-generated-primitives.md)        | Accepted | Generated primitives take token-colored variant edits only with a guard test, re-applied after regeneration            |
 | [0053](../adr/0053-public-pdf-tab-renders-the-download-in-the-browser.md) | Rejected | Public PDF tab draws the gated PDF download with pdf.js in the browser; no new route or server raster                  |
+| [0054](../adr/0054-cloudfront-edge-for-single-host-production.md)         | Accepted | Interim CloudFront edge with origin mTLS before the single host; ADR 0051 still governs the Vietnam move               |
 
 ## Remaining gates
 
