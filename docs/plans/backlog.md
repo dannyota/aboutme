@@ -4,6 +4,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
+- `docs/design/vietnam-production.md` contradicts itself: lines 150-151 say the two Caddy units conflict in systemd, while steps 5 and 8 run them side by side (SO_REUSEPORT). Also cover ACME HTTP-01 with two Caddy processes on port 80 (shared certificate storage), same-user units, and check `/readyz` on the server directly in step 8. Evidence: deploy handoff review, 2026-09-25.
+- `docs/design/single-host-production.md:268` and `docs/runbooks/production.md:257` omit the new recovery exceptions: an unconfirmed new app is left running when maintenance cannot be confirmed, and the failed previous-app restart path. Evidence: `deploy/aws/scripts/deploy.sh` restore.
 - The paged editor preview holds less than the PDF on some templates (minimal-air spilled to two pages at 65% print fill while the PDF fit one), so a user can see two preview pages for a one-page PDF. Evidence: Vietnam tech samples work, 2026-09-25; `apps/web/e2e/preview-gap-expected.json`.
 - Template date formats ignore the resume language: the style guide wants `MM/YYYY` for Vietnamese and `Mon YYYY` for English, and international-lang's `YYYY` drops months. Evidence: `docs/design/vietnam-tech-resumes.md`, `packages/schema/samples/international-lang.*`.
 - The Vietnam tech style guide conflicts with the samples on two points (Zalo line in English resumes; fresher awards as their own section). The designer decides and updates the guide or the samples. Evidence: `docs/design/vietnam-tech-resumes.md`.
