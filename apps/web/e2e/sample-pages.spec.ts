@@ -11,11 +11,11 @@ import { denyExternalRequests, preparePrintPage } from './support';
 // Every gallery sample's PDF pages, rasterized through the same print path
 // that produces the real PDF: the harness in continuous mode, print media,
 // and page.pdf() with the production print flags (docs/design/templates/
-// print.md). The images are what the template gallery will show later; this
-// spec only produces and checks them, with no UI change. Compare mode fails
-// on the first stale file; update mode writes review-only candidates plus
-// the manifest that lists them, for the manager to commit exactly like a
-// pixel baseline.
+// print.md). The template gallery shows these images on the cards of the
+// templates with a sample (DESIGN.md, Library); this spec only produces and
+// checks them. Compare mode fails on the first stale file; update mode
+// writes review-only candidates plus the manifest that lists them, for the
+// manager to commit exactly like a pixel baseline.
 
 const PAGES_DIR = resolve(import.meta.dirname, '../public/templates/pages');
 const CANDIDATE_SUBDIR = 'template-pages';

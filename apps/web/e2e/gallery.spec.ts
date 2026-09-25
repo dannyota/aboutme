@@ -30,6 +30,37 @@ for (const width of [390, 1440]) {
     await expect(page.locator('[data-filter="ats"]'))
       .toHaveAttribute('aria-current', 'page');
   });
+
+  test(`gallery at ${width} px shows the 5 stored sample pages`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const response = await page.goto('/templates');
+    expect(response?.status()).toBe(200);
+
+    const images = page.locator('img[data-page-image]');
+    await expect(images).toHaveCount(5);
+    const count = await images.count();
+    for (let index = 0; index < count; index += 1) {
+      const image = images.nth(index);
+      await expect(image).toHaveAttribute('alt', /.+/);
+      await expect(image).toHaveAttribute(
+        'loading',
+        index < 2 ? 'eager' : 'lazy',
+      );
+      await expect(image).toHaveAttribute('width', /^\d+$/);
+      await expect(image).toHaveAttribute('height', /^\d+$/);
+      await image.scrollIntoViewIfNeeded();
+      await expect(async () => {
+        const naturalWidth = await image.evaluate((element) =>
+          (element as HTMLImageElement).naturalWidth);
+        expect(naturalWidth).toBeGreaterThan(0);
+      }).toPass();
+    }
+
+    await expect(page.locator('[data-sheet-thumbnail]')).toHaveCount(15);
+    await expect(page.locator('h1')).toHaveCount(1);
+  });
 }
 
 test('gallery header at 360 px fits the viewport in English', async ({
