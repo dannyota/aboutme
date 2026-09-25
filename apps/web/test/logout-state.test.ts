@@ -112,10 +112,12 @@ describe('logout state transition', () => {
     expect(wrapper.get('[data-testid="identities"]').text()).toBe('[]');
     expect(wrapper.get('[data-testid="auth-state"]').text()).toBe('anonymous');
     expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(false);
-    expect(wrapper.get('[href="/login"]').text()).toContain('Sign in');
-    expect(wrapper.get('[href="/register"]').text()).toContain(
-      'Create account',
-    );
+    // /app/resumes is an authRequiredPath (AppShell.vue), and the real
+    // navigateTo('/login') asserted below would already have left it: the
+    // header shows neither the account menu nor the signed-out links while
+    // this now-anonymous state is still rendered here.
+    expect(wrapper.find('[href="/login"]').exists()).toBe(false);
+    expect(wrapper.find('[href="/register"]').exists()).toBe(false);
     expect(meReads).toBe(readsBeforeLogout);
     expect(vi.mocked(navigateTo)).toHaveBeenCalledWith('/login');
 

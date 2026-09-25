@@ -538,3 +538,53 @@ test('the header at 390px never overflows on /app/settings/sessions while '
     document.documentElement.scrollWidth
     - document.documentElement.clientWidth)).toBe(0);
 });
+
+// AppShell.vue's showSignedOutLinks must stay hidden on an authRequiredPath
+// route for every authState but 'authenticated', not just 'loading': once
+// /api/v1/me settles to a rejected session, useResumeList.ts's
+// anonymous-state watcher redirects to /login, but only after that settling
+// is itself a render. A header that shows the signed-out links for that one
+// render pushes past the viewport at 390px, the same way it did for the
+// still-loading case above.
+test('the header at 390px never overflows on /app/resumes while /me settles '
+  + 'to a 401 and the page redirects to /login', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.context().addCookies([{
+    name: 'aboutme-locale',
+    value: 'vi',
+    url: 'http://127.0.0.1:20092',
+  }]);
+  let releaseMe!: () => void;
+  const meGate = new Promise<void>((resolve) => {
+    releaseMe = resolve;
+  });
+  await page.route('**/api/v1/me', async (route) => {
+    await meGate;
+    await route.fulfill({
+      status: 401,
+      json: { error: { code: 'session_required', message: 'Sign in.' } },
+    });
+  });
+
+  const response = await page.goto('/app/resumes');
+  expect(response?.status()).toBe(200);
+  await expect(page.getByTestId('app-shell')).toBeVisible();
+
+  const overflow = () => page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth);
+  expect(await overflow()).toBe(0);
+
+  releaseMe();
+  // Sample continuously instead of only before and after the redirect: the
+  // production regression this guards was a transient render between the
+  // settled 401 and the navigation, not a settled state of its own.
+  const deadline = Date.now() + 5000;
+  while (
+    new URL(page.url()).pathname !== '/login' && Date.now() < deadline
+  ) {
+    expect(await overflow()).toBe(0);
+  }
+  expect(await overflow()).toBe(0);
+  expect(new URL(page.url()).pathname).toBe('/login');
+});

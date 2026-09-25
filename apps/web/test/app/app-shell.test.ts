@@ -60,7 +60,10 @@ describe('AppShell', () => {
 
   it('shows sign-in and registration while signed out', async () => {
     meStatus = 401;
-    const wrapper = await mountShell();
+    // Not an authRequiredPath: /app/resumes (mountShell's default) redirects
+    // an anonymous visitor away, so it never keeps a settled signed-out
+    // header the way this generic route does.
+    const wrapper = await mountShell('/forgot-password');
     await flushPromises();
     const found = links(wrapper);
     expect(found['Sign in']).toBe('/login');
@@ -72,7 +75,7 @@ describe('AppShell', () => {
   });
   it('shows the signed-out shell when /me returns a server error', async () => {
     meStatus = 500;
-    const wrapper = await mountShell();
+    const wrapper = await mountShell('/forgot-password');
     // A 500 retries once (ofetch's default for GET), so settling takes an
     // extra round trip past a single flushPromises().
     await vi.waitFor(() => expect(links(wrapper)['Sign in']).toBe('/login'));
@@ -117,6 +120,33 @@ describe('AppShell', () => {
       }
     },
   );
+  it.each([
+    '/app/settings/sessions',
+    '/authorize',
+    '/app/resumes',
+    '/app/new',
+  ])(
+    'never shows signed-out account links on %s once /me settles to a 401',
+    async (route) => {
+      // These routes redirect an anonymous visitor to /login, so a header
+      // that shows the signed-out links only once /me has settled (rather
+      // than just while it is loading) still renders them for the moment
+      // between that settling and the redirect landing — the production
+      // regression this guards.
+      meStatus = 401;
+      const wrapper = await mountShell(route);
+      expect(links(wrapper)['Sign in']).toBeUndefined();
+      expect(links(wrapper)['Create account']).toBeUndefined();
+      await flushPromises();
+      const found = links(wrapper);
+      expect(found['Sign in']).toBeUndefined();
+      expect(found['Create account']).toBeUndefined();
+      expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(
+        false,
+      );
+      wrapper.unmount();
+    },
+  );
   it('keeps signed-out account links immediate on / while /me is still '
     + 'loading', async () => {
     const unregisterMe = registerEndpoint(
@@ -136,22 +166,11 @@ describe('AppShell', () => {
       unregisterMe();
     }
   });
-  it.each(['/app/settings/sessions', '/authorize'])(
-    'keeps signed-out account links visible on phones at %s',
-    async (route) => {
-      meStatus = 401;
-      const wrapper = await mountShell(route);
-      await flushPromises();
-      const signIn = wrapper.findAll('a')
-        .find((link) => link.attributes('href') === '/login');
-      const createAccount = wrapper.findAll('a')
-        .find((link) => link.attributes('href') === '/register');
-
-      expect(signIn?.classes()).not.toContain('max-[44rem]:hidden');
-      expect(createAccount?.classes()).not.toContain('max-[44rem]:hidden');
-      wrapper.unmount();
-    },
-  );
+  // /app/settings/sessions and /authorize once kept the signed-out links
+  // unhidden on phones (hidePhoneAccountLinks), for a signed-out visitor who
+  // had no other in-page account affordance there. Both are authRequiredPath
+  // routes, so showSignedOutLinks now hides those links outright, and that
+  // exception never renders.
   it.each(['/', '/login', '/privacy'])(
     'keeps signed-out account links compact on phones at %s',
     async (route) => {
@@ -309,7 +328,10 @@ describe('AppShell', () => {
       setSiteLocale('vi');
       const wrapper = await mountShell('/app/resumes');
       await flushPromises();
-      expect(links(wrapper)['Đăng nhập']).toBe('/login');
+      // /app/resumes is an authRequiredPath, so its header keeps no
+      // signed-out links once /me settles; Library is the localized text
+      // this signed-out shell still shows there.
+      expect(links(wrapper)['Thư viện']).toBe('/templates');
       expect(wrapper.find('[data-testid="landing-locale"]').exists()).toBe(
         true,
       );
@@ -522,7 +544,8 @@ describe('AppShell', () => {
     ['/privacy', 'Create your resume'],
     ['/login', 'Create account'],
     ['/register', 'Create account'],
-    ['/authorize', 'Create account'],
+    // /authorize is excluded: it is an authRequiredPath, so its header never
+    // renders this CTA at all while signed out, settled or not.
   ])('labels the header CTA %s as %s', async (route, label) => {
     meStatus = 401;
     setSiteLocale('en');
