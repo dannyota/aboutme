@@ -45,7 +45,7 @@ dashboard, and update this table in the same change.
 | Rocket Loader, Auto Minify | Off; both would rewrite validated public HTML                                                                     |
 | Automatic HTTPS Rewrites   | Off; it rewrote links inside validated public HTML, and Always Use HTTPS already covers the site                  |
 | Cache rule                 | `not starts_with(http.request.uri.path, "/_nuxt/")` → bypass cache                                                |
-| Origin CA certificate      | ECC, `aboutme.vn` and `www.aboutme.vn`, expires 2041-09-12; stored at `/aboutme/prod/tls/origin-cert`             |
+| Origin CA certificate      | ECC, apex and www, expires 2041-09-12; in `/aboutme/prod/tls/origin-cert` until `tls.sh export`                   |
 | Authenticated Origin Pulls | On; zone-level certificate from `tls.sh pull`, active, expires 2036-09-13. Caddy requires it from its first start |
 
 Mail records (MX, TXT, DKIM and the SES `bounce` records) belong to the
@@ -61,18 +61,17 @@ Values live in SSM Parameter Store under `/aboutme/prod/`. Never print them.
 
 - `deploy/aws/scripts/secrets.sh` creates missing database passwords and keys
   and never overwrites one.
-- `deploy/aws/scripts/tls.sh origin` creates a new origin key (to SSM) and
-  `deploy/aws/prod/origin.csr`. A new key needs a new Origin CA certificate from
-  that request, stored at `/aboutme/prod/tls/origin-cert`.
-- `deploy/aws/scripts/tls.sh pull` creates a new origin-pull CA (certificate to
-  SSM, key discarded) and a leaf client certificate in
-  `$XDG_RUNTIME_DIR/aboutme-origin-pull`. Upload it in the dashboard: SSL/TLS →
-  Origin Server → Authenticated Origin Pulls → Zone-level → Upload certificate,
-  pasting each file with `wl-copy < <file>`. Then run
-  `wl-copy --clear && tls.sh forget-pull`. The deploy after a new CA picks up
-  the new trust pool.
+- `tls.sh origin` writes a new key to SSM and `deploy/aws/prod/origin.csr`;
+  deploys stop until `/aboutme/prod/tls/origin-cert` holds its certificate.
+- `tls.sh pull` creates a new origin-pull CA (certificate to SSM, key discarded)
+  and a client certificate in `$XDG_RUNTIME_DIR/aboutme-origin-pull`. Upload it
+  at SSL/TLS → Origin Server → Authenticated Origin Pulls → Zone-level → Upload
+  certificate, pasting each file with `wl-copy < <file>`, then run
+  `wl-copy --clear && tls.sh forget-pull`; the next deploy adopts the new CA.
 - The RDS master password is managed by RDS in Secrets Manager. Only the
   one-shot `db-setup` task can read it.
+- `tls.sh export` stores the ACM origin certificate in
+  `/aboutme/prod/tls/origin-{key,cert}` ([CloudFront runbook](cloudfront.md)).
 
 List names only:
 
@@ -169,15 +168,16 @@ bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 
 The script verifies the caller, assumes the operator then deploy role, reads the
 release fence, and rejects a target below its minimum before any AWS mutation.
-It then checks the tag and CI, resolves image digests, compares Cloudflare
-ranges, checks that every secret the new revisions reference exists (by name,
-never reading a value), snapshots RDS, registers task definition revisions,
-disables the `aboutme-prod-site-down` alarm actions and the
-`aboutme-prod-task-stopped` rule when they were enabled, and disables the job
-schedules. `app` and `maintenance` both listen on 443 at once. Each handoff
-starts the incoming service and confirms its task runs before it stops the
-outgoing one: `maintenance` up, `app` down, the database steps, `web` up, `app`
-up, `maintenance` down, then the schedules re-enable. `maintenance` serves
+It then checks the tag and CI, resolves image digests, refuses when the origin
+certificate expires within 21 days, compares Cloudflare ranges, checks that
+every secret the new revisions reference exists (by name, never reading a
+value), snapshots RDS, registers task definition revisions, disables the
+`aboutme-prod-site-down` alarm actions and the `aboutme-prod-task-stopped` rule
+when they were enabled, and disables the job schedules. `app` and `maintenance`
+both listen on 443 at once. Each handoff starts the incoming service and
+confirms its task runs before it stops the outgoing one: `maintenance` up, `app`
+down, the database steps, `web` up, `app` up, `maintenance` down, then the
+schedules re-enable. `maintenance` serves
 `deploy/caddy/production/maintenance.html` at 503 for every path, including
 `/readyz` and `/api/*`. It then smoke-tests through Cloudflare, using the base
 caller's own credentials for `ec2:DescribeAddresses` and

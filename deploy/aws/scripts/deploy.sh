@@ -95,6 +95,8 @@ source "$script_dir/totp-reencrypt.sh"
 source "$script_dir/notifications.sh"
 # shellcheck source=handoff.sh
 source "$script_dir/handoff.sh"
+# shellcheck source=edge.sh
+source "$script_dir/edge.sh"
 
 # Shared by the mid-deploy maintenance-page check and the final smoke checks.
 smoke_attempts=5
@@ -266,6 +268,8 @@ for name in server web caddy; do
   [[ $d == sha256:* ]] || { say "no $name image for $tag"; exit 1; }
   image[$name]="ghcr.io/$repo-$name@$d"
 done
+
+edge_origin_cert_check || exit 1
 
 live=$(curl -fsS https://api.cloudflare.com/client/v4/ips | jq -r '.result.ipv4_cidrs | sort | join(" ")')
 deployed=$(current_def app | jq -r '.containerDefinitions[] | select(.name == "caddy")

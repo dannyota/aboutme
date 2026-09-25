@@ -5,6 +5,19 @@ here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# Real certificates for edge_origin_cert_check (edge.sh), which runs real
+# openssl against whatever the stubbed ssm get-parameter prints: one far from
+# expiry (the default answer, so every case not testing this check still
+# passes) and one inside the 21-day guard window.
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 100 \
+  -subj /CN=aboutme.vn -keyout "$work/origin-cert-100.key" -out "$work/origin-cert-100.pem" 2>/dev/null
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 10 \
+  -subj /CN=aboutme.vn -keyout "$work/origin-cert-10.key" -out "$work/origin-cert-10.pem" 2>/dev/null
+# The stored origin key fingerprint the stub returns by default: the SHA-256
+# of the 100-day certificate's public key, as tls.sh writes it.
+openssl x509 -in "$work/origin-cert-100.pem" -noout -pubkey | openssl pkey -pubin -outform DER |
+  openssl dgst -sha256 -r | cut -d' ' -f1 >"$work/origin-cert-100.sha256"
+
 mkdir -p "$work/bin"
 for cmd in aws gh git curl date; do
   cat >"$work/bin/$cmd" <<'STUB'
@@ -402,8 +415,16 @@ for want in "Key=Name,Values=/aboutme/prod/db/app-password " "Key=Name,Values=/a
 done
 [[ $(count "$f" "--secret-id arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12 ") == 1 ]] ||
   { echo "ok: want one describe-secret for the Secrets Manager ARN without its JSON key" >&2; exit 1; }
-absent "$f" "get-parameter"
 absent "$f" "get-secret-value"
+# The only SSM value reads are edge_origin_cert_check's two, as the base
+# caller: the public origin certificate and the origin key's public
+# fingerprint. Never a task secret, never through the deploy role.
+[[ $(count "$f" "ssm get-parameter") == 2 ]] ||
+  { echo "ok: want exactly two ssm get-parameter(s) calls" >&2; exit 1; }
+grep -qF "[test-base] aws --region ap-southeast-1 ssm get-parameter --name /aboutme/prod/tls/origin-cert " "$f" ||
+  { echo "ok: the origin certificate read did not run as the base caller" >&2; exit 1; }
+grep -qF "[test-base] aws --region ap-southeast-1 ssm get-parameters --names /aboutme/prod/tls/origin-key-sha256 " "$f" ||
+  { echo "ok: the origin key fingerprint read did not run as the base caller" >&2; exit 1; }
 
 for missing in secret_missing secretsmanager_missing; do
   run_case "$missing" fail v0.1.0
@@ -417,6 +438,62 @@ grep -q -F "missing secret /aboutme/prod/oauth/google-client-id" "$work/secret_m
   { echo "secret_missing: the missing parameter is not named" >&2; exit 1; }
 grep -q -F "missing secret arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12" "$work/secretsmanager_missing.out" ||
   { echo "secretsmanager_missing: the missing secret is not named" >&2; exit 1; }
+
+# The origin-certificate guard (edge.sh) refuses before any mutation: a
+# certificate inside the 21-day window, or one that cannot be read at all.
+run_case origin_cert_expiring fail v0.1.0
+f=$work/origin_cert_expiring.calls
+absent "$f" "create-db-snapshot"
+absent "$f" "register-task-definition"
+absent "$f" "update-service"
+absent "$f" "operation_id=:o, operation_kind=:k"
+grep -qF "the origin certificate expires in fewer than 21 days; run tls.sh export, then deploy" \
+  "$work/origin_cert_expiring.out" ||
+  { echo "origin_cert_expiring: no expiry message" >&2; exit 1; }
+
+run_case origin_cert_unreadable fail v0.1.0
+f=$work/origin_cert_unreadable.calls
+absent "$f" "create-db-snapshot"
+absent "$f" "register-task-definition"
+absent "$f" "update-service"
+absent "$f" "operation_id=:o, operation_kind=:k"
+grep -qF "could not read the origin certificate" "$work/origin_cert_unreadable.out" ||
+  { echo "origin_cert_unreadable: no unreadable message" >&2; exit 1; }
+
+# A stored value that is not a certificate reads as unreadable.
+run_case origin_cert_not_pem fail v0.1.0
+absent "$work/origin_cert_not_pem.calls" "register-task-definition"
+grep -qF "could not read the origin certificate" "$work/origin_cert_not_pem.out" ||
+  { echo "origin_cert_not_pem: no unreadable message" >&2; exit 1; }
+
+# A certificate that does not match the stored origin key refuses before any
+# mutation: every Caddy task started from them would fail its TLS setup.
+run_case origin_key_mismatch fail v0.1.0
+f=$work/origin_key_mismatch.calls
+absent "$f" "create-db-snapshot"
+absent "$f" "register-task-definition"
+absent "$f" "update-service"
+absent "$f" "operation_id=:o, operation_kind=:k"
+grep -qF "the origin certificate does not match the stored origin key; run tls.sh export, then deploy" \
+  "$work/origin_key_mismatch.out" ||
+  { echo "origin_key_mismatch: no mismatch message" >&2; exit 1; }
+
+# Before the first export no fingerprint exists; the deploy goes ahead.
+run_case origin_key_fingerprint_absent 0 v0.1.0
+grep -qF "no origin key fingerprint stored yet; skipping the key match check" \
+  "$work/origin_key_fingerprint_absent.out" ||
+  { echo "origin_key_fingerprint_absent: no skip message" >&2; exit 1; }
+
+# The same guard runs on --rollback, not only a normal deploy.
+run_case origin_cert_expiring_rollback fail --rollback v0.0.9
+f=$work/origin_cert_expiring_rollback.calls
+absent "$f" "create-db-snapshot"
+absent "$f" "register-task-definition"
+absent "$f" "update-service"
+absent "$f" "operation_id=:o, operation_kind=:k"
+grep -qF "the origin certificate expires in fewer than 21 days; run tls.sh export, then deploy" \
+  "$work/origin_cert_expiring_rollback.out" ||
+  { echo "origin_cert_expiring_rollback: no expiry message" >&2; exit 1; }
 
 # A task definition that still maps host port 443 (tofu apply not run yet)
 # refuses before any mutation: the app and maintenance handoff needs both

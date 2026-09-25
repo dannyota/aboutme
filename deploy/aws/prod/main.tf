@@ -97,3 +97,13 @@ module "ops" {
   jobs_task_role_arn   = module.identity.jobs_task_role_arn
   site_alarm_enabled   = var.site_alarm_enabled
 }
+
+module "edge" {
+  source = "../modules/edge"
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+  name             = local.name
+  alerts_topic_arn = module.ops.alerts_topic_arn
+}
