@@ -17,20 +17,23 @@ const route = useRoute();
 const signedIn = computed(() => authState.value === 'authenticated');
 // `/app/**` and `/authorize` redirect an anonymous visitor to /login
 // (useResumeList.ts, pages/app/resumes/[id].vue, pages/authorize.vue), so a
-// signed-out header is never this route's real state, only a transient one
-// while `/me` is still in flight. On the phone-width exceptions below,
-// showing the signed-out links there anyway widens the header past the
-// viewport, since those two routes are the ones hidePhoneAccountLinks lets
-// keep full width (DESIGN.md).
+// signed-out header is never this route's real state: it is either
+// authenticated, waiting on `/me`, or already on its way to /login. Showing
+// the signed-out links there at all, even for the one render after `/me`
+// settles and before that redirect lands, would widen the header past the
+// viewport at phone width, so this hides them unconditionally rather than
+// only while loading.
 const authRequiredPath = computed(() => (
   route.path.startsWith('/app/') || route.path === '/authorize'
 ));
 const showSignedOutLinks = computed(() => (
-  authState.value !== 'authenticated'
-  && !(authRequiredPath.value && authState.value === 'loading')
+  authState.value !== 'authenticated' && !authRequiredPath.value
 ));
 // Localized routes show the language control (app/i18n/locale.ts).
 const localized = computed(() => isLocalizedPath(route.path));
+// /app/settings/sessions and /authorize never reach showSignedOutLinks
+// above, so this exception no longer widens anything there; every other
+// localized route still compacts these links on phones (DESIGN.md).
 const hidePhoneAccountLinks = computed(() => {
   const path = route.path.length > 1
     ? route.path.replace(/\/+$/, '')
