@@ -165,9 +165,17 @@ case "$cmd $args" in
       *) printf '200 0.4' ;;
     esac ;;
   "curl "*"https://aboutme.vn/"*) echo 200 ;;
-  "curl "*"https://192.0.2.10/"*)
-    # origin_open: the origin answers a direct request.
+  "curl "*"https://192.0.2.10:443/"*)
+    # origin_open: the origin answers a direct request on 443.
     if [[ $STUB_CASE == origin_open ]]; then exit 0; fi
+    # origin_tls_rejected: the port is reachable and only mTLS refuses.
+    if [[ $STUB_CASE == origin_tls_rejected ]]; then exit 56; fi
+    exit 28 ;;
+  "curl "*"https://192.0.2.10:8443/"*)
+    # origin_open_8443: the origin answers a direct request on 8443.
+    if [[ $STUB_CASE == origin_open_8443 ]]; then exit 0; fi
+    # origin_refused_8443: the port is reachable but nothing listens.
+    if [[ $STUB_CASE == origin_refused_8443 ]]; then exit 7; fi
     exit 28 ;;
   "curl "*) exit 28 ;;
   "aws "*"ecs describe-task-definition"*"--task-definition arn:"*)
@@ -245,6 +253,19 @@ case "$cmd $args" in
       echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"containerPort":443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
       exit 0
     fi
+    if [[ $STUB_CASE == port8443_mapped ]]; then
+      # OpenTofu has not dropped the CloudFront listener's host port mapping
+      # yet either.
+      echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}],"portMappings":[{"hostPort":8443,"containerPort":8443}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      exit 0
+    fi
+    case $STUB_CASE in
+      edge_ok | edge_no_distribution | edge_wrong_origin | edge_wrong_port | edge_no_mtls | edge_wrong_protocol | edge_no_address)
+        # The new app revision's Caddy runs both edges; edge_distribution_check
+        # (edge.sh) checks the live distribution before any mutation.
+        echo '{"family":"f","networkMode":"host","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"},{"name":"EDGES","value":"cloudflare,cloudfront"}],"secrets":[{"name":"CLOUDFRONT_CLIENT_CA","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/tls/cloudfront-client-ca"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+        exit 0 ;;
+    esac
     # One secret in each valueFrom form: SSM ARN, SSM name, Secrets Manager ARN.
     echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[{"name":"CLOUDFLARE_RANGES","value":"192.0.2.0/24 198.51.100.0/24"}]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"}]}]}' ;;
   "aws "*"ssm get-parameters --names /aboutme/prod/tls/origin-key-sha256"*)
@@ -587,8 +608,29 @@ case "$cmd $args" in
       fi
     fi ;;
   "aws "*"ec2 describe-addresses"*)
-    if [[ $STUB_CASE == origin_unknown ]]; then echo None; exit 0; fi
+    if [[ $STUB_CASE == origin_unknown || $STUB_CASE == edge_no_address ]]; then echo None; exit 0; fi
     echo 192.0.2.10 ;;
+  "aws "*"cloudfront list-distributions"*)
+    # edge_distribution_check (edge.sh): the live distribution for
+    # aboutme.vn, its origin's HTTPS port, protocol policy, mTLS client
+    # certificate, and domain name (192.0.2.10, as ec2 describe-addresses
+    # above answers).
+    case $STUB_CASE in
+      edge_ok)
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn","www.aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+      edge_no_distribution)
+        echo '{"DistributionList":{"Items":[]}}' ;;
+      edge_wrong_origin)
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-198-51-100-1.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+      edge_wrong_port)
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+      edge_wrong_protocol)
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"match-viewer","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+      edge_no_mtls)
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only"}}]}}]}}' ;;
+      *)
+        echo '{"DistributionList":{"Items":[]}}' ;;
+    esac ;;
   # The snapshot name's time is fixed at 2026-10-20T00:00Z.
   "date -u +%Y%m%d%H%M") echo 202610200000 ;;
   *) exit 0 ;;

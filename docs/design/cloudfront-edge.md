@@ -69,9 +69,10 @@ Two layers replace Cloudflare's ranges and Authenticated Origin Pulls:
    authentication extended key usage, imported into ACM in `us-east-1`
    ([requirements][cf-mtls-cert]). `tls.sh` gains a mode that generates it the
    way `tls.sh pull` does today: the CA key is discarded, the CA certificate
-   goes to SSM, and the client certificate and key go straight to ACM. Another
-   distribution cannot present it. Origin mTLS is available on pay-as-you-go,
-   Business, and Premium, not on the Free plan ([enable mTLS][cf-mtls-enable]).
+   goes to SSM, and the client certificate and key go from the per-user tmpfs to
+   ACM, then are deleted. Another distribution cannot present it. Origin mTLS is
+   available on pay-as-you-go, Business, and Premium, not on the Free plan
+   ([enable mTLS][cf-mtls-enable]).
 
 A secret origin header is not used. It is weaker than mTLS: the value travels in
 every request and sits in the distribution config and OpenTofu state. It stays
@@ -315,9 +316,10 @@ Each step ships alone; the site stays on Cloudflare until step 5.
    `nosniff`, and `Server` removal. Tests cover forged headers per listener,
    IPv4 and unbracketed IPv6 values, duplicates, and a missing header. ADR
    0051's Caddy edge selection later adds `vcdn` to this list.
-3. **Build the edge.** OpenTofu adds the client CA parameter, the viewer
-   certificate, the security group, the policies, the distribution, and the web
-   ACL; task definitions get `EDGES=cloudflare,cloudfront` and the trust pool.
+3. **Build the edge.** `tls.sh` stores the client CA parameter and imports the
+   client certificate; OpenTofu adds the viewer certificate, the security group,
+   the policies, the distribution, and the web ACL; task definitions get
+   `EDGES=cloudflare,cloudfront` and the trust pool.
 4. **Test before cutover** with `aboutme.vn` and `www.aboutme.vn` pinned to the
    distribution's edge addresses (`curl --resolve`, Chromium
    `--host-resolver-rules`), running the [test plan](#test-plan). The real
@@ -362,7 +364,8 @@ Before cutover with pinned hostnames and again after; evidence under
    cache apart; `/`, `/healthz`, `/api/*`, a public page, its PDF, and its photo
    always miss; unpublish gives 404 at once; `If-None-Match` gets 304.
 7. **Headers:** CSPs, `Clear-Site-Data`, HSTS, `nosniff`, and `__Host-` cookies
-   present; `Server: Caddy` and `CF-Ray` absent; `www` redirects.
+   present; `Server: Caddy` and `CF-Ray` absent from served responses (Caddy's
+   own empty 502 and 504 keep its defaults); `www` redirects.
 8. **Deploy:** a one-second poll of `/` and `/healthz` through a deploy and a
    `--rollback` sees only 200 or the marked 503, never 502, 504, or a timeout.
 9. **Latency:** the origin latency poll from Vietnam and one distant network

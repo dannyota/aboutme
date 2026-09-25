@@ -48,3 +48,74 @@ edge_origin_cert_check() {
     return 1
   }
 }
+
+# Runs only when the new app revision's Caddy container lists cloudfront in
+# EDGES (docs/design/cloudfront-edge.md; ADR 0054). Reads $work/app.json,
+# which deploy.sh's step 2 loop writes, and checks the live distribution with
+# the base caller's own credentials, as origin_ip does: cloudfront:List* and
+# ec2:DescribeAddresses are outside the deploy role's closed list.
+edge_distribution_check() {
+  local edges
+  edges=$(jq -r '.containerDefinitions[] | select(.name == "caddy") | (.environment // [])[]
+    | select(.name == "EDGES") | .value' "$work/app.json")
+  case ",$edges," in
+    *,cloudfront,*) ;;
+    *) return 0 ;;
+  esac
+
+  local ip domain dists count origin https_port protocol mtls_arn origin_domain
+  ip=$(aws --region "$region" ec2 describe-addresses --filters Name=tag:Name,Values=aboutme-prod \
+    --query 'Addresses[0].PublicIp' --output text) &&
+    [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || {
+    say "could not resolve the origin address"
+    return 1
+  }
+  domain="ec2-${ip//./-}.ap-southeast-1.compute.amazonaws.com"
+
+  dists=$(aws cloudfront list-distributions --output json) || {
+    say "could not list CloudFront distributions"
+    return 1
+  }
+  count=$(jq '[.DistributionList.Items[]? | select(.Aliases.Items[]? == "aboutme.vn")] | length' <<<"$dists")
+  ((count == 1)) || {
+    say "expected exactly one CloudFront distribution for aboutme.vn; found $count; run tofu apply first"
+    return 1
+  }
+  origin=$(jq -c '[.DistributionList.Items[] | select(.Aliases.Items[]? == "aboutme.vn")][0].Origins.Items[0]' <<<"$dists")
+  https_port=$(jq -r '.CustomOriginConfig.HTTPSPort // empty' <<<"$origin")
+  protocol=$(jq -r '.CustomOriginConfig.OriginProtocolPolicy // empty' <<<"$origin")
+  # CloudFront API 2020-05-31: CustomOriginConfig.OriginMtlsConfig.
+  mtls_arn=$(jq -r '.CustomOriginConfig.OriginMtlsConfig.ClientCertificateArn // empty' <<<"$origin")
+  origin_domain=$(jq -r '.DomainName // empty' <<<"$origin")
+
+  [[ $https_port == 8443 ]] || {
+    say "the distribution's origin HTTPS port is ${https_port:-unset}, not 8443; run tofu apply first"
+    return 1
+  }
+  [[ $protocol == https-only ]] || {
+    say "the distribution's origin protocol policy is ${protocol:-unset}, not https-only; run tofu apply first"
+    return 1
+  }
+  [[ -n $mtls_arn ]] || {
+    say "the distribution's origin has no mTLS client certificate; run tofu apply first"
+    return 1
+  }
+  [[ $origin_domain == "$domain" ]] || {
+    say "the distribution's origin is ${origin_domain:-unset}, not $domain; run tofu apply first"
+    return 1
+  }
+}
+
+# The direct-origin check covers 443 and 8443 (docs/design/cloudfront-edge.md,
+# "Deploys and monitoring"). The security groups drop these packets, so only a
+# timeout (curl exit 28) passes: a refused connection or a TLS rejection means
+# the port is reachable, and mTLS alone is guarding it. It never retries into
+# a pass.
+edge_origin_closed() { # ip port
+  local status=0
+  curl -sk -m "${DEPLOY_SMOKE_TIMEOUT:-5}" -o /dev/null "https://$1:$2/" || status=$?
+  ((status == 28)) || {
+    say "smoke: the origin is reachable directly on port $2 (curl exit $status); check the security groups"
+    return 1
+  }
+}

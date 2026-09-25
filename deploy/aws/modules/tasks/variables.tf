@@ -109,6 +109,24 @@ variable "cloudflare_ipv4_cidrs" {
   type = list(string)
 }
 
+# Which Caddy edge listeners run; see deploy/caddy/production/entrypoint.sh
+# and docs/design/cloudfront-edge.md.
+variable "edges" {
+  type = list(string)
+  validation {
+    condition     = length(var.edges) > 0
+    error_message = "edges must not be empty."
+  }
+  validation {
+    condition     = alltrue([for e in var.edges : contains(["cloudflare", "cloudfront"], e)])
+    error_message = "edges must contain only \"cloudflare\" and \"cloudfront\"."
+  }
+  validation {
+    condition     = length(var.edges) == length(distinct(var.edges))
+    error_message = "edges must not repeat a value."
+  }
+}
+
 variable "image_server" {
   type = string
 }

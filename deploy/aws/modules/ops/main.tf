@@ -286,6 +286,21 @@ resource "aws_sns_topic_subscription" "email_us_east_1" {
   endpoint  = var.alarm_email
 }
 
+resource "aws_sns_topic_policy" "alerts_us_east_1" {
+  provider = aws.us_east_1
+  arn      = aws_sns_topic.alerts_us_east_1.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Action    = "sns:Publish"
+      Resource  = aws_sns_topic.alerts_us_east_1.arn
+      Principal = { Service = ["events.amazonaws.com", "cloudwatch.amazonaws.com"] }
+      Condition = { StringEquals = { "aws:SourceAccount" = var.account_id } }
+    }]
+  })
+}
+
 resource "aws_cloudwatch_metric_alarm" "site" {
   provider            = aws.us_east_1
   alarm_name          = "${var.name}-site-down"

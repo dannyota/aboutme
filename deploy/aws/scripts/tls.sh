@@ -10,6 +10,15 @@
 #                       www.aboutme.vn (docs/design/cloudfront-edge.md,
 #                       "Origin certificate"; ADR 0054) to SSM, and print the
 #                       next step
+#   tls.sh client-ca      new CloudFront origin mTLS CA (docs/design/
+#                         cloudfront-edge.md, "Origin access"): the CA
+#                         certificate joins the SSM trust pool (key
+#                         discarded), and the client certificate and key go
+#                         to the per-user tmpfs, ready for tls.sh client-import
+#   tls.sh client-import  imports the client certificate and key from the
+#                         per-user tmpfs into ACM in us-east-1, then deletes
+#                         those files
+#   tls.sh forget-client  delete the client files without importing
 #
 # A new origin key needs a new Origin CA certificate from the CSR.
 set -euo pipefail
@@ -17,6 +26,10 @@ region=ap-southeast-1
 root=$(git rev-parse --show-toplevel)
 runtime=${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must point at a per-user tmpfs}
 pull_dir=$runtime/aboutme-origin-pull
+client_dir=$runtime/aboutme-cloudfront-client
+client_name=cloudfront-origin.aboutme.vn
+# ACM's name for an ECDSA P-256 key.
+acm_ec_p256=EC_prime256v1
 umask 077
 
 store() { # parameter type file [tier]
@@ -72,6 +85,79 @@ case "${1:-}" in
     rm -rf "$pull_dir"
     echo "origin-pull files deleted"
     ;;
+  client-ca)
+    if [[ -e $client_dir ]]; then
+      echo "tls: $client_dir exists; run tls.sh client-import, or tls.sh forget-client to discard it" >&2
+      exit 1
+    fi
+    mkdir -p "$client_dir"
+    openssl req -x509 "${ec[@]}" -days 3650 -subj /CN=aboutme-cloudfront-origin-ca \
+      -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign \
+      -keyout "$work/ca.key" -out "$work/ca.pem" 2>/dev/null
+    # The name must be exactly $client_name, as a DNS SAN: ACM derives an
+    # imported certificate's domain name only from a DNS-shaped name, and
+    # OpenTofu's data.aws_acm_certificate.client and client-import below look
+    # it up by that domain name. No DNS record exists or is needed for it.
+    openssl req -new "${ec[@]}" -subj "/CN=$client_name" \
+      -keyout "$client_dir/client.key" -out "$work/client.csr" 2>/dev/null
+    printf '%s\n' basicConstraints=critical,CA:FALSE keyUsage=critical,digitalSignature \
+      extendedKeyUsage=clientAuth "subjectAltName=DNS:$client_name" >"$work/client.ext"
+    openssl x509 -req -in "$work/client.csr" -CA "$work/ca.pem" -CAkey "$work/ca.key" \
+      -CAcreateserial -days 3650 -sha256 -extfile "$work/client.ext" -out "$client_dir/client.pem" 2>/dev/null
+    cp "$work/ca.pem" "$client_dir/ca.pem"
+
+    # The trust pool holds every CA Caddy must still accept; a rotation keeps
+    # the old CA until the new one is deployed and the parameter is
+    # overwritten to drop it.
+    existing=$(aws ssm get-parameters --region "$region" --names /aboutme/prod/tls/cloudfront-client-ca \
+      --query 'Parameters[0].Value' --output text)
+    if [[ $existing == None ]]; then
+      cp "$work/ca.pem" "$work/trust-pool.pem"
+    else
+      printf '%s\n' "$existing" >"$work/trust-pool.pem"
+      cat "$work/ca.pem" >>"$work/trust-pool.pem"
+    fi
+    store /aboutme/prod/tls/cloudfront-client-ca String "$work/trust-pool.pem" Intelligent-Tiering
+    echo "CloudFront origin mTLS CA stored in SSM; its key is discarded"
+    if [[ $existing == None ]]; then
+      echo "first run: run tls.sh client-import, then tofu apply"
+    else
+      echo "rotation: deploy the live tag first so Caddy trusts the new CA, then run tls.sh client-import"
+    fi
+    ;;
+  client-import)
+    [[ -d $client_dir ]] || { echo "tls: $client_dir does not exist; run tls.sh client-ca first" >&2; exit 1; }
+    # ListCertificates returns only RSA certificates unless keyTypes names
+    # others.
+    client_arns=$(aws acm list-certificates --region us-east-1 --includes "keyTypes=$acm_ec_p256" \
+      --query "CertificateSummaryList[?DomainName=='$client_name' && Type=='IMPORTED'].CertificateArn" \
+      --output text)
+    read -ra client_cert_arns <<<"$client_arns"
+    if ((${#client_cert_arns[@]} > 1)); then
+      echo "tls: more than one imported certificate for $client_name in us-east-1; refusing" >&2
+      exit 1
+    elif ((${#client_cert_arns[@]} == 1)); then
+      # Reimporting keeps the same ARN, so the distribution's
+      # origin_mtls_config never changes.
+      aws acm import-certificate --region us-east-1 --certificate-arn "${client_cert_arns[0]}" \
+        --certificate "fileb://$client_dir/client.pem" --private-key "fileb://$client_dir/client.key" \
+        --certificate-chain "fileb://$client_dir/ca.pem" >"$work/import.json"
+    else
+      aws acm import-certificate --region us-east-1 \
+        --certificate "fileb://$client_dir/client.pem" --private-key "fileb://$client_dir/client.key" \
+        --certificate-chain "fileb://$client_dir/ca.pem" \
+        --tags Key=Name,Value=aboutme-prod-cloudfront-client Key=Project,Value=aboutme Key=Environment,Value=prod \
+        >"$work/import.json"
+    fi
+    client_cert_arn=$(jq -r .CertificateArn <"$work/import.json")
+    client_expiry=$(openssl x509 -in "$client_dir/client.pem" -noout -enddate | cut -d= -f2)
+    rm -rf "$client_dir"
+    echo "client certificate ${client_cert_arn##*/} imported; expires $client_expiry"
+    ;;
+  forget-client)
+    rm -rf "$client_dir"
+    echo "CloudFront client files deleted"
+    ;;
   export)
     # Exactly one certificate must match: an exportable, issued ACM
     # certificate for aboutme.vn.
@@ -79,7 +165,7 @@ case "${1:-}" in
     # others.
     # shellcheck disable=SC2016 # The backticks are JMESPath literals.
     certs=$(aws acm list-certificates --region "$region" --certificate-statuses ISSUED \
-      --includes keyTypes=EC_prime256v1,exportOption=ENABLED \
+      --includes "keyTypes=$acm_ec_p256,exportOption=ENABLED" \
       --query 'CertificateSummaryList[?DomainName==`aboutme.vn`].CertificateArn' --output text)
     read -ra cert_arns <<<"$certs"
     ((${#cert_arns[@]} == 1)) ||
@@ -135,7 +221,7 @@ case "${1:-}" in
     echo "next: redeploy the live tag with deploy.sh <tag>"
     ;;
   *)
-    echo "usage: tls.sh origin|pull|forget-pull|export" >&2
+    echo "usage: tls.sh origin|pull|forget-pull|client-ca|client-import|forget-client|export" >&2
     exit 2
     ;;
 esac

@@ -16,9 +16,9 @@ locals {
   # parameters: it cannot reuse the app role, which also needs the server
   # container's secrets.
   exec_params = {
-    app         = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "oauth/google-client-id", "oauth/google-client-secret", "totp/key-a", "totp/key-b"]
+    app         = ["db/app-password", "auth-email/active-key-id", "auth-email/active-key", "password-rate-hmac-key", "tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "tls/cloudfront-client-ca", "oauth/google-client-id", "oauth/google-client-secret", "totp/key-a", "totp/key-b"]
     web         = []
-    maintenance = ["tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca"]
+    maintenance = ["tls/origin-key", "tls/origin-cert", "tls/origin-pull-ca", "tls/cloudfront-client-ca"]
     migrate     = ["db/migrator-password"]
     jobs        = ["db/app-password"]
     db-admin    = ["db/migrator-password", "db/app-password"]

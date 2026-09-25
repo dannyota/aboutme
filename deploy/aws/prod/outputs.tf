@@ -25,3 +25,11 @@ output "origin_certificate_arn" {
 output "certificate_validation_records" {
   value = module.edge.certificate_validation_records
 }
+
+output "distribution_id" {
+  value = module.edge.distribution_id
+}
+
+output "distribution_domain_name" {
+  value = module.edge.distribution_domain_name
+}
