@@ -240,15 +240,15 @@ export default defineNuxtConfig({
           rel: 'icon',
           type: 'image/png',
           sizes: '32x32',
-          href: '/icon-32.png',
+          href: '/icon-32-v2.png',
         },
-        { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+        { rel: 'icon', href: '/favicon-v2.svg', type: 'image/svg+xml' },
         {
           rel: 'apple-touch-icon',
           sizes: '180x180',
-          href: '/apple-touch-icon.png',
+          href: '/apple-touch-icon-v2.png',
         },
-        { rel: 'manifest', href: '/site.webmanifest' },
+        { rel: 'manifest', href: '/site-v2.webmanifest' },
       ],
       meta: [
         // Safari auto-links digit runs such as date ranges into tel: links;
