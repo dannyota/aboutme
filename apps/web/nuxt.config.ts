@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { build as viteBuild } from 'vite';
 
-import { HTML_CSP } from './app/utils/csp';
+import { APP_CSP, HTML_CSP } from './app/utils/csp';
 import {
   buildPrintDocumentValidator,
   buildPublicResumeValidator,
@@ -289,6 +289,19 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
+    // Every Nuxt-rendered page gets the app-page CSP by default; a page with
+    // its own inline script (the homepage and template pages' JSON-LD) has
+    // its hash added at render time instead of widening this policy
+    // (server/plugins/security-headers.ts). This default header never
+    // reaches a browser unchanged from the two internal routes under this
+    // wildcard: the print route's own handler overwrites it with the exact
+    // policy Chromium's real navigation there enforces
+    // (server/utils/print/handler.ts,
+    // apps/server/internal/printrender/policy.go), and the public-render
+    // route is read only by Go's render client, which reads its body and
+    // ignores every header but Content-Type
+    // (apps/server/internal/directrender/client.go).
+    '/**': { headers: { 'Content-Security-Policy': APP_CSP } },
     // The account pages are client-rendered, so their first HTML is a shell
     // without head tags; this header keeps them out of search engines.
     '/app/**': { headers: { 'X-Robots-Tag': 'noindex' } },
@@ -351,8 +364,13 @@ export default defineNuxtConfig({
       include: [
         '@lucide/vue',
         '@vueuse/core',
-        'ajv-formats',
-        'ajv/dist/2020.js',
+        // The editor's precompiled document validator
+        // (app/editor/documentValidator.generated.mjs) imports these Ajv
+        // runtime helpers directly; the resume list is the first page after
+        // sign-in to reach it.
+        'ajv-formats/dist/formats.js',
+        'ajv/dist/runtime/equal.js',
+        'ajv/dist/runtime/ucs2length.js',
         'class-variance-authority',
         'clsx',
         'dompurify',

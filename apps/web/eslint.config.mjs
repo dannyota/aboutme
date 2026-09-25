@@ -356,7 +356,16 @@ export default withNuxt(
     // are meaningless on output nobody edits, and `--fix` would rewrite it
     // into permanent drift against the generator. `make api-check`, not
     // eslint, is what keeps this directory honest.
-    ignores: ['app/api/generated/**', '.dev/**'],
+    //
+    // app/editor/documentValidator.generated.mjs is an Ajv standalone compile
+    // of resume.schema.json (scripts/generate-document-validator.mjs), the
+    // same reasoning: unformatted generated code with no hand-authored drift
+    // to catch.
+    ignores: [
+      'app/api/generated/**',
+      'app/editor/documentValidator.generated.mjs',
+      '.dev/**',
+    ],
   },
   {
     rules: googleStyleRules,
