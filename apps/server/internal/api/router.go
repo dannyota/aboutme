@@ -160,13 +160,10 @@ func New(logger *slog.Logger, pinger DBPinger, opts Options, public PublicRoutes
 	// so every rejection this chain can produce — RateLimit's 429 and its
 	// own 400 invalid_client_ip, BodyLimit's 413, the mux's 404/405 — all
 	// carry Cache-Control: no-store, no-transform, not just a successful
-	// response. A
-	// public route group can substitute a different policy (for example,
-	// PublicJSONCache for public JSON) by wrapping just that group's
-	// handler INSIDE the mux: that inner middleware's Cache-Control write
-	// happens after this outer one in the call chain and so overrides it
-	// for that group specifically, the same pattern NoStoreCache itself
-	// already uses to survive a downstream rejection.
+	// response. A route inside the mux can substitute a different policy
+	// (the public API sends no-cache, must-revalidate): its Cache-Control
+	// write happens after this outer one and so overrides it for that
+	// route only.
 	otherChain := NoStoreCache()(
 		RateLimit(RateLimiterConfig{TrustedProxies: opts.TrustedProxies, Clock: opts.Clock})(
 			BodyLimit(opts.BodyLimitBytes)(mux)))
