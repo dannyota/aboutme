@@ -214,7 +214,20 @@ for (const theme of THEMES) {
           + 'animation: none !important; }',
       });
       await page.getByRole('tab', { name: 'PDF' }).click();
-      await expect(page.locator('img[data-pdf-page]')).toHaveCount(2);
+      const pages = page.locator('img[data-pdf-page]');
+      await expect(pages).toHaveCount(2);
+      // Page 2 loads lazily; bring each page into view until it has
+      // decoded, so the full-page capture never shows an empty sheet.
+      for (let index = 0; index < 2; index += 1) {
+        const image = pages.nth(index);
+        await image.scrollIntoViewIfNeeded();
+        await expect(async () => {
+          const naturalWidth = await image.evaluate((element) =>
+            (element as HTMLImageElement).naturalWidth);
+          expect(naturalWidth).toBeGreaterThan(0);
+        }).toPass();
+      }
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.evaluate(() => document.fonts.ready);
       await waitForImages(page);
 
