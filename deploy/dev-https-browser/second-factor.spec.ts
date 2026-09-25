@@ -43,8 +43,10 @@ import { freshCSRF } from './editor-fixtures';
 import {
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
+  locatorStateWord,
   newDiagnosticCounters,
   pageDiagnosticsAttacher,
+  pageStateWords,
   type DiagnosticCounters,
   signInWithGoogle,
 } from './harness-lib';
@@ -185,6 +187,9 @@ function runsRole(r: AccountRole): boolean {
 let recordedStage = 'start';
 let recordedRole: AccountRole = 'none';
 let tearingDown = false;
+// The failed page's state in closed words, read just before teardown
+// navigates away from it.
+let failurePageState = 'page-unread';
 
 function stage(name: string): void {
   if (tearingDown) return;
@@ -235,12 +240,11 @@ test.afterEach(({}, testInfo) => {
   // Only a real failure may add a line.
   if (testInfo.status === 'skipped') return;
   if (testInfo.status === testInfo.expectedStatus) return;
-  const outcome = outcomeOf(
-    testInfo.status ?? 'unknown',
-    testInfo.error?.message ?? '',
-  );
+  const message = testInfo.error?.message ?? '';
+  const outcome = outcomeOf(testInfo.status ?? 'unknown', message);
+  const detail = `${failurePageState}-${locatorStateWord(message)}`;
   console.log(
-    `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}`,
+    `${MODE}-stage:fail-${outcome}-at-${recordedStage}-for-${recordedRole}-${detail}`,
   );
 });
 
@@ -1672,6 +1676,9 @@ test('proves the passkey second factor over native HTTPS', async ({
     steps.attemptsExhausted = true;
     }
   } finally {
+    // Read the page before teardown navigates away from a failure.
+    failurePageState = await pageStateWords(page)
+      + `-path-${landingCategory(page.url()).replace(/^landing-/u, '')}`;
     beginTeardown();
     // Deletes only the accounts the active shard created (every account on
     // the unsharded default), so a shard's cleanup step reports on exactly
@@ -1861,6 +1868,9 @@ test('proves disabled passkey enrollment answers as an unregistered route',
       steps.locales = true;
       steps.viewports = true;
     } finally {
+      // Read the page before teardown navigates away from a failure.
+      failurePageState = await pageStateWords(page)
+        + `-path-${landingCategory(page.url()).replace(/^landing-/u, '')}`;
       beginTeardown();
       steps.cleanup = await deleteSignedInAccount(page).catch(() => false);
       await writeFile(
