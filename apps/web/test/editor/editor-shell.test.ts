@@ -21,10 +21,14 @@ import type { ResumeRecord } from '../../app/stores/resumes';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
 
+// EditorPreview.vue's own storage key for the PDF/Web mode toggle.
+const PREVIEW_MODE_STORAGE_KEY = 'aboutme.editorPreviewMode';
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   setSiteLocale(undefined);
+  window.localStorage.removeItem(PREVIEW_MODE_STORAGE_KEY);
 });
 
 beforeEach(() => {
@@ -135,6 +139,25 @@ describe('EditorShell', () => {
     expect(wrapper.text()).not.toMatch(/Undo all|Redo/);
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
   });
+
+  it(
+    'keeps a single h1 when the real preview renders the resume name',
+    () => {
+      window.localStorage.setItem(PREVIEW_MODE_STORAGE_KEY, 'web');
+      const record = editorRecord();
+      const wrapper = mount(EditorShell, {
+        props: { actions: actionsFor(record), record },
+        global: { stubs: heavyStubs({ preview: 'real' }) },
+      });
+
+      // The topbar names the resume in its own h1; the real preview below
+      // renders the resume name as a p, so the workspace keeps one h1.
+      expect(wrapper.get('[data-resume-title]').element.tagName).toBe('H1');
+      expect(wrapper.findAll('h1')).toHaveLength(1);
+      expect(wrapper.get('.resume-name').element.tagName).toBe('P');
+      wrapper.unmount();
+    },
+  );
 
   it('shows Unsaved while a field holds an edit it has not saved', () => {
     const drafts = createFieldDrafts();
@@ -682,11 +705,13 @@ function downloadController(): PdfDownloadController {
   };
 }
 
-function heavyStubs(options: { preview?: boolean } = {}) {
+function heavyStubs(options: { preview?: boolean | 'real' } = {}) {
   return {
-    ...(options.preview === false
-      ? { ResumeDocument: { name: 'ResumeDocument', template: '<div />' } }
-      : { EditorPreview: { name: 'EditorPreview', template: '<div />' } }),
+    ...(options.preview === 'real'
+      ? {}
+      : options.preview === false
+        ? { ResumeDocument: { name: 'ResumeDocument', template: '<div />' } }
+        : { EditorPreview: { name: 'EditorPreview', template: '<div />' } }),
     PersonalDetailsPanel: {
       name: 'PersonalDetailsPanel',
       template: '<div />',
