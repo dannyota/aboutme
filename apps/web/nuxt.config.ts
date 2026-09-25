@@ -364,8 +364,13 @@ export default defineNuxtConfig({
       include: [
         '@lucide/vue',
         '@vueuse/core',
-        'ajv-formats',
-        'ajv/dist/2020.js',
+        // The editor's precompiled document validator
+        // (app/editor/documentValidator.generated.mjs) imports these Ajv
+        // runtime helpers directly; the resume list is the first page after
+        // sign-in to reach it.
+        'ajv-formats/dist/formats.js',
+        'ajv/dist/runtime/equal.js',
+        'ajv/dist/runtime/ucs2length.js',
         'class-variance-authority',
         'clsx',
         'dompurify',
