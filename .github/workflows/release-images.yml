@@ -56,9 +56,8 @@ jobs:
             caddy)
               # The entrypoint's adapt mode assembles the edge listeners and
               # parses both route tables without the runtime TLS files.
-              for edges in cloudflare cloudfront cloudflare,cloudfront; do
-                docker run --rm -e EDGES="$edges" -e CLOUDFLARE_RANGES=192.0.2.0/24 "$IMAGE" adapt
-              done
+              docker run --rm "$IMAGE" adapt
+              docker run --rm -e EDGES=cloudfront "$IMAGE" adapt
               ;;
           esac
       - name: Install Trivy

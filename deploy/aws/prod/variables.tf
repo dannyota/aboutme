@@ -109,13 +109,6 @@ variable "totp_previous_key_slot" {
   description = "Which totp/key-<slot> parameter supplies TOTP_PREVIOUS_KEY: \"\", \"a\", or \"b\""
 }
 
-# See deploy/caddy/production/entrypoint.sh and docs/design/cloudfront-edge.md.
-variable "edges" {
-  type        = list(string)
-  default     = ["cloudflare", "cloudfront"]
-  description = "Which Caddy edge listeners run: \"cloudflare\", \"cloudfront\", or both"
-}
-
 # docs/design/cloudfront-edge.md, "DDoS and WAF": rules count for a week
 # before the owner switches them to block.
 variable "waf_block" {

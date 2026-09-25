@@ -39,15 +39,15 @@ locals {
   ]
 
   # Caddy's edge listeners; see deploy/caddy/production/entrypoint.sh and
-  # docs/design/cloudfront-edge.md.
-  caddy_cloudfront = contains(var.edges, "cloudfront")
+  # docs/design/cloudfront-edge.md. CloudFront is the only edge.
   caddy_env = [
-    { name = "CLOUDFLARE_RANGES", value = join(" ", var.cloudflare_ipv4_cidrs) },
-    { name = "EDGES", value = join(",", var.edges) },
+    { name = "EDGES", value = "cloudfront" },
   ]
-  caddy_client_ca_secret = local.caddy_cloudfront ? [
+  caddy_secrets = [
+    { name = "ORIGIN_KEY", valueFrom = "${local.param}/tls/origin-key" },
+    { name = "ORIGIN_CERT", valueFrom = "${local.param}/tls/origin-cert" },
     { name = "CLOUDFRONT_CLIENT_CA", valueFrom = "${local.param}/tls/cloudfront-client-ca" },
-  ] : []
+  ]
 
   server_env = concat(local.media_env, [
     { name = "ENV", value = "prod" },
@@ -131,15 +131,11 @@ resource "aws_ecs_task_definition" "app" {
       memory    = 128
       cpu       = 128
       essential = true
-      # No port mapping: Caddy binds host port 443 through host networking with
+      # No port mapping: Caddy binds host port 8443 through host networking with
       # SO_REUSEPORT, and ECS must place this task beside a running maintenance
       # task during a deploy handoff (deploy/aws/scripts/handoff.sh).
-      environment = local.caddy_env
-      secrets = concat([
-        { name = "ORIGIN_KEY", valueFrom = "${local.param}/tls/origin-key" },
-        { name = "ORIGIN_CERT", valueFrom = "${local.param}/tls/origin-cert" },
-        { name = "ORIGIN_PULL_CA", valueFrom = "${local.param}/tls/origin-pull-ca" },
-      ], local.caddy_client_ca_secret)
+      environment      = local.caddy_env
+      secrets          = local.caddy_secrets
       linuxParameters  = { tmpfs = [{ containerPath = "/run/caddy", size = 1 }] }
       dependsOn        = [{ containerName = "server", condition = "HEALTHY" }]
       logConfiguration = local.logs["caddy"]
@@ -160,12 +156,8 @@ resource "aws_ecs_task_definition" "maintenance" {
       cpu       = 128
       essential = true
       # No port mapping, for the same reason as the app's Caddy container.
-      environment = concat(local.caddy_env, [{ name = "MAINTENANCE", value = "1" }])
-      secrets = concat([
-        { name = "ORIGIN_KEY", valueFrom = "${local.param}/tls/origin-key" },
-        { name = "ORIGIN_CERT", valueFrom = "${local.param}/tls/origin-cert" },
-        { name = "ORIGIN_PULL_CA", valueFrom = "${local.param}/tls/origin-pull-ca" },
-      ], local.caddy_client_ca_secret)
+      environment      = concat(local.caddy_env, [{ name = "MAINTENANCE", value = "1" }])
+      secrets          = local.caddy_secrets
       linuxParameters  = { tmpfs = [{ containerPath = "/run/caddy", size = 1 }] }
       logConfiguration = local.logs["caddy"]
     },

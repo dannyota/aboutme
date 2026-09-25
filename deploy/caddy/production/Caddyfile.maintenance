@@ -5,7 +5,7 @@
 # the generated headers this imports, built the same way as routes.caddy.
 #
 # It imports the same edge listeners as Caddyfile (see edges/), so both carry
-# the same client certificate trust and client address rules; only the
+# the same client certificate trust and client address rule; only the
 # apex_site snippet differs. www still redirects to the apex, as in
 # Caddyfile: the page polls /readyz on its own origin, and a visitor's tab
 # must keep pointing at the apex across the deploy, or the poll becomes a

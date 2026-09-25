@@ -56,7 +56,7 @@ process used Go's inherited effective descriptor limit; the test did not change
 host limits.
 
 This is a local transport baseline. It does not prove the whole application fits
-an AWS task's 512 MiB budget or establish latency through AWS and Cloudflare. A
+an AWS task's 512 MiB budget or establish latency through AWS and CloudFront. A
 hosted resource and edge measurement has not been recorded. The stress test does
 not emit a machine hostname or resume content.
 

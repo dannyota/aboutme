@@ -17,7 +17,7 @@ Direct user instructions and platform safety rules come first. Then:
 
 Design wins over a plan. An accepted ADR wins over design text it contradicts; fix the text. Disagreement between code, deployment config, and OpenAPI is a defect: repair them together rather than picking one silently.
 
-`aboutme` is a public AGPL-3.0 resume builder and hosted display service: Go API, Nuxt/Vue web app, PostgreSQL, deferred Flutter app. Resumes, not users, have public URLs. Production runs at `https://aboutme.vn` on one AWS Singapore host behind Cloudflare ([ADR 0037](docs/adr/0037-single-host-production-without-hosted-uat.md)). **The repository and its CI logs are public.** Never commit secrets, personal data, credentials, or internal notes.
+`aboutme` is a public AGPL-3.0 resume builder and hosted display service: Go API, Nuxt/Vue web app, PostgreSQL, deferred Flutter app. Resumes, not users, have public URLs. Production runs at `https://aboutme.vn` on one AWS Singapore host behind Amazon CloudFront ([ADR 0037](docs/adr/0037-single-host-production-without-hosted-uat.md), [ADR 0054](docs/adr/0054-cloudfront-edge-for-single-host-production.md)). **The repository and its CI logs are public.** Never commit secrets, personal data, credentials, or internal notes.
 
 ## Instruction files
 

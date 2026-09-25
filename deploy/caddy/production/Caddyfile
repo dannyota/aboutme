@@ -1,8 +1,8 @@
 # Production route table for the single-host deployment. See
 # docs/design/single-host-production.md and docs/design/cloudfront-edge.md.
-# Each edge has its own listener, TLS client trust, and client address rule
-# in edges/; entrypoint.sh concatenates the edges named in EDGES into
-# /run/caddy/edges.global and /run/caddy/edges.sites. Each listener sets
+# The CloudFront listener on 8443 has its own TLS client trust and client
+# address rule in edges/; entrypoint.sh concatenates the edges named in EDGES
+# into /run/caddy/edges.global and /run/caddy/edges.sites. The listener sets
 # {vars.client_address}, which routes.caddy sends to Go as X-Real-IP.
 {
 	admin off

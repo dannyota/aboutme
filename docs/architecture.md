@@ -44,9 +44,10 @@ private storage. PostgreSQL is not published to the host. Caddy is the only
 published service. The current Compose Caddyfile serves HTTP; this is suitable
 for deployment smoke checks.
 
-Production runs on one AWS Singapore host behind Cloudflare, with RDS and
+Production runs on one AWS Singapore host behind Amazon CloudFront, with RDS and
 private S3, per
-[ADR 0037](adr/0037-single-host-production-without-hosted-uat.md) and the
+[ADR 0037](adr/0037-single-host-production-without-hosted-uat.md),
+[ADR 0054](adr/0054-cloudfront-edge-for-single-host-production.md), and the
 [single-host design](design/single-host-production.md). It runs one replica
 under [ADR 0036](adr/0036-single-replica-launch-and-pipeline-migrations.md).
 Revocation leases, print jobs, event subscribers, and limiters hold

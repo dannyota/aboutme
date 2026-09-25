@@ -1,10 +1,11 @@
+# shellcheck shell=bash
 # Sourced by deploy.sh. Starts and stops the app and maintenance services so
-# that something always accepts connections on host port 443
+# that something always accepts connections on host port 8443
 # (docs/design/single-host-production.md, "Deploy"). Needs $cluster, say(),
 # aws_, and (for maintenance_up) the revision map already defined.
 #
 # Both services run Caddy with host networking, and Caddy binds every TCP
-# listener with SO_REUSEPORT, so a second Caddy joins the first on port 443
+# listener with SO_REUSEPORT, so a second Caddy joins the first on port 8443
 # and the kernel spreads new connections across both. Neither task definition
 # declares a port mapping, so ECS places one service's task beside the
 # other's. Every handoff therefore starts the incoming service and confirms
@@ -53,7 +54,7 @@ scale_to_zero_and_wait() { # service
 # revision while it runs nothing, and only then scaled up. A service already
 # running another revision (for example maintenance left up by a failed
 # deploy) is updated in one call; ECS then stops its task before the
-# replacement starts, so that one case can leave a short gap on port 443.
+# replacement starts, so that one case can leave a short gap on port 8443.
 start_service() { # service revision
   local svc=$1 rev=$2 state td count
   state=$(aws_ ecs describe-services --cluster "$cluster" --services "$svc" \
@@ -78,7 +79,7 @@ start_service() { # service revision
 # Proves that the service runs exactly one task, of the given revision, with
 # every container running. The app's Caddy container starts only after the
 # server container reports healthy, so a running app task already accepts
-# connections on port 443.
+# connections on port 8443.
 confirm_running() { # service revision
   local out
   local -a tasks=()

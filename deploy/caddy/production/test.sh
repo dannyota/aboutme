@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Builds the production Caddy image and checks route rendering, each edge
-# listener's client certificate trust and client address rule (EDGES), that
-# the origin key does not stay in the process environment, and maintenance
-# mode's page, headers, and CSP hashes. See docs/design/cloudfront-edge.md.
+# Builds the production Caddy image and checks route rendering, the
+# CloudFront listener's client certificate trust and client address rule
+# (EDGES), that the origin key does not stay in the process environment, and
+# maintenance mode's page, headers, and CSP hashes. See
+# docs/design/cloudfront-edge.md.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 work=$(mktemp -d)
 name=aboutme-caddy-test
-port=20451
-cf_port=20452
+port=20452
+closed_port=20451
 trap 'podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
 
 render=$root/deploy/caddy/production/render.sh
@@ -75,13 +76,7 @@ ec=(-newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes)
 openssl req -x509 "${ec[@]}" -days 1 -subj /CN=aboutme.vn \
   -addext subjectAltName=DNS:aboutme.vn,DNS:www.aboutme.vn \
   -keyout "$work/origin.key" -out "$work/origin.pem" 2>/dev/null
-openssl req -x509 "${ec[@]}" -days 1 -subj /CN=pull-ca \
-  -keyout "$work/ca.key" -out "$work/ca.pem" 2>/dev/null
-openssl req "${ec[@]}" -subj /CN=pull -keyout "$work/pull.key" -out "$work/pull.csr" 2>/dev/null
-openssl x509 -req -in "$work/pull.csr" -CA "$work/ca.pem" -CAkey "$work/ca.key" \
-  -CAcreateserial -days 1 -out "$work/pull.pem" 2>/dev/null
-# The CloudFront origin mTLS CA and its client certificate, a separate trust
-# pool from the Cloudflare origin-pull CA above.
+# The CloudFront origin mTLS CA and its client certificate.
 openssl req -x509 "${ec[@]}" -days 1 -subj /CN=cloudfront-ca \
   -keyout "$work/cf-ca.key" -out "$work/cf-ca.pem" 2>/dev/null
 openssl req "${ec[@]}" -subj /CN=cloudfront -keyout "$work/cf.key" -out "$work/cf.csr" 2>/dev/null
@@ -93,7 +88,6 @@ openssl req -x509 "${ec[@]}" -days 1 -subj /CN=other \
 
 image=localhost/aboutme/caddy:test
 tls_env=(-e ORIGIN_CERT="$(cat "$work/origin.pem")" -e ORIGIN_KEY="$(cat "$work/origin.key")")
-pull_ca_env=(-e ORIGIN_PULL_CA="$(cat "$work/ca.pem")")
 cf_ca_env=(-e CLOUDFRONT_CLIENT_CA="$(cat "$work/cf-ca.pem")")
 
 wait_started() { # container... -> waits for each to serve its configuration
@@ -112,7 +106,7 @@ wait_started() { # container... -> waits for each to serve its configuration
 
 start_stack() { # podman run options...
   podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
-  podman run -d --name "$name" -p "127.0.0.1:$port:443" -p "127.0.0.1:$cf_port:8443" \
+  podman run -d --name "$name" -p "127.0.0.1:$port:8443" -p "127.0.0.1:$closed_port:443" \
     --tmpfs /run/caddy "${tls_env[@]}" "$@" "$image" >/dev/null
   # A stand-in for Go on 127.0.0.1:8080 that echoes the forwarded client
   # address and any CloudFront-Viewer-Address that reached it.
@@ -122,17 +116,16 @@ start_stack() { # podman run options...
   wait_started "$name" "$name-echo"
 }
 
-# ---- Default edges: EDGES unset serves only the Cloudflare listener ----
-start_stack "${pull_ca_env[@]}" -e CLOUDFLARE_RANGES="192.0.2.0/24 198.51.100.0/24"
-
 request() {
   curl -s -o /dev/null -w '%{http_code}' --resolve "aboutme.vn:$port:127.0.0.1" \
     --resolve "www.aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "$@"
 }
-cf_request() {
-  curl -s -o /dev/null -w '%{http_code}' --resolve "aboutme.vn:$cf_port:127.0.0.1" \
-    --resolve "www.aboutme.vn:$cf_port:127.0.0.1" --cacert "$work/origin.pem" "$@"
-}
+
+cf=(--cert "$work/cf.pem" --key "$work/cf.key")
+
+# ---- EDGES unset: the CloudFront listener starts, container port 443 answers nothing ----
+start_stack "${cf_ca_env[@]}"
+
 if request "https://aboutme.vn:$port/healthz" >/dev/null 2>&1; then
   echo "request without a client certificate succeeded" >&2
   exit 1
@@ -141,101 +134,55 @@ if request --cert "$work/other.pem" --key "$work/other.key" "https://aboutme.vn:
   echo "request with an untrusted client certificate succeeded" >&2
   exit 1
 fi
-pull=(--cert "$work/pull.pem" --key "$work/pull.key")
-cf=(--cert "$work/cf.pem" --key "$work/cf.key")
-code=$(request "${pull[@]}" "https://aboutme.vn:$port/healthz" || true)
-[[ $code == 200 ]] || { echo "healthz: want 200 from the stand-in, got $code" >&2; exit 1; }
-code=$(request "${pull[@]}" "https://aboutme.vn:$port/print/x" || true)
-[[ $code == 404 ]] || { echo "print: want 404, got $code" >&2; exit 1; }
-code=$(request "${pull[@]}" "https://www.aboutme.vn:$port/a" || true)
-[[ $code == 301 ]] || { echo "www: want 301, got $code" >&2; exit 1; }
-if cf_request "${cf[@]}" "https://aboutme.vn:$cf_port/healthz" >/dev/null 2>&1; then
-  echo "EDGES unset: the CloudFront listener answered" >&2
+code=$(request "${cf[@]}" "https://aboutme.vn:$port/healthz" || true)
+[[ $code == 200 ]] || { echo "EDGES unset: healthz: want 200 from the stand-in, got $code" >&2; exit 1; }
+if curl -s -m 3 -o /dev/null "http://127.0.0.1:$closed_port/" 2>/dev/null; then
+  echo "container port 443 answered" >&2
   exit 1
 fi
-# The Cloudflare listener keeps its responses as they were: Caddy adds no
-# HSTS there and keeps its Server header.
-curl -s -o /dev/null -D "$work/cfl.headers" --resolve "aboutme.vn:$port:127.0.0.1" \
-  --cacert "$work/origin.pem" "${pull[@]}" "https://aboutme.vn:$port/healthz"
-if grep -qi '^strict-transport-security:' "$work/cfl.headers"; then
-  echo "Cloudflare listener: Caddy added HSTS" >&2
-  exit 1
-fi
-grep -qi '^server: caddy' "$work/cfl.headers" || { echo "Cloudflare listener: Server header changed" >&2; exit 1; }
 if podman exec "$name" sh -c 'tr "\0" "\n" </proc/1/environ | grep -q "^ORIGIN_KEY="'; then
   echo "ORIGIN_KEY remains in the Caddy process environment" >&2
   exit 1
 fi
 podman exec "$name" sh -c 'test "$(stat -c %a /run/caddy/origin-key.pem)" = 600'
-forwarded() {
-  curl -s --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${pull[@]}" \
-    -H 'CF-Connecting-IP: 203.0.113.7' -H 'X-Real-IP: 6.6.6.6' -H 'X-Forwarded-For: 5.5.5.5' \
-    -H 'CloudFront-Viewer-Address: 198.51.100.9:4000' "https://aboutme.vn:$port/api/v1/probe"
-}
-got=$(forwarded)
-if [[ $got != ip=* || $got == *203.0.113.7* || $got == *6.6.6.6* || $got == *5.5.5.5* || $got == 'ip= '* ||
-  $got == ip=198.51.100.9* ]]; then
-  echo "untrusted peer: Go received '$got', want the peer address" >&2
-  exit 1
-fi
 
-# EDGES unset with the local peer trusted: CF-Connecting-IP reaches Go, as
-# it does in production before any edge change.
-start_stack "${pull_ca_env[@]}" \
-  -e CLOUDFLARE_RANGES="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.0/8 ::1/128 fc00::/7"
-got=$(forwarded)
-[[ $got == ip=203.0.113.7\ * ]] || { echo "EDGES unset, trusted peer: Go received '$got'" >&2; exit 1; }
-
-# ---- Both edges; the Cloudflare listener trusts the local peer ----
-# Trust the local peer, which is on a private network, but not the visitor
-# address. Strict mode returns the first untrusted address in the header.
-start_stack "${pull_ca_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudflare,cloudfront \
-  -e CLOUDFLARE_RANGES="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.0/8 ::1/128 fc00::/7"
-got=$(forwarded)
-[[ $got == ip=203.0.113.7\ * ]] || { echo "trusted peer: Go received '$got', want ip=203.0.113.7" >&2; exit 1; }
-
-# Each listener trusts only its own edge's client certificate.
-if request "${cf[@]}" "https://aboutme.vn:$port/healthz" >/dev/null 2>&1; then
-  echo "Cloudflare listener accepted the CloudFront client certificate" >&2
-  exit 1
-fi
-for bad in "" "--cert $work/pull.pem --key $work/pull.key" "--cert $work/other.pem --key $work/other.key"; do
-  # shellcheck disable=SC2086 # $bad is deliberately split into curl options.
-  if cf_request $bad "https://aboutme.vn:$cf_port/healthz" >/dev/null 2>&1; then
-    echo "CloudFront listener accepted a request with client certificate options '$bad'" >&2
-    exit 1
-  fi
-done
-code=$(cf_request "${cf[@]}" "https://aboutme.vn:$cf_port/healthz" || true)
-[[ $code == 200 ]] || { echo "CloudFront healthz: want 200, got $code" >&2; exit 1; }
-code=$(cf_request "${cf[@]}" "https://aboutme.vn:$cf_port/print/x" || true)
-[[ $code == 404 ]] || { echo "CloudFront print: want 404, got $code" >&2; exit 1; }
-curl -s -o /dev/null -D "$work/www.headers" --resolve "www.aboutme.vn:$cf_port:127.0.0.1" \
-  --cacert "$work/origin.pem" "${cf[@]}" "https://www.aboutme.vn:$cf_port/a?b=1"
-grep -q '^HTTP/[0-9.]* 301' "$work/www.headers" || { echo "CloudFront www: want 301" >&2; exit 1; }
+# ---- CloudFront listener: routing, client certificate trust, response headers ----
+start_stack "${cf_ca_env[@]}" -e EDGES=cloudfront
+code=$(request "${cf[@]}" "https://aboutme.vn:$port/healthz" || true)
+[[ $code == 200 ]] || { echo "healthz: want 200, got $code" >&2; exit 1; }
+code=$(request "${cf[@]}" "https://aboutme.vn:$port/print/x" || true)
+[[ $code == 404 ]] || { echo "print: want 404, got $code" >&2; exit 1; }
+curl -s -o /dev/null -D "$work/www.headers" --resolve "www.aboutme.vn:$port:127.0.0.1" \
+  --cacert "$work/origin.pem" "${cf[@]}" "https://www.aboutme.vn:$port/a?b=1"
+grep -q '^HTTP/[0-9.]* 301' "$work/www.headers" || { echo "www: want 301" >&2; exit 1; }
 grep -qi '^location: https://aboutme.vn/a?b=1' "$work/www.headers" ||
-  { echo "CloudFront www: want a redirect to the apex, same path and query" >&2; exit 1; }
+  { echo "www: want a redirect to the apex, same path and query" >&2; exit 1; }
 
-# Response headers on the CloudFront listener: HSTS and nosniff added when
-# the upstream sent none, Server removed (the stand-in upstream sends one).
-curl -s -o /dev/null -D "$work/cf.headers" --resolve "aboutme.vn:$cf_port:127.0.0.1" \
-  --cacert "$work/origin.pem" "${cf[@]}" "https://aboutme.vn:$cf_port/healthz"
-grep -qi '^strict-transport-security: max-age=31536000'$'\r''$' "$work/cf.headers" ||
-  { echo "CloudFront listener: want HSTS max-age=31536000" >&2; exit 1; }
-grep -qi '^x-content-type-options: nosniff' "$work/cf.headers" ||
-  { echo "CloudFront listener: want X-Content-Type-Options nosniff" >&2; exit 1; }
-if grep -qi '^server:' "$work/cf.headers"; then
-  echo "CloudFront listener: Server header present" >&2
+# Response headers: HSTS and nosniff added when the upstream sent none,
+# Server removed (the stand-in upstream sends one), and no Via naming Caddy
+# (reverse_proxy adds "Via: 1.1 Caddy" to every proxied response).
+curl -s -o /dev/null -D "$work/resp.headers" --resolve "aboutme.vn:$port:127.0.0.1" \
+  --cacert "$work/origin.pem" "${cf[@]}" "https://aboutme.vn:$port/healthz"
+grep -qi '^strict-transport-security: max-age=31536000'$'\r''$' "$work/resp.headers" ||
+  { echo "want HSTS max-age=31536000" >&2; exit 1; }
+grep -qi '^x-content-type-options: nosniff' "$work/resp.headers" ||
+  { echo "want X-Content-Type-Options nosniff" >&2; exit 1; }
+if grep -qi '^server:' "$work/resp.headers"; then
+  echo "Server header present" >&2
+  exit 1
+fi
+if grep -qi '^via:' "$work/resp.headers"; then
+  echo "Via header present" >&2
   exit 1
 fi
 
 viewer() { # CloudFront-Viewer-Address values... -> what Go receives
   local args=() v
   for v in "$@"; do args+=(-H "CloudFront-Viewer-Address: $v"); done
-  curl -s --resolve "aboutme.vn:$cf_port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
+  curl -s --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
     -H 'CF-Connecting-IP: 203.0.113.50' -H 'X-Real-IP: 6.6.6.6' -H 'X-Forwarded-For: 5.5.5.5' \
     -H 'Forwarded: for=4.4.4.4' -H 'X-Forwarded-Host: evil.example' \
-    "${args[@]}" "https://aboutme.vn:$cf_port/api/v1/probe"
+    "${args[@]}" "https://aboutme.vn:$port/api/v1/probe"
 }
 want_viewer() { # want-ip values...
   local want=$1 got
@@ -258,44 +205,31 @@ want_viewer '' 203.0.113.7:123456
 want_viewer '' 'evil.example:80'
 want_viewer '' '{env.ORIGIN_KEY}:1'
 want_viewer '' ''
-# Cloudflare's header means nothing on the CloudFront listener.
+# CF-Connecting-IP means nothing on the CloudFront listener.
 got=$(viewer)
-[[ $got != *203.0.113.50* ]] || { echo "CloudFront listener trusted CF-Connecting-IP: '$got'" >&2; exit 1; }
+[[ $got != *203.0.113.50* ]] || { echo "listener trusted CF-Connecting-IP: '$got'" >&2; exit 1; }
 
 # Nothing listens on the web upstream here, so reverse_proxy logs the failed
 # request. Caddy's logs must keep the method and URI but never the visitor's
-# address or request headers, on either listener.
-curl -s -o /dev/null --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${pull[@]}" \
-  -H 'CF-Connecting-IP: 203.0.113.7' -H 'User-Agent: privacy-probe-agent' \
-  -H 'Referer: https://referrer.example/privacy-probe' "https://aboutme.vn:$port/nested/privacy-probe" || true
-curl -s -o /dev/null --resolve "aboutme.vn:$cf_port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
+# address or request headers.
+curl -s -o /dev/null --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
   -H 'CloudFront-Viewer-Address: 203.0.113.8:5555' -H 'User-Agent: privacy-probe-agent' \
-  -H 'Referer: https://referrer.example/privacy-probe' "https://aboutme.vn:$cf_port/nested/privacy-probe-cf" || true
+  -H 'Referer: https://referrer.example/privacy-probe' "https://aboutme.vn:$port/nested/privacy-probe" || true
 logs=$(podman logs "$name" 2>&1)
 grep -q '"uri":"/nested/privacy-probe"' <<<"$logs" || { echo "no proxy log line for the probe request" >&2; exit 1; }
-grep -q '"uri":"/nested/privacy-probe-cf"' <<<"$logs" ||
-  { echo "no proxy log line for the CloudFront probe request" >&2; exit 1; }
 grep -q '"method":"GET"' <<<"$logs" || { echo "proxy log lost the method" >&2; exit 1; }
-for leak in client_ip remote_ip remote_port '"headers"' 203.0.113.7 203.0.113.8 privacy-probe-agent \
+for leak in client_ip remote_ip remote_port '"headers"' 203.0.113.8 privacy-probe-agent \
   referrer.example Cf-Connecting-Ip Cloudfront-Viewer-Address; do
   if grep -qF -- "$leak" <<<"$logs"; then
     echo "Caddy log contains $leak" >&2
     exit 1
   fi
 done
-# Both edges reach the origin over TCP only, so no HTTP/3 listener starts.
+# The listener reaches the origin over TCP only, so no HTTP/3 listener starts.
 if grep -i 'enabling HTTP/3 listener' <<<"$logs" >&2; then
   echo "Caddy enabled HTTP/3" >&2
   exit 1
 fi
-
-# ---- CloudFront only: no Cloudflare listener, no Cloudflare settings needed ----
-start_stack "${cf_ca_env[@]}" -e EDGES=cloudfront
-if request "${pull[@]}" "https://aboutme.vn:$port/healthz" >/dev/null 2>&1; then
-  echo "EDGES=cloudfront: the Cloudflare listener answered" >&2
-  exit 1
-fi
-want_viewer 203.0.113.7 203.0.113.7:46532
 
 # ---- EDGES and its settings are validated before Caddy starts ----
 refuse() { # label podman run options...
@@ -316,33 +250,29 @@ refuse() { # label podman run options...
   grep -qE '^aboutme-caddy: |parameter (not set|null)' "$work/refuse.err" ||
     { echo "entrypoint did not name the problem for $label:" >&2; cat "$work/refuse.err" >&2; exit 1; }
 }
-both=("${pull_ca_env[@]}" "${cf_ca_env[@]}" -e CLOUDFLARE_RANGES=192.0.2.0/24)
-refuse "an empty EDGES" "${both[@]}" -e EDGES=
-refuse "an unknown edge" "${both[@]}" -e EDGES=cloudflare,bogus
-refuse "a repeated edge" "${both[@]}" -e EDGES=cloudfront,cloudfront
-refuse "a trailing comma" "${both[@]}" -e EDGES=cloudflare,
-refuse "a space" "${both[@]}" -e 'EDGES=cloudflare, cloudfront'
-refuse "an uppercase edge" "${both[@]}" -e EDGES=CloudFront
-refuse "cloudfront without its CA" "${pull_ca_env[@]}" -e CLOUDFLARE_RANGES=192.0.2.0/24 -e EDGES=cloudflare,cloudfront
-refuse "cloudflare without its CA" "${cf_ca_env[@]}" -e CLOUDFLARE_RANGES=192.0.2.0/24 -e EDGES=cloudflare,cloudfront
-refuse "cloudflare without its ranges" "${pull_ca_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudflare
+refuse "an empty EDGES" "${cf_ca_env[@]}" -e EDGES=
+refuse "an unknown edge" "${cf_ca_env[@]}" -e EDGES=cloudfront,bogus
+refuse "a repeated edge" "${cf_ca_env[@]}" -e EDGES=cloudfront,cloudfront
+refuse "a trailing comma" "${cf_ca_env[@]}" -e EDGES=cloudfront,
+refuse "a space" "${cf_ca_env[@]}" -e 'EDGES=cloudfront, cloudfront'
+refuse "an uppercase edge" "${cf_ca_env[@]}" -e EDGES=CloudFront
+refuse "an unknown edge value cloudflare" "${cf_ca_env[@]}" -e EDGES=cloudflare
+refuse "an unknown edge value cloudflare alongside cloudfront" "${cf_ca_env[@]}" -e EDGES=cloudflare,cloudfront
+refuse "cloudfront without its CA" -e EDGES=cloudfront
 
 # The release smoke test runs the same adapt mode without TLS material.
-for edges in cloudflare cloudfront cloudflare,cloudfront; do
-  podman run --rm -e EDGES="$edges" -e CLOUDFLARE_RANGES=192.0.2.0/24 "$image" adapt ||
-    { echo "adapt failed for EDGES=$edges" >&2; exit 1; }
-done
+podman run --rm "$image" adapt || { echo "adapt failed for EDGES unset" >&2; exit 1; }
+podman run --rm -e EDGES=cloudfront "$image" adapt || { echo "adapt failed for EDGES=cloudfront" >&2; exit 1; }
 
 # ---- Maintenance mode: same image, MAINTENANCE=1 selects Caddyfile.maintenance ----
 podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
-podman run -d --name "$name" -p "127.0.0.1:$port:443" -p "127.0.0.1:$cf_port:8443" --tmpfs /run/caddy \
-  "${tls_env[@]}" "${pull_ca_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudflare,cloudfront \
-  -e CLOUDFLARE_RANGES="192.0.2.0/24 198.51.100.0/24" -e MAINTENANCE=1 \
+podman run -d --name "$name" -p "127.0.0.1:$port:8443" --tmpfs /run/caddy \
+  "${tls_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudfront -e MAINTENANCE=1 \
   "$image" >/dev/null
 wait_started "$name"
 
 # The origin still rejects a direct request with no client certificate, and
-# one with a certificate another CA signed, on each listener.
+# one with a certificate another CA signed.
 if request "https://aboutme.vn:$port/healthz" >/dev/null 2>&1; then
   echo "maintenance: request without a client certificate succeeded" >&2
   exit 1
@@ -351,27 +281,19 @@ if request --cert "$work/other.pem" --key "$work/other.key" "https://aboutme.vn:
   echo "maintenance: request with an untrusted client certificate succeeded" >&2
   exit 1
 fi
-for bad in "" "--cert $work/pull.pem --key $work/pull.key"; do
-  # shellcheck disable=SC2086 # $bad is deliberately split into curl options.
-  if cf_request $bad "https://aboutme.vn:$cf_port/healthz" >/dev/null 2>&1; then
-    echo "maintenance: CloudFront listener accepted client certificate options '$bad'" >&2
-    exit 1
-  fi
-done
 
 maint() { # url [client certificate options] -> writes $work/maint.headers and $work/maint.body, a GET
   local url=$1
   shift
-  (($#)) || set -- "${pull[@]}"
+  (($#)) || set -- "${cf[@]}"
   curl -s -m 10 -o "$work/maint.body" -D "$work/maint.headers" \
     --resolve "aboutme.vn:$port:127.0.0.1" --resolve "www.aboutme.vn:$port:127.0.0.1" \
-    --resolve "aboutme.vn:$cf_port:127.0.0.1" \
     --cacert "$work/origin.pem" "$@" "$url"
 }
 maint_method() { # method url -> writes $work/maint.headers and $work/maint.body
   curl -s -m 10 -X "$1" -o "$work/maint.body" -D "$work/maint.headers" \
     --resolve "aboutme.vn:$port:127.0.0.1" --resolve "www.aboutme.vn:$port:127.0.0.1" \
-    --cacert "$work/origin.pem" "${pull[@]}" "$2"
+    --cacert "$work/origin.pem" "${cf[@]}" "$2"
 }
 maint_head() { # url -> writes $work/maint.headers, $work/maint.size
   # -X HEAD only changes the request line; curl still expects a body up to
@@ -380,7 +302,7 @@ maint_head() { # url -> writes $work/maint.headers, $work/maint.size
   # headers, so -o must discard it rather than double up with -D.
   curl -s -m 10 -o /dev/null -D "$work/maint.headers" -w '%{size_download}' --head \
     --resolve "aboutme.vn:$port:127.0.0.1" --resolve "www.aboutme.vn:$port:127.0.0.1" \
-    --cacert "$work/origin.pem" "${pull[@]}" "$1" >"$work/maint.size"
+    --cacert "$work/origin.pem" "${cf[@]}" "$1" >"$work/maint.size"
 }
 check_maint_response() { # label
   grep -q '^HTTP/[0-9.]* 503' "$work/maint.headers" || { echo "$1: want 503" >&2; exit 1; }
@@ -396,6 +318,10 @@ check_maint_response() { # label
   got_csp=$(grep -i '^content-security-policy:' "$work/maint.headers" |
     sed -E 's/^[Cc]ontent-[Ss]ecurity-[Pp]olicy: //' | tr -d '\r')
   [[ $got_csp == "$want_csp" ]] || { echo "$1: CSP does not match the page's recomputed hashes" >&2; exit 1; }
+  if grep -qi '^server:' "$work/maint.headers"; then
+    echo "$1: Server header present" >&2
+    exit 1
+  fi
 }
 for path in / /readyz /api/v1/anything; do
   maint "https://aboutme.vn:$port$path"
@@ -406,17 +332,6 @@ for path in / /readyz /api/v1/anything; do
   cmp -s "$work/maint.body" "$maintenance_html" ||
     { echo "maintenance $path: served body does not match maintenance.html byte for byte" >&2; exit 1; }
 done
-
-# The CloudFront listener serves the same page, keeps the page's own HSTS,
-# and removes Server.
-maint "https://aboutme.vn:$cf_port/readyz" "${cf[@]}"
-check_maint_response "maintenance CloudFront /readyz"
-cmp -s "$work/maint.body" "$maintenance_html" ||
-  { echo "maintenance CloudFront: served body does not match maintenance.html byte for byte" >&2; exit 1; }
-if grep -qi '^server:' "$work/maint.headers"; then
-  echo "maintenance CloudFront: Server header present" >&2
-  exit 1
-fi
 
 for method in POST PUT PATCH DELETE OPTIONS; do
   maint_method "$method" "https://aboutme.vn:$port/api/v1/anything"
@@ -436,19 +351,5 @@ maint "https://www.aboutme.vn:$port/some/path"
 grep -q '^HTTP/[0-9.]* 301' "$work/maint.headers" || { echo "maintenance www: want 301" >&2; exit 1; }
 grep -qi '^location: https://aboutme.vn/some/path' "$work/maint.headers" ||
   { echo "maintenance www: want a permanent redirect to the apex, same path" >&2; exit 1; }
-
-# Maintenance mode with EDGES unset, as production runs it before any edge
-# change: the Cloudflare listener serves the page and 8443 stays closed.
-podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
-podman run -d --name "$name" -p "127.0.0.1:$port:443" -p "127.0.0.1:$cf_port:8443" --tmpfs /run/caddy \
-  "${tls_env[@]}" "${pull_ca_env[@]}" -e CLOUDFLARE_RANGES="192.0.2.0/24 198.51.100.0/24" -e MAINTENANCE=1 \
-  "$image" >/dev/null
-wait_started "$name"
-maint "https://aboutme.vn:$port/readyz"
-check_maint_response "maintenance, EDGES unset"
-if cf_request "${cf[@]}" "https://aboutme.vn:$cf_port/healthz" >/dev/null 2>&1; then
-  echo "maintenance, EDGES unset: the CloudFront listener answered" >&2
-  exit 1
-fi
 
 echo "caddy-prod-test: ok"

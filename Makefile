@@ -138,11 +138,11 @@ media-orphan-sweep-dry-run: ## Report orphan candidates without changing media o
 	cd apps/server && go run ./cmd/server media-orphan-sweep --dry-run
 
 .PHONY: deploy-script-test
-deploy-script-test: ## Test deploy.sh step order and failure recovery with stubbed AWS, GitHub and Cloudflare calls
+deploy-script-test: ## Test deploy.sh step order and failure recovery with stubbed AWS and GitHub calls
 	bash deploy/aws/scripts/deploy_test.sh
 
 .PHONY: caddy-prod-test
-caddy-prod-test: ## Build the production Caddy image and test routing, origin-pull mTLS, and client-IP trust
+caddy-prod-test: ## Build the production Caddy image and test routing, origin mTLS, and client-IP trust
 	bash deploy/caddy/production/test.sh
 
 .PHONY: server-test-realtime-stress

@@ -26,34 +26,29 @@ tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars
 
 A clean environment prints `No changes.`
 
-## Cloudflare settings
+## Cloudflare DNS
 
-These live only in Cloudflare. Change them through the MCP connection or the
-dashboard, and update this table in the same change.
+Cloudflare is DNS only: it answers queries for the zone and carries no HTTP
+traffic. Change these through the MCP connection or the dashboard, and update
+this table in the same change.
 
-| Setting                    | Value                                                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `aboutme.vn`               | `A` to the host Elastic IP (`tofu output host_public_ip`), proxied                                                |
-| `www.aboutme.vn`           | `CNAME` to `aboutme.vn`, proxied; the origin redirects it to the apex                                             |
-| SSL/TLS mode               | Full (strict)                                                                                                     |
-| Always Use HTTPS           | On                                                                                                                |
-| Minimum TLS version        | 1.2; TLS 1.3 on                                                                                                   |
-| HSTS                       | On, max-age 31536000, no subdomains, no preload, nosniff                                                          |
-| Bot Fight Mode             | Off                                                                                                               |
-| Web Analytics (RUM)        | Off; the privacy policy promises no analytics or tracking scripts                                                 |
-| Email Obfuscation          | Off; it rewrote validated public HTML and injected a script                                                       |
-| Rocket Loader, Auto Minify | Off; both would rewrite validated public HTML                                                                     |
-| Automatic HTTPS Rewrites   | Off; it rewrote links inside validated public HTML, and Always Use HTTPS already covers the site                  |
-| Cache rule                 | `not starts_with(http.request.uri.path, "/_nuxt/")` → bypass cache                                                |
-| Origin CA certificate      | ECC, apex and www, expires 2041-09-12; in `/aboutme/prod/tls/origin-cert` until `tls.sh export`                   |
-| Authenticated Origin Pulls | On; zone-level certificate from `tls.sh pull`, active, expires 2036-09-13. Caddy requires it from its first start |
+| Setting                    | Value                                                                                                     |
+| -------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `aboutme.vn`               | `CNAME` (flattened) to the distribution domain (`tofu output distribution_domain_name`), DNS-only, TTL 60 |
+| `www.aboutme.vn`           | `CNAME` to the distribution domain, DNS-only, TTL 60                                                      |
+| ACM validation `CNAME`s    | DNS-only; see the [CloudFront runbook](cloudfront.md#origin-certificate)                                  |
+| CAA                        | `0 issue "amazon.com"`                                                                                    |
+| DNSSEC                     | On, with the DS record at the `.vn` registry                                                              |
+| Universal SSL              | Off, so Cloudflare adds no CAA record for its own CAs                                                     |
+| Authenticated Origin Pulls | Off; no zone-level certificate                                                                            |
+| Origin CA certificate      | None                                                                                                      |
+
+No record is proxied, so proxy-only settings (SSL/TLS mode, cache rules, HSTS,
+Always Use HTTPS) have no effect, and a proxied record would fail TLS because
+Universal SSL is off.
 
 Mail records (MX, TXT, DKIM and the SES `bounce` records) belong to the
 [email runbook](email.md); do not change them here.
-
-Before a deploy, `deploy.sh` compares Cloudflare's published IPv4 ranges with
-the ranges in the running task definition. If they differ, run `tofu apply` to
-refresh the security group and the Caddy trust list first.
 
 ## Secrets
 
@@ -61,17 +56,13 @@ Values live in SSM Parameter Store under `/aboutme/prod/`. Never print them.
 
 - `deploy/aws/scripts/secrets.sh` creates missing database passwords and keys
   and never overwrites one.
-- `tls.sh origin` writes a new key to SSM and `deploy/aws/prod/origin.csr`;
-  deploys stop until `/aboutme/prod/tls/origin-cert` holds its certificate.
-- `tls.sh pull` creates a new origin-pull CA (certificate to SSM, key discarded)
-  and a client certificate in `$XDG_RUNTIME_DIR/aboutme-origin-pull`. Upload it
-  at SSL/TLS → Origin Server → Authenticated Origin Pulls → Zone-level → Upload
-  certificate, pasting each file with `wl-copy < <file>`, then run
-  `wl-copy --clear && tls.sh forget-pull`; the next deploy adopts the new CA.
-- The RDS master password is managed by RDS in Secrets Manager. Only the
-  one-shot `db-setup` task can read it.
 - `tls.sh export` stores the ACM origin certificate in
   `/aboutme/prod/tls/origin-{key,cert}` ([CloudFront runbook](cloudfront.md)).
+- `tls.sh client-ca` and `tls.sh client-import` manage the CloudFront origin
+  mTLS client CA and certificate; see the
+  [CloudFront runbook](cloudfront.md#origin-mtls-client-certificate).
+- The RDS master password is managed by RDS in Secrets Manager. Only the
+  one-shot `db-setup` task can read it.
 
 List names only:
 
@@ -169,26 +160,32 @@ bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 The script verifies the caller, assumes the operator then deploy role, reads the
 release fence, and rejects a target below its minimum before any AWS mutation.
 It then checks the tag and CI, resolves image digests, refuses when the origin
-certificate expires within 21 days, compares Cloudflare ranges, checks that
+certificate expires within 21 days, runs a distribution preflight (origin
+domain, port 8443, HTTPS only, the origin mTLS client certificate), checks that
 every secret the new revisions reference exists (by name, never reading a
 value), snapshots RDS, registers task definition revisions, disables the
 `aboutme-prod-site-down` alarm actions and the `aboutme-prod-task-stopped` rule
 when they were enabled, and disables the job schedules. `app` and `maintenance`
-both listen on 443 at once. Each handoff starts the incoming service and
+both listen on 8443 at once. Each handoff starts the incoming service and
 confirms its task runs before it stops the outgoing one: `maintenance` up, `app`
 down, the database steps, `web` up, `app` up, `maintenance` down, then the
 schedules re-enable. `maintenance` serves
 `deploy/caddy/production/maintenance.html` at 503 for every path, including
-`/readyz` and `/api/*`. It then smoke-tests through Cloudflare, using the base
+`/readyz` and `/api/*`. It then smoke-tests through CloudFront, using the base
 caller's own credentials for `ec2:DescribeAddresses` and
 `cloudwatch:GetMetricStatistics` (in `us-east-1`), both outside the deploy
-role's IAM list. It warms `DEPLOY_WARM_PAGE` (default `/danny`; must stay a
-published resume page) and the homepage, since first requests after a restart
-can be slow on the Cloudflare-to-origin path in a way `/healthz` misses, until
-each answers fast (`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run
-out. The script requires the maintenance page's 503 response before a database
-task starts, and refuses to run while either task definition still maps host
-port 443. Do not promise a bounded downtime window.
+role's IAM list. The smoke checks require HSTS, a `Via` header naming CloudFront
+(`(CloudFront)`), and no `CF-Ray` on `https://aboutme.vn/`, and require that a
+direct request to the Elastic IP on 443 and 8443 time out. It warms
+`DEPLOY_WARM_PAGE` (default `/danny`; must stay a published resume page) and the
+homepage, since first requests after a restart can be slow on the
+CloudFront-to-origin path in a way `/healthz` misses, until each answers fast
+(`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run out. Smoke checks
+retry any failed answer, such as a 502 or 504 from CloudFront, a bounded number
+of times. The script requires the maintenance page's 503 response, checked
+through CloudFront, before a database task starts, and refuses to run while
+either task definition still maps host port 443 or 8443. Do not promise a
+bounded downtime window.
 
 The deploy records the prior state of the site-down alarm actions and
 task-stopped rule before it changes either source. On success, it re-enables the
@@ -440,9 +437,10 @@ alone before any further release action.
 - ECS services `aboutme-prod-app` and `aboutme-prod-web` each run one task;
   `aboutme-prod-maintenance` runs zero. `deploy.sh` is the only thing that
   changes any of their desired counts; OpenTofu ignores that drift.
-- `https://aboutme.vn/healthz` and `/readyz` return 200 through Cloudflare, and
-  `https://www.aboutme.vn/` redirects to the apex.
-- A request straight to the Elastic IP gets no response.
+- `https://aboutme.vn/healthz` and `/readyz` return 200 through CloudFront,
+  responses carry `Via: ... (CloudFront)`, and `https://www.aboutme.vn/`
+  redirects to the apex.
+- A request straight to the Elastic IP on 443 or 8443 gets no response.
 - The five job schedules in group `aboutme-prod-jobs` are enabled.
 - The `aboutme-prod-site-down` alarm (us-east-1) has actions enabled
   (`site_alarm_enabled = true` in `prod.tfvars`).
