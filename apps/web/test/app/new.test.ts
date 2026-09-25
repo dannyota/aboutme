@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import NewResumePage from '../../app/pages/app/new.vue';
 import { setSiteLocale } from '../support/locale';
+import { holdSignedOutRedirects } from '../support/signedOutRedirects';
 
 // /app/new is reached from a public gallery page, so a signed-out visitor
 // must land on account creation, not sign-in, carrying the sample or
@@ -27,11 +28,14 @@ registerEndpoint('/api/v1/me', (event) => {
 });
 
 describe('/app/new', () => {
+  let replace: ReturnType<typeof holdSignedOutRedirects>;
+
   beforeEach(() => {
     meStatus = 401;
     clearNuxtData();
     setSiteLocale(undefined);
     vi.mocked(navigateTo).mockClear();
+    replace = holdSignedOutRedirects();
     startDocumentSpy.mockClear();
   });
 
@@ -42,14 +46,12 @@ describe('/app/new', () => {
     async (route) => {
       await mountSuspended(NewResumePage, { route });
       await vi.waitFor(() => {
-        expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
+        expect(replace).toHaveBeenCalledWith(
           `/register?next=${encodeURIComponent(route)}`,
-          { replace: true },
         );
       });
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
+      expect(replace).not.toHaveBeenCalledWith(
         expect.stringContaining('/login'),
-        expect.anything(),
       );
     });
 

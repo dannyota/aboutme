@@ -9,6 +9,7 @@ import { setResponseStatus } from 'h3';
 import AppRoot from '../app/app.vue';
 import { registerCapabilities } from './support/capabilities';
 import { setSiteLocale } from './support/locale';
+import { holdSignedOutRedirects } from './support/signedOutRedirects';
 
 mockNuxtImport('navigateTo', () => vi.fn());
 registerCapabilities({ providerLogin: false, agentAccess: false });
@@ -33,6 +34,7 @@ async function visit(route: string): Promise<void> {
 beforeEach(() => {
   setSiteLocale(undefined);
   clearNuxtData();
+  holdSignedOutRedirects();
 });
 
 const sitePages = [

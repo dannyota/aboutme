@@ -1,5 +1,6 @@
 import type { Ref } from 'vue';
 import { watch } from 'vue';
+import type { Router } from 'vue-router';
 import type { AuthState } from '@/composables/useAuth';
 import { requiresSession, signedOutRedirect } from '@/utils/returnPath';
 
@@ -14,6 +15,14 @@ import { requiresSession, signedOutRedirect } from '@/utils/returnPath';
  * `redirectWhenSettled`, which redirects only if it lands anonymous. A
  * session lost after the page settled signed in is left to the page
  * (`useResumeList.ts`, `pages/app/resumes/[id].vue`).
+ *
+ * `redirectWhenSettled` calls the router, not `navigateTo`. The read can
+ * settle while the navigation that started it still loads its page chunk,
+ * and Nuxt marks every navigation as processing middleware from `beforeEach`
+ * until `afterEach`. In that window `navigateTo` only returns the location
+ * for a middleware to hand back and navigates nowhere, which would leave a
+ * signed-out visitor who followed a link to `/app/**` on its loading state.
+ * `router.replace` supersedes the pending navigation instead.
  */
 
 interface Target {
@@ -32,7 +41,7 @@ let watching = false;
 
 function redirectWhenSettled(
   authState: Ref<AuthState>,
-  nuxtApp: ReturnType<typeof useNuxtApp>,
+  router: Router,
 ): void {
   if (watching) return;
   watching = true;
@@ -45,9 +54,7 @@ function redirectWhenSettled(
     // The visitor may have moved on to a public page while the read was in
     // flight.
     if (!requiresSession(target.path)) return;
-    // A watcher callback runs outside the Nuxt context navigateTo needs.
-    void nuxtApp.runWithContext(() =>
-      navigateTo(signedOutRedirect(target.fullPath), { replace: true }));
+    void router.replace(signedOutRedirect(target.fullPath));
   });
 }
 
@@ -60,6 +67,6 @@ export default defineNuxtRouteMiddleware((to) => {
     return navigateTo(signedOutRedirect(to.fullPath), { replace: true });
   }
   if (authState.value === 'loading') {
-    redirectWhenSettled(authState, useNuxtApp());
+    redirectWhenSettled(authState, useRouter());
   }
 });

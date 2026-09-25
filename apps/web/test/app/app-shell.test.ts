@@ -8,6 +8,7 @@ import { flushPromises } from '@vue/test-utils';
 import { setResponseStatus } from 'h3';
 import AppShell from '../../app/components/app/AppShell.vue';
 import { setSiteLocale } from '../support/locale';
+import { holdSignedOutRedirects } from '../support/signedOutRedirects';
 
 const me = {
   data: {
@@ -56,6 +57,7 @@ describe('AppShell', () => {
     setSiteLocale('en');
     clearNuxtData();
     vi.mocked(navigateTo).mockClear();
+    holdSignedOutRedirects();
   });
 
   it('shows sign-in and registration while signed out', async () => {
