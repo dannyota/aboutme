@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Hoàng Minh Tiến",
+    "headline": "Bridge Software Engineer · JLPT N1, Java, Japanese clients",
+    "details": [
+      {
+        "id": "2c7cee0e-5989-5664-b21c-1c84b22b2755",
+        "type": "email",
+        "value": "minhtien.hoang@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "f025cee2-8cde-525b-aaa2-95db8e61a3c5",
+        "type": "phone",
+        "value": "+84 90 000 0633",
+        "isHidden": false
+      },
+      {
+        "id": "31a1cb95-01e7-5e7e-972c-ca4f44b99bac",
+        "type": "location",
+        "value": "Hanoi, Vietnam",
+        "isHidden": false
+      },
+      {
+        "id": "227b854b-4dbc-597f-b1bd-80f9cdb18eac",
+        "type": "linkedin",
+        "value": "https://example.com/in/hoang-minh-tien",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "4c83b920-f67b-5473-853a-f3f254a73b8a",
+          "isHidden": false,
+          "text": "<p>Bridge Software Engineer with 9 years on Japanese client projects: 3 as a Java developer (1 onsite in Tokyo), then 6 as a BrSE. Write Japanese specs, run change requests, and coordinate offshore teams of 8 to 12.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "fc311ae0-5ad2-5974-9ea8-425171c32a52",
+          "isHidden": false,
+          "jobTitle": "Bridge Software Engineer (BrSE)",
+          "employer": "A Japan-focused software outsourcing company",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 4
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Life insurance platform for a Japanese client (3 years): coordinated 12 Java developers, wrote 40 basic design documents in Japanese, and handled 150 change requests; UAT defects fell from 45 to 18 per round.</li><li>Warehouse system for a Japanese retailer (1 year): moved the system to .NET 8 with a team of 8 and delivered all 6 releases on schedule.</li><li>Digital banking project for a Japanese client (current, 2 years): analyze requirements and run weekly meetings in Japanese; 90% of specs pass client review the first time.</li><li>Coached 3 developers into BrSE roles; within a year each ran a Japanese client project on their own.</li></ul>"
+        },
+        {
+          "id": "c9fa3eb9-7728-5d9f-8362-0c03372e5e01",
+          "isHidden": false,
+          "jobTitle": "Java Developer",
+          "employer": "A software outsourcing company (800 staff)",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2017,
+              "m": 7
+            },
+            "end": {
+              "y": 2020,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built a contract management module in Java (Spring Boot) and Oracle Database for a Japanese insurer, working from Japanese detail designs.</li><li>Spent 1 year onsite in Tokyo supporting the client through UAT, fixing 90 defects and rewriting the operations manual in Japanese.</li></ul>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "c6568315-0989-5341-919a-94ca5df39fc9",
+          "isHidden": false,
+          "degree": "Bachelor of Engineering in Information Technology",
+          "school": "Hong Ha Institute of Digital Engineering",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2012,
+              "m": 9
+            },
+            "end": {
+              "y": 2017,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "e8051cf3-9b5d-5524-868a-19d465f0751e",
+          "isHidden": false,
+          "name": "Japanese (JLPT N1)",
+          "level": 4
+        },
+        {
+          "id": "bf602f40-ec36-5e90-982a-ba22f7b37fd6",
+          "isHidden": false,
+          "name": "English (TOEIC 780)",
+          "level": 3
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "2dccbb80-4ff2-586a-88c1-e5a0e1139542",
+          "isHidden": false,
+          "name": "Java"
+        },
+        {
+          "id": "4d8fa711-c49b-5279-b35f-32a06cadfaeb",
+          "isHidden": false,
+          "name": "Spring Boot"
+        },
+        {
+          "id": "a7ff7a4d-45df-5e88-a780-cb2df6f10ad2",
+          "isHidden": false,
+          "name": ".NET (C#)"
+        },
+        {
+          "id": "1f773eb1-8608-52ea-93d4-5a753ba948c6",
+          "isHidden": false,
+          "name": "Oracle Database"
+        },
+        {
+          "id": "a07d488e-1de2-59ab-860f-e7806dbcbc49",
+          "isHidden": false,
+          "name": "SQL Server"
+        },
+        {
+          "id": "317ce92d-ad9b-5abe-9dc4-f9fc1080cafb",
+          "isHidden": false,
+          "name": "Spec writing (basic and detail design)"
+        },
+        {
+          "id": "c4e00135-4332-53e6-ad46-b140d5881c80",
+          "isHidden": false,
+          "name": "Redmine"
+        },
+        {
+          "id": "7fe34fa6-9c29-54eb-9b02-f46af47f69df",
+          "isHidden": false,
+          "name": "Git"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "83536e85-3437-5db0-9ec2-5e7cd8127451",
+          "isHidden": false,
+          "title": "Oracle Certified Professional, Java SE 11 Developer",
+          "issuer": "Oracle",
+          "date": {
+            "y": 2019,
+            "m": 12
+          }
+        },
+        {
+          "id": "7591c0ca-05d7-5a29-9eec-2f8124e51943",
+          "isHidden": false,
+          "title": "Fundamental Information Technology Engineer Examination (FE)",
+          "issuer": "VITEC",
+          "date": {
+            "y": 2016,
+            "m": 10
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "be-vietnam-pro",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#191614",
+      "text": "#2a2724",
+      "background": "#ffffff",
+      "accent": "#5a4a3a",
+      "surface": "#f0ede7"
+    },
+    "spacing": {
+      "sectionGap": 18,
+      "entryGap": 9,
+      "lineHeight": 1.55,
+      "pageMargin": {
+        "x": 16,
+        "y": 14
+      }
+    },
+    "heading": {
+      "style": "normal",
+      "showRule": true
+    },
+    "header": {
+      "align": "center",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "education"
+        ],
+        "sidebar": [
+          "language",
+          "skill",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "bar"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "YYYY"
+  }
+}

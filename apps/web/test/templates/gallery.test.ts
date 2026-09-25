@@ -29,14 +29,22 @@ const ids = TEMPLATES.map((template) => template.id);
 describe('gallery catalog', () => {
   it('lists all 20 templates, samples first in the set order', () => {
     expect(GALLERY.map(({ id }) => id).sort()).toEqual([...ids].sort());
-    expect(GALLERY.slice(0, 5).map(({ id }) => id)).toEqual([
+    expect(GALLERY.slice(0, 13).map(({ id }) => id)).toEqual([
       'ats-plain',
       'engineer-compact',
+      'one-page-tight',
+      'nordic-muted',
+      'creative-accent',
+      'elegant-serif-two',
+      'mono-print',
+      'consulting-formal',
+      'international-lang',
+      'minimal-air',
       'graduate-friendly',
       'executive-band',
       'modern-sidebar',
     ]);
-    const rest = GALLERY.slice(5).map(({ name }) => name);
+    const rest = GALLERY.slice(13).map(({ name }) => name);
     expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b, 'en')));
   });
 
@@ -71,7 +79,7 @@ describe('gallery catalog', () => {
     expect(parseFilter(['ats'])).toBeUndefined();
     expect(parseFilter(undefined)).toBeUndefined();
     expect(GALLERY.filter((template) => matchesFilter(template, 'sample')))
-      .toHaveLength(5);
+      .toHaveLength(13);
     for (const filter of FILTERS) {
       expect(galleryCopy.vi.filters[filter]).not.toBe('');
       expect(galleryCopy.en.filters[filter]).not.toBe('');

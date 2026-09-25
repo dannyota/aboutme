@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Phạm Thu Hà",
+    "headline": "QA Lead · Playwright, Selenium, Postman, ISTQB",
+    "details": [
+      {
+        "id": "d41c69ea-8837-504f-8be5-9c89cbc343a9",
+        "type": "email",
+        "value": "thuha.pham@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "211d1519-6cec-53fb-9d5c-f87120bb4fbf",
+        "type": "phone",
+        "value": "+84 90 000 0611",
+        "isHidden": false
+      },
+      {
+        "id": "66e3c149-39a3-5fa9-86df-86775be1dec5",
+        "type": "location",
+        "value": "Cầu Giấy, Hà Nội",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Tóm tắt",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "6a826d63-224a-5db0-a142-06f39df8c6ad",
+          "isHidden": false,
+          "text": "<p>QA Lead với 8 năm kiểm thử web, mobile và API; đưa Playwright vào CI/CD, giảm 70% lỗi lọt ra production.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Kinh nghiệm làm việc",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "9a4be662-1195-5d77-a2b2-9c3f1e1beeca",
+          "isHidden": false,
+          "jobTitle": "QA Lead",
+          "employer": "Công ty fintech khởi nghiệp",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 6
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Dẫn dắt nhóm 5 QA kiểm thử ứng dụng ví điện tử 2 triệu người dùng.</li><li>Chuyển 900 test case sang Playwright, rút ngắn regression từ 95 xuống 25 phút.</li></ul>"
+        },
+        {
+          "id": "b12a2a20-990f-5677-93bf-92abface30f2",
+          "isHidden": false,
+          "jobTitle": "Automation Tester",
+          "employer": "Công ty thương mại điện tử (500 nhân sự)",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2018,
+              "m": 7
+            },
+            "end": {
+              "y": 2023,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Kiểm thử thủ công trong 2 năm đầu, chạy hơn 1.500 test case cho luồng đặt hàng.</li><li>Tự động hóa 650 test case bằng Selenium và Java, rút regression từ 3 ngày còn 4 giờ.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Kỹ năng",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "fdc025b4-b2bd-5d82-a5ea-c358d3efa69a",
+          "isHidden": false,
+          "name": "Playwright, Selenium WebDriver, Postman, k6, TypeScript, Java, SQL, GitLab CI, Jira, Scrum"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Ngoại ngữ",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "b433eec8-c085-5b1f-9f44-b24e0aa1594c",
+          "isHidden": false,
+          "name": "Tiếng Anh (TOEIC 820)"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Chứng chỉ",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "6f535525-0cef-532b-9ce5-78bd536aa246",
+          "isHidden": false,
+          "title": "ISTQB Certified Tester Advanced Level Test Manager (CTAL-TM)",
+          "issuer": "ISTQB",
+          "date": {
+            "y": 2024,
+            "m": 8
+          }
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Học vấn",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "b0219e68-2ac1-555f-be6d-5b3df47161da",
+          "isHidden": false,
+          "degree": "Cử nhân Công nghệ Thông tin",
+          "school": "Trường Đại học Công nghệ Thông tin Bắc Lĩnh",
+          "city": "Hà Nội",
+          "country": "Việt Nam",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2018,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 14
+    },
+    "colors": {
+      "primary": "#000000",
+      "text": "#000000",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 26,
+      "entryGap": 12,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 20,
+        "y": 18
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "stacked",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "skill",
+          "language",
+          "certificate",
+          "education"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

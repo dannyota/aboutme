@@ -20,6 +20,66 @@
     ]
   },
   {
+    "templateId": "consulting-formal",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "consulting-formal-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "consulting-formal",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "consulting-formal-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "creative-accent",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "creative-accent-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "creative-accent",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "creative-accent-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "elegant-serif-two",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "elegant-serif-two-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "elegant-serif-two",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "elegant-serif-two-vi-p1.png"
+    ]
+  },
+  {
     "templateId": "engineer-compact",
     "lng": "en",
     "pages": 1,
@@ -82,6 +142,46 @@
     ]
   },
   {
+    "templateId": "international-lang",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "international-lang-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "international-lang",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "international-lang-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "minimal-air",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "minimal-air-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "minimal-air",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "minimal-air-vi-p1.png"
+    ]
+  },
+  {
     "templateId": "modern-sidebar",
     "lng": "en",
     "pages": 1,
@@ -99,6 +199,66 @@
     "height": 1754,
     "files": [
       "modern-sidebar-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "mono-print",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "mono-print-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "mono-print",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "mono-print-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "nordic-muted",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "nordic-muted-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "nordic-muted",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "nordic-muted-vi-p1.png"
+    ]
+  },
+  {
+    "templateId": "one-page-tight",
+    "lng": "en",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "one-page-tight-en-p1.png"
+    ]
+  },
+  {
+    "templateId": "one-page-tight",
+    "lng": "vi",
+    "pages": 1,
+    "width": 1240,
+    "height": 1754,
+    "files": [
+      "one-page-tight-vi-p1.png"
     ]
   }
 ]

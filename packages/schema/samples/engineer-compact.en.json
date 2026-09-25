@@ -1,37 +1,31 @@
 {
   "schemaVersion": 4,
   "personalDetails": {
-    "fullName": "Khoa Vu",
-    "headline": "Senior Backend Engineer · Go, Distributed Systems, Payments",
+    "fullName": "Đỗ Hoàng Nam",
+    "headline": "Senior Frontend Engineer · React, TypeScript, Next.js",
     "details": [
       {
-        "id": "073df7b2-6368-5c70-93bb-9daee8894ca8",
+        "id": "9fc208cb-2a62-5fb1-b526-bca31b915ea5",
         "type": "email",
-        "value": "khoa.vu@example.com",
+        "value": "nam.do@example.com",
         "isHidden": false
       },
       {
-        "id": "07470325-8924-5fe8-a536-734e10a57a7a",
+        "id": "a6e149f6-a159-5049-a4e7-b46694ccada5",
         "type": "phone",
-        "value": "+84 90 000 0303",
+        "value": "+84 90 000 0521",
         "isHidden": false
       },
       {
-        "id": "35e2d3d5-830b-5b6d-b2c7-579b96f5ac52",
+        "id": "342384e9-1edc-5d3e-b980-41a26fca8fcc",
         "type": "location",
-        "value": "Ho Chi Minh City, Vietnam",
+        "value": "Cau Giay, Hanoi",
         "isHidden": false
       },
       {
-        "id": "97d44d52-276a-5d8f-8f6f-ab32260ebc0c",
+        "id": "9d5f2dcc-cbe0-50a1-8f50-3398475a490a",
         "type": "github",
-        "value": "https://example.com/khoa-vu",
-        "isHidden": false
-      },
-      {
-        "id": "cd01a50a-9461-544c-9e6a-5ac66af2793a",
-        "type": "website",
-        "value": "https://khoavu.example.com",
+        "value": "https://example.com/do-hoang-nam",
         "isHidden": false
       }
     ]
@@ -43,9 +37,9 @@
       "iconKey": "user",
       "entries": [
         {
-          "id": "1cf09015-52e6-588a-a874-3ab6d3f763e2",
+          "id": "bf6f1a37-a8f2-5528-b56a-bbb0a89f5a07",
           "isHidden": false,
-          "text": "<p>Backend engineer with 7 years building payment and logistics systems in Go. Designed services that settle 1.2 million merchant payouts a month at 99.99% availability. Lead a team of 5 and coach engineers on testing, design reviews and on-call practice.</p>"
+          "text": "<p>Senior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month. Strong in web performance, design systems, and Playwright.</p>"
         }
       ]
     },
@@ -55,100 +49,82 @@
       "iconKey": "briefcase",
       "entries": [
         {
-          "id": "6392a955-cdfc-54e1-b90b-71e1cae513f8",
+          "id": "d1aa2a3b-dfbe-5c4b-8a11-3f5289b0d3d9",
           "isHidden": false,
-          "jobTitle": "Senior Backend Engineer",
-          "employer": "Paylane Asia",
-          "city": "Ho Chi Minh City",
+          "jobTitle": "Senior Frontend Engineer",
+          "employer": "An e-commerce company (500 staff)",
+          "city": "Hanoi",
           "country": "Vietnam",
           "dates": {
             "start": {
-              "y": 2023,
-              "m": 2
+              "y": 2024,
+              "m": 4
             },
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Designed the payout service (Go, PostgreSQL) that settles 1.2M merchant transfers a month at 99.99% availability.</li><li>Cut p99 payment API latency from 480 ms to 120 ms by moving fraud checks to an asynchronous Kafka pipeline.</li><li>Lead a team of 5; introduced design reviews and on-call runbooks that cut mean time to recovery from 41 to 18 minutes.</li></ul>"
+          "description": "<ul><li>Lead a team of 4 moving the shopping app from a React SPA to Next.js; LCP fell from 4.1 s to 1.9 s.</li><li>Maintain a 60-component React and TypeScript design system for 5 product teams, which cut feature build time by about 30%.</li><li>Run A/B tests on the checkout flow; 6 tests raised conversion by 9%.</li><li>Cut the home page JavaScript bundle from 480 KB to 210 KB with code splitting.</li></ul>"
         },
         {
-          "id": "cf190963-218c-5e09-beb5-eb0ce81ecd40",
+          "id": "39159c90-3b96-5a8d-8768-8724df347584",
           "isHidden": false,
-          "jobTitle": "Backend Engineer",
-          "employer": "Blue Kite Logistics",
-          "city": "Ho Chi Minh City",
+          "jobTitle": "Frontend Developer",
+          "employer": "A retail SaaS company (120 staff)",
+          "city": "Hanoi",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 1
+            },
+            "end": {
+              "y": 2024,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built the inventory dashboard in React and GraphQL for 800 retail businesses.</li><li>Set up Playwright end-to-end tests in GitLab CI, cutting regressions that reached production by 70%.</li><li>Added virtual scrolling to a 10,000-row table, bringing scroll lag down from 3 s to 0.3 s.</li></ul>"
+        },
+        {
+          "id": "8c53131a-bf53-5953-a5a7-8773fcc88ca8",
+          "isHidden": false,
+          "jobTitle": "Junior Frontend Developer",
+          "employer": "A Japan-focused software outsourcing company",
+          "city": "Hanoi",
           "country": "Vietnam",
           "dates": {
             "start": {
               "y": 2020,
-              "m": 6
-            },
-            "end": {
-              "y": 2023,
-              "m": 1
-            },
-            "present": false
-          },
-          "description": "<ul><li>Built the shipment-tracking API (Go, gRPC, Redis) serving 40M requests a day for 3,000 merchants.</li><li>Moved 14 services from virtual machines to Kubernetes with Terraform, cutting infrastructure cost by 35%.</li><li>Added contract tests between 6 teams&#39; services, dropping integration incidents from 9 to 2 per quarter.</li></ul>"
-        },
-        {
-          "id": "07ee6cab-39d0-5cd3-9c05-ec3b7d87019d",
-          "isHidden": false,
-          "jobTitle": "Software Engineer",
-          "employer": "Otter Byte Studio",
-          "city": "Ho Chi Minh City",
-          "country": "Vietnam",
-          "dates": {
-            "start": {
-              "y": 2019,
               "m": 7
             },
             "end": {
-              "y": 2020,
-              "m": 5
+              "y": 2021,
+              "m": 12
             },
             "present": false
           },
-          "description": "<ul><li>Shipped REST APIs in Node.js for 4 client apps and raised test coverage from 20% to 75%.</li></ul>"
+          "description": "<ul><li>Booking system for a Japanese clinic chain (8 months): built 12 admin screens in React.</li><li>Recruitment website for a Singapore client (6 months): built the responsive UI in Vue.js, scoring 95 in mobile Lighthouse.</li></ul>"
         }
       ]
     },
     "project": {
       "sectionType": "project",
-      "displayName": "Open Source",
+      "displayName": "Projects",
       "iconKey": "folder",
       "entries": [
         {
-          "id": "4b43a754-275a-51a2-8d96-2559a5699be5",
+          "id": "8c8b959a-0df4-59de-88d9-2ce01b88fb86",
           "isHidden": false,
-          "title": "pgqueue",
-          "link": "https://example.com/khoa-vu/pgqueue",
-          "description": "<p>Go job queue built on PostgreSQL SKIP LOCKED. 1,100 GitHub stars; runs in production at 3 companies.</p>",
+          "title": "vn-address-kit",
+          "link": "https://example.com/do-hoang-nam/vn-address-kit",
+          "description": "<p>Vietnamese address library: 300 GitHub stars, 3,000 npm downloads a week.</p>",
           "dates": {
             "start": {
-              "y": 2022,
-              "m": 3
+              "y": 2024,
+              "m": 1
             },
             "end": null,
             "present": true
-          }
-        },
-        {
-          "id": "1d1f8ab7-ac53-5f9c-be85-fea2d345b4da",
-          "isHidden": false,
-          "title": "sqlc-lint",
-          "link": "https://example.com/khoa-vu/sqlc-lint",
-          "description": "<p>Linter that flags unindexed queries in sqlc projects before merge; 40 contributors.</p>",
-          "dates": {
-            "start": {
-              "y": 2024,
-              "m": 8
-            },
-            "end": {
-              "y": 2024,
-              "m": 12
-            },
-            "present": false
           }
         }
       ]
@@ -159,41 +135,51 @@
       "iconKey": "code",
       "entries": [
         {
-          "id": "9506f2c1-93a5-51a3-8163-ea58545982b7",
+          "id": "77fe74f5-ccbe-53a0-a79d-6d8f7b079d44",
           "isHidden": false,
-          "name": "Go",
-          "level": 5,
-          "infoHtml": "<p>7 years, production</p>"
+          "name": "React",
+          "level": 5
         },
         {
-          "id": "a33ead54-4ff8-5cbd-8455-ee83d817ad14",
+          "id": "362339f1-ff6b-5a66-9be6-dd1b1a940f4c",
           "isHidden": false,
-          "name": "PostgreSQL",
-          "level": 4,
-          "infoHtml": "<p>Schema design, query tuning</p>"
+          "name": "TypeScript",
+          "level": 5
         },
         {
-          "id": "51b671bf-e119-5b7a-893b-dc1cf996e80f",
+          "id": "8873ef68-9180-5606-a5ef-7c6ba6c4e431",
           "isHidden": false,
-          "name": "Kafka",
+          "name": "Next.js",
           "level": 4
         },
         {
-          "id": "6689cebc-fcea-5f0e-a99b-173b8dff177a",
+          "id": "05a01e10-7242-5b6c-9f17-588ce98a4367",
           "isHidden": false,
-          "name": "Kubernetes",
+          "name": "Playwright",
           "level": 4
         },
         {
-          "id": "8d517a30-f91d-52a7-81d7-623e5b2bab62",
+          "id": "b1fecc66-2441-50ad-88a4-f57419bc9619",
           "isHidden": false,
-          "name": "Terraform",
+          "name": "Tailwind CSS",
+          "level": 4
+        },
+        {
+          "id": "61dcb600-2164-54a4-b85b-e7a162df8140",
+          "isHidden": false,
+          "name": "Vitest",
+          "level": 4
+        },
+        {
+          "id": "604262ec-7b19-5f41-a2b7-f267bf89a3de",
+          "isHidden": false,
+          "name": "Node.js",
           "level": 3
         },
         {
-          "id": "30514f47-5b6f-555b-9c22-6d31e1ddbe30",
+          "id": "1e31b9eb-258b-59b0-a113-215326ae0611",
           "isHidden": false,
-          "name": "TypeScript",
+          "name": "GraphQL",
           "level": 3
         }
       ]
@@ -204,23 +190,13 @@
       "iconKey": "award",
       "entries": [
         {
-          "id": "c586a921-bb94-5b91-8ce4-812b60c1f9e2",
+          "id": "579c86a2-a274-55d6-8792-d8d946ceca99",
           "isHidden": false,
-          "title": "AWS Certified Solutions Architect – Associate",
+          "title": "AWS Certified Developer – Associate",
           "issuer": "Amazon Web Services",
           "date": {
             "y": 2024,
-            "m": 3
-          }
-        },
-        {
-          "id": "6436d6a6-bf57-5fee-9145-ababba6ee06f",
-          "isHidden": false,
-          "title": "Certified Kubernetes Application Developer (CKAD)",
-          "issuer": "The Linux Foundation",
-          "date": {
-            "y": 2022,
-            "m": 10
+            "m": 5
           }
         }
       ]
@@ -231,15 +207,9 @@
       "iconKey": "languages",
       "entries": [
         {
-          "id": "9943a659-eafb-5839-bc09-3308b4637e6b",
+          "id": "34cdc1c2-bae2-548f-9250-e0f815ed7f19",
           "isHidden": false,
-          "name": "Vietnamese",
-          "level": 5
-        },
-        {
-          "id": "10ec07b2-64c8-51b2-ae6e-4274c83f34b2",
-          "isHidden": false,
-          "name": "English",
+          "name": "English (IELTS 7.0)",
           "level": 4
         }
       ]
@@ -250,11 +220,11 @@
       "iconKey": "graduation-cap",
       "entries": [
         {
-          "id": "31307f2c-6b85-537d-8f89-3c756a487bbf",
+          "id": "bfdc168e-1288-5440-b38b-3a0448c8b95c",
           "isHidden": false,
-          "degree": "B.Eng. Computer Engineering",
-          "school": "Riverside University of Technology",
-          "city": "Ho Chi Minh City",
+          "degree": "B.Eng. in Information Technology",
+          "school": "Song Hong University of Technology",
+          "city": "Hanoi",
           "country": "Vietnam",
           "dates": {
             "start": {
@@ -262,7 +232,7 @@
               "m": 9
             },
             "end": {
-              "y": 2019,
+              "y": 2020,
               "m": 6
             },
             "present": false
