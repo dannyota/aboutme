@@ -31,6 +31,9 @@ readonly -a SPEC_SOURCES=(
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
+  second-factor-lib.ts
+  second-factor-pages.ts
+  proof-shards.mjs
 )
 
 validate_spec_dir() {
@@ -119,11 +122,16 @@ mode_is_totp_production() {
   esac
 }
 
-# add_shard_env <array-name> <flag> <key> <value> <valid-shard>...: validates value against the trailing shard list and appends KEY=value (--env KEY=value when <flag> is set) to the named array.
+# add_shard_env <array-name> <flag> <mode>: for a sharded mode, validates its shard variable against the mode's shard names and appends KEY=value (--env KEY=value when <flag> is set) to the named array.
 add_shard_env() {
-  local -n arr=$1; local flag=$2 key=$3 value=$4; shift 4
+  local -n arr=$1; local flag=$2 key value names
+  case $3 in
+  totp) key=ABOUTME_TOTP_SHARD value=${ABOUTME_TOTP_SHARD-} names='primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled' ;;
+  second-factor) key=ABOUTME_PASSKEY_SHARD value=${ABOUTME_PASSKEY_SHARD-} names='primary-disabled recovery-attempts' ;;
+  *) return 0 ;;
+  esac
   [ -z "$value" ] && return 0
-  [[ " $* " == *" $value "* ]] || fail "$key must be one of: $*"
+  [[ " $names " == *" $value "* ]] || fail "$key must be one of: $names"
   arr+=(${flag:+--env} "$key=$value")
 }
 
@@ -468,11 +476,7 @@ inside_container() {
   if [ "$mode" = mcp-sdk ]; then
     mode_env+=(ABOUTME_MCP_BROWSER_DIR=/mcp-browser ABOUTME_MCP_WORKFLOW_MODE="$workflow_mode")
   fi
-  if [ "$mode" = totp ]; then
-    add_shard_env mode_env '' ABOUTME_TOTP_SHARD "${ABOUTME_TOTP_SHARD-}" primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled
-  elif [ "$mode" = second-factor ]; then
-    add_shard_env mode_env '' ABOUTME_PASSKEY_SHARD "${ABOUTME_PASSKEY_SHARD-}" primary-disabled recovery-attempts
-  fi
+  add_shard_env mode_env '' "$mode"
   env "${mode_env[@]}" \
     /opt/aboutme-auth/node_modules/.bin/playwright test \
     --config "$config" "$spec" \
@@ -667,11 +671,7 @@ host_run() {
     tmp_bytes=268435456
   fi
   local -a env_args=()
-  if [ "$mode" = totp ]; then
-    add_shard_env env_args --env ABOUTME_TOTP_SHARD "${ABOUTME_TOTP_SHARD-}" primary skew replay-concurrent replace-recovery locale-attempts epoch-disabled
-  elif [ "$mode" = second-factor ]; then
-    add_shard_env env_args --env ABOUTME_PASSKEY_SHARD "${ABOUTME_PASSKEY_SHARD-}" primary-disabled recovery-attempts
-  fi
+  add_shard_env env_args --env "$mode"
   exec podman run \
     --rm \
     --init \

@@ -32,6 +32,9 @@ readonly -a DEV_HTTPS_BROWSER_SPEC_SOURCES=(
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
+  second-factor-lib.ts
+  second-factor-pages.ts
+  proof-shards.mjs
 )
 
 # stage_dev_https_browser_specs <context-dir> <staging-dir>
