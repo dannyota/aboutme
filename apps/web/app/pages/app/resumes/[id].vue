@@ -187,11 +187,13 @@ function initializeActions(): void {
 }
 
 onMounted(() => {
+  let wasAuthenticated = false;
   watch(
     auth.authState,
     async (state) => {
       if (state !== 'authenticated') stopRealtime();
       if (state === 'authenticated') {
+        wasAuthenticated = true;
         initializeActions();
         await load();
         if (loadState.value === 'ready') startRealtime();
@@ -202,7 +204,10 @@ onMounted(() => {
           loadState.value = 'ready';
           return;
         }
-        await navigateTo('/login');
+        // A first-visit anonymous state is the shared route guard's job
+        // (middleware/signed-in.global.ts); only a session lost after this
+        // page had already loaded is this page's own to send on.
+        if (wasAuthenticated) await navigateTo('/login');
       }
       if (state === 'error') loadState.value = 'failed';
     },

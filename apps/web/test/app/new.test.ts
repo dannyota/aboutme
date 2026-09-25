@@ -9,9 +9,10 @@ import { setResponseStatus } from 'h3';
 import NewResumePage from '../../app/pages/app/new.vue';
 import { setSiteLocale } from '../support/locale';
 
-// /app/new is reached from a public gallery page, so a signed-out visitor
-// must land on account creation, not sign-in, carrying the sample or
-// template query back with them (register.vue then returns them here).
+// A signed-out visit to /app/new is the shared route guard's job
+// (middleware/signed-in.global.ts sends it to /register, not /login, and
+// carries the sample or template query back with it); this page itself no
+// longer redirects a signed-out visitor.
 
 let meStatus = 401;
 const startDocumentSpy = vi.spyOn(
@@ -34,29 +35,22 @@ describe('/app/new', () => {
   });
 
   it(
-    'sends a signed-out sample visitor to register, next the full path',
+    'does not navigate away from a signed-out sample visit itself',
     async () => {
       const route = '/app/new?sample=ats-plain&lng=en';
       await mountSuspended(NewResumePage, { route });
       await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(route)}`,
-      );
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     },
   );
 
   it(
-    'sends a signed-out template visitor to register the same way',
+    'does not navigate away from a signed-out template visit itself',
     async () => {
       const route = '/app/new?template=classic-serif';
       await mountSuspended(NewResumePage, { route });
       await flushPromises();
-      expect(vi.mocked(navigateTo)).toHaveBeenCalledWith(
-        `/register?next=${encodeURIComponent(route)}`,
-      );
-      expect(vi.mocked(navigateTo)).not.toHaveBeenCalledWith(
-        expect.stringContaining('/login'),
-      );
+      expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     },
   );
 

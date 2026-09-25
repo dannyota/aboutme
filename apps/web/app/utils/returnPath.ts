@@ -120,3 +120,33 @@ export function isAppRoute(path: string): boolean {
   const pathname = path.split(/[?#]/u, 1)[0] ?? '';
   return APP_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
 }
+
+function pathOnly(path: string): string {
+  const pathname = path.split(/[?#]/u, 1)[0] ?? '';
+  return pathname.length > 1 ? pathname.replace(/\/+$/u, '') : pathname;
+}
+
+/**
+ * True when `path` names a route that requires a signed-in session:
+ * `/authorize` and every `/app/**` route (docs/design/web.md, Application
+ * surfaces). The router matches paths without regard to case or a trailing
+ * slash, so this normalizes both before comparing.
+ */
+export function requiresSession(path: string): boolean {
+  const lowered = pathOnly(path).toLowerCase();
+  return lowered === '/authorize' || lowered.startsWith('/app/');
+}
+
+/**
+ * Where a signed-out visit to a session-required route goes: `/app/new`
+ * goes to `/register` (a visitor there came from a public gallery page, not
+ * the app), every other route goes to `/login`, each carrying a validated
+ * `?next=` back to `fullPath` (docs/design/web.md, the shared route guard).
+ */
+export function signedOutRedirect(fullPath: string): string {
+  const next = validateReturnPath(fullPath);
+  const base = pathOnly(fullPath).toLowerCase() === APP_NEW_PATH
+    ? '/register'
+    : '/login';
+  return next === null ? base : `${base}?next=${encodeURIComponent(next)}`;
+}

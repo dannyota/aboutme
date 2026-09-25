@@ -2,7 +2,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { validateReturnPath } from '../app/utils/returnPath';
+import {
+  requiresSession,
+  signedOutRedirect,
+  validateReturnPath,
+} from '../app/utils/returnPath';
 
 describe('login and registration return path', () => {
   it.each([
@@ -77,5 +81,60 @@ describe('login and registration return path', () => {
     ['/app/%6Eew?x=1', '/app/new'],
   ])('keeps only the checked query of %s', (value, want) => {
     expect(validateReturnPath(value)).toBe(want);
+  });
+});
+
+describe('requiresSession', () => {
+  it.each([
+    '/app/resumes',
+    '/app/new?sample=x',
+    '/app/settings/sessions',
+    '/APP/Settings/Sessions/',
+    '/authorize?client_id=a',
+    '/Authorize/',
+  ])('is true for %s', (path) => {
+    expect(requiresSession(path)).toBe(true);
+  });
+
+  it.each([
+    '/',
+    '/app',
+    '/apps',
+    '/application/x',
+    '/templates',
+    '/login',
+    '/login?next=/app/resumes',
+  ])('is false for %s', (path) => {
+    expect(requiresSession(path)).toBe(false);
+  });
+});
+
+describe('signedOutRedirect', () => {
+  it('sends /app/settings/sessions to login with next', () => {
+    expect(signedOutRedirect('/app/settings/sessions')).toBe(
+      '/login?next=%2Fapp%2Fsettings%2Fsessions',
+    );
+  });
+
+  it('sends /app/new to register, dropping unchecked query values', () => {
+    const next = encodeURIComponent(
+      '/app/new?sample=engineer-compact&lng=en',
+    );
+    expect(
+      signedOutRedirect(
+        '/app/new?sample=engineer-compact&lng=en&x=1',
+      ),
+    ).toBe(`/register?next=${next}`);
+  });
+
+  it('keeps the full query of /authorize in next', () => {
+    const next = encodeURIComponent('/authorize?client_id=a&state=b');
+    expect(signedOutRedirect('/authorize?client_id=a&state=b')).toBe(
+      `/login?next=${next}`,
+    );
+  });
+
+  it('drops next for a path over the byte limit', () => {
+    expect(signedOutRedirect('/' + 'a'.repeat(2048))).toBe('/login');
   });
 });
