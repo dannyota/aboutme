@@ -12,8 +12,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 
+	"github.com/dannyota/aboutme/apps/server/internal/devdb"
 	"github.com/dannyota/aboutme/apps/server/internal/password"
 )
 
@@ -66,32 +66,10 @@ func parseConfig(args []string) (string, Config, error) {
 			return "", Config{}, fmt.Errorf("unknown argument %q", args[i])
 		}
 	}
-	if err := validateDatabaseURL(databaseURL); err != nil {
+	if err := devdb.ValidateURL(databaseURL, seedDatabase); err != nil {
 		return "", Config{}, err
 	}
 	return cmd, Config{DatabaseURL: databaseURL}, nil
-}
-
-func validateDatabaseURL(raw string) error {
-	if strings.TrimSpace(raw) == "" {
-		return errors.New("--database-url is required")
-	}
-	connConfig, err := pgx.ParseConfig(raw)
-	if err != nil {
-		return errors.New("--database-url must be a valid postgres connection string")
-	}
-	if connConfig.Host != "127.0.0.1" {
-		return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", connConfig.Host)
-	}
-	for _, fallback := range connConfig.Fallbacks {
-		if fallback.Host != "127.0.0.1" {
-			return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", fallback.Host)
-		}
-	}
-	if connConfig.Database != seedDatabase {
-		return fmt.Errorf("--database-url must target database %q (explicit opt-in), got %q", seedDatabase, connConfig.Database)
-	}
-	return nil
 }
 
 func run(ctx context.Context, cmd string, cfg Config) error {

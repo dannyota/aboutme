@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dannyota/aboutme/apps/server/internal/devdb"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 )
 
@@ -73,7 +73,7 @@ func parseConfig(args []string, root string) (string, Config, error) {
 		}
 	}
 
-	if err := validateDatabaseURL(databaseURL); err != nil {
+	if err := devdb.ValidateURL(databaseURL, fixtureDatabase); err != nil {
 		return "", Config{}, err
 	}
 	resolvedMediaRoot, err := resolveMediaRoot(mediaRoot, root)
@@ -89,32 +89,6 @@ func parseConfig(args []string, root string) (string, Config, error) {
 	}
 
 	return cmd, Config{DatabaseURL: databaseURL, MediaRoot: resolvedMediaRoot, Now: now}, nil
-}
-
-// validateDatabaseURL enforces loopback-only, postgres-only, and the exact
-// fixture database name before any connection is opened.
-func validateDatabaseURL(raw string) error {
-	if strings.TrimSpace(raw) == "" {
-		return errors.New("--database-url is required")
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return fmt.Errorf("--database-url is not a valid URL: %w", err)
-	}
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return fmt.Errorf("--database-url scheme must be postgres or postgresql, got %q", u.Scheme)
-	}
-	if host := u.Hostname(); host != "127.0.0.1" {
-		return fmt.Errorf("--database-url must target loopback 127.0.0.1, got %q", host)
-	}
-	name := strings.Trim(u.Path, "/")
-	if name == "" {
-		return errors.New("--database-url must name a database")
-	}
-	if name != fixtureDatabase {
-		return fmt.Errorf("--database-url must target database %q (explicit opt-in), got %q", fixtureDatabase, name)
-	}
-	return nil
 }
 
 // resolveMediaRoot canonicalizes the media root against the repository root
