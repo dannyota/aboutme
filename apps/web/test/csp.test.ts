@@ -40,10 +40,11 @@ describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
 
   it('never allows inline or eval scripts', () => {
     // The script-src directive carries only 'self': no 'unsafe-inline', no
-    // 'unsafe-eval', and no nonce or hash baked into the static policy (a
-    // page with an inline script, such as the homepage's JSON-LD, earns its
-    // own response-specific hash source at render time instead; see
-    // server/utils/cspHash.ts).
+    // 'unsafe-eval', and no nonce or hash. A page with an inline script, such
+    // as the homepage's JSON-LD, needs none: a
+    // `<script type="application/ld+json">` is a data block the browser
+    // never executes (app/utils/csp.ts cites the HTML spec), so script-src
+    // does not govern it.
     expect(APP_CSP.split(';').find((part) => part.includes('script-src')))
       .toBe(' script-src \'self\'');
     // style-src is the one directive allowed to carry 'unsafe-inline': the
