@@ -16,12 +16,10 @@ export const HTML_CSP
  * Baseline CSP for Nuxt-rendered app pages (`/`, `/login`, `/templates/**`,
  * `/app/**`, and every other route `nuxt.config.ts` does not give a more
  * specific policy): as strict as the interactive app allows rather than the
- * fully locked-down `HTML_CSP`. `default-src 'none'` and `base-uri 'none'`
- * match `HTML_CSP` exactly: the app has no `<iframe>` (the only directives
- * that would otherwise fall back to `default-src`, `frame-src` and
- * `child-src`, need it) and injects no `<base>` tag of its own. Only
- * `form-action` scopes to the app's own origin instead of `'none'`: the app
- * is a real origin with same-origin form submissions.
+ * fully locked-down `HTML_CSP`. `default-src 'self'` and `base-uri 'self'`
+ * scope to the app's own origin, unlike `HTML_CSP`'s `'none'`: the app is a
+ * real origin, not a document with no origin of its own. `form-action` is
+ * `'self'` for the same reason.
  *
  * `script-src 'self'` never carries `'unsafe-inline'` or `'unsafe-eval'`:
  * Nuxt's own hydration payload is already externalized into a same-origin
@@ -59,7 +57,7 @@ export const HTML_CSP
  * `script-src` never need to name Google at all.
  */
 export const APP_CSP
-  = 'default-src \'none\'; base-uri \'none\'; object-src \'none\'; '
+  = 'default-src \'self\'; base-uri \'self\'; object-src \'none\'; '
     + 'frame-ancestors \'none\'; form-action \'self\'; script-src \'self\'; '
     + 'style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; '
     + 'font-src \'self\'; connect-src \'self\'; manifest-src \'self\'; '

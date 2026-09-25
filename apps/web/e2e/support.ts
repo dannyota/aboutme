@@ -11,6 +11,8 @@ import { resolve } from 'node:path';
 export interface CspViolation {
   readonly blockedURI: string;
   readonly effectiveDirective: string;
+  readonly sourceFile: string;
+  readonly sample: string;
 }
 
 export interface CspProbe {
@@ -22,30 +24,45 @@ export interface CspProbe {
 /**
  * Installs listeners a CSP regression would trip: a real
  * `securitypolicyviolation` event, a console error, or an uncaught page
- * error. Call before the first `page.goto`, since `addInitScript` only
- * applies to documents created after it runs.
+ * error. Violations reach Node through a page binding, so the probe keeps
+ * those of every document the page loads, including one it has since
+ * navigated away from. Call before the first `page.goto`, since
+ * `addInitScript` only applies to documents created after it runs.
  */
 export async function trackCsp(page: Page): Promise<CspProbe> {
+  const violations: CspViolation[] = [];
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.exposeFunction(
+    '__reportCspViolation',
+    (violation: CspViolation) => {
+      violations.push(violation);
+    },
+  );
   await page.addInitScript(() => {
-    const violations: CspViolation[] = [];
-    Object.defineProperty(window, '__cspViolations', { value: violations });
     document.addEventListener('securitypolicyviolation', (event) => {
-      violations.push({
+      const report = (window as Window & {
+        __reportCspViolation?: (violation: CspViolation) => Promise<void>;
+      }).__reportCspViolation;
+      void report?.({
         blockedURI: event.blockedURI,
         effectiveDirective: event.effectiveDirective,
+        sourceFile: event.sourceFile,
+        sample: event.sample.slice(0, 80),
       });
     });
   });
   return {
-    violations: () => page.evaluate(() =>
-      (window as Window & { __cspViolations?: CspViolation[] })
-        .__cspViolations ?? []),
+    violations: async () => {
+      // Lets a binding call from a violation raised just before this check
+      // reach Node first.
+      await page.evaluate(() => undefined).catch(() => undefined);
+      return [...violations];
+    },
     consoleErrors,
     pageErrors,
   };

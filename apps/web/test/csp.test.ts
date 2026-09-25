@@ -23,7 +23,7 @@ describe('HTML_CSP (public resume HTML and the harness)', () => {
 describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
   it('is as strict as the interactive app allows', () => {
     expect(APP_CSP).toBe(
-      'default-src \'none\'; base-uri \'none\'; object-src \'none\'; '
+      'default-src \'self\'; base-uri \'self\'; object-src \'none\'; '
       + 'frame-ancestors \'none\'; form-action \'self\'; script-src \'self\'; '
       + 'style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; '
       + 'font-src \'self\'; connect-src \'self\'; manifest-src \'self\'; '
@@ -31,12 +31,11 @@ describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
     );
   });
 
-  it('matches HTML_CSP except for form-action', () => {
-    // The two policies share every directive but form-action: HTML_CSP has
-    // no origin of its own (public resume HTML and the harness), while the
-    // app is a real origin with same-origin form submissions.
-    expect(APP_CSP.replace('form-action \'self\'', 'form-action \'none\''))
-      .toBe(HTML_CSP);
+  it('scopes to the app\'s own origin, unlike HTML_CSP\'s no origin', () => {
+    expect(APP_CSP).toContain('default-src \'self\'');
+    expect(APP_CSP).toContain('base-uri \'self\'');
+    expect(HTML_CSP).toContain('default-src \'none\'');
+    expect(HTML_CSP).toContain('base-uri \'none\'');
   });
 
   it('never allows inline or eval scripts', () => {
@@ -54,9 +53,7 @@ describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
     expect(APP_CSP).toContain('style-src \'self\' \'unsafe-inline\'');
   });
 
-  it('denies framing, embedding, and plugins by default', () => {
-    expect(APP_CSP).toContain('default-src \'none\'');
-    expect(APP_CSP).toContain('base-uri \'none\'');
+  it('denies framing, embedding, and plugins', () => {
     expect(APP_CSP).toContain('frame-ancestors \'none\'');
     expect(APP_CSP).toContain('object-src \'none\'');
   });
