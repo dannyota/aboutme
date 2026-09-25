@@ -24,6 +24,10 @@ import {
 // response's status line, not always the request path.
 const ANONYMOUS_ME_401 = 'a status of 401';
 
+// The browser logs its own "Failed to load resource" message for a document
+// served with status 404; the not-found tests below expect that status.
+const DOCUMENT_404 = 'a status of 404';
+
 // The schema-current golden fixture (part of the reviewed e2e source set;
 // packages/schema/fixtures/full.json), used as the editor test's mocked
 // resume body with its photo stripped: the editor watches
@@ -159,7 +163,11 @@ test('a 404 page sends the plain app CSP and never x-powered-by', async ({
     .map((match) => match[0]);
   expect(inlineScripts).toEqual([]);
 
-  await expectCspClean(probe, [ANONYMOUS_ME_401]);
+  await expectCspClean(probe, [ANONYMOUS_ME_401, DOCUMENT_404]);
+  // Only the document itself may be a 404; a missing chunk or asset would
+  // log a second one.
+  expect(probe.consoleErrors.filter((message) =>
+    message.includes(DOCUMENT_404))).toHaveLength(1);
   expect(external).toEqual([]);
 });
 
@@ -179,7 +187,11 @@ test('an unknown top-level path sends the plain app CSP', async ({ page }) => {
     .map((match) => match[0]);
   expect(inlineScripts).toEqual([]);
 
-  await expectCspClean(probe, [ANONYMOUS_ME_401]);
+  await expectCspClean(probe, [ANONYMOUS_ME_401, DOCUMENT_404]);
+  // Only the document itself may be a 404; a missing chunk or asset would
+  // log a second one.
+  expect(probe.consoleErrors.filter((message) =>
+    message.includes(DOCUMENT_404))).toHaveLength(1);
   expect(external).toEqual([]);
 });
 
