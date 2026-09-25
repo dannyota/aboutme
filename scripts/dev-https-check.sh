@@ -51,6 +51,9 @@ readonly -a SPEC_SOURCES=(
   editor-fixtures.ts
   network-policy.ts
   harness-lib.ts
+  second-factor-lib.ts
+  second-factor-pages.ts
+  proof-shards.mjs
 )
 
 EVIDENCE_KEEP=10

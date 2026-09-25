@@ -25,11 +25,9 @@ import {
   type ConsoleMessage,
   type Page,
   type Request,
-  type Route,
 } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
-import { request as httpsRequest } from 'node:https';
 import { freshCSRF } from './editor-fixtures';
 import {
   installExternalRequestFirewall,
@@ -42,10 +40,75 @@ import {
   signInWithGoogle,
 } from './harness-lib';
 import {
-  ALLOWED_ORIGIN,
   httpFailureStatus,
   isExpectedNegativeHTTPConsole,
 } from './network-policy';
+import { TOTP_SHARD_ROLES } from './proof-shards.mjs';
+import {
+  AuthenticatorPool,
+  CA_PATH,
+  callbackCategory,
+  CAPTURE_TOKEN_PATH,
+  captureClient,
+  configureProof,
+  cookieValue,
+  DESKTOP,
+  DISABLED_ACCOUNT_LABEL,
+  fabricatedRecoveryCode,
+  failOnUnexpectedConsole,
+  landedAfter,
+  landingCategory,
+  LINK_ACCOUNT_LABEL,
+  ORIGIN,
+  outcomeOf,
+  PENDING_COOKIE,
+  pendingCookieHeader,
+  pendingCSRFToken,
+  PHONE,
+  beginTeardown as recordTeardown,
+  recordedRole,
+  recordedStage,
+  role as recordRole,
+  recordUnexpectedConsole,
+  runPassword,
+  runsRole,
+  SESSION_COOKIE,
+  stage,
+  tearingDown,
+  type TrustedResult,
+  trustedPost,
+  trustedRequest,
+  WAIT_HYDRATE_MS,
+  WAIT_NAVIGATION_MS,
+  WAIT_RESPONSE_MS,
+  watchingCallback,
+} from './second-factor-lib';
+import {
+  agentToolsStatus,
+  closeRevealAndProveCleared,
+  completeWithRecovery,
+  createAgentGrant,
+  deleteAccount,
+  deleteSignedInAccount,
+  DISABLED_WARM_ROUTES,
+  expectSignedInApp,
+  forceReauthOnce,
+  gotoFirstVisit,
+  gotoHydrated,
+  hydrated,
+  meStatus,
+  passwordSignIn,
+  type PendingLocaleCase,
+  readRevealedCodes,
+  reauthenticateWithPassword,
+  registerVerified,
+  setLocale,
+  signOut,
+  SIGNED_IN_WARM_ROUTES,
+  submitRecoveryCode,
+  WARM_ROUTES,
+  warmRoutes,
+} from './second-factor-pages';
 import {
   codeForStep,
   codeNextStep,
@@ -59,39 +122,15 @@ import {
   TOTP_PERIOD_SECONDS,
 } from './totp-fixture';
 
-const ORIGIN = ALLOWED_ORIGIN;
 const MODE = process.env.ABOUTME_BROWSER_MODE ?? 'totp';
-const CA_PATH = '/uat-input/caddy-root.crt';
-const CAPTURE_TOKEN_PATH = '/uat-input/mail-capture-token';
-const CLIENT_NAME_PATH = '/uat-input/mcp-client-name';
-const CAPTURE_URL = 'http://127.0.0.1:20444/api/messages';
 const ENABLED_EVIDENCE_PATH = '/evidence/totp-second-factor-proof.json';
 const DISABLED_EVIDENCE_PATH = '/evidence/totp-enrollment-disabled-proof.json';
 // Diagnostic only: per-section wall-clock timing, never covered by
 // verify-evidence.mjs and never read by it.
 const ENABLED_TIMING_PATH = '/evidence/totp-timing.json';
-const REDIRECT_URI = 'http://127.0.0.1:20090/callback';
-const LINK_ACCOUNT_LABEL = 'Bob Local — bob@example.invalid';
-const DISABLED_ACCOUNT_LABEL = 'Development User — developer@example.invalid';
-const PENDING_COOKIE = '__Host-auth-pending';
-const SESSION_COOKIE = '__Host-session';
-const LOCALE_COOKIE = 'aboutme-locale';
-const RECOVERY_INPUT = '#second-factor-recovery-code';
 const TOTP_LOGIN_INPUT = '#second-factor-totp-code';
 const TOTP_SETUP_INPUT = '#totp-code';
-const PHONE = { height: 844, width: 390 };
-const DESKTOP = { height: 900, width: 1440 };
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-// See second-factor.spec.ts for why each of these is bounded rather than
-// left to Playwright's own defaults.
-const WAIT_RESPONSE_MS = 30_000;
-const WAIT_NAVIGATION_MS = 60_000;
-const WAIT_LANDING_MS = 180_000;
-const WAIT_WARM_MS = 90_000;
-const WAIT_HYDRATE_MS = 30_000;
-const WAIT_LOOPBACK_MS = 20_000;
-const WAIT_MAIL_MS = 45_000;
 // Teardown's own sign-in never needs the full WAIT_LANDING_MS: a real
 // account's post-login navigation is a fast client-side route change, and an
 // account that never existed fails at the password check, not by hanging.
@@ -110,17 +149,6 @@ const EXPECTED_PAGE_FAILURES: ReadonlyMap<string, readonly number[]> = new Map([
   ['/api/v1/auth/password/reauth', [401]],
   ['/mcp', [401]],
 ]);
-
-// --- Failure reporting, modeled on second-factor.spec.ts --------------------
-
-type FailureOutcome
-  = | 'timeout'
-    | 'navigation'
-    | 'response'
-    | 'capture'
-    | 'locator'
-    | 'assertion'
-    | 'unknown';
 
 type AccountRole =
   | 'none'
@@ -142,85 +170,27 @@ type AccountRole =
 // host environment). Unset (every local or single-shard run) proves every
 // role. `primary` alone carries most of the account's own step count, so it
 // is its own shard.
-type TotpShard =
-  | 'primary'
-  | 'skew'
-  | 'replay-concurrent'
-  | 'replace-recovery'
-  | 'locale-attempts'
-  | 'epoch-disabled';
+// The shard map itself lives in proof-shards.mjs, shared with the coverage
+// check.
+const ACTIVE_ROLES = configureProof(
+  MODE, 'ABOUTME_TOTP_SHARD', TOTP_SHARD_ROLES,
+);
 
-const TOTP_SHARD_ROLES: Readonly<Record<TotpShard, readonly AccountRole[]>> = {
-  'primary': ['primary'],
-  'skew': ['skew'],
-  'replay-concurrent': ['replay', 'concurrent'],
-  'replace-recovery': ['replace', 'recovery'],
-  'locale-attempts': ['locale', 'attempts'],
-  'epoch-disabled': ['epoch'],
-};
+// --- Failure reporting (see second-factor-lib.ts) ---------------------------
 
-const TOTP_SHARD_NAMES = Object.keys(TOTP_SHARD_ROLES) as readonly TotpShard[];
-
-function isTotpShard(value: string): value is TotpShard {
-  return (TOTP_SHARD_NAMES as readonly string[]).includes(value);
-}
-
-function activeShardRoles(): ReadonlySet<AccountRole> | null {
-  const raw = process.env.ABOUTME_TOTP_SHARD;
-  if (raw === undefined || raw === '') return null;
-  if (isTotpShard(raw)) return new Set(TOTP_SHARD_ROLES[raw]);
-  throw new Error(
-    `ABOUTME_TOTP_SHARD must be one of ${TOTP_SHARD_NAMES.join(', ')}, not ${JSON.stringify(raw)}`,
-  );
-}
-
-const ACTIVE_ROLES = activeShardRoles();
-
-/** True when the active shard (or the unsharded default) proves `r`. */
-function runsRole(r: AccountRole): boolean {
-  return ACTIVE_ROLES === null || ACTIVE_ROLES.has(r);
-}
-
-let recordedStage = 'start';
-let recordedRole: AccountRole = 'none';
-let tearingDown = false;
 // CI diagnostics only (see totp-fixture.ts "CI section timing"); never part
 // of the withheld browser output or the verified evidence.
 const timer = newSectionTimer();
 
-function stage(name: string): void {
-  if (tearingDown) return;
-  recordedStage = name;
-  console.log(`${MODE}-stage:${name}`);
-}
-
 function role(next: AccountRole): void {
   if (tearingDown) return;
   timer.enter(next);
-  recordedRole = next;
+  recordRole(next);
 }
 
 function beginTeardown(): void {
   timer.enter('cleanup');
-  tearingDown = true;
-  console.log(`${MODE}-stage:cleanup-after-${recordedStage}`);
-}
-
-const OUTCOME_PATTERNS: ReadonlyArray<readonly [RegExp, FailureOutcome]> = [
-  [/^Test timeout of \d+ms exceeded/u, 'timeout'],
-  [/waitForURL|waiting for navigation/u, 'navigation'],
-  [/waitForResponse|waitForEvent/u, 'response'],
-  [/capture (read|reset) failed|within its capture bound/u, 'capture'],
-  [/^(?:TimeoutError: )?(locator|page|frame|elementHandle)\./u, 'locator'],
-  [/expect|Timed out \d+ms waiting for/u, 'assertion'],
-];
-
-function outcomeOf(status: string, message: string): FailureOutcome {
-  if (status === 'timedOut') return 'timeout';
-  for (const [pattern, outcome] of OUTCOME_PATTERNS) {
-    if (pattern.test(message)) return outcome;
-  }
-  return 'unknown';
+  recordTeardown();
 }
 
 /**
@@ -287,120 +257,9 @@ test.afterEach(({}, testInfo) => {
   );
 });
 
-function callbackCategory(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return 'callback-unparsed';
-  }
-  if (url.origin !== ORIGIN) return 'callback-foreign-origin';
-  if (url.pathname === '/login/second-factor') return 'callback-second-factor';
-  if (url.pathname === '/login') return 'callback-login';
-  if (url.pathname !== '/app/settings/sessions') return 'callback-other-path';
-  return url.searchParams.get('error') === null
-    ? 'callback-settings-clean'
-    : 'callback-settings-error';
-}
-
-const APP_LANDINGS: readonly string[] = [
-  'landing-app-new',
-  'landing-app-other',
-  'landing-app-resume',
-  'landing-app-resumes',
-  'landing-app-settings',
-];
-
-function landingCategory(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return 'landing-unparsed';
-  }
-  if (url.origin !== ORIGIN) return 'landing-foreign-origin';
-  const path = url.pathname;
-  if (path === '/login') return 'landing-login';
-  if (path === '/login/second-factor') return 'landing-second-factor';
-  if (path === '/app/resumes') return 'landing-app-resumes';
-  if (path.startsWith('/app/resumes/')) return 'landing-app-resume';
-  if (path === '/app/new') return 'landing-app-new';
-  if (path === '/app/settings/sessions') return 'landing-app-settings';
-  if (path.startsWith('/app/')) return 'landing-app-other';
-  if (path === '/') return 'landing-home';
-  return 'landing-other-path';
-}
-
-async function submitState(page: Page): Promise<string> {
-  const submit = page
-    .getByTestId('login-form')
-    .locator('button[type="submit"]');
-  if (await submit.count() === 0) return 'submit-absent';
-  return await submit.isDisabled() ? 'submit-busy' : 'submit-idle';
-}
-
-async function landedAfter(
-  page: Page,
-  from: string,
-  timeoutMs: number = WAIT_LANDING_MS,
-): Promise<string> {
-  let settled = true;
-  try {
-    await page.waitForURL(
-      (url) => url.origin === ORIGIN && url.pathname !== from,
-      { timeout: timeoutMs },
-    );
-  } catch {
-    settled = false;
-  }
-  let where = landingCategory(page.url());
-  if (where === 'landing-login') {
-    where = await page.getByTestId('login-form-error').count() > 0
-      ? 'landing-login-error'
-      : 'landing-login-idle';
-  }
-  stage(settled ? where : `${where}-${await submitState(page)}`);
-  return where;
-}
-
-function expectLanding(page: Page, want: string): void {
-  expect(landingCategory(page.url())).toBe(want);
-}
-
-async function expectSignedInApp(page: Page): Promise<void> {
-  expect(APP_LANDINGS).toContain(landingCategory(page.url()));
-  expect(await meStatus(page)).toBe(200);
-}
-
-async function watchingCallback(
-  page: Page,
-  body: () => Promise<void>,
-): Promise<void> {
-  let landed = 'callback-none';
-  const record = (frame: { url(): string; parentFrame(): unknown }): void => {
-    if (frame.parentFrame() === null) landed = callbackCategory(frame.url());
-  };
-  page.on('framenavigated', record);
-  try {
-    await body();
-  } catch (error) {
-    if (!tearingDown) recordedStage = landed;
-    throw error;
-  } finally {
-    page.off('framenavigated', record);
-  }
-}
-
-/**
- * Closed words for each unexpected console error: the index of a known path
- * in EXPECTED_PAGE_FAILURES (or `other`, `offorigin`, `nonhttp`) plus the
- * status. No URL, query, or body text is kept.
- */
-const unexpectedConsole: string[] = [];
-
 function isUnexpectedTotpConsole(message: ConsoleMessage): boolean {
   const unexpected = classifyTotpConsole(message);
-  if (unexpected !== null) unexpectedConsole.push(unexpected);
+  if (unexpected !== null) recordUnexpectedConsole(unexpected);
   return unexpected !== null;
 }
 
@@ -423,19 +282,6 @@ function classifyTotpConsole(message: ConsoleMessage): string | null {
   return `${index < 0 ? 'other' : `path${index}`}-${status}`;
 }
 
-/**
- * Fails a completed journey whose page logged an unexpected error, naming
- * the first few in closed words so the hosted log shows them.
- */
-function failOnUnexpectedConsole(journeyDone: boolean): void {
-  if (!journeyDone || unexpectedConsole.length === 0) return;
-  // Teardown has begun, so stage() is silent; record the words directly.
-  recordedStage
-    = `console-unexpected-${unexpectedConsole.slice(0, 4).join('-')}`;
-  console.log(`${MODE}-stage:${recordedStage}`);
-  throw new Error('the page logged unexpected console errors');
-}
-
 // --- Fictional run identity --------------------------------------------
 
 const RUN_MARKER = randomBytes(6).toString('hex');
@@ -446,280 +292,7 @@ function runEmail(role: string): string {
   return `totp-${role}-${RUN_MARKER}-${accountSequence}@example.invalid`;
 }
 
-function runPassword(): string {
-  return randomBytes(24).toString('base64url');
-}
-
-function canonicalRecovery(value: string): string {
-  return value.replace(/[- ]/gu, '').toUpperCase();
-}
-
-function fabricatedRecoveryCode(issued: readonly string[]): string {
-  for (;;) {
-    let body = '';
-    for (const [index, byte] of [...randomBytes(26)].entries()) {
-      body += CROCKFORD[byte % (index === 0 ? 8 : 32)];
-    }
-    const code = `amr_${body}`;
-    const wanted = canonicalRecovery(code);
-    if (!issued.some((value) => canonicalRecovery(value) === wanted)) {
-      return code;
-    }
-  }
-}
-
-// --- Trusted loopback requests -------------------------------------------
-
-interface TrustedResult {
-  readonly status: number;
-  readonly code: string | null;
-}
-
-function trustedRequest(
-  ca: Buffer,
-  method: 'POST' | 'PUT',
-  path: string,
-  headers: Readonly<Record<string, string>>,
-  body: string,
-): Promise<TrustedResult> {
-  if (!path.startsWith('/') || path.startsWith('//')) {
-    return Promise.reject(new Error('trusted request path rejected'));
-  }
-  return new Promise((resolve, reject) => {
-    const request = httpsRequest(
-      {
-        ca,
-        headers,
-        hostname: 'localhost',
-        method,
-        path,
-        port: 20443,
-        protocol: 'https:',
-        timeout: WAIT_LOOPBACK_MS,
-      },
-      (response) => {
-        const chunks: Buffer[] = [];
-        let size = 0;
-        response.on('data', (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > 64 * 1024) {
-            request.destroy(new Error('trusted response exceeded bound'));
-            return;
-          }
-          chunks.push(chunk);
-        });
-        response.on('end', () => {
-          resolve({
-            code: errorCode(Buffer.concat(chunks).toString('utf8')),
-            status: response.statusCode ?? 0,
-          });
-        });
-      },
-    );
-    request.on('timeout', () => {
-      request.destroy(new Error('trusted request exceeded its loopback bound'));
-    });
-    request.on('error', reject);
-    if (body !== '') request.write(body);
-    request.end();
-  });
-}
-
-function trustedPost(
-  ca: Buffer,
-  path: string,
-  headers: Readonly<Record<string, string>>,
-  body: string,
-): Promise<TrustedResult> {
-  return trustedRequest(ca, 'POST', path, headers, body);
-}
-
-function errorCode(body: string): string | null {
-  try {
-    const parsed = JSON.parse(body) as { error?: { code?: unknown } };
-    return typeof parsed.error?.code === 'string' ? parsed.error.code : null;
-  } catch {
-    return null;
-  }
-}
-
-async function cookieValue(
-  context: BrowserContext,
-  name: string,
-): Promise<string | null> {
-  const jar = await context.cookies(ORIGIN);
-  return jar.find((entry) => entry.name === name)?.value ?? null;
-}
-
-async function pendingCookieHeader(context: BrowserContext): Promise<string> {
-  const token = await cookieValue(context, PENDING_COOKIE);
-  if (token === null) throw new Error('no pending cookie to carry');
-  return `${PENDING_COOKIE}=${token}`;
-}
-
-async function pendingCSRFToken(page: Page): Promise<string> {
-  return page.evaluate(async () => {
-    const response = await fetch('/api/v1/auth/second-factor', {
-      cache: 'no-store',
-      credentials: 'include',
-    });
-    const body = (await response.json()) as { data?: { csrfToken?: unknown } };
-    if (response.status !== 200 || typeof body.data?.csrfToken !== 'string') {
-      throw new Error('pending status read failed');
-    }
-    return body.data.csrfToken;
-  });
-}
-
-// --- Captured security mail ------------------------------------------------
-
-interface CapturedMessage {
-  kind: string;
-  to: string;
-  text_body: string;
-}
-
-interface CaptureClient {
-  reset(): Promise<void>;
-  waitForToken(kind: string, to: string): Promise<string>;
-  waitForKind(kind: string, to: string): Promise<void>;
-}
-
-function captureClient(token: string): CaptureClient {
-  const headers = { Authorization: `Bearer ${token}` };
-  const read = async (): Promise<CapturedMessage[]> => {
-    const response = await fetch(CAPTURE_URL, {
-      headers,
-      signal: AbortSignal.timeout(WAIT_LOOPBACK_MS),
-    });
-    if (!response.ok) throw new Error(`capture read failed: ${response.status}`);
-    const body = (await response.json()) as { messages: CapturedMessage[] };
-    return body.messages;
-  };
-  return {
-    async reset() {
-      const response = await fetch(CAPTURE_URL, {
-        headers,
-        method: 'DELETE',
-        signal: AbortSignal.timeout(WAIT_LOOPBACK_MS),
-      });
-      if (!response.ok) {
-        throw new Error(`capture reset failed: ${response.status}`);
-      }
-    },
-    async waitForKind(kind, to) {
-      const deadline = Date.now() + WAIT_MAIL_MS;
-      while (Date.now() < deadline) {
-        for (const message of await read()) {
-          if (message.kind === kind && message.to === to) return;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      throw new Error('no security message within its capture bound');
-    },
-    async waitForToken(kind, to) {
-      const deadline = Date.now() + WAIT_MAIL_MS;
-      while (Date.now() < deadline) {
-        for (const message of await read()) {
-          if (message.kind !== kind || message.to !== to) continue;
-          const found = message.text_body.match(/#token=([A-Za-z0-9_-]+)/u);
-          if (found?.[1] !== undefined) return found[1];
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250));
-      }
-      throw new Error('no security message within its capture bound');
-    },
-  };
-}
-
 // --- Page helpers ------------------------------------------------------
-
-async function setLocale(
-  context: BrowserContext,
-  locale: 'en' | 'vi',
-): Promise<void> {
-  await context.addCookies([
-    { name: LOCALE_COOKIE, url: ORIGIN, value: locale },
-  ]);
-}
-
-const WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
-  ['/register', 'register'],
-  ['/login', 'login'],
-  ['/login/second-factor', 'login-second-factor'],
-  ['/forgot-password', 'forgot-password'],
-];
-
-const SIGNED_IN_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
-  ['/app/resumes', 'app-resumes'],
-  ['/app/settings/sessions', 'app-settings-sessions'],
-];
-
-const DISABLED_WARM_ROUTES: ReadonlyArray<readonly [string, string]> = [
-  ['/login', 'login'],
-];
-
-type CounterClass = 'certificate' | 'console' | 'external' | 'page';
-
-function dirtiedCounter(
-  before: DiagnosticCounters,
-  after: DiagnosticCounters,
-): CounterClass | null {
-  if (after.certificateErrors !== before.certificateErrors) {
-    return 'certificate';
-  }
-  if (after.consoleErrors !== before.consoleErrors) return 'console';
-  if (after.externalRequests !== before.externalRequests) return 'external';
-  if (after.pageErrors !== before.pageErrors) return 'page';
-  return null;
-}
-
-async function warmRoutes(
-  page: Page,
-  routes: ReadonlyArray<readonly [string, string]>,
-  counters: DiagnosticCounters,
-): Promise<void> {
-  for (const [path, token] of routes) {
-    stage(`warm-${token}`);
-    const before = { ...counters };
-    await page.goto(path, { timeout: WAIT_WARM_MS });
-    await hydrated(page, WAIT_WARM_MS);
-    const dirty = dirtiedCounter(before, counters);
-    if (dirty !== null) stage(`warm-dirty-${token}-${dirty}`);
-    expect(dirty).toBeNull();
-  }
-}
-
-async function hydrated(page: Page, timeout: number): Promise<void> {
-  await expect.poll(
-    () => page.evaluate(() => Boolean(
-      (document.getElementById('__nuxt') as HTMLElement & {
-        __vue_app__?: unknown;
-      } | null)?.__vue_app__,
-    )),
-    { timeout },
-  ).toBe(true);
-}
-
-async function gotoHydrated(page: Page, path: string): Promise<void> {
-  await page.goto(path);
-  await hydrated(page, WAIT_HYDRATE_MS);
-}
-
-async function gotoFirstVisit(page: Page, url: string): Promise<void> {
-  await page.goto(url, { timeout: WAIT_WARM_MS });
-  await hydrated(page, WAIT_WARM_MS);
-}
-
-async function meStatus(page: Page): Promise<number> {
-  return page.evaluate(async () => {
-    const response = await fetch('/api/v1/me', {
-      cache: 'no-store',
-      credentials: 'include',
-    });
-    return response.status;
-  });
-}
 
 interface FactorState {
   readonly status: number;
@@ -758,91 +331,6 @@ async function factorState(page: Page): Promise<FactorState> {
       totpEnabled: body.data?.totpEnabled === true,
     };
   });
-}
-
-async function registerVerified(
-  page: Page,
-  capture: CaptureClient,
-  email: string,
-  password: string,
-  name: string,
-): Promise<void> {
-  stage('register-open');
-  await gotoHydrated(page, '/register');
-  stage('register-form-ready');
-  await expect(page.getByTestId('register-form')).toBeVisible();
-  stage('register-fill');
-  await page.getByLabel('Name').fill(name);
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password', { exact: true }).fill(password);
-  await page.getByLabel('Confirm password', { exact: true }).fill(password);
-  stage('register-submit');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  stage('register-accepted');
-  await expect(page.getByTestId('register-success')).toBeVisible();
-  stage('register-await-mail');
-  const token = await capture.waitForToken('verify', email);
-  stage('register-verify-open');
-  await gotoFirstVisit(page, `${ORIGIN}/verify-email#token=${token}`);
-  stage('register-verified');
-  await expect(page.getByTestId('verify-success')).toBeVisible();
-}
-
-async function passwordSignIn(
-  page: Page,
-  email: string,
-  password: string,
-  landingTimeoutMs: number = WAIT_LANDING_MS,
-): Promise<'pending' | 'session'> {
-  stage('sign-in-open');
-  await gotoHydrated(page, '/login');
-  stage('sign-in-fill');
-  await page.locator('#login-email').fill(email);
-  await page.locator('#login-password').fill(password);
-  const response = page.waitForResponse((candidate) => {
-    const url = new URL(candidate.url());
-    return url.origin === ORIGIN
-      && url.pathname === '/api/v1/auth/password/login';
-  }, { timeout: WAIT_RESPONSE_MS });
-  stage('sign-in-submit');
-  await page.getByTestId('login-form').locator('button[type="submit"]')
-    .click();
-  const status = (await response).status();
-  stage('sign-in-landing');
-  const where = await landedAfter(page, '/login', landingTimeoutMs);
-  if (status === 202) {
-    expect(where).toBe('landing-second-factor');
-    await hydrated(page, WAIT_HYDRATE_MS);
-    return 'pending';
-  }
-  expect(status).toBe(204);
-  expect(APP_LANDINGS).toContain(where);
-  expect(await meStatus(page)).toBe(200);
-  return 'session';
-}
-
-/**
- * Signs out. In a sharded run, no-ops without navigating when no session
- * exists yet: a shard's first role has no session yet, and visiting
- * /app/settings/sessions while signed out logs unexpected 401s from the API
- * calls the settings page makes on the way to redirecting to /login. The
- * unsharded default always expects a session and still fails if there is
- * none, so a broken logout keeps failing an unsharded run.
- */
-async function signOut(page: Page): Promise<void> {
-  await setLocale(page.context(), 'en');
-  if (ACTIVE_ROLES !== null
-    && await cookieValue(page.context(), SESSION_COOKIE) === null) return;
-  await gotoHydrated(page, '/app/settings/sessions');
-  await page.getByRole('button', { name: 'Log out', exact: true }).click();
-  await page.waitForURL(`${ORIGIN}/login`, { timeout: WAIT_NAVIGATION_MS });
-  // The logout response's Clear-Site-Data drops every cookie. The app writes
-  // the language choice back before it leaves for /login, so English
-  // survives without the proof pinning it again.
-  await expect.poll(
-    () => cookieValue(page.context(), LOCALE_COOKIE),
-    { timeout: WAIT_RESPONSE_MS },
-  ).toBe('en');
 }
 
 /** Submits one TOTP code on the pending login page and returns the status. */
@@ -909,90 +397,6 @@ async function reauthenticateEnrolled(
 async function completeWithTotp(page: Page, code: string): Promise<void> {
   expect(await submitPendingTotpCode(page, code)).toBe(204);
   await landedAfter(page, '/login/second-factor');
-}
-
-async function submitRecoveryCode(page: Page, code: string): Promise<number> {
-  const response = page.waitForResponse((candidate) => {
-    const url = new URL(candidate.url());
-    return url.origin === ORIGIN
-      && url.pathname === '/api/v1/auth/second-factor/recovery/verify';
-  }, { timeout: WAIT_RESPONSE_MS });
-  const input = page.locator(RECOVERY_INPUT);
-  await input.click();
-  await input.fill(code);
-  await input.press('Enter');
-  return (await response).status();
-}
-
-async function completeWithRecovery(page: Page, code: string): Promise<void> {
-  expect(await submitRecoveryCode(page, code)).toBe(204);
-  await landedAfter(page, '/login/second-factor');
-}
-
-async function reauthenticateWithPassword(
-  page: Page,
-  password: string,
-): Promise<void> {
-  await page.getByTestId('second-factor-reauth-password').waitFor();
-  await page.getByLabel('Current password', { exact: true }).fill(password);
-  await page.getByTestId('second-factor-reauth-submit').click();
-  await expect(page.getByTestId('second-factor-reauth-password'))
-    .toHaveCount(0);
-}
-
-async function forceReauthOnce(page: Page, pathname: string): Promise<void> {
-  let spent = false;
-  await page.route(`${ORIGIN}${pathname}`, async (route: Route) => {
-    const url = new URL(route.request().url());
-    if (spent || url.origin !== ORIGIN || url.pathname !== pathname) {
-      await route.fallback();
-      return;
-    }
-    spent = true;
-    await route.fulfill({
-      body: JSON.stringify({
-        error: {
-          code: 'reauth_required',
-          message: 'recent reauthentication is required',
-        },
-      }),
-      contentType: 'application/json',
-      headers: { 'Cache-Control': 'no-store' },
-      status: 403,
-    });
-  });
-}
-
-async function readRevealedCodes(page: Page): Promise<string[]> {
-  const reveal = page.getByTestId('recovery-reveal');
-  const list = page.getByTestId('recovery-codes-list');
-  await expect(list).toBeVisible();
-  const codes = (await list.locator('li').allTextContents())
-    .map((value) => value.trim());
-  expect(codes).toHaveLength(10);
-  for (const code of codes) expect(code).toMatch(/^amr_[0-9A-Z-]+$/u);
-  await expect(reveal.getByRole('button', { name: 'Copy' })).toBeVisible();
-  await expect(reveal.getByRole('button', { name: 'Download' })).toBeVisible();
-  return codes;
-}
-
-async function closeRevealAndProveCleared(
-  page: Page,
-  codes: readonly string[],
-): Promise<void> {
-  await page.getByTestId('recovery-reveal-close').click();
-  await expect(page.getByTestId('recovery-codes-list')).toHaveCount(0);
-  const leaked = await page.evaluate((values) => {
-    const blobs = [document.documentElement.outerHTML];
-    for (const store of [localStorage, sessionStorage]) {
-      for (let index = 0; index < store.length; index += 1) {
-        const key = store.key(index);
-        if (key !== null) blobs.push(key, store.getItem(key) ?? '');
-      }
-    }
-    return values.some((value) => blobs.some((blob) => blob.includes(value)));
-  }, [...codes]);
-  expect(leaked).toBe(false);
 }
 
 /** Reads the grouped secret from the open setup dialog. */
@@ -1990,63 +1394,63 @@ test('proves the authenticator-app second factor over native HTTPS', async ({
         email: primaryEmail,
         password: primaryPassword,
         recoveryCode: primaryCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.skew) {
       removed.push(await deleteAccount(page, {
         email: skewEmail,
         password: skewPassword,
         recoveryCode: skewCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.replay) {
       removed.push(await deleteAccount(page, {
         email: replayEmail,
         password: replayPassword,
         recoveryCode: replayCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.concurrent) {
       removed.push(await deleteAccount(page, {
         email: concurrentEmail,
         password: concurrentPassword,
         recoveryCode: concurrentCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.replace) {
       removed.push(await deleteAccount(page, {
         email: replaceEmail,
         password: replacePassword,
         recoveryCode: replaceCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.epoch) {
       removed.push(await deleteAccount(page, {
         email: epochEmail,
         password: epochPassword,
         recoveryCode: epochCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.locale) {
       removed.push(await deleteAccount(page, {
         email: localeEmail,
         password: localeFinalPassword,
         recoveryCode: localeCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.recovery) {
       removed.push(await deleteAccount(page, {
         email: recoveryEmail,
         password: recoveryPassword,
         recoveryCode: recoveryCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     if (createdAccounts.attempts) {
       removed.push(await deleteAccount(page, {
         email: attemptsEmail,
         password: attemptsPassword,
         recoveryCode: attemptsCleanupCode,
-      }));
+      }, CLEANUP_LANDING_MS));
     }
     steps.cleanup = removed.length > 0 && removed.every(Boolean);
     for (const extra of extraContexts) {
@@ -2239,122 +1643,6 @@ test('proves disabled TOTP enrollment answers as an unregistered route',
 
 // --- Shared journey helpers ------------------------------------------------
 
-/** Registers a connected agent and completes one consent round trip. */
-async function createAgentGrant(
-  context: BrowserContext,
-  page: Page,
-): Promise<string> {
-  const clientName = (await readFile(CLIENT_NAME_PATH, 'utf8')).trim();
-  const clientID = await page.evaluate(
-    async ({ name, redirectURI }) => {
-      const response = await fetch('/oauth/register', {
-        body: JSON.stringify({
-          client_name: name,
-          redirect_uris: [redirectURI],
-          token_endpoint_auth_method: 'none',
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      });
-      const body = (await response.json()) as { client_id?: unknown };
-      if (response.status !== 201 || typeof body.client_id !== 'string') {
-        throw new Error('OAuth registration failed');
-      }
-      return body.client_id;
-    },
-    { name: clientName, redirectURI: REDIRECT_URI },
-  );
-  const { createHash, randomUUID } = await import('node:crypto');
-  const verifier = randomBytes(48).toString('base64url');
-  const challenge = createHash('sha256').update(verifier).digest('base64url');
-  const state = randomUUID();
-  let callback: URL | undefined;
-  await context.route(`${REDIRECT_URI}**`, async (route: Route) => {
-    callback = new URL(route.request().url());
-    await route.fulfill({
-      body: 'complete',
-      contentType: 'text/plain',
-      status: 200,
-    });
-  });
-  const query = new URLSearchParams({
-    client_id: clientID,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    redirect_uri: REDIRECT_URI,
-    response_type: 'code',
-    scope: 'resumes:read resumes:write',
-    state,
-  });
-  await gotoHydrated(page, `/oauth/authorize?${query.toString()}`);
-  await Promise.all([
-    page.waitForURL(`${REDIRECT_URI}**`, { timeout: WAIT_NAVIGATION_MS }),
-    page.getByRole('button', { name: 'Approve' }).click(),
-  ]);
-  expect(callback?.searchParams.get('state')).toBe(state);
-  const code = callback?.searchParams.get('code');
-  expect(code).toMatch(/^[A-Za-z0-9_-]+$/u);
-  await gotoHydrated(page, '/app/resumes');
-  const accessToken = await page.evaluate(
-    async ({ authorizationCode, codeVerifier, id, redirectURI }) => {
-      const response = await fetch('/oauth/token', {
-        body: new URLSearchParams({
-          client_id: id,
-          code: authorizationCode,
-          code_verifier: codeVerifier,
-          grant_type: 'authorization_code',
-          redirect_uri: redirectURI,
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        method: 'POST',
-      });
-      const body = (await response.json()) as { access_token?: unknown };
-      if (response.status !== 200 || typeof body.access_token !== 'string') {
-        throw new Error('OAuth token exchange failed');
-      }
-      return body.access_token;
-    },
-    {
-      authorizationCode: code as string,
-      codeVerifier: verifier,
-      id: clientID,
-      redirectURI: REDIRECT_URI,
-    },
-  );
-  await context.unroute(`${REDIRECT_URI}**`);
-  return accessToken;
-}
-
-async function agentToolsStatus(page: Page, token: string): Promise<number> {
-  return page.evaluate(async (bearer) => {
-    const response = await fetch('/mcp', {
-      body: JSON.stringify({
-        id: 1,
-        jsonrpc: '2.0',
-        method: 'tools/list',
-        params: {},
-      }),
-      cache: 'no-store',
-      credentials: 'omit',
-      headers: {
-        'Accept': 'application/json, text/event-stream',
-        'Authorization': `Bearer ${bearer}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
-    });
-    return response.status;
-  }, token);
-}
-
-interface PendingLocaleCase {
-  readonly code: string;
-  readonly email: string;
-  readonly locale: 'en' | 'vi';
-  readonly password: string;
-  readonly viewport: { readonly height: number; readonly width: number };
-}
-
 /**
  * Signs in again in one locale at one proof width and completes the pending
  * page entirely by keyboard through the authenticator-app field, checking
@@ -2469,141 +1757,4 @@ async function probeDisabledRoutes(
         '/api/v1/me/second-factor/unregistered/enrollment', 'POST', '{}'),
     };
   }, csrf);
-}
-
-// --- Virtual authenticators (passkey coexistence only) ---------------------
-
-type CDPSend = (
-  method: string,
-  params?: Record<string, unknown>,
-) => Promise<Record<string, unknown>>;
-
-const WAIT_CDP_MS = 30_000;
-
-async function boundedCDPCall<T>(work: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      work,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(
-            'virtual authenticator command exceeded its bound',
-          )),
-          WAIT_CDP_MS,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
-  }
-}
-
-function boundedCDP(send: CDPSend): CDPSend {
-  return (method, params) => boundedCDPCall(send(method, params));
-}
-
-/** One virtual authenticator, used only to prove TOTP and passkeys coexist. */
-class AuthenticatorPool {
-  private constructor(private readonly send: CDPSend) {}
-
-  static async attach(
-    context: BrowserContext,
-    page: Page,
-  ): Promise<AuthenticatorPool> {
-    const session = await boundedCDPCall(context.newCDPSession(page));
-    const send = boundedCDP(
-      session.send.bind(session) as unknown as CDPSend,
-    );
-    await send('WebAuthn.enable', { enableUI: false });
-    return new AuthenticatorPool(send);
-  }
-
-  async add(): Promise<string> {
-    const result = await this.send('WebAuthn.addVirtualAuthenticator', {
-      options: {
-        automaticPresenceSimulation: true,
-        hasResidentKey: true,
-        hasUserVerification: true,
-        isUserVerified: true,
-        protocol: 'ctap2',
-        transport: 'internal',
-      },
-    });
-    const id = result.authenticatorId;
-    if (typeof id !== 'string' || id === '') {
-      throw new Error('virtual authenticator was not created');
-    }
-    return id;
-  }
-}
-
-// --- Teardown ---------------------------------------------------------------
-
-interface AccountTeardown {
-  readonly email: string;
-  readonly password: string;
-  /** An unused recovery code, when the account is still enrolled. */
-  readonly recoveryCode: string;
-}
-
-async function deleteAccount(
-  page: Page,
-  account: AccountTeardown,
-): Promise<boolean> {
-  if (account.email === '') return true;
-  try {
-    // Leave the app page first. The previous step may have just landed on a
-    // signed-in page whose startup reads (`/me`, then the resume list) are
-    // still running; clearing cookies under it turns the next read into a
-    // 401 that the page logs as a console error.
-    await page.goto('about:blank');
-    await page.context().clearCookies();
-    await setLocale(page.context(), 'en');
-    const outcome = await passwordSignIn(
-      page, account.email, account.password, CLEANUP_LANDING_MS,
-    );
-    if (outcome === 'pending') {
-      if (account.recoveryCode === '') return false;
-      await completeWithRecovery(page, account.recoveryCode);
-    } else {
-      await gotoHydrated(page, '/app/settings/sessions');
-      const reauth = await page.evaluate(
-        async ({ secret, token }) => {
-          const response = await fetch('/api/v1/auth/password/reauth', {
-            body: JSON.stringify({ password: secret }),
-            cache: 'no-store',
-            credentials: 'include',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-Token': token,
-            },
-            method: 'POST',
-          });
-          return response.status;
-        },
-        { secret: account.password, token: await freshCSRF(page) },
-      );
-      if (reauth !== 204) return false;
-    }
-    return await deleteSignedInAccount(page);
-  } catch {
-    return false;
-  }
-}
-
-async function deleteSignedInAccount(page: Page): Promise<boolean> {
-  await gotoHydrated(page, '/app/settings/sessions');
-  if (await meStatus(page) !== 200) return false;
-  const csrf = await freshCSRF(page);
-  const status = await page.evaluate(async (token) => {
-    const response = await fetch('/api/v1/me', {
-      cache: 'no-store',
-      credentials: 'include',
-      headers: { 'X-CSRF-Token': token },
-      method: 'DELETE',
-    });
-    return response.status;
-  }, csrf);
-  return status === 204;
 }

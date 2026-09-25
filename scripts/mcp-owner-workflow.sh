@@ -63,7 +63,7 @@ spec_manifest() {
   ' "$launcher")
   [ "${#names[@]}" -gt 0 ] || return 1
   for name in "${names[@]}"; do
-    [[ $name =~ ^[a-z0-9][a-z0-9.-]*\.ts$ ]] || return 1
+    [[ $name =~ ^[a-z0-9][a-z0-9.-]*\.(ts|mjs)$ ]] || return 1
   done
   printf '%s\n' "${names[@]}" | LC_ALL=C sort -u
 }
