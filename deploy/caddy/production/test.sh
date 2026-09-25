@@ -36,6 +36,30 @@ if bash "$maintenance_render" "$work/bad.html" >/dev/null 2>&1; then
   echo "maintenance-render accepted a page with two style blocks" >&2
   exit 1
 fi
+
+# Each of the following starts from the real page with exactly one line
+# changed, so a passing build stays honest about what the real page contains.
+reject() { # label -> assert maintenance-render rejects $work/bad.html
+  if bash "$maintenance_render" "$work/bad.html" >/dev/null 2>&1; then
+    echo "maintenance-render accepted a page with $1" >&2
+    exit 1
+  fi
+}
+sed '/aboutme:maintenance/d' "$maintenance_html" >"$work/bad.html"
+reject "no aboutme:maintenance marker"
+sed '0,/<style>/s//<link rel="stylesheet" href="x.css"><style>/' "$maintenance_html" >"$work/bad.html"
+reject "a <link> tag"
+sed '0,/<body>/s//<body style="color:red">/' "$maintenance_html" >"$work/bad.html"
+reject "a style attribute"
+sed 's#<title>#<!-- https://evil.example --><title>#' "$maintenance_html" >"$work/bad.html"
+reject "an absolute URL"
+sed '0,/aria-label="aboutme"/s//aria-label="aboutme" href="logo.svg"/' "$maintenance_html" >"$work/bad.html"
+reject "a non-fragment href"
+sed '0,/fill="url(#lf)"/s//fill="url(logo.png)"/' "$maintenance_html" >"$work/bad.html"
+reject "a non-fragment css url()"
+bash "$maintenance_render" "$maintenance_html" >/dev/null ||
+  { echo "maintenance-render rejected the real maintenance page" >&2; exit 1; }
+
 # Recomputed fresh from the page as it stands on disk right now (a second run
 # of the same generator, not the one baked into the image below), so a stale
 # image or a hand-edited hash fails this check even though it shares code
