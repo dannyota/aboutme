@@ -148,6 +148,17 @@ test('a 404 page sends the plain app CSP and never x-powered-by', async ({
   expect(response?.status()).toBe(404);
   expectPlainAppCsp(response!.headers());
 
+  // A failure here should name the exact inline script CSP blocked, not
+  // just that one was blocked: server/utils/cspExternalize.ts externalizes
+  // Nuxt's own hydration payload for every response, so any inline
+  // `<script>` a 404 response still carries is worth seeing verbatim.
+  const html = await response!.text();
+  const inlineScript
+    = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+  const inlineScripts = [...html.matchAll(inlineScript)]
+    .map((match) => match[0]);
+  expect(inlineScripts).toEqual([]);
+
   await expectCspClean(probe, [ANONYMOUS_ME_401]);
   expect(external).toEqual([]);
 });
