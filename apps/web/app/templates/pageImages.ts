@@ -18,22 +18,37 @@ export interface SamplePageImage {
   readonly height: number;
 }
 
+export interface SampleNumberedPageImage extends SamplePageImage {
+  readonly number: number;
+}
+
 /**
- * Page one of a gallery sample, from the stored images `sample-pages.spec`
- * produces (DESIGN.md, Library). Undefined when the template has no sample
+ * Every stored page of a gallery sample, in order, from the images
+ * `sample-pages.spec` produces (DESIGN.md, Library). Empty when the
+ * template has no sample in that language.
+ */
+export function samplePageImages(
+  templateId: string,
+  lng: Locale,
+): readonly SampleNumberedPageImage[] {
+  const entry = entries.find((candidate) =>
+    candidate.templateId === templateId && candidate.lng === lng);
+  if (entry === undefined) return [];
+  return entry.files.map((file, index) => ({
+    src: `/templates/pages/${file}`,
+    width: entry.width,
+    height: entry.height,
+    number: index + 1,
+  }));
+}
+
+/**
+ * Page one of a gallery sample. Undefined when the template has no sample
  * in that language, so the card falls back to the live filler render.
  */
 export function samplePageImage(
   templateId: string,
   lng: Locale,
 ): SamplePageImage | undefined {
-  const entry = entries.find((candidate) =>
-    candidate.templateId === templateId && candidate.lng === lng);
-  const file = entry?.files[0];
-  if (entry === undefined || file === undefined) return undefined;
-  return {
-    src: `/templates/pages/${file}`,
-    width: entry.width,
-    height: entry.height,
-  };
+  return samplePageImages(templateId, lng)[0];
 }
