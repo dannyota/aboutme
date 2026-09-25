@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Lê Minh Khang",
+    "headline": "Entry-level Backend Developer · Java, Spring Boot, MySQL",
+    "details": [
+      {
+        "id": "5f0adedb-4a82-5853-a5ab-1f50f0273a2c",
+        "type": "email",
+        "value": "minhkhang.le@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "6cc97b22-514a-5f9d-b412-d6dfb674b237",
+        "type": "phone",
+        "value": "+84 90 000 0622",
+        "isHidden": false
+      },
+      {
+        "id": "ab61bc97-9fa2-5e0a-9afa-1521703ee167",
+        "type": "location",
+        "value": "Ho Chi Minh City",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Objective",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "15bd4a36-0189-5644-9214-134bb9773a96",
+          "isHidden": false,
+          "text": "<p>Computer Science graduate with a 4-month backend internship, seeking an entry-level Java role.</p>"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "8d67a2a9-ef35-52c2-9619-d82dc4f332e2",
+          "isHidden": false,
+          "degree": "Bachelor of Science in Computer Science",
+          "school": "Green Saigon University of Computer Science",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 9
+            },
+            "end": {
+              "y": 2026,
+              "m": 6
+            },
+            "present": false
+          },
+          "description": "<ul><li>GPA 3.45/4; merit scholarship for 3 semesters.</li><li>Graduation project (9.2/10): clinic booking system; owned the backend, 22 Spring Boot REST APIs.</li><li>Second prize, university student programming contest.</li></ul>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "c6c9639a-cc71-5235-8676-f6cc348393e0",
+          "isHidden": false,
+          "jobTitle": "Backend Developer Intern",
+          "employer": "An e-commerce company (300 staff)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2026,
+              "m": 2
+            },
+            "end": {
+              "y": 2026,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built 6 Spring Boot REST APIs for discount codes, now in production.</li><li>Wrote 85 JUnit 5 unit tests, raising coverage from 40% to 78%.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "491a53f8-726d-5ea7-a26d-67aa6b177cb7",
+          "isHidden": false,
+          "name": "Java, Spring Boot, REST API, MySQL, Redis, Docker, Git, JUnit 5"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "fae4f5f7-5b3f-5b05-8db8-d22431979e97",
+          "isHidden": false,
+          "name": "English (TOEIC 750)"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "inter",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#14161a",
+      "text": "#24272c",
+      "background": "#ffffff"
+    },
+    "spacing": {
+      "sectionGap": 36,
+      "entryGap": 16,
+      "lineHeight": 1.65,
+      "pageMargin": {
+        "x": 30,
+        "y": 24
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": false
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "education",
+          "work",
+          "skill",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}

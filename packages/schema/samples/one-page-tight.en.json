@@ -1,0 +1,332 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Trần Đức Thắng",
+    "headline": "Senior Backend Engineer · Go, PostgreSQL, Kafka",
+    "details": [
+      {
+        "id": "2f7d2077-97b1-5d8c-aeda-9d2814a1ccfa",
+        "type": "email",
+        "value": "thang.tran@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "a4854a73-418a-5daa-8a0e-10bb8f009f25",
+        "type": "phone",
+        "value": "+84 90 000 0522",
+        "isHidden": false
+      },
+      {
+        "id": "b1a421b1-21c8-52be-b767-5e064337903b",
+        "type": "location",
+        "value": "Ho Chi Minh City",
+        "isHidden": false
+      },
+      {
+        "id": "cc43660b-d5ff-547e-b0d0-455a29d2699b",
+        "type": "github",
+        "value": "https://example.com/tran-duc-thang",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "06aa3761-8697-5d09-ae49-aa50fac1c098",
+          "isHidden": false,
+          "text": "<p>Senior Backend Engineer with 9 years building payment, banking, and logistics systems in Go and Java. Lead a team of 5 and run on-call and design reviews.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "9a911f37-6e0a-5f54-bd9e-eb1c13caf25f",
+          "isHidden": false,
+          "jobTitle": "Senior Backend Engineer",
+          "employer": "An e-wallet company (8 million users)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 6
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Design and run the payment service in Go and PostgreSQL, handling 3 million transactions a day at 99.95% uptime.</li><li>Moved end-of-day reconciliation to Kafka events: 25 minutes instead of 4 hours.</li><li>Lead a team of 5; brought in design reviews and on-call runbooks that cut MTTR from 45 to 15 minutes.</li></ul>"
+        },
+        {
+          "id": "a6d3347c-6586-5e6c-86d4-687897f78d3a",
+          "isHidden": false,
+          "jobTitle": "Backend Developer",
+          "employer": "A logistics company (300 staff)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2021,
+              "m": 4
+            },
+            "end": {
+              "y": 2023,
+              "m": 5
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built the shipment-tracking API in Go, gRPC, and Redis for 20 million requests a day.</li><li>Split a PHP monolith into 9 Go microservices on Kubernetes, moving releases from weekly to daily.</li></ul>"
+        },
+        {
+          "id": "c6e7f6e3-8148-540e-a488-bc23abedbf04",
+          "isHidden": false,
+          "jobTitle": "Java Developer",
+          "employer": "A joint-stock commercial bank",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 1
+            },
+            "end": {
+              "y": 2021,
+              "m": 3
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built internet banking REST APIs in Java and Spring Boot for 1.2 million customers.</li></ul>"
+        },
+        {
+          "id": "b268680d-1507-588c-b4a0-fce256024401",
+          "isHidden": false,
+          "jobTitle": "Junior Java Developer",
+          "employer": "A Japan-focused software outsourcing company",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2017,
+              "m": 7
+            },
+            "end": {
+              "y": 2018,
+              "m": 12
+            },
+            "present": false
+          },
+          "description": "<ul><li>Warehouse system for a Japanese client (10 months): wrote 25 Spring Boot REST APIs; UAT defects fell from 40 to 8 between two deliveries.</li></ul>"
+        }
+      ]
+    },
+    "project": {
+      "sectionType": "project",
+      "displayName": "Projects",
+      "iconKey": "folder",
+      "entries": [
+        {
+          "id": "48d2a419-c15d-5617-ab62-6e36ce008670",
+          "isHidden": false,
+          "title": "Transactional outbox library for Go",
+          "link": "https://example.com/tran-duc-thang/outbox",
+          "description": "<p>Open-source library that sends events from PostgreSQL to Kafka without losing messages; 600 GitHub stars, in production at 4 companies.</p>",
+          "dates": {
+            "start": {
+              "y": 2022,
+              "m": 5
+            },
+            "end": null,
+            "present": true
+          }
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "dbbf03ac-3161-5547-863e-a1554be283ab",
+          "isHidden": false,
+          "degree": "Bachelor of Science in Computer Science",
+          "school": "Phuong Nam University of Technology",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2013,
+              "m": 9
+            },
+            "end": {
+              "y": 2017,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "3805b89b-37bb-5da7-8c19-6b9e584660d9",
+          "isHidden": false,
+          "name": "Go"
+        },
+        {
+          "id": "a1486f02-1fa8-59f4-b60e-25a322e5e2cc",
+          "isHidden": false,
+          "name": "Java"
+        },
+        {
+          "id": "dc734b39-d5e5-586b-8884-3c3db7a1eee9",
+          "isHidden": false,
+          "name": "Spring Boot"
+        },
+        {
+          "id": "ce3f86cf-39e5-55fb-84b7-506fdcd54ac9",
+          "isHidden": false,
+          "name": "PostgreSQL"
+        },
+        {
+          "id": "d3bdfc67-1d6e-5c46-9934-8f0adb51e743",
+          "isHidden": false,
+          "name": "Redis"
+        },
+        {
+          "id": "12a019f2-9c9b-54ea-b1cb-1b59e09e0c66",
+          "isHidden": false,
+          "name": "Kafka"
+        },
+        {
+          "id": "c600d871-7ea0-55c2-b4c4-7a626a869143",
+          "isHidden": false,
+          "name": "gRPC"
+        },
+        {
+          "id": "201cc086-7a62-5012-b801-663c94adacef",
+          "isHidden": false,
+          "name": "Docker"
+        },
+        {
+          "id": "6b99e9f1-1767-5c82-89c6-e58c20cccce0",
+          "isHidden": false,
+          "name": "Kubernetes"
+        },
+        {
+          "id": "d1fcf9ea-e694-56f5-8ae0-98cdd3ecb7a6",
+          "isHidden": false,
+          "name": "AWS"
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "7d48d4fa-43eb-5f55-8a01-32742c5d6026",
+          "isHidden": false,
+          "name": "English (TOEIC 850)"
+        }
+      ]
+    },
+    "certificate": {
+      "sectionType": "certificate",
+      "displayName": "Certifications",
+      "iconKey": "award",
+      "entries": [
+        {
+          "id": "3c205fc6-49c7-5a4d-aac4-8cf56d39bd35",
+          "isHidden": false,
+          "title": "AWS Certified Developer – Associate",
+          "issuer": "Amazon Web Services",
+          "date": {
+            "y": 2022,
+            "m": 8
+          }
+        },
+        {
+          "id": "4fc47aca-98b3-5954-a1f2-a28a392d4d31",
+          "isHidden": false,
+          "title": "Oracle Certified Professional: Java SE 11 Developer",
+          "issuer": "Oracle",
+          "date": {
+            "y": 2019,
+            "m": 10
+          }
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 13
+    },
+    "colors": {
+      "primary": "#22303c",
+      "text": "#1c2126",
+      "background": "#ffffff",
+      "accent": "#2f4858"
+    },
+    "spacing": {
+      "sectionGap": 10,
+      "entryGap": 6,
+      "lineHeight": 1.25,
+      "pageMargin": {
+        "x": 12,
+        "y": 11
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 2,
+      "surfaceTarget": "none",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "project",
+          "education"
+        ],
+        "sidebar": [
+          "skill",
+          "language",
+          "certificate"
+        ]
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "text"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "MM/YYYY"
+  }
+}

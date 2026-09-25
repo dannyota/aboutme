@@ -48,7 +48,7 @@ describe('template detail page: tabs', () => {
 
     const panel = wrapper.get('[data-ats-text]');
     expect(panel.classes()).toContain('paper-surface');
-    expect(panel.text()).toContain('Khoa Vu');
+    expect(panel.text()).toContain('Đỗ Hoàng Nam');
   });
 
   it('shows every stored page with alt text and a caption in the PDF tab',

@@ -1,0 +1,216 @@
+{
+  "schemaVersion": 4,
+  "personalDetails": {
+    "fullName": "Đinh Công Khánh",
+    "headline": "Senior Mobile Engineer · Flutter, Kotlin, Swift",
+    "details": [
+      {
+        "id": "4c5dce9f-9965-539f-a209-bb9d3acd2940",
+        "type": "email",
+        "value": "khanh.dinh@example.com",
+        "isHidden": false
+      },
+      {
+        "id": "4d73cb9f-9674-5c04-ac3b-73d2b44df414",
+        "type": "phone",
+        "value": "+84 90 000 0525",
+        "isHidden": false
+      },
+      {
+        "id": "56be964c-9eb8-54d3-9406-817921e21832",
+        "type": "location",
+        "value": "Binh Thanh, Ho Chi Minh City",
+        "isHidden": false
+      },
+      {
+        "id": "db38c7e9-e1d5-5871-922d-4443c0a938d2",
+        "type": "github",
+        "value": "https://example.com/dinh-cong-khanh",
+        "isHidden": false
+      }
+    ]
+  },
+  "content": {
+    "profile": {
+      "sectionType": "profile",
+      "displayName": "Summary",
+      "iconKey": "user",
+      "entries": [
+        {
+          "id": "a4851ad1-5612-5352-a609-737ba5d935ad",
+          "isHidden": false,
+          "text": "<p>Senior Mobile Engineer with 7 years on Android and iOS apps for up to 2 million users.</p>"
+        }
+      ]
+    },
+    "work": {
+      "sectionType": "work",
+      "displayName": "Experience",
+      "iconKey": "briefcase",
+      "entries": [
+        {
+          "id": "29bd70a0-011b-5aed-8882-007fbe63c601",
+          "isHidden": false,
+          "jobTitle": "Senior Mobile Engineer",
+          "employer": "A fintech startup",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2023,
+              "m": 2
+            },
+            "end": null,
+            "present": true
+          },
+          "description": "<ul><li>Led a team of 4 that rebuilt the stock-trading app in Flutter; crash-free sessions rose from 97.2% to 99.6%.</li><li>Cut app start time from 3.8 s to 1.6 s; the App Store rating rose from 3.9 to 4.6.</li></ul>"
+        },
+        {
+          "id": "793d7bbc-3523-59b9-bbb0-8476f1f92301",
+          "isHidden": false,
+          "jobTitle": "Mobile Developer",
+          "employer": "A food delivery company (2 million users)",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2020,
+              "m": 9
+            },
+            "end": {
+              "y": 2023,
+              "m": 1
+            },
+            "present": false
+          },
+          "description": "<ul><li>Built real-time order tracking in Kotlin and Firebase for 2 million Android users.</li></ul>"
+        },
+        {
+          "id": "f60c04cf-cfb3-5170-a5d3-673c8340f083",
+          "isHidden": false,
+          "jobTitle": "Junior Mobile Developer",
+          "employer": "A Japan-focused software outsourcing company",
+          "city": "Ho Chi Minh City",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2019,
+              "m": 7
+            },
+            "end": {
+              "y": 2020,
+              "m": 8
+            },
+            "present": false
+          },
+          "description": "<ul><li>Retail app for a Japanese client (12 months): built 20 iOS screens in Swift and passed UAT with no critical defects.</li></ul>"
+        }
+      ]
+    },
+    "skill": {
+      "sectionType": "skill",
+      "displayName": "Skills",
+      "iconKey": "code",
+      "entries": [
+        {
+          "id": "c6ac578a-a844-59fc-88a8-0e6b0470148b",
+          "isHidden": false,
+          "name": "Flutter, Dart, Kotlin, Swift, Jetpack Compose, Firebase, Fastlane, GitHub Actions"
+        }
+      ]
+    },
+    "education": {
+      "sectionType": "education",
+      "displayName": "Education",
+      "iconKey": "graduation-cap",
+      "entries": [
+        {
+          "id": "750e8a4e-c911-5cc4-a1c6-f375e40ed2fa",
+          "isHidden": false,
+          "degree": "Bachelor of Engineering in Information Technology",
+          "school": "Song Tien Polytechnic University",
+          "city": "Can Tho",
+          "country": "Vietnam",
+          "dates": {
+            "start": {
+              "y": 2014,
+              "m": 9
+            },
+            "end": {
+              "y": 2019,
+              "m": 6
+            },
+            "present": false
+          }
+        }
+      ]
+    },
+    "language": {
+      "sectionType": "language",
+      "displayName": "Languages",
+      "iconKey": "languages",
+      "entries": [
+        {
+          "id": "894fe833-3d1e-5b45-a880-971ca8360952",
+          "isHidden": false,
+          "name": "English (TOEIC 780)"
+        }
+      ]
+    }
+  },
+  "customization": {
+    "font": {
+      "family": "source-sans-3",
+      "baseSizePx": 15
+    },
+    "colors": {
+      "primary": "#c23a14",
+      "text": "#1f1a17",
+      "background": "#ffffff",
+      "accent": "#c23a14",
+      "surface": "#fff0eb"
+    },
+    "spacing": {
+      "sectionGap": 20,
+      "entryGap": 10,
+      "lineHeight": 1.5,
+      "pageMargin": {
+        "x": 22,
+        "y": 18
+      }
+    },
+    "heading": {
+      "style": "uppercase",
+      "showRule": true
+    },
+    "header": {
+      "align": "left",
+      "detailsLayout": "inline",
+      "iconStyle": "none"
+    },
+    "layout": {
+      "columns": 1,
+      "surfaceTarget": "header",
+      "sections": {
+        "main": [
+          "profile",
+          "work",
+          "skill",
+          "education",
+          "language"
+        ],
+        "sidebar": []
+      }
+    },
+    "sectionDisplay": {
+      "skill": {
+        "style": "tag"
+      },
+      "language": {
+        "style": "text"
+      }
+    },
+    "pageFormat": "a4",
+    "dateFormat": "Mon YYYY"
+  }
+}
