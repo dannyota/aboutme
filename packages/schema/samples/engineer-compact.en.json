@@ -314,6 +314,6 @@
       }
     },
     "pageFormat": "a4",
-    "dateFormat": "MM/YYYY"
+    "dateFormat": "Mon YYYY"
   }
 }

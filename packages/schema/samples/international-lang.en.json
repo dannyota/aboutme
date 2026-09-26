@@ -262,6 +262,6 @@
       }
     },
     "pageFormat": "a4",
-    "dateFormat": "YYYY"
+    "dateFormat": "Mon YYYY"
   }
 }
