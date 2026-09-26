@@ -162,7 +162,11 @@ func run() error {
 		return fmt.Errorf("create account service: %w", err)
 	}
 	authService.SetAccountDeleteHandler(accountService.DeleteHandler())
-	hub, err := realtime.NewHub(realtime.Config{})
+	cards, err := newPreviewCards(cfg.PreviewCards, pool, reader, printQueue, logger)
+	if err != nil {
+		return err
+	}
+	hub, err := realtime.NewHub(realtime.Config{Observe: cards.observe()})
 	if err != nil {
 		return fmt.Errorf("create realtime hub: %w", err)
 	}
@@ -179,6 +183,7 @@ func run() error {
 		PublicOrigin: runtime.PublicOrigin, AppDigest: runtime.AppDigest, RendererDigest: runtime.RendererDigest,
 		Live: streams.PublicHandler(), PrintQueue: printQueue,
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now, Logger: logger,
+		Cards: cards.public,
 	})
 	if err != nil {
 		return fmt.Errorf("create public service: %w", err)
@@ -276,6 +281,7 @@ func run() error {
 	if healthErr := secondFactor.TOTPHealth.Check(ctx); healthErr != nil {
 		logger.Error("totp key health check failed at startup", "err", "query failed")
 	}
+	cardsDone := cards.run(workerCtx, logger)
 	totpHealthDone := make(chan struct{})
 	go func() {
 		defer close(totpHealthDone)
@@ -288,6 +294,7 @@ func run() error {
 	<-workerDone
 	<-listenerDone
 	<-totpHealthDone
+	<-cardsDone
 	return err
 }
 

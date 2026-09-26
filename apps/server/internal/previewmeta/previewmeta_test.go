@@ -190,3 +190,31 @@ func assertNoSentinel(t *testing.T, meta Meta) {
 		}
 	}
 }
+
+func TestCardTextLeavesOffScrubbedFields(t *testing.T) {
+	email := []schema.PersonalDetail{{ID: "email", Type: schema.Email, Value: "ada@example.com"}}
+	tests := []struct {
+		name, headline         *string
+		details                []schema.PersonalDetail
+		wantName, wantHeadline string
+	}{
+		{text(" Nguyễn\u200e  Văn A "), text("Kỹ sư\nphần mềm"), nil, "Nguyễn Văn A", "Kỹ sư phần mềm"},
+		{text("Ada ada@example.com"), text("Engineer"), email, "", ""},
+		{text("Ada"), text("Call +84 912 345 678"), nil, "Ada", ""},
+		{text("Ada"), text("Engineer at ada@example.com"), email, "Ada", ""},
+		{nil, text("Engineer"), nil, "", ""},
+		{text("Ada"), nil, nil, "Ada", ""},
+	}
+	for _, test := range tests {
+		person := project(t, fixture{lng: "en", name: test.name, headline: test.headline, details: test.details}).Document.PersonalDetails
+		name, headline := CardText(person)
+		if name != test.wantName || headline != test.wantHeadline {
+			t.Errorf("CardText() = %q, %q, want %q, %q", name, headline, test.wantName, test.wantHeadline)
+		}
+		for _, sentinel := range sentinels {
+			if strings.Contains(name+headline, sentinel) {
+				t.Fatalf("card text leaks %s", sentinel)
+			}
+		}
+	}
+}

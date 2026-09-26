@@ -463,3 +463,43 @@ resource "aws_iam_role_policy" "deploy_alarm_and_rule_suppression" {
     ]
   })
 }
+
+# observer.sh copies the verified observer image into its one ECR repository
+# and points the observer function at it by digest
+# (docs/design/deployment-transparency/README.md, "Access on AWS"). The read
+# actions let it compare the pushed digest, and Lambda requires the caller
+# that updates an image function to be able to read that image.
+resource "aws_iam_role_policy" "deploy_observer" {
+  name = "deployment-observer"
+  role = aws_iam_role.deploy.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        # GetAuthorizationToken has no resource-level scoping.
+        Effect   = "Allow"
+        Action   = "ecr:GetAuthorizationToken"
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:DescribeImages",
+        ]
+        Resource = "arn:aws:ecr:ap-southeast-1:${var.account_id}:repository/${var.name}-observer"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["lambda:GetFunction", "lambda:UpdateFunctionCode"]
+        Resource = "arn:aws:lambda:ap-southeast-1:${var.account_id}:function:${var.name}-observer"
+      },
+    ]
+  })
+}

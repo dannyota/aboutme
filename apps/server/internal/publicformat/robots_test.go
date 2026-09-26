@@ -51,11 +51,14 @@ func TestRobotsKeepsPrivatePathsOutAndResumesIn(t *testing.T) {
 		// A resume slug that only starts like a sign-in page stays crawlable.
 		{"/login-expert", true},
 		{"/registered-nurse", true},
-		// Social cards fetch the share image; nothing else under /api.
+		// Social cards fetch the share image and the preview cards; nothing
+		// else under /api.
 		{"/api/v1/public/resumes/ada/og.png", true},
 		{"/api/v1/public/resumes/ada/pdf", false},
 		{"/api/v1/public/resumes/ada", false},
 		{"/api/v1/public/resumes/ada/og.png.bak", false},
+		{"/api/v1/public/resumes/ada/og/0123456789abcdef.png", true},
+		{"/api/v1/public/resumes/ada/ogx/0123456789abcdef.png", false},
 		{"/api/v1/me", false},
 		{"/app/settings/sessions", false},
 		{"/login", false},

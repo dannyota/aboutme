@@ -134,6 +134,22 @@ func TestRenderRejectsUnknownFormatAndCanceledContextBeforeLaunch(t *testing.T) 
 	}
 }
 
+func TestRenderAcceptsEveryRenderFormat(t *testing.T) {
+	var formats []renderjob.Format
+	renderer := &Renderer{render: func(_ context.Context, navigation renderjob.Navigation) ([]byte, error) {
+		formats = append(formats, navigation.Format)
+		return []byte("output"), nil
+	}}
+	for _, format := range []renderjob.Format{renderjob.PDF, renderjob.PNG, renderjob.Card} {
+		if output, err := renderer.Render(context.Background(), validTestNavigation(format)); err != nil || string(output) != "output" {
+			t.Fatalf("Render(%s) = %q, %v", format, output, err)
+		}
+	}
+	if len(formats) != 3 || formats[2] != renderjob.Card {
+		t.Fatalf("rendered formats = %v, want pdf, png, card", formats)
+	}
+}
+
 func TestRenderRejectsMalformedNavigationWithoutLaunch(t *testing.T) {
 	launched := false
 	renderer := &Renderer{render: func(context.Context, renderjob.Navigation) ([]byte, error) {

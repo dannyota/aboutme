@@ -44,6 +44,10 @@ type Meta struct {
 	Locale string `json:"locale"`
 	// ImageAlt is og:image:alt and twitter:image:alt.
 	ImageAlt string `json:"imageAlt"`
+	// ImageURL is the absolute URL of the current preview card version, set
+	// only while stored cards are on. When it is "", the page names the
+	// share image by its unversioned og.png alias.
+	ImageURL string `json:"imageUrl,omitempty"`
 }
 
 // For derives the preview text of resume. publicTitle is the owner's validated
@@ -104,6 +108,18 @@ func ImageText(person publicresume.PublicPersonalDetails, slug string, contacts 
 		headline = cardField(*person.Headline, contacts)
 	}
 	return firstGraphemes(joinPresent(" · ", name, headline), MaxImageTextGraphemes, MaxImageTextBytes)
+}
+
+// CardText is the name and headline the preview card shows, each normalized
+// and left off ("") when scrubbing would change it. The headline is left off
+// too when there is no name, so the card and ImageText agree.
+func CardText(person publicresume.PublicPersonalDetails) (name, headline string) {
+	contacts := contactValues(person)
+	name = cardField(person.FullName, contacts)
+	if name == "" || person.Headline == nil {
+		return name, ""
+	}
+	return name, cardField(*person.Headline, contacts)
 }
 
 // Locale maps a BCP 47 resume language to an Open Graph locale: vi to vi_VN,

@@ -28,6 +28,7 @@ import (
 const (
 	pdfMaxBytes                  = 16_777_216
 	pngMaxBytes                  = 4_194_304
+	cardMaxBytes                 = 524_288
 	browserEnvironmentExecutable = "/usr/bin/env"
 	browserTimezone              = "TZ=UTC"
 	browserLanguage              = "LANG=C.UTF-8"
@@ -416,10 +417,13 @@ func runNavigation(ctx context.Context, cancel context.CancelFunc, callbacks *jo
 		return ErrRenderFailed
 	}
 	var output []byte
-	if navigation.Format == renderjob.PDF {
+	switch navigation.Format {
+	case renderjob.PDF:
 		output, err = capturePDF(targetCtx, navigation.RevisionTime)
-	} else {
-		output, err = capturePNG(targetCtx)
+	case renderjob.Card:
+		output, err = capturePNG(targetCtx, cardMaxBytes)
+	default:
+		output, err = capturePNG(targetCtx, pngMaxBytes)
 	}
 	if err != nil {
 		return err
@@ -560,7 +564,7 @@ func (s *cdpPDFStream) read(ctx context.Context, size int64) (streamChunk, error
 
 func (s *cdpPDFStream) close(ctx context.Context) error { return cdpio.Close(s.handle).Do(ctx) }
 
-func capturePNG(ctx context.Context) ([]byte, error) {
+func capturePNG(ctx context.Context, limit int) ([]byte, error) {
 	data, err := page.CaptureScreenshot().
 		WithFormat(page.CaptureScreenshotFormatPng).
 		WithClip(&page.Viewport{X: 0, Y: 0, Width: 1200, Height: 630, Scale: 1}).
@@ -570,7 +574,7 @@ func capturePNG(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, ErrRenderFailed
 	}
-	if err := validatePNG(data, pngMaxBytes); err != nil {
+	if err := validatePNG(data, limit); err != nil {
 		return nil, err
 	}
 	return data, nil

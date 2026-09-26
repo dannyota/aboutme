@@ -2,7 +2,7 @@
 
 Status: planned; waiting for the owner approvals V1 to V8 in [the design](../design/viewer-analytics/README.md#owner-approval). Design: [viewer analytics](../design/viewer-analytics/README.md), [ADR 0060](../adr/0060-viewer-data-controller-and-consent.md), [ADR 0061](../adr/0061-layered-human-view-counting.md), [ADR 0062](../adr/0062-sign-in-to-view-without-an-account.md). Three releases, one feature each, numbered in shipping order as V1 recommends. If the owner keeps the original numbers (0.6.4 tracking, 0.6.5 sign-in, 0.6.6 counts), only the labels change; the order stays, because tracking and sign-in record into the counting path.
 
-Starts after LinkedIn sign-in (0.6.2) and LinkedIn import (0.6.3). ADR numbers 0060 to 0062 assume 0058 and 0059 land first from `docs/linkedin`; the manager renumbers if not. Migration numbers: the manager assigns them after the queued ones.
+Starts after [LinkedIn sign-in and import](linkedin.md) (0.6.2 and 0.6.3); the gate lists LinkedIn only once it is enabled. Migration numbers: the manager assigns them after the queued ones.
 
 |Release|Outcome|Risk|
 |-|-|-|

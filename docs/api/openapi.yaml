@@ -3111,6 +3111,10 @@ paths:
       summary: Read a published resume's share image
       description: >-
         Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background.
+        While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this
+        path is an alias of the current preview card that
+        `/public/resumes/{slug}/og/{version}.png` serves, so share images that
+        platforms fetched earlier keep working (ADR 0055).
         The current generation gate runs before cache reuse or conditional
         evaluation. Query parameters and request bodies are rejected.
         PDF and PNG misses share a 20-render-per-minute client IP limit;
@@ -3146,6 +3150,59 @@ paths:
         - $ref: "#/components/parameters/PublicSlug"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses: *publicPNGResponses
+  /public/resumes/{slug}/og/{version}.png:
+    get:
+      operationId: getPublicResumePreviewCard
+      tags: [public]
+      security: []
+      summary: Read a published resume's link-preview card
+      description: >-
+        Serves the stored 1200 by 630 preview card of a live resume: name,
+        headline, photo, and aboutme branding, with no contact details. The
+        live-state gate runs before any stored card is read. Only the current
+        card version answers; any other version, and every version of a
+        private, unpublished, renamed, or deleted resume, is the same `404
+        public_not_found`. When the current card is not stored yet, the request
+        joins the pending build or starts one and waits within the 20-second
+        render deadline. Answers `404` for every version while stored preview
+        cards are off (`PREVIEW_CARD_ENABLED` unset or `false`). Query
+        parameters and request bodies are rejected. A build shares the
+        20-render-per-minute client IP limit with PDF and PNG misses; every
+        request also passes the 300-per-minute IP limit
+        (docs/adr/0055-stored-link-preview-card.md).
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/PreviewCardVersion"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: &publicCardResponses
+        "200":
+          $ref: "#/components/responses/PublicCardRead"
+        "304":
+          $ref: "#/components/responses/PublicPNGNotModified"
+        "400":
+          $ref: "#/components/responses/PublicBadRequest"
+        "404":
+          $ref: "#/components/responses/PublicNotFound"
+        "405":
+          $ref: "#/components/responses/PublicMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/PublicArtifactRateLimited"
+        "503":
+          $ref: "#/components/responses/PublicUnavailable"
+    head:
+      operationId: headPublicResumePreviewCard
+      tags: [public]
+      security: []
+      summary: Read published link-preview card headers
+      description: >-
+        Performs the same admission, build, and conditional comparison as GET.
+        Sends the selected status and headers, including Content-Length for a
+        200 response, without body bytes.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+        - $ref: "#/components/parameters/PreviewCardVersion"
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses: *publicCardResponses
   /auth/password/register:
     post:
       operationId: postAuthPasswordRegister
@@ -4848,6 +4905,20 @@ components:
           $ref: "#/components/headers/PublicBodyETag"
     PublicPNGRead:
       description: The exact generated PNG bytes, bounded at 4194304 bytes.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/PublicCacheControl"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+        ETag:
+          $ref: "#/components/headers/PublicBodyETag"
+      content:
+        image/png:
+          schema:
+            type: string
+            format: binary
+    PublicCardRead:
+      description: The exact stored preview card PNG bytes, bounded at 524288 bytes.
       headers:
         Cache-Control:
           $ref: "#/components/headers/PublicCacheControl"
@@ -8332,6 +8403,18 @@ components:
         maxLength: 30
         pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
       example: ada-lovelace
+    PreviewCardVersion:
+      name: version
+      in: path
+      required: true
+      description: >-
+        Card version: the first 16 lowercase hex digits of SHA-256 over the
+        card layout version and every card input. Resume pages name the
+        current one in `og:image`.
+      schema:
+        type: string
+        pattern: "^[0-9a-f]{16}$"
+      example: "0123456789abcdef"
     SectionKey:
       name: sectionKey
       in: path

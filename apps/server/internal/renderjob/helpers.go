@@ -42,13 +42,21 @@ func (q *Queue) newAuthority() (token string, hash [32]byte, err error) {
 }
 
 func (q *Queue) outputLimit(format Format) int {
-	if format == PNG {
+	switch format {
+	case PNG:
 		return q.pngLimit
+	case Card:
+		return q.cardLimit
+	default:
+		return q.pdfLimit
 	}
-	return q.pdfLimit
 }
 
-func validFormat(format Format) bool { return format == PDF || format == PNG }
+func validFormat(format Format) bool { return format == PDF || format == PNG || format == Card }
+
+func validPriority(priority Priority) bool {
+	return priority == PriorityNormal || priority == PriorityLow
+}
 
 func validSnapshot(snapshot Snapshot, limit int) bool {
 	return snapshot.ResumeID != uuid.Nil && snapshot.Revision > 0 && snapshot.SchemaVersion > 0 &&

@@ -934,7 +934,7 @@ export interface paths {
         };
         /**
          * Read a published resume's share image
-         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
+         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this path is an alias of the current preview card that `/public/resumes/{slug}/og/{version}.png` serves, so share images that platforms fetched earlier keep working (ADR 0055). The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
          */
         get: operations["getPublicResumeShareImage"];
         put?: never;
@@ -946,6 +946,30 @@ export interface paths {
          * @description Performs the same admission, rendering, and conditional comparison as GET. Sends the selected status and headers, including Content-Length for a 200 response, without body bytes.
          */
         head: operations["headPublicResumeShareImage"];
+        patch?: never;
+        trace?: never;
+    };
+    "/public/resumes/{slug}/og/{version}.png": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a published resume's link-preview card
+         * @description Serves the stored 1200 by 630 preview card of a live resume: name, headline, photo, and aboutme branding, with no contact details. The live-state gate runs before any stored card is read. Only the current card version answers; any other version, and every version of a private, unpublished, renamed, or deleted resume, is the same `404 public_not_found`. When the current card is not stored yet, the request joins the pending build or starts one and waits within the 20-second render deadline. Answers `404` for every version while stored preview cards are off (`PREVIEW_CARD_ENABLED` unset or `false`). Query parameters and request bodies are rejected. A build shares the 20-render-per-minute client IP limit with PDF and PNG misses; every request also passes the 300-per-minute IP limit (docs/adr/0055-stored-link-preview-card.md).
+         */
+        get: operations["getPublicResumePreviewCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read published link-preview card headers
+         * @description Performs the same admission, build, and conditional comparison as GET. Sends the selected status and headers, including Content-Length for a 200 response, without body bytes.
+         */
+        head: operations["headPublicResumePreviewCard"];
         patch?: never;
         trace?: never;
     };
@@ -3178,6 +3202,18 @@ export interface components {
                 "image/png": string;
             };
         };
+        /** @description The exact stored preview card PNG bytes, bounded at 524288 bytes. */
+        PublicCardRead: {
+            headers: {
+                "Cache-Control": components["headers"]["PublicCacheControl"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                ETag: components["headers"]["PublicBodyETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "image/png": string;
+            };
+        };
         /** @description The strong tag matches the selected PNG bytes. No body or Content-Length. */
         PublicPNGNotModified: {
             headers: {
@@ -4108,6 +4144,11 @@ export interface components {
          * @example ada-lovelace
          */
         PublicSlug: string;
+        /**
+         * @description Card version: the first 16 lowercase hex digits of SHA-256 over the card layout version and every card input. Resume pages name the current one in `og:image`.
+         * @example 0123456789abcdef
+         */
+        PreviewCardVersion: string;
         /**
          * @description A section's key inside the resume document's `content` map. Its path shape matches the released resume schema; malformed keys are `400 request_invalid`, while a well-formed unknown key is a `404 resume_not_found`-shaped domain failure.
          * @example experience
@@ -7258,6 +7299,80 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["PublicPNGRead"];
+            304: components["responses"]["PublicPNGNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            429: components["responses"]["PublicArtifactRateLimited"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    getPublicResumePreviewCard: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+                /**
+                 * @description Card version: the first 16 lowercase hex digits of SHA-256 over the card layout version and every card input. Resume pages name the current one in `og:image`.
+                 * @example 0123456789abcdef
+                 */
+                version: components["parameters"]["PreviewCardVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicCardRead"];
+            304: components["responses"]["PublicPNGNotModified"];
+            400: components["responses"]["PublicBadRequest"];
+            404: components["responses"]["PublicNotFound"];
+            405: components["responses"]["PublicMethodNotAllowed"];
+            429: components["responses"]["PublicArtifactRateLimited"];
+            503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    headPublicResumePreviewCard: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Conditional representation read. Owner photo and public routes accept exactly one well-formed strong entity tag: an exact match returns `304` with no body, while a different tag returns `200` and the selected bytes.
+                 *
+                 *     Singleton header: a repeated field line, a comma-folded list, a weak tag, or `*` is `400 request_invalid`. This route deliberately does not implement multi-tag negotiation.
+                 * @example "p-3f2a91c8"
+                 */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+                /**
+                 * @description Card version: the first 16 lowercase hex digits of SHA-256 over the card layout version and every card input. Resume pages name the current one in `og:image`.
+                 * @example 0123456789abcdef
+                 */
+                version: components["parameters"]["PreviewCardVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicCardRead"];
             304: components["responses"]["PublicPNGNotModified"];
             400: components["responses"]["PublicBadRequest"];
             404: components["responses"]["PublicNotFound"];

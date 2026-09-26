@@ -2,6 +2,8 @@ package publicresume
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"sync"
@@ -108,6 +110,28 @@ func (r *Reader) ReadResume(ctx context.Context, slug string, representation pub
 		return snapshot, lease, nil
 	}
 	return Snapshot{}, nil, ErrUnavailable
+}
+
+// ProjectRow projects a stored row into a snapshot without admission. It
+// takes no lease and checks no live state, so a caller must gate before it
+// serves anything derived from the result; the preview card store uses it to
+// recompute a card version from a row it holds locked.
+func (r *Reader) ProjectRow(row store.Resume) (Snapshot, error) {
+	if row.Slug == nil || row.Revision <= 0 {
+		return Snapshot{}, ErrUnavailable
+	}
+	return r.snapshot(row)
+}
+
+// PhotoKeyDigest is the hex SHA-256 of the private photo storage key, or ""
+// when the snapshot has no photo. It lets a caller detect a photo change
+// without the key itself leaving this package.
+func (s Snapshot) PhotoKeyDigest() string {
+	if s.photoKey == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(s.photoKey))
+	return hex.EncodeToString(digest[:])
 }
 
 func (r *Reader) snapshot(row store.Resume) (Snapshot, error) {

@@ -17,6 +17,9 @@ const (
 	PDF Format = "pdf"
 	// PNG is the fixed 1200 by 630 share-image format.
 	PNG Format = "png"
+	// Card is the 1200 by 630 link-preview card, captured like PNG from a
+	// card envelope (docs/design/link-previews.md, "Preview card").
+	Card Format = "card"
 
 	// MaxConcurrentRenders is the fixed v1 browser concurrency limit.
 	MaxConcurrentRenders = 1
@@ -34,6 +37,13 @@ const (
 	PDFMaxBytes = 16_777_216
 	// PNGMaxBytes bounds one completed share-image artifact.
 	PNGMaxBytes = 4_194_304
+	// CardMaxBytes bounds one completed preview card, under WhatsApp's
+	// 600 KB image limit.
+	CardMaxBytes = 524_288
+	// LowPriorityMaxWaiting is how many queue places may be taken when a
+	// low-priority render enters. The places above it stay free for owner
+	// exports, and low-priority work alone can never saturate readiness.
+	LowPriorityMaxWaiting = 2
 
 	capabilityBytes = 32
 	audiencePrint   = "nuxt-print"
@@ -63,6 +73,17 @@ var (
 // Format identifies one fixed render output contract.
 type Format string
 
+// Priority orders admission between owner work and background work.
+type Priority uint8
+
+const (
+	// PriorityNormal admits a render while any queue place is free.
+	PriorityNormal Priority = iota
+	// PriorityLow admits a background render only while at most
+	// LowPriorityMaxWaiting places behind the running render are taken.
+	PriorityLow
+)
+
 // Snapshot is the frozen, already-authorized renderer input.
 type Snapshot struct {
 	ResumeID         uuid.UUID
@@ -79,6 +100,7 @@ type Snapshot struct {
 // Request supplies a frozen snapshot and optional public generation validator.
 type Request struct {
 	Format             Format
+	Priority           Priority
 	Prepare            func(context.Context) (Snapshot, error)
 	ValidateGeneration func(context.Context, Snapshot) error
 }
@@ -132,6 +154,7 @@ type Config struct {
 	SnapshotLimit     int
 	PDFLimit          int
 	PNGLimit          int
+	CardLimit         int
 }
 
 type attempt struct {
@@ -202,6 +225,7 @@ type Queue struct {
 	snapshotLimit int
 	pdfLimit      int
 	pngLimit      int
+	cardLimit     int
 	renderPermit  chan struct{}
 	attempts      map[*attempt]struct{}
 	jobs          map[uuid.UUID]*job
@@ -262,12 +286,16 @@ func New(config Config) (*Queue, error) {
 	if err != nil {
 		return nil, ErrInvalidRequest
 	}
+	cardLimit, err := boundedInt(config.CardLimit, CardMaxBytes)
+	if err != nil {
+		return nil, ErrInvalidRequest
+	}
 
 	queue := &Queue{
 		renderer: config.Renderer, entropy: config.Entropy, newUUID: config.NewUUID,
 		now: config.Now, afterFunc: config.AfterFunc,
 		capacity: concurrent + queueDepth, jobTimeout: jobTimeout, capabilityTTL: capabilityTTL,
-		snapshotLimit: snapshotLimit, pdfLimit: pdfLimit, pngLimit: pngLimit,
+		snapshotLimit: snapshotLimit, pdfLimit: pdfLimit, pngLimit: pngLimit, cardLimit: cardLimit,
 		renderPermit: make(chan struct{}, concurrent), attempts: make(map[*attempt]struct{}),
 		jobs: make(map[uuid.UUID]*job), closeDone: make(chan struct{}),
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/contactlink"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
+	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
 	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
@@ -22,7 +23,7 @@ import (
 
 // htmlFormatVersion names the cached page format. It rises whenever the page
 // head changes, so no cached page with an older head is served.
-const htmlFormatVersion = 2
+const htmlFormatVersion = 3
 
 // HTMLDependencies contains the dependencies for public HTML responses.
 type HTMLDependencies struct {
@@ -34,6 +35,9 @@ type HTMLDependencies struct {
 	RendererDigest string
 	// Logger receives one closed, content-free line per 503. Nil disables it.
 	Logger *slog.Logger
+	// Cards turns on stored preview cards: the page names the current card
+	// version. Nil keeps the og.png share image.
+	Cards PreviewCards
 }
 
 // NewHTMLHandler creates the handler for public resume HTML pages.
@@ -87,6 +91,15 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			return
 		}
 		page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
+		if dependencies.Cards != nil {
+			version, versionErr := dependencies.Cards.Version(snapshot)
+			if versionErr != nil {
+				logHTMLUnavailable(dependencies.Logger, request, "card_version_failed", "")
+				serveHTMLError(w, request, http.StatusServiceUnavailable)
+				return
+			}
+			page.Preview.ImageURL = dependencies.PublicOrigin.Resolve(previewcard.Path(snapshot.Public.Slug, version))
+		}
 		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
 		result, err := dependencies.Renderer.Render(lease.Context(), publicRenderRequest(snapshot.Public, snapshot.DiscoveryEnabled, page, dependencies.PublicOrigin))
 		if err != nil {

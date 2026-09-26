@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (q *Queue) admit(parent context.Context) (*attempt, error) {
+func (q *Queue) admit(parent context.Context, priority Priority) (*attempt, error) {
 	ctx, cancel := context.WithCancel(parent)
 	active := &attempt{ctx: ctx, cancel: cancel, done: make(chan struct{})}
 	q.mu.Lock()
@@ -18,7 +18,8 @@ func (q *Queue) admit(parent context.Context) (*attempt, error) {
 		cancel()
 		return nil, ErrClosed
 	}
-	if len(q.attempts) >= q.capacity {
+	if len(q.attempts) >= q.capacity ||
+		(priority == PriorityLow && len(q.attempts) > MaxConcurrentRenders+LowPriorityMaxWaiting) {
 		q.mu.Unlock()
 		cancel()
 		return nil, ErrSaturated

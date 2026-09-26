@@ -31,3 +31,15 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 		t.Fatalf("closed request = %s", body)
 	}
 }
+
+// The card image URL is sent only while stored cards are on, so a renderer
+// that predates the card keeps its closed preview object.
+func TestPreviewImageURLIsSentOnlyWhenSet(t *testing.T) {
+	body, err := json.Marshal(previewmeta.Meta{Title: "Ada", Description: "Resume on aboutme.vn", ImageAlt: "Ada", ImageURL: "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != `{"title":"Ada","description":"Resume on aboutme.vn","locale":"","imageAlt":"Ada","imageUrl":"https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"}` {
+		t.Fatalf("preview with a card = %s", body)
+	}
+}
