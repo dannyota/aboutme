@@ -24,13 +24,13 @@ concurrency:
 
 # Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
 # job past that limit waits in the queue, including behind other branches'
-# runs. This workflow starts exactly 20 jobs (6 single jobs, 2 web-e2e
-# shards, 12 proof groups), each sized to finish in about 4 minutes, then
-# the ci gate. Short checks join a longer job that already has their setup
-# instead of paying for a runner of their own, and independent work inside a
-# job overlaps through scripts/ci-background.sh. Each check after a job's
-# first runs under `if: ${{ !cancelled() }}` so one failure does not hide
-# another.
+# runs. This workflow starts 18 jobs (5 single jobs, 2 Semgrep product
+# scans, 2 web-e2e shards, 9 proof groups), each sized to finish in about 4
+# minutes, then the ci gate. Short checks join a longer job that already has
+# their setup instead of paying for a runner of their own, and independent
+# work inside a job overlaps through scripts/ci-background.sh. Each check
+# after a job's first runs under `if: ${{ !cancelled() }}` so one failure
+# does not hide another.
 jobs:
   # Every check that needs no database, browser, or Go test run: the
   # append-only migration and released-schema guards, gitleaks, the
@@ -604,12 +604,16 @@ jobs:
           toolchain-hit: ${{ steps.setup.outputs.go-toolchain-hit }}
 
   # Connected Semgrep: Code (SAST, Pro rules + cross-file analysis), Supply
-  # Chain (SCA for Go + npm), and Secrets — all free for public repositories.
-  # Supply Chain covers dependency CVEs for Go and npm. It authenticates with
-  # SEMGREP_APP_TOKEN, which GitHub withholds from FORK pull requests, so run
-  # it on pushes, manual runs, and same-repo PRs only. A fork PR would have no
-  # token and fail.
-  semgrep:
+  # Chain (SCA for Go + npm), and Secrets, all free for public repositories.
+  # Each product set runs as its own `semgrep ci` scan in its own job, so the
+  # two scans overlap instead of adding up. Every scan uploads to the same
+  # Semgrep project and ref, and each blocks on its own products' blocking
+  # findings. Secrets runs with Code: both use the Pro engine, and a scan
+  # that selects only products the Semgrep deployment does not enable stops
+  # with an error. The scans authenticate with SEMGREP_APP_TOKEN, which
+  # GitHub withholds from FORK pull requests, so they run on pushes, manual
+  # runs, and same-repo PRs only. A fork PR would have no token and fail.
+  semgrep-code:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
@@ -627,8 +631,29 @@ jobs:
           path: ~/.cache/pip
           key: pip-semgrep-1.178.0-${{ runner.os }}
       - run: pip install semgrep==1.178.0
+      - run: semgrep ci --code --secrets --no-suppress-errors
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  semgrep-supply-chain:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # semgrep ci is diff-aware; give it history
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # The code job saves this cache; this job only restores it.
+      - name: Restore pip cache for Semgrep 1.178.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-semgrep-1.178.0-${{ runner.os }}
+      - run: pip install semgrep==1.178.0
       - run: scripts/test/semgrep-sca-inputs-test.sh
-      - run: semgrep ci --code --supply-chain --secrets --no-suppress-errors
+      - run: semgrep ci --supply-chain --no-suppress-errors
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
@@ -637,8 +662,9 @@ jobs:
   # shard ran; this job first checks that the shards' evidence together
   # proves every step of the TOTP and passkey scenarios and that each
   # disabled-enrollment phase ran exactly once. It then fails unless every
-  # job above succeeded; semgrep may be `skipped` only through its own `if:`
-  # (a fork pull request withholds SEMGREP_APP_TOKEN), never any other job.
+  # job above succeeded; a Semgrep job may be `skipped` only through its own
+  # `if:` (a fork pull request withholds SEMGREP_APP_TOKEN), never any other
+  # job.
   ci:
     if: always()
     needs:
@@ -649,7 +675,8 @@ jobs:
       - web
       - web-e2e
       - dev-https-proofs
-      - semgrep
+      - semgrep-code
+      - semgrep-supply-chain
     runs-on: ubuntu-latest
     steps:
       - if: ${{ needs.dev-https-proofs.result == 'success' }}
@@ -681,7 +708,7 @@ jobs:
             { echo "no TOTP shard evidence files were downloaded" >&2; exit 1; }
           node deploy/dev-https-browser/check-shard-coverage.mjs totp \
             "${evidence_files[@]}"
-      - name: Require every job to succeed (semgrep may be skipped on its own condition)
+      - name: Require every job to succeed (Semgrep jobs may be skipped on their own condition)
         if: always()
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
@@ -689,7 +716,8 @@ jobs:
           bad=$(echo "$NEEDS_JSON" | jq -r '
             to_entries
             | map(select(.value.result != "success"))
-            | map(select(.key != "semgrep" or .value.result != "skipped"))
+            | map(select(.value.result != "skipped"
+                or (.key | IN("semgrep-code", "semgrep-supply-chain") | not)))
             | .[]
             | "\(.key)=\(.value.result)"
           ')
