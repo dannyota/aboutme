@@ -412,7 +412,7 @@ describe('EditorShell', () => {
     // Plain mount renders NuxtLink without a router, so the target is `to`.
     expect(brand.attributes('href') ?? brand.attributes('to'))
       .toBe('/app/resumes');
-    const logos = brand.findAll('svg[role="img"][aria-label="aboutme"]');
+    const logos = brand.findAll('svg[role="img"][aria-label="aboutme.vn"]');
     expect(logos).toHaveLength(2);
     expect(logos.some((logo) => logo.attributes('viewBox') === '0 0 29 32'))
       .toBe(true);

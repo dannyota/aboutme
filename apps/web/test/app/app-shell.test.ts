@@ -300,7 +300,7 @@ describe('AppShell', () => {
     expect(wrapper.find('[aria-label^="Switch to"]').exists()).toBe(true);
   });
 
-  it('links the header brand mark to / with an aboutme accessible name',
+  it('links the header brand mark to / with an aboutme.vn accessible name',
     async () => {
       meStatus = 401;
       const wrapper = await mountShell();
@@ -313,7 +313,7 @@ describe('AppShell', () => {
       expect(svg?.attributes('role')).toBe('img');
       const name = svg?.attributes('aria-label')
         ?? svg?.element.querySelector(':scope > title')?.textContent?.trim();
-      expect(name).toBe('aboutme');
+      expect(name).toBe('aboutme.vn');
     });
 
   it('speaks the homepage language in the signed-out shell on /', async () => {
