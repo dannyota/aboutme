@@ -272,9 +272,9 @@ It redeploys earlier server, web, and app Caddy images without a snapshot or
 migration, through the same maintenance-page window as a normal deploy. The
 maintenance service keeps its currently registered Caddy image so rollbacks to
 tags from before maintenance mode still serve the page. A rollback is safe only
-when the failed release applied no migration. After a migration, fix forward
-with a new release, or restore the database from the snapshot the failed deploy
-took.
+when the failed release applied no migration, and only to a tag whose Caddy runs
+as uid 10001: `SO_REUSEPORT` needs the same uid on both Caddies. After a
+migration, fix forward or restore the snapshot the failed deploy took.
 
 A rollback also runs through the fence-aware `deploy.sh`, never a copy from the
 target tag, and is rejected the same way a forward deploy is when the target is

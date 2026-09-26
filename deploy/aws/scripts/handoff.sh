@@ -6,10 +6,14 @@
 #
 # Both services run Caddy with host networking, and Caddy binds every TCP
 # listener with SO_REUSEPORT, so a second Caddy joins the first on port 8443
-# and the kernel spreads new connections across both. Neither task definition
-# declares a port mapping, so ECS places one service's task beside the
-# other's. Every handoff therefore starts the incoming service and confirms
-# its task runs before it stops the outgoing one.
+# and the kernel spreads new connections across both. The kernel joins only
+# sockets of the same effective uid, so the incoming Caddy must run as the
+# same user as the outgoing one (deploy/caddy/production/Dockerfile). A Caddy
+# of another user cannot bind and exits, and confirm_running then fails the
+# handoff unless it samples that task in the moment before it exits. Neither
+# task definition declares a port mapping, so ECS places one service's task
+# beside the other's. Every handoff therefore starts the incoming service and
+# confirms its task runs before it stops the outgoing one.
 
 # Seconds a started task must stay up before confirm_running inspects it. A
 # Caddy that cannot bind or load its config exits within this hold.

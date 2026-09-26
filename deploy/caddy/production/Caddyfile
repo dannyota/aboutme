@@ -6,6 +6,11 @@
 # {vars.client_address}, which routes.caddy sends to Go as X-Real-IP.
 {
 	admin off
+	# No HTTP-to-HTTPS redirect server on port 80. CloudFront reaches the
+	# origin over HTTPS on 8443 only, and the security group admits nothing
+	# else, so that server would answer no one. Without it Caddy binds no
+	# privileged port and runs as a non-root user with no capability.
+	auto_https disable_redirects
 	import /run/caddy/edges.global
 	# Request logs keep the method, URI, and status but never the visitor's
 	# address or request headers (privacy policy: no IP in request logs).
