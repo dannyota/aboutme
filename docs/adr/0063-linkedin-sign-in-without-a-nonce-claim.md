@@ -116,4 +116,5 @@ Retrieved 2026-09-26.
 6. [python-social-auth `LinkedinOpenIdConnect`](https://github.com/python-social-auth/social-core/blob/master/social_core/backends/linkedin.py)
 7. [RFC 9700, OAuth 2.0 Security Best Current Practice, sections 2.1.1 and 4.5](https://www.rfc-editor.org/rfc/rfc9700.html#section-2.1.1)
 8. [RFC 6749, section 4.1.2](https://www.rfc-editor.org/rfc/rfc6749.html#section-4.1.2):
-   "The client MUST NOT use the authorization code more than once"
+   "If an authorization code is used more than once, the authorization server
+   MUST deny the request"; LinkedIn's own enforcement is not verified
