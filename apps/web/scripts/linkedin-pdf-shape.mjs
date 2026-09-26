@@ -441,7 +441,7 @@ function formatNumber(value) {
 
 function printShape(shape) {
   const info = shape.metadataResult.info ?? {};
-  const encrypted = info.EncryptFilterName != null;
+  const encrypted = (info.EncryptFilterName ?? null) !== null;
   console.log(`pdf version: ${info.PDFFormatVersion ?? 'unknown'}`);
   console.log(`pages: ${shape.numPages}`);
   console.log(`encrypted: ${encrypted ? 'yes' : 'no'}`);
