@@ -420,17 +420,18 @@ async function removeEveryFactor(
       await completeWithRecovery(page, recoveryCode);
     }
     await gotoHydrated(page, '/app/settings/sessions');
-    const csrf = await freshCSRF(page);
-    // Best-effort: remove TOTP, then every passkey, then sign every other
-    // session out. A route this account never used answers 404 and is
-    // ignored.
+    // Best-effort: remove TOTP, then every passkey. A route this account
+    // never used answers 404 and is ignored. Each removal that succeeds
+    // replaces the session and its CSRF secret, so every request reads a
+    // fresh token; reusing one would get 403 csrf_rejected after the first
+    // removal and stop the loop early.
     await page.evaluate(async (token) => {
       await fetch('/api/v1/me/second-factor/totp', {
         credentials: 'include',
         headers: { 'X-CSRF-Token': token },
         method: 'DELETE',
       });
-    }, csrf);
+    }, await freshCSRF(page));
     let removedPasskey = true;
     while (removedPasskey) {
       removedPasskey = await page.evaluate(async (token) => {
@@ -449,7 +450,7 @@ async function removeEveryFactor(
           method: 'DELETE',
         });
         return response.status === 204;
-      }, csrf);
+      }, await freshCSRF(page));
     }
     return true;
   } catch {
