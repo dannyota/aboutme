@@ -1,11 +1,11 @@
 # 0064: LinkedIn import reads the English Save to PDF in the browser
 
-Status: Proposed (2026-09-27). It supersedes decisions 1 and 3 of
+Status: Accepted (2026-09-27). It supersedes decisions 1 and 3 of
 [ADR 0059](0059-linkedin-import-in-the-browser.md) in part: import reads
 LinkedIn's profile "Save to PDF" file instead of the data download. ADR 0059's
-decisions 2 and 4 stand. The choices marked **Owner approval** in
-[LinkedIn import](../design/linkedin-import.md#owner-approval) need approval
-before code starts.
+decisions 2 and 4 stand. The owner approved the choices marked **Owner
+approval** in [LinkedIn import](../design/linkedin-import.md#owner-approval) on
+2026-09-27.
 
 ## Context
 

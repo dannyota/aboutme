@@ -8,9 +8,9 @@ uploaded. Only the resume the person creates is stored.
 of the PDF, and [ADR 0059](../adr/0059-linkedin-import-in-the-browser.md) the
 rule that parsing stays in the browser.
 
-Status: proposed. Facts were checked on 2026-09-26 and 2026-09-27. **Verify**
-marks a fact the build must confirm first, in
-[Facts to confirm](#facts-to-confirm-before-the-build).
+Status: accepted; the owner approved I1 to I10 on 2026-09-27. Facts were checked
+on 2026-09-26 and 2026-09-27. **Verify** marks a fact the build must confirm
+first, in [Facts to confirm](#facts-to-confirm-before-the-build).
 
 ## Sources a normal app can use
 
@@ -369,18 +369,18 @@ Nuxt's route header reaches `/_nuxt/` files, which the CSP test checks.
 
 ## Owner approval
 
-| ID  | Choice                                                                                                                               | Recommendation                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| I1  | Accept ADR 0064: English Save to PDF, parsed in the browser by pdf.js 6.3.289 in a worker; `pdfjs-dist` becomes a runtime dependency | Yes                                                               |
-| I2  | App page policy `worker-src 'self'`; public, print, and harness policies unchanged                                                   | Yes. Fallback: main-thread pdf.js with no hard time limit         |
-| I3  | Entry link in the create dialog; page `/app/import/linkedin`                                                                         | Yes                                                               |
-| I4  | Resume language English; the gallery's first template; the person changes the template in the editor                                 | Yes                                                               |
-| I5  | Sections and fields in Mapping; email and phone unselected; the dropped list above                                                   | Yes                                                               |
-| I6  | Privacy notice item above; the owner reviews the Vietnamese                                                                          | Yes                                                               |
-| I7  | Non-LinkedIn and non-English PDFs get a message and no import; no partial import                                                     | Yes                                                               |
-| I8  | The page asks people to import their own profile; no technical check                                                                 | Yes. A name check against the account would reject real users     |
-| I9  | Browsers older than Chrome 125, Firefox ESR, and Safari 18 get a message                                                             | Yes. Save to PDF is desktop-only, where these versions are common |
-| I10 | The data download import stays deferred as the later path for Vietnamese profiles                                                    | Yes. Decide once the PDF import is in use                         |
+| ID  | Choice                                                                                                                               | Decision |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| I1  | Accept ADR 0064: English Save to PDF, parsed in the browser by pdf.js 6.3.289 in a worker; `pdfjs-dist` becomes a runtime dependency | Approved |
+| I2  | App page policy `worker-src 'self'`; public, print, and harness policies unchanged                                                   | Approved |
+| I3  | Entry link in the create dialog; page `/app/import/linkedin`                                                                         | Approved |
+| I4  | Resume language English; the gallery's first template; the person changes the template in the editor                                 | Approved |
+| I5  | Sections and fields in Mapping; email and phone unselected; the dropped list above                                                   | Approved |
+| I6  | Privacy notice item above; the owner reviews the Vietnamese                                                                          | Approved |
+| I7  | Non-LinkedIn and non-English PDFs get a message and no import; no partial import                                                     | Approved |
+| I8  | The page asks people to import their own profile; no technical check                                                                 | Approved |
+| I9  | Browsers older than Chrome 125, Firefox ESR, and Safari 18 get a message                                                             | Approved |
+| I10 | The data download import stays deferred as the later path for Vietnamese profiles                                                    | Approved |
 
 ## Sources
 
