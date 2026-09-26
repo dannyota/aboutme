@@ -54,15 +54,15 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     privacy: {
       title: 'Chính sách quyền riêng tư',
       description:
-        'Chính sách quyền riêng tư của aboutme: chúng tôi thu thập gì, dùng '
+        'Chính sách quyền riêng tư của aboutme.vn: chúng tôi thu thập gì, dùng '
         + 'để làm gì, và bạn có những lựa chọn nào.',
       intro:
-        'aboutme (https://aboutme.vn) là công cụ tạo CV mã nguồn mở. Trang '
-        + 'này giải thích chúng tôi thu thập gì, dùng để làm gì, và bạn có '
-        + 'những lựa chọn nào.',
+        'aboutme.vn là công cụ tạo CV mã nguồn mở. Trang này giải thích '
+        + 'chúng tôi thu thập gì, dùng để làm gì, và bạn có những lựa chọn '
+        + 'nào.',
       operator: {
         text:
-          'aboutme do Danny, một cá nhân, vận hành phi thương mại tại '
+          'aboutme.vn do Danny, một cá nhân, vận hành phi thương mại tại '
           + 'Việt Nam.',
         contactLabel: 'Liên hệ',
       },
@@ -105,7 +105,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Mục đích và cơ sở xử lý',
           paragraphs: [
             'Chúng tôi xử lý dữ liệu cá nhân của bạn để thực hiện thỏa '
-            + 'thuận giữa bạn và aboutme theo Điều khoản sử dụng: cung cấp '
+            + 'thuận giữa bạn và aboutme.vn theo Điều khoản sử dụng: cung cấp '
             + 'tài khoản và các CV bạn tạo, giữ an toàn cho dịch vụ, và gửi '
             + 'email về tài khoản. Các tính năng tuỳ chọn (đăng CV công '
             + 'khai, cho phép lập chỉ mục, kết nối trợ lý AI, đăng nhập '
@@ -235,22 +235,23 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     terms: {
       title: 'Điều khoản sử dụng',
       description:
-        'Điều khoản sử dụng aboutme, công cụ tạo CV miễn phí và mã nguồn mở.',
+        'Điều khoản sử dụng aboutme.vn, công cụ tạo CV miễn phí và mã nguồn '
+        + 'mở.',
       intro:
-        'Các điều khoản này áp dụng khi bạn sử dụng aboutme '
-        + '(https://aboutme.vn).',
+        'Các điều khoản này áp dụng khi bạn sử dụng aboutme.vn.',
       sections: [
         {
           heading: 'Dịch vụ',
           paragraphs: [
-            'aboutme miễn phí. Mã nguồn được công bố theo giấy phép AGPL-3.0.',
+            'aboutme.vn miễn phí. Mã nguồn được công bố theo giấy phép '
+            + 'AGPL-3.0.',
           ],
           repositoryLink: 'Mã nguồn trên GitHub',
         },
         {
           heading: 'Nội dung của bạn',
           paragraphs: [
-            'Bạn sở hữu nội dung bạn tạo. Bạn cho phép aboutme lưu trữ, sao '
+            'Bạn sở hữu nội dung bạn tạo. Bạn cho phép aboutme.vn lưu trữ, sao '
             + 'lưu, kết xuất thành PDF, gửi đến các trợ lý AI bạn kết nối, '
             + 'và hiển thị nội dung đó theo cách bạn chọn, ví dụ khi bạn '
             + 'đăng CV. Quyền này chấm dứt khi bạn xoá nội dung, trừ các '
@@ -263,7 +264,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Quy tắc sử dụng',
           paragraphs: [
-            'Không dùng aboutme để:',
+            'Không dùng aboutme.vn để:',
           ],
           items: [
             'đăng nội dung vi phạm pháp luật;',
@@ -362,15 +363,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     privacy: {
       title: 'Privacy Policy',
       description:
-        'The aboutme privacy policy: what we collect, what we use it for, and '
+        'The aboutme.vn privacy policy: what we collect, what we use it for, '
         + 'the choices you have.',
       intro:
-        'aboutme (https://aboutme.vn) is an open-source resume builder. This '
-        + 'page explains what we collect, what we use it for, and the '
-        + 'choices you have.',
+        'aboutme.vn is an open-source resume builder. This page explains '
+        + 'what we collect, what we use it for, and the choices you have.',
       operator: {
         text:
-          'aboutme is operated by Danny, an individual, on a '
+          'aboutme.vn is operated by Danny, an individual, on a '
           + 'non-commercial basis in Vietnam.',
         contactLabel: 'Contact',
       },
@@ -537,22 +537,23 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     terms: {
       title: 'Terms of Service',
       description:
-        'The terms for using aboutme, a free and open-source resume builder.',
-      intro: 'These terms apply when you use aboutme (https://aboutme.vn).',
+        'The terms for using aboutme.vn, a free and open-source resume '
+        + 'builder.',
+      intro: 'These terms apply when you use aboutme.vn.',
       sections: [
         {
           heading: 'The service',
           paragraphs: [
-            'aboutme is free. Its code is open source under the AGPL-3.0 '
-            + 'license.',
+            'aboutme.vn is free. Its code is open source under the '
+            + 'AGPL-3.0 license.',
           ],
           repositoryLink: 'Source code on GitHub',
         },
         {
           heading: 'Your content',
           paragraphs: [
-            'You own the content you create. You give aboutme permission to '
-            + 'store, back up, render as PDF, send to AI agents you '
+            'You own the content you create. You give aboutme.vn permission '
+            + 'to store, back up, render as PDF, send to AI agents you '
             + 'connect, and display your content the way you choose, for '
             + 'example by publishing a resume. This permission ends when '
             + 'you delete the content, except for backup copies until they '
@@ -565,7 +566,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Acceptable use',
           paragraphs: [
-            'Do not use aboutme to:',
+            'Do not use aboutme.vn to:',
           ],
           items: [
             'post illegal content;',

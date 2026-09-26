@@ -99,8 +99,8 @@ describe('site-v2.webmanifest', () => {
   };
 
   it('names the app and matches the Aurora brand colors', () => {
-    expect(manifest.name).toBe('aboutme');
-    expect(manifest.short_name).toBe('aboutme');
+    expect(manifest.name).toBe('aboutme.vn');
+    expect(manifest.short_name).toBe('aboutme.vn');
     expect(manifest.theme_color).toBe('#1a5ceb');
     expect(manifest.background_color).toBe('#f5f8ff');
     expect(manifest.display).toBe('browser');

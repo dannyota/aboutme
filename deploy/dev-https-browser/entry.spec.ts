@@ -297,7 +297,7 @@ for (const viewport of [
     await page.goto(`${ORIGIN}/app/resumes`);
     await waitForHydration(page);
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
-    await expect(page).toHaveTitle('CV · aboutme');
+    await expect(page).toHaveTitle('CV · aboutme.vn');
 
     stage(`workspace-locale-${viewport.name}-invalid`);
     await context.addCookies([
@@ -316,7 +316,7 @@ for (const viewport of [
     await english.focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page).toHaveTitle('Resumes · aboutme');
+    await expect(page).toHaveTitle('Resumes · aboutme.vn');
     await expect.poll(async () => (await context.cookies(ORIGIN)).find(
       (cookie) => cookie.name === 'aboutme-locale',
     )?.value).toBe('en');
@@ -326,13 +326,13 @@ for (const viewport of [
     await vietnamese.focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
-    await expect(page).toHaveTitle('CV · aboutme');
+    await expect(page).toHaveTitle('CV · aboutme.vn');
 
     stage(`workspace-locale-${viewport.name}-create-reload`);
     await page.goto(`${ORIGIN}/app/new?template=engineer-compact`);
     await waitForHydration(page);
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
-    await expect(page).toHaveTitle('Tạo CV · aboutme');
+    await expect(page).toHaveTitle('Tạo CV · aboutme.vn');
     await page.reload();
     await waitForHydration(page);
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
@@ -341,7 +341,7 @@ for (const viewport of [
     await page.getByTestId('landing-locale-en').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page).toHaveTitle('New resume · aboutme');
+    await expect(page).toHaveTitle('New resume · aboutme.vn');
     await page.getByTestId('landing-locale-vi').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
@@ -349,7 +349,7 @@ for (const viewport of [
     stage(`workspace-locale-${viewport.name}-settings-vietnamese`);
     await page.goto(`${ORIGIN}/app/settings/sessions`);
     await waitForHydration(page);
-    await expect(page).toHaveTitle('Cài đặt · aboutme');
+    await expect(page).toHaveTitle('Cài đặt · aboutme.vn');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Cài đặt' }),
     ).toBeVisible();
@@ -368,7 +368,7 @@ for (const viewport of [
     await settingsEnglish.focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page).toHaveTitle('Settings · aboutme');
+    await expect(page).toHaveTitle('Settings · aboutme.vn');
     await expect(
       page.getByRole('heading', { level: 1, name: 'Settings' }),
     ).toBeVisible();

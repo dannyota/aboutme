@@ -4,7 +4,7 @@
 import type { Locale } from './locale';
 import type { WorkspaceCopy } from './workspace';
 
-export const siteName = 'aboutme';
+export const siteName = 'aboutme.vn';
 export const siteOrigin = 'https://aboutme.vn';
 export const ogImageUrl = `${siteOrigin}/og-image.jpg`;
 
@@ -22,7 +22,9 @@ export function isIndexablePath(path: string): boolean {
   return indexablePaths.has(path) || GALLERY_PATH.test(path);
 }
 
-/** "<page> · aboutme", the title pattern for every page but the homepage. */
+/**
+ * "<page> · aboutme.vn", the title pattern for every page but the homepage.
+ */
 export function pageTitle(name: string): string {
   return `${name} · ${siteName}`;
 }
@@ -53,8 +55,8 @@ export const workspaceTitles: WorkspaceCopy<WorkspaceTitles> = {
 };
 
 export const homeTitle: Record<Locale, string> = {
-  vi: 'aboutme — CV miễn phí, riêng tư đến khi bạn muốn',
-  en: 'aboutme — Free resumes, private until you choose',
+  vi: 'aboutme.vn — CV miễn phí, riêng tư đến khi bạn muốn',
+  en: 'aboutme.vn — Free resumes, private until you choose',
 };
 
 export const ogLocales: Record<Locale, string> = {

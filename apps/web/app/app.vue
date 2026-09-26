@@ -40,7 +40,7 @@ const indexable = computed(() => isIndexablePath(route.path));
 
 useHead(
   computed(() => ({
-    title: 'aboutme',
+    title: 'aboutme.vn',
     meta: indexable.value ? [] : [{ name: 'robots', content: 'noindex' }],
     // Application pages only: isAppSurface already excludes the render
     // harness (/_harness/**); the renderer mounts inside these pages but
