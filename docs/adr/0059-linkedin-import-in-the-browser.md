@@ -1,8 +1,13 @@
 # 0059: LinkedIn import reads the data export in the browser
 
-Status: Proposed (2026-09-26).
+Status: Proposed (2026-09-26). Superseded in part by
+[ADR 0064](0064-linkedin-import-from-save-to-pdf.md) (proposed): the first
+import reads the English Save to PDF, so decisions 1 and 3 and the rejection of
+PDF import no longer hold. Decisions 2 and 4 stand. Reading the data download is
+deferred to a later release.
 
-The detailed design is [LinkedIn import](../design/linkedin-import.md).
+The detailed design is [LinkedIn import](../design/linkedin-import.md), which
+now describes the PDF import.
 
 ## Context
 

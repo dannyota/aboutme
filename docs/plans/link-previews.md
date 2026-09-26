@@ -1,6 +1,6 @@
 # Link previews (0.6.0 and 0.6.1)
 
-Status: 0.6.0 is tagged `v0.6.0`; 0.6.1 is planned. The owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0055 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). The owner moved the publish-panel preview and the Verify page ([deployment transparency](deployment-transparency.md)) into 0.6.1 with the card. The next releases are 0.6.2 LinkedIn sign-in and 0.6.3 LinkedIn import ([linkedin.md](linkedin.md)).
+Status: 0.6.0 is tagged `v0.6.0`; 0.6.1 is tagged `v0.6.1`. The owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0055 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). The owner moved the publish-panel preview and the Verify page ([deployment transparency](deployment-transparency.md)) into 0.6.1 with the card. LinkedIn sign-in and import follow in [linkedin.md](linkedin.md).
 
 |Release|Outcome|Risk|
 |-|-|-|
