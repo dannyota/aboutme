@@ -204,8 +204,8 @@ with its counts for the last 7, 30, and 90 days, and links to a resume page
 - a daily bar chart of real views for 90 days, and a 12-month monthly total;
 - M, with the breakdown: bots, hosting networks, anomalies, failed checks, and
   crawlers;
-- link previews by platform: "Chia sẻ trong Zalo × 3" / "Shared in Zalo × 3",
-  with the note that one share can fetch more than once;
+- link previews by platform: "Xem trước liên kết trên Zalo × 3" / "Link previews
+  on Zalo × 3", with the note that one share can fetch more than once;
 - the definition line (**Owner approval** V2): "Một lượt xem cho mỗi mạng mỗi
   ngày. Hai người cùng một mạng trong một ngày được tính một lần; một người xem
   vào hai ngày được tính hai lần." / "One view per network per day. Two people
