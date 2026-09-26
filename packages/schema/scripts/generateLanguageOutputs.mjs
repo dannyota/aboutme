@@ -6,7 +6,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compile as compileTypeScript } from "json-schema-to-typescript";
 
-import { generatedHeader, quicktypeBin } from "./generatePaths.mjs";
+import {
+  generatedHeader,
+  quicktypeBin,
+  writeGenerated,
+} from "./generatePaths.mjs";
 import {
   buildGoCodegenSchema,
   buildTsCodegenSchema,
@@ -53,6 +57,9 @@ export function generateGo(
     pointerFiles.push(pointerPath);
   }
 
+  // quicktype writes its raw output beside the inputs, never to outFile: the
+  // raw text still declares the placeholder Section and does not compile.
+  const quicktypeOut = join(tmpDir, "quicktype-output.go");
   runQuicktype([
     "--src-lang",
     "schema",
@@ -71,12 +78,12 @@ export function generateGo(
     "--telemetry",
     "disable",
     "-o",
-    outFile,
+    quicktypeOut,
     schemaFilePath,
     ...pointerFiles,
   ]);
 
-  let raw = readFileSync(outFile, "utf8");
+  let raw = readFileSync(quicktypeOut, "utf8");
 
   // Deal with the placeholder's empty struct (see buildGoCodegenSchema and
   // this function's sectionMode comment). Matched exactly (not a general
@@ -143,12 +150,10 @@ func (p PersonalDetails) MarshalJSON() ([]byte, error) {
     `${generatedHeader(sourceName)}\n\npackage ${packageName}\n\n${preamble}` +
     raw +
     presenceMarshal;
-  writeFileSync(outFile, body);
-
   // quicktype's Go column-alignment pass misaligns struct fields when an
   // inline comment sits between them (visible on Customization pre-gofmt);
   // gofmt fixes that and is the canonical formatter for committed Go anyway.
-  execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
+  writeGenerated(outFile, body, "go");
 }
 
 export async function generateTs(sharedSchema, outFile, { sourceName }) {
@@ -173,5 +178,5 @@ export async function generateTs(sharedSchema, outFile, { sourceName }) {
     },
   );
 
-  writeFileSync(outFile, `${generatedHeader(sourceName)}\n\n${ts}`);
+  writeGenerated(outFile, `${generatedHeader(sourceName)}\n\n${ts}`);
 }
