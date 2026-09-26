@@ -23,7 +23,7 @@ The owner settled every product-visible choice:
    alone. The default tab title ends in the English word "Resume" even on a
    Vietnamese resume, and Apple and Facebook ask for a title without site
    branding.
-5. **Publish-panel preview.** It ships as its own release, after the card.
+5. **Publish-panel preview.** It ships in the same release as the card.
 6. **Privacy notice.** The wording in [Privacy](#privacy). The frontend adds the
    Vietnamese text, and the owner reviews it before that release ships.
 

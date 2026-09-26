@@ -38,6 +38,8 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Scaling](scaling/README.md)                                    | What a second serving replica needs                            |
 | Other   | [Link previews](link-previews.md)                               | Page tags, preview card, and platform rules for shared links   |
 | Other   | [Deployment transparency](deployment-transparency/README.md)    | Running digests, signed provenance, SBOMs, and the verify page |
+| Other   | [LinkedIn sign-in](linkedin-sign-in.md)                         | LinkedIn OIDC flow, account linking, and app setup             |
+| Other   | [LinkedIn import](linkedin-import.md)                           | New resume from the LinkedIn data download                     |
 
 ## System summary
 
