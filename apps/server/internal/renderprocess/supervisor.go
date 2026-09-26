@@ -105,6 +105,7 @@ func Run(args []string) int {
 	default:
 	}
 
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- argv comes from the server process that starts this supervisor and parseArgs checks its shape
 	cmd := exec.CommandContext(context.Background(), command[0], command[1:]...) //nolint:gosec // validated argv is the supervisor's input contract
 	cmd.Env = make([]string, 0)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
