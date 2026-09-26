@@ -261,10 +261,36 @@ go_packages() {
   done | sort -u
 }
 
+# go_modules: prints every Go module's root directory (relative to ROOT),
+# tracked or newly added on this branch. Module boundaries are structural, so
+# this reads the current tree rather than TOUCHED.
+go_modules() {
+  { git ls-files -- '*go.mod'
+    git ls-files --others --exclude-standard -- '*go.mod'; } |
+    sed -e 's|/go\.mod$||' -e 's|^go\.mod$|.|' | sort -u
+}
+
+# workspace_modules: prints each directory go.work's "use" lists (block or
+# single-line form), with the "./" prefix and any trailing slash stripped. A
+# module outside this list needs GOWORK=off, as its own go.mod requires.
+workspace_modules() {
+  [[ -f go.work ]] || return 0
+  awk '
+    /^use[[:space:]]*\(/ { inblock = 1; next }
+    inblock && /^\)/      { inblock = 0; next }
+    inblock               { print $1; next }
+    /^use[[:space:]]+/    { sub(/^use[[:space:]]+/, ""); print $1 }
+  ' go.work | sed -e 's|^\./||' -e 's|/*$||'
+}
+
 check_go() {
-  local -a files packages
-  mapfile -t files < <(list "${CHANGED[@]}" |
-    filter '^(apps/server|packages/schema/gen/go)/.*\.go$')
+  local -a modules workspace files
+  mapfile -t modules < <(go_modules)
+  mapfile -t workspace < <(workspace_modules)
+  local pattern
+  pattern=$(printf '%s|' "${modules[@]}")
+  pattern=${pattern%|}
+  mapfile -t files < <(list "${CHANGED[@]}" | filter "^(${pattern})/.*\\.go\$")
   if ((${#files[@]} == 0)); then
     record gofmt skip "no changed Go files"
     record golangci-lint skip "no changed Go files"
@@ -278,11 +304,20 @@ check_go() {
     sed 's/^/  /' <<<"$unformatted"
     record gofmt FAIL "${#files[@]} file(s); run gofmt -w on the files above"
   fi
-  # CI lints apps/server only, with apps/server/.golangci.yml; the generated
-  # schema module gets gofmt alone.
-  mapfile -t packages < <(go_packages apps/server)
-  if ((${#packages[@]} == 0)); then
-    record golangci-lint skip "no changed apps/server packages"
+  # Every Go module with its own .golangci.yml is linted with that config,
+  # from its own directory (apps/server, deploy/observer); a module without
+  # one (packages/schema/gen/go, deploy/caddy/production/build) gets gofmt
+  # alone, as before. A module outside go.work's use list runs with
+  # GOWORK=off, matching the Makefile and CI.
+  local module packages_probe
+  local -a linted=()
+  for module in "${modules[@]}"; do
+    [[ -f $module/.golangci.yml ]] || continue
+    packages_probe=$(go_packages "$module")
+    [[ -n $packages_probe ]] && linted+=("$module")
+  done
+  if ((${#linted[@]} == 0)); then
+    record golangci-lint skip "no changed packages in a linted module"
     return
   fi
   local want have
@@ -292,9 +327,16 @@ check_go() {
     record golangci-lint REFUSED "installed ${have:-none}, .tool-versions pins $want"
     return
   fi
-  run golangci-lint "${#packages[@]} package(s)" bash -c 'cd apps/server &&
-    GOMEMLIMIT=1536MiB GOFLAGS=-p=2 golangci-lint run --concurrency=2 "$@"' \
-    golangci-lint "${packages[@]}"
+  local -a packages
+  local gowork
+  for module in "${linted[@]}"; do
+    mapfile -t packages < <(go_packages "$module")
+    gowork=
+    printf '%s\n' "${workspace[@]}" | grep -Fqx -- "$module" || gowork='GOWORK=off '
+    run golangci-lint "$module: ${#packages[@]} package(s)" bash -c "cd '$module' &&
+      ${gowork}GOMEMLIMIT=1536MiB GOFLAGS=-p=2 golangci-lint run --concurrency=2 \"\$@\"" \
+      golangci-lint "${packages[@]}"
+  done
 }
 
 check_shell() {
