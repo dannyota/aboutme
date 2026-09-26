@@ -2,7 +2,7 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052 and
-0054–0056 are accepted; ADR 0053 is rejected.
+0054–0056 are accepted; ADR 0053 is rejected; ADR 0057 is proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -62,6 +62,7 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0054](../adr/0054-cloudfront-edge-for-single-host-production.md)         | Accepted | Interim CloudFront edge with origin mTLS; DNS superseded by 0056; ADR 0051 still governs the Vietnam move              |
 | [0055](../adr/0055-stored-link-preview-card.md)                           | Accepted | Stored, versioned link-preview card replaces the top-crop share image; supersedes 0032                                 |
 | [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
+| [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
 
 ## Remaining gates
 
