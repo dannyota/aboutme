@@ -258,7 +258,7 @@ func TestRegistrationOptions_ExactShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registrationOptions() error = %v", err)
 	}
-	want := `{"challenge":"` + b64.EncodeToString(challenge) + `","rp":{"name":"aboutme","id":"aboutme.vn"},` +
+	want := `{"challenge":"` + b64.EncodeToString(challenge) + `","rp":{"name":"aboutme.vn","id":"aboutme.vn"},` +
 		`"user":{"id":"` + b64.EncodeToString(handle) + `","name":"a@example.com","displayName":"A"},` +
 		`"pubKeyCredParams":[{"type":"public-key","alg":-7},{"type":"public-key","alg":-257}],"timeout":300000,` +
 		`"excludeCredentials":[],"authenticatorSelection":{"residentKey":"required","requireResidentKey":true,` +

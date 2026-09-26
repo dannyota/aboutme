@@ -2248,7 +2248,7 @@ export interface components {
             challenge: string;
             rp: {
                 /** @constant */
-                name: "aboutme";
+                name: "aboutme.vn";
                 /** @description The canonical `PUBLIC_ORIGIN` host — the exact WebAuthn relying-party ID. */
                 id: string;
             };

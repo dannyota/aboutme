@@ -91,7 +91,7 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 	if msg.Kind != KindVerify || msg.To != "alice@example.com" {
 		t.Fatalf("msg = %+v, want verify to alice@example.com", msg)
 	}
-	if msg.Subject != "Xác minh email aboutme / Verify your aboutme email" {
+	if msg.Subject != "Xác minh email aboutme.vn / Verify your aboutme.vn email" {
 		t.Errorf("subject = %q, want fixed bilingual subject", msg.Subject)
 	}
 	for _, want := range []string{"Xác minh email", "Verify your email", "24", p.Link} {
@@ -109,7 +109,7 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 	}
 
 	reset := buildMessage(KindReset, Payload{Version: 1, To: "b@c.d", Link: resetLinkPrefix + "tok"})
-	if reset.Subject != "Đặt lại mật khẩu aboutme / Reset your aboutme password" {
+	if reset.Subject != "Đặt lại mật khẩu aboutme.vn / Reset your aboutme.vn password" {
 		t.Errorf("reset subject = %q", reset.Subject)
 	}
 	for _, want := range []string{"30", resetLinkPrefix + "tok"} {
@@ -118,7 +118,7 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 		}
 	}
 	changed := buildMessage(KindPasswordChanged, Payload{Version: 1, To: "b@c.d"})
-	if changed.Subject != "Mật khẩu aboutme đã thay đổi / Your aboutme password was changed" {
+	if changed.Subject != "Mật khẩu aboutme.vn đã thay đổi / Your aboutme.vn password was changed" {
 		t.Errorf("password_changed subject = %q", changed.Subject)
 	}
 	for _, body := range []string{changed.HTMLBody, changed.TextBody} {
@@ -425,7 +425,7 @@ func TestWorkerRunOnceSendsAndMarksSent(t *testing.T) {
 	}
 	msg := sender.calls[0]
 	if msg.Kind != KindVerify || msg.To != "alice@example.com" ||
-		msg.Subject != "Xác minh email aboutme / Verify your aboutme email" {
+		msg.Subject != "Xác minh email aboutme.vn / Verify your aboutme.vn email" {
 		t.Fatalf("message kind=%q to=%q subject=%q, want the verify template for alice@example.com", msg.Kind, msg.To, msg.Subject)
 	}
 	state, leased := jobState(ctx, t, sp, jobID)

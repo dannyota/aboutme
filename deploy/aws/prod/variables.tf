@@ -20,7 +20,7 @@ variable "ses_from_address" {
 
 variable "ses_from_name" {
   type    = string
-  default = "Danny from aboutme"
+  default = "Danny from aboutme.vn"
 }
 
 variable "ses_configuration_set" {

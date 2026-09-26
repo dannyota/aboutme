@@ -45,7 +45,7 @@ const (
 	maxTransportHints       = 8
 	maxTransportHintBytes   = 32
 	ceremonyTimeoutMillis   = 300000
-	relyingPartyDisplayName = "aboutme"
+	relyingPartyDisplayName = "aboutme.vn"
 )
 
 // canonicalTransports is the closed transport set in its fixed order.

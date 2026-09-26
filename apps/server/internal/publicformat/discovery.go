@@ -94,8 +94,8 @@ func LLMS(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 		return nil, errors.New("public origin is required")
 	}
 	var out bytes.Buffer
-	out.WriteString("# aboutme\n\n")
-	out.WriteString("> aboutme is a free, open-source resume builder. A resume is private until\n")
+	out.WriteString("# aboutme.vn\n\n")
+	out.WriteString("> aboutme.vn is a free, open-source resume builder. A resume is private until\n")
 	out.WriteString("> you publish it; this file lists only the resumes their owners made discoverable.\n\n")
 	out.WriteString("## Site\n\n")
 	for _, page := range sitePages {
