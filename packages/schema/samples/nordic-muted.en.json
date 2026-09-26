@@ -39,7 +39,7 @@
         {
           "id": "dbe26ed4-d8b7-56f7-8ebe-b8e3dc455369",
           "isHidden": false,
-          "text": "<p>Senior DevOps Engineer with 10 years in infrastructure, starting as a system administrator. Run Kubernetes on AWS for 60 microservices at 99.95% uptime. CKA certified, with deep Terraform and GitOps work.</p>"
+          "text": "<p>Senior DevOps Engineer with 10 years in infrastructure, starting as a system administrator. Run Kubernetes on AWS for 60 microservices at 99.95% uptime. CKA certified, with deep Terraform and GitOps work, and cut the AWS bill by about 35%.</p>"
         }
       ]
     },
@@ -63,7 +63,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Run 4 Kubernetes (EKS) clusters on AWS for 60 microservices.</li><li>Rebuilt the infrastructure as 40 Terraform modules; a new environment takes 2 hours instead of 3 days.</li><li>Run GitOps with Argo CD and GitLab CI, which raised deploys from 5 to 60 a week.</li><li>Set up Prometheus and Grafana monitoring with on-call runbooks, cutting MTTR from 50 to 12 minutes.</li></ul>"
+          "description": "<ul><li>Run 4 Kubernetes (EKS) clusters on AWS for 60 microservices.</li><li>Manage the infrastructure as 40 Terraform modules; a new environment takes 2 hours instead of 3 days.</li><li>Run GitOps with Argo CD and GitLab CI, which raised deploys from 5 to 60 a week.</li><li>Set up Prometheus and Grafana monitoring with on-call runbooks, cutting MTTR from 50 to 12 minutes.</li><li>Cut the AWS bill by about 35% with Karpenter, Spot instances, and rightsizing, with no drop in uptime.</li></ul>"
         },
         {
           "id": "0c95a813-6c9e-580a-9e71-15f192b15cf9",
@@ -83,7 +83,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>E-commerce platform for an Australian client (14 months): moved 25 services from VMs to Kubernetes with zero downtime.</li><li>Built a shared GitLab CI pipeline for 12 projects, taking releases from 2 hours to 15 minutes.</li></ul>"
+          "description": "<ul><li>E-commerce platform for an Australian client (14 months): moved 25 services from VMs to Kubernetes with zero downtime.</li><li>Built a shared GitLab CI pipeline for 12 projects, taking releases from 2 hours to 15 minutes.</li><li>Added Trivy image scans to every pipeline, removing 200 Critical and High CVEs from base images.</li></ul>"
         },
         {
           "id": "41d6acef-4a1d-5c93-9295-ca28d4871c7b",

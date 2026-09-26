@@ -33,7 +33,7 @@
         {
           "id": "1918a953-4cd1-5278-93bf-36fd68380a65",
           "isHidden": false,
-          "text": "<p>Security Engineer with 9 years: 2 as a developer, 3 as a SOC analyst at a bank, 4 in e-commerce application security. Strong in OWASP pentesting, SIEM and DevSecOps.</p>"
+          "text": "<p>Security Engineer with 9 years: 2 as a developer, 3 as a SOC analyst at a bank, 4 in e-commerce application security. Strong in OWASP pentesting, SIEM and DevSecOps. Led a first-time PCI DSS v4.0 pass.</p>"
         }
       ]
     },
@@ -57,7 +57,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Pentest web apps and APIs to the OWASP Top 10 with Burp Suite: 120 flaws, 18 High or above.</li><li>Added Semgrep to GitLab CI for 40 repositories; Critical fixes now take 7 days, not 30.</li><li>Led the technical side of a PCI DSS v4.0 audit, passed first time with no major findings.</li><li>Set up WAF and rate limiting on AWS for 25 services, blocking 90% of credential stuffing.</li></ul>"
+          "description": "<ul><li>Pentest web apps and APIs to the OWASP Top 10 with Burp Suite: 120 flaws, 18 High or above.</li><li>Run Semgrep in GitLab CI for 40 repositories; Critical fixes now take 7 days, not 30.</li><li>Lead the technical side of PCI DSS v4.0 audits; the first one passed with no major findings.</li><li>Set up WAF and rate limiting on AWS for 25 services, blocking 90% of credential stuffing.</li><li>Run a security champions program for 12 developers across 6 teams; High findings in new code fell 45% in a year.</li></ul>"
         },
         {
           "id": "1fbadd14-b68d-51ae-b1a9-b739deb3bd4c",
@@ -77,7 +77,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Triaged SIEM (Splunk) alerts on a 24/7 rota, about 400 a day.</li><li>Wrote 60 correlation rules and playbooks, cutting false positives from 70% to 30%.</li></ul>"
+          "description": "<ul><li>Triaged SIEM (Splunk) alerts on a 24/7 rota, about 400 a day.</li><li>Wrote 60 correlation rules and playbooks, cutting false positives from 70% to 30%.</li><li>Automated IOC lookups and ticket creation in Python, saving each shift about 2 hours.</li></ul>"
         },
         {
           "id": "59dcd85b-d535-5af1-9416-30ee0307f9ce",

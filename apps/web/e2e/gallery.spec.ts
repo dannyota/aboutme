@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { SAMPLES } from '@aboutme/schema/samples';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
+import { SAMPLE_PAGES } from '../app/templates/samplePages';
 import {
   CHROME_PIXEL_TOLERANCE,
   verifyScreenshot,
@@ -177,7 +178,10 @@ test('template page switches between the page and the ATS text', async ({
   await expect(page.locator('h1')).toHaveCount(1);
 });
 
-test('the executive band PDF tab shows both stored pages', async ({
+// The executive band sample's PDF tab, whose page count the gallery pins.
+const EXECUTIVE_PAGES = SAMPLE_PAGES['executive-band']!;
+
+test('the executive band PDF tab shows every stored page', async ({
   page,
 }) => {
   await page.context().addCookies([{
@@ -190,9 +194,8 @@ test('the executive band PDF tab shows both stored pages', async ({
 
   await page.getByRole('tab', { name: 'PDF' }).click();
   const images = page.locator('img[data-pdf-page]');
-  await expect(images).toHaveCount(2);
-  const count = await images.count();
-  for (let index = 0; index < count; index += 1) {
+  await expect(images).toHaveCount(EXECUTIVE_PAGES);
+  for (let index = 0; index < EXECUTIVE_PAGES; index += 1) {
     const image = images.nth(index);
     await expect(image).toHaveAttribute('alt', /.+/);
     await image.scrollIntoViewIfNeeded();
@@ -202,10 +205,12 @@ test('the executive band PDF tab shows both stored pages', async ({
       expect(naturalWidth).toBeGreaterThan(0);
     }).toPass();
   }
-  await expect(page.locator('figcaption')).toHaveText([
-    'Page 1 of 2',
-    'Page 2 of 2',
-  ]);
+  await expect(page.locator('figcaption')).toHaveText(
+    Array.from(
+      { length: EXECUTIVE_PAGES },
+      (_, index) => `Page ${index + 1} of ${EXECUTIVE_PAGES}`,
+    ),
+  );
   await expect(page.locator('h1')).toHaveCount(1);
 });
 
@@ -284,10 +289,10 @@ for (const theme of THEMES) {
       });
       await page.getByRole('tab', { name: 'PDF' }).click();
       const pages = page.locator('img[data-pdf-page]');
-      await expect(pages).toHaveCount(2);
-      // Page 2 loads lazily; bring each page into view until it has
+      await expect(pages).toHaveCount(EXECUTIVE_PAGES);
+      // Later pages load lazily; bring each page into view until it has
       // decoded, so the full-page capture never shows an empty sheet.
-      for (let index = 0; index < 2; index += 1) {
+      for (let index = 0; index < EXECUTIVE_PAGES; index += 1) {
         const image = pages.nth(index);
         await image.scrollIntoViewIfNeeded();
         await expect(async () => {

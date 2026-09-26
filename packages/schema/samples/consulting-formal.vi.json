@@ -40,7 +40,7 @@
         {
           "id": "cfd2ac54-4d05-5cb8-a1bc-bbeb0fe96581",
           "isHidden": false,
-          "text": "<p>Security Engineer với 9 năm: 2 năm developer, 3 năm SOC Analyst tại ngân hàng, 4 năm bảo mật ứng dụng thương mại điện tử. Thế mạnh: pentest OWASP, SIEM, DevSecOps.</p>"
+          "text": "<p>Security Engineer với 9 năm: 2 năm developer, 3 năm SOC Analyst tại ngân hàng, 4 năm bảo mật ứng dụng thương mại điện tử. Thế mạnh: pentest OWASP, SIEM, DevSecOps. Chủ trì kỹ thuật đợt đánh giá PCI DSS v4.0 đạt ngay lần đầu.</p>"
         }
       ]
     },
@@ -64,7 +64,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Pentest web và API theo OWASP Top 10 bằng Burp Suite: 120 lỗ hổng, 18 mức High trở lên.</li><li>Đưa Semgrep vào GitLab CI cho 40 repository, rút thời gian vá lỗi Critical từ 30 còn 7 ngày.</li><li>Chủ trì phần kỹ thuật đợt đánh giá PCI DSS v4.0, đạt ngay lần đầu, không có phát hiện lớn.</li><li>Cấu hình WAF và rate limiting trên AWS cho 25 dịch vụ, chặn 90% credential stuffing.</li></ul>"
+          "description": "<ul><li>Pentest web và API theo OWASP Top 10 bằng Burp Suite: 120 lỗ hổng, 18 mức High trở lên.</li><li>Đưa Semgrep vào GitLab CI cho 40 repository, rút thời gian vá lỗi Critical từ 30 còn 7 ngày.</li><li>Chủ trì phần kỹ thuật đợt đánh giá PCI DSS v4.0, đạt ngay lần đầu, không có phát hiện lớn.</li><li>Cấu hình WAF và rate limiting trên AWS cho 25 dịch vụ, chặn 90% credential stuffing.</li><li>Vận hành chương trình security champion cho 12 developer ở 6 nhóm, giảm 45% lỗi mức High trong code mới sau một năm.</li></ul>"
         },
         {
           "id": "bba9c36a-038e-5b9e-add9-bffaee97aa65",
@@ -84,7 +84,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Phân tích cảnh báo SIEM (Splunk) trong ca trực 24/7, trung bình 400 cảnh báo mỗi ngày.</li><li>Viết 60 correlation rule và playbook, giảm cảnh báo giả từ 70% xuống 30%.</li></ul>"
+          "description": "<ul><li>Phân tích cảnh báo SIEM (Splunk) trong ca trực 24/7, trung bình 400 cảnh báo mỗi ngày.</li><li>Viết 60 correlation rule và playbook, giảm cảnh báo giả từ 70% xuống 30%.</li><li>Tự động hóa tra cứu IOC và tạo ticket bằng Python, tiết kiệm khoảng 2 giờ mỗi ca trực.</li></ul>"
         },
         {
           "id": "0aa0a12d-2ead-5b02-b2ee-f9a816275bdb",

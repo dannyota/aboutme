@@ -46,7 +46,7 @@
         {
           "id": "184a0aad-aefe-5522-a352-0e1a4dc63f07",
           "isHidden": false,
-          "text": "<p>Senior Backend Engineer với 9 năm xây dựng hệ thống thanh toán, ngân hàng và logistics bằng Go và Java. Dẫn dắt nhóm 5 người, quen vận hành on-call và design review.</p>"
+          "text": "<p>Senior Backend Engineer với 9 năm xây dựng hệ thống thanh toán, ngân hàng và logistics bằng Go và Java. Dẫn dắt nhóm 5 người, vận hành on-call và design review, duy trì một thư viện Go mã nguồn mở.</p>"
         }
       ]
     },
@@ -70,7 +70,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Thiết kế và vận hành payment service bằng Go và PostgreSQL, xử lý 3 triệu giao dịch/ngày với uptime 99,95%.</li><li>Chuyển đối soát cuối ngày sang luồng event-driven trên Kafka: từ 4 giờ còn 25 phút.</li><li>Dẫn dắt nhóm 5 người; đưa design review và runbook on-call vào quy trình, giảm MTTR từ 45 xuống 15 phút.</li></ul>"
+          "description": "<ul><li>Thiết kế và vận hành payment service bằng Go và PostgreSQL, xử lý 3 triệu giao dịch/ngày với uptime 99,95%.</li><li>Chuyển đối soát cuối ngày sang luồng event-driven trên Kafka: từ 4 giờ còn 25 phút.</li><li>Tối ưu truy vấn PostgreSQL và thêm cache Redis cho API nạp tiền, giảm p99 latency từ 800 ms xuống 120 ms.</li><li>Áp dụng idempotency key và transactional outbox cho 12 luồng thanh toán, giảm lỗi trừ tiền trùng từ khoảng 40 lần/tháng xuống 0.</li><li>Dẫn dắt nhóm 5 người; đưa design review và runbook on-call vào quy trình, giảm MTTR từ 45 xuống 15 phút.</li></ul>"
         },
         {
           "id": "05a3f405-38a4-554c-a876-edd96d8066c6",
@@ -90,7 +90,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Xây dựng API theo dõi vận đơn bằng Go, gRPC và Redis cho 20 triệu request/ngày.</li><li>Tách monolith PHP thành 9 microservices bằng Go trên Kubernetes, tăng tần suất release từ 1 lần/tuần lên hằng ngày.</li></ul>"
+          "description": "<ul><li>Xây dựng API theo dõi vận đơn bằng Go, gRPC và Redis cho 20 triệu request/ngày.</li><li>Tách monolith PHP thành 9 microservices bằng Go trên Kubernetes, tăng tần suất release từ 1 lần/tuần lên hằng ngày.</li><li>Xây dựng pipeline CI/CD với GitHub Actions và integration test, rút ngắn thời gian release từ 2 giờ còn 15 phút.</li><li>Gắn metric Prometheus và cảnh báo Grafana cho mọi service, giảm sự cố do khách hàng phát hiện từ 12 xuống 3 vụ/quý.</li></ul>"
         },
         {
           "id": "2637471a-42e2-5004-a2a6-276d0dce9572",
