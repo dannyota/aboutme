@@ -154,7 +154,11 @@ jobs:
             { echo "release: $TAG is not a vMAJOR.MINOR.PATCH tag" >&2; exit 1; }
           mkdir release
           : >release/digests.txt
-          for name in server web caddy; do
+          # server, web, and caddy are always built; the observer image is
+          # listed once the matrix builds it.
+          names=(server web caddy)
+          [[ ! -e artifacts/digest-observer.txt ]] || names+=(observer)
+          for name in "${names[@]}"; do
             line=$(cat "artifacts/digest-$name.txt")
             [[ $line =~ ^$name=(sha256:[0-9a-f]{64})$ ]] ||
               { echo "release: malformed digest for $name" >&2; exit 1; }
