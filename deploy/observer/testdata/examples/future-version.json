@@ -1,0 +1,46 @@
+{
+  "schema_version": 2,
+  "project": "aboutme",
+  "environment": "production",
+  "site": "https://aboutme.vn",
+  "source_repository": "https://github.com/dannyota/aboutme",
+  "platform": {
+    "provider": "aws",
+    "orchestrator": "ecs",
+    "region": "ap-southeast-1"
+  },
+  "observed_at": "2027-03-01T00:00:00Z",
+  "stale_after": "2027-03-01T00:03:00Z",
+  "summary": "verified",
+  "release": {
+    "version": "v1.0.0",
+    "commit": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "deployed_at": "2027-03-01T00:00:00Z"
+  },
+  "components": [
+    {
+      "name": "server",
+      "image": "ghcr.io/dannyota/aboutme-server",
+      "images": [
+        {
+          "digest": "sha256:0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+          "replicas": 1,
+          "running_since": "2027-03-01T00:00:00Z",
+          "version": "v1.0.0",
+          "commit": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+          "signature": {
+            "status": "verified",
+            "checked_at": "2027-03-01T00:00:30Z",
+            "signer_workflow": "https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v1.0.0",
+            "transparency_log_index": 4000000000
+          }
+        }
+      ]
+    }
+  ],
+  "observer": {
+    "version": "v1.0.0",
+    "commit": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "source": "self-reported"
+  }
+}

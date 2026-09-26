@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        name: [server, web, caddy]
+        name: [server, web, caddy, observer]
         include:
           - name: server
             dockerfile: deploy/server.Dockerfile
@@ -29,14 +29,30 @@ jobs:
             dockerfile: deploy/web.Dockerfile
           - name: caddy
             dockerfile: deploy/caddy/production/Dockerfile
+          - name: observer
+            dockerfile: deploy/observer/Dockerfile
     env:
       IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.ref_name }}
       NAME: ${{ matrix.name }}
       DOCKERFILE: ${{ matrix.dockerfile }}
+      VERSION: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The observer's image must be a single-platform manifest with no
+      # buildx provenance attachment, so Lambda accepts it
+      # (docs/design/deployment-transparency/README.md, "Where the observer runs").
+      # Its build information comes from build args, never from a
+      # self-reported runtime value.
       - name: Build
-        run: docker build --platform linux/arm64 -f "$DOCKERFILE" -t "$IMAGE" .
+        run: |
+          if [ "$NAME" = "observer" ]; then
+            docker build --platform linux/arm64 --provenance=false \
+              --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
+              -f "$DOCKERFILE" -t "$IMAGE" .
+          else
+            docker build --platform linux/arm64 -f "$DOCKERFILE" -t "$IMAGE" .
+          fi
       - name: Smoke
         run: |
           case "$NAME" in
@@ -58,6 +74,12 @@ jobs:
               # parses both route tables without the runtime TLS files.
               docker run --rm "$IMAGE" adapt
               docker run --rm -e EDGES=cloudfront "$IMAGE" adapt
+              ;;
+            observer)
+              # No AWS access here: this only proves the binary starts and
+              # the manifest is the single-platform arch Lambda requires.
+              [ "$(docker inspect --format '{{.Architecture}}' "$IMAGE")" = "arm64" ]
+              docker run --rm "$IMAGE" version
               ;;
           esac
       - name: Install Trivy

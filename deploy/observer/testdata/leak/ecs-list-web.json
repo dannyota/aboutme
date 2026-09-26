@@ -1,0 +1,5 @@
+{
+  "taskArns": [
+    "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee02"
+  ]
+}

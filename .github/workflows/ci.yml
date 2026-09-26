@@ -24,7 +24,7 @@ concurrency:
 
 # Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
 # job past that limit waits in the queue, including behind other branches'
-# runs. This workflow starts 18 jobs (5 single jobs, 2 Semgrep product
+# runs. This workflow starts 19 jobs (6 single jobs, 2 Semgrep product
 # scans, 2 web-e2e shards, 9 proof groups), each sized to finish in about 4
 # minutes, then the ci gate. Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
@@ -320,6 +320,47 @@ jobs:
         run: bash scripts/ci-background.sh wait media-corpus 1200
       - if: always()
         run: make test-s3-down
+      - uses: ./.github/actions/save-go-cache
+        with:
+          cache-hit: ${{ steps.go.outputs.cache-hit }}
+          cache-key: ${{ steps.go.outputs.cache-key }}
+          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
+
+  # The deployment transparency observer (deploy/observer/README.md): its own
+  # Go module outside go.work, so every step runs with GOWORK=off. No
+  # database, browser, or live AWS access is needed; the platform adapters
+  # and the S3 publisher are tested against httptest servers.
+  observer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: deploy/observer
+    env:
+      GOWORK: "off"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: go
+        uses: ./.github/actions/setup-go
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          working-directory: deploy/observer
+          version: v2.14.0
+      - name: go mod tidy is a no-op
+        run: |
+          cp go.mod /tmp/observer-go.mod.before && cp go.sum /tmp/observer-go.sum.before
+          go mod tidy
+          diff /tmp/observer-go.mod.before go.mod && diff /tmp/observer-go.sum.before go.sum \
+            || { echo "go.mod/go.sum are not tidy: run 'go mod tidy' in deploy/observer and commit"; exit 1; }
+      - name: Install the pinned govulncheck (1.8.0)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: govulncheck deploy/observer
+        run: govulncheck ./...
       - uses: ./.github/actions/save-go-cache
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
@@ -680,6 +721,7 @@ jobs:
     needs:
       - contracts
       - server
+      - observer
       - server-integration
       - server-resumeapi
       - web
