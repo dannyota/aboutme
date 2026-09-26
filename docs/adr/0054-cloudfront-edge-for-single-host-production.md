@@ -3,7 +3,8 @@
 Status: Accepted (2026-09-25) for the move, by the human owner's direction, on
 condition that the result is as secure as today. The choices marked for owner
 approval in the [CloudFront edge design](../design/cloudfront-edge.md) stay open
-until the owner approves them.
+until the owner approves them. The DNS decision is superseded by
+[ADR 0056](0056-route-53-production-dns.md).
 
 ## Context
 
