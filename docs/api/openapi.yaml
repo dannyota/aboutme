@@ -792,8 +792,9 @@ paths:
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
         path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
-        OAuth2/OIDC login transaction (PKCE S256, an OIDC
-        nonce) and redirects the browser to LinkedIn's own authorize
+        OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's
+        token endpoint takes client credentials in the request body, ADR
+        0063) and redirects the browser to LinkedIn's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
         handle, 10-minute TTL) that the matching `GET
         /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`.
@@ -926,8 +927,11 @@ paths:
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
         path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
-        cookie), exchanges the authorization code (PKCE), verifies the ID
-        token (issuer/audience/signature/expiry, plus the OIDC nonce), and
+        cookie), exchanges the authorization code (client credentials in the
+        request body, no PKCE), verifies the ID token
+        (issuer/audience/signature/expiry; a present nonce claim must match
+        the transaction's nonce, but LinkedIn's ID tokens omit the claim and
+        an absent one is accepted, ADR 0063), and
         resolves the local user per `purpose`, exactly like `GET
         /auth/google/callback` — see that
         operation's own description for the full `purpose=login` vs

@@ -103,19 +103,19 @@ public repository.
 each item (**Owner approval** V4; the owner reviews the Vietnamese). The notice
 never implies tracking.
 
-| Release         | Section          | Change (English; the Vietnamese mirrors it)                                                                                                                                                                                                                          |
-| --------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| View counts     | What we collect  | New item: "Views of public resumes: we count views and keep only daily totals. To tell people from bots, your IP address and browser details are used in memory only and discarded the same day, and your browser solves a small computing task. No cookie is used." |
-| View counts     | What we don't do | Replace "No analytics or tracking scripts." with "No third-party analytics or advertising trackers. We count views of public resumes only as described above."                                                                                                       |
-| Sign in to view | What we collect  | New item: "If a resume owner requires sign-in to view: Google or LinkedIn confirms your account, and we discard your name and email at once. The owner is not told who you are."                                                                                     |
-| Sign in to view | Cookies          | Add the pass cookie, which lets you view that resume for 7 days, and the join-invite `localStorage` entry.                                                                                                                                                           |
+| Release         | Section          | Change (English; the Vietnamese mirrors it)                                                                                                                                                                                                                                       |
+| --------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| View counts     | What we collect  | New item: "Views of public resumes: we count views and keep only daily totals. To tell people from bots, your IP address and browser details are used only in server memory and discarded the same day, and your browser solves a small computing task. Counting uses no cookie." |
+| View counts     | What we don't do | Replace "No analytics or tracking scripts." with "No third-party analytics or advertising trackers. We count views of public resumes only as described above."                                                                                                                    |
+| Sign in to view | What we collect  | New item: "If a resume owner requires sign-in to view: Google or LinkedIn confirms your account, and we discard your name and email at once. The owner is not told who you are."                                                                                                  |
+| Sign in to view | Cookies          | Add the pass cookie, which lets you view that resume for 7 days, and the join-invite `localStorage` entry.                                                                                                                                                                        |
 
 Vietnamese for the view-counts rows: "Lượt xem CV công khai: chúng tôi đếm lượt
 xem và chỉ lưu tổng số theo ngày. Để phân biệt người với bot, địa chỉ IP và
-thông tin trình duyệt của bạn chỉ được dùng trong bộ nhớ và bị xoá trong ngày,
-và trình duyệt của bạn giải một phép tính nhỏ. Không dùng cookie." and "Không
-dùng công cụ phân tích hay mã theo dõi của bên thứ ba, không dùng mã quảng cáo.
-Chúng tôi chỉ đếm lượt xem CV công khai như mô tả ở trên."
+thông tin trình duyệt của bạn chỉ được dùng tạm trong bộ nhớ máy chủ và bị xoá
+trong ngày; trình duyệt của bạn giải một phép tính nhỏ. Việc đếm lượt xem không
+dùng cookie." and "Không dùng công cụ phân tích hay mã theo dõi quảng cáo của
+bên thứ ba. Chúng tôi chỉ đếm lượt xem CV công khai như mô tả ở trên."
 
 ## Articles that do not change the design
 

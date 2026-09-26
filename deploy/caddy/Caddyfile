@@ -7,8 +7,11 @@
 # Denied and reserved roots never reach an upstream. Other paths go to Nuxt.
 {
 	admin off
-	# Request logs keep the method, URI, and status but never the visitor's
-	# address or request headers, matching production.
+	# No site below turns on Caddy's access log, so an ordinary request is
+	# never logged, matching production. This shapes the format
+	# for whatever Caddy still writes on its own, such as a failed
+	# reverse_proxy dial: it keeps the method and URI but never the
+	# visitor's address or request headers.
 	log default {
 		output stderr
 		format filter {

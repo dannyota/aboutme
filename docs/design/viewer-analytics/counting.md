@@ -206,12 +206,13 @@ with its counts for the last 7, 30, and 90 days, and links to a resume page
   crawlers;
 - link previews by platform: "Xem trước liên kết trên Zalo × 3" / "Link previews
   on Zalo × 3", with the note that one share can fetch more than once;
-- the definition line (**Owner approval** V2): "Một lượt xem cho mỗi mạng mỗi
-  ngày. Hai người cùng một mạng trong một ngày được tính một lần; một người xem
-  vào hai ngày được tính hai lần." / "One view per network per day. Two people
-  on one network in one day count once; one person on two days counts twice."
-- the honest-limit line: "Số liệu chỉ loại được những gì các lớp lọc phát hiện;
-  công cụ tự động tinh vi vẫn có thể được tính." / "Counts exclude only what the
+- the definition line (**Owner approval** V2): "Mỗi kết nối mạng được tính tối
+  đa một lượt xem mỗi ngày. Hai người dùng chung một kết nối mạng trong một ngày
+  được tính một lần; một người xem vào hai ngày được tính hai lần." / "One view
+  per network per day. Two people on one network in one day count once; one
+  person on two days counts twice."
+- the honest-limit line: "Số liệu chỉ loại được những gì bộ lọc phát hiện; công
+  cụ tự động tinh vi vẫn có thể được tính." / "Counts exclude only what the
   filters detect; sophisticated automation can still be counted."
 
 The page reads only aggregates. Resume pages show the 90 days ending today, and
