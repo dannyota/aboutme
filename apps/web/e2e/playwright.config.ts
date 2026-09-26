@@ -83,7 +83,12 @@ export default defineConfig({
         'sample-pages.spec.ts',
         'preview-gap.spec.ts',
       ]
-    : ['normal-csp.spec.ts', 'gallery.spec.ts', 'chrome.spec.ts'],
+    : [
+        'normal-csp.spec.ts',
+        'gallery.spec.ts',
+        'chrome.spec.ts',
+        'verify.spec.ts',
+      ],
   timeout: 20_000,
   updateSnapshots: 'none',
   use: {

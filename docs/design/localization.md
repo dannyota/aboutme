@@ -20,11 +20,11 @@ on a shared device inherits it. There is no account language field, server
 locale, or locale header, so the choice is per browser.
 
 Localized routes are the homepage, authentication and recovery pages, legal
-pages, template gallery, the resume workspace (`/app/resumes`, `/app/new`, and
-the editor below `/app/resumes/`), `/app/settings/sessions`, and `/authorize`.
-Route classification in `useRouteLocale()` names these paths exactly. It
-excludes `/oauth/*`, MCP, API, and public resume routes. A new settings route
-joins only by an explicit change.
+pages, template gallery, the verify page (`/verify`), the resume workspace
+(`/app/resumes`, `/app/new`, and the editor below `/app/resumes/`),
+`/app/settings/sessions`, and `/authorize`. Route classification in
+`useRouteLocale()` names these paths exactly. It excludes `/oauth/*`, MCP, API,
+and public resume routes. A new settings route joins only by an explicit change.
 
 Public resume chrome follows resume language: `Tải PDF` and
 `Tạo bằng aboutme.vn` for Vietnamese resumes, `Download PDF` and

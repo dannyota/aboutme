@@ -1,6 +1,7 @@
-// Site languages. The homepage, account pages, the Privacy Policy and Terms,
-// the Library, resume workspace, settings, and authorization are bilingual
-// and default to Vietnamese (docs/design/localization.md).
+// Site languages. The homepage, account pages, the Privacy Policy, Terms,
+// and Verify pages, the Library, resume workspace, settings, and
+// authorization are bilingual and default to Vietnamese
+// (docs/design/localization.md).
 
 export const locales = ['vi', 'en'] as const;
 
@@ -40,6 +41,7 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/verify-email',
   '/privacy',
   '/terms',
+  '/verify',
   '/app/settings/sessions',
   '/authorize',
 ]);

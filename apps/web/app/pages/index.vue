@@ -490,6 +490,11 @@ useHead(computed(() => ({
         data-testid="landing-privacy-link"
         to="/privacy"
       >{{ legal.privacyLink }}</NuxtLink>
+      <NuxtLink
+        class="text-link underline-offset-4 hover:underline"
+        data-testid="landing-verify-link"
+        to="/verify"
+      >{{ legal.verifyLink }}</NuxtLink>
     </footer>
   </main>
 </template>

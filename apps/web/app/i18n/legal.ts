@@ -34,6 +34,8 @@ export type LegalCopy = {
   /** Short link labels for the homepage footer and registration. */
   readonly privacyLink: string;
   readonly termsLink: string;
+  /** The homepage footer's link to /verify. */
+  readonly verifyLink: string;
   /** "By creating an account you agree to the [Terms] and the [Privacy]." */
   readonly agreement: readonly [string, string, string];
 };
@@ -43,6 +45,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     updated: 'Cập nhật lần cuối ngày 26/09/2026',
     privacyLink: 'Chính sách quyền riêng tư',
     termsLink: 'Điều khoản sử dụng',
+    verifyLink: 'Kiểm chứng',
     agreement: [
       'Khi tạo tài khoản, bạn xác nhận đủ 16 tuổi và đồng ý với ',
       ' và ',
@@ -349,6 +352,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     updated: 'Last updated September 26, 2026',
     privacyLink: 'Privacy Policy',
     termsLink: 'Terms of Service',
+    verifyLink: 'Verify',
     agreement: [
       'By creating an account you confirm you are at least 16 and agree '
       + 'to the ',

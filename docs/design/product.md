@@ -77,7 +77,7 @@ any route may claim it, and drift between the registry, OpenAPI root paths, the
 Nuxt page manifest, or generated dispatch fails the build.
 
 The registry keys one row per literal top-level segment; finer paths dispatch
-inside the owning router. `packages/publicroots/public-roots.v8.json` holds the
+inside the owning router. `packages/publicroots/public-roots.v9.json` holds the
 exact roots. `admin`, `people`, and `u` are reserved for future use with no
 handler ([ADR 0004](../adr/0004-resume-slug-only-urls.md)). The dotted and
 underscore-prefixed roots cannot pass the slug grammar but stay in the registry

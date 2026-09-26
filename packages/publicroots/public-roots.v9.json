@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "roots": [
     { "root": ".well-known", "dispatch": "go" },
     { "root": "admin", "dispatch": "reserved" },
@@ -25,6 +25,7 @@
     { "root": "templates", "dispatch": "nuxt" },
     { "root": "terms", "dispatch": "nuxt" },
     { "root": "u", "dispatch": "reserved" },
+    { "root": "verify", "dispatch": "nuxt" },
     { "root": "verify-email", "dispatch": "nuxt" }
   ]
 }
