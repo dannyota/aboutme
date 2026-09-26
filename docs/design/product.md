@@ -32,11 +32,12 @@ without publishing an account profile.
 | Discovery           | Search engine optimization (SEO) and generative engine optimization (GEO), only after explicit opt-in    |
 | Export              | Owner PDF; optional public PDF                                                                           |
 | Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes   |
+| Viewer analytics    | Owner-only view counts; viewer detail only with consent or sign-in                                       |
 | Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                  |
 
 Out of v1: cover letters, a job tracker, first-party AI writing features, custom
-domains, teams, analytics, interface languages beyond Vietnamese and English,
-and collaborative editing.
+domains, teams, interface languages beyond Vietnamese and English, and
+collaborative editing.
 
 ## Landing and entry
 

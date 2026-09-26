@@ -40,6 +40,12 @@ intended model, not replacement DDL.
 | `lifecycle_audit_events`         | Fixed account-deletion, provider-unlink, and media events, independent of deleted accounts and retained for 180 days      |
 | `privacy_sweep_state`            | Durable cursor for bounded weekly media reconciliation                                                                    |
 | `public_state`                   | Singleton durable discovery generation advanced with public-membership mutations                                          |
+| `resume_view_days`               | Daily real and filtered view counts per resume; no personal data; 400 days; see viewer analytics                          |
+| `resume_share_signal_days`       | Daily link-preview fetches per resume and platform; no personal data; 400 days                                            |
+| `resume_view_events`             | Append-only consented or signed-in views with closed fields, 90 days; durations in `resume_view_durations`                |
+| `view_consents`                  | Append-only viewer agree, decline, and withdraw records with notice version; 180 days                                     |
+| `resume_viewers`                 | Per-resume signed-in viewer: provider subject, name, verified email; 90 days after the last view                          |
+| `viewer_passes`                  | Hashed 7-day viewer pass bound to one resume and one viewer                                                               |
 
 Runtime coordination tables, such as the write barrier, replica membership,
 claims, rate buckets and publication transitions, are not part of the current

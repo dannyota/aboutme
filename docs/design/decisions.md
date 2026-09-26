@@ -2,7 +2,8 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052 and
-0054–0056 are accepted; ADR 0053 is rejected; ADR 0057 is proposed.
+0054–0056 are accepted; ADR 0053 is rejected; ADRs 0057 and 0060–0062 are
+proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -63,6 +64,9 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0055](../adr/0055-stored-link-preview-card.md)                           | Accepted | Stored, versioned link-preview card replaces the top-crop share image; supersedes 0032                                 |
 | [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
 | [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
+| [0060](../adr/0060-viewer-data-controller-and-consent.md)                 | Proposed | aboutme controls viewer data; three fixed modes; detail only after consent                                             |
+| [0061](../adr/0061-layered-human-view-counting.md)                        | Proposed | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |
+| [0062](../adr/0062-sign-in-to-view-without-an-account.md)                 | Proposed | Sign in to view with per-resume viewer identities and passes, no account                                               |
 
 ## Remaining gates
 
