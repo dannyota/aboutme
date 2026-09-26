@@ -292,6 +292,7 @@ type Querier interface {
 	// The grant-skip read: a live grant with equal-or-wider scopes lets authorize
 	// issue a code without a second consent.
 	GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error)
+	GetLiveResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	// Ambiguous-delete recovery proves the exact immutable cleanup job without
 	// scanning or exposing unrelated object keys.
 	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
@@ -346,6 +347,9 @@ type Querier interface {
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
+	// A stored card is derived data (ADR 0055); every public read passes the
+	// live-state gate before it reads one.
+	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)
 	GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error)
 	// Loads a target so the caller can revoke its rotation partner.
 	// RevokeSessionForUser returns only a row count, and the target need not be the
@@ -450,6 +454,8 @@ type Querier interface {
 	// interface{} for it, while a plain nullable column reference keeps the Go
 	// type *time.Time — NULL for a grant whose tokens have never been used.
 	ListLiveOAuthGrantsForUser(ctx context.Context, arg ListLiveOAuthGrantsForUserParams) ([]ListLiveOAuthGrantsForUserRow, error)
+	// Every live resume and the version of its stored card, NULL when none.
+	ListLiveResumePreviewCardVersions(ctx context.Context) ([]ListLiveResumePreviewCardVersionsRow, error)
 	// Lists sessions that internal/auth also considers live:
 	//
 	//   - not explicitly revoked (revoked_at IS NULL);
@@ -494,6 +500,11 @@ type Querier interface {
 	// public_state before these account-scoped locks.
 	LockCanonicalAccountEmail(ctx context.Context, email string) error
 	LockPublicState(ctx context.Context) (PublicState, error)
+	// FOR SHARE makes a card store wait for, or block, an unpublish, rename, or
+	// delete of the same resume, since those lock the row for update. The row
+	// returned is the latest committed one, so the caller recomputes the card
+	// version from it before it writes.
+	LockResumeForPreviewCard(ctx context.Context, id uuid.UUID) (Resume, error)
 	LockSlugClaim(ctx context.Context, slug string) error
 	LockUserForResumeWrite(ctx context.Context, id uuid.UUID) (uuid.UUID, error)
 	// SES accepted: clears every encryption and lease field and records sent_at.
@@ -668,6 +679,7 @@ type Querier interface {
 	// already holds (GetPasswordCredentialForUpdate), re-encoding the hash and
 	// bumping changed_at on the conflict arm.
 	UpsertPasswordCredential(ctx context.Context, arg UpsertPasswordCredentialParams) (PasswordCredential, error)
+	UpsertResumePreviewCard(ctx context.Context, arg UpsertResumePreviewCardParams) error
 }
 
 var _ Querier = (*Queries)(nil)

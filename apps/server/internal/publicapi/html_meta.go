@@ -55,7 +55,10 @@ var previewMetaKeys = []metaKey{
 // expectedPreviewMeta is the exact content of each preview meta element the
 // page must carry once. og:locale is absent when the language maps to none.
 func expectedPreviewMeta(resume publicresume.PublicResume, preview previewmeta.Meta, origin publicresume.PublicOrigin) map[metaKey]string {
-	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
+	imageURL := preview.ImageURL
+	if imageURL == "" {
+		imageURL = origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
+	}
 	expected := map[metaKey]string{
 		{"name", "description"}:         preview.Description,
 		{"property", "og:type"}:         "profile",
