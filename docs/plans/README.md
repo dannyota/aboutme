@@ -7,7 +7,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |Path|Holds|
 |-|-|
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
-|[link-previews.md](link-previews.md)|Link-preview releases, waiting for the owner to schedule them|
+|[link-previews.md](link-previews.md)|Link previews, releases 0.6.0 to 0.6.2, waiting for owner approvals|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0051](../adr/0051-vietnam-hosted-production.md))|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
@@ -36,7 +36,7 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 
 ## Remaining
 
-- The open rows of [v0.5-roadmap.md](v0.5-roadmap.md), then [link previews](link-previews.md) when scheduled.
+- The open rows of [v0.5-roadmap.md](v0.5-roadmap.md), then [link previews](link-previews.md) (0.6.0 to 0.6.2).
 - [Vietnam production migration](vietnam-production.md): provider confirmation, app preparation releases, build, rehearsal, cutover, AWS real-data deletion.
 - [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).

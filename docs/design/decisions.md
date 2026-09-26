@@ -2,7 +2,7 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052 and
-0054 are accepted; ADR 0053 is rejected.
+0054 are accepted; ADR 0053 is rejected; ADR 0055 is proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -60,6 +60,7 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0052](../adr/0052-guarded-token-edits-to-generated-primitives.md)        | Accepted | Generated primitives take token-colored variant edits only with a guard test, re-applied after regeneration            |
 | [0053](../adr/0053-public-pdf-tab-renders-the-download-in-the-browser.md) | Rejected | Public PDF tab draws the gated PDF download with pdf.js in the browser; no new route or server raster                  |
 | [0054](../adr/0054-cloudfront-edge-for-single-host-production.md)         | Accepted | Interim CloudFront edge with origin mTLS before the single host; ADR 0051 still governs the Vietnam move               |
+| [0055](../adr/0055-stored-link-preview-card.md)                           | Proposed | Stored, versioned link-preview card replaces the top-crop share image; would supersede 0032                            |
 
 ## Remaining gates
 

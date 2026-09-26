@@ -1,22 +1,48 @@
-# Link previews
+# Link previews (0.6.0 to 0.6.2)
 
-Status: open; waits for the owner to schedule it. Two releases, numbered when they ship. Platform pages and resumes ship separately because their privacy rules differ.
+Status: planned; waits for the owner approvals listed in [the design](../design/link-previews.md#owner-approvals). Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). Three small releases, one feature each. The manager may deploy 0.6.0 and 0.6.1 together under 0.6.1 if both are green together.
 
-Current code: platform pages set title, description, canonical URL, Open Graph, and Twitter tags in `apps/web/app/composables/useSiteSeo.ts`. Published resumes get head tags and the 1200 by 630 share image ([ADR 0032](../adr/0032-public-share-image.md)) from `apps/server/internal/publicapi/html.go`. No release has verified the cards in real apps.
-
-|Release|Outcome|Acceptance|
+|Release|Outcome|Risk|
 |-|-|-|
-|Platform-page previews|Homepage and public template pages|Localized metadata and a crawlable branded image, verified in the apps below.|
-|Published-resume previews|Resume cards|Resume metadata and the existing share image verified in the apps below, including private and revoked states.|
+|0.6.0 Preview text|Title, description from the summary, locale, URL, site name, image type and alt on every live resume page; privacy notice paragraph on third-party copies|Medium: HTML validator and render contract|
+|0.6.1 Preview card|Stored, versioned 1200 by 630 card with name, headline, photo, branding; no contact data; built at publish and on change|High: migration, publish revocation, render queue|
+|0.6.2 Publish-panel preview|The publish dialog shows the card and a chat-card mock; no new setting|Low; only if the owner approves it for 0.6.x|
 
-A later release may refine the share-image crop if the checks show it is unreadable. Keep that visual change apart from metadata fixes.
+## Before any code
 
-## Rules
+- Owner approves the four items in the design (card look, preview title, publish-panel timing, privacy wording).
+- Architect then marks ADR 0055 accepted and ADR 0032 superseded, and updates the rows that ADR 0032 still states: `docs/design/product.md` (share image row, robots sentence), `docs/design/api.md` (image route rows), `docs/design/budgets.md` (card bytes 524,288), `docs/design/data.md` (new table row), `docs/design/templates/print.md` (share image row), `docs/design/decisions.md`.
 
-- Resume cards derive only from the current public snapshot: the sanitized projection plus validated public head settings ([ADR 0042](../adr/0042-public-page-title-and-favicon.md)). Keep an owner-set public title without adding those settings to public JSON. No account email, private field, hidden entry, or storage key in a card.
-- Serve Open Graph and X card tags with absolute HTTPS image URLs, image dimensions, content type, and alt text. Update the public renderer and the Go HTML validator together so the metadata allowlist accepts only the intended escaped values.
-- Crawlers get Vietnamese by default: one canonical URL, language in a cookie. Do not promise per-language platform cards without a separate URL design. Resume metadata follows the resume language.
-- Cover Vietnamese and English, custom and default public titles, long names and headlines, with and without photo, discovery off, PDF download off, renamed URLs, unpublish, and delete. Keep live link, discoverability, and download permission separate; changing that contract needs a design decision first.
-- Unpublishing stops fresh origin reads. Do not promise that it clears third-party caches; record the measured behavior and the refresh tools each platform offers.
-- Check cards in Facebook, LinkedIn, Zalo, and one more chat app, using fictional published resumes, inspectors, and unsent drafts. Never send or publish a message as part of a check.
-- References: [Open Graph](https://ogp.me/), [LinkedIn sharing](https://www.linkedin.com/help/linkedin/answer/a521928/making-your-website-shareable-on-linkedin?lang=en). They define metadata, not a guarantee that every app shows the same card.
+## 0.6.0 Preview text
+
+Deploy order: the web image starts before the app, so the Nuxt decoder accepts a missing `preview` object and then emits today's head. Go always sends it and validates the new head.
+
+|Role|Files|Work|
+|-|-|-|
+|backend|new `apps/server/internal/previewmeta/` (code, tests, `testdata/` cases); `apps/server/internal/directrender/` (request type and tests); `apps/server/internal/publicapi/html.go`; new `apps/server/internal/publicapi/html_meta.go` and `html_meta_test.go`; `html_test.go`, `html_diagnostics_test.go`|Text rules from the design (normalize, scrub, title, description with fallbacks and cut, locale, image text); pass `preview` in the render request; move the meta checks out of `html.go` (658 lines) into `html_meta.go` and accept exactly the new tags; raise `htmlFormatVersion`; test the largest document still fits 532,480 bytes|
+|frontend|`apps/web/server/utils/public-render/envelope.ts`; `apps/web/server/workers/public-render/render.ts`; `apps/web/test/public-render/render.test.ts`; `apps/web/test/seo.test.ts` if it asserts resume tags; `apps/web/app/i18n/legal.ts` and its test|Decode the closed `preview` object; emit the tags in design order with attribute escaping; head snapshots for a Vietnamese and an English resume; privacy notice paragraph on third-party copies in both languages, as approved|
+|qa|`deploy/dev-https-browser/privacy.spec.ts`, `exports.spec.ts`, `verify-evidence.mjs` (their resume head assertions)|Update head assertions; after deploy, run the live check list in the design on a fictional resume and store evidence under `.dev/personas/`|
+
+## 0.6.1 Preview card
+
+|Role|Files|Work|
+|-|-|-|
+|designer|`DESIGN.md` (new "Link preview card" section); new `apps/web/app/components/preview/preview-card.css`|Final card spec inside the design's layout rules; card CSS and tokens; review the built card at 1200, 600, and 300 px wide and in a square crop|
+|backend|new `apps/server/migrations/00007_resume_preview_cards.sql` (manager confirms the number); store queries and sqlc output under `apps/server/internal/store/`; new `apps/server/internal/previewcard/` (envelope inputs, version, scheduler, store transaction); `apps/server/internal/printsnapshot/` (card envelope); `apps/server/internal/renderjob/` (low-priority admission); `apps/server/internal/printrender/` (card byte limit); `apps/server/internal/publicresume/` (photo key digest accessor); `apps/server/internal/publicapi/` (new `card.go` route, `routes.go`, `/og.png` alias in `artifact.go`); `apps/server/internal/previewmeta/` (versioned image URL); `apps/server/internal/publicformat/` (robots rule and testdata); unpublish, rename, and delete transactions in `apps/server/internal/resumeapi/` or the store; `apps/server/cmd/server/main.go`; `docs/api/openapi.yaml`|Everything in "Build, storage, and serving" and "Privacy" of the design; tests for version mismatch 404, store refused after unpublish, stale row, alias, scheduler debounce and sweep, queue priority, and contact sentinels absent from the envelope|
+|frontend|new `apps/web/app/components/preview/PreviewCard.vue` and its app wrapper; `apps/web/server/utils/print/envelope.ts` (card kind); `apps/web/server/workers/print/render.ts`; new harness page for the card under `apps/web/app/pages/_harness/`; web tests including the layout pin hash; regenerated `apps/web/app/api/generated/openapi.ts`; web source manifest; `apps/web/app/i18n/legal.ts` (stored-card sentence)|Render the closed card envelope with the designer's CSS; reject unknown keys; no script; pin the component and CSS hash to the layout version|
+|qa|new `apps/web/e2e/card.spec.ts` and its baselines; `deploy/dev-https-browser/` public check updates|Pixel baselines for the design's cases, safe-square geometry, byte limit with the noisiest photo, contact sentinels absent from the card text; live check list after deploy, then again after unpublish|
+|devops|none in the repository|Read the web ACL's sampled requests during the live checks for blocked crawler user agents|
+
+The reviewer does an adversarial pass on 0.6.1 and confirms by name: gate before every card read, row deleted in the unpublish, rename, and delete transactions, no store after revocation, old versions return 404, no contact field in the card envelope, and owner PDF exports keep their queue places.
+
+## 0.6.2 Publish-panel preview
+
+|Role|Files|Work|
+|-|-|-|
+|designer|`DESIGN.md` (publish dialog section)|Spec for the card and chat-card mock in the dialog at phone and desktop widths|
+|frontend|new `apps/web/app/components/editor/PublishPreview.vue` (`PublishDialog.vue` is 664 lines, so only a one-line mount there); new `apps/web/app/utils/previewText.ts` and tests reading the Go cases in `apps/server/internal/previewmeta/testdata/`|Render `PreviewCard.vue` and the text from the TypeScript copy of the rules; no new request or setting|
+|qa|`deploy/dev-https-browser/` editor check; baselines for the dialog|Proof at phone and desktop widths in both languages|
+
+## Writing rules for briefs
+
+Code, comments, tests, and living docs cite the design doc, ADR 0055, or `AC-*` IDs, never this plan, its releases, or task names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate.
