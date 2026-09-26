@@ -27,7 +27,7 @@ function onCopy(): void {
 
 function partClass(kind: CommandPart['kind']): string {
   if (kind === 'live') {
-    return 'rounded bg-surface-blue px-0.5 font-bold text-foreground';
+    return 'rounded-sm bg-surface-blue font-bold text-foreground';
   }
   if (kind === 'placeholder') return 'italic text-muted-foreground';
   return '';
