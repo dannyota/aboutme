@@ -65,13 +65,13 @@ describe('workspace locale', () => {
   });
 
   it('provides localized settings and authorization titles', () => {
-    expect(workspaceTitles.vi.settings).toBe('Cài đặt · aboutme');
-    expect(workspaceTitles.en.settings).toBe('Settings · aboutme');
+    expect(workspaceTitles.vi.settings).toBe('Cài đặt · aboutme.vn');
+    expect(workspaceTitles.en.settings).toBe('Settings · aboutme.vn');
     expect(workspaceTitles.vi.authorize).toBe(
-      'Cấp quyền cho tác nhân · aboutme',
+      'Cấp quyền cho tác nhân · aboutme.vn',
     );
     expect(workspaceTitles.en.authorize).toBe(
-      'Authorize an agent · aboutme',
+      'Authorize an agent · aboutme.vn',
     );
   });
 });

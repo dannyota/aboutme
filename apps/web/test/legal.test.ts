@@ -64,8 +64,8 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).not.toContain('Cloudflare');
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
-      'aboutme do Danny, một cá nhân, vận hành phi thương mại tại Việt Nam. '
-      + 'Liên hệ: danny@aboutme.vn.',
+      'aboutme.vn do Danny, một cá nhân, vận hành phi thương mại tại Việt '
+      + 'Nam. Liên hệ: danny@aboutme.vn.',
     );
     expect(operator.get('a').attributes('href')).toBe(
       'mailto:danny@aboutme.vn',
@@ -115,7 +115,7 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain('Your rights');
     expect(wrapper.text()).toContain('Why we use your data');
     expect(wrapper.get('[data-testid="legal-operator"]').text()).toBe(
-      'aboutme is operated by Danny, an individual, on a non-commercial '
+      'aboutme.vn is operated by Danny, an individual, on a non-commercial '
       + 'basis in Vietnam. Contact: danny@aboutme.vn.',
     );
   });

@@ -47,8 +47,8 @@ const sitePages = [
   {
     route: '/',
     title: {
-      vi: 'aboutme — CV miễn phí, riêng tư đến khi bạn muốn',
-      en: 'aboutme — Free resumes, private until you choose',
+      vi: 'aboutme.vn — CV miễn phí, riêng tư đến khi bạn muốn',
+      en: 'aboutme.vn — Free resumes, private until you choose',
     },
     description: {
       vi: 'Công cụ tạo CV mã nguồn mở.',
@@ -59,32 +59,32 @@ const sitePages = [
   {
     route: '/privacy',
     title: {
-      vi: 'Chính sách quyền riêng tư · aboutme',
-      en: 'Privacy Policy · aboutme',
+      vi: 'Chính sách quyền riêng tư · aboutme.vn',
+      en: 'Privacy Policy · aboutme.vn',
     },
     description: {
-      vi: 'Chính sách quyền riêng tư của aboutme',
-      en: 'The aboutme privacy policy',
+      vi: 'Chính sách quyền riêng tư của aboutme.vn',
+      en: 'The aboutme.vn privacy policy',
     },
     canonical: 'https://aboutme.vn/privacy',
   },
   {
     route: '/terms',
     title: {
-      vi: 'Điều khoản sử dụng · aboutme',
-      en: 'Terms of Service · aboutme',
+      vi: 'Điều khoản sử dụng · aboutme.vn',
+      en: 'Terms of Service · aboutme.vn',
     },
     description: {
-      vi: 'Điều khoản sử dụng aboutme',
-      en: 'The terms for using aboutme',
+      vi: 'Điều khoản sử dụng aboutme.vn',
+      en: 'The terms for using aboutme.vn',
     },
     canonical: 'https://aboutme.vn/terms',
   },
   {
     route: '/verify',
     title: {
-      vi: 'Kiểm chứng phiên bản đang chạy · aboutme',
-      en: 'Verify what\'s running · aboutme',
+      vi: 'Kiểm chứng phiên bản đang chạy · aboutme.vn',
+      en: 'Verify what\'s running · aboutme.vn',
     },
     description: {
       vi: 'Trang này cho thấy chính xác phiên bản đang chạy',
@@ -112,7 +112,7 @@ describe('site page search metadata', () => {
         expect(meta('meta[property="og:title"]')).toBe(page.title[locale]);
         expect(meta('meta[property="og:url"]')).toBe(page.canonical);
         expect(meta('meta[property="og:type"]')).toBe('website');
-        expect(meta('meta[property="og:site_name"]')).toBe('aboutme');
+        expect(meta('meta[property="og:site_name"]')).toBe('aboutme.vn');
         expect(meta('meta[property="og:locale"]')).toBe(
           locale === 'vi' ? 'vi_VN' : 'en_US',
         );
@@ -152,7 +152,7 @@ describe('site page search metadata', () => {
       'WebApplication',
     ]);
     expect(graph[0]).toMatchObject({
-      name: 'aboutme',
+      name: 'aboutme.vn',
       url: 'https://aboutme.vn/',
       inLanguage: ['vi', 'en'],
     });
@@ -181,19 +181,23 @@ describe('site page search metadata', () => {
 
 describe('page titles and noindex', () => {
   it.each([
-    ['/login', 'Đăng nhập · aboutme', 'Sign in · aboutme'],
-    ['/register', 'Tạo tài khoản · aboutme', 'Create account · aboutme'],
+    ['/login', 'Đăng nhập · aboutme.vn', 'Sign in · aboutme.vn'],
+    ['/register', 'Tạo tài khoản · aboutme.vn', 'Create account · aboutme.vn'],
     [
       '/forgot-password',
-      'Quên mật khẩu · aboutme',
-      'Forgot password · aboutme',
+      'Quên mật khẩu · aboutme.vn',
+      'Forgot password · aboutme.vn',
     ],
     [
       '/reset-password',
-      'Đặt lại mật khẩu · aboutme',
-      'Reset password · aboutme',
+      'Đặt lại mật khẩu · aboutme.vn',
+      'Reset password · aboutme.vn',
     ],
-    ['/verify-email', 'Xác minh email · aboutme', 'Verify email · aboutme'],
+    [
+      '/verify-email',
+      'Xác minh email · aboutme.vn',
+      'Verify email · aboutme.vn',
+    ],
   ])('titles %s in both languages and keeps it out of search', async (
     route,
     viTitle,
@@ -210,8 +214,8 @@ describe('page titles and noindex', () => {
   });
 
   it.each([
-    ['/authorize', 'Authorize an agent · aboutme'],
-    ['/app/settings/sessions', 'Settings · aboutme'],
+    ['/authorize', 'Authorize an agent · aboutme.vn'],
+    ['/app/settings/sessions', 'Settings · aboutme.vn'],
   ])('titles %s in English and keeps it out of search', async (
     route,
     title,
@@ -223,8 +227,8 @@ describe('page titles and noindex', () => {
   });
 
   it.each([
-    ['/authorize', 'Cấp quyền cho tác nhân · aboutme'],
-    ['/app/settings/sessions', 'Cài đặt · aboutme'],
+    ['/authorize', 'Cấp quyền cho tác nhân · aboutme.vn'],
+    ['/app/settings/sessions', 'Cài đặt · aboutme.vn'],
   ])('uses Vietnamese for an invalid cookie on %s', async (route, title) => {
     setSiteLocale('fr');
     await visit(route);
@@ -237,16 +241,16 @@ describe('page titles and noindex', () => {
   it('titles resumes and settings in both locales', async () => {
     setSiteLocale('vi');
     await visit('/app/resumes');
-    await waitForTitle('CV · aboutme');
+    await waitForTitle('CV · aboutme.vn');
     expect(meta('meta[name="robots"]')).toBe('noindex');
 
     setSiteLocale('en');
     await visit('/app/resumes');
-    await waitForTitle('Resumes · aboutme');
+    await waitForTitle('Resumes · aboutme.vn');
 
     setSiteLocale('vi');
     await visit('/app/settings/sessions');
-    await waitForTitle('Cài đặt · aboutme');
+    await waitForTitle('Cài đặt · aboutme.vn');
   });
 });
 

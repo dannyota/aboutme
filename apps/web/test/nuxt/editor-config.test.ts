@@ -18,8 +18,8 @@ describe('editor runtime prerequisites', () => {
       expect(currentSchema.$id).toBe('https://aboutme.vn/schema/resume/v4');
       expect(validateDocument).toBeTypeOf('function');
       expect(defineStore).toBeTypeOf('function');
-      expect(workspaceTitles.vi.editor).toBe('CV · aboutme');
-      expect(workspaceTitles.en.editor).toBe('Resume · aboutme');
+      expect(workspaceTitles.vi.editor).toBe('CV · aboutme.vn');
+      expect(workspaceTitles.en.editor).toBe('Resume · aboutme.vn');
 
       const previousHarness = process.env.NUXT_HARNESS;
       process.env.NUXT_HARNESS = '1';
