@@ -69,8 +69,8 @@ export const viewsIndexCopy: WorkspaceCopy<ViewsIndexCopy> = {
     title: 'Lượt xem',
     loading: 'Đang tải lượt xem…',
     unavailable: 'Không thể tải lượt xem. Hãy thử lại.',
-    emptyTitle: 'Chưa có CV nào được đăng công khai',
-    emptyDescription: 'Đăng một CV để bắt đầu theo dõi lượt xem của nó.',
+    emptyTitle: 'Chưa có CV nào được xuất bản',
+    emptyDescription: 'Xuất bản một CV để bắt đầu theo dõi lượt xem.',
     live: 'Đang công khai',
     draft: 'Bản nháp',
     last7: '7 ngày qua',
@@ -103,31 +103,32 @@ export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
     unavailable: 'Không thể tải lượt xem. Hãy thử lại.',
     notFoundTitle: 'Không tìm thấy CV',
     notFoundDescription: 'CV này không tồn tại hoặc bạn không có quyền xem.',
-    backToViews: 'Về danh sách lượt xem',
+    backToViews: 'Quay lại Lượt xem',
     headline: (real, filtered) => `${real} lượt xem thật · ${filtered} bị lọc`,
     definition:
-      'Một lượt xem cho mỗi mạng mỗi ngày. Hai người cùng một mạng trong '
-      + 'một ngày được tính một lần; một người xem vào hai ngày được tính '
-      + 'hai lần.',
+      'Mỗi kết nối mạng được tính tối đa một lượt xem mỗi ngày. Hai người '
+      + 'dùng chung một kết nối mạng trong một ngày được tính một lần; một '
+      + 'người xem vào hai ngày được tính hai lần.',
     chartHeading: 'Lượt xem thật theo ngày (90 ngày qua)',
     chartCaption: 'Số lượt xem thật mỗi ngày, 90 ngày qua',
     chartDay: (date, real) => `${date}: ${real} lượt xem thật`,
     monthlyHeading: 'Tổng theo tháng (12 tháng qua)',
     monthLabel: (month, real) => `${month}: ${real} lượt xem thật`,
-    filteredHeading: 'Bị lọc trong 90 ngày qua',
+    filteredHeading: 'Lượt bị lọc trong 90 ngày qua',
     filteredLabels: {
       bot: 'Bot',
-      datacenter: 'Mạng máy chủ',
-      anomaly: 'Bất thường',
-      invalid: 'Không qua kiểm tra',
-      crawler: 'Trình thu thập',
+      datacenter: 'Truy cập từ máy chủ',
+      anomaly: 'Tăng đột biến',
+      invalid: 'Không vượt qua kiểm tra',
+      crawler: 'Trình thu thập dữ liệu',
     },
-    previewsNote: 'Mỗi lần chia sẻ có thể được tải xem trước nhiều lần.',
+    previewsNote:
+      'Mỗi lần chia sẻ, ứng dụng có thể tải bản xem trước nhiều lần.',
     previewLine: (platform, fetches) => (
-      `Chia sẻ trong ${platform} × ${fetches}`
+      `Xem trước liên kết trên ${platform} × ${fetches}`
     ),
     honestLimit:
-      'Số liệu chỉ loại được những gì các lớp lọc phát hiện; công cụ tự '
+      'Số liệu chỉ loại được những gì bộ lọc phát hiện; công cụ tự '
       + 'động tinh vi vẫn có thể được tính.',
   },
   en: {
@@ -154,7 +155,9 @@ export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
       crawler: 'Crawlers',
     },
     previewsNote: 'One share can fetch the preview more than once.',
-    previewLine: (platform, fetches) => `Shared in ${platform} × ${fetches}`,
+    previewLine: (platform, fetches) => (
+      `Link previews on ${platform} × ${fetches}`
+    ),
     honestLimit:
       'Counts exclude only what the filters detect; sophisticated '
       + 'automation can still be counted.',

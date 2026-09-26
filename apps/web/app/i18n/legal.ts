@@ -102,9 +102,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'bao giờ gửi mật khẩu.',
             'Lượt xem CV công khai: chúng tôi đếm lượt xem và chỉ lưu tổng '
             + 'số theo ngày. Để phân biệt người với bot, địa chỉ IP và '
-            + 'thông tin trình duyệt của bạn chỉ được dùng trong bộ nhớ và '
-            + 'bị xoá trong ngày, và trình duyệt của bạn giải một phép tính '
-            + 'nhỏ. Không dùng cookie.',
+            + 'thông tin trình duyệt của bạn chỉ được dùng tạm trong bộ nhớ '
+            + 'máy chủ và bị xoá trong ngày; trình duyệt của bạn giải một '
+            + 'phép tính nhỏ. Việc đếm lượt xem không dùng cookie.',
           ],
         },
         {
@@ -124,9 +124,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Chúng tôi không làm gì',
           items: [
             'Không quảng cáo.',
-            'Không dùng công cụ phân tích hay mã theo dõi của bên thứ ba, '
-            + 'không dùng mã quảng cáo. Chúng tôi chỉ đếm lượt xem CV công '
-            + 'khai như mô tả ở trên.',
+            'Không dùng công cụ phân tích hay mã theo dõi quảng cáo của bên '
+            + 'thứ ba. Chúng tôi chỉ đếm lượt xem CV công khai như mô tả ở '
+            + 'trên.',
             'Không bán dữ liệu của bạn và không chia sẻ dữ liệu cho mục đích '
             + 'tiếp thị.',
             'Cookie chỉ dùng để giữ phiên đăng nhập, hoàn tất đăng nhập bằng '
@@ -420,9 +420,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'password.',
             'Views of public resumes: we count views and keep only daily '
             + 'totals. To tell people from bots, your IP address and '
-            + 'browser details are used in memory only and discarded the '
-            + 'same day, and your browser solves a small computing task. '
-            + 'No cookie is used.',
+            + 'browser details are used only in server memory and '
+            + 'discarded the same day, and your browser solves a small '
+            + 'computing task. Counting uses no cookie.',
           ],
         },
         {
