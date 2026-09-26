@@ -879,11 +879,16 @@ async function provesEnabledJourney(
     steps.unicodeDigitsRejected = true;
 
     stage('enroll-complete');
-    expect(await submitSetupCode(page, await freshCode(page, secret, primaryTracker)))
-      .toBe(200);
+    const enrollCode = await freshCode(page, secret, primaryTracker);
+    const enrolledTokenRefetched = await holdTokenRefetch(page);
+    expect(await submitSetupCode(page, enrollCode)).toBe(200);
     const firstCodes = await readRevealedCodes(page);
     await closeRevealAndProveCleared(page, firstCodes);
     await expect(page.getByTestId('totp-added-success')).toBeVisible();
+    // Completion replaced the session, and passkey-coexistence adds a
+    // passkey on this same page. Waiting here, before meStatus reads
+    // /api/v1/me itself, also keeps the hold on the page's own refetch.
+    await enrolledTokenRefetched();
     steps.enrolled = true;
     steps.recoveryRevealedOnce = true;
 
