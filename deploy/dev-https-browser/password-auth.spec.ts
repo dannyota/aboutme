@@ -15,6 +15,7 @@ import {
   signInWithGoogle,
   waitForHydration,
   pinEnglish,
+  warmPage,
 } from './harness-lib';
 import { ALLOWED_ORIGIN } from './network-policy';
 
@@ -197,6 +198,15 @@ test('proves password authentication over native HTTPS', async ({
   const password = secret();
   const newPassword = secret();
 
+  // Warm every signed-out page this proof visits before the timed journey
+  // below depends on any of them already being compiled on the harness's
+  // dev server (harness-lib.ts warmPage). Each is visited again for real at
+  // its own tight bound, so a real hydration regression there still fails
+  // fast instead of being masked behind the warm bound.
+  await warmPage(page, '/register');
+  await warmPage(page, '/login');
+  await warmPage(page, '/forgot-password');
+
   // 1. Register and prove the fixed, account-neutral accepted copy.
   await gotoHydrated(page, '/register');
   await page.getByLabel('Name').fill('Proof User');
@@ -209,9 +219,13 @@ test('proves password authentication over native HTTPS', async ({
     'Check your email',
   );
 
-  // 2. Verify through the captured link, with no session created.
+  // 2. Verify through the captured link, with no session created. This page
+  // reads its token from the URL fragment, so it cannot be pre-warmed with
+  // no token (the second-factor journeys exclude these pages from their own
+  // WARM_ROUTES for the same reason); its one real visit takes the warm
+  // bound directly instead.
   const verifyToken = await waitForLink(capture, 'verify', email);
-  await gotoHydrated(page, verifyURL(verifyToken));
+  await warmPage(page, verifyURL(verifyToken));
   await expect(page.getByTestId('verify-success')).toContainText(
     'Email verified',
   );
@@ -225,6 +239,10 @@ test('proves password authentication over native HTTPS', async ({
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL('/app/resumes');
   expect(await meStatus(page)).toBe(200);
+
+  // /app/settings/sessions needs a session, so it could not join the
+  // signed-out warm pass above; warm it now that one exists.
+  await warmPage(page, '/app/settings/sessions');
 
   // 4. Link a provider whose verified email differs from the account email.
   setPasswordStage('settings-navigation');
@@ -353,7 +371,9 @@ test('proves password authentication over native HTTPS', async ({
   await page.getByRole('button', { name: 'Send reset link' }).click();
   await expect(page.getByTestId('forgot-success')).toBeVisible();
   const resetToken = await waitForLink(capture, 'reset', email);
-  await gotoHydrated(page, resetURL(resetToken));
+  // Like verify-email above, this page reads its token from the URL
+  // fragment and gets its one real visit here, at the warm bound.
+  await warmPage(page, resetURL(resetToken));
   await page.getByLabel('New password', { exact: true }).fill(newPassword);
   await page.getByLabel('Confirm password', { exact: true }).fill(newPassword);
   await page.getByRole('button', { name: 'Reset password' }).click();
