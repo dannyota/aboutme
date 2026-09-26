@@ -9,7 +9,8 @@ import {
 } from '../i18n/meta';
 
 export interface SiteSeo {
-  readonly path: '/' | '/privacy' | '/terms' | `/templates${string}`;
+  readonly path:
+    | '/' | '/privacy' | '/terms' | '/verify' | `/templates${string}`;
   readonly title: string;
   readonly description: string;
   readonly locale: Locale;

@@ -49,6 +49,8 @@ const lightTokens = {
   '--surface-blue': '#eaf2ff',
   '--surface-indigo': '#f0eeff',
   '--surface-pink': '#fff0fa',
+  '--surface-destructive':
+    'color-mix(in srgb, var(--destructive) 7%, var(--card))',
   '--editor-canvas': '#eef3fc',
   '--primary-hover': '#1550d4',
   '--shadow-primary':
@@ -108,6 +110,8 @@ const darkTokens = {
   '--surface-blue': '#10224a',
   '--surface-indigo': '#1a1a4a',
   '--surface-pink': '#2a1533',
+  '--surface-destructive':
+    'color-mix(in srgb, var(--destructive) 12%, var(--card))',
   '--editor-canvas': '#071126',
   '--primary-hover': '#8fb3ff',
   '--shadow-primary': '0 1px 2px rgb(0 0 0 / 0.4)',
@@ -170,7 +174,7 @@ describe('application theme', () => {
     ]) {
       expect(theme[`--color-brand-${brand}`]).toBe(`var(--brand-${brand})`);
     }
-    for (const surface of ['blue', 'indigo', 'pink']) {
+    for (const surface of ['blue', 'indigo', 'pink', 'destructive']) {
       expect(theme[`--color-surface-${surface}`]).toBe(
         `var(--surface-${surface})`,
       );

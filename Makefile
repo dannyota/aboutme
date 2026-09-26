@@ -13,7 +13,7 @@ WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 # that together run each spec once: preview-gap holds the slowest harness
 # spec, and rest holds every other harness spec and the normal surface.
 WEB_E2E_HARNESS_SPECS := screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts
-WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts chrome.spec.ts
+WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts chrome.spec.ts verify.spec.ts
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
 DEV_HTTPS_BROWSER_TAG := localhost/aboutme-dev-https-browser:local
 DEV_HTTPS_BROWSER_MANIFEST := .dev/native-https/browser-image.manifest

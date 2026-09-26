@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "project": "aboutme",
+  "environment": "production",
+  "site": "https://aboutme.vn",
+  "source_repository": "https://github.com/dannyota/aboutme",
+  "platform": {
+    "provider": "aws",
+    "orchestrator": "ecs",
+    "region": "ap-southeast-1"
+  },
+  "observed_at": "2026-10-02T03:14:05Z",
+  "stale_after": "2026-10-02T03:17:05Z",
+  "summary": "mismatch",
+  "release": null,
+  "components": [
+    {
+      "name": "server",
+      "image": "ghcr.io/dannyota/aboutme-server",
+      "running_images": [
+        {
+          "digest": "sha256:fdafc11f142a7df36d8182dc9fca9cfc0121adeaf2265e2336961c45c46f8181",
+          "replicas": 1,
+          "running_since": "2026-10-02T03:10:51Z",
+          "version": "v0.6.0",
+          "commit": "91466ff958e35e0a8279ad136f75d3d582b1c69f",
+          "signature": {
+            "status": "verified",
+            "checked_at": "2026-10-02T03:13:05Z",
+            "signer_workflow": "https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.6.0",
+            "transparency_log_index": 2965228543
+          },
+          "sbom": {
+            "status": "verified",
+            "format": "spdx-2.3"
+          },
+          "links": {
+            "commit": "https://github.com/dannyota/aboutme/commit/91466ff958e35e0a8279ad136f75d3d582b1c69f",
+            "release": "https://github.com/dannyota/aboutme/releases/tag/v0.6.0",
+            "build": "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:fdafc11f142a7df36d8182dc9fca9cfc0121adeaf2265e2336961c45c46f8181?predicate_type=provenance",
+            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.0/aboutme-server.spdx.json",
+            "transparency_log": "https://search.sigstore.dev/?logIndex=2965228543"
+          }
+        }
+      ]
+    },
+    {
+      "name": "web",
+      "image": "ghcr.io/dannyota/aboutme-web",
+      "running_images": [
+        {
+          "digest": "sha256:d198990c371b4ded151952928049db1094b88bd41e7f0587c41d3472eb56d62d",
+          "replicas": 1,
+          "running_since": "2026-10-02T03:11:20Z",
+          "version": null,
+          "commit": null,
+          "signature": {
+            "status": "not_found",
+            "checked_at": "2026-10-02T03:13:05Z",
+            "signer_workflow": null,
+            "transparency_log_index": null
+          },
+          "sbom": {
+            "status": "not_found",
+            "format": null
+          },
+          "links": {
+            "commit": null,
+            "release": null,
+            "build": null,
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:d198990c371b4ded151952928049db1094b88bd41e7f0587c41d3472eb56d62d?predicate_type=provenance",
+            "sbom": null,
+            "transparency_log": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "caddy",
+      "image": "ghcr.io/dannyota/aboutme-caddy",
+      "running_images": [
+        {
+          "digest": "sha256:ecf490c9f2ae1c3879e5070a6ece1a6f14dc0c228533b862aea0b11c727412f2",
+          "replicas": 1,
+          "running_since": "2026-10-02T03:12:02Z",
+          "version": "v0.6.0",
+          "commit": "91466ff958e35e0a8279ad136f75d3d582b1c69f",
+          "signature": {
+            "status": "verified",
+            "checked_at": "2026-10-02T03:13:05Z",
+            "signer_workflow": "https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.6.0",
+            "transparency_log_index": 2965228702
+          },
+          "sbom": {
+            "status": "verified",
+            "format": "spdx-2.3"
+          },
+          "links": {
+            "commit": "https://github.com/dannyota/aboutme/commit/91466ff958e35e0a8279ad136f75d3d582b1c69f",
+            "release": "https://github.com/dannyota/aboutme/releases/tag/v0.6.0",
+            "build": "https://github.com/dannyota/aboutme/actions/runs/36218940587/attempts/1",
+            "provenance": "https://api.github.com/repos/dannyota/aboutme/attestations/sha256:ecf490c9f2ae1c3879e5070a6ece1a6f14dc0c228533b862aea0b11c727412f2?predicate_type=provenance",
+            "sbom": "https://github.com/dannyota/aboutme/releases/download/v0.6.0/aboutme-caddy.spdx.json",
+            "transparency_log": "https://search.sigstore.dev/?logIndex=2965228702"
+          }
+        }
+      ]
+    }
+  ],
+  "observer": {
+    "version": "v0.6.0",
+    "commit": "91466ff958e35e0a8279ad136f75d3d582b1c69f",
+    "source": "self-reported"
+  }
+}

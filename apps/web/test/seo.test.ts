@@ -17,6 +17,12 @@ registerEndpoint('/api/v1/me', (event) => {
   setResponseStatus(event, 401);
   return { error: { code: 'session_required', message: 'Sign in.' } };
 });
+// /verify fetches this in the browser only (useDeploymentDocument); a 404
+// keeps it out of every other page's metadata assertions.
+registerEndpoint('/.well-known/deployment.json', (event) => {
+  setResponseStatus(event, 404);
+  return null;
+});
 
 function meta(selector: string): string | null {
   return document.head.querySelector(selector)?.getAttribute('content') ?? null;
@@ -73,6 +79,18 @@ const sitePages = [
       en: 'The terms for using aboutme',
     },
     canonical: 'https://aboutme.vn/terms',
+  },
+  {
+    route: '/verify',
+    title: {
+      vi: 'Kiểm chứng phiên bản đang chạy · aboutme',
+      en: 'Verify what\'s running · aboutme',
+    },
+    description: {
+      vi: 'Trang này cho thấy chính xác phiên bản đang chạy',
+      en: 'This page shows exactly which build runs',
+    },
+    canonical: 'https://aboutme.vn/verify',
   },
 ] as const;
 

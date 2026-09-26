@@ -22,7 +22,7 @@ chrome may frame the renderer but does not change its output.
 Vietnamese is the default site language. The language choice persists in the
 `aboutme-locale` cookie. Every application route renders in the chosen language:
 
-- `/`, `/privacy`, and `/terms`.
+- `/`, `/privacy`, `/terms`, and `/verify`.
 - `/templates` and `/templates/{id}`.
 - `/login`, `/login/second-factor`, `/register`, `/forgot-password`,
   `/reset-password`, and `/verify-email`.
@@ -50,10 +50,11 @@ identity.
   with the page, and never animate.
 - The resume is a whole white sheet with a neutral paper shadow. It stays white
   in dark theme and never takes an Aurora token, gradient, radius, or shadow.
-- Blue leads. Primary actions, links, focus, and the logo are blue. Indigo,
-  purple, and cyan are supporting accents for templates, customization, and
-  product capabilities. Pink and orange are small, rare accents. A section uses
-  a few accents, never all of them.
+- Blue leads. Primary actions, links, focus, and the logo are blue; on `/verify`
+  blue also marks the verified state and its passed checks. Indigo, purple, and
+  cyan are supporting accents for templates, customization, and product
+  capabilities. Pink and orange are small, rare accents. A section uses a few
+  accents, never all of them.
 - Red means public. Seal red marks the public state, the Publish action, and the
   seal, and nothing else. Destructive actions use the separate destructive
   token.
@@ -119,6 +120,7 @@ and `text-brand-indigo`:
 | `--brand-pink`, `--brand-orange`     | `#F55DB1`, `#FF9C47` | `#FF7CC4`, `#FFB067` |
 | `--surface-blue`                     | `#EAF2FF`            | `#10224A`            |
 | `--surface-indigo`, `--surface-pink` | `#F0EEFF`, `#FFF0FA` | `#1A1A4A`, `#2A1533` |
+| `--surface-destructive`              | 7% destructive, card | 12% destructive      |
 
 Text on the canvas, a card, or a tinted surface meets WCAG AA: 4.5:1 for normal
 text and 3:1 for large text, input borders, and focus rings, measured over the
@@ -444,5 +446,5 @@ descendants are excluded so application CSS cannot alter the renderer.
 - Keep the renderer pure and outside application chrome styling. Do not add
   page-specific values that bypass the semantic tokens.
 - Keep the single-meaning color rules: seal red is for public state and Publish,
-  blue is for actions, links, and focus, and draft/saved states remain pencil
-  marks rather than colored chips.
+  blue is for actions, links, focus, and the verify page's verified state, and
+  draft/saved states remain pencil marks rather than colored chips.
