@@ -214,7 +214,8 @@ Four sections follow the hero:
 4. Free and open source: the AGPL-3.0 link and an outline button to the GitHub
    repository.
 
-The footer shows `aboutme.vn` and links Terms and Privacy.
+The footer shows `aboutme.vn` and links Terms and Privacy. The
+[verify page spec](docs/design/deployment-transparency/visual.md) adds Verify.
 
 ## Library
 
