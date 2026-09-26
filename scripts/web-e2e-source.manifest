@@ -439,6 +439,14 @@ apps/web/e2e/baselines/template-pdf--dark--1440.png
 apps/web/e2e/baselines/template-pdf--dark--390.png
 apps/web/e2e/baselines/template-pdf--light--1440.png
 apps/web/e2e/baselines/template-pdf--light--390.png
+apps/web/e2e/baselines/verify--unavailable--dark--1280.png
+apps/web/e2e/baselines/verify--unavailable--dark--390.png
+apps/web/e2e/baselines/verify--unavailable--light--1280.png
+apps/web/e2e/baselines/verify--unavailable--light--390.png
+apps/web/e2e/baselines/verify--verified--dark--1280.png
+apps/web/e2e/baselines/verify--verified--dark--390.png
+apps/web/e2e/baselines/verify--verified--light--1280.png
+apps/web/e2e/baselines/verify--verified--light--390.png
 apps/web/e2e/chrome.spec.ts
 apps/web/e2e/corpus.spec.ts
 apps/web/e2e/fixtures/deployment/mismatch-invalid.json
