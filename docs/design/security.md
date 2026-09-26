@@ -264,6 +264,14 @@ only a bounded batch of expired transactions before inserting one row, so
 cleanup never becomes unbounded request work. Unknown, provider-only, and
 wrong-password login states stay byte-identical.
 
+## Viewer analytics
+
+Public pages may set three `__Host-` viewer cookies, only from server endpoints,
+and `sign_in` resumes gate their public routes behind a hashed per-resume viewer
+pass. The OAuth purpose `view` authenticates a viewer for one resume and never
+reads, creates, or signs in an account.
+[Viewer analytics](viewer-analytics/README.md) owns the rules.
+
 ## No operator surface
 
 The public application has no privileged role, operator session, or route that

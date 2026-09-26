@@ -219,7 +219,9 @@ the Amazon IP reputation list, and known bad inputs: USD 5 per web ACL plus USD
 starts at 2,000 requests per five minutes. The core rule set is left out: it
 blocks bodies over 8 KB, which photo uploads, autosaves, and `/mcp` calls
 exceed, and its cross-site scripting body rule would inspect rich-text resume
-bodies ([baseline groups][waf-crs]). WAF logging stays off.
+bodies ([baseline groups][waf-crs]). WAF logging stays off. Viewer analytics
+adds label-only rules on one path
+([counting](viewer-analytics/counting.md#layers-2-and-3-edge-labels)).
 
 ## Deploys and monitoring
 

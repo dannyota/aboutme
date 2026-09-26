@@ -38,6 +38,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Scaling](scaling/README.md)                                    | What a second serving replica needs                            |
 | Other   | [Link previews](link-previews.md)                               | Page tags, preview card, and platform rules for shared links   |
 | Other   | [Deployment transparency](deployment-transparency/README.md)    | Running digests, signed provenance, SBOMs, and the verify page |
+| Other   | [Viewer analytics](viewer-analytics/README.md)                  | View counts, consented viewer tracking, and sign in to view    |
 
 ## System summary
 

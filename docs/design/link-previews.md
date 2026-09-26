@@ -282,10 +282,12 @@ engaging in malicious activities" and reconnaissance, and count DDoS sources
 the platforms' own networks, so a block is unlikely (inference, **Verify**).
 Sharing one link costs two to three requests, far under the rate rule's 2,000
 per 5 minutes per IP. The web ACL must not gain the Anonymous IP list or Bot
-Control without an allow rule for the crawlers above: the Anonymous IP list
-blocks hosting providers by default [waf-ip]. With WAF logging off, devops
-checks the web ACL's sampled requests for blocked crawler user agents during the
-live checks.
+Control in blocking mode without an allow rule for the crawlers above: the
+Anonymous IP list blocks hosting providers by default [waf-ip]. Viewer analytics
+adds both in Count mode only, scoped to its collect path
+([counting](viewer-analytics/counting.md#layers-2-and-3-edge-labels)). With WAF
+logging off, devops checks the web ACL's sampled requests for blocked crawler
+user agents during the live checks.
 
 ## Compatibility, loss, and rollback
 
