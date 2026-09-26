@@ -1,9 +1,9 @@
 # 0063: LinkedIn sign-in without a nonce claim
 
-Status: Proposed (2026-09-26). Once accepted, it supersedes decision 2 of
+Status: Accepted (2026-09-26). It supersedes decision 2 of
 [ADR 0058](0058-linkedin-sign-in-in-production.md) in part: LinkedIn keeps its
-flow, but the nonce is no longer its code-injection defense. The owner accepts
-or rejects the remaining risk below before LinkedIn is turned on again.
+flow, but the nonce is no longer its code-injection defense. The owner accepted
+the remaining risk below, and LinkedIn is on again from v0.6.3.
 
 ## Context
 

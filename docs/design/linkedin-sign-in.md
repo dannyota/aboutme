@@ -6,7 +6,7 @@ can enable it beside Google, the privacy notice names it, and browser proofs
 cover it against a local mock. The flag turns on as its own step after the
 release is live. [ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)
 records the decision, and
-[ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md) (proposed)
+[ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md) (accepted)
 records that LinkedIn returns no nonce claim.
 
 Status: accepted and built. Facts below were checked against LinkedIn's
