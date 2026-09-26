@@ -79,6 +79,7 @@ operational-test-dev-https: ## operational-test's dev-https static safety-test s
 
 operational-test-deploy: ## operational-test's deploy-script static safety-test suite
 	bash deploy/aws/scripts/deploy_test.sh
+	bash deploy/aws/scripts/observer_test.sh
 
 operational-test-browser: ## operational-test's browser-image and MCP owner-workflow static safety tests
 	bash deploy/dev-https-browser/static-test.sh
@@ -138,8 +139,9 @@ media-orphan-sweep-dry-run: ## Report orphan candidates without changing media o
 	cd apps/server && go run ./cmd/server media-orphan-sweep --dry-run
 
 .PHONY: deploy-script-test
-deploy-script-test: ## Test deploy.sh step order and failure recovery with stubbed AWS and GitHub calls
+deploy-script-test: ## Test deploy.sh and observer.sh step order and failure recovery with stubbed AWS and GitHub calls
 	bash deploy/aws/scripts/deploy_test.sh
+	bash deploy/aws/scripts/observer_test.sh
 
 .PHONY: caddy-prod-test
 caddy-prod-test: ## Build the production Caddy image and test routing, origin mTLS, and client-IP trust

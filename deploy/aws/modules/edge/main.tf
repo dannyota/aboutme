@@ -174,6 +174,94 @@ data "aws_cloudfront_cache_policy" "disabled" {
   name = "Managed-CachingDisabled"
 }
 
+# /.well-known/deployment.json comes from the transparency bucket, cached 30
+# seconds, never from the host (docs/design/deployment-transparency/
+# README.md, "Serving and caching"; ADR 0057).
+resource "aws_cloudfront_cache_policy" "deployment_document" {
+  name        = "${var.name}-deployment-document"
+  min_ttl     = 0
+  default_ttl = 30
+  max_ttl     = 30
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    headers_config {
+      header_behavior = "none"
+    }
+    query_strings_config {
+      query_string_behavior = "none"
+    }
+    cookies_config {
+      cookie_behavior = "none"
+    }
+    enable_accept_encoding_gzip   = true
+    enable_accept_encoding_brotli = true
+  }
+}
+
+# The request never reaches Caddy, so the edge sets the headers Caddy would
+# and strips the ones S3 adds. CloudFront replaces a removed Server header
+# with its own "Server: CloudFront".
+resource "aws_cloudfront_response_headers_policy" "deployment_document" {
+  name = "${var.name}-deployment-document"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = false
+      preload                    = false
+      override                   = true
+    }
+    content_type_options {
+      override = true
+    }
+    # The object is served on the site's own origin; a sandboxed empty
+    # policy keeps it inert even if its content type were ever wrong.
+    content_security_policy {
+      content_security_policy = "default-src 'none'; frame-ancestors 'none'; sandbox"
+      override                = true
+    }
+  }
+
+  # Any page may read the document. CloudFront adds the header to CORS
+  # requests, those that carry Origin.
+  cors_config {
+    access_control_allow_credentials = false
+    origin_override                  = true
+    access_control_allow_origins {
+      items = ["*"]
+    }
+    access_control_allow_methods {
+      items = ["GET", "HEAD"]
+    }
+    access_control_allow_headers {
+      items = ["*"]
+    }
+  }
+
+  remove_headers_config {
+    items {
+      header = "Server"
+    }
+    items {
+      header = "x-amz-request-id"
+    }
+    items {
+      header = "x-amz-id-2"
+    }
+    items {
+      header = "x-amz-server-side-encryption"
+    }
+  }
+}
+
+resource "aws_cloudfront_origin_access_control" "transparency" {
+  name                              = "${var.name}-transparency"
+  description                       = "CloudFront reads deployment.json from the transparency bucket"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
 # ---- Web ACL ----
 
 # docs/design/cloudfront-edge.md, "DDoS and WAF": a rate rule per IP, the
@@ -348,7 +436,31 @@ resource "aws_cloudfront_distribution" "edge" {
     }
   }
 
-  # /_nuxt/* is the only cached path (docs/design/cloudfront-edge.md, "Cache
+  dynamic "origin" {
+    for_each = var.transparency_enabled ? [1] : []
+    content {
+      origin_id                = "transparency"
+      domain_name              = var.transparency_bucket_domain_name
+      origin_access_control_id = aws_cloudfront_origin_access_control.transparency.id
+    }
+  }
+
+  # The deployment document, from the transparency bucket.
+  dynamic "ordered_cache_behavior" {
+    for_each = var.transparency_enabled ? [1] : []
+    content {
+      path_pattern               = "/.well-known/deployment.json"
+      target_origin_id           = "transparency"
+      allowed_methods            = ["GET", "HEAD"]
+      cached_methods             = ["GET", "HEAD"]
+      cache_policy_id            = aws_cloudfront_cache_policy.deployment_document.id
+      response_headers_policy_id = aws_cloudfront_response_headers_policy.deployment_document.id
+      viewer_protocol_policy     = "redirect-to-https"
+      compress                   = true
+    }
+  }
+
+  # /_nuxt/* is the other cached path (docs/design/cloudfront-edge.md, "Cache
   # and forwarding"); Caddy already compresses at the origin.
   ordered_cache_behavior {
     path_pattern           = "/_nuxt/*"

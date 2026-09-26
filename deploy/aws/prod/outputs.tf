@@ -41,3 +41,7 @@ output "dns_name_servers" {
 output "dnssec" {
   value = module.dns.dnssec
 }
+
+output "observer_repository_url" {
+  value = module.observer.repository_url
+}
