@@ -1,6 +1,7 @@
 # 0032 - Public resumes expose one share image
 
-Status: Accepted (2026-09-05).
+Status: Accepted (2026-09-05). Superseded by
+[ADR 0055](0055-stored-link-preview-card.md).
 
 ## Context
 

@@ -1,11 +1,9 @@
 # 0055: Stored link-preview card replaces the top-crop share image
 
-Status: Proposed (2026-09-26). The owner settled two parts: the card is built
-when a resume is published and rebuilt when it changes, and the description is
-the resume summary. The choices marked **Owner approval** in the
-[link-preview design](../design/link-previews.md) stay open until the owner
-approves them. On acceptance this record supersedes
-[ADR 0032](0032-public-share-image.md) and amends
+Status: Accepted (2026-09-26). The owner approved the card and its
+product-visible choices, listed in the
+[link-preview design](../design/link-previews.md#owner-decisions). This record
+supersedes [ADR 0032](0032-public-share-image.md) and amends
 [ADR 0022](0022-public-artifact-revocation.md) for one stored artifact.
 
 ## Context

@@ -7,25 +7,25 @@ and a preview card image built for thumbnails. The card holds no contact
 details. [ADR 0055](../adr/0055-stored-link-preview-card.md) records the stored
 card and the choices it replaces.
 
-Status: proposed. The owner settled two points: the card is built at publish and
-rebuilt when it changes, and the description is the resume summary. **Owner
-approval** marks the four product-visible choices still open. **Verify** marks a
-fact that comes from community sources or inference and that the live checks
-must confirm.
+Status: accepted. **Verify** marks a fact that comes from community sources or
+inference and that the live checks must confirm.
 
-## Owner approvals
+## Owner decisions
 
-1. **Card look.** The card uses white paper, a fixed layout and font, aboutme
-   branding, and the resume template's accent color. Recommended: follow the
-   accent color, so the card matches the page the reader opens.
-2. **Preview title.** Recommended: the owner's public page title when set,
-   otherwise the full name alone. The default tab title ends in the English word
-   "Resume" even on a Vietnamese resume, and Apple and Facebook ask for a title
-   without site branding.
-3. **Publish-panel preview.** Recommended: ship it as its own release after the
-   card, not with the page tags.
-4. **Privacy notice wording**, in [Privacy](#privacy). Recommended: the text
-   below, in Vietnamese and English.
+The owner settled every product-visible choice:
+
+1. The card is built at publish and rebuilt when it changes.
+2. The description is the resume summary.
+3. **Card look.** The card follows the template accent, so it matches the page
+   the reader opens ([Preview card](#preview-card)). The owner chose it over a
+   fixed brand blue after comparing mockups.
+4. **Preview title.** The public page title when set, otherwise the full name
+   alone. The default tab title ends in the English word "Resume" even on a
+   Vietnamese resume, and Apple and Facebook ask for a title without site
+   branding.
+5. **Publish-panel preview.** It ships as its own release, after the card.
+6. **Privacy notice.** The wording in [Privacy](#privacy). The frontend adds the
+   Vietnamese text, and the owner reviews it before that release ships.
 
 ## Current state
 
@@ -126,8 +126,8 @@ dots, dashes, parentheses, and a leading `+`. Also remove any exact visible
 contact detail value. Normalize again after removal. An owner-set public title
 is used as written.
 
-**Preview title** (**Owner approval** 2): the public title when set, else the
-full name cut to 70 clusters, else `aboutme.vn/<slug>`.
+**Preview title**: the public title when set, else the full name cut to 70
+clusters, else `aboutme.vn/<slug>`.
 
 **Description**, at most 160 clusters:
 
@@ -180,10 +180,9 @@ Layout rules for the designer, who owns the final spec in `DESIGN.md`:
 - Name: bold, 72 px, stepping down to 52 px as it grows, at most two lines.
 - Headline: regular, 32 px, `--paper-muted`, at most two lines.
 - Footer inside the square: the aboutme mark and `aboutme.vn/<slug>`.
-- Accent (**Owner approval** 1): the template accent (`colors.accent`, else
-  `colors.primary`), clamped to 3:1 against white like `--color-accent-solid`,
-  used only for decoration outside the safe square and for the photo ring. Text
-  never takes the accent.
+- Accent: the template accent (`colors.accent`, else `colors.primary`), clamped
+  to 3:1 against white like `--color-accent-solid`, used only for decoration
+  outside the safe square and for the photo ring. Text never takes the accent.
 - At 300 px wide, the size of a phone chat card, the name renders at about 18
   px. The headline is secondary and may be small there.
 - Apple advises against text in preview images. The card keeps its text large
@@ -264,8 +263,8 @@ transfer per crawler fetch. No new cloud resource.
 - A platform keeps what it fetched. Unpublishing stops new fetches; it cannot
   remove a card already shown.
 
-Privacy notice changes (**Owner approval** 4), English draft; the frontend adds
-the Vietnamese text for the owner to approve:
+Privacy notice changes, English text; the frontend adds the Vietnamese text for
+the owner to review:
 
 - "What we collect", Content: "the resumes you write, the photos you upload,
   and, while a resume is public, the preview image we make from it for link
@@ -312,10 +311,10 @@ bound; a test with the largest valid document proves the fit.
 ## Publish-panel preview
 
 The publish dialog can show the card and a neutral chat card with the title and
-description, with no new setting (**Owner approval** 3). The dialog renders the
-same card component in the browser, so it works before the first publish and
-needs no new route. A TypeScript copy of the text rules checks against the Go
-rules with one shared fixture set, as ADR 0042 does for the public title.
+description, with no new setting. The dialog renders the same card component in
+the browser, so it works before the first publish and needs no new route. A
+TypeScript copy of the text rules checks against the Go rules with one shared
+fixture set, as ADR 0042 does for the public title.
 
 ## Tests
 

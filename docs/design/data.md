@@ -32,6 +32,7 @@ intended model, not replacement DDL.
 | `totp_enrollments`               | Ten-minute sealed setup secret bound to account, session, epoch, and issuer; token digest; one row per user               |
 | `authentication_security_events` | Rejected non-increasing passkey counter values, retained for 180 days                                                     |
 | `resumes`                        | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts                      |
+| `resume_preview_cards`           | One per live resume: 16-hex card version, PNG of 1 to 524,288 bytes, render time; cascades with the resume                |
 | `slug_tombstones`                | Released slug and release time only, no account link; deleted by the privacy sweep 180 days after release                 |
 | `idempotency_records`            | User, concrete operation identity, mutation key, semantic request fingerprint, stored response, expiry                    |
 | `idempotency_usage`              | One per-user retained-record and stored-response-byte counter maintained transactionally                                  |

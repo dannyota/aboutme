@@ -1,17 +1,16 @@
 # Link previews (0.6.0 to 0.6.2)
 
-Status: planned; waits for the owner approvals listed in [the design](../design/link-previews.md#owner-approvals). Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). Three small releases, one feature each. The manager may deploy 0.6.0 and 0.6.1 together under 0.6.1 if both are green together.
+Status: planned; the owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0055 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). Three small releases, one feature each. The manager may deploy 0.6.0 and 0.6.1 together under 0.6.1 if both are green together.
 
 |Release|Outcome|Risk|
 |-|-|-|
 |0.6.0 Preview text|Title, description from the summary, locale, URL, site name, image type and alt on every live resume page; privacy notice paragraph on third-party copies|Medium: HTML validator and render contract|
 |0.6.1 Preview card|Stored, versioned 1200 by 630 card with name, headline, photo, branding; no contact data; built at publish and on change|High: migration, publish revocation, render queue|
-|0.6.2 Publish-panel preview|The publish dialog shows the card and a chat-card mock; no new setting|Low; only if the owner approves it for 0.6.x|
+|0.6.2 Publish-panel preview|The publish dialog shows the card and a chat-card mock; no new setting|Low; approved by the owner as its own release|
 
-## Before any code
+## Owner review
 
-- Owner approves the four items in the design (card look, preview title, publish-panel timing, privacy wording).
-- Architect then marks ADR 0055 accepted and ADR 0032 superseded, and updates the rows that ADR 0032 still states: `docs/design/product.md` (share image row, robots sentence), `docs/design/api.md` (image route rows), `docs/design/budgets.md` (card bytes 524,288), `docs/design/data.md` (new table row), `docs/design/templates/print.md` (share image row), `docs/design/decisions.md`.
+- The owner reviews the Vietnamese privacy notice text in each release that changes it (0.6.0 and 0.6.1) before that release ships.
 
 ## 0.6.0 Preview text
 

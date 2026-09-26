@@ -109,22 +109,22 @@ It also sets two optional page details: the browser-tab title (default
 Both are public, like the slug
 ([ADR 0042](../adr/0042-public-page-title-and-favicon.md)).
 
-| State                    | Public behavior                                                                                                                                |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes                                      |
-| Live, discovery disabled | Shareable; HTML, JSON, photo, PDF, and share image send `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown `404` |
-| Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                      |
-| Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                   |
-| Share image              | One 1200 by 630 PNG top-viewport capture is available when live, independent of download and discovery flags; ADR 0032                         |
+| State                    | Public behavior                                                                                                                                 |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `live=false`             | All public resume, photo, markdown, PDF, image, and live-event routes return `404`; the SSE stream closes                                       |
+| Live, discovery disabled | Shareable; HTML, JSON, photo, PDF, and preview card send `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown `404` |
+| Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                       |
+| Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                    |
+| Preview card             | Stored 1200 by 630 PNG with name, headline, and photo, never contact details; live only, independent of download and discovery; ADR 0055        |
 
 The sitemap lists `/`, `/privacy`, `/terms`, `/templates`, and each
 `/templates/{id}` page, then every discoverable resume. `llms.txt` follows the
 llms.txt convention: a title, a one-line summary, the site pages and source
 code, then each discoverable resume's markdown. `robots.txt` allows everything
 except `/app/`, `/api/`, and the sign-in pages. Under `/api/` it allows only the
-share image, which social cards fetch. Each sign-in page is disallowed by exact
-path, with or without a query, so a slug that starts with the same letters stays
-crawlable.
+preview card, which link previews fetch ([link previews](link-previews.md)).
+Each sign-in page is disallowed by exact path, with or without a query, so a
+slug that starts with the same letters stays crawlable.
 
 Deleted, renamed, tombstoned, and never-published slugs all return the same
 public `404`. The service does not expose which internal state caused absence.

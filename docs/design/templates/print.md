@@ -221,10 +221,11 @@ ambiguous PDF structures fail the job. The PDF Title is the print page title,
 ([ADR 0045](../../adr/0045-pdf-download-name-and-metadata.md)). Repeated real
 PDF and PNG captures of the same revision must match byte for byte.
 
-The og-image render uses the same pipeline and the same pinned environment, at
-its own viewport rather than `@page`; it inherits every determinism rule here.
-The exact image path, live-state gate, and crop are defined by
-[ADR 0032](../../adr/0032-public-share-image.md).
+The link-preview card render uses the same pipeline and the same pinned
+environment, at a 1200 by 630 viewport rather than `@page`; it inherits every
+determinism rule here. The card envelope, image path, live-state gate, and
+storage are defined in [link previews](../link-previews.md) and
+[ADR 0055](../../adr/0055-stored-link-preview-card.md).
 
 Operationally, prints run one at a time inside the Go task's 512 MiB whole-task
 budget, with a configured 20-second cancellation deadline from admission and
