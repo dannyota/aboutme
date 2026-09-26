@@ -33,6 +33,16 @@ case "$cmd $args" in
   "git fetch"*) exit 0 ;;
   "git rev-list"*) echo 0123456789abcdef0123456789abcdef01234567 ;;
   "git merge-base"*) exit 0 ;;
+  "gh attestation verify"*)
+    # The verified statement names the image and digest the call asked for.
+    [[ $args =~ oci://(ghcr\.io/dannyota/aboutme-[a-z]+)@sha256:([0-9a-f]{64}) ]] || exit 1
+    subject=${BASH_REMATCH[1]}
+    case $STUB_CASE in
+      provenance_fails) echo "verification failed" >&2; exit 1 ;;
+      provenance_wrong_subject) subject=ghcr.io/dannyota/aboutme-web ;;
+    esac
+    printf '[{"verificationResult":{"statement":{"subject":[{"name":"%s","digest":{"sha256":"%s"}}]}}}]\n' \
+      "$subject" "${BASH_REMATCH[2]}" ;;
   "gh run list"*)
     # The commit stub always returns this SHA (git rev-list, above).
     sha=0123456789abcdef0123456789abcdef01234567

@@ -1401,8 +1401,37 @@ grep -qF "not an assumed-role session" "$work/verify_role_fails.out" ||
 [ -z "$(ls -A "$tmproot")" ] ||
   { echo "verify_role_fails: left a temp directory behind in TMPDIR" >&2; exit 1; }
 
+# Every image's build provenance is verified by digest, for this tag and the
+# commit it names, before the fence lock, the snapshot, or any registration
+# (provenance.sh). A rollback verifies its own tag's images the same way.
+f=$work/ok.calls
+sha=0123456789abcdef0123456789abcdef01234567
+for name in server web caddy; do
+  want="gh attestation verify oci://ghcr.io/dannyota/aboutme-$name@sha256:$(printf '%064d' 1) --repo dannyota/aboutme"
+  want+=" --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.1.0"
+  want+=" --source-ref refs/tags/v0.1.0 --source-digest $sha --deny-self-hosted-runners --format json"
+  [[ $(count "$f" "$want") == 1 ]] || { echo "ok: $name provenance was not verified once with the full policy" >&2; exit 1; }
+  before "$f" "$want" "operation_id=:o"
+  before "$f" "$want" "rds create-db-snapshot"
+  before "$f" "$want" "ecs register-task-definition"
+done
+grep -qF "gh attestation verify oci://ghcr.io/dannyota/aboutme-server@sha256:$(printf '%064d' 1) --repo dannyota/aboutme --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.0.9 --source-ref refs/tags/v0.0.9" \
+  "$work/rollback.calls" || { echo "rollback: provenance was not verified for the rollback tag" >&2; exit 1; }
+
+for case_ in provenance_fails provenance_wrong_subject; do
+  run_case "$case_" fail v0.1.0
+  f=$work/$case_.calls
+  absent "$f" "operation_id=:o"
+  absent "$f" "rds create-db-snapshot"
+  absent "$f" "ecs register-task-definition"
+  absent "$f" "ecs update-service"
+  absent "$f" "gh attestation verify oci://ghcr.io/dannyota/aboutme-web@"
+  grep -qF "provenance:" "$work/$case_.out" || { echo "$case_: no provenance message" >&2; exit 1; }
+done
+
 run_case usage 2
 
 # The pre-switch DNS comparison script (docs/runbooks/dns.md).
 bash "$here/dns-check_test.sh"
+bash "$here/provenance_test.sh"
 echo "deploy-script-test: ok"

@@ -12,7 +12,8 @@
 #
 # Every mode assumes the operator role, strongly reads the release fence,
 # assumes the deploy role, and holds one operation lock across the run (see
-# the sourced fence.sh). Order: build revisions, check that every task secret
+# the sourced fence.sh). Order: verify each image's build provenance (the
+# sourced provenance.sh), build revisions, check that every task secret
 # exists, snapshot, register revisions, stop jobs, start maintenance beside
 # the app, stop the app, migrate, start web, start the new app beside
 # maintenance, stop maintenance, re-enable jobs, smoke, warm the release,
@@ -97,6 +98,8 @@ source "$script_dir/notifications.sh"
 source "$script_dir/handoff.sh"
 # shellcheck source=edge.sh
 source "$script_dir/edge.sh"
+# shellcheck source=provenance.sh
+source "$script_dir/provenance.sh"
 
 # Shared by the mid-deploy maintenance-page check and the final smoke checks.
 smoke_attempts=5
@@ -266,6 +269,7 @@ declare -A image
 for name in server web caddy; do
   d=$(digest "$name")
   [[ $d == sha256:* ]] || { say "no $name image for $tag"; exit 1; }
+  provenance_verify "$name" "$d" "$tag" "$commit" || exit 1
   image[$name]="ghcr.io/$repo-$name@$d"
 done
 
