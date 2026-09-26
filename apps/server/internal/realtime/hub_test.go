@@ -218,3 +218,20 @@ func TestHubRejectsInvalidConfigAndScope(t *testing.T) {
 		}
 	}
 }
+
+func TestHubObserverSeesEveryPublishedChange(t *testing.T) {
+	var seen []Change
+	h := newAvailableHub(t, Config{Observe: func(c Change) { seen = append(seen, c) }})
+	changes := []Change{
+		{AccountID: accountA, ResumeID: resumeA, Revision: 2},
+		{AccountID: accountB, ResumeID: resumeB, Revision: 9, Deleted: true},
+	}
+	for _, change := range changes {
+		h.Publish(change)
+	}
+	h.SetAvailable(false)
+	h.Publish(Change{AccountID: accountA, ResumeID: resumeA, Revision: 3})
+	if len(seen) != 3 || seen[0] != changes[0] || seen[1] != changes[1] || seen[2].Revision != 3 {
+		t.Fatalf("observed changes = %+v", seen)
+	}
+}

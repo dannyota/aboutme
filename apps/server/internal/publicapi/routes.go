@@ -16,6 +16,7 @@ const (
 	publicRoutePhoto
 	publicRoutePDF
 	publicRoutePNG
+	publicRouteCard
 	publicRouteHTML
 	publicRouteMarkdown
 	publicRouteSitemap
@@ -47,6 +48,8 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		s.pdf.ServeHTTP(w, request)
 	case publicRoutePNG:
 		s.png.ServeHTTP(w, request)
+	case publicRouteCard:
+		s.card.ServeHTTP(w, request)
 	case publicRouteHTML:
 		s.html.ServeHTTP(w, request)
 	case publicRouteMarkdown:
@@ -80,6 +83,12 @@ func classifyPublicRoute(path string) publicRoute {
 	const prefix = "/api/v1/public/resumes/"
 	if strings.HasPrefix(path, prefix) {
 		rest := strings.TrimPrefix(path, prefix)
+		if strings.Contains(rest, "/og/") {
+			if _, _, ok := cardPathParts(path); ok {
+				return publicRouteCard
+			}
+			return publicRouteNone
+		}
 		if strings.HasSuffix(rest, "/og.png") {
 			if validPublicSlug(strings.TrimSuffix(rest, "/og.png")) {
 				return publicRoutePNG

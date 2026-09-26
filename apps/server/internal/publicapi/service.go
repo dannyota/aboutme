@@ -38,6 +38,9 @@ type ServiceDependencies struct {
 	Live           http.Handler
 	// Logger receives closed, content-free diagnostics. Nil disables them.
 	Logger *slog.Logger
+	// Cards turns on stored preview cards (ADR 0055). Nil keeps the og.png
+	// share image, so the server can deploy before the web card renderer.
+	Cards PreviewCards
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
@@ -48,6 +51,7 @@ type Service struct {
 	photo    http.Handler
 	pdf      http.Handler
 	png      http.Handler
+	card     http.Handler
 	html     http.Handler
 	markdown http.Handler
 	sitemap  http.Handler
@@ -61,7 +65,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
 	}
-	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger})
+	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger, Cards: dependencies.Cards})
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +95,12 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	artifacts, artifactErr := newArtifactHandlers(ArtifactDependencies{
 		Reader: dependencies.Reader, Cache: dependencies.Cache, Queue: dependencies.PrintQueue,
 		AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest,
-		TrustedProxies: dependencies.TrustedProxies, Clock: dependencies.Clock,
+		TrustedProxies: dependencies.TrustedProxies, Clock: dependencies.Clock, Cards: dependencies.Cards,
 	})
 	if artifactErr != nil {
 		return nil, artifactErr
 	}
-	service.pdf, service.png = artifacts.pdf, artifacts.png
+	service.pdf, service.png, service.card = artifacts.pdf, artifacts.png, artifacts.card
 	return service, nil
 }
 

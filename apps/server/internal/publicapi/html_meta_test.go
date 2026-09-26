@@ -38,7 +38,10 @@ type previewTag struct{ attribute, name, content string }
 // docs/design/link-previews.md, "Page head", leaving out og:locale when the
 // language maps to none.
 func previewTags(resume publicresume.PublicResume, preview previewmeta.Meta, root string) []previewTag {
-	imageURL := root + "/api/v1/public/resumes/" + resume.Slug + "/og.png"
+	imageURL := preview.ImageURL
+	if imageURL == "" {
+		imageURL = root + "/api/v1/public/resumes/" + resume.Slug + "/og.png"
+	}
 	tags := []previewTag{
 		{"name", "description", preview.Description},
 		{"property", "og:type", "profile"},
@@ -387,4 +390,58 @@ func largestPreviewDocument(t *testing.T) schema.Resume {
 		t.Fatalf("largest document is not valid: %v", err)
 	}
 	return document
+}
+
+// With stored cards on, the page names the current card version, the render
+// request carries that URL, and a head naming the og.png alias is rejected.
+func TestPublicHTMLNamesTheCurrentCardVersion(t *testing.T) {
+	slug, reader := previewTestReader(t, previewResume(), true, nil)
+	public := projectedPreviewResume(t)
+	want := previewmeta.For(public, nil)
+	want.ImageURL = "https://aboutme.example/api/v1/public/resumes/ada/og/" + cardVersion + ".png"
+	titled := func(head string) string {
+		title := stdhtml.EscapeString(expectedPublicPage(public, nil, nil).Title)
+		return strings.Replace(pageWithHead(public, head), "<title>Ada — Resume</title>", "<title>"+title+"</title>", 1)
+	}
+	versioned := titled(previewHead(public, want, "https://aboutme.example"))
+	unversioned := want
+	unversioned.ImageURL = ""
+	alias := titled(previewHead(public, unversioned, "https://aboutme.example"))
+	for _, test := range []struct {
+		body     string
+		wantCode int
+	}{{versioned, http.StatusOK}, {alias, http.StatusServiceUnavailable}} {
+		var sent struct {
+			Preview previewmeta.Meta `json:"preview"`
+		}
+		origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
+		if err != nil {
+			t.Fatal(err)
+		}
+		cache, err := publiccache.New(2, time.Minute, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		renderer := directrender.New(origin, &http.Client{Transport: htmlRoundTrip(func(request *http.Request) (*http.Response, error) {
+			if decodeErr := json.NewDecoder(request.Body).Decode(&sent); decodeErr != nil {
+				return nil, decodeErr
+			}
+			return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader(test.body))}, nil
+		})})
+		handler, err := NewHTMLHandler(HTMLDependencies{
+			Reader: reader, Cache: cache, Renderer: renderer, PublicOrigin: mustPublicOrigin(t),
+			AppDigest: "sha256:app", RendererDigest: "sha256:renderer", Cards: &fakeCards{version: cardVersion},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/"+slug, nil))
+		if w.Code != test.wantCode {
+			t.Fatalf("response = %d, want %d", w.Code, test.wantCode)
+		}
+		if sent.Preview != want {
+			t.Fatalf("sent preview = %#v, want %#v", sent.Preview, want)
+		}
+	}
 }

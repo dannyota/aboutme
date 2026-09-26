@@ -412,3 +412,35 @@ func errString(err error) string {
 	}
 	return err.Error()
 }
+
+func TestProjectRowAndPhotoKeyDigestKeepTheKeyPrivate(t *testing.T) {
+	reader := newTestReader(t, &readerStore{})
+	row := validReaderRow(t, "ada")
+	var personal map[string]any
+	if err := json.Unmarshal(row.PersonalDetails, &personal); err != nil {
+		t.Fatal(err)
+	}
+	personal["photo"] = map[string]any{"key": "private/object-key"}
+	encoded, err := json.Marshal(personal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.PersonalDetails = encoded
+	row.Live = false
+	snapshot, err := reader.ProjectRow(row)
+	if err != nil {
+		t.Fatalf("ProjectRow() error = %v", err)
+	}
+	// The hex SHA-256 of "private/object-key".
+	const want = "fdfb86ee7abe56a6e1e3425240b4d10ec74c29c288a47f2a7c20a79c8eff50ff"
+	if digest := snapshot.PhotoKeyDigest(); digest != want {
+		t.Fatalf("PhotoKeyDigest() = %q, want %q", digest, want)
+	}
+	if (Snapshot{}).PhotoKeyDigest() != "" {
+		t.Fatal("PhotoKeyDigest() without a photo is not empty")
+	}
+	row.Slug = nil
+	if _, err := reader.ProjectRow(row); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("ProjectRow(no slug) error = %v, want ErrUnavailable", err)
+	}
+}

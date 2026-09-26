@@ -1,6 +1,7 @@
 User-agent: *
 Allow: /
 Allow: /api/v1/public/resumes/*/og.png$
+Allow: /api/v1/public/resumes/*/og/
 Disallow: /api/
 Disallow: /app/
 Disallow: /authorize$
