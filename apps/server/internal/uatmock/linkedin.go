@@ -13,6 +13,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -326,7 +327,9 @@ func (l *linkedinMock) signIDToken(binding linkedinBinding) (string, error) {
 	if binding.account.Email != "" {
 		claims["email"] = binding.account.Email
 		if binding.account.EmailVerified != nil {
-			claims["email_verified"] = *binding.account.EmailVerified
+			// LinkedIn's ID token sends email_verified as the JSON string
+			// "true"/"false", not a JSON boolean.
+			claims["email_verified"] = strconv.FormatBool(*binding.account.EmailVerified)
 		}
 	}
 	payload, err := json.Marshal(claims)
