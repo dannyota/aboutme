@@ -5,7 +5,9 @@ way they do with Google. LinkedIn follows its documented web flow, production
 can enable it beside Google, the privacy notice names it, and browser proofs
 cover it against a local mock. The flag turns on as its own step after the
 release is live. [ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)
-records the decision.
+records the decision, and
+[ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md) (proposed)
+records that LinkedIn returns no nonce claim.
 
 Status: accepted and built. Facts below were checked against LinkedIn's
 documentation and its live discovery document on 2026-09-26. **Verify** marks a
@@ -13,36 +15,37 @@ fact that only the first production sign-in can confirm.
 
 ## Built state
 
-| Part          | State                                                                                                                                                                                                                          |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Flag          | `PROVIDER_LOGIN_ENABLED` takes a comma list; `linkedin` registers the start and callback routes ([ADR 0039](../adr/0039-per-provider-login-enablement.md)). Production can set `""`, `"google"`, or `"google,linkedin"`.       |
-| Server        | `apps/server/internal/auth/linkedin.go`: OIDC discovery of `https://www.linkedin.com/oauth`, scopes `openid profile email`, state and nonce without PKCE, form client credentials, ID token checks, nullable `email_verified`. |
-| Registration  | A new subject needs an email that is present, `email_verified` true, and canonical. An existing subject signs in without an email check. Link and reauth ignore email.                                                         |
-| Linking       | Shared with Google: identity is `(provider, subject)`; an email already owned by any account returns the generic `email_already_registered` and writes nothing; linking starts only from a signed-in account.                  |
-| Config        | Prod and staging need `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` only when LinkedIn is enabled. `LINKEDIN_OIDC_ISSUER_URL` is allowed only with `ENV=dev` and only on loopback path `/linkedin`.                        |
-| Web           | Capabilities `providers` drives the buttons ("Tiếp tục với LinkedIn" / "Continue with LinkedIn"), settings link, reauth, and notices. The authorize URL allowlist holds `https://www.linkedin.com/oauth/v2/authorization`.     |
-| Mock provider | `internal/uatmock` and `cmd/mock-oauth` serve Google and LinkedIn. The native HTTPS harness enables `google,linkedin`.                                                                                                         |
-| Production    | `deploy/aws/modules/tasks` wires each listed provider's two SSM parameters. The app execution role may read Google's and LinkedIn's.                                                                                           |
+| Part          | State                                                                                                                                                                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Flag          | `PROVIDER_LOGIN_ENABLED` takes a comma list; `linkedin` registers the start and callback routes ([ADR 0039](../adr/0039-per-provider-login-enablement.md)). Production can set `""`, `"google"`, or `"google,linkedin"`.                                    |
+| Server        | `apps/server/internal/auth/linkedin.go`: OIDC discovery of `https://www.linkedin.com/oauth`, scopes `openid profile email`, state and nonce without PKCE, form client credentials, ID token checks with an optional nonce claim, nullable `email_verified`. |
+| Registration  | A new subject needs an email that is present, `email_verified` true, and canonical. An existing subject signs in without an email check. Link and reauth ignore email.                                                                                      |
+| Linking       | Shared with Google: identity is `(provider, subject)`; an email already owned by any account returns the generic `email_already_registered` and writes nothing; linking starts only from a signed-in account.                                               |
+| Config        | Prod and staging need `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` only when LinkedIn is enabled. `LINKEDIN_OIDC_ISSUER_URL` is allowed only with `ENV=dev` and only on loopback path `/linkedin`.                                                     |
+| Web           | Capabilities `providers` drives the buttons ("Tiếp tục với LinkedIn" / "Continue with LinkedIn"), settings link, reauth, and notices. The authorize URL allowlist holds `https://www.linkedin.com/oauth/v2/authorization`.                                  |
+| Mock provider | `internal/uatmock` and `cmd/mock-oauth` serve Google and LinkedIn. The native HTTPS harness enables `google,linkedin`.                                                                                                                                      |
+| Production    | `deploy/aws/modules/tasks` wires each listed provider's two SSM parameters. The app execution role may read Google's and LinkedIn's.                                                                                                                        |
 
 ## LinkedIn facts
 
-| Topic           | Fact                                                                                                                                                                                                                                | Source   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| Product         | "Sign In with LinkedIn using OpenID Connect" is an open permission: any developer adds it from the app's Products tab, with no partner review.                                                                                      | [1], [2] |
-| Scopes          | `openid` (required for OIDC), `profile` (id, name, picture), `email` (primary email). The access table also says `profile` gives the headline, but no claim or userinfo field carries it.                                           | [1], [2] |
-| ID token claims | `iss`, `aud`, `iat`, `exp`, `sub`; with `profile`: `name`, `given_name`, `family_name`, `picture`, `locale`; with `email`: `email`, `email_verified`. Signed RS256.                                                                 | [1], [3] |
-| Email           | `email` and `email_verified` are optional and "may not be included in all responses".                                                                                                                                               | [1]      |
-| Subject         | `subject_types_supported` is `pairwise`: `sub` differs per LinkedIn app. A new app gives every member a new subject.                                                                                                                | [3]      |
-| Issuer          | The live discovery document says `https://www.linkedin.com/oauth`. The documentation sample shows `https://www.linkedin.com`, which is stale; the code uses the live value.                                                         | [1], [3] |
-| Endpoints       | Authorize `https://www.linkedin.com/oauth/v2/authorization`; token `https://www.linkedin.com/oauth/v2/accessToken`; userinfo `https://api.linkedin.com/v2/userinfo`; JWKS `https://www.linkedin.com/oauth/openid/jwks`.             | [3]      |
-| Token request   | Form-encoded POST with `grant_type`, `code`, `client_id`, `client_secret`, `redirect_uri`. The web flow lists no PKCE parameter.                                                                                                    | [4]      |
-| PKCE            | A report dated 2026-09-21 says the token endpoint answers `401 invalid_client` when a confidential client sends `code_verifier`. LinkedIn does not document this. **Verify.**                                                       | [5]      |
-| Redirect URLs   | Registered on the Auth tab; absolute; query parameters are ignored; no `#`; a request must match a registered URL or LinkedIn returns 401.                                                                                          | [4]      |
-| Lifetimes       | Authorization code 30 minutes; access token 60 days (the service discards it).                                                                                                                                                      | [4]      |
-| Cancel          | The callback gets `error=user_cancelled_login` or `error=user_cancelled_authorize` with `state`, not `access_denied`.                                                                                                               | [4]      |
-| Identity        | "Sign In with LinkedIn using OpenID Connect does not verify user identities and should not be marketed as such."                                                                                                                    | [1]      |
-| App setup       | An app needs a name, a LinkedIn Page, a privacy policy URL, and a logo. A Page super admin can verify the app's Page association through a URL valid 30 days. The docs require that step for restricted products, not for this one. | [6], [7] |
-| Controller      | For members outside the EU, EEA, and Switzerland, LinkedIn Corporation (United States) controls their LinkedIn data.                                                                                                                | [8]      |
+| Topic           | Fact                                                                                                                                                                                                                                | Source         |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| Product         | "Sign In with LinkedIn using OpenID Connect" is an open permission: any developer adds it from the app's Products tab, with no partner review.                                                                                      | [1], [2]       |
+| Scopes          | `openid` (required for OIDC), `profile` (id, name, picture), `email` (primary email). The access table also says `profile` gives the headline, but no claim or userinfo field carries it.                                           | [1], [2]       |
+| ID token claims | `iss`, `aud`, `iat`, `exp`, `sub`; with `profile`: `name`, `given_name`, `family_name`, `picture`, `locale`; with `email`: `email`, `email_verified`. Signed RS256.                                                                 | [1], [3]       |
+| Email           | `email` and `email_verified` are optional and "may not be included in all responses".                                                                                                                                               | [1]            |
+| Nonce           | LinkedIn accepts a `nonce` parameter but returns no `nonce` claim. Its guides never mention nonce, discovery does not list the claim, and the first production sign-ins on 2026-09-26 all lacked it.                                | [1], [3], [10] |
+| Subject         | `subject_types_supported` is `pairwise`: `sub` differs per LinkedIn app. A new app gives every member a new subject.                                                                                                                | [3]            |
+| Issuer          | The live discovery document says `https://www.linkedin.com/oauth`. The documentation sample shows `https://www.linkedin.com`, which is stale; the code uses the live value.                                                         | [1], [3]       |
+| Endpoints       | Authorize `https://www.linkedin.com/oauth/v2/authorization`; token `https://www.linkedin.com/oauth/v2/accessToken`; userinfo `https://api.linkedin.com/v2/userinfo`; JWKS `https://www.linkedin.com/oauth/openid/jwks`.             | [3]            |
+| Token request   | Form-encoded POST with `grant_type`, `code`, `client_id`, `client_secret`, `redirect_uri`. The web flow lists no PKCE parameter.                                                                                                    | [4]            |
+| PKCE            | A report dated 2026-09-21 says the token endpoint answers `401 invalid_client` when a confidential client sends `code_verifier`. LinkedIn does not document this. **Verify.**                                                       | [5]            |
+| Redirect URLs   | Registered on the Auth tab; absolute; query parameters are ignored; no `#`; a request must match a registered URL or LinkedIn returns 401.                                                                                          | [4]            |
+| Lifetimes       | Authorization code 30 minutes; access token 60 days (the service discards it).                                                                                                                                                      | [4]            |
+| Cancel          | The callback gets `error=user_cancelled_login` or `error=user_cancelled_authorize` with `state`, not `access_denied`.                                                                                                               | [4]            |
+| Identity        | "Sign In with LinkedIn using OpenID Connect does not verify user identities and should not be marketed as such."                                                                                                                    | [1]            |
+| App setup       | An app needs a name, a LinkedIn Page, a privacy policy URL, and a logo. A Page super admin can verify the app's Page association through a URL valid 30 days. The docs require that step for restricted products, not for this one. | [6], [7]       |
+| Controller      | For members outside the EU, EEA, and Switzerland, LinkedIn Corporation (United States) controls their LinkedIn data.                                                                                                                | [8]            |
 
 ## Design
 
@@ -57,11 +60,17 @@ LinkedIn follows its documented confidential web flow:
   (`oauth2.AuthStyleInParams`) and no `code_verifier`. Auto-detection is not
   used, because its first attempt sends HTTP Basic credentials that LinkedIn
   does not document.
-- The ID token nonce is the code-injection defense. It is random per
-  transaction, stored with the transaction, and bound to the browser by the
-  `__Host-oauth-tx` handle. The callback discards every token until the nonce
-  matches. RFC 9700 section 2.1.1 allows this for confidential OpenID Connect
-  clients [9].
+- The authorize request carries a nonce that is random per transaction, stored
+  with the transaction, and bound to the browser by the `__Host-oauth-tx`
+  handle. LinkedIn returns no nonce claim, so the callback accepts an ID token
+  without one. A present nonce claim must equal the transaction's, or the
+  callback discards every token.
+- Without PKCE or a returned nonce, nothing binds a LinkedIn authorization code
+  to the browser that started the flow, as RFC 9700 section 2.1.1 asks [9].
+  State, the one-time transaction, the exact redirect URI, the single-use
+  30-minute code, and the client secret limit a code injection to an attacker
+  who takes the victim's code before the victim's browser delivers it. ADR 0063
+  sets out that risk for the owner.
 - The transaction row keeps its PKCE verifier column, so storage does not
   change; LinkedIn simply never receives it. Google and GitHub keep PKCE S256.
 - `error=user_cancelled_login`, `error=user_cancelled_authorize`, and
@@ -70,9 +79,8 @@ LinkedIn follows its documented confidential web flow:
 - The UI never says LinkedIn verified a person. The only use of the email claim
   is the existing registration rule.
 
-`security.md` changes its OAuth sentence to: "Google and GitHub use
-authorization code with PKCE S256. LinkedIn uses its documented confidential
-flow without PKCE; the OIDC nonce defends against code injection."
+`security.md` states the same rule: Google and GitHub use PKCE S256, and
+LinkedIn has neither PKCE nor a returned nonce.
 
 ### Account linking
 
@@ -173,9 +181,11 @@ Tests cite this design and ADR 0058.
 - Go, `internal/auth`: the authorize URL has `nonce` and no `code_challenge`;
   the token request has `client_id` and `client_secret` in the body, no
   `Authorization` header, and no `code_verifier`; both cancel errors and
-  `access_denied` give cancelled; any other `error` gives the generic failure; a
-  wrong nonce still fails after a successful exchange. Google keeps its PKCE
-  assertions.
+  `access_denied` give cancelled; any other `error` gives the generic failure;
+  an ID token without a nonce claim signs in once, and a replay on the same
+  transaction stops before the token endpoint; a wrong nonce still fails after a
+  successful exchange. Google keeps its PKCE assertions and rejects a missing
+  nonce.
 - Go, discovery: a committed copy of LinkedIn's public discovery document
   (`internal/auth/testdata/linkedin-discovery.json`, fetched 2026-09-26) served
   by a test server is accepted with the issuer constant. The test fails if the
@@ -183,8 +193,8 @@ Tests cite this design and ADR 0058.
 - Go, config: `google,linkedin` in prod without either LinkedIn value stops
   startup; with both, it starts.
 - Mock provider: `uatmock` gains a LinkedIn mode on `/linkedin` with LinkedIn's
-  behavior: pairwise-looking subjects, optional email claims, 401
-  `invalid_client` when the token request carries `code_verifier` or Basic
+  behavior: pairwise-looking subjects, optional email claims, no nonce claim,
+  401 `invalid_client` when the token request carries `code_verifier` or Basic
   credentials, and cancel buttons that send the two LinkedIn error codes.
   Accounts: verified email; no email claim; `email_verified` false; an email
   that a password account holds; one for linking. The harness sets
@@ -263,12 +273,13 @@ argument, or a repository file.
 
 ## Owner approval
 
-| ID  | Choice                                                                                          | Recommendation                                                        |
-| --- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| L1  | Turn on LinkedIn sign-in in production, and create a public "aboutme" LinkedIn Page for the app | Yes                                                                   |
-| L2  | LinkedIn uses its documented flow without PKCE; the nonce defends against code injection        | Yes; LinkedIn documents no PKCE for web apps and one report shows 401 |
-| L3  | New collision message, above                                                                    | Yes                                                                   |
-| L4  | Privacy notice text, above; the owner reviews the Vietnamese                                    | Yes                                                                   |
+| ID  | Choice                                                                                            | Recommendation                                                        |
+| --- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| L1  | Turn on LinkedIn sign-in in production, and create a public "aboutme" LinkedIn Page for the app   | Yes                                                                   |
+| L2  | LinkedIn uses its documented flow without PKCE; the nonce defends against code injection          | Yes; LinkedIn documents no PKCE for web apps and one report shows 401 |
+| L5  | Accept ADR 0063: LinkedIn sign-in without a returned nonce, with the code-injection risk it names | Yes, or keep LinkedIn off                                             |
+| L3  | New collision message, above                                                                      | Yes                                                                   |
+| L4  | Privacy notice text, above; the owner reviews the Vietnamese                                      | Yes                                                                   |
 
 ## Sources
 
@@ -286,3 +297,5 @@ Retrieved 2026-09-26.
 8. [LinkedIn Privacy Policy](https://www.linkedin.com/legal/privacy-policy),
    effective 2025-11-03
 9. [RFC 9700, OAuth 2.0 Security Best Current Practice, section 2.1.1](https://www.rfc-editor.org/rfc/rfc9700.html#section-2.1.1)
+10. [Keycloak `LinkedInOIDCIdentityProviderFactory`](https://github.com/keycloak/keycloak/blob/main/services/src/main/java/org/keycloak/social/linkedin/LinkedInOIDCIdentityProviderFactory.java),
+    which turns the nonce off because LinkedIn does not return it

@@ -3,8 +3,8 @@ package uatmock
 // The LinkedIn mode follows LinkedIn's documented confidential web flow so the
 // native HTTPS proof exercises the same requests production sends: no PKCE,
 // client credentials only in the token request form body, optional email
-// claims, pairwise-looking subjects, and LinkedIn's two cancel errors. See
-// docs/design/linkedin-sign-in.md.
+// claims, no nonce claim in the ID token, pairwise-looking subjects, and
+// LinkedIn's two cancel errors. See docs/design/linkedin-sign-in.md.
 
 import (
 	"crypto/subtle"
@@ -75,15 +75,15 @@ var linkedinCancelErrors = map[string][2]string{
 	"cancel_authorize": {"user_cancelled_authorize", "The user cancelled the authorization"}, //nolint:misspell // LinkedIn's exact wire values.
 }
 
-// linkedinAuthorizeFields are the documented authorize parameters, all
-// required. PKCE parameters are refused rather than ignored.
+// linkedinAuthorizeFields are the authorize parameters the server sends, all
+// required. LinkedIn accepts nonce but never returns it. PKCE parameters are
+// refused rather than ignored.
 var linkedinAuthorizeFields = []string{"client_id", "redirect_uri", "response_type", "scope", "state", "nonce"}
 
 // linkedinTokenFields are the documented token request form parameters.
 var linkedinTokenFields = []string{"grant_type", "code", "redirect_uri", "client_id", "client_secret"}
 
 type linkedinBinding struct {
-	nonce   string
 	account linkedinAccount
 }
 
@@ -209,7 +209,7 @@ func (l *linkedinMock) serveAuthorize(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "invalid authorization request", http.StatusBadRequest)
 				return
 			}
-			code, storeErr := l.storeCode(linkedinBinding{nonce: form.Get("nonce"), account: selected})
+			code, storeErr := l.storeCode(linkedinBinding{account: selected})
 			if storeErr != nil {
 				http.Error(w, "authorization unavailable", http.StatusInternalServerError)
 				return
@@ -311,16 +311,17 @@ func (l *linkedinMock) serveToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// signIDToken leaves out the nonce claim, as LinkedIn does even when the
+// authorize request carried a nonce.
 func (l *linkedinMock) signIDToken(binding linkedinBinding) (string, error) {
 	now := l.svc.cfg.Now()
 	claims := map[string]any{
-		"iss":   l.issuerURL,
-		"aud":   l.clientID,
-		"sub":   binding.account.Subject,
-		"name":  binding.account.Name,
-		"nonce": binding.nonce,
-		"iat":   now.Unix(),
-		"exp":   now.Add(time.Duration(accessTokenLifetimeSeconds) * time.Second).Unix(),
+		"iss":  l.issuerURL,
+		"aud":  l.clientID,
+		"sub":  binding.account.Subject,
+		"name": binding.account.Name,
+		"iat":  now.Unix(),
+		"exp":  now.Add(time.Duration(accessTokenLifetimeSeconds) * time.Second).Unix(),
 	}
 	if binding.account.Email != "" {
 		claims["email"] = binding.account.Email

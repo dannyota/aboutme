@@ -104,10 +104,13 @@ sealed under a runtime key ring, and a key failure disables TOTP only. The
 ## OAuth transaction
 
 Google and GitHub use authorization code with PKCE S256. LinkedIn uses its
-documented confidential flow without PKCE; the OIDC nonce defends against code
-injection ([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)). OIDC
-providers use a nonce and validate signature, issuer, audience, expiry, and
-nonce. GitHub has a distinct callback and no invented OIDC checks.
+documented confidential flow without PKCE
+([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)) and returns no nonce
+claim, so no check binds a LinkedIn code to the starting browser
+([ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md), proposed).
+OIDC providers send a nonce and validate signature, issuer, audience, expiry,
+and nonce; LinkedIn's nonce is checked only when present. GitHub has a distinct
+callback and no invented OIDC checks.
 
 The server stores transaction state, purpose, the opaque-handle hash, PKCE
 verifier, exact provider redirect URI, bounded login return path, expiry, and
