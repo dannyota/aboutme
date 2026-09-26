@@ -1,0 +1,536 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aboutme.vn/.well-known/deployment.v1.json",
+  "title": "aboutme deployment document, version 1",
+  "description": "See docs/design/deployment-transparency/document.md. Every object is closed; the allOf rules null every claim an unverified signature or SBOM cannot support.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "environment",
+    "site",
+    "source_repository",
+    "platform",
+    "observed_at",
+    "stale_after",
+    "summary",
+    "release",
+    "components",
+    "observer"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "project": {
+      "const": "aboutme"
+    },
+    "environment": {
+      "enum": ["production"]
+    },
+    "site": {
+      "enum": ["https://aboutme.vn"]
+    },
+    "source_repository": {
+      "const": "https://github.com/dannyota/aboutme"
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "orchestrator", "region"],
+      "properties": {
+        "provider": {
+          "enum": ["aws", "greennode"]
+        },
+        "orchestrator": {
+          "enum": ["ecs", "kubernetes"]
+        },
+        "region": {
+          "type": "string",
+          "pattern": "^(ap-southeast-1|[A-Z]{2,4}[0-9]{2})$"
+        }
+      }
+    },
+    "observed_at": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "stale_after": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "summary": {
+      "enum": ["verified", "rolling_out", "unverified", "mismatch"]
+    },
+    "release": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "commit", "deployed_at"],
+          "properties": {
+            "version": {
+              "$ref": "#/$defs/version"
+            },
+            "commit": {
+              "$ref": "#/$defs/commit"
+            },
+            "deployed_at": {
+              "$ref": "#/$defs/timestamp"
+            }
+          }
+        }
+      ]
+    },
+    "components": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/component"
+      }
+    },
+    "observer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit", "source"],
+      "properties": {
+        "version": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/version"
+            }
+          ]
+        },
+        "commit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/commit"
+            }
+          ]
+        },
+        "source": {
+          "const": "self-reported"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "status": {
+      "enum": ["verified", "not_found", "invalid", "unchecked"]
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "image", "running_images"],
+      "properties": {
+        "name": {
+          "enum": ["server", "web", "caddy", "maintenance"]
+        },
+        "image": {
+          "enum": [
+            "ghcr.io/dannyota/aboutme-server",
+            "ghcr.io/dannyota/aboutme-web",
+            "ghcr.io/dannyota/aboutme-caddy"
+          ]
+        },
+        "running_images": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/running_image"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "server"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "image": {
+                "const": "ghcr.io/dannyota/aboutme-server"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "web"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "image": {
+                "const": "ghcr.io/dannyota/aboutme-web"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "caddy"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "image": {
+                "const": "ghcr.io/dannyota/aboutme-caddy"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "maintenance"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "image": {
+                "const": "ghcr.io/dannyota/aboutme-caddy"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "running_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "replicas",
+        "running_since",
+        "version",
+        "commit",
+        "signature",
+        "sbom",
+        "links"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "running_since": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "version": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/version"
+            }
+          ]
+        },
+        "commit": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/commit"
+            }
+          ]
+        },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "checked_at",
+            "signer_workflow",
+            "transparency_log_index"
+          ],
+          "properties": {
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "checked_at": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/timestamp"
+                }
+              ]
+            },
+            "signer_workflow": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^https://github\\.com/dannyota/aboutme/\\.github/workflows/release-images\\.yml@refs/tags/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "transparency_log_index": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              ]
+            }
+          }
+        },
+        "sbom": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "format"],
+          "properties": {
+            "status": {
+              "$ref": "#/$defs/status"
+            },
+            "format": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "const": "spdx-2.3"
+                }
+              ]
+            }
+          }
+        },
+        "links": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commit",
+            "release",
+            "build",
+            "provenance",
+            "sbom",
+            "transparency_log"
+          ],
+          "properties": {
+            "commit": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^https://github\\.com/dannyota/aboutme/commit/[0-9a-f]{40}$"
+                }
+              ]
+            },
+            "release": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^https://github\\.com/dannyota/aboutme/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+                }
+              ]
+            },
+            "build": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^https://github\\.com/dannyota/aboutme/actions/runs/[0-9]{1,20}/attempts/[0-9]{1,4}$"
+                }
+              ]
+            },
+            "provenance": {
+              "type": "string",
+              "pattern": "^https://api\\.github\\.com/repos/dannyota/aboutme/attestations/sha256:[0-9a-f]{64}\\?predicate_type=provenance$"
+            },
+            "sbom": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^https://github\\.com/dannyota/aboutme/releases/download/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)/aboutme-(server|web|caddy)\\.spdx\\.json$"
+                }
+              ]
+            },
+            "transparency_log": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "string",
+                  "pattern": "^https://search\\.sigstore\\.dev/\\?logIndex=[0-9]{1,20}$"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "signature": {
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "verified"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "version": {
+                "type": "null"
+              },
+              "commit": {
+                "type": "null"
+              },
+              "signature": {
+                "properties": {
+                  "signer_workflow": {
+                    "type": "null"
+                  },
+                  "transparency_log_index": {
+                    "type": "null"
+                  }
+                }
+              },
+              "links": {
+                "properties": {
+                  "commit": {
+                    "type": "null"
+                  },
+                  "release": {
+                    "type": "null"
+                  },
+                  "build": {
+                    "type": "null"
+                  },
+                  "sbom": {
+                    "type": "null"
+                  },
+                  "transparency_log": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "sbom": {
+                "properties": {
+                  "status": {
+                    "not": {
+                      "const": "verified"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "sbom": {
+                "properties": {
+                  "format": {
+                    "type": "null"
+                  }
+                }
+              },
+              "links": {
+                "properties": {
+                  "release": {
+                    "type": "null"
+                  },
+                  "sbom": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "summary": {
+            "not": {
+              "const": "verified"
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "release": {
+            "type": "null"
+          }
+        }
+      }
+    }
+  ]
+}

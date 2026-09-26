@@ -1,0 +1,282 @@
+{
+  "kind": "PodList",
+  "apiVersion": "v1",
+  "metadata": {
+    "resourceVersion": "canary-rv-4f5e"
+  },
+  "items": [
+    {
+      "metadata": {
+        "name": "canary-pod-6a1f-server",
+        "namespace": "canary-namespace-8d2c",
+        "uid": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b60",
+        "labels": {
+          "app.kubernetes.io/component": "server",
+          "canary-label": "canary-label-value-2b1a"
+        },
+        "annotations": {
+          "canary-annotation": "canary-annotation-value-7c3d"
+        },
+        "ownerReferences": [
+          {
+            "kind": "ReplicaSet",
+            "name": "canary-rs-5e6f",
+            "uid": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c50"
+          }
+        ],
+        "unknownMemberCanary": "canary-unknown-5c9e"
+      },
+      "spec": {
+        "nodeName": "canary-node-19c4.internal",
+        "serviceAccountName": "canary-sa-2e7d",
+        "containers": [
+          {
+            "name": "server",
+            "image": "canary-registry.example/aboutme-server:canary-tag",
+            "env": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "hostIP": "10.9.8.7",
+        "podIP": "10.9.8.7",
+        "podIPs": [
+          {
+            "ip": "10.9.8.7"
+          },
+          {
+            "ip": "fd00:9:8::7"
+          }
+        ],
+        "startTime": "2026-09-20T01:02:03Z",
+        "containerStatuses": [
+          {
+            "name": "server",
+            "image": "canary-registry.example/aboutme-server:canary-tag",
+            "imageID": "docker-pullable://canary-registry.example/aboutme-server@sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+            "containerID": "containerd://canary-container-8e3b",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-09-20T01:02:04Z"
+              }
+            },
+            "unknownMemberCanary": "canary-unknown-5c9e"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "canary-pod-6a1f-web",
+        "namespace": "canary-namespace-8d2c",
+        "uid": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b61",
+        "labels": {
+          "app.kubernetes.io/component": "web",
+          "canary-label": "canary-label-value-2b1a"
+        },
+        "annotations": {
+          "canary-annotation": "canary-annotation-value-7c3d"
+        },
+        "ownerReferences": [
+          {
+            "kind": "ReplicaSet",
+            "name": "canary-rs-5e6f",
+            "uid": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c51"
+          }
+        ],
+        "unknownMemberCanary": "canary-unknown-5c9e"
+      },
+      "spec": {
+        "nodeName": "canary-node-19c4.internal",
+        "serviceAccountName": "canary-sa-2e7d",
+        "containers": [
+          {
+            "name": "web",
+            "image": "canary-registry.example/aboutme-web:canary-tag",
+            "env": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "hostIP": "10.9.8.7",
+        "podIP": "10.9.8.7",
+        "podIPs": [
+          {
+            "ip": "10.9.8.7"
+          },
+          {
+            "ip": "fd00:9:8::7"
+          }
+        ],
+        "startTime": "2026-09-20T01:02:03Z",
+        "containerStatuses": [
+          {
+            "name": "web",
+            "image": "canary-registry.example/aboutme-web:canary-tag",
+            "imageID": "docker-pullable://canary-registry.example/aboutme-web@sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+            "containerID": "containerd://canary-container-8e3b",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-09-20T01:02:05Z"
+              }
+            },
+            "unknownMemberCanary": "canary-unknown-5c9e"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "canary-pod-6a1f-caddy",
+        "namespace": "canary-namespace-8d2c",
+        "uid": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b62",
+        "labels": {
+          "app.kubernetes.io/component": "caddy",
+          "canary-label": "canary-label-value-2b1a"
+        },
+        "annotations": {
+          "canary-annotation": "canary-annotation-value-7c3d"
+        },
+        "ownerReferences": [
+          {
+            "kind": "ReplicaSet",
+            "name": "canary-rs-5e6f",
+            "uid": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c52"
+          }
+        ],
+        "unknownMemberCanary": "canary-unknown-5c9e"
+      },
+      "spec": {
+        "nodeName": "canary-node-19c4.internal",
+        "serviceAccountName": "canary-sa-2e7d",
+        "containers": [
+          {
+            "name": "caddy",
+            "image": "canary-registry.example/aboutme-caddy:canary-tag",
+            "env": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "hostIP": "10.9.8.7",
+        "podIP": "10.9.8.7",
+        "podIPs": [
+          {
+            "ip": "10.9.8.7"
+          },
+          {
+            "ip": "fd00:9:8::7"
+          }
+        ],
+        "startTime": "2026-09-20T01:02:03Z",
+        "containerStatuses": [
+          {
+            "name": "caddy",
+            "image": "canary-registry.example/aboutme-caddy:canary-tag",
+            "imageID": "docker-pullable://canary-registry.example/aboutme-caddy@sha256:cacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacaca",
+            "containerID": "containerd://canary-container-8e3b",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-09-20T01:02:06Z"
+              }
+            },
+            "unknownMemberCanary": "canary-unknown-5c9e"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "canary-pod-6a1f-maintenance",
+        "namespace": "canary-namespace-8d2c",
+        "uid": "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b63",
+        "labels": {
+          "app.kubernetes.io/component": "maintenance",
+          "canary-label": "canary-label-value-2b1a"
+        },
+        "annotations": {
+          "canary-annotation": "canary-annotation-value-7c3d"
+        },
+        "ownerReferences": [
+          {
+            "kind": "ReplicaSet",
+            "name": "canary-rs-5e6f",
+            "uid": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c53"
+          }
+        ],
+        "unknownMemberCanary": "canary-unknown-5c9e"
+      },
+      "spec": {
+        "nodeName": "canary-node-19c4.internal",
+        "serviceAccountName": "canary-sa-2e7d",
+        "containers": [
+          {
+            "name": "maintenance",
+            "image": "canary-registry.example/aboutme-maintenance:canary-tag",
+            "env": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "hostIP": "10.9.8.7",
+        "podIP": "10.9.8.7",
+        "podIPs": [
+          {
+            "ip": "10.9.8.7"
+          },
+          {
+            "ip": "fd00:9:8::7"
+          }
+        ],
+        "startTime": "2026-09-20T01:02:03Z",
+        "containerStatuses": [
+          {
+            "name": "maintenance",
+            "image": "canary-registry.example/aboutme-maintenance:canary-tag",
+            "imageID": "docker-pullable://canary-registry.example/aboutme-maintenance@sha256:c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4",
+            "containerID": "containerd://canary-container-8e3b",
+            "ready": true,
+            "restartCount": 0,
+            "state": {
+              "running": {
+                "startedAt": "2026-09-20T01:02:07Z"
+              }
+            },
+            "unknownMemberCanary": "canary-unknown-5c9e"
+          }
+        ]
+      }
+    }
+  ],
+  "unknownMemberCanary": "canary-unknown-5c9e"
+}

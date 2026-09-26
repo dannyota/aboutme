@@ -1,0 +1,392 @@
+{
+  "tasks": [
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee01",
+      "clusterArn": "arn:aws:ecs:ap-southeast-1:123456789012:cluster/canary-cluster-7f3a",
+      "containerInstanceArn": "arn:aws:ecs:ap-southeast-1:123456789012:container-instance/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee99",
+      "taskDefinitionArn": "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/canary-family-4b2c:17",
+      "availabilityZone": "ap-southeast-1b",
+      "capacityProviderName": "canary-capacity-3d8e",
+      "group": "service:canary-group-1a2b",
+      "startedBy": "canary-started-by-6f0d",
+      "lastStatus": "RUNNING",
+      "desiredStatus": "RUNNING",
+      "launchType": "EC2",
+      "connectivity": "CONNECTED",
+      "connectivityAt": 1789999970,
+      "createdAt": 1789999940,
+      "pullStartedAt": 1789999950,
+      "pullStoppedAt": 1789999960,
+      "startedAt": 1790000000,
+      "cpu": "512",
+      "memory": "1024",
+      "version": 7,
+      "enableExecuteCommand": false,
+      "healthStatus": "HEALTHY",
+      "attachments": [
+        {
+          "id": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+          "type": "ElasticNetworkInterface",
+          "status": "ATTACHED",
+          "details": [
+            {
+              "name": "privateIPv4Address",
+              "value": "10.9.8.7"
+            },
+            {
+              "name": "macAddress",
+              "value": "0a:1b:2c:3d:4e:5f"
+            },
+            {
+              "name": "subnetId",
+              "value": "subnet-canary0a1b2c3d"
+            },
+            {
+              "name": "privateDnsName",
+              "value": "ip-10-9-8-7.canary.internal"
+            }
+          ]
+        }
+      ],
+      "attributes": [
+        {
+          "name": "ecs.cpu-architecture",
+          "value": "canary-attr-arm"
+        }
+      ],
+      "overrides": {
+        "containerOverrides": [
+          {
+            "name": "server",
+            "environment": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ],
+        "taskRoleArn": "arn:aws:iam::123456789012:role/canary-task-role",
+        "executionRoleArn": "arn:aws:iam::123456789012:role/canary-exec-role"
+      },
+      "tags": [
+        {
+          "key": "canary-tag-key",
+          "value": "canary-tag-value-9e2f"
+        }
+      ],
+      "ephemeralStorage": {
+        "sizeInGiB": 20
+      },
+      "unknownMemberCanary": "canary-unknown-5c9e",
+      "containers": [
+        {
+          "containerArn": "arn:aws:ecs:ap-southeast-1:123456789012:container/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee01/0f1e2d3c-4b5a-4968-8776-655443322110",
+          "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee01",
+          "name": "server",
+          "image": "canary-registry.example/aboutme-server:canary-tag",
+          "imageDigest": "sha256:5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+          "runtimeId": "c0ffee00c0ffee00c0ffee00c0ffee01-canary-runtime-5d1e",
+          "lastStatus": "RUNNING",
+          "healthStatus": "HEALTHY",
+          "cpu": "256",
+          "memory": "512",
+          "networkBindings": [
+            {
+              "bindIP": "10.9.8.7",
+              "containerPort": 8443,
+              "hostPort": 8443,
+              "protocol": "tcp"
+            }
+          ],
+          "networkInterfaces": [
+            {
+              "attachmentId": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+              "privateIpv4Address": "10.9.8.7",
+              "ipv6Address": "fd00:9:8::7"
+            }
+          ],
+          "managedAgents": [
+            {
+              "name": "ExecuteCommandAgent",
+              "lastStatus": "RUNNING",
+              "reason": "canary-agent-reason"
+            }
+          ],
+          "unknownMemberCanary": "canary-unknown-5c9e"
+        },
+        {
+          "containerArn": "arn:aws:ecs:ap-southeast-1:123456789012:container/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee01/0f1e2d3c-4b5a-4968-8776-655443322110",
+          "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee01",
+          "name": "caddy",
+          "image": "canary-registry.example/aboutme-caddy:canary-tag",
+          "imageDigest": "sha256:cacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacaca",
+          "runtimeId": "c0ffee00c0ffee00c0ffee00c0ffee01-canary-runtime-5d1e",
+          "lastStatus": "RUNNING",
+          "healthStatus": "HEALTHY",
+          "cpu": "256",
+          "memory": "512",
+          "networkBindings": [
+            {
+              "bindIP": "10.9.8.7",
+              "containerPort": 8443,
+              "hostPort": 8443,
+              "protocol": "tcp"
+            }
+          ],
+          "networkInterfaces": [
+            {
+              "attachmentId": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+              "privateIpv4Address": "10.9.8.7",
+              "ipv6Address": "fd00:9:8::7"
+            }
+          ],
+          "managedAgents": [
+            {
+              "name": "ExecuteCommandAgent",
+              "lastStatus": "RUNNING",
+              "reason": "canary-agent-reason"
+            }
+          ],
+          "unknownMemberCanary": "canary-unknown-5c9e"
+        }
+      ]
+    },
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee02",
+      "clusterArn": "arn:aws:ecs:ap-southeast-1:123456789012:cluster/canary-cluster-7f3a",
+      "containerInstanceArn": "arn:aws:ecs:ap-southeast-1:123456789012:container-instance/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee99",
+      "taskDefinitionArn": "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/canary-family-4b2c:17",
+      "availabilityZone": "ap-southeast-1b",
+      "capacityProviderName": "canary-capacity-3d8e",
+      "group": "service:canary-group-1a2b",
+      "startedBy": "canary-started-by-6f0d",
+      "lastStatus": "RUNNING",
+      "desiredStatus": "RUNNING",
+      "launchType": "EC2",
+      "connectivity": "CONNECTED",
+      "connectivityAt": 1789999980,
+      "createdAt": 1789999950,
+      "pullStartedAt": 1789999960,
+      "pullStoppedAt": 1789999970,
+      "startedAt": 1790000010,
+      "cpu": "512",
+      "memory": "1024",
+      "version": 7,
+      "enableExecuteCommand": false,
+      "healthStatus": "HEALTHY",
+      "attachments": [
+        {
+          "id": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+          "type": "ElasticNetworkInterface",
+          "status": "ATTACHED",
+          "details": [
+            {
+              "name": "privateIPv4Address",
+              "value": "10.9.8.7"
+            },
+            {
+              "name": "macAddress",
+              "value": "0a:1b:2c:3d:4e:5f"
+            },
+            {
+              "name": "subnetId",
+              "value": "subnet-canary0a1b2c3d"
+            },
+            {
+              "name": "privateDnsName",
+              "value": "ip-10-9-8-7.canary.internal"
+            }
+          ]
+        }
+      ],
+      "attributes": [
+        {
+          "name": "ecs.cpu-architecture",
+          "value": "canary-attr-arm"
+        }
+      ],
+      "overrides": {
+        "containerOverrides": [
+          {
+            "name": "server",
+            "environment": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ],
+        "taskRoleArn": "arn:aws:iam::123456789012:role/canary-task-role",
+        "executionRoleArn": "arn:aws:iam::123456789012:role/canary-exec-role"
+      },
+      "tags": [
+        {
+          "key": "canary-tag-key",
+          "value": "canary-tag-value-9e2f"
+        }
+      ],
+      "ephemeralStorage": {
+        "sizeInGiB": 20
+      },
+      "unknownMemberCanary": "canary-unknown-5c9e",
+      "containers": [
+        {
+          "containerArn": "arn:aws:ecs:ap-southeast-1:123456789012:container/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee02/0f1e2d3c-4b5a-4968-8776-655443322110",
+          "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee02",
+          "name": "web",
+          "image": "canary-registry.example/aboutme-web:canary-tag",
+          "imageDigest": "sha256:7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e",
+          "runtimeId": "c0ffee00c0ffee00c0ffee00c0ffee02-canary-runtime-5d1e",
+          "lastStatus": "RUNNING",
+          "healthStatus": "HEALTHY",
+          "cpu": "256",
+          "memory": "512",
+          "networkBindings": [
+            {
+              "bindIP": "10.9.8.7",
+              "containerPort": 8443,
+              "hostPort": 8443,
+              "protocol": "tcp"
+            }
+          ],
+          "networkInterfaces": [
+            {
+              "attachmentId": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+              "privateIpv4Address": "10.9.8.7",
+              "ipv6Address": "fd00:9:8::7"
+            }
+          ],
+          "managedAgents": [
+            {
+              "name": "ExecuteCommandAgent",
+              "lastStatus": "RUNNING",
+              "reason": "canary-agent-reason"
+            }
+          ],
+          "unknownMemberCanary": "canary-unknown-5c9e"
+        }
+      ]
+    },
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee03",
+      "clusterArn": "arn:aws:ecs:ap-southeast-1:123456789012:cluster/canary-cluster-7f3a",
+      "containerInstanceArn": "arn:aws:ecs:ap-southeast-1:123456789012:container-instance/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee99",
+      "taskDefinitionArn": "arn:aws:ecs:ap-southeast-1:123456789012:task-definition/canary-family-4b2c:17",
+      "availabilityZone": "ap-southeast-1b",
+      "capacityProviderName": "canary-capacity-3d8e",
+      "group": "service:canary-group-1a2b",
+      "startedBy": "canary-started-by-6f0d",
+      "lastStatus": "RUNNING",
+      "desiredStatus": "RUNNING",
+      "launchType": "EC2",
+      "connectivity": "CONNECTED",
+      "connectivityAt": 1789999870,
+      "createdAt": 1789999840,
+      "pullStartedAt": 1789999850,
+      "pullStoppedAt": 1789999860,
+      "startedAt": 1789999900,
+      "cpu": "512",
+      "memory": "1024",
+      "version": 7,
+      "enableExecuteCommand": false,
+      "healthStatus": "HEALTHY",
+      "attachments": [
+        {
+          "id": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+          "type": "ElasticNetworkInterface",
+          "status": "ATTACHED",
+          "details": [
+            {
+              "name": "privateIPv4Address",
+              "value": "10.9.8.7"
+            },
+            {
+              "name": "macAddress",
+              "value": "0a:1b:2c:3d:4e:5f"
+            },
+            {
+              "name": "subnetId",
+              "value": "subnet-canary0a1b2c3d"
+            },
+            {
+              "name": "privateDnsName",
+              "value": "ip-10-9-8-7.canary.internal"
+            }
+          ]
+        }
+      ],
+      "attributes": [
+        {
+          "name": "ecs.cpu-architecture",
+          "value": "canary-attr-arm"
+        }
+      ],
+      "overrides": {
+        "containerOverrides": [
+          {
+            "name": "server",
+            "environment": [
+              {
+                "name": "CANARY_ENV",
+                "value": "canary-env-secret-4a7b"
+              }
+            ]
+          }
+        ],
+        "taskRoleArn": "arn:aws:iam::123456789012:role/canary-task-role",
+        "executionRoleArn": "arn:aws:iam::123456789012:role/canary-exec-role"
+      },
+      "tags": [
+        {
+          "key": "canary-tag-key",
+          "value": "canary-tag-value-9e2f"
+        }
+      ],
+      "ephemeralStorage": {
+        "sizeInGiB": 20
+      },
+      "unknownMemberCanary": "canary-unknown-5c9e",
+      "containers": [
+        {
+          "containerArn": "arn:aws:ecs:ap-southeast-1:123456789012:container/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee03/0f1e2d3c-4b5a-4968-8776-655443322110",
+          "taskArn": "arn:aws:ecs:ap-southeast-1:123456789012:task/canary-cluster-7f3a/c0ffee00c0ffee00c0ffee00c0ffee03",
+          "name": "caddy",
+          "image": "canary-registry.example/aboutme-caddy:canary-tag",
+          "imageDigest": "sha256:c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4c4",
+          "runtimeId": "c0ffee00c0ffee00c0ffee00c0ffee03-canary-runtime-5d1e",
+          "lastStatus": "RUNNING",
+          "healthStatus": "HEALTHY",
+          "cpu": "256",
+          "memory": "512",
+          "networkBindings": [
+            {
+              "bindIP": "10.9.8.7",
+              "containerPort": 8443,
+              "hostPort": 8443,
+              "protocol": "tcp"
+            }
+          ],
+          "networkInterfaces": [
+            {
+              "attachmentId": "3f2a9c1e-7b4d-4e8a-9c2b-1d5e6f7a8b9c",
+              "privateIpv4Address": "10.9.8.7",
+              "ipv6Address": "fd00:9:8::7"
+            }
+          ],
+          "managedAgents": [
+            {
+              "name": "ExecuteCommandAgent",
+              "lastStatus": "RUNNING",
+              "reason": "canary-agent-reason"
+            }
+          ],
+          "unknownMemberCanary": "canary-unknown-5c9e"
+        }
+      ]
+    }
+  ],
+  "failures": [],
+  "unknownMemberCanary": "canary-unknown-5c9e"
+}

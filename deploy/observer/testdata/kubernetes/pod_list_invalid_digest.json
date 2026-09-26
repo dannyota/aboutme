@@ -1,0 +1,18 @@
+{
+  "items": [
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "server" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "server",
+            "imageID": "containerd://sha256:not-a-digest",
+            "state": { "running": { "startedAt": "2026-09-20T10:00:00Z" } }
+          }
+        ]
+      }
+    }
+  ]
+}

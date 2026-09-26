@@ -1,0 +1,93 @@
+{
+  "items": [
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "server" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "server",
+            "imageID": "docker-pullable://ghcr.io/dannyota/aboutme-server@sha256:a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "state": { "running": { "startedAt": "2026-09-20T10:00:00Z" } }
+          },
+          {
+            "name": "sidecar",
+            "imageID": "docker-pullable://ghcr.io/dannyota/aboutme-sidecar@sha256:a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "state": { "running": { "startedAt": "2026-09-20T10:00:00Z" } }
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "server" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "server",
+            "imageID": "docker-pullable://ghcr.io/dannyota/aboutme-server@sha256:a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "state": { "running": { "startedAt": "2026-09-20T09:55:00Z" } }
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "server" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "server",
+            "imageID": "docker-pullable://ghcr.io/dannyota/aboutme-server@sha256:a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+            "state": { "terminated": { "startedAt": "2026-09-20T09:00:00Z" } }
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "web" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "web",
+            "imageID": "containerd://ghcr.io/dannyota/aboutme-web@sha256:e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6e6",
+            "state": { "running": { "startedAt": "2026-09-20T10:05:00Z" } }
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "caddy" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "caddy",
+            "imageID": "docker-pullable://ghcr.io/dannyota/aboutme-caddy@sha256:f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7",
+            "state": { "running": { "startedAt": "2026-09-20T09:59:00Z" } }
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": { "app.kubernetes.io/component": "maintenance" }
+      },
+      "status": {
+        "containerStatuses": [
+          {
+            "name": "maintenance",
+            "imageID": "docker-pullable://ghcr.io/dannyota/aboutme-caddy@sha256:f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7",
+            "state": { "running": { "startedAt": "2026-09-20T09:00:00Z" } }
+          }
+        ]
+      }
+    }
+  ]
+}

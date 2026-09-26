@@ -1,0 +1,78 @@
+{
+  "tasks": [
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:111122223333:task/aboutme-prod/0a1b2c3d4e5f60718293a4b5c6d7e8f9",
+      "lastStatus": "RUNNING",
+      "startedAt": 1750000000,
+      "containers": [
+        {
+          "name": "server",
+          "lastStatus": "RUNNING",
+          "imageDigest": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        {
+          "name": "caddy",
+          "lastStatus": "RUNNING",
+          "imageDigest": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        },
+        {
+          "name": "sidecar",
+          "lastStatus": "RUNNING",
+          "imageDigest": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        }
+      ]
+    },
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:111122223333:task/aboutme-prod/1a1b2c3d4e5f60718293a4b5c6d7e8fa",
+      "lastStatus": "RUNNING",
+      "startedAt": 1750000100,
+      "containers": [
+        {
+          "name": "server",
+          "lastStatus": "RUNNING",
+          "imageDigest": "sha256:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
+        },
+        {
+          "name": "caddy",
+          "lastStatus": "STOPPED",
+          "imageDigest": "sha256:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+        }
+      ]
+    },
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:111122223333:task/aboutme-prod/2a1b2c3d4e5f60718293a4b5c6d7e8fb",
+      "lastStatus": "PENDING",
+      "containers": [
+        {
+          "name": "server",
+          "lastStatus": "PENDING"
+        }
+      ]
+    },
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:111122223333:task/aboutme-prod/3a1b2c3d4e5f60718293a4b5c6d7e8fc",
+      "lastStatus": "RUNNING",
+      "startedAt": 1750000200,
+      "containers": [
+        {
+          "name": "web",
+          "lastStatus": "RUNNING",
+          "imageDigest": "sha256:c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3"
+        }
+      ]
+    },
+    {
+      "taskArn": "arn:aws:ecs:ap-southeast-1:111122223333:task/aboutme-prod/4a1b2c3d4e5f60718293a4b5c6d7e8fd",
+      "lastStatus": "RUNNING",
+      "startedAt": 1750000300,
+      "containers": [
+        {
+          "name": "caddy",
+          "lastStatus": "RUNNING",
+          "imageDigest": "sha256:d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4"
+        }
+      ]
+    }
+  ],
+  "failures": []
+}
