@@ -72,7 +72,9 @@ edge_distribution_check() {
     say "expected exactly one CloudFront distribution for aboutme.vn; found $count; run tofu apply first"
     return 1
   }
-  origin=$(jq -c '[.DistributionList.Items[] | select(.Aliases.Items[]? == "aboutme.vn")][0].Origins.Items[0]' <<<"$dists")
+  # The distribution has more than one origin (the host and the transparency
+  # bucket), so the check reads the host origin by its OpenTofu origin_id.
+  origin=$(jq -c '[.DistributionList.Items[] | select(.Aliases.Items[]? == "aboutme.vn")][0].Origins.Items[]? | select(.Id == "host")' <<<"$dists")
   https_port=$(jq -r '.CustomOriginConfig.HTTPSPort // empty' <<<"$origin")
   protocol=$(jq -r '.CustomOriginConfig.OriginProtocolPolicy // empty' <<<"$origin")
   # CloudFront API 2020-05-31: CustomOriginConfig.OriginMtlsConfig.

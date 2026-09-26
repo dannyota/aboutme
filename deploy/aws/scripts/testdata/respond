@@ -648,15 +648,15 @@ case "$cmd $args" in
       edge_no_distribution)
         echo '{"DistributionList":{"Items":[]}}' ;;
       edge_wrong_origin)
-        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-198-51-100-1.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"Id":"host","DomainName":"ec2-198-51-100-1.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
       edge_wrong_port)
-        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"Id":"host","DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
       edge_wrong_protocol)
-        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"match-viewer","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"Id":"host","DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"match-viewer","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
       edge_no_mtls)
-        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only"}}]}}]}}' ;;
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn"]},"Origins":{"Items":[{"Id":"host","DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only"}}]}}]}}' ;;
       *)
-        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn","www.aboutme.vn"]},"Origins":{"Items":[{"DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
+        echo '{"DistributionList":{"Items":[{"Aliases":{"Items":["aboutme.vn","www.aboutme.vn"]},"Origins":{"Items":[{"Id":"transparency","DomainName":"aboutme-prod-transparency-1.s3.ap-southeast-1.amazonaws.com","S3OriginConfig":{"OriginAccessIdentity":""}},{"Id":"host","DomainName":"ec2-192-0-2-10.ap-southeast-1.compute.amazonaws.com","CustomOriginConfig":{"HTTPSPort":8443,"OriginProtocolPolicy":"https-only","OriginMtlsConfig":{"ClientCertificateArn":"arn:aws:acm:us-east-1:1:certificate/client"}}}]}}]}}' ;;
     esac ;;
   # The snapshot name's time is fixed at 2026-10-20T00:00Z.
   "date -u +%Y%m%d%H%M") echo 202610200000 ;;
