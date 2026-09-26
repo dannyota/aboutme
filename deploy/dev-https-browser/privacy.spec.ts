@@ -171,13 +171,19 @@ function expectedNegativeConsole(
         url.search === "") ||
       (status === 404 &&
         revokedSlug !== undefined &&
-        [
+        ([
           `/${revokedSlug}`,
           `/api/v1/public/resumes/${revokedSlug}`,
           `/api/v1/public/resumes/${revokedSlug}/photo`,
           `/api/v1/public/resumes/${revokedSlug}/pdf`,
           `/api/v1/public/resumes/${revokedSlug}/og.png`,
-        ].includes(url.pathname)) ||
+        ].includes(url.pathname) ||
+          // The stored card's versioned URL (docs/design/link-previews.md,
+          // "Build, storage, and serving"); its 16-hex version varies per
+          // resume, so this checks the shape rather than a literal path.
+          new RegExp(
+            `^/api/v1/public/resumes/${revokedSlug}/og/[0-9a-f]{16}\\.png$`,
+          ).test(url.pathname))) ||
       (status === 409 &&
         tombstoneResumeID !== undefined &&
         url.pathname === `/api/v1/resumes/${tombstoneResumeID}/publish`))
@@ -514,7 +520,7 @@ async function deleteThroughReauth(page: Page): Promise<void> {
 async function publicReads(
   page: Page,
   slug: string,
-): Promise<Record<string, number | string>> {
+): Promise<Record<string, number | string | null>> {
   return page.evaluate(async (value) => {
     const paths = {
       html: `/${value}`,
@@ -523,10 +529,26 @@ async function publicReads(
       pdf: `/api/v1/public/resumes/${value}/pdf`,
       share: `/api/v1/public/resumes/${value}/og.png`,
     };
-    const result: Record<string, number | string> = {};
+    const result: Record<string, number | string | null> = {};
+    let htmlBody = "";
     for (const [name, path] of Object.entries(paths)) {
-      result[name] = (await fetch(path, { cache: "no-store" })).status;
+      const response = await fetch(path, { cache: "no-store" });
+      result[name] = response.status;
+      if (name === "html") htmlBody = await response.text();
     }
+    // The stored card's versioned URL, present only while the page is live
+    // (docs/design/link-previews.md, "Build, storage, and serving").
+    const match = /<meta property="og:image" content="([^"]*)"/u
+      .exec(htmlBody);
+    result.shareVersionedPath = match?.[1] === undefined
+      ? null
+      : new URL(match[1]).pathname;
+    result.shareVersioned = result.shareVersionedPath === null
+      ? null
+      : (await fetch(
+          result.shareVersionedPath as string,
+          { cache: "no-store" },
+        )).status;
     const sitemap = await fetch("/sitemap.xml", { cache: "no-store" });
     result.discovery = await sitemap.text();
     result.discoveryStatus = sitemap.status;
@@ -605,8 +627,13 @@ test("proves account export, reauthentication, and deletion", async ({
       pdf: 200,
       photo: 200,
       share: 200,
+      shareVersioned: 200,
     });
+    expect(live.shareVersionedPath).toMatch(new RegExp(
+      `^/api/v1/public/resumes/${prepared.slug}/og/[0-9a-f]{16}\\.png$`,
+    ));
     expect(live.discovery).toContain(`/${prepared.slug}`);
+    const liveShareVersionedPath = live.shareVersionedPath as string;
 
     stage("export");
     await page.goto("/app/settings/sessions");
@@ -774,7 +801,15 @@ test("proves account export, reauthentication, and deletion", async ({
       pdf: 404,
       photo: 404,
       share: 404,
+      shareVersionedPath: null,
     });
+    // The version the live page named keeps returning the public 404, not
+    // the resume's actual data, once revoked.
+    const revokedVersioned = await publicPage.evaluate(
+      async (path) => (await fetch(path, { cache: "no-store" })).status,
+      liveShareVersionedPath,
+    );
+    expect(revokedVersioned).toBe(404);
     expect(revoked.discovery).not.toContain(`/${prepared.slug}`);
     steps.publicRevoked = true;
 

@@ -21,7 +21,7 @@ import {
   PRINT_WORKER_DEADLINE_MS,
   runPrintWorker,
 } from '../../server/utils/print/runner';
-import { printEnvelope } from './fixture';
+import { cardEnvelope, printEnvelope } from './fixture';
 
 const directories: string[] = [];
 
@@ -60,6 +60,17 @@ describe('print worker build', () => {
         deadlineMs: PRINT_WORKER_DEADLINE_MS,
         workerUrl: new URL(`file://${worker}`),
       })).resolves.toContain('data-print-document="true"');
+      // The same worker draws the link-preview card, and its CSS ships in
+      // print.css, the only stylesheet the card page may load.
+      expect(readFileSync(css, 'utf8')).toContain('.preview-card-body');
+      const card = await runPrintWorker(cardEnvelope(), {
+        signal: new AbortController().signal,
+        deadlineMs: PRINT_WORKER_DEADLINE_MS,
+        workerUrl: new URL(`file://${worker}`),
+      });
+      expect(card).toContain('<body class="preview-card-print">');
+      expect(card).toContain('Nguyễn Văn An');
+      expect(card).not.toContain('resume-document');
     },
   );
 

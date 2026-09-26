@@ -46,6 +46,11 @@ export type PublishPageCopy = {
   };
 };
 
+export type PublishPreviewCopy = {
+  readonly heading: string;
+  readonly caption: string;
+};
+
 export type PublishCopy = {
   readonly title: string;
   readonly description: string;
@@ -92,6 +97,7 @@ export type PublishCopy = {
   readonly copied: string;
   readonly copyFailed: string;
   readonly page: PublishPageCopy;
+  readonly preview: PublishPreviewCopy;
 };
 
 export const publishCopy: WorkspaceCopy<PublishCopy> = {
@@ -198,6 +204,12 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
         generic: 'Kiểm tra biểu tượng thẻ.',
       },
     },
+    preview: {
+      heading: 'Xem trước khi chia sẻ CV',
+      caption:
+        'Ứng dụng chat và mạng xã hội hiển thị thẻ như thế này. '
+        + 'Mỗi ứng dụng có thể cắt ảnh khác nhau.',
+    },
   },
   en: {
     title: 'Publish resume',
@@ -302,6 +314,12 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
         invalid_emoji: 'Enter exactly one emoji.',
         generic: 'Check the tab icon.',
       },
+    },
+    preview: {
+      heading: 'Preview when your resume is shared',
+      caption:
+        'Chat apps and social networks show a card like this. '
+        + 'Each app may crop it.',
     },
   },
 };

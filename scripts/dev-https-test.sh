@@ -412,6 +412,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'PASSKEY_ENROLLMENT_ENABLED=true'
   assert_contains "$server_env" 'TOTP_ACTIVE_KEY='
   assert_contains "$server_env" 'TOTP_ENROLLMENT_ENABLED=true'
+  assert_contains "$server_env" 'PREVIEW_CARD_ENABLED=true'
 
   [ -f .dev/native-https/input/caddy-root.crt ] || fail "exported Caddy root is missing"
   mode=$(stat -c '%a' .dev/native-https/input/caddy-root.crt)

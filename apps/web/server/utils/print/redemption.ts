@@ -5,7 +5,7 @@ import {
   decodePrintEnvelopeBytes,
   PRINT_ENVELOPE_MAX_BYTES,
   PRINT_FAILURE,
-  type PrintEnvelope,
+  type PrintJobEnvelope,
 } from './envelope';
 
 export const PRINT_REDEMPTION_DEADLINE_MS = 5_000;
@@ -17,7 +17,7 @@ export interface PrintRedemptionRequest {
 }
 
 export interface PrintRedemptionClient {
-  redeem: (request: PrintRedemptionRequest) => Promise<PrintEnvelope>;
+  redeem: (request: PrintRedemptionRequest) => Promise<PrintJobEnvelope>;
 }
 
 export interface PrintRedemptionClientOptions {
@@ -93,7 +93,9 @@ const rejectResponse = async (response: Response): Promise<never> => {
   return fail();
 };
 
-const readEnvelope = async (response: Response): Promise<PrintEnvelope> => {
+const readEnvelope = async (
+  response: Response,
+): Promise<PrintJobEnvelope> => {
   if (
     response.status !== 200
     || response.redirected

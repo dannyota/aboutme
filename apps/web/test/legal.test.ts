@@ -57,8 +57,8 @@ describe('privacy and terms pages', () => {
     );
     expect(wrapper.text()).toContain(
       'dịch vụ đó sẽ lấy tiêu đề trang, phần tóm tắt và ảnh xem trước của '
-      + 'trang, và có thể giữ bản sao riêng của họ sau khi bạn ngừng công '
-      + 'khai.',
+      + 'trang (họ tên, tiêu đề và ảnh của bạn), và có thể giữ bản sao riêng '
+      + 'của họ sau khi bạn ngừng công khai.',
     );
     expect(wrapper.text()).toContain('Amazon Route 53 cung cấp dịch vụ DNS.');
     expect(wrapper.text()).not.toContain('Cloudflare');
@@ -107,8 +107,9 @@ describe('privacy and terms pages', () => {
     );
     expect(wrapper.text()).toContain(
       'When anyone shares your public link in a chat app or social network, '
-      + 'that service fetches the page\'s title, summary, and preview image, '
-      + 'and may keep its own copy after you unpublish.',
+      + 'that service fetches the page\'s title, summary, and preview image '
+      + '(your name, headline, and photo), and may keep its own copy after '
+      + 'you unpublish.',
     );
     expect(wrapper.text()).toContain('Amazon Route 53 provides DNS.');
     expect(wrapper.text()).not.toContain('Cloudflare');

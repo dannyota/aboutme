@@ -160,7 +160,9 @@ export async function renderPublicResume(
       }),
     );
     const discoveryScript = jsonLd(request);
-    const imageURL = [
+    // The stored card's versioned URL when the server names one, else the
+    // og.png alias (docs/design/link-previews.md, "Page head").
+    const imageURL = request.preview?.imageUrl ?? [
       request.canonicalOrigin,
       '/api/v1/public/resumes/',
       request.publicResume.slug,

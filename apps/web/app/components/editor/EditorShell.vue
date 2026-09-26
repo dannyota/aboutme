@@ -307,6 +307,7 @@ async function discardAndSignIn(): Promise<void> {
       :open="publishOpen"
       :actions="actions"
       :record="record"
+      :photo-url="photoUrl"
       @close="publishOpen = false"
       @focus-issue="focusIssue"
     />

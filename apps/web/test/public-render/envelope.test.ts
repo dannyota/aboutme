@@ -140,3 +140,34 @@ describe('public render envelope preview', () => {
     }
   });
 });
+
+describe('public render envelope card image', () => {
+  const imageUrl
+    = 'https://resume.example/api/v1/public/resumes/ada1/og/0123456789abcdef.png';
+
+  it('accepts preview text with and without the card URL', () => {
+    expect(decode(withPreview({ imageUrl })).preview?.imageUrl)
+      .toBe(imageUrl);
+    expect(decode({ ...base, preview }).preview?.imageUrl).toBeUndefined();
+  });
+
+  it('accepts only this page\'s versioned card URL', () => {
+    for (const value of [
+      '',
+      null,
+      7,
+      'https://resume.example/api/v1/public/resumes/ada1/og.png',
+      'https://other.example/api/v1/public/resumes/ada1/og/0123456789abcdef.png',
+      'https://resume.example/api/v1/public/resumes/bob1/og/0123456789abcdef.png',
+      'https://resume.example/api/v1/public/resumes/ada1/og/0123456789ABCDEF.png',
+      'https://resume.example/api/v1/public/resumes/ada1/og/0123456789abcde.png',
+      'https://resume.example/api/v1/public/resumes/ada1/og/0123456789abcdef0.png',
+      `${imageUrl}?v=1`,
+      `${imageUrl}#x`,
+      ` ${imageUrl}`,
+      `${imageUrl}"><script>`,
+    ]) {
+      rejects(withPreview({ imageUrl: value }));
+    }
+  });
+});

@@ -407,4 +407,26 @@ describe('link-preview head', () => {
     ].join(''));
     expect(html).not.toMatch(/name="description"|og:title|og:type/u);
   });
+
+  it('names the stored card verbatim when the server sends it', async () => {
+    const imageUrl = 'https://resume.example/api/v1/public/resumes/ada1/og/'
+      + '0123456789abcdef.png';
+    const html = await renderPublicResume({
+      ...request(),
+      preview: {
+        title: 'Ada Lovelace',
+        description: 'Writes the first program.',
+        locale: 'en_US',
+        imageAlt: 'Ada Lovelace',
+        imageUrl,
+      },
+    }, VERSIONS);
+    expect(previewHead(html)).toContain(
+      `<meta property="og:image" content="${imageUrl}">`,
+    );
+    expect(previewHead(html)).toContain(
+      `<meta name="twitter:image" content="${imageUrl}">`,
+    );
+    expect(html).not.toContain('/og.png');
+  });
 });

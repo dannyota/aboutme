@@ -150,8 +150,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'trạng sức khoẻ, hoặc tôn giáo, vào một CV công khai.',
             'Khi bất kỳ ai chia sẻ đường dẫn công khai của bạn trong một ứng '
             + 'dụng nhắn tin hoặc mạng xã hội, dịch vụ đó sẽ lấy tiêu đề '
-            + 'trang, phần tóm tắt và ảnh xem trước của trang, và có thể giữ '
-            + 'bản sao riêng của họ sau khi bạn ngừng công khai.',
+            + 'trang, phần tóm tắt và ảnh xem trước của trang (họ tên, tiêu '
+            + 'đề và ảnh của bạn), và có thể giữ bản sao riêng của họ sau khi '
+            + 'bạn ngừng công khai.',
           ],
         },
         {
@@ -453,8 +454,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'information, or religion, in a public resume.',
             'When anyone shares your public link in a chat app or social '
             + 'network, that service fetches the page\'s title, summary, and '
-            + 'preview image, and may keep its own copy after you '
-            + 'unpublish.',
+            + 'preview image (your name, headline, and photo), and may keep '
+            + 'its own copy after you unpublish.',
           ],
         },
         {
