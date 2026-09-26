@@ -23,7 +23,7 @@ import (
 // table this list does not name.
 var businessTables = []string{
 	"users", "identities", "oauth_transactions", "sessions", "idempotency_records",
-	"resumes", "resume_preview_cards", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
+	"resumes", "resume_preview_cards", "resume_view_days", "resume_share_signal_days", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
 	"public_state", "password_credentials", "password_registrations",
 	"password_reset_tokens", "auth_email_jobs", "oauth_clients",
 	"oauth_authorization_codes", "oauth_grants", "oauth_tokens",

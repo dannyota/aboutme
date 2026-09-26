@@ -100,6 +100,11 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'mật khẩu đã từng bị lộ hay chưa qua dịch vụ Have I Been '
             + 'Pwned. Chỉ 5 ký tự đầu của mã băm SHA-1 được gửi đi, không '
             + 'bao giờ gửi mật khẩu.',
+            'Lượt xem CV công khai: chúng tôi đếm lượt xem và chỉ lưu tổng '
+            + 'số theo ngày. Để phân biệt người với bot, địa chỉ IP và '
+            + 'thông tin trình duyệt của bạn chỉ được dùng trong bộ nhớ và '
+            + 'bị xoá trong ngày, và trình duyệt của bạn giải một phép tính '
+            + 'nhỏ. Không dùng cookie.',
           ],
         },
         {
@@ -119,7 +124,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Chúng tôi không làm gì',
           items: [
             'Không quảng cáo.',
-            'Không dùng công cụ phân tích hay mã theo dõi.',
+            'Không dùng công cụ phân tích hay mã theo dõi của bên thứ ba, '
+            + 'không dùng mã quảng cáo. Chúng tôi chỉ đếm lượt xem CV công '
+            + 'khai như mô tả ở trên.',
             'Không bán dữ liệu của bạn và không chia sẻ dữ liệu cho mục đích '
             + 'tiếp thị.',
             'Cookie chỉ dùng để giữ phiên đăng nhập, hoàn tất đăng nhập bằng '
@@ -411,6 +418,11 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'has appeared in a known breach using Have I Been Pwned. Only '
             + 'the first 5 characters of its SHA-1 hash are sent, never the '
             + 'password.',
+            'Views of public resumes: we count views and keep only daily '
+            + 'totals. To tell people from bots, your IP address and '
+            + 'browser details are used in memory only and discarded the '
+            + 'same day, and your browser solves a small computing task. '
+            + 'No cookie is used.',
           ],
         },
         {
@@ -430,7 +442,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'What we don\'t do',
           items: [
             'No ads.',
-            'No analytics or tracking scripts.',
+            'No third-party analytics or advertising trackers. We count '
+            + 'views of public resumes only as described above.',
             'We don\'t sell your data or share it for marketing.',
             'Cookies are used only to keep you signed in, to complete '
             + 'Google or LinkedIn sign-in, to hold a pending second-factor '

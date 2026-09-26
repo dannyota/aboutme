@@ -122,6 +122,11 @@ tags:
       routes use privacy-safe public DTOs, exact-body validators, and the
       shared public generation gate. They never expose owner resume objects or
       private media keys.
+  - name: views
+    description: >-
+      Anonymous view counts. The public page's script calls start and collect;
+      the owner reads daily aggregates. No route stores personal data, and no
+      MCP tool reads counts (docs/design/viewer-analytics/README.md).
 paths:
   /events:
     get:
@@ -2981,6 +2986,95 @@ paths:
         "500":
           $ref: "#/components/responses/ResumeInternalError"
 
+  /views:
+    get:
+      operationId: listResumeViewCounts
+      tags: [views]
+      security:
+        - sessionCookie: []
+      summary: List view counts for the owner's resumes
+      description: >-
+        Returns, for every owned resume that is live or has any stored count,
+        the real and filtered views over the last 7, 30, and 90 days. Days are
+        Asia/Ho_Chi_Minh dates and include today. Counts hold no personal data
+        (docs/design/viewer-analytics/counting.md). The route reads the
+        session cookie only; bearer tokens and agents never reach it.
+      responses:
+        "200":
+          description: The owner's view summaries, newest resume first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewSummaryResponse"
+              example:
+                data:
+                  today: "2026-09-26"
+                  resumes:
+                    - id: 018f5b6a-9a3e-7c21-8b1e-000000000010
+                      title: Backend engineer
+                      slug: ada-lovelace
+                      live: true
+                      last7: { real: 4, filtered: 9 }
+                      last30: { real: 12, filtered: 31 }
+                      last90: { real: 20, filtered: 55 }
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
+  /views/{id}:
+    get:
+      operationId: getResumeViewCounts
+      tags: [views]
+      security:
+        - sessionCookie: []
+      summary: Read one resume's daily view counts
+      description: >-
+        Returns 90 daily rows (oldest first, ending today), 12 monthly totals
+        (oldest first, ending this month), and link-preview fetches by
+        platform over the last 90 days. `real` is the counted views; the
+        other day fields are the filtered outcomes. A resume owned by another
+        account answers exactly like a missing one.
+      parameters:
+        - $ref: "#/components/parameters/ResumeID"
+      responses:
+        "200":
+          description: The resume's view counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumeViewCountsResponse"
+              example:
+                data:
+                  id: 018f5b6a-9a3e-7c21-8b1e-000000000010
+                  title: Backend engineer
+                  slug: ada-lovelace
+                  live: true
+                  today: "2026-09-26"
+                  days:
+                    - date: "2026-09-26"
+                      real: 2
+                      bot: 1
+                      datacenter: 3
+                      anomaly: 0
+                      invalid: 1
+                      crawler: 4
+                  months:
+                    - month: "2026-09"
+                      real: 12
+                      filtered: 31
+                  previews:
+                    - platform: zalo
+                      fetches: 3
+        "401":
+          $ref: "#/components/responses/ResumeUnauthorized"
+        "404":
+          $ref: "#/components/responses/ResumeNotFound"
+        "429":
+          $ref: "#/components/responses/ResumeRateLimited"
+        "500":
+          $ref: "#/components/responses/ResumeInternalError"
   /public/resumes/{slug}:
     get:
       operationId: getPublicResume
@@ -3203,6 +3297,131 @@ paths:
         - $ref: "#/components/parameters/PreviewCardVersion"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses: *publicCardResponses
+  /public/resumes/{slug}/views/start:
+    post:
+      operationId: startPublicResumeView
+      tags: [views]
+      security: []
+      summary: Start counting a view of a published resume
+      description: >-
+        Called once by the public page's script at load. Returns a one-time
+        sealed view token and an ALTCHA v2 proof-of-work challenge bound to
+        it (docs/adr/0061-layered-human-view-counting.md). The request needs
+        an `Origin` equal to the site origin and a JSON body; it carries no
+        CSRF token because it holds no session authority. A `__Host-session`
+        cookie is read only to recognize the resume's owner: then `owner` is
+        true, no token is issued, and the owner's network is excluded from
+        the day's count. Limited to 30 requests a minute per client IP.
+      parameters:
+        - $ref: "#/components/parameters/PublicSlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewStartRequest"
+            example: {}
+      responses:
+        "200":
+          description: >-
+            A token and challenge, or `owner: true` with neither.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/ViewNoStore"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewStartResponse"
+              example:
+                data:
+                  owner: false
+                  token: 3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+                  challenge:
+                    parameters:
+                      algorithm: PBKDF2/SHA-256
+                      nonce: 0f1e2d3c4b5a69788796a5b4
+                      salt: a1b2c3d4e5f60718293a4b5c
+                      cost: 1000
+                      keyLength: 32
+                      keyPrefix: 3f9a0c
+                      keySignature: 9d2c
+                      data:
+                        view: 3q2-7wAAAAAAAAAAAAAAAA
+                    signature: 5e8f
+        "400":
+          $ref: "#/components/responses/ViewBadRequest"
+        "403":
+          $ref: "#/components/responses/ViewOriginRejected"
+        "404":
+          $ref: "#/components/responses/ViewResumeNotFound"
+        "413":
+          $ref: "#/components/responses/ViewBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/ViewMediaTypeUnsupported"
+        "429":
+          $ref: "#/components/responses/ViewRateLimited"
+        "500":
+          $ref: "#/components/responses/ViewInternalError"
+        "503":
+          $ref: "#/components/responses/ViewUnavailable"
+  /public/views/collect:
+    post:
+      operationId: collectPublicResumeView
+      tags: [views]
+      security: []
+      summary: Report a view that passed the page's visible-time check
+      description: >-
+        Sent by the page's script after 8 seconds of visible time and one
+        trusted interaction, with the start token, its challenge, and the
+        solution. The server checks the token age (8 seconds to 30 minutes),
+        single use, the proof of work, the edge bot and hosting-network
+        labels, the day's per-network dedupe, the owner, and the hourly cap,
+        then answers `204` whatever the outcome, so a client cannot learn
+        which check rejected it. Only a malformed body is a `400`. Same
+        `Origin`, JSON, and rate rules as start.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ViewCollectRequest"
+            example:
+              token: 3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+              challenge:
+                parameters:
+                  algorithm: PBKDF2/SHA-256
+                  nonce: 0f1e2d3c4b5a69788796a5b4
+                  salt: a1b2c3d4e5f60718293a4b5c
+                  cost: 1000
+                  keyLength: 32
+                  keyPrefix: 3f9a0c
+                  keySignature: 9d2c
+                  data:
+                    view: 3q2-7wAAAAAAAAAAAAAAAA
+                signature: 5e8f
+              solution:
+                counter: 412
+                derivedKey: 3f9a0c
+      responses:
+        "204":
+          description: The report was accepted for evaluation.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/ViewNoStore"
+        "400":
+          $ref: "#/components/responses/ViewBadRequest"
+        "403":
+          $ref: "#/components/responses/ViewOriginRejected"
+        "404":
+          $ref: "#/components/responses/ViewRouteNotFound"
+        "413":
+          $ref: "#/components/responses/ViewBodyTooLarge"
+        "415":
+          $ref: "#/components/responses/ViewMediaTypeUnsupported"
+        "429":
+          $ref: "#/components/responses/ViewRateLimited"
+        "500":
+          $ref: "#/components/responses/ViewInternalError"
   /auth/password/register:
     post:
       operationId: postAuthPasswordRegister
@@ -5080,6 +5299,148 @@ components:
             error:
               code: request_invalid
               message: request is invalid
+    ViewBadRequest:
+      description: "`request_invalid`: the body is not the documented JSON object."
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: request_invalid
+              message: request is invalid
+    ViewOriginRejected:
+      description: >-
+        `origin_rejected`: the `Origin` header is missing, repeated, or not the
+        site origin.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: origin_rejected
+              message: request origin is not allowed
+    ViewResumeNotFound:
+      description: >-
+        `public_not_found`: the uniform answer for a missing, private,
+        renamed, or deleted resume. A percent-encoded spelling of the path
+        answers `not_found` instead, before any lookup.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: public_not_found
+              message: public resume not found
+    ViewRouteNotFound:
+      description: >-
+        `not_found`: the path was percent-encoded. Only the plain spelling is
+        served, so the edge's path match and the server's agree.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: not_found
+              message: no route for this path
+    ViewInternalError:
+      description: >-
+        `internal_error`: the optional session check failed. The body carries
+        no internal detail.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: internal_error
+              message: an internal error occurred
+    ViewBodyTooLarge:
+      description: "`body_too_large`: the body is over 4 KiB."
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: body_too_large
+              message: request body exceeds the 4096 byte limit
+    ViewMediaTypeUnsupported:
+      description: >-
+        `media_type_unsupported`: `Content-Type` is not exactly one
+        `application/json` value.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: media_type_unsupported
+              message: Content-Type must be application/json
+    ViewRateLimited:
+      description: "`rate_limited`: the 30-per-minute client IP budget is spent."
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            minimum: 1
+          example: 2
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: rate_limited
+              message: too many requests; retry later
+    ViewUnavailable:
+      description: >-
+        `temporarily_unavailable`: the one-time token store is full or the
+        database is unreachable. Nothing is counted.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ViewNoStore"
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            minimum: 1
+          example: 60
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: temporarily_unavailable
+              message: service temporarily unavailable
     PublicNotFound:
       description: >-
         `public_not_found`: the uniform answer for missing, private, renamed,
@@ -5668,6 +6029,11 @@ components:
               code: rate_limited
               message: too many requests; retry later
   headers:
+    ViewNoStore:
+      description: View counting responses are never stored.
+      schema:
+        type: string
+        const: no-store, no-transform
     PublicPDFAttachment:
       description: >-
         Public PDF download filename, `<Full-Name>-Resume.pdf`. `filename`
@@ -5897,6 +6263,252 @@ components:
               maxItems: 10
               items:
                 $ref: "#/components/schemas/OAuthAgentGrant"
+    ViewStartRequest:
+      type: object
+      description: An empty object; start takes no input beyond the path.
+      additionalProperties: false
+      maxProperties: 0
+    ViewChallenge:
+      type: object
+      description: >-
+        An ALTCHA v2 challenge, signed by the server. The client returns it
+        unchanged with its solution. `data.view` binds it to one view token.
+      additionalProperties: false
+      required: [parameters, signature]
+      properties:
+        parameters:
+          type: object
+          additionalProperties: false
+          required: [algorithm, nonce, salt, cost, keyLength, keyPrefix, keySignature, data]
+          properties:
+            algorithm:
+              type: string
+              const: PBKDF2/SHA-256
+            nonce:
+              type: string
+              pattern: "^[0-9a-f]{2,64}$"
+            salt:
+              type: string
+              pattern: "^[0-9a-f]{2,64}$"
+            cost:
+              type: integer
+              minimum: 1
+              maximum: 100000
+            keyLength:
+              type: integer
+              minimum: 16
+              maximum: 64
+            keyPrefix:
+              type: string
+              pattern: "^[0-9a-f]{1,128}$"
+            keySignature:
+              type: string
+              pattern: "^[0-9a-f]{1,128}$"
+            data:
+              type: object
+              additionalProperties: false
+              required: [view]
+              properties:
+                view:
+                  type: string
+                  pattern: "^[A-Za-z0-9_-]{22}$"
+        signature:
+          type: string
+          pattern: "^[0-9a-f]{1,128}$"
+    ViewStartResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [owner]
+          properties:
+            owner:
+              type: boolean
+              description: >-
+                True only when the request carries the resume owner's own
+                session. Then `token` and `challenge` are absent.
+            token:
+              type: string
+              description: Opaque one-time view token.
+              pattern: "^[A-Za-z0-9_-]{16,200}$"
+            challenge:
+              $ref: "#/components/schemas/ViewChallenge"
+    ViewCollectRequest:
+      type: object
+      additionalProperties: false
+      required: [token, challenge, solution]
+      properties:
+        token:
+          type: string
+          pattern: "^[A-Za-z0-9_-]{16,200}$"
+        challenge:
+          $ref: "#/components/schemas/ViewChallenge"
+        solution:
+          type: object
+          additionalProperties: false
+          required: [counter, derivedKey]
+          properties:
+            counter:
+              type: integer
+              minimum: 0
+              maximum: 10000000
+            derivedKey:
+              type: string
+              pattern: "^[0-9a-f]{2,128}$"
+    ViewTotals:
+      type: object
+      additionalProperties: false
+      required: [real, filtered]
+      properties:
+        real:
+          type: integer
+          minimum: 0
+          description: Views that passed every layer.
+        filtered:
+          type: integer
+          minimum: 0
+          description: >-
+            Bots, hosting networks, anomalies, failed checks, and crawlers.
+    ViewSummary:
+      type: object
+      additionalProperties: false
+      required: [id, title, slug, live, last7, last30, last90]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 160
+        slug:
+          type:
+            - string
+            - "null"
+        live:
+          type: boolean
+        last7:
+          $ref: "#/components/schemas/ViewTotals"
+        last30:
+          $ref: "#/components/schemas/ViewTotals"
+        last90:
+          $ref: "#/components/schemas/ViewTotals"
+    ViewSummaryResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [today, resumes]
+          properties:
+            today:
+              type: string
+              format: date
+              description: Today's Asia/Ho_Chi_Minh date.
+            resumes:
+              type: array
+              maxItems: 1000
+              items:
+                $ref: "#/components/schemas/ViewSummary"
+    ViewDay:
+      type: object
+      additionalProperties: false
+      required: [date, real, bot, datacenter, anomaly, invalid, crawler]
+      properties:
+        date:
+          type: string
+          format: date
+        real:
+          type: integer
+          minimum: 0
+        bot:
+          type: integer
+          minimum: 0
+        datacenter:
+          type: integer
+          minimum: 0
+        anomaly:
+          type: integer
+          minimum: 0
+        invalid:
+          type: integer
+          minimum: 0
+        crawler:
+          type: integer
+          minimum: 0
+    ViewMonth:
+      type: object
+      additionalProperties: false
+      required: [month, real, filtered]
+      properties:
+        month:
+          type: string
+          pattern: "^[0-9]{4}-[0-9]{2}$"
+        real:
+          type: integer
+          minimum: 0
+        filtered:
+          type: integer
+          minimum: 0
+    ViewPreviewPlatform:
+      type: string
+      description: The app whose link-preview fetcher requested the page.
+      enum:
+        [facebook, linkedin, x, telegram, whatsapp, slack, discord, skype, viber, zalo]
+    ViewPreviews:
+      type: object
+      additionalProperties: false
+      required: [platform, fetches]
+      properties:
+        platform:
+          $ref: "#/components/schemas/ViewPreviewPlatform"
+        fetches:
+          type: integer
+          minimum: 1
+    ResumeViewCountsResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [id, title, slug, live, today, days, months, previews]
+          properties:
+            id:
+              type: string
+              format: uuid
+            title:
+              type: string
+              maxLength: 160
+            slug:
+              type:
+                - string
+                - "null"
+            live:
+              type: boolean
+            today:
+              type: string
+              format: date
+            days:
+              type: array
+              maxItems: 90
+              items:
+                $ref: "#/components/schemas/ViewDay"
+            months:
+              type: array
+              maxItems: 12
+              items:
+                $ref: "#/components/schemas/ViewMonth"
+            previews:
+              type: array
+              maxItems: 10
+              items:
+                $ref: "#/components/schemas/ViewPreviews"
     Error:
       type: object
       description: Failure response wrapper.

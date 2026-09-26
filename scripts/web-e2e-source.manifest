@@ -275,6 +275,10 @@ apps/web/app/components/verify/VerifyLimits.vue
 apps/web/app/components/verify/VerifyStatusCard.vue
 apps/web/app/components/verify/useClipboardCopy.ts
 apps/web/app/components/verify/verifyAnnounce.ts
+apps/web/app/components/views/ViewsDailyChart.vue
+apps/web/app/components/views/ViewsFilteredBreakdown.vue
+apps/web/app/components/views/ViewsLinkPreviews.vue
+apps/web/app/components/views/ViewsResumeCard.vue
 apps/web/app/composables/agentGrants.ts
 apps/web/app/composables/identitySettings.ts
 apps/web/app/composables/passwordSettings.ts
@@ -356,6 +360,7 @@ apps/web/app/i18n/settings.ts
 apps/web/app/i18n/shell.ts
 apps/web/app/i18n/templates.ts
 apps/web/app/i18n/verify.ts
+apps/web/app/i18n/views.ts
 apps/web/app/i18n/workspace.ts
 apps/web/app/landing/copy.ts
 apps/web/app/landing/sampleContext.ts
@@ -373,6 +378,8 @@ apps/web/app/pages/app/new.vue
 apps/web/app/pages/app/resumes/[id].vue
 apps/web/app/pages/app/resumes/index.vue
 apps/web/app/pages/app/settings/sessions.vue
+apps/web/app/pages/app/views/[id].vue
+apps/web/app/pages/app/views/index.vue
 apps/web/app/pages/authorize.vue
 apps/web/app/pages/forgot-password.vue
 apps/web/app/pages/index.vue
@@ -388,6 +395,7 @@ apps/web/app/pages/verify-email.vue
 apps/web/app/pages/verify.vue
 apps/web/app/public-roots.generated.ts
 apps/web/app/public/public-resume.client.ts
+apps/web/app/public/viewBeacon.ts
 apps/web/app/realtime/controller.ts
 apps/web/app/realtime/owner.ts
 apps/web/app/stores/resumes.ts

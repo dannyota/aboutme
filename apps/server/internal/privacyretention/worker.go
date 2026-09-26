@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"github.com/dannyota/aboutme/apps/server/internal/viewcount"
 )
 
 const (
@@ -21,7 +22,11 @@ const (
 	cleanupTimeout          = 5 * time.Second
 	auditRetention          = 180 * 24 * time.Hour
 	slugReservation         = 180 * 24 * time.Hour
-	oauthClientIdle         = 24 * time.Hour
+	// viewCountDays is how long daily view counts are kept
+	// (docs/design/viewer-analytics/README.md, "Rules"). They are not
+	// personal data; the sweep bounds their growth.
+	viewCountDays   = 400
+	oauthClientIdle = 24 * time.Hour
 	// sessionRedactionLead covers the daily sweep schedule plus one missed
 	// run, so a session's IP and user agent are still redacted by its
 	// absolute expiry (90 days after sign-in, docs/design/security.md) even
@@ -71,6 +76,8 @@ type Result struct {
 	SlugTombstonesDeleted                     int64 `json:"slugTombstonesDeleted"`
 	SlugTombstonesBacklog                     int64 `json:"slugTombstonesBacklog"`
 	SlugTombstonesOldestSeconds               int64 `json:"slugTombstonesOldestSeconds"`
+	ViewCountDaysDeleted                      int64 `json:"viewCountDaysDeleted"`
+	ShareSignalDaysDeleted                    int64 `json:"shareSignalDaysDeleted"`
 
 	OAuthTransactionsDeleted       int64 `json:"oauthTransactionsDeleted"`
 	OAuthAuthorizationCodesDeleted int64 `json:"oauthAuthorizationCodesDeleted"`
@@ -267,6 +274,20 @@ func (w *Worker) Retain(ctx context.Context) (result Result, returnErr error) {
 	}
 	result.SlugTombstonesDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
 		return q.DeleteExpiredSlugTombstonesPage(ctx, store.DeleteExpiredSlugTombstonesPageParams{Cutoff: now.Add(-slugReservation), LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
+
+	viewCutoff := viewcount.Date(viewcount.Day(now).AddDate(0, 0, -viewCountDays))
+	result.ViewCountDaysDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteOldResumeViewDaysPage(ctx, store.DeleteOldResumeViewDaysPageParams{Cutoff: viewCutoff, LimitRows: limit})
+	})
+	if err != nil {
+		return w.failed(result)
+	}
+	result.ShareSignalDaysDeleted, result.Pages, err = runPages(runCtx, result.Pages, func(ctx context.Context, limit int32) (int64, error) {
+		return q.DeleteOldResumeShareSignalDaysPage(ctx, store.DeleteOldResumeShareSignalDaysPageParams{Cutoff: viewCutoff, LimitRows: limit})
 	})
 	if err != nil {
 		return w.failed(result)

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { LogOut, Moon, Settings2, Sun, UserRound } from '@lucide/vue';
+import {
+  ChartColumn, LogOut, Moon, Settings2, Sun, UserRound,
+} from '@lucide/vue';
 import { computed } from 'vue';
 import IconButton from '@/components/app/IconButton.vue';
 import { shellCopy } from '@/i18n/shell';
@@ -36,6 +38,12 @@ function signOut(): void {
       </IconButton>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="end">
+      <DropdownMenuItem
+        data-testid="account-menu-views"
+        @select="navigateTo('/app/views')"
+      >
+        <ChartColumn aria-hidden="true" />{{ copy.views }}
+      </DropdownMenuItem>
       <DropdownMenuItem
         data-testid="account-menu-settings"
         @select="navigateTo('/app/settings/sessions')"

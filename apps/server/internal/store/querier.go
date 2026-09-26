@@ -12,6 +12,11 @@ import (
 )
 
 type Querier interface {
+	AddResumeShareSignalDays(ctx context.Context, arg AddResumeShareSignalDaysParams) error
+	// Target-list unnest zips the equal-length arrays row by row. The join
+	// skips a resume deleted since the view; the cascade removes its rows
+	// otherwise.
+	AddResumeViewDays(ctx context.Context, arg AddResumeViewDaysParams) error
 	AdvanceDiscoveryGeneration(ctx context.Context) (int64, error)
 	// Compare-and-advance on a valid code: the WHERE guard is the single-use
 	// rule, so a replayed step (equal, not greater) affects zero rows and the
@@ -221,6 +226,9 @@ type Querier interface {
 	// Deletes exactly the candidate set the caller just locked. The batch bound
 	// lives in ListIdleOAuthClientCandidates; this statement never widens it.
 	DeleteOAuthClients(ctx context.Context, ids []uuid.UUID) (int64, error)
+	DeleteOldResumeShareSignalDaysPage(ctx context.Context, arg DeleteOldResumeShareSignalDaysPageParams) (int64, error)
+	// Daily counts are kept 400 days (docs/design/viewer-analytics/README.md).
+	DeleteOldResumeViewDaysPage(ctx context.Context, arg DeleteOldResumeViewDaysPageParams) (int64, error)
 	DeletePasswordRegistration(ctx context.Context, id uuid.UUID) (int64, error)
 	DeletePasswordResetToken(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUserParams) (int64, error)
@@ -293,6 +301,11 @@ type Querier interface {
 	// issue a code without a second consent.
 	GetLiveOAuthGrant(ctx context.Context, arg GetLiveOAuthGrantParams) (OAuthGrant, error)
 	GetLiveResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
+	GetLiveViewResumeByID(ctx context.Context, id uuid.UUID) (GetLiveViewResumeByIDRow, error)
+	// View count queries (docs/design/viewer-analytics/counting.md). Tables hold
+	// daily numbers only; days are Asia/Ho_Chi_Minh dates.
+	// The same live gate as GetPublicResumeBySlug.
+	GetLiveViewResumeBySlug(ctx context.Context, slug string) (GetLiveViewResumeBySlugRow, error)
 	// Ambiguous-delete recovery proves the exact immutable cleanup job without
 	// scanning or exposing unrelated object keys.
 	GetMediaDeletionJobByObjectKey(ctx context.Context, arg GetMediaDeletionJobByObjectKeyParams) (MediaDeletionJob, error)
@@ -323,6 +336,7 @@ type Querier interface {
 	// arm take the row lock and return the existing row; user_id itself never
 	// appears in a SET clause.
 	GetOrCreateIdempotencyUsageForUpdate(ctx context.Context, userID uuid.UUID) (IdempotencyUsage, error)
+	GetOwnedViewResume(ctx context.Context, arg GetOwnedViewResumeParams) (GetOwnedViewResumeRow, error)
 	GetPasswordCredential(ctx context.Context, userID uuid.UUID) (PasswordCredential, error)
 	GetPasswordCredentialForUpdate(ctx context.Context, userID uuid.UUID) (PasswordCredential, error)
 	GetPasswordRegistrationByDigest(ctx context.Context, tokenDigest []byte) (PasswordRegistration, error)
@@ -476,6 +490,8 @@ type Querier interface {
 	// as a deterministic tiebreaker for equal creation times.
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
+	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
+	ListResumeViewDays(ctx context.Context, arg ListResumeViewDaysParams) ([]ListResumeViewDaysRow, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
 	// Bounded key-ring health check across both tables without decrypting. A
 	// healthy ring holds at most two distinct IDs (one active, at most one
@@ -494,6 +510,9 @@ type Querier interface {
 	// expired row here outright instead of decrypting it
 	// (docs/design/totp-key-management.md#rotation).
 	ListTOTPEnrollmentsOffActiveKey(ctx context.Context, arg ListTOTPEnrollmentsOffActiveKeyParams) ([]TotpEnrollment, error)
+	// Every owned resume that is live or has counts, with totals over the last
+	// 7, 30, and 90 days.
+	ListViewSummaries(ctx context.Context, arg ListViewSummariesParams) ([]ListViewSummariesRow, error)
 	ListWebAuthnCredentialsForUser(ctx context.Context, userID uuid.UUID) ([]WebauthnCredential, error)
 	// Account deletion owns the global lock order documented in
 	// docs/design/operations.md. The caller takes slug advisory locks and

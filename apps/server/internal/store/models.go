@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AuthEmailJob struct {
@@ -235,6 +236,24 @@ type ResumePreviewCard struct {
 	Version    string
 	PNG        []byte
 	RenderedAt time.Time
+}
+
+type ResumeShareSignalDay struct {
+	ResumeID uuid.UUID
+	Day      pgtype.Date
+	Platform string
+	Fetches  int32
+}
+
+type ResumeViewDay struct {
+	ResumeID   uuid.UUID
+	Day        pgtype.Date
+	Counted    int32
+	Bot        int32
+	Datacenter int32
+	Anomaly    int32
+	Invalid    int32
+	Crawler    int32
 }
 
 type SecondFactorPolicy struct {

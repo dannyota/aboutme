@@ -66,6 +66,15 @@ describe('privacy and terms pages', () => {
       + 'khoản của bạn.',
     );
     expect(wrapper.text()).not.toContain('Cloudflare');
+    expect(wrapper.text()).toContain(
+      'Lượt xem CV công khai: chúng tôi đếm lượt xem và chỉ lưu tổng số '
+      + 'theo ngày.',
+    );
+    expect(wrapper.text()).toContain(
+      'Không dùng công cụ phân tích hay mã theo dõi của bên thứ ba, không '
+      + 'dùng mã quảng cáo. Chúng tôi chỉ đếm lượt xem CV công khai như mô '
+      + 'tả ở trên.',
+    );
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
       'aboutme.vn do Danny, một cá nhân, vận hành phi thương mại tại Việt '
@@ -121,6 +130,13 @@ describe('privacy and terms pages', () => {
       + 'your account.',
     );
     expect(wrapper.text()).not.toContain('Cloudflare');
+    expect(wrapper.text()).toContain(
+      'Views of public resumes: we count views and keep only daily totals.',
+    );
+    expect(wrapper.text()).toContain(
+      'No third-party analytics or advertising trackers. We count views '
+      + 'of public resumes only as described above.',
+    );
     expect(wrapper.text()).toContain('Your rights');
     expect(wrapper.text()).toContain('Why we use your data');
     expect(wrapper.get('[data-testid="legal-operator"]').text()).toBe(
