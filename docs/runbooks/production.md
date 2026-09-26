@@ -30,7 +30,8 @@ A clean environment prints `No changes.`
 
 Cloudflare is DNS only: it answers queries for the zone and carries no HTTP
 traffic. Change these through the MCP connection or the dashboard, and update
-this table in the same change.
+this table in the same change. A Route 53 zone with the same records is prepared
+for the move in the [DNS runbook](dns.md); change a record in both until then.
 
 | Setting                    | Value                                                                                                     |
 | -------------------------- | --------------------------------------------------------------------------------------------------------- |

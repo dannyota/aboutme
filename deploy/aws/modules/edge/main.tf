@@ -16,8 +16,8 @@ locals {
   ecdsa_p256 = "EC_prime256v1"
 }
 
-# An ACM exportable public certificate for the origin. DNS validation is added
-# by hand at Cloudflare (docs/runbooks/cloudfront.md); there is no
+# An ACM exportable public certificate for the origin. Its DNS validation
+# records live in the Route 53 zone (modules/dns); there is no
 # aws_acm_certificate_validation resource, so apply never waits on issuance.
 resource "aws_acm_certificate" "origin" {
   domain_name               = "aboutme.vn"
@@ -94,9 +94,8 @@ resource "aws_acm_certificate" "viewer" {
 
 # ACM gives every certificate for a domain name in this account the same DNS
 # validation CNAME, in any region (docs/design/cloudfront-edge.md, "Origin
-# certificate"), so the records the owner added for the origin certificate
-# (docs/runbooks/cloudfront.md) validate this one too. Apply waits here until
-# it issues; add those records before the first apply.
+# certificate"), so the origin certificate's records in the Route 53 zone
+# (modules/dns) validate this one too. Apply waits here until it issues.
 resource "aws_acm_certificate_validation" "viewer" {
   provider                = aws.us_east_1
   certificate_arn         = aws_acm_certificate.viewer.arn

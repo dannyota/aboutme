@@ -29,3 +29,15 @@ output "distribution_id" {
 output "distribution_domain_name" {
   value = module.edge.distribution_domain_name
 }
+
+output "dns_zone_id" {
+  value = module.dns.zone_id
+}
+
+output "dns_name_servers" {
+  value = module.dns.name_servers
+}
+
+output "dnssec" {
+  value = module.dns.dnssec
+}

@@ -11,6 +11,7 @@ operations the repository supports now.
 | [Realtime](realtime.md)                     | Runnable    | Check stream bounds, recovery, refresh, and revocation       |
 | [Authentication email](email.md)            | Production  | Verify and operate Google Workspace and AWS SES              |
 | [Production](production.md)                 | Operational | Deploy, rollback, access, edge settings, and secrets         |
+| [DNS](dns.md)                               | Prepared    | Route 53 zone, the move from Cloudflare, and DNSSEC          |
 
 The production runbook covers only shipped scripts and current operator steps.
 Planned behavior belongs in the [deployment design](../design/deployment.md),

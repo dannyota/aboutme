@@ -95,3 +95,18 @@ module "edge" {
   alerts_topic_arn_us_east_1 = module.ops.alerts_topic_arn_us_east_1
   waf_block                  = var.waf_block
 }
+
+module "dns" {
+  source = "../modules/dns"
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+  name                           = local.name
+  account_id                     = var.account_id
+  distribution_domain_name       = module.edge.distribution_domain_name
+  distribution_hosted_zone_id    = module.edge.distribution_hosted_zone_id
+  certificate_validation_records = module.edge.certificate_validation_records_by_domain
+  alerts_topic_arn_us_east_1     = module.ops.alerts_topic_arn_us_east_1
+  google_workspace               = var.google_workspace
+}

@@ -44,6 +44,10 @@ separately. Therefore root SPF remains Google-only. The MAIL FROM records are:
 
 Do not replace the Google root MX or root SPF with SES records.
 
+OpenTofu's `dns` module recreates these records in the Route 53 zone prepared in
+the [DNS runbook](dns.md). Until the name servers move, change a record at
+Cloudflare and in that module together.
+
 ## Reputation and feedback
 
 SES account-level suppression is enabled for both `BOUNCE` and `COMPLAINT`. The

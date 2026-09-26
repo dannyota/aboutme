@@ -17,22 +17,20 @@ public certificate for `aboutme.vn` and `www.aboutme.vn` in `ap-southeast-1`,
 ECDSA P-256, exported to SSM.
 
 `deploy/aws/modules/edge` provisions the certificate with DNS validation, but
-does not wait for it to issue: OpenTofu never adds the validation records
-itself.
+does not wait for it to issue.
 
-### Owner step: add the validation records
+### Validation records
 
-After `tofu apply` creates the certificate, add its DNS validation records at
-Cloudflare, as DNS-only (grey cloud), not proxied:
+OpenTofu's `dns` module creates the certificate's DNS validation records in the
+Route 53 zone from the certificate's own validation options. Until the name
+servers move to Route 53 ([DNS runbook](dns.md)), Cloudflare answers, and its
+DNS-only copies of the same records must stay. List them with:
 
 ```sh
 tofu output -json certificate_validation_records
 ```
 
-Each entry is `{name, type, value}`; create a `CNAME` record for the exact
-`name` and `value` given. These same records also validate the viewer
-certificate added in a later step, so only one set of DNS-only records is ever
-needed for both.
+The same records also validate the viewer certificate, so one set serves both.
 
 ### Export and deploy
 

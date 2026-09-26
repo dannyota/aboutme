@@ -37,3 +37,12 @@ totp_previous_key_slot = ""
 # The WAF web ACL only counts matches until the owner switches it to block
 # after a week of counts.
 waf_block = false
+
+# Google Workspace's DNS values, copied from the Admin console or the current
+# zone: the verification CNAME's first label and target, and the whole
+# google._domainkey TXT value as one string.
+google_workspace = {
+  verification_label  = ""
+  verification_target = ""
+  dkim_txt            = ""
+}
