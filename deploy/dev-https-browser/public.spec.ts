@@ -28,10 +28,107 @@ const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';
 const PDF_NAME = 'Public-proof-resume-Resume.pdf';
+// The fixture adds no profile section, so the description falls back to the
+// job title and employer joined by a comma (docs/design/link-previews.md,
+// "Text rules", fallback 2). The image text is the scrubbed full name alone,
+// since the fixture sets no headline.
+const PUBLIC_PROOF_DESCRIPTION = 'Engineer, Example Corp';
+const PUBLIC_PROOF_IMAGE_ALT = 'Public proof resume';
 let createdID: string | undefined;
 
 function stage(name: string): void {
   console.log('public-stage:' + name);
+}
+
+// One head meta element, by its naming attribute's value (for example
+// "og:title") and its decoded content.
+interface HeadMetaTag {
+  readonly key: string;
+  readonly value: string;
+}
+
+// The preview meta elements the page head must carry, in the order
+// docs/design/link-previews.md, "Page head", requires.
+const LINK_PREVIEW_KEYS: readonly string[] = [
+  'description',
+  'og:type',
+  'og:site_name',
+  'og:title',
+  'og:description',
+  'og:url',
+  'og:locale',
+  'og:image',
+  'og:image:type',
+  'og:image:width',
+  'og:image:height',
+  'og:image:alt',
+  'twitter:card',
+  'twitter:image',
+  'twitter:image:alt',
+];
+
+// Tags the page head must never carry: X and Discord fall back to Open Graph,
+// and no tag may tint the mobile browser bar.
+const FORBIDDEN_HEAD_KEYS: readonly string[] = [
+  'twitter:title',
+  'twitter:description',
+  'theme-color',
+];
+
+// decodeHeadAttribute reverses the escaping the renderer applies to a
+// double-quoted attribute value. &amp; decodes last, so an already-escaped
+// entity such as &amp;lt; is not doubly unescaped.
+function decodeHeadAttribute(value: string): string {
+  return value
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', '\'')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&');
+}
+
+// headMetaTags lists every name= or property= meta element inside the page's
+// <head>, in document order, with its content decoded.
+function headMetaTags(html: string): HeadMetaTag[] {
+  const head = /<head[^>]*>([\s\S]*?)<\/head>/iu.exec(html)?.[1] ?? '';
+  const pattern = /<meta\s+(?:name|property)="([^"]*)"\s+content="([^"]*)"\s*\/?>/gu;
+  const tags: HeadMetaTag[] = [];
+  for (const match of head.matchAll(pattern)) {
+    tags.push({ key: match[1], value: decodeHeadAttribute(match[2]) });
+  }
+  return tags;
+}
+
+// expectLinkPreviewHead checks the page's raw HTML against every rule in
+// docs/design/link-previews.md, "Page head": each expected element appears
+// once, in order, with the exact value, and the forbidden ones never appear.
+// A failure names only the closed tag key, never the resume-derived value.
+function expectLinkPreviewHead(
+  html: string,
+  expected: readonly HeadMetaTag[],
+): void {
+  const tags = headMetaTags(html);
+  for (const key of FORBIDDEN_HEAD_KEYS) {
+    if (tags.some((tag) => tag.key === key)) {
+      throw new Error(`head-forbidden-${key}`);
+    }
+  }
+  const present = tags.filter((tag) => LINK_PREVIEW_KEYS.includes(tag.key));
+  if (present.length !== expected.length) {
+    throw new Error(`head-count-${present.length}`);
+  }
+  const seen = new Set<string>();
+  for (const [index, want] of expected.entries()) {
+    const got = present[index];
+    if (got === undefined || got.key !== want.key) {
+      throw new Error(`head-order-${want.key}`);
+    }
+    if (got.value !== want.value) {
+      throw new Error(`head-mismatch-${want.key}`);
+    }
+    if (seen.has(got.key)) throw new Error(`head-duplicate-${got.key}`);
+    seen.add(got.key);
+  }
 }
 
 test.afterEach(async ({ browser }, testInfo) => {
@@ -263,6 +360,9 @@ test('proves a published resume hydrates in a real browser', async ({
     stage('public-navigation');
     const response = await publicPage.goto(`${ORIGIN}/${publishedSlug}`);
     expect(response?.status()).toBe(200);
+    // The raw response body carries the server-rendered head before any
+    // client script can touch it, in the document order the renderer wrote.
+    const publicHTML = await response?.text() ?? '';
     const structured = await publicPage
       .locator('script[type="application/ld+json"]')
       .textContent();
@@ -281,6 +381,29 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(iconHref?.startsWith('data:image/svg+xml,')).toBe(true);
     expect(decodeURIComponent(iconHref!.slice('data:image/svg+xml,'.length)))
       .toContain(`>${PAGE_EMOJI}</text>`);
+
+    // The link-preview tags: exact value, exact order, exactly once, and
+    // none of the tags the page must never send.
+    stage('public-link-preview');
+    const canonicalURL = `${ORIGIN}/${publishedSlug}`;
+    const ogImageURL = `${ORIGIN}/api/v1/public/resumes/${publishedSlug}/og.png`;
+    expectLinkPreviewHead(publicHTML, [
+      { key: 'description', value: PUBLIC_PROOF_DESCRIPTION },
+      { key: 'og:type', value: 'profile' },
+      { key: 'og:site_name', value: 'aboutme.vn' },
+      { key: 'og:title', value: PAGE_TITLE },
+      { key: 'og:description', value: PUBLIC_PROOF_DESCRIPTION },
+      { key: 'og:url', value: canonicalURL },
+      { key: 'og:locale', value: 'en_US' },
+      { key: 'og:image', value: ogImageURL },
+      { key: 'og:image:type', value: 'image/png' },
+      { key: 'og:image:width', value: '1200' },
+      { key: 'og:image:height', value: '630' },
+      { key: 'og:image:alt', value: PUBLIC_PROOF_IMAGE_ALT },
+      { key: 'twitter:card', value: 'summary_large_image' },
+      { key: 'twitter:image', value: ogImageURL },
+      { key: 'twitter:image:alt', value: PUBLIC_PROOF_IMAGE_ALT },
+    ]);
 
     // Every public page credits the site once, linking the canonical home.
     const credit = publicPage.locator('a.public-credit');

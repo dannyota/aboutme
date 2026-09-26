@@ -1,0 +1,197 @@
+{
+  "normalize": [
+    {
+      "name": "white space runs and controls",
+      "input": "  Ada\t\n Lovelace\u0007 ",
+      "want": "Ada Lovelace"
+    },
+    {
+      "name": "bidirectional formatting",
+      "input": "a\u200eb\u202ec\u2066d\u061ce",
+      "want": "a b c d e"
+    },
+    {
+      "name": "no-break space",
+      "input": "Nguyễn\u00a0Văn",
+      "want": "Nguyễn Văn"
+    }
+  ],
+  "scrub": [
+    {
+      "name": "email",
+      "input": "Write to ada@example.com today",
+      "contacts": [],
+      "want": "Write to today"
+    },
+    {
+      "name": "international phone",
+      "input": "Call +84 912 345 678 now",
+      "contacts": [],
+      "want": "Call now"
+    },
+    {
+      "name": "phone with parentheses and dashes",
+      "input": "Call (+84) 912-345-678.",
+      "contacts": [],
+      "want": "Call ."
+    },
+    {
+      "name": "nine digits",
+      "input": "ID 123456789 gone",
+      "contacts": [],
+      "want": "ID gone"
+    },
+    {
+      "name": "eight digits stay",
+      "input": "ID 12345678 stays",
+      "contacts": [],
+      "want": "ID 12345678 stays"
+    },
+    {
+      "name": "year range stays",
+      "input": "From 2019 - 2023 at Acme",
+      "contacts": [],
+      "want": "From 2019 - 2023 at Acme"
+    },
+    {
+      "name": "exact contact value",
+      "input": "Based in Hà Nội, Việt Nam and remote",
+      "contacts": [
+        "Hà Nội, Việt Nam"
+      ],
+      "want": "Based in and remote"
+    },
+    {
+      "name": "contact link value",
+      "input": "See https://github.com/ada for code",
+      "contacts": [
+        "https://github.com/ada"
+      ],
+      "want": "See for code"
+    },
+    {
+      "name": "year range with a bracketed count",
+      "input": "Led teams 2010 - 2015 (5 years) at Acme",
+      "contacts": [],
+      "want": "Led teams 2010 - 2015 (5 years) at Acme"
+    },
+    {
+      "name": "run of years",
+      "input": "Roles 2012-2016-2020 at Acme",
+      "contacts": [],
+      "want": "Roles 2012-2016-2020 at Acme"
+    },
+    {
+      "name": "years of experience",
+      "input": "5+ years of Go",
+      "contacts": [],
+      "want": "5+ years of Go"
+    },
+    {
+      "name": "number with thousands separators",
+      "input": "Served 2,000,000 users",
+      "contacts": [],
+      "want": "Served 2,000,000 users"
+    },
+    {
+      "name": "identifier touching letters",
+      "input": "Order ID123456789 ships",
+      "contacts": [],
+      "want": "Order ID123456789 ships"
+    },
+    {
+      "name": "Vietnamese mobile",
+      "input": "Call 0912 345 678 today",
+      "contacts": [],
+      "want": "Call today"
+    },
+    {
+      "name": "Vietnamese mobile with country code",
+      "input": "Call +84 912 345 678 today",
+      "contacts": [],
+      "want": "Call today"
+    },
+    {
+      "name": "Vietnamese landline",
+      "input": "Office (028) 3822 1234 in District 1",
+      "contacts": [],
+      "want": "Office in District 1"
+    },
+    {
+      "name": "international number",
+      "input": "UK +44 20 7946 0958 or US +1 (415) 555-0132",
+      "contacts": [],
+      "want": "UK or US"
+    }
+  ],
+  "cut": [
+    {
+      "name": "fits",
+      "input": "Short summary.",
+      "want": "Short summary."
+    },
+    {
+      "name": "whole sentences",
+      "input": "Abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb. Abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb. Abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.",
+      "want": "Abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb. Abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb."
+    },
+    {
+      "name": "short sentence then word cut",
+      "input": "Abbbbbbbbbbbbbbbbbbbbbbbbbbbb. abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd",
+      "want": "Abbbbbbbbbbbbbbbbbbbbbbbbbbbb. abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd abcd…"
+    },
+    {
+      "name": "trailing punctuation dropped",
+      "input": "abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc,",
+      "want": "abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc, abc…"
+    },
+    {
+      "name": "no space near the end",
+      "input": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中",
+      "want": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中…"
+    },
+    {
+      "name": "byte bound",
+      "input": "👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽",
+      "want": "👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽👍🏽…"
+    }
+  ],
+  "locale": [
+    {
+      "lng": "vi",
+      "want": "vi_VN"
+    },
+    {
+      "lng": "en",
+      "want": "en_US"
+    },
+    {
+      "lng": "en-GB",
+      "want": "en_GB"
+    },
+    {
+      "lng": "vi-VN",
+      "want": "vi_VN"
+    },
+    {
+      "lng": "fr",
+      "want": ""
+    },
+    {
+      "lng": "und",
+      "want": ""
+    },
+    {
+      "lng": "zh-Hant-TW",
+      "want": ""
+    },
+    {
+      "lng": "es-419",
+      "want": ""
+    },
+    {
+      "lng": "",
+      "want": ""
+    }
+  ]
+}

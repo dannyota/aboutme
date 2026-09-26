@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 )
 
@@ -15,6 +16,7 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 		CanonicalOrigin:  "https://aboutme.example",
 		DiscoveryEnabled: true,
 		PageTitle:        "Ada — Resume",
+		Preview:          previewmeta.Meta{Title: "Ada", Description: "Resume on aboutme.vn", ImageAlt: "Ada"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -23,8 +25,9 @@ func TestPublicRenderRequestHasOnlyTheClosedWireFields(t *testing.T) {
 	if err := json.Unmarshal(body, &fields); err != nil {
 		t.Fatal(err)
 	}
-	if len(fields) != 6 || string(fields["mode"]) != `"continuous"` || string(fields["canonicalOrigin"]) != `"https://aboutme.example"` || string(fields["discoveryEnabled"]) != "true" || fields["publicResume"] == nil ||
-		string(fields["pageTitle"]) != `"Ada — Resume"` || string(fields["faviconHref"]) != `""` {
+	if len(fields) != 7 || string(fields["mode"]) != `"continuous"` || string(fields["canonicalOrigin"]) != `"https://aboutme.example"` || string(fields["discoveryEnabled"]) != "true" || fields["publicResume"] == nil ||
+		string(fields["pageTitle"]) != `"Ada — Resume"` || string(fields["faviconHref"]) != `""` ||
+		string(fields["preview"]) != `{"title":"Ada","description":"Resume on aboutme.vn","locale":"","imageAlt":"Ada"}` {
 		t.Fatalf("closed request = %s", body)
 	}
 }

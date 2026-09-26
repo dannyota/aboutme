@@ -50,6 +50,18 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'chúng tôi giữ chỗ đường dẫn cũ trong 180 ngày',
     );
+    expect(wrapper.text()).toContain(
+      'Nội dung: các CV bạn viết, ảnh bạn tải lên, và, khi một CV đang công '
+      + 'khai, ảnh xem trước chúng tôi tạo từ CV đó để hiển thị khi đường '
+      + 'dẫn được chia sẻ.',
+    );
+    expect(wrapper.text()).toContain(
+      'dịch vụ đó sẽ lấy tiêu đề trang, phần tóm tắt và ảnh xem trước của '
+      + 'trang, và có thể giữ bản sao riêng của họ sau khi bạn ngừng công '
+      + 'khai.',
+    );
+    expect(wrapper.text()).toContain('Amazon Route 53 cung cấp dịch vụ DNS.');
+    expect(wrapper.text()).not.toContain('Cloudflare');
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
       'aboutme do Danny, một cá nhân, vận hành phi thương mại tại Việt Nam. '
@@ -88,6 +100,18 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'we keep its old web address reserved for 180 days',
     );
+    expect(wrapper.text()).toContain(
+      'Content: the resumes you write, the photos you upload, and, while a '
+      + 'resume is public, the preview image we make from it for link '
+      + 'previews.',
+    );
+    expect(wrapper.text()).toContain(
+      'When anyone shares your public link in a chat app or social network, '
+      + 'that service fetches the page\'s title, summary, and preview image, '
+      + 'and may keep its own copy after you unpublish.',
+    );
+    expect(wrapper.text()).toContain('Amazon Route 53 provides DNS.');
+    expect(wrapper.text()).not.toContain('Cloudflare');
     expect(wrapper.text()).toContain('Your rights');
     expect(wrapper.text()).toContain('Why we use your data');
     expect(wrapper.get('[data-testid="legal-operator"]').text()).toBe(

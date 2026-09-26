@@ -55,11 +55,12 @@ func TestPublicHTMLRequiresExactlyOneCreditLink(t *testing.T) {
 		t.Run("Vietnamese "+lng, func(t *testing.T) {
 			vietnamese := resume
 			vietnamese.Lng = lng
-			candidate := strings.Replace(valid, "Built with aboutme.vn", "Tạo bằng aboutme.vn", 1)
+			english := validHTMLIn(lng, "Ada", "https://aboutme.example/ada", "1", "")
+			candidate := strings.Replace(english, "Built with aboutme.vn", "Tạo bằng aboutme.vn", 1)
 			if rule := publicHTMLRejection([]byte(candidate), vietnamese, origin, jsonLD, false); rule != "" {
 				t.Fatalf("Vietnamese credit rejected by %q", rule)
 			}
-			if rule := publicHTMLRejection([]byte(valid), vietnamese, origin, jsonLD, false); rule != "credit_link" {
+			if rule := publicHTMLRejection([]byte(english), vietnamese, origin, jsonLD, false); rule != "credit_link" {
 				t.Fatalf("English credit on a Vietnamese resume: rule = %q, want credit_link", rule)
 			}
 		})
@@ -67,7 +68,8 @@ func TestPublicHTMLRequiresExactlyOneCreditLink(t *testing.T) {
 	for _, lng := range []string{"en", "en-US", "fr", "und"} {
 		other := resume
 		other.Lng = lng
-		if rule := publicHTMLRejection([]byte(valid), other, origin, jsonLD, false); rule != "" {
+		page := validHTMLIn(lng, "Ada", "https://aboutme.example/ada", "1", "")
+		if rule := publicHTMLRejection([]byte(page), other, origin, jsonLD, false); rule != "" {
 			t.Fatalf("lng %q: English credit rejected by %q", lng, rule)
 		}
 	}

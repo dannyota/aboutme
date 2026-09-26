@@ -62,7 +62,7 @@ func TestPublicHTMLLogsTheClosedReasonForA503(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := strings.Replace(validHTML("Ada", "https://aboutme.example/ada", "1", ""),
+	body := strings.Replace(validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", ""),
 		`body</main>`, nestedMain, 1)
 	renderer := directrender.New(origin, &http.Client{Transport: htmlRoundTrip(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(bytes.NewBufferString(body))}, nil
@@ -189,9 +189,12 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	emoji := "\U0001F680"
 	page := expectedPublicPage(resume, &title, &emoji)
 	icon := `<link rel="icon" href="` + publicpage.FaviconHref(emoji) + `">`
-	valid := strings.Replace(
+	// The public title is also the preview title (docs/design/link-previews.md).
+	ogTitle := `<meta property="og:title" content="Ada">`
+	customOGTitle := `<meta property="og:title" content="Ada &amp; &lt;friends&gt;">`
+	valid := strings.Replace(strings.Replace(
 		validHTML("Ada", "https://aboutme.example/ada", "1", ""),
-		`<title>Ada — Resume</title>`, `<title>Ada &amp; &lt;friends&gt;</title>`+icon, 1)
+		`<title>Ada — Resume</title>`, `<title>Ada &amp; &lt;friends&gt;</title>`+icon, 1), ogTitle, customOGTitle, 1)
 	if rule := publicHTMLRejectionForPage([]byte(valid), resume, page, origin, jsonLD, false); rule != "" {
 		t.Fatalf("stored title and icon rejected by %q", rule)
 	}
@@ -225,7 +228,7 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	if rule := publicHTMLRejectionForPage([]byte(valid), resume, noIcon, origin, jsonLD, false); rule != "title" {
 		t.Fatalf("page without settings: rule = %q, want title", rule)
 	}
-	withDefaultTitle := strings.Replace(valid, `<title>Ada &amp; &lt;friends&gt;</title>`, `<title>Ada — Resume</title>`, 1)
+	withDefaultTitle := strings.Replace(strings.Replace(valid, `<title>Ada &amp; &lt;friends&gt;</title>`, `<title>Ada — Resume</title>`, 1), customOGTitle, ogTitle, 1)
 	if rule := publicHTMLRejectionForPage([]byte(withDefaultTitle), resume, noIcon, origin, jsonLD, false); rule != "favicon" {
 		t.Fatalf("icon without the setting: rule = %q, want favicon", rule)
 	}

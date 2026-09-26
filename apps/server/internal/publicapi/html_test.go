@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	stdhtml "html"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
@@ -38,7 +40,7 @@ func TestPublicHTMLDiscoverableValidatesWorkerDocumentAndConditionalResponse(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := validHTML("Ada", "https://aboutme.example/ada", "1", string(jsonLD.Script))
+	body := validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", string(jsonLD.Script))
 	renderer := directrender.New(origin, &http.Client{Transport: htmlRoundTrip(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(bytes.NewBufferString(body))}, nil
 	})})
@@ -82,11 +84,11 @@ func TestPublicHTMLNondiscoverableRejectsUnexpectedScript(t *testing.T) {
 		html string
 		want int
 	}{
-		{"valid", validHTML("Ada", "https://aboutme.example/ada", "1", ""), http.StatusOK},
-		{"extra inline script", validHTML("Ada", "https://aboutme.example/ada", "1", "<script>alert(1)</script>"), http.StatusServiceUnavailable},
-		{"wrong canonical", validHTML("Ada", "https://aboutme.example/other", "1", ""), http.StatusServiceUnavailable},
-		{"wrong title", validHTML("Grace", "https://aboutme.example/ada", "1", ""), http.StatusServiceUnavailable},
-		{"wrong revision", validHTML("Ada", "https://aboutme.example/ada", "2", ""), http.StatusServiceUnavailable},
+		{"valid", validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", ""), http.StatusOK},
+		{"extra inline script", validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", "<script>alert(1)</script>"), http.StatusServiceUnavailable},
+		{"wrong canonical", validHTMLIn("en", "Ada", "https://aboutme.example/other", "1", ""), http.StatusServiceUnavailable},
+		{"wrong title", validHTMLIn("en", "Grace", "https://aboutme.example/ada", "1", ""), http.StatusServiceUnavailable},
+		{"wrong revision", validHTMLIn("en", "Ada", "https://aboutme.example/ada", "2", ""), http.StatusServiceUnavailable},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			cache, cacheErr := publiccache.New(2, time.Minute, time.Now)
@@ -129,7 +131,7 @@ func TestPublicHTMLRejectsWrongMainAssetJSONLDAndOversize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	valid := validHTML("Ada", "https://aboutme.example/ada", "1", string(jsonLD.Script))
+	valid := validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", string(jsonLD.Script))
 	origin, err := directrender.ParseRenderOrigin("http://127.0.0.1:20030", "development")
 	if err != nil {
 		t.Fatal(err)
@@ -182,7 +184,7 @@ func TestPublicHTMLHoldsLeaseThroughResponseWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	renderer := directrender.New(origin, &http.Client{Transport: htmlRoundTrip(func(*http.Request) (*http.Response, error) {
-		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader(validHTML("Ada", "https://aboutme.example/ada", "1", "")))}, nil
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"text/html; charset=utf-8"}}, Body: io.NopCloser(strings.NewReader(validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", "")))}, nil
 	})})
 	handler, err := NewHTMLHandler(HTMLDependencies{Reader: reader, Cache: cache, Renderer: renderer, PublicOrigin: mustPublicOrigin(t), AppDigest: "sha256:app", RendererDigest: "sha256:renderer"})
 	if err != nil {
@@ -231,7 +233,7 @@ func TestPublicHTMLRejectsUnexpectedResourceLoads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	base := validHTML("Ada", "https://aboutme.example/ada", "1", "")
+	base := validHTMLIn("en", "Ada", "https://aboutme.example/ada", "1", "")
 	for _, test := range []struct {
 		name, injection string
 	}{
@@ -501,9 +503,18 @@ func mustPublicOrigin(t *testing.T) publicresume.PublicOrigin {
 }
 
 func validHTML(name, canonical, revision, dataScript string) string {
-	root := strings.TrimSuffix(canonical, "/"+strings.Split(canonical, "/")[3])
-	imageURL := root + "/api/v1/public/resumes/" + strings.Split(canonical, "/")[3] + "/og.png"
+	return validHTMLIn("", name, canonical, revision, dataScript)
+}
+
+// validHTMLIn is a valid page for a resume in language lng whose only content
+// is the full name; name is the escaped <title> text. Its preview head is the
+// one Go derives for that resume, in design order.
+func validHTMLIn(lng, name, canonical, revision, dataScript string) string {
+	slug := strings.Split(canonical, "/")[3]
+	root := strings.TrimSuffix(canonical, "/"+slug)
 	credit := `<div class="public-toolbar"><a class="public-credit" href="` + root + `/">Built with aboutme.vn</a></div>`
-	social := `<meta property="og:image" content="` + imageURL + `"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="` + imageURL + `">`
-	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + social + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">" + credit + "body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
+	resume := publicresume.PublicResume{Slug: slug, Lng: lng, Document: publicresume.PublicResumeDocument{
+		PersonalDetails: publicresume.PublicPersonalDetails{FullName: stdhtml.UnescapeString(name)}}}
+	head := previewHead(resume, previewmeta.For(resume, nil), root)
+	return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" + name + " — Resume</title><link rel=\"canonical\" href=\"" + canonical + "\">" + head + dataScript + "</head><body><a href=\"#public-resume\">Skip to content</a><main id=\"public-resume\" data-revision=\"" + revision + "\">" + credit + "body</main><script type=\"module\" src=\"/_nuxt/assets/public-resume.mjs?v=0123456789abcdef\"></script></body></html>"
 }

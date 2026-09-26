@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 )
 
@@ -22,6 +23,9 @@ type PublicRenderRequest struct {
 	// validator expects; FaviconHref is "" when the owner set no icon.
 	PageTitle   string `json:"pageTitle"`
 	FaviconHref string `json:"faviconHref"`
+	// Preview is the link-preview text the page head carries; the validator
+	// accepts exactly these values (docs/design/link-previews.md).
+	Preview previewmeta.Meta `json:"preview"`
 }
 
 // Result is a validated renderer response.

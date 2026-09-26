@@ -27,6 +27,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/mcpapi"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/oauthsrv"
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/printapi"
 	"github.com/dannyota/aboutme/apps/server/internal/printrender"
 	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
@@ -446,34 +447,36 @@ func printableDigest(value string) bool {
 // direct worker applies the same OpenAPI validator to probes and viewer
 // renders, so readiness cannot use an incomplete synthetic value.
 func readinessRenderRequest(origin publicresume.PublicOrigin) directrender.PublicRenderRequest {
-	return directrender.PublicRenderRequest{
-		PublicResume: publicresume.PublicResume{
-			Slug:     "readiness-probe",
-			Revision: "1",
-			Lng:      "en",
-			Document: publicresume.PublicResumeDocument{
-				SchemaVersion:   schema.CurrentVersion,
-				PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Readiness Probe"},
-				Content: publicresume.PublicContent{
-					"profile": {SectionType: string(schema.Profile), ProfileEntries: []publicresume.PublicProfileEntry{{ID: "00000000-0000-4000-8000-000000000001"}}},
-				},
-				Customization: schema.Customization{
-					Font:           schema.Font{Family: schema.Inter, BaseSizePx: 14},
-					Colors:         schema.Colors{Primary: "#1a1a1a", Text: "#1a1a1a", Background: "#ffffff"},
-					Spacing:        schema.Spacing{SectionGap: 16, EntryGap: 8, LineHeight: 1.4},
-					Heading:        schema.Heading{Style: schema.Normal},
-					Layout:         schema.Layout{Columns: 1, Sections: schema.Sections{Main: []string{"profile"}, Sidebar: []string{}}},
-					SectionDisplay: schema.SectionDisplay{Skill: schema.SkillClass{Style: schema.Text}, Language: schema.LanguageClass{Style: schema.Text}},
-					PageFormat:     schema.A4,
-					DateFormat:     schema.MmYyyy,
-				},
+	resume := publicresume.PublicResume{
+		Slug:     "readiness-probe",
+		Revision: "1",
+		Lng:      "en",
+		Document: publicresume.PublicResumeDocument{
+			SchemaVersion:   schema.CurrentVersion,
+			PersonalDetails: publicresume.PublicPersonalDetails{FullName: "Readiness Probe"},
+			Content: publicresume.PublicContent{
+				"profile": {SectionType: string(schema.Profile), ProfileEntries: []publicresume.PublicProfileEntry{{ID: "00000000-0000-4000-8000-000000000001"}}},
+			},
+			Customization: schema.Customization{
+				Font:           schema.Font{Family: schema.Inter, BaseSizePx: 14},
+				Colors:         schema.Colors{Primary: "#1a1a1a", Text: "#1a1a1a", Background: "#ffffff"},
+				Spacing:        schema.Spacing{SectionGap: 16, EntryGap: 8, LineHeight: 1.4},
+				Heading:        schema.Heading{Style: schema.Normal},
+				Layout:         schema.Layout{Columns: 1, Sections: schema.Sections{Main: []string{"profile"}, Sidebar: []string{}}},
+				SectionDisplay: schema.SectionDisplay{Skill: schema.SkillClass{Style: schema.Text}, Language: schema.LanguageClass{Style: schema.Text}},
+				PageFormat:     schema.A4,
+				DateFormat:     schema.MmYyyy,
 			},
 		},
+	}
+	return directrender.PublicRenderRequest{
+		PublicResume:     resume,
 		Mode:             directrender.PublicRenderMode,
 		CanonicalOrigin:  origin.String(),
 		DiscoveryEnabled: false,
 		// The worker rejects an empty title, so the probe sends the default.
 		PageTitle: publicpage.EffectiveTitle(nil, "Readiness Probe"),
+		Preview:   previewmeta.For(resume, nil),
 	}
 }
 

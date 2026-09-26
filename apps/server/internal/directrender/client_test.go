@@ -59,7 +59,7 @@ func TestClientPostsClosedRequestToDirectOrigin(t *testing.T) {
 	if err := json.Unmarshal([]byte(gotBody), &envelope); err != nil {
 		t.Fatal(err)
 	}
-	if len(envelope) != 6 || envelope["pageTitle"] == nil || envelope["faviconHref"] == nil || string(envelope["mode"]) != `"continuous"` || string(envelope["canonicalOrigin"]) != `"https://aboutme.example"` || string(envelope["discoveryEnabled"]) != "false" || envelope["publicResume"] == nil {
+	if len(envelope) != 7 || envelope["preview"] == nil || envelope["pageTitle"] == nil || envelope["faviconHref"] == nil || string(envelope["mode"]) != `"continuous"` || string(envelope["canonicalOrigin"]) != `"https://aboutme.example"` || string(envelope["discoveryEnabled"]) != "false" || envelope["publicResume"] == nil {
 		t.Fatalf("closed envelope = %s", gotBody)
 	}
 }

@@ -83,7 +83,7 @@ const SCRIPT_VERSION = 'fedcba9876543210';
 const VERSIONS = { style: STYLE_VERSION, script: SCRIPT_VERSION };
 
 describe('public Vue worker document', () => {
-  it('uses Task 08 JSON-LD bytes and a complete titled document', async () => {
+  it('uses the Go JSON-LD bytes and a complete titled document', async () => {
     const html = await renderPublicResume(request(), VERSIONS);
     await expect(renderPublicResume(request(), VERSIONS))
       .resolves.toBe(html);
@@ -274,5 +274,137 @@ describe('public style version', () => {
         script: version,
       })).rejects.toThrow();
     }
+  });
+});
+
+describe('link-preview head', () => {
+  // The head between the canonical link and the stylesheets, where the
+  // preview tags sit (docs/design/link-previews.md, "Page head").
+  const previewHead = (html: string) => html.slice(
+    html.indexOf('<link rel="canonical"'),
+    html.indexOf('<link rel="stylesheet"'),
+  );
+
+  it('writes every tag in order for a Vietnamese resume', async () => {
+    const value = {
+      ...request(),
+      preview: {
+        title: 'Nguyễn "An" <Dev> & Co',
+        description: 'Kỹ sư phần mềm, viết \'backend\' & <API>.',
+        locale: 'vi_VN',
+        imageAlt: 'Nguyễn "An" · Kỹ sư',
+      },
+    };
+    value.publicResume.lng = 'vi';
+    const html = await renderPublicResume(value, VERSIONS);
+    expect(previewHead(html)).toBe([
+      '<link rel="canonical" href="https://resume.example/ada1">',
+      '<meta name="description" content="Kỹ sư phần mềm, viết &#39;backend&#39;'
+      + ' &amp; &lt;API&gt;.">',
+      '<meta property="og:type" content="profile">',
+      '<meta property="og:site_name" content="aboutme.vn">',
+      '<meta property="og:title" content="Nguyễn &quot;An&quot; &lt;Dev&gt;'
+      + ' &amp; Co">',
+      '<meta property="og:description" content="Kỹ sư phần mềm, viết '
+      + '&#39;backend&#39; &amp; &lt;API&gt;.">',
+      '<meta property="og:url" content="https://resume.example/ada1">',
+      '<meta property="og:locale" content="vi_VN">',
+      '<meta property="og:image" '
+      + 'content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+      '<meta property="og:image:type" content="image/png">',
+      '<meta property="og:image:width" content="1200">',
+      '<meta property="og:image:height" content="630">',
+      '<meta property="og:image:alt" content="Nguyễn &quot;An&quot; · Kỹ sư">',
+      '<meta name="twitter:card" content="summary_large_image">',
+      '<meta name="twitter:image" '
+      + 'content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+      '<meta name="twitter:image:alt" content="Nguyễn &quot;An&quot; · Kỹ sư">',
+    ].join(''));
+    expect(html).toContain('<html lang="vi">');
+  });
+
+  it('writes every tag in order for an English resume', async () => {
+    const value = {
+      ...request(),
+      preview: {
+        title: 'Ada Lovelace',
+        description: 'Writes the first published program.',
+        locale: 'en_US',
+        imageAlt: 'Ada Lovelace · Analyst',
+      },
+    };
+    const html = await renderPublicResume(value, VERSIONS);
+    expect(previewHead(html)).toBe([
+      '<link rel="canonical" href="https://resume.example/ada1">',
+      '<meta name="description" '
+      + 'content="Writes the first published program.">',
+      '<meta property="og:type" content="profile">',
+      '<meta property="og:site_name" content="aboutme.vn">',
+      '<meta property="og:title" content="Ada Lovelace">',
+      '<meta property="og:description" '
+      + 'content="Writes the first published program.">',
+      '<meta property="og:url" content="https://resume.example/ada1">',
+      '<meta property="og:locale" content="en_US">',
+      '<meta property="og:image" '
+      + 'content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+      '<meta property="og:image:type" content="image/png">',
+      '<meta property="og:image:width" content="1200">',
+      '<meta property="og:image:height" content="630">',
+      '<meta property="og:image:alt" content="Ada Lovelace · Analyst">',
+      '<meta name="twitter:card" content="summary_large_image">',
+      '<meta name="twitter:image" '
+      + 'content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+      '<meta name="twitter:image:alt" content="Ada Lovelace · Analyst">',
+    ].join(''));
+  });
+
+  it('omits og:locale when no locale maps', async () => {
+    const value = {
+      ...request(),
+      preview: {
+        title: 'Ada',
+        description: 'Resume on aboutme.vn',
+        locale: '',
+        imageAlt: 'Ada',
+      },
+    };
+    value.publicResume.lng = 'und';
+    const html = await renderPublicResume(value, VERSIONS);
+    expect(html).not.toContain('og:locale');
+    expect(html).toContain(
+      '<meta property="og:url" content="https://resume.example/ada1">'
+      + '<meta property="og:image" ',
+    );
+  });
+
+  it('never writes tags the server validator rejects', async () => {
+    const html = await renderPublicResume({
+      ...request(),
+      preview: {
+        title: 'Ada',
+        description: 'Analyst',
+        locale: 'en_US',
+        imageAlt: 'Ada',
+      },
+    }, VERSIONS);
+    const rejected = ['twitter:title', 'twitter:description', 'theme-color'];
+    for (const name of rejected) {
+      expect(html).not.toContain(name);
+    }
+  });
+
+  it('keeps the image-only head without preview text', async () => {
+    const html = await renderPublicResume(request(), VERSIONS);
+    expect(previewHead(html)).toBe([
+      '<link rel="canonical" href="https://resume.example/ada1">',
+      '<meta property="og:image" '
+      + 'content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+      '<meta property="og:image:width" content="1200">',
+      '<meta property="og:image:height" content="630">',
+      '<meta name="twitter:card" content="summary_large_image">',
+      '<meta name="twitter:image" '
+      + 'content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
+    ].join(''));
+    expect(html).not.toMatch(/name="description"|og:title|og:type/u);
   });
 });
