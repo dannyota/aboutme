@@ -20,8 +20,8 @@ const (
 	colorMuted  = "#5B6470"
 	colorRule   = "#DADDD6"
 	fontStack   = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-	footerVI    = "aboutme, công cụ tạo CV mã nguồn mở."
-	footerEN    = "aboutme, the open-source resume builder."
+	footerVI    = "aboutme.vn, công cụ tạo CV mã nguồn mở."
+	footerEN    = "aboutme.vn, the open-source resume builder."
 	fallbackVI  = "Nút không hoạt động? Sao chép và dán liên kết này vào trình duyệt:"
 	fallbackEN  = "Button not working? Paste this link into your browser:"
 	fallbackTxt = "Mở liên kết / Open the link:"
@@ -47,52 +47,52 @@ type template struct {
 
 var templates = map[Kind]template{
 	KindVerify: {
-		subject:   "Xác minh email aboutme / Verify your aboutme email",
+		subject:   "Xác minh email aboutme.vn / Verify your aboutme.vn email",
 		preheader: "Xác nhận email để hoàn tất đăng ký. Confirm your email to finish your account.",
 		action:    "Xác minh email · Verify email",
 		vi: section{
 			lang:    "vi",
 			heading: "Xác minh email của bạn",
-			body:    "Cảm ơn bạn đã đăng ký aboutme. Hãy xác nhận địa chỉ email này để hoàn tất việc tạo tài khoản.",
+			body:    "Cảm ơn bạn đã đăng ký aboutme.vn. Hãy xác nhận địa chỉ email này để hoàn tất việc tạo tài khoản.",
 			note:    "Liên kết có hiệu lực trong 24 giờ. Nếu bạn không đăng ký, hãy bỏ qua email này; sẽ không có tài khoản nào được tạo.",
 		},
 		en: section{
 			lang:    "en",
 			heading: "Verify your email",
-			body:    "Thanks for signing up for aboutme. Confirm this email address to finish creating your account.",
+			body:    "Thanks for signing up for aboutme.vn. Confirm this email address to finish creating your account.",
 			note:    "The link works for 24 hours. If you did not sign up, ignore this email and no account is created.",
 		},
 	},
 	KindReset: {
-		subject:   "Đặt lại mật khẩu aboutme / Reset your aboutme password",
+		subject:   "Đặt lại mật khẩu aboutme.vn / Reset your aboutme.vn password",
 		preheader: "Liên kết đặt lại mật khẩu, hiệu lực 30 phút. Your password reset link, valid for 30 minutes.",
 		action:    "Đặt lại mật khẩu · Reset password",
 		vi: section{
 			lang:    "vi",
 			heading: "Đặt lại mật khẩu",
-			body:    "Có người đã yêu cầu đặt lại mật khẩu cho tài khoản aboutme dùng email này.",
+			body:    "Có người đã yêu cầu đặt lại mật khẩu cho tài khoản aboutme.vn dùng email này.",
 			note:    "Liên kết có hiệu lực trong 30 phút và chỉ dùng được một lần. Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn sẽ không thay đổi.",
 		},
 		en: section{
 			lang:    "en",
 			heading: "Reset your password",
-			body:    "Someone asked to reset the password for the aboutme account that uses this email.",
+			body:    "Someone asked to reset the password for the aboutme.vn account that uses this email.",
 			note:    "The link works once, for 30 minutes. If you did not ask, ignore this email and your password stays the same.",
 		},
 	},
 	KindPasswordChanged: {
-		subject:   "Mật khẩu aboutme đã thay đổi / Your aboutme password was changed",
+		subject:   "Mật khẩu aboutme.vn đã thay đổi / Your aboutme.vn password was changed",
 		preheader: "Mật khẩu tài khoản của bạn vừa được thay đổi. Your account password was just changed.",
 		vi: section{
 			lang:    "vi",
 			heading: "Mật khẩu đã được thay đổi",
-			body:    "Mật khẩu tài khoản aboutme của bạn vừa được thay đổi.",
+			body:    "Mật khẩu tài khoản aboutme.vn của bạn vừa được thay đổi.",
 			note:    "Nếu bạn không thực hiện thay đổi này, hãy trả lời email này ngay để chúng tôi hỗ trợ.",
 		},
 		en: section{
 			lang:    "en",
 			heading: "Your password was changed",
-			body:    "The password for your aboutme account was just changed.",
+			body:    "The password for your aboutme.vn account was just changed.",
 			note:    "If you did not make this change, reply to this email right away and we will help.",
 		},
 	},
@@ -111,7 +111,7 @@ var templates = map[Kind]template{
 func securityTemplate(subject, viAction, enAction string) template {
 	return template{
 		subject:   subject,
-		preheader: "Thông báo bảo mật aboutme. aboutme security notice.",
+		preheader: "Thông báo bảo mật aboutme.vn. aboutme.vn security notice.",
 		vi: section{
 			lang: "vi", heading: "Thông báo bảo mật", body: viAction,
 			note: "Nếu bạn không thực hiện việc này, hãy đổi mật khẩu và thu hồi các phiên đăng nhập ngay.",

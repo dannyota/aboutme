@@ -1,6 +1,6 @@
-# aboutme
+# aboutme.vn
 
-> aboutme is a free, open-source resume builder. A resume is private until
+> aboutme.vn is a free, open-source resume builder. A resume is private until
 > you publish it; this file lists only the resumes their owners made discoverable.
 
 ## Site

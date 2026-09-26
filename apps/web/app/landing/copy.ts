@@ -55,7 +55,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
       private: 'Riêng tư theo mặc định',
       pdf: 'PDF',
     },
-    principlesTitle: 'Vì sao dùng aboutme',
+    principlesTitle: 'Vì sao dùng aboutme.vn',
     points: [
       {
         title: 'Riêng tư theo mặc định',
@@ -130,7 +130,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
       private: 'Private by default',
       pdf: 'PDF',
     },
-    principlesTitle: 'Why aboutme',
+    principlesTitle: 'Why aboutme.vn',
     points: [
       {
         title: 'Private by default',

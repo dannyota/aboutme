@@ -11,7 +11,7 @@ credentials or AWS account identifiers.
 receives normal user, support, and security mail. Authentication mail is sent
 transactionally through AWS SES in `ap-southeast-1` with:
 
-- From address: `danny@aboutme.vn`, shown as `Danny from aboutme`
+- From address: `danny@aboutme.vn`, shown as `Danny from aboutme.vn`
 - Configuration set: `aboutme-auth`
 - CloudFormation stack: `aboutme-email`
 - SES domain identity: `aboutme.vn`
@@ -67,7 +67,7 @@ Set these names and values in the runtime environment:
 AUTH_EMAIL_MODE=ses
 AWS_REGION=ap-southeast-1
 SES_FROM_ADDRESS=danny@aboutme.vn
-SES_FROM_NAME=Danny from aboutme
+SES_FROM_NAME=Danny from aboutme.vn
 SES_CONFIGURATION_SET=aboutme-auth
 ```
 

@@ -7731,7 +7731,7 @@ components:
           properties:
             name:
               type: string
-              const: aboutme
+              const: aboutme.vn
             id:
               type: string
               description: The canonical `PUBLIC_ORIGIN` host — the exact

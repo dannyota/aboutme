@@ -189,7 +189,7 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
       emoji: 'Biểu tượng thẻ',
       emojiHint:
         'Tùy chọn. Một biểu tượng cảm xúc, để trống để dùng biểu tượng '
-        + 'aboutme.',
+        + 'aboutme.vn.',
       suggestedIcons: 'Biểu tượng thẻ gợi ý',
       useIcon: (icon) => `Dùng ${icon}`,
       removeIcon: 'Xóa biểu tượng',
@@ -300,7 +300,7 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
       titleHint: (count, maximum) =>
         `Optional. ${count}/${maximum} characters.`,
       emoji: 'Tab icon',
-      emojiHint: 'Optional. One emoji; leave empty for the aboutme icon.',
+      emojiHint: 'Optional. One emoji; leave empty for the aboutme.vn icon.',
       suggestedIcons: 'Suggested tab icons',
       useIcon: (icon) => `Use ${icon}`,
       removeIcon: 'Remove icon',

@@ -54,7 +54,7 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     signInAgainWith: (provider) => `Đăng nhập lại với ${provider}`,
     cancelled: 'Đã hủy.',
     identityAlreadyLinked:
-      'Nhà cung cấp đó đã liên kết với một tài khoản aboutme khác.',
+      'Nhà cung cấp đó đã liên kết với một tài khoản aboutme.vn khác.',
     unlinked: (provider) => `Đã hủy liên kết ${provider}.`,
     sessionsRemain: 'Các thiết bị đã đăng nhập vẫn giữ nguyên.',
     signOutOtherDevices: 'Đăng xuất các thiết bị khác',
@@ -88,7 +88,7 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     signInAgainWith: (provider) => `Sign in again with ${provider}`,
     cancelled: 'That was cancelled.',
     identityAlreadyLinked:
-      'That provider is already linked to a different aboutme account.',
+      'That provider is already linked to a different aboutme.vn account.',
     unlinked: (provider) => `${provider} is unlinked.`,
     sessionsRemain: 'Devices that are already signed in stay signed in.',
     signOutOtherDevices: 'Sign out other devices',

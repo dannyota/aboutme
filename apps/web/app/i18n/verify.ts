@@ -254,7 +254,7 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     yourself: {
       heading: 'Tự kiểm chứng',
       intro: 'Các lệnh này kiểm tra trực tiếp với GitHub và Sigstore, không '
-        + 'cần tin aboutme.',
+        + 'cần tin aboutme.vn.',
       selector: 'Thành phần',
       readDigests: 'Đọc các mã băm đang chạy',
       verifyBuild: 'Kiểm chứng cách image được dựng (GitHub CLI cần đăng nhập)',
@@ -418,7 +418,7 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     yourself: {
       heading: 'Verify it yourself',
       intro: 'These commands check against GitHub and Sigstore directly. They '
-        + 'don\'t trust aboutme.',
+        + 'don\'t trust aboutme.vn.',
       selector: 'Component',
       readDigests: 'Read the running digests',
       verifyBuild: 'Verify how the image was built (the GitHub CLI must be '
