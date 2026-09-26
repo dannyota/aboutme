@@ -20,3 +20,13 @@ variable "waf_block" {
   type        = bool
   description = "false: every WAF rule only counts; true: rules block"
 }
+
+variable "transparency_enabled" {
+  type        = bool
+  description = "Serve /.well-known/deployment.json from the transparency bucket"
+}
+
+variable "transparency_bucket_domain_name" {
+  type        = string
+  description = "The transparency bucket's regional domain name"
+}

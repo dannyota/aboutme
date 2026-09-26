@@ -46,3 +46,8 @@ google_workspace = {
   verification_target = ""
   dkim_txt            = ""
 }
+
+# The deployment observer (docs/design/deployment-transparency/README.md).
+# Empty until deploy/aws/scripts/observer.sh <tag> has copied the image into
+# ECR; then its digest, which creates the function, schedule, and alarm.
+observer_image_digest = ""

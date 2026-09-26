@@ -11,7 +11,7 @@ choice.
 Status: proposed. **Owner approval** marks a product-visible choice the owner
 makes before the work that depends on it starts ([list](#owner-approval)).
 **Verify** marks a platform fact that devops confirms on the account before
-relying on it ([facts](#facts-to-verify)).
+relying on it ([facts](#facts-checked-on-the-account)).
 
 | Page                            | Holds                                                     |
 | ------------------------------- | --------------------------------------------------------- |
@@ -45,7 +45,7 @@ flowchart LR
   S[EventBridge Scheduler<br/>every minute] --> L[Lambda observer<br/>own role, off the host]
   L -->|ListTasks, DescribeTasks| E[ECS control plane<br/>cluster aboutme-prod]
   L -->|attestation by digest| G[GitHub attestations API]
-  L -->|PutObject deployment.json| B[(S3 transparency bucket)]
+  L -->|PutObject .well-known/deployment.json| B[(S3 transparency bucket)]
   V[Browser, curl] --> C[CloudFront]
   C -->|/.well-known/deployment.json<br/>origin access control| B
   C -->|/verify and everything else| O[Caddy on the host]
@@ -83,10 +83,12 @@ byte into the private ECR repository `aboutme-prod-observer`, fails unless the
 ECR digest equals the GHCR digest, and points the function at that digest.
 Observer updates are separate from application deploys and rare.
 
-Function settings: `arm64`, 128 MB, 30-second timeout, reserved concurrency one
-so runs never overlap, no VPC, and no environment secret. Its environment holds
-only the cluster name, the three service names, and the bucket name; none of
-them reaches the document.
+Function settings: `arm64`, 128 MB, a 30-second timeout on a 60-second schedule
+so runs never overlap, no VPC, and no environment secret. Reserved concurrency
+one is a variable left unset: the account's Lambda concurrency quota is 10, the
+minimum unreserved pool, so no function can reserve any until a quota increase.
+Its environment holds only the cluster name, the three service names, and the
+bucket name; none of them reaches the document.
 
 ### Kubernetes
 
@@ -170,7 +172,7 @@ The observer's role, with `<ACCOUNT>` and `<BUCKET>` filled by OpenTofu:
       "Sid": "PublishDocument",
       "Effect": "Allow",
       "Action": "s3:PutObject",
-      "Resource": "arn:aws:s3:::<BUCKET>/deployment.json"
+      "Resource": "arn:aws:s3:::<BUCKET>/.well-known/deployment.json"
     },
     {
       "Sid": "VerificationCache",
@@ -190,30 +192,39 @@ The observer's role, with `<ACCOUNT>` and `<BUCKET>` filled by OpenTofu:
 
 `ecs:ListTasks` authorizes against the `container-instance` resource type and
 `ecs:DescribeTasks` against `task`; both accept the `ecs:cluster` condition key
-([service authorization reference][ecs-iam]). **Verify** with the IAM policy
-simulator and one live run that a call against another cluster is denied. The
-platform read is exactly these two actions.
+([service authorization reference][ecs-iam]). The IAM policy simulator denies
+both against another cluster ([facts](#facts-checked-on-the-account)); one live
+denied call follows the first apply. The platform read is exactly these two
+actions.
 
 The rest of the boundary:
 
-- **Bucket** `aboutme-prod-transparency` (name from a variable, as the media
-  bucket's is): private, Block Public Access on, SSE-S3, versioning off. Its
-  policy lets only the CloudFront distribution read `deployment.json` through
-  origin access control, and denies `s3:PutObject` on `deployment.json` and
-  `verified/*` to every principal except the observer role. CloudFront never
-  serves `verified/*`.
+- **Bucket** `aboutme-prod-transparency-<account id>` (a variable may name it,
+  as the media bucket's does): private, Block Public Access on, SSE-S3,
+  versioning off. The document's key is `.well-known/deployment.json`, because
+  CloudFront appends the viewer path to an S3 origin. The policy lets only the
+  CloudFront distribution read that key through origin access control, and
+  denies writing, deleting, or replicating it and `verified/*` to every
+  principal except the observer role. CloudFront never serves `verified/*`. The
+  observer role cannot list the bucket, so a missing cache entry answers 403,
+  which the observer treats as a miss.
 - **ECR** repository `aboutme-prod-observer`: private, immutable tags, a
   repository policy that lets the Lambda service pull (`ecr:BatchGetImage`,
   `ecr:GetDownloadUrlForLayer`) with `aws:SourceArn` set to the function.
 - **Scheduler** role: `lambda:InvokeFunction` on the function only. It is a new
   role, separate from the jobs scheduler role.
 - **Deploy role** gains `ecr:GetAuthorizationToken` (no resource scope exists),
-  the five layer and image push actions on the one repository, and
-  `lambda:GetFunction` and `lambda:UpdateFunctionCode` on the one function. The
-  operator role's explicit deny already blocks it from doing either directly.
+  the five layer and image push actions plus `ecr:BatchGetImage`,
+  `ecr:GetDownloadUrlForLayer`, and `ecr:DescribeImages` on the one repository
+  (to compare digests, and because Lambda requires the caller that sets an image
+  to read it), and `lambda:GetFunction` and `lambda:UpdateFunctionCode` on the
+  one function. The operator role's explicit deny already blocks it from doing
+  either directly.
 - The `app`, `web`, `jobs`, `maintenance`, and instance roles get nothing.
-- A CloudWatch alarm on the function's `Errors` metric (five or more in ten
-  minutes) emails the owner through the existing SNS topic.
+- Two CloudWatch alarms email the owner through the existing SNS topic: the
+  function's `Errors` metric (five or more in ten minutes), and its
+  `Invocations` metric (none in ten minutes, missing data counts), which fires
+  when runs stop. Lambda does not retry a failed run.
 
 ## Run, freshness, and staleness
 
@@ -255,8 +266,9 @@ apply.
 - The request never reaches Caddy, so a response headers policy on this behavior
   sets HSTS (`max-age=31536000`), `X-Content-Type-Options: nosniff`, and
   `Access-Control-Allow-Origin: *` for GET, and removes `Server`,
-  `x-amz-request-id`, `x-amz-id-2`, and `x-amz-server-side-encryption`
-  (**Verify** that CloudFront may remove `Server`).
+  `x-amz-request-id`, `x-amz-id-2`, and `x-amz-server-side-encryption`.
+  CloudFront then adds its own `Server: CloudFront` ([removing
+  headers][cf-remove]).
 - The web ACL's per-IP rate rule covers this path like every other. Edge caching
   keeps origin reads to about two a minute per edge location, and Go carries no
   load for it.
@@ -336,21 +348,37 @@ Compatibility:
 The footer label ("Kiểm chứng" and "Verify") and page title ("Kiểm chứng phiên
 bản đang chạy" and "Verify what's running") are decided.
 
-## Facts to verify
+## Facts checked on the account
 
-1. `ecs:ListTasks` with `Resource: "*"` and the `ecs:cluster` condition allows
-   the observer's calls and denies another cluster.
-2. ECS `containers[].imageDigest` equals the pinned digest for a single-platform
-   manifest. Release images today are single-platform Docker v2 manifests; when
-   `linux/amd64` arrives and images become an index, confirm which digest ECS
-   and the kubelet report, and attest that one.
-3. Lambda accepts the observer image's manifest type (it must be one platform,
-   built with `--provenance=false`).
-4. The ECR repository policy grant is enough for Lambda to pull without an
-   execution-role ECR permission.
-5. A CloudFront response headers policy may remove `Server` from an S3 origin
-   response.
-6. The copy into ECR keeps the digest byte for byte.
+Checked on 2026-09-26 against production, read-only, and the AWS documentation.
+Items that need the created resources are confirmed again by the first observer
+run.
+
+1. **Cluster condition.** The [service authorization reference][ecs-iam] lists
+   `ecs:cluster` for `ListTasks` (resource `container-instance`) and
+   `DescribeTasks` (resource `task`). The IAM policy simulator, given the policy
+   above, allows `ListTasks` and `DescribeTasks` with the production cluster,
+   and denies both with another cluster or without the key. A live denied call
+   follows the first apply.
+2. **Reported digest.** For every running `app` and `web` container,
+   `containers[].imageDigest` equals the `@sha256` digest the task definition
+   pins, and GHCR serves the release tags as single-platform Docker v2 manifests
+   with that same digest.
+3. **Manifest type.** Lambda accepts Docker image manifest V2 schema 2 and OCI
+   manifests, one architecture only ([Lambda images][lambda-images]). The
+   observer image must be built for `linux/arm64` alone with
+   `--provenance=false`; `observer.sh` refuses any other manifest.
+4. **Pull permission.** For a function in the same account, the repository
+   policy alone is enough; the execution role needs no ECR permission ([Lambda
+   images][lambda-images]).
+5. **`Server` header.** A response headers policy may remove `Server`, and
+   CloudFront then sends `Server: CloudFront` ([removing headers][cf-remove]).
+6. **Byte-for-byte copy.** `observer.sh` copies with
+   `skopeo copy --preserve-digests`, which fails rather than change a digest,
+   and then fails unless ECR reports the GHCR digest.
 
 [ecs-iam]:
-  https://docs.aws.amazon.com/service-authorization/latest/reference/list_amazonelasticcontainerservice.html
+  https://docs.aws.amazon.com/service-authorization/latest/reference/list_ecs.html
+[lambda-images]: https://docs.aws.amazon.com/lambda/latest/dg/images-create.html
+[cf-remove]:
+  https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/understanding-response-headers-policies.html#understanding-response-headers-policies-remove-headers

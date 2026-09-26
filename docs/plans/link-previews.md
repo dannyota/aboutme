@@ -1,12 +1,11 @@
-# Link previews (0.6.0 to 0.6.2)
+# Link previews (0.6.0 and 0.6.1)
 
-Status: planned; the owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0055 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). Three small releases, one feature each. The manager may deploy 0.6.0 and 0.6.1 together under 0.6.1 if both are green together.
+Status: 0.6.0 is tagged `v0.6.0`; 0.6.1 is planned. The owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0055 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). The owner moved the publish-panel preview and the Verify page ([deployment transparency](deployment-transparency.md)) into 0.6.1 with the card. The next releases are 0.6.2 LinkedIn sign-in and 0.6.3 LinkedIn import ([linkedin.md](linkedin.md)).
 
 |Release|Outcome|Risk|
 |-|-|-|
 |0.6.0 Preview text|Title, description from the summary, locale, URL, site name, image type and alt on every live resume page; privacy notice paragraph on third-party copies|Medium: HTML validator and render contract|
-|0.6.1 Preview card|Stored, versioned 1200 by 630 card with name, headline, photo, branding; no contact data; built at publish and on change|High: migration, publish revocation, render queue|
-|0.6.2 Publish-panel preview|The publish dialog shows the card and a chat-card mock; no new setting|Low; approved by the owner as its own release|
+|0.6.1 Preview card, publish-panel preview, and Verify page|Stored, versioned 1200 by 630 card with name, headline, photo, branding; no contact data; built at publish and on change. The publish dialog shows the card and a chat-card mock; no new setting. The Verify page as in [deployment transparency](deployment-transparency.md#verify-page)|High: migration, publish revocation, render queue; the Verify page adds a public route and a reserved slug|
 
 ## Owner review
 
@@ -32,9 +31,11 @@ Deploy order: the web image starts before the app, so the Nuxt decoder accepts a
 |qa|new `apps/web/e2e/card.spec.ts` and its baselines; `deploy/dev-https-browser/` public check updates|Pixel baselines for the design's cases, safe-square geometry, byte limit with the noisiest photo, contact sentinels absent from the card text; live check list after deploy, then again after unpublish|
 |devops|none in the repository|Read the web ACL's sampled requests during the live checks for blocked crawler user agents|
 
-The reviewer does an adversarial pass on 0.6.1 and confirms by name: gate before every card read, row deleted in the unpublish, rename, and delete transactions, no store after revocation, old versions return 404, no contact field in the card envelope, and owner PDF exports keep their queue places.
+The reviewer does one adversarial pass on 0.6.1, after the publish-panel part, and confirms by name: gate before every card read, row deleted in the unpublish, rename, and delete transactions, no store after revocation, old versions return 404, no contact field in the card envelope, and owner PDF exports keep their queue places.
 
-## 0.6.2 Publish-panel preview
+## 0.6.1 Publish-panel preview part
+
+Built after the card work in the same release; the frontend starts it once `PreviewCard.vue` exists.
 
 |Role|Files|Work|
 |-|-|-|
