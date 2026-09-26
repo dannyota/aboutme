@@ -304,6 +304,31 @@ func TestGoogleCallback_RejectsNonceMismatch(t *testing.T) {
 	assertNoUser(t, q, email)
 }
 
+// TestGoogleCallback_RejectsMissingNonce proves Google keeps the strict rule:
+// an ID token without a nonce claim is rejected. Only LinkedIn, which never
+// returns the claim, accepts its absence.
+func TestGoogleCallback_RejectsMissingNonce(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	handler, q := newTestService(t, withGoogleIssuer(p.URL))
+
+	subject := uniqueSubject(t)
+	email := uniqueEmail(t)
+	txCookie, state, _ := beginGoogle(t, handler)
+	p.RegisterCode("code-nonce-missing", oidctest.Claims{
+		Subject:       subject,
+		Email:         email,
+		EmailVerified: ptrTrue(),
+	})
+
+	resp := doCallback(t, handler, "code-nonce-missing", state, txCookie) //nolint:bodyclose // doCallback -> doGet closes the body itself before returning.
+
+	assertRejected(t, resp)
+	assertNoIdentity(t, q, subject)
+	assertNoUser(t, q, email)
+}
+
 // TestGoogleCallback_RejectsExpiredIDToken proves go-oidc rejects a token
 // whose "exp" is already in the past. oidctest's
 // TestProvider_ExpiresIn_IndependentOfIDTokenExpiry

@@ -1,11 +1,12 @@
 package auth
 
-// LinkedIn follows its documented confidential web flow: no PKCE, client
-// credentials in the token request body, and the OIDC nonce as the
-// code-injection defense (RFC 9700 section 2.1.1). Its email and
+// LinkedIn follows its documented confidential web flow: no PKCE and client
+// credentials in the token request body. LinkedIn accepts the OIDC nonce
+// parameter but leaves the nonce claim out of its ID tokens, so the callback
+// accepts an absent claim and rejects a present one that differs. Its email and
 // email_verified claims are optional, so EmailVerified is a *bool and a missing
 // claim never counts as verified for registration. See
-// docs/design/linkedin-sign-in.md and ADR 0058.
+// docs/design/linkedin-sign-in.md, ADR 0058, and ADR 0063.
 
 import (
 	"context"
@@ -97,8 +98,9 @@ func (s *Service) linkedinRedirectURL() string {
 }
 
 // buildLinkedInAuthorizeURL binds state and an OIDC nonce and sends no PKCE
-// challenge. The transaction still stores a verifier that LinkedIn never
-// receives, so storage matches the other providers.
+// challenge. LinkedIn does not echo the nonce today; sending it keeps the check
+// in force if it starts to. The transaction still stores a verifier that
+// LinkedIn never receives, so storage matches the other providers.
 func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error) {
 	provider, err := s.linkedinProvider(ctx)
 	if err != nil {
@@ -172,7 +174,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	// Use the transaction's exact authorization-time redirect URI. No
 	// code_verifier: LinkedIn's token endpoint rejects it from a confidential
-	// client, and the nonce check below binds the code to this transaction.
+	// client.
 	oauth2Cfg := s.linkedinOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code)
 	if err != nil {
@@ -193,9 +195,11 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// go-oidc exposes the nonce but does not validate it. For LinkedIn this
-	// check is the code-injection defense, so it runs before any claim is used.
-	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
+	// go-oidc exposes the nonce but does not validate it. LinkedIn omits the
+	// claim, so only a present claim is compared; a present claim that differs
+	// is rejected before any other claim is used. ADR 0063 records the
+	// remaining code-injection risk.
+	if idToken.Nonce != "" && idToken.Nonce != tx.Nonce {
 		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonNonceMismatch)
 		return
 	}
