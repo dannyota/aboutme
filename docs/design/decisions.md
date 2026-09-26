@@ -2,7 +2,7 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052 and
-0054 are accepted; ADR 0053 is rejected; ADR 0055 is proposed.
+0054–0056 are accepted; ADR 0053 is rejected.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0029](../adr/0029-application-ui-toolkit.md)                             | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated; primitive rule amended by 0052           |
 | [0030](../adr/0030-stamped-document-visual-identity.md)                   | Accepted | Stamped-document identity: seal red only for public state, Be Vietnam Pro chrome; palette superseded by 0050           |
 | [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)                   | Accepted | AWS cost research, OpenTofu, managed AWS services; hosted UAT superseded by 0037                                       |
-| [0032](../adr/0032-public-share-image.md)                                 | Accepted | One live-gated public PNG share image from the continuous resume renderer                                              |
+| [0032](../adr/0032-public-share-image.md)                                 | Accepted | One live-gated public PNG share image from the continuous resume renderer; superseded by 0055                          |
 | [0033](../adr/0033-public-image-builds-private-deployment.md)             | Accepted | Public ARM64 build/smoke; ECR publication superseded by 0037                                                           |
 | [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)           | Accepted | Scheduled UAT and autoscaling; superseded by 0036 and 0037                                                             |
 | [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)             | Accepted | Fleet coordination contract retained for a later second replica; runtime and hosted UAT superseded by 0037 and 0038    |
@@ -59,8 +59,9 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0051](../adr/0051-vietnam-hosted-production.md)                          | Accepted | Vietnam-hosted production: GreenNode compute, storage, CDN, DNS; Bizfly mail; AWS becomes test only                    |
 | [0052](../adr/0052-guarded-token-edits-to-generated-primitives.md)        | Accepted | Generated primitives take token-colored variant edits only with a guard test, re-applied after regeneration            |
 | [0053](../adr/0053-public-pdf-tab-renders-the-download-in-the-browser.md) | Rejected | Public PDF tab draws the gated PDF download with pdf.js in the browser; no new route or server raster                  |
-| [0054](../adr/0054-cloudfront-edge-for-single-host-production.md)         | Accepted | Interim CloudFront edge with origin mTLS before the single host; ADR 0051 still governs the Vietnam move               |
-| [0055](../adr/0055-stored-link-preview-card.md)                           | Proposed | Stored, versioned link-preview card replaces the top-crop share image; would supersede 0032                            |
+| [0054](../adr/0054-cloudfront-edge-for-single-host-production.md)         | Accepted | Interim CloudFront edge with origin mTLS; DNS superseded by 0056; ADR 0051 still governs the Vietnam move              |
+| [0055](../adr/0055-stored-link-preview-card.md)                           | Accepted | Stored, versioned link-preview card replaces the top-crop share image; supersedes 0032                                 |
+| [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
 
 ## Remaining gates
 

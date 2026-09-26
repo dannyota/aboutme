@@ -31,7 +31,7 @@ admission bound; the [scaling contract](scaling/README.md) and
 | Whole server task memory (Go + Chromium)        | ≤ 512 MiB cgroup                                    | Print queue and Chromium; production benchmark           |
 | Print capability lifetime                       | ≤ 60 s; job deadline remains 20 s                   | Render queue                                             |
 | Private print JSON / HTML                       | ≤ 3,407,872 / 6,291,456 bytes                       | Snapshot encoder and Nuxt print boundary                 |
-| PDF / share-image bytes                         | ≤ 16,777,216 / 4,194,304 bytes                      | Streamed PDF and PNG validation                          |
+| PDF / preview card bytes                        | ≤ 16,777,216 / 524,288 bytes                        | Streamed PDF and PNG validation                          |
 | Owner PDF requests per account and IP           | ≤ 10/min                                            | Owner PDF route                                          |
 | Public artifact requests / render misses per IP | ≤ 300/min / 20/min                                  | Public artifact routes                                   |
 | Public artifact cache                           | ≤ 128 entries, 32 MiB bodies, 60 s TTL              | Shared public cache                                      |
