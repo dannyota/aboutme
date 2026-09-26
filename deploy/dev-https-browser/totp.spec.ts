@@ -27,6 +27,7 @@ import {
   type ConsoleMessage,
   type Page,
   type Request,
+  type Route,
 } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -301,6 +302,54 @@ function runEmail(role: string): string {
 }
 
 // --- Page helpers ------------------------------------------------------
+
+// A settings mutation that replaces the session, such as TOTP removal, sets
+// a new session cookie with a new CSRF secret, and the page keeps the old
+// token until its own /api/v1/me refetch lands (sessions.vue
+// onSecondFactorChanged). A mutation sent before then gets 403
+// csrf_rejected, and useAuth's mutate refreshes and retries once, which the
+// console check counts as unexpected. The refetch is held for
+// TOKEN_REFETCH_HOLD_MS, so a next step that does not wait for it always
+// sends the stale token and fails that check instead of failing only when
+// the runner is slow.
+const TOKEN_REFETCH_HOLD_MS = 1_000;
+
+/**
+ * Holds the page's next /api/v1/me request, then passes it on. Call it before
+ * the action that replaces the session; the returned wait resolves once the
+ * page has the refetched response, and the next mutation awaits it. A page
+ * that never refetches fails the wait within WAIT_RESPONSE_MS.
+ */
+async function holdTokenRefetch(page: Page): Promise<() => Promise<void>> {
+  let release = (): void => undefined;
+  const settled = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`${ORIGIN}/api/v1/me`, async (route: Route) => {
+    try {
+      await new Promise((resolve) => {
+        setTimeout(resolve, TOKEN_REFETCH_HOLD_MS);
+      });
+      await route.fulfill({ response: await route.fetch() });
+    } finally {
+      release();
+    }
+  }, { times: 1 });
+  return async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        settled,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('the page did not refetch its session')),
+            WAIT_RESPONSE_MS,
+          );
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  };
+}
 
 interface FactorState {
   readonly status: number;
@@ -952,6 +1001,7 @@ async function provesEnabledJourney(
     await reauthenticateEnrolled(page, primaryPassword, secret, primaryTracker);
     await page.getByTestId('totp-remove').click();
     await expect(page.getByRole('alertdialog')).toBeVisible();
+    const tokenRefetched = await holdTokenRefetch(page);
     await page.locator('[data-action="totp-remove-confirm"]').click();
     await expect(page.getByTestId('totp-removed-success')).toBeVisible();
     state = await factorState(page);
@@ -959,7 +1009,10 @@ async function provesEnabledJourney(
     expect(state.totpEnabled).toBe(false);
     steps.oneRemoved = true;
 
+    // The removal replaced the session, so the passkey removal waits for
+    // the page's replacement CSRF token (holdTokenRefetch).
     stage('final-removal');
+    await tokenRefetched();
     await page.locator('[data-testid^="passkey-remove-"]').first().click();
     await expect(page.getByRole('alertdialog'))
       .toContainText('This is your last passkey.');
