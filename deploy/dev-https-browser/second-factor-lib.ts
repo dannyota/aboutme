@@ -542,6 +542,7 @@ export interface CaptureClient {
 export function captureClient(token: string): CaptureClient {
   const headers = { Authorization: `Bearer ${token}` };
   const read = async (): Promise<CapturedMessage[]> => {
+    // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- loopback HTTP to the local mail capture harness
     const response = await fetch(CAPTURE_URL, {
       headers,
       signal: AbortSignal.timeout(WAIT_LOOPBACK_MS),
@@ -552,6 +553,7 @@ export function captureClient(token: string): CaptureClient {
   };
   return {
     async reset() {
+      // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, {
         headers,
         method: 'DELETE',

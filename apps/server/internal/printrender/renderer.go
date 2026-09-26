@@ -170,6 +170,7 @@ func defaultHooksWithSupervisor(supervisor supervisorCommand) *runtimeHooks {
 		sandboxSupported: linuxSandboxSupported,
 		supervisor:       supervisor,
 		version: func(ctx context.Context, executable string) (string, error) {
+			// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- executable is the configured absolute browser path that New checked and never request data
 			cmd := exec.CommandContext(ctx, executable, "--version")
 			configure, proof := newBrowserCommand(executable, supervisor.path, supervisor.prefix)
 			configure(cmd)

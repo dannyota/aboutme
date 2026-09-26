@@ -38,4 +38,5 @@ COPY --from=render /maintenance.generated.caddy /etc/caddy/maintenance.generated
 # secret material sits under it for a path rewrite to ever reach.
 COPY deploy/caddy/production/maintenance.html /etc/caddy/maintenance-site/maintenance.html
 COPY --chmod=0755 deploy/caddy/production/entrypoint.sh /usr/local/bin/aboutme-caddy
+# nosemgrep: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint -- Caddy runs as root under ECS host networking; see the stage comment above
 ENTRYPOINT ["/usr/local/bin/aboutme-caddy"]
