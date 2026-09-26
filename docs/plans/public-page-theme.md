@@ -1,13 +1,13 @@
-# Public page bar and color scheme (0.6.8, 0.6.9)
+# Public page bar and light/dark theme (0.6.9)
 
-Status: planned. Design: [public page bar and theme](../design/public-page-theme.md). One feature per release: the page bar ships first with no contract change; the color scheme needs an ADR and a schema version, so it ships second. Mockups: `.dev/design/public-theme/` in the main checkout (ignored), rendered from production template pages by a scratch script.
+Status: planned. Design: [public page bar and theme](../design/public-page-theme.md). The owner numbered both parts as one release, 0.6.9. The page bar lands first with no contract change; the color scheme needs an ADR and a schema version, so it lands second. Both deploy once under 0.6.9. Mockups: `.dev/design/public-theme/` in the main checkout (ignored), rendered from production template pages by a scratch script.
 
-|Release|Outcome|Risk|
+|Part|Outcome|Risk|
 |-|-|-|
-|0.6.8 Page bar|Full-width Aurora bar with the mark, a muted credit, and a 32 px outlined Download PDF button; download-off state; not sticky|Low: markup and CSS; the validator hooks stay|
-|0.6.9 Color scheme|Owner picks Light, Dark, or Match device per resume; public page and Web preview render the dark palette rule; PDF, print, and card stay light|Medium: schema version, renderer roles, ADR amending ADR 0050|
+|Page bar|Full-width Aurora bar with the mark, a muted credit, and a 32 px outlined Download PDF button; download-off state; not sticky|Low: markup and CSS; the validator hooks stay|
+|Color scheme|Owner picks Light, Dark, or Match device per resume; public page and Web preview render the dark palette rule; PDF, print, and card stay light|Medium: schema version, renderer roles, ADR amending ADR 0050|
 
-## 0.6.8 Page bar
+## Page bar
 
 |Role|Files|Work|
 |-|-|-|
@@ -17,7 +17,7 @@ Status: planned. Design: [public page bar and theme](../design/public-page-theme
 
 Go needs no change: the credit anchor keeps one text child and the download href is unchanged. The reviewer confirms the validator still passes on a Vietnamese and an English page, with download on and off.
 
-## 0.6.9 Color scheme
+## Color scheme
 
 Order: architect first, then backend and frontend in parallel on disjoint paths, then qa.
 
@@ -29,9 +29,8 @@ Order: architect first, then backend and frontend in parallel on disjoint paths,
 |qa|new baselines `public--modern-sidebar--dark--390.png`, `public--creative-accent--dark--1440.png`, `public--executive-band--dark--1440.png`, `public--classic-serif--system--1440.png` (emulated dark preference); `apps/web/e2e/screenshot.spec.ts` cells; dev-https public proof|Print media on a dark page computes the light surface; the PDF of a dark resume matches its light PDF; the preview card is unchanged|
 |designer|none|Finish review of three templates in both schemes at 390 and 1440 px, and the editor field in both languages|
 
-Unchanged baselines in both releases: every `*--paged.png` and `*--continuous.png`, `print-baselines/`, `chrome--*`, `template-*`, and all golden HTML.
+Unchanged baselines in both parts: every `*--paged.png` and `*--continuous.png`, `print-baselines/`, `chrome--*`, `template-*`, and all golden HTML.
 
 ## Open
 
-- The owner named one release, 0.6.8. This plan splits it in two under the one-feature rule; the manager confirms or merges them.
-- The ADR for the dark scheme needs owner approval before 0.6.9 code starts.
+- The ADR for the dark scheme needs owner approval before the color scheme code starts.

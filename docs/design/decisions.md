@@ -2,8 +2,8 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052,
-0054–0056, 0058, and 0060–0063 are accepted; ADR 0053 is rejected; ADRs 0057 and
-0059 are proposed.
+0054–0056, 0058, and 0060–0063 are accepted; ADR 0053 is rejected; ADRs 0057,
+0059, and 0064 are proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -65,11 +65,12 @@ supersession record; these pages state the resulting design. ADRs 0001–0052,
 | [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
 | [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
 | [0058](../adr/0058-linkedin-sign-in-in-production.md)                     | Accepted | Production may enable LinkedIn sign-in; LinkedIn uses its documented flow with a nonce and no PKCE                     |
-| [0059](../adr/0059-linkedin-import-in-the-browser.md)                     | Proposed | LinkedIn import reads the member's data download in the browser; the file is never uploaded                            |
+| [0059](../adr/0059-linkedin-import-in-the-browser.md)                     | Proposed | Import parses in the browser and never uploads the file; its data download source superseded in part by 0064           |
 | [0060](../adr/0060-viewer-data-controller-and-consent.md)                 | Accepted | aboutme controls viewer counting and keeps no viewer data; consented tracking dropped                                  |
 | [0061](../adr/0061-layered-human-view-counting.md)                        | Accepted | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |
 | [0062](../adr/0062-sign-in-to-view-without-an-account.md)                 | Accepted | Sign in to view with a signed pass cookie, no account, nothing kept about the viewer                                   |
 | [0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md)             | Accepted | LinkedIn returns no nonce claim; its callback checks the nonce only when present, with the code-injection risk named   |
+| [0064](../adr/0064-linkedin-import-from-save-to-pdf.md)                   | Proposed | LinkedIn import reads the English Save to PDF with pdf.js in a worker; app pages allow same-origin workers             |
 
 ## Remaining gates
 
