@@ -56,6 +56,9 @@ type flight struct {
 	done chan struct{}
 	png  []byte
 	err  error
+	// joined counts every call that join has returned this flight to,
+	// including the one that started it, while s.mu guards it.
+	joined int
 }
 
 // NewService creates the card build service.
@@ -118,13 +121,15 @@ func (s *Service) join(resumeID uuid.UUID, version string, priority renderjob.Pr
 	defer s.mu.Unlock()
 	normal := flightKey{resumeID: resumeID, version: version, priority: renderjob.PriorityNormal}
 	if pending, found := s.flights[normal]; found {
+		pending.joined++
 		return pending, nil
 	}
 	key := flightKey{resumeID: resumeID, version: version, priority: priority}
 	if pending, found := s.flights[key]; found {
+		pending.joined++
 		return pending, nil
 	}
-	pending := &flight{done: make(chan struct{})}
+	pending := &flight{done: make(chan struct{}), joined: 1}
 	s.flights[key] = pending
 	return pending, &key
 }
