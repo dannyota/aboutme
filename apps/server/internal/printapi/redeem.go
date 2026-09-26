@@ -250,7 +250,13 @@ func snapshotMatches(snapshot renderjob.Snapshot, requestedResumeID uuid.UUID) b
 	}
 
 	var envelope map[string]json.RawMessage
-	if err := json.Unmarshal(snapshot.Payload, &envelope); err != nil || len(envelope) != 6 {
+	if err := json.Unmarshal(snapshot.Payload, &envelope); err != nil {
+		return false
+	}
+	if _, card := envelope["kind"]; card {
+		return cardSnapshotMatches(snapshot)
+	}
+	if len(envelope) != 6 {
 		return false
 	}
 	for _, key := range []string{"version", "resumeId", "revision", "publicGeneration", "lng", "document"} {
@@ -286,6 +292,24 @@ func snapshotMatches(snapshot renderjob.Snapshot, requestedResumeID uuid.UUID) b
 		return false
 	}
 	return true
+}
+
+// cardSnapshotMatches accepts a link-preview card envelope only in the exact
+// bytes printsnapshot.MarshalCard emits for it, bound to the snapshot's
+// resume and to a public generation. Any unknown key, a document, or a
+// non-canonical encoding fails.
+func cardSnapshotMatches(snapshot renderjob.Snapshot) bool {
+	if snapshot.PublicGeneration != snapshot.Revision {
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(snapshot.Payload))
+	decoder.DisallowUnknownFields()
+	var envelope printsnapshot.CardEnvelope
+	if err := decoder.Decode(&envelope); err != nil || envelope.ResumeID != snapshot.ResumeID.String() {
+		return false
+	}
+	canonical, err := printsnapshot.MarshalCard(envelope)
+	return err == nil && bytes.Equal(canonical, snapshot.Payload)
 }
 
 func canonicalLanguage(value string) bool {

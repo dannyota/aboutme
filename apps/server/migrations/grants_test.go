@@ -2,7 +2,7 @@
 // owns every object in public (including goose_db_version and the citext
 // extension) and belongs to no other role, and aboutme_app holds exactly
 // SELECT/INSERT/UPDATE/DELETE (no grant option, nothing else) on each of
-// the 26 business tables, nothing at all on any other relation in
+// the 29 business tables, nothing at all on any other relation in
 // public, and cannot create or alter schema objects. Every check is proven
 // against the real ACL and catalog state a live goose-migrated database
 // produces, not against the migration source text.
@@ -23,7 +23,7 @@ import (
 // table this list does not name.
 var businessTables = []string{
 	"users", "identities", "oauth_transactions", "sessions", "idempotency_records",
-	"resumes", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
+	"resumes", "resume_preview_cards", "slug_tombstones", "idempotency_usage", "media_deletion_jobs",
 	"public_state", "password_credentials", "password_registrations",
 	"password_reset_tokens", "auth_email_jobs", "oauth_clients",
 	"oauth_authorization_codes", "oauth_grants", "oauth_tokens",

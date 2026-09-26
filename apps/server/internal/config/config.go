@@ -124,6 +124,12 @@ type Config struct {
 	// unaffected either way (docs/design/totp-second-factor-contract.md
 	// "Enrollment and replacement API").
 	TOTPEnrollment bool
+	// PreviewCards turns on stored link-preview cards
+	// (PREVIEW_CARD_ENABLED=true): pages name the versioned card, og.png
+	// serves it, and the card scheduler runs. It defaults to false, which
+	// keeps the og.png share image, because the card needs a web renderer
+	// that draws the card envelope (docs/adr/0055-stored-link-preview-card.md).
+	PreviewCards bool
 	// TOTPActiveKey and TOTPPreviousKey are the canonical 43-character
 	// unpadded base64url TOTP sealing keys from TOTP_ACTIVE_KEY and the
 	// optional TOTP_PREVIOUS_KEY. TOTPActiveKey is always required, whether
@@ -241,6 +247,10 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	previewCards, err := loadPreviewCardFlag(getenv("PREVIEW_CARD_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
 	totpActiveKey, totpPreviousKey, err := loadTOTPKeyRing(getenv("TOTP_ACTIVE_KEY"), getenv("TOTP_PREVIOUS_KEY"))
 	if err != nil {
 		return Config{}, err
@@ -312,6 +322,7 @@ func Load(getenv func(string) string) (Config, error) {
 		ProviderLogin:                providerLogin,
 		PasswordRegistrationDisabled: passwordRegistrationDisabled,
 		PasskeyEnrollment:            passkeyEnrollment,
+		PreviewCards:                 previewCards,
 		TOTPEnrollment:               totpEnrollment,
 		TOTPActiveKey:                totpActiveKey,
 		TOTPPreviousKey:              totpPreviousKey,

@@ -37,11 +37,16 @@ type ArtifactDependencies struct {
 	RendererDigest string
 	TrustedProxies api.TrustedProxies
 	Clock          func() time.Time
+	// Cards turns on stored preview cards: og.png becomes an alias of the
+	// current card and the versioned card route answers. Nil keeps the
+	// og.png share image and the versioned route returns 404.
+	Cards PreviewCards
 }
 
 type artifactHandlers struct {
-	pdf http.Handler
-	png http.Handler
+	pdf  http.Handler
+	png  http.Handler
+	card http.Handler
 }
 
 type artifactService struct {
@@ -79,7 +84,7 @@ func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, 
 			Requests: publicRenderRequestsPerMinute, Window: time.Minute,
 		}),
 	}
-	return &artifactHandlers{
+	handlers := &artifactHandlers{
 		pdf: service.handler(artifactContract{
 			format: renderjob.PDF, representation: publicstate.RepresentationPDF,
 			suffix: "/pdf", variant: "default", formatVersion: publicPDFFormatVersion,
@@ -91,7 +96,17 @@ func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, 
 			suffix: "/og.png", variant: "1200x630", formatVersion: publicPNGFormatVersion,
 			contentType: "image/png", maxBytes: renderjob.PNGMaxBytes,
 		}),
-	}, nil
+		card: http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+			if validateArtifactRequest(w, request) {
+				servePublicJSONError(w, request, http.StatusNotFound)
+			}
+		}),
+	}
+	if dependencies.Cards != nil {
+		handlers.png = service.cardHandler(dependencies.Cards, true)
+		handlers.card = service.cardHandler(dependencies.Cards, false)
+	}
+	return handlers, nil
 }
 
 func (s *artifactService) handler(contract artifactContract) http.Handler {

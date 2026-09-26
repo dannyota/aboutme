@@ -74,11 +74,12 @@ func Sitemap(origin publicresume.PublicOrigin, slugs []string) ([]byte, error) {
 
 // Robots encodes the canonical robots.txt response. Crawlers may read every
 // page except the API, the signed-in app, and the sign-in pages. Under /api
-// only the share images stay open, because social cards fetch them; PDFs and
-// JSON of resumes with discovery off must not be crawled.
+// only the share image and the preview cards stay open, because social cards
+// fetch them; PDFs and JSON of resumes with discovery off must not be
+// crawled.
 func Robots(origin publicresume.PublicOrigin) []byte {
 	var out bytes.Buffer
-	out.WriteString("User-agent: *\nAllow: /\nAllow: /api/v1/public/resumes/*/og.png$\nDisallow: /api/\nDisallow: /app/\n")
+	out.WriteString("User-agent: *\nAllow: /\nAllow: /api/v1/public/resumes/*/og.png$\nAllow: /api/v1/public/resumes/*/og/\nDisallow: /api/\nDisallow: /app/\n")
 	for _, page := range crawlerHiddenPages {
 		out.WriteString("Disallow: /" + page + "$\nDisallow: /" + page + "?\n")
 	}

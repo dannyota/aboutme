@@ -58,9 +58,9 @@ revokes every viewer pass for the resume in the same transaction.
    ([ADR 0014](../../adr/0014-oauth-start-methods.md)). The start checks that
    the slug is live and `sign_in`, then stores the transaction with purpose
    `view`, the resume ID, and the notice version, and redirects to the provider.
-2. The provider flow is unchanged: Google with PKCE, LinkedIn as its sign-in
-   design sets out, nonce and ID token checks for both
-   ([security](../security.md#oauth-transaction)).
+2. The provider flow is unchanged: Google with PKCE, LinkedIn as
+   [LinkedIn sign-in](../linkedin-sign-in.md#protocol) sets out, nonce and ID
+   token checks for both ([security](../security.md#oauth-transaction)).
 3. The callback, for purpose `view`, never looks up, creates, links, or signs in
    an account and never creates a session. It re-checks that the resume is live
    and `sign_in`, upserts the viewer identity, appends a `sign_in` consent

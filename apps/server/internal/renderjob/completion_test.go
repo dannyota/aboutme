@@ -63,7 +63,7 @@ func newDirectJob(t *testing.T, snapshot Snapshot, validate func(context.Context
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	active, err := queue.admit(context.Background())
+	active, err := queue.admit(context.Background(), PriorityNormal)
 	if err != nil {
 		t.Fatalf("admit() error = %v", err)
 	}

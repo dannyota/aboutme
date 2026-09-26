@@ -11,10 +11,10 @@ func (q *Queue) Render(ctx context.Context, request Request) (Result, error) {
 	if contextErr := ctx.Err(); contextErr != nil {
 		return Result{}, contextErr
 	}
-	if !validFormat(request.Format) || request.Prepare == nil {
+	if !validFormat(request.Format) || !validPriority(request.Priority) || request.Prepare == nil {
 		return Result{}, ErrInvalidRequest
 	}
-	attempt, err := q.admit(ctx)
+	attempt, err := q.admit(ctx, request.Priority)
 	if err != nil {
 		return Result{}, err
 	}
