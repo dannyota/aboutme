@@ -11,31 +11,32 @@ Current behavior lives in code, deployment configuration, and
 
 ## Pages
 
-| Section | File                                                            | Purpose                                                        |
-| ------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
-| 1       | [Product](product.md)                                           | Users, journeys, scope, public namespace, and publish states   |
-| 2       | [System](system.md)                                             | Components, route ownership, renderer and failure boundaries   |
-| 3       | [Data](data.md)                                                 | Relational model, resume document, validation, and versions    |
-| 4       | [API](api.md)                                                   | HTTP conventions, endpoints, photo intake, and write safety    |
-| 5       | [Web and rendering](web.md)                                     | Web surfaces, UI toolkit, renderer, templates, and print       |
-| 5a      | [Localization](localization.md)                                 | Vietnamese and English interface, separate from resume text    |
-| 5b      | [Security](security.md)                                         | Identity, sessions, CSRF, agent OAuth, limits, and content     |
-| 5c      | [Second-factor authentication](second-factor-authentication.md) | Shared passkey, TOTP, recovery, and epoch rules                |
-| 5d      | [Passkey contract](passkey-second-factor-contract.md)           | Pending, WebAuthn, recovery, mail, and passkey storage shapes  |
-| 5e      | [Authenticator-app contract](totp-second-factor-contract.md)    | TOTP routes, failure budget, and storage                       |
-| 5f      | [TOTP key management](totp-key-management.md)                   | Sealing, key ring, rotation, and key failures                  |
-| 6       | [Deployment](deployment.md)                                     | Environments, trust boundaries, media, mail, and migrations    |
-| 6a      | [Single-host production](single-host-production.md)             | Production host, edge, database, secrets, deploy, and alarms   |
-| 6b      | [Release fence](passkey-release-fence.md)                       | Minimum production release, operation lock, and IAM            |
-| 7       | [Repository boundaries](repository.md)                          | Sources of truth and dependency direction                      |
-| 8       | [Realtime](realtime.md)                                         | Autosave, Server-Sent Events, and fallback                     |
-| 9       | [Operations](operations.md)                                     | Privacy lifecycle, export, deletion, monitoring, and checks    |
-| 10      | [Decision status](decisions.md)                                 | ADR index, open gates, and change process                      |
-| Other   | [Numeric budgets](budgets.md)                                   | Hard limits, rate policies, SLOs, and benchmark protocol       |
-| Other   | [Font catalog](fonts.md)                                        | Font license gate, provenance, coverage, and fallback          |
-| Other   | [MCP owner workflow](mcp-owner-workflow.md)                     | Official-SDK client run that copies one resume into Vietnamese |
-| Other   | [Templates](templates/README.md)                                | Preset data, tokens, colors, geometry, and print behavior      |
-| Other   | [Scaling](scaling/README.md)                                    | What a second serving replica needs                            |
+| Section | File                                                            | Purpose                                                         |
+| ------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| 1       | [Product](product.md)                                           | Users, journeys, scope, public namespace, and publish states    |
+| 2       | [System](system.md)                                             | Components, route ownership, renderer and failure boundaries    |
+| 3       | [Data](data.md)                                                 | Relational model, resume document, validation, and versions     |
+| 4       | [API](api.md)                                                   | HTTP conventions, endpoints, photo intake, and write safety     |
+| 5       | [Web and rendering](web.md)                                     | Web surfaces, UI toolkit, renderer, templates, and print        |
+| 5a      | [Localization](localization.md)                                 | Vietnamese and English interface, separate from resume text     |
+| 5b      | [Security](security.md)                                         | Identity, sessions, CSRF, agent OAuth, limits, and content      |
+| 5c      | [Second-factor authentication](second-factor-authentication.md) | Shared passkey, TOTP, recovery, and epoch rules                 |
+| 5d      | [Passkey contract](passkey-second-factor-contract.md)           | Pending, WebAuthn, recovery, mail, and passkey storage shapes   |
+| 5e      | [Authenticator-app contract](totp-second-factor-contract.md)    | TOTP routes, failure budget, and storage                        |
+| 5f      | [TOTP key management](totp-key-management.md)                   | Sealing, key ring, rotation, and key failures                   |
+| 6       | [Deployment](deployment.md)                                     | Environments, trust boundaries, media, mail, and migrations     |
+| 6a      | [Single-host production](single-host-production.md)             | Production host, edge, database, secrets, deploy, and alarms    |
+| 6b      | [Release fence](passkey-release-fence.md)                       | Minimum production release, operation lock, and IAM             |
+| 7       | [Repository boundaries](repository.md)                          | Sources of truth and dependency direction                       |
+| 8       | [Realtime](realtime.md)                                         | Autosave, Server-Sent Events, and fallback                      |
+| 9       | [Operations](operations.md)                                     | Privacy lifecycle, export, deletion, monitoring, and checks     |
+| 10      | [Decision status](decisions.md)                                 | ADR index, open gates, and change process                       |
+| Other   | [Numeric budgets](budgets.md)                                   | Hard limits, rate policies, SLOs, and benchmark protocol        |
+| Other   | [Font catalog](fonts.md)                                        | Font license gate, provenance, coverage, and fallback           |
+| Other   | [MCP owner workflow](mcp-owner-workflow.md)                     | Official-SDK client run that copies one resume into Vietnamese  |
+| Other   | [Templates](templates/README.md)                                | Preset data, tokens, colors, geometry, and print behavior       |
+| Other   | [Scaling](scaling/README.md)                                    | What a second serving replica needs                             |
+| Other   | [Link previews](link-previews.md)                               | Page tags, preview card, and platform behavior for shared links |
 
 ## System summary
 
