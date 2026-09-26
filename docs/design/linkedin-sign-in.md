@@ -276,10 +276,10 @@ argument, or a repository file.
 | ID  | Choice                                                                                            | Recommendation                                                        |
 | --- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | L1  | Turn on LinkedIn sign-in in production, and create a public "aboutme" LinkedIn Page for the app   | Yes                                                                   |
-| L2  | LinkedIn uses its documented flow without PKCE; the nonce defends against code injection          | Yes; LinkedIn documents no PKCE for web apps and one report shows 401 |
-| L5  | Accept ADR 0063: LinkedIn sign-in without a returned nonce, with the code-injection risk it names | Yes, or keep LinkedIn off                                             |
+| L2  | LinkedIn uses its documented flow without PKCE; the nonce defends against code injection (see L5) | Yes; LinkedIn documents no PKCE for web apps and one report shows 401 |
 | L3  | New collision message, above                                                                      | Yes                                                                   |
 | L4  | Privacy notice text, above; the owner reviews the Vietnamese                                      | Yes                                                                   |
+| L5  | Accept ADR 0063: LinkedIn sign-in without a returned nonce, with the code-injection risk it names | Yes, or keep LinkedIn off                                             |
 
 ## Sources
 
