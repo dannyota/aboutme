@@ -71,7 +71,7 @@ describe('views detail page', () => {
       expect(breakdown.text()).toContain('Failed checks');
       expect(breakdown.text()).toContain('Crawlers');
       const previews = wrapper.get('[data-testid="views-link-previews"]');
-      expect(previews.text()).toContain('Shared in Zalo × 3');
+      expect(previews.text()).toContain('Link previews on Zalo × 3');
       expect(previews.text()).toContain(
         'One share can fetch the preview more than once.',
       );
@@ -127,9 +127,9 @@ describe('views detail page', () => {
       '6 lượt xem thật · 9 bị lọc',
     );
     expect(wrapper.get('[data-testid="views-definition"]').text()).toBe(
-      'Một lượt xem cho mỗi mạng mỗi ngày. Hai người cùng một mạng trong '
-      + 'một ngày được tính một lần; một người xem vào hai ngày được tính '
-      + 'hai lần.',
+      'Mỗi kết nối mạng được tính tối đa một lượt xem mỗi ngày. Hai người '
+      + 'dùng chung một kết nối mạng trong một ngày được tính một lần; một '
+      + 'người xem vào hai ngày được tính hai lần.',
     );
   });
 });
