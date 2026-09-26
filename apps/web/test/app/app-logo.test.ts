@@ -31,21 +31,22 @@ function svgOf(wrapper: ReturnType<typeof mount>): Element {
 }
 
 describe('AppLogo', () => {
-  it('exposes an accessible name of aboutme for the full mark', () => {
+  it('exposes an accessible name of aboutme.vn for the full mark', () => {
     const wrapper = mount(AppLogo);
     const svg = svgOf(wrapper);
 
     expect(svg.getAttribute('role')).toBe('img');
-    expect(accessibleName(svg)).toBe('aboutme');
+    expect(accessibleName(svg)).toBe('aboutme.vn');
   });
 
-  it('exposes an accessible name of aboutme for the mark-only variant', () => {
-    const wrapper = mount(AppLogo, { props: { markOnly: true } });
-    const svg = svgOf(wrapper);
+  it('exposes an accessible name of aboutme.vn for the mark-only variant',
+    () => {
+      const wrapper = mount(AppLogo, { props: { markOnly: true } });
+      const svg = svgOf(wrapper);
 
-    expect(svg.getAttribute('role')).toBe('img');
-    expect(accessibleName(svg)).toBe('aboutme');
-  });
+      expect(svg.getAttribute('role')).toBe('img');
+      expect(accessibleName(svg)).toBe('aboutme.vn');
+    });
 
   it('renders no wordmark group when mark-only', () => {
     const full = svgOf(mount(AppLogo));

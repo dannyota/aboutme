@@ -12,10 +12,11 @@ import (
 // HTML has no image, script, stylesheet, web font, tracking pixel, or any
 // external resource: every style is inline and the wordmark is text.
 
-// Brand colors sampled from docs/brand/aboutme-icon.png, plus the paper desk.
+// Ink and paper desk colors, and the primary brand blue (ADR 0050) for the
+// "me.vn" in the aboutme.vn wordmark.
 const (
 	colorInk    = "#192024"
-	colorGreen  = "#34C871"
+	colorBrand  = "#1A5CEB"
 	colorDesk   = "#EDEFEB"
 	colorMuted  = "#5B6470"
 	colorRule   = "#DADDD6"
@@ -189,7 +190,7 @@ func renderHTML(t template, link string) string {
 		`background:#FFFFFF;border:1px solid ` + colorRule + `;border-radius:8px;font-family:` + fontStack +
 		`;color:` + colorInk + `;"><tr><td style="padding:32px 32px 8px;">`)
 	b.WriteString(`<div style="font-size:22px;font-weight:800;letter-spacing:-0.02em;">about<span style="color:` +
-		colorGreen + `;">/</span>me</div>`)
+		colorBrand + `;">me.vn</span></div>`)
 	b.WriteString(`</td></tr>`)
 
 	writeSection(&b, t.vi, `padding:16px 32px 0;`, colorInk)

@@ -1,5 +1,12 @@
 # aboutme
 
+<!-- markdownlint-disable MD033 -->
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/banner-dark.jpg">
+  <img src="docs/brand/banner-light.jpg" alt="aboutme.vn: build a resume, share its link, and keep control of it." width="100%">
+</picture>
+<!-- markdownlint-enable MD033 -->
+
 [![CI](https://github.com/dannyota/aboutme/actions/workflows/ci.yml/badge.svg)](https://github.com/dannyota/aboutme/actions/workflows/ci.yml)
 
 Build a resume, share its link, and export a PDF. aboutme is a free, open-source

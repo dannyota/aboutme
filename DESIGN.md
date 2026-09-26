@@ -67,18 +67,18 @@ identity.
 
 ## Logo
 
-The logo is lowercase `aboutme`. The mark is a rounded document with a folded
-top-right corner whose body forms a lowercase single-story `a`, filled with a
-cyan to blue to indigo gradient. The `a` is cut out of the body, so the
-background shows through it. The wordmark follows the mark: `about` in the text
-color and `me` in the blue-to-indigo brand gradient, drawn as round-capped
-strokes so it needs no font.
+The logo is lowercase `aboutme.vn`: a rounded document mark with a folded corner
+whose body forms a cut-out single-story `a` in a cyan to blue to indigo
+gradient, then `about` in the text color and `me.vn` in the blue-to-indigo
+gradient. Strokes and a filled-circle dot draw the letters without a font.
 
-`AppLogo` renders it inline at 24, 32, or 48 px high, or as the mark alone. It
-is one image named “aboutme”. Under `forced-colors: active`, the mark and `me`
-use the text color. `public/favicon-v2.svg` is the mark alone with a plain fold.
-The iPhone home-screen and install icons use the glossy square app icon; icon
-files carry a version in their names so browsers fetch a changed icon.
+`AppLogo` renders it inline at 24, 32, or 48 px high, or as the mark alone, as
+one image named “aboutme.vn”. Under `forced-colors: active`, the mark and
+`me.vn` use the text color. `public/favicon-v2.svg` is the mark with a plain
+fold. Home-screen and install icons use the glossy square app icon; icon file
+names carry a version so browsers fetch a changed icon. Source art (wordmark,
+light and dark banners) is in `docs/brand/`; `public/og-image-v2.jpg` is the
+light banner cropped to 1200 × 630.
 
 ## Typography and tokens
 

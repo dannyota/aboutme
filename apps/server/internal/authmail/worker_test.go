@@ -147,7 +147,7 @@ func TestBuildMessageHTMLIsSelfContained(t *testing.T) {
 				t.Errorf("%v html contains %q", kind, banned)
 			}
 		}
-		for _, want := range []string{`lang="vi"`, `lang="en"`, "about<span", ">/</span>me"} {
+		for _, want := range []string{`lang="vi"`, `lang="en"`, "about<span", ">me.vn</span>"} {
 			if !strings.Contains(msg.HTMLBody, want) {
 				t.Errorf("%v html missing %q", kind, want)
 			}
