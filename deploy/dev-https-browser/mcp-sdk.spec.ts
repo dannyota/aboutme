@@ -513,6 +513,12 @@ async function signIn(page: Page, guard: FlowGuard, login: Login): Promise<void>
       && new URL(response.url()).pathname === '/api/v1/auth/password/login',
     { timeout: STEP_TIMEOUT_MS },
   );
+  let returns = 0;
+  page.on('request', (request) => {
+    if (!request.isNavigationRequest() || request.frame() !== page.mainFrame()) return;
+    const url = parsed(request.url());
+    if (url?.origin === guard.handoff.origin && url.pathname === '/oauth/authorize') returns += 1;
+  });
   await submit.click();
   stage('login-submitted');
   step('session');
@@ -527,18 +533,17 @@ async function signIn(page: Page, guard: FlowGuard, login: Login): Promise<void>
   // outcome instead of reporting a generic login failure.
   if (status === 202) throw new HelperFailure('second_factor_required');
   if (status !== 204) throw new HelperFailure('login_failed');
-  // The login page follows `next` through the client router, and the
-  // authorization endpoint is served by the API rather than by a page route,
-  // so the helper reopens the authorization URL as a full navigation.
+  // The login page opens `next`, the authorization endpoint, as a full page
+  // load, and the endpoint redirects to the consent page. The helper only
+  // waits for that page: a second navigation of its own would race the login
+  // page's and fail whenever the page's started later. Exactly one request to
+  // the endpoint proves the login page made the return by itself.
   try {
-    await page.goto(guard.handoff.authorizationURL.href, {
-      timeout: STEP_TIMEOUT_MS,
-      waitUntil: 'commit',
-    });
     await onPath(page, guard.handoff.origin, ['/authorize']);
   } catch {
     throw new HelperFailure(guard.violated ? 'origin_rejected' : 'login_failed');
   }
+  if (returns !== 1) throw new HelperFailure('login_failed');
 }
 
 async function approveConsent(page: Page, guard: FlowGuard, handoff: Handoff): Promise<void> {
