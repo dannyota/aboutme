@@ -1,0 +1,202 @@
+/*
+ * The 1200 by 630 link-preview card (docs/design/link-preview-card.md). Every
+ * rule is scoped to the card, because this stylesheet ships both in the print
+ * stylesheet, where no base styles apply, and in the app, where Tailwind's
+ * base styles do.
+ */
+body.preview-card-print {
+  margin: 0;
+  background: #fff;
+}
+
+body.preview-card-print main {
+  display: block;
+  margin: 0;
+}
+
+.preview-card,
+.preview-card * {
+  box-sizing: border-box;
+}
+
+.preview-card {
+  position: relative;
+  width: 1200px;
+  height: 630px;
+  overflow: hidden;
+  background: #fff;
+  color: #171a18;
+  font-family: 'Be Vietnam Pro', sans-serif;
+  font-synthesis: none;
+  hyphens: manual;
+  text-align: center;
+}
+
+.preview-card p {
+  margin: 0;
+}
+
+.preview-card svg {
+  display: block;
+}
+
+.preview-card-band {
+  position: absolute;
+  top: 0;
+  width: 285px;
+  height: 630px;
+}
+
+.preview-card-band-left {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb-linear, var(--card-accent) var(--card-band-outer), #fff) 0,
+    color-mix(in srgb-linear, var(--card-accent) var(--card-band-inner), #fff)
+      285px
+  );
+}
+
+.preview-card-band-right {
+  left: 915px;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb-linear, var(--card-accent) var(--card-band-outer), #fff) 0,
+    color-mix(in srgb-linear, var(--card-accent) var(--card-band-inner), #fff)
+      285px
+  );
+}
+
+.preview-card-band::after {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb-linear, var(--card-accent) var(--card-dot), #fff) 3px,
+    transparent 3.5px
+  );
+  background-size: 24px 24px;
+  content: '';
+}
+
+.preview-card-band-left::after {
+  background-position: 0 3px;
+  mask-image: linear-gradient(to right, #000 0, #000 96px, transparent 285px);
+}
+
+.preview-card-band-right::after {
+  background-position: -3px 3px;
+  mask-image: linear-gradient(to left, #000 0, #000 96px, transparent 285px);
+}
+
+.preview-card-body {
+  position: absolute;
+  top: 39px;
+  left: 335px;
+  display: flex;
+  width: 530px;
+  height: 500px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-card-photo {
+  width: 208px;
+  height: 208px;
+  flex: none;
+  padding: 4px;
+  border: 4px solid var(--card-accent);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.preview-card-photo-clip {
+  position: relative;
+  display: block;
+  width: 192px;
+  height: 192px;
+  overflow: hidden;
+  border-radius: 50%;
+}
+
+.preview-card-photo-image {
+  position: absolute;
+  display: block;
+  max-width: none;
+  object-fit: cover;
+}
+
+.preview-card-name,
+.preview-card-headline {
+  display: -webkit-box;
+  width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+  white-space: normal;
+  word-break: normal;
+}
+
+/* Padding keeps stacked Vietnamese marks inside the clip; equal negative
+   margins cancel it in the layout. */
+.preview-card-name {
+  margin: -0.2em 0 -0.05em;
+  padding: 0.2em 0 0.05em;
+  font-weight: 700;
+  /* A CJK fallback face without a bold weight still sets the name bold. */
+  font-synthesis-weight: auto;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.preview-card-photo + .preview-card-name {
+  margin-top: calc(15px - 0.2em);
+}
+
+.preview-card-headline {
+  margin: calc(17px - 0.15em) 0 -0.05em;
+  padding: 0.15em 0 0.05em;
+  color: #5f6763;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.preview-card-link {
+  display: block;
+}
+
+.preview-card-link-prefix,
+.preview-card-link-slug {
+  display: block;
+  white-space: nowrap;
+}
+
+.preview-card-link-prefix {
+  color: #5f6763;
+}
+
+.preview-card-footer {
+  position: absolute;
+  top: 559px;
+  left: 335px;
+  display: flex;
+  width: 530px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.preview-card-footer-link {
+  max-width: 489px;
+  overflow: hidden;
+  color: #5f6763;
+  font-weight: 500;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

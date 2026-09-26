@@ -129,6 +129,26 @@ function expectRevisionMetadata(bytes: Uint8Array): void {
   expect(text).not.toContain("D:19700101000000");
 }
 
+// The stored preview card's byte cap (docs/design/link-previews.md, "Preview
+// card"), stricter than PNG_MAX_BYTES's general download sanity cap.
+const CARD_MAX_BYTES = 524_288;
+
+// Reads one head meta element's content by its naming attribute, matching
+// public.spec.ts's headMetaTags pattern.
+function extractMetaContent(
+  html: string,
+  attribute: "name" | "property",
+  key: string,
+): string {
+  const pattern = new RegExp(
+    `<meta\\s+${attribute}="${key}"\\s+content="([^"]*)"\\s*\\/?>`,
+    "u",
+  );
+  const match = pattern.exec(html);
+  expect(match, `missing meta ${attribute}=${key}`).not.toBeNull();
+  return match![1]!;
+}
+
 function expectPNG(bytes: Uint8Array): void {
   expect(bytes.byteLength).toBeGreaterThan(24);
   expect(bytes.byteLength).toBeLessThanOrEqual(PNG_MAX_BYTES);
@@ -184,10 +204,13 @@ function isExpectedExportConsole(
     (expectedFailure === "revoked" &&
       status === 404 &&
       slug !== undefined &&
-      [
+      ([
         `/api/v1/public/resumes/${slug}/pdf`,
         `/api/v1/public/resumes/${slug}/og.png`,
-      ].includes(url.pathname))
+      ].includes(url.pathname) ||
+        new RegExp(
+          `^/api/v1/public/resumes/${slug}/og/[0-9a-f]{16}\\.png$`,
+        ).test(url.pathname)))
   );
 }
 
@@ -449,8 +472,16 @@ test("proves owner and public export gates through native HTTPS", async ({
     const publicHTML = await fetchText(publicPage, `/${slug}`);
     expect(publicHTML.status).toBe(200);
     expect(publicHTML.headers["x-robots-tag"]).toBe("noindex, noarchive");
-    expect(publicHTML.text).toContain('property="og:image"');
-    expect(publicHTML.text).toContain(`/api/v1/public/resumes/${slug}/og.png`);
+    // The stored card's versioned URL (docs/design/link-previews.md, "Build,
+    // storage, and serving"); og:image and twitter:image must agree on it.
+    const ogImageURL = extractMetaContent(publicHTML.text, "property", "og:image");
+    expect(extractMetaContent(publicHTML.text, "name", "twitter:image")).toBe(
+      ogImageURL,
+    );
+    const ogImagePath = new URL(ogImageURL).pathname;
+    expect(ogImagePath).toMatch(
+      new RegExp(`^/api/v1/public/resumes/${slug}/og/[0-9a-f]{16}\\.png$`),
+    );
     const publicPDF = await fetchArtifact(
       publicPage,
       `/api/v1/public/resumes/${slug}/pdf`,
@@ -478,6 +509,14 @@ test("proves owner and public export gates through native HTTPS", async ({
     const publicPNGETag = publicPNG.headers.etag;
     expect(publicPNGETag).toMatch(/^"[^\"]+"$/);
     expectPNG(Uint8Array.from(publicPNG.body));
+    expect(publicPNG.body.length).toBeLessThanOrEqual(CARD_MAX_BYTES);
+
+    stage("public-share-image-versioned");
+    const versionedPNG = await fetchArtifact(publicPage, ogImagePath);
+    expect(versionedPNG.status).toBe(200);
+    expect(versionedPNG.headers["content-type"]).toBe("image/png");
+    expectPNG(Uint8Array.from(versionedPNG.body));
+    expect(versionedPNG.body).toEqual(publicPNG.body);
     steps.publicPDF = true;
     steps.shareImage = true;
     steps.discoveryIndependent = true;
@@ -540,21 +579,25 @@ test("proves owner and public export gates through native HTTPS", async ({
     createdID = undefined;
     recordedResumeIDs.delete(created.metadata.id);
     stage("delete-accepted");
-    const [revokedPDF, revokedPNG] = await Promise.all([
+    const [revokedPDF, revokedPNG, revokedVersionedPNG] = await Promise.all([
       fetchArtifact(publicPage, `/api/v1/public/resumes/${slug}/pdf`, {
         headers: { "If-None-Match": publicPDFETag },
       }),
       fetchArtifact(publicPage, `/api/v1/public/resumes/${slug}/og.png`, {
         headers: { "If-None-Match": publicPNGETag },
       }),
+      fetchArtifact(publicPage, ogImagePath),
     ]);
     stage(
-      revokedPDF.status === 404 && revokedPNG.status === 404
+      revokedPDF.status === 404 &&
+        revokedPNG.status === 404 &&
+        revokedVersionedPNG.status === 404
         ? "revocation-read-denied"
         : "revocation-read-unexpected",
     );
     expect(revokedPDF.status).toBe(404);
     expect(revokedPNG.status).toBe(404);
+    expect(revokedVersionedPNG.status).toBe(404);
     steps.revocation = true;
     steps.cleanup = true;
   } catch (error) {

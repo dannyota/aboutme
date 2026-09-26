@@ -2,6 +2,7 @@ import type { Resume } from '@aboutme/schema';
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 
+import PreviewCard from '../../../app/components/preview/PreviewCard.vue';
 import PrintResumeApp from '../../../app/components/print/PrintResumeApp.vue';
 import {
   renderPageRule,
@@ -10,6 +11,7 @@ import {
 import {
   PRINT_FAILURE,
   PRINT_HTML_MAX_BYTES,
+  type PrintCardEnvelope,
   type PrintEnvelope,
 } from '../../utils/print/envelope';
 
@@ -59,6 +61,43 @@ export async function renderPrintResume(
       `<style>${renderPageRule(styles.page)}</style>`,
       '</head><body class="resume-print">',
       `<main data-print-document="true" data-revision="${envelope.revision}">`,
+      body,
+      '</main></body></html>',
+    ].join('');
+    if (
+      Buffer.byteLength(html, 'utf8') > PRINT_HTML_MAX_BYTES
+      || /<script\b/iu.test(html)
+    ) throw new Error();
+    return html;
+  } catch {
+    throw new Error(PRINT_FAILURE);
+  }
+}
+
+/**
+ * The link-preview card page Go captures at 1200 by 630
+ * (docs/design/link-previews.md, "Preview card"). It carries only the card
+ * envelope's fields, no script, and the same fonts and stylesheet as the
+ * print document; the decoder already bounded the language and slug, so
+ * both are safe in attributes and text.
+ */
+export async function renderPrintCard(
+  envelope: PrintCardEnvelope,
+): Promise<string> {
+  try {
+    const body = await renderToString(createSSRApp({
+      render: () => h(PreviewCard, { card: envelope.card }),
+    }));
+    const html = [
+      '<!doctype html>',
+      `<html lang="${envelope.card.lng}"><head>`,
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=1200">',
+      `<title>aboutme.vn/${envelope.card.slug}</title>`,
+      '<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css">',
+      '<link rel="stylesheet" href="/_nuxt/assets/print.css">',
+      '</head><body class="preview-card-print">',
+      '<main data-print-document="true">',
       body,
       '</main></body></html>',
     ].join('');

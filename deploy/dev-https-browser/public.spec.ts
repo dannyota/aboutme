@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 
 import {
@@ -129,6 +129,36 @@ function expectLinkPreviewHead(
     if (seen.has(got.key)) throw new Error(`head-duplicate-${got.key}`);
     seen.add(got.key);
   }
+}
+
+// The stored preview card's byte cap (docs/design/link-previews.md, "Preview
+// card").
+const CARD_MAX_BYTES = 524_288;
+
+interface FetchedImage {
+  readonly body: number[];
+  readonly status: number;
+  readonly type: string | null;
+}
+
+async function fetchImage(page: Page, url: string): Promise<FetchedImage> {
+  return page.evaluate(async (href) => {
+    const response = await fetch(href, { cache: 'no-store', credentials: 'omit' });
+    return {
+      body: Array.from(new Uint8Array(await response.arrayBuffer())),
+      status: response.status,
+      type: response.headers.get('content-type'),
+    };
+  }, url);
+}
+
+// Reads a PNG's IHDR width and height (big-endian, at byte offsets 16 and
+// 20; docs/design/link-previews.md pins every card to 1200 by 630).
+function expectPNGSize(body: readonly number[]): void {
+  const bytes = Uint8Array.from(body);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  expect(view.getUint32(16)).toBe(1200);
+  expect(view.getUint32(20)).toBe(630);
 }
 
 test.afterEach(async ({ browser }, testInfo) => {
@@ -386,7 +416,13 @@ test('proves a published resume hydrates in a real browser', async ({
     // none of the tags the page must never send.
     stage('public-link-preview');
     const canonicalURL = `${ORIGIN}/${publishedSlug}`;
-    const ogImageURL = `${ORIGIN}/api/v1/public/resumes/${publishedSlug}/og.png`;
+    // The stored card's versioned URL (docs/design/link-previews.md, "Build,
+    // storage, and serving"); og:image and twitter:image share it below.
+    const ogImageURL = headMetaTags(publicHTML)
+      .find((tag) => tag.key === 'og:image')?.value ?? '';
+    expect(new URL(ogImageURL).pathname).toMatch(new RegExp(
+      `^/api/v1/public/resumes/${publishedSlug}/og/[0-9a-f]{16}\\.png$`,
+    ));
     expectLinkPreviewHead(publicHTML, [
       { key: 'description', value: PUBLIC_PROOF_DESCRIPTION },
       { key: 'og:type', value: 'profile' },
@@ -404,6 +440,17 @@ test('proves a published resume hydrates in a real browser', async ({
       { key: 'twitter:image', value: ogImageURL },
       { key: 'twitter:image:alt', value: PUBLIC_PROOF_IMAGE_ALT },
     ]);
+
+    stage('public-share-image');
+    const versionedImage = await fetchImage(publicPage, ogImageURL);
+    expect(versionedImage.status).toBe(200);
+    expect(versionedImage.type).toBe('image/png');
+    expect(versionedImage.body.length).toBeLessThanOrEqual(CARD_MAX_BYTES);
+    expectPNGSize(versionedImage.body);
+    const aliasURL = `${ORIGIN}/api/v1/public/resumes/${publishedSlug}/og.png`;
+    const aliasImage = await fetchImage(publicPage, aliasURL);
+    expect(aliasImage.status).toBe(200);
+    expect(aliasImage.body).toEqual(versionedImage.body);
 
     // Every public page credits the site once, linking the canonical home.
     const credit = publicPage.locator('a.public-credit');

@@ -167,7 +167,8 @@ section, or document field, so no email, phone, or address can reach the image.
 Name and headline pass the same normalize and scrub rules; a field that loses a
 scrubbed token is left off the card.
 
-Layout rules for the designer, who owns the final spec in `DESIGN.md`:
+Layout rules; the designer owns the final spec in
+[Link-preview card](link-preview-card.md):
 
 - White paper background, `--paper-ink` text, fixed `Be Vietnam Pro` at 400 and
   700, which covers Vietnamese. The template's font does not apply.

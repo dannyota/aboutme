@@ -1,6 +1,10 @@
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 
 import type { components } from '../../../app/api/generated/openapi';
+import {
+  CARD_LAYOUT_VERSION,
+  type PreviewCardContent,
+} from '../../../app/components/preview/cardLayout';
 
 import validatePrintDocument from '#print-document-validator';
 
@@ -20,6 +24,27 @@ export interface PrintEnvelope {
   lng: string;
   document: PublicResumeDocument;
 }
+
+/**
+ * A link-preview card job: the closed envelope of
+ * docs/design/link-previews.md, "Preview card". It has no document, so no
+ * contact detail can reach the card.
+ */
+export interface PrintCardEnvelope {
+  version: 1;
+  kind: 'card';
+  resumeId: string;
+  card: PreviewCardContent;
+}
+
+/** What the print route renders: a resume document or a preview card. */
+export type PrintJobEnvelope = PrintEnvelope | PrintCardEnvelope;
+
+export const isCardEnvelope = (
+  envelope: PrintJobEnvelope,
+): envelope is PrintCardEnvelope => 'kind' in envelope;
+
+const PRINT_CARD_TEXT_MAX_CHARACTERS = 160;
 
 const fail = (): never => {
   throw new Error(PRINT_FAILURE);
@@ -148,12 +173,10 @@ const canonicalLanguage = (value: unknown): value is string => {
   }
 };
 
-const validPhoto = (document: PublicResumeDocument): boolean => {
-  const photo = document.personalDetails.photo;
-  if (photo === undefined) return true;
+const validDataPhoto = (url: string): boolean => {
   const matched
     = /^data:image\/(?:jpeg|png);base64,([A-Za-z0-9+/]*(?:={1,2})?)$/u
-      .exec(photo.url);
+      .exec(url);
   if (matched === null || matched[1] === undefined || matched[1] === '') {
     return false;
   }
@@ -168,7 +191,98 @@ const validPhoto = (document: PublicResumeDocument): boolean => {
   }
 };
 
-export function decodePrintEnvelope(source: string): PrintEnvelope {
+const validPhoto = (document: PublicResumeDocument): boolean => {
+  const photo = document.personalDetails.photo;
+  return photo === undefined || validDataPhoto(photo.url);
+};
+
+const plainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const exactKeys = (value: Record<string, unknown>, keys: string): boolean =>
+  Object.keys(value).sort().join(',') === keys;
+
+// Go's unicode.IsSpace: the Unicode White_Space characters.
+const WHITE_SPACE = '[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a'
+  + '\\u2028\\u2029\\u202f\\u205f\\u3000]';
+const EDGE_SPACE = new RegExp(`^${WHITE_SPACE}|${WHITE_SPACE}$`, 'u');
+
+// Card text is normalized by the server: 1 to 160 code points, well formed,
+// no control character, and no space at either end.
+const validCardText = (value: unknown): value is string | null =>
+  value === null
+  || (
+    typeof value === 'string'
+    && value !== ''
+    && value.isWellFormed()
+    && [...value].length <= PRINT_CARD_TEXT_MAX_CHARACTERS
+    && !/\p{Cc}/u.test(value)
+    && !EDGE_SPACE.test(value)
+  );
+
+// Public slugs: 4 to 30 of a-z, 0-9, and single inner hyphens.
+const validSlug = (value: unknown): value is string =>
+  typeof value === 'string'
+  && value.length >= 4
+  && value.length <= 30
+  && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(value);
+
+const unitFraction = (value: unknown, allowZero: boolean): boolean =>
+  typeof value === 'number'
+  && Number.isFinite(value)
+  && value <= 1
+  && (allowZero ? value >= 0 : value > 0);
+
+const validCardPhoto = (value: unknown): boolean => {
+  if (value === null) return true;
+  if (!plainObject(value) || !exactKeys(value, 'crop,url')) return false;
+  if (typeof value.url !== 'string' || !validDataPhoto(value.url)) {
+    return false;
+  }
+  const crop = value.crop;
+  if (crop === null) return true;
+  return plainObject(crop)
+    && exactKeys(crop, 'height,width,x,y')
+    && unitFraction(crop.x, true)
+    && unitFraction(crop.y, true)
+    && unitFraction(crop.width, false)
+    && unitFraction(crop.height, false);
+};
+
+// The card envelope is closed at both levels: an unknown key anywhere, such
+// as a contact or document field, rejects it.
+const decodeCardEnvelope = (
+  envelope: Record<string, unknown>,
+): PrintCardEnvelope => {
+  const card = envelope.card;
+  if (
+    !exactKeys(envelope, 'card,kind,resumeId,version')
+    || envelope.version !== 1
+    || envelope.kind !== 'card'
+    || !canonicalUUID(envelope.resumeId)
+    || !plainObject(card)
+    || !exactKeys(
+      card,
+      'accent,headline,layoutVersion,lng,name,photo,slug',
+    )
+    || card.layoutVersion !== CARD_LAYOUT_VERSION
+    || !canonicalLanguage(card.lng)
+    || !validSlug(card.slug)
+    || !validCardText(card.name)
+    || !validCardText(card.headline)
+    || (card.name === null && card.headline !== null)
+    || !validCardPhoto(card.photo)
+    || typeof card.accent !== 'string'
+    || !/^#[0-9a-f]{6}$/u.test(card.accent)
+  ) fail();
+  return envelope as unknown as PrintCardEnvelope;
+};
+
+/**
+ * Decodes a redeemed print envelope: a resume print envelope, which has no
+ * kind, or a card envelope, whose kind is "card".
+ */
+export function decodePrintEnvelope(source: string): PrintJobEnvelope {
   if (Buffer.byteLength(source, 'utf8') > PRINT_ENVELOPE_MAX_BYTES) fail();
   try {
     new DuplicateKeyScanner(source).scan();
@@ -177,6 +291,7 @@ export function decodePrintEnvelope(source: string): PrintEnvelope {
       fail();
     }
     const envelope = value as Record<string, unknown>;
+    if (Object.hasOwn(envelope, 'kind')) return decodeCardEnvelope(envelope);
     if (
       Object.keys(envelope).sort().join(',')
       !== 'document,lng,publicGeneration,resumeId,revision,version'
@@ -205,7 +320,9 @@ export function decodePrintEnvelope(source: string): PrintEnvelope {
   }
 }
 
-export function decodePrintEnvelopeBytes(source: Uint8Array): PrintEnvelope {
+export function decodePrintEnvelopeBytes(
+  source: Uint8Array,
+): PrintJobEnvelope {
   try {
     return decodePrintEnvelope(
       new TextDecoder('utf-8', { fatal: true }).decode(source),

@@ -4,7 +4,10 @@ import { EventEmitter } from 'node:events';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { PRINT_HTML_MAX_BYTES } from '../../server/utils/print/envelope';
+import {
+  isCardEnvelope,
+  PRINT_HTML_MAX_BYTES,
+} from '../../server/utils/print/envelope';
 import {
   PRINT_WORKER_DEADLINE_MS,
   runPrintWorker,
@@ -43,6 +46,8 @@ describe('print worker lifecycle', () => {
         workerFactory: (_url, workerData) => {
           expect(workerData).not.toBe(envelope);
           expect(Object.isFrozen(workerData)).toBe(true);
+          expect(isCardEnvelope(workerData)).toBe(false);
+          if (isCardEnvelope(workerData)) return worker;
           expect(Object.isFrozen(workerData.document.personalDetails))
             .toBe(true);
           return worker;

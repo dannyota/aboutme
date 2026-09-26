@@ -3,7 +3,7 @@ import { Worker } from 'node:worker_threads';
 import {
   PRINT_FAILURE,
   PRINT_HTML_MAX_BYTES,
-  type PrintEnvelope,
+  type PrintJobEnvelope,
 } from './envelope';
 
 export const PRINT_WORKER_DEADLINE_MS = 5_000;
@@ -21,7 +21,7 @@ export interface PrintWorkerOptions {
   /** Test seam. Production always creates a Node worker. */
   workerFactory?: (
     url: URL | string,
-    workerData: PrintEnvelope,
+    workerData: PrintJobEnvelope,
   ) => PrintWorker;
 }
 
@@ -36,7 +36,7 @@ const freeze = <T>(value: T): T => {
 };
 
 export function runPrintWorker(
-  envelope: PrintEnvelope,
+  envelope: PrintJobEnvelope,
   options: PrintWorkerOptions,
 ): Promise<string> {
   if (

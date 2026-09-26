@@ -25,12 +25,14 @@ import { editorShellCopy } from '@/i18n/editor-shell';
 import { publishCopy } from '../../i18n/publish';
 import { workspaceCopy } from '../../i18n/workspace';
 import PublishPageFields from './PublishPageFields.vue';
+import PublishPreview from './PublishPreview.vue';
 import type { ResumeRecord } from '../../stores/resumes';
 
 const props = defineProps<{
   readonly open: boolean;
   readonly actions: ResumeEditorActions;
   readonly record: ResumeRecord;
+  readonly photoUrl?: string;
 }>();
 const { locale } = useLocale();
 const copy = computed(() => publishCopy[locale.value]);
@@ -361,6 +363,14 @@ onBeforeUnmount(resetCopyState);
         :disabled="busy"
         :copy="copy.page"
         :server-issues="state.kind === 'invalid' ? state.issues : []"
+      />
+
+      <PublishPreview
+        :document="record.current.document"
+        :slug="slug"
+        :page-title="pageTitle"
+        :lng="record.current.metadata.lng"
+        :photo-url="photoUrl"
       />
 
       <fieldset class="grid gap-3">

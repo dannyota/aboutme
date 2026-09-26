@@ -18,6 +18,11 @@ export interface PublicRenderPreview {
   /** og:locale, or '' when the resume language maps to none. */
   locale: string;
   imageAlt: string;
+  /**
+   * The absolute URL of the current stored preview card, sent only while
+   * stored cards are on; without it the page names the og.png alias.
+   */
+  imageUrl?: string;
 }
 
 export interface PublicRenderRequest {
@@ -45,6 +50,8 @@ const validFaviconHref = (value: unknown): value is string =>
 
 const PREVIEW_LOCALE = /^[a-z]{2,3}_[A-Z]{2}$/u;
 const PREVIEW_KEYS = ['description', 'imageAlt', 'locale', 'title'].join(',');
+const PREVIEW_KEYS_WITH_IMAGE
+  = ['description', 'imageAlt', 'imageUrl', 'locale', 'title'].join(',');
 
 const boundedText = (value: unknown, maxBytes: number): value is string =>
   typeof value === 'string'
@@ -56,7 +63,8 @@ const validPreview = (value: unknown): value is PublicRenderPreview => {
     return false;
   }
   const preview = value as Record<string, unknown>;
-  return Object.keys(preview).sort().join(',') === PREVIEW_KEYS
+  const keys = Object.keys(preview).sort().join(',');
+  return (keys === PREVIEW_KEYS || keys === PREVIEW_KEYS_WITH_IMAGE)
     && boundedText(preview.title, 2240)
     && boundedText(preview.description, 1024)
     && boundedText(preview.imageAlt, 1024)
@@ -190,6 +198,19 @@ function normalizedOrigin(value: unknown): value is string {
   }
 }
 
+// The versioned card URL Go names (docs/design/link-previews.md, "Page
+// head"): this page's own origin and slug, and a 16-hex-digit version.
+const validCardImageURL = (
+  value: unknown,
+  request: PublicRenderRequest,
+): boolean => {
+  if (typeof value !== 'string') return false;
+  const prefix = `${request.canonicalOrigin}/api/v1/public/resumes/`
+    + `${request.publicResume.slug}/og/`;
+  return value.startsWith(prefix)
+    && /^[0-9a-f]{16}\.png$/u.test(value.slice(prefix.length));
+};
+
 export function isPublicResume(value: unknown): value is PublicResume {
   return validatePublicResume(value) === true;
 }
@@ -237,7 +258,12 @@ export function decodePublicRenderEnvelope(
     ) {
       fail();
     }
-    return envelope as unknown as PublicRenderRequest;
+    const request = envelope as unknown as PublicRenderRequest;
+    const imageUrl = request.preview?.imageUrl;
+    if (imageUrl !== undefined && !validCardImageURL(imageUrl, request)) {
+      fail();
+    }
+    return request;
   } catch {
     return fail();
   }

@@ -4,7 +4,7 @@ import {
   setResponseStatus,
 } from 'h3';
 
-import { PRINT_FAILURE, type PrintEnvelope } from './envelope';
+import { PRINT_FAILURE, type PrintJobEnvelope } from './envelope';
 import {
   createPrintRedemptionClient,
   isRenderCapability,
@@ -102,7 +102,7 @@ export function createPrintHandler(dependencies: PrintHandlerDependencies) {
     event.node.res.once('close', responseClosed);
     try {
       if (event.node.req.aborted) return PRINT_NOT_FOUND_BODY;
-      const envelope: PrintEnvelope = await createPrintRedemptionClient({
+      const envelope: PrintJobEnvelope = await createPrintRedemptionClient({
         origin: dependencies.origin,
         signal: controller.signal,
         transport: dependencies.transport,

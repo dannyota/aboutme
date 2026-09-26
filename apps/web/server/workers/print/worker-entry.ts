@@ -1,8 +1,14 @@
 import { parentPort, workerData } from 'node:worker_threads';
 
-import type { PrintEnvelope } from '../../utils/print/envelope';
-import { renderPrintResume } from './render';
+import {
+  isCardEnvelope,
+  type PrintJobEnvelope,
+} from '../../utils/print/envelope';
+import { renderPrintCard, renderPrintResume } from './render';
 
-const html = await renderPrintResume(workerData as PrintEnvelope);
+const envelope = workerData as PrintJobEnvelope;
+const html = isCardEnvelope(envelope)
+  ? await renderPrintCard(envelope)
+  : await renderPrintResume(envelope);
 parentPort?.postMessage({ type: 'result', html });
 parentPort?.close();
