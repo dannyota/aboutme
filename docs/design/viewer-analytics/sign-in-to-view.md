@@ -73,8 +73,9 @@ working.
    the slug is live and requires sign-in, stores the transaction with purpose
    `view` and the resume ID, and redirects to the provider.
 2. The provider flow is unchanged: Google with PKCE, LinkedIn as
-   [LinkedIn sign-in](../linkedin-sign-in.md#protocol) sets out, nonce and ID
-   token checks for both ([security](../security.md#oauth-transaction)).
+   [LinkedIn sign-in](../linkedin-sign-in.md#protocol) sets out, and ID token
+   checks for both, with LinkedIn's nonce checked only when present
+   ([security](../security.md#oauth-transaction)).
 3. The callback, for purpose `view`, never looks up, creates, links, or signs in
    an account and never creates a session. It verifies the ID token, re-checks
    that the resume is live and requires sign-in, discards every claim, sets the
