@@ -1,8 +1,7 @@
 // Reads and validates released-versions.json, then emits the Go and
 // TypeScript halves of the released-version registry it describes.
 
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -10,6 +9,7 @@ import {
   GO_MODULE_PATH,
   manifestPath,
   packageRoot,
+  writeGenerated,
 } from "./generatePaths.mjs";
 
 // released-versions.json is the only release registry. Do not infer releases
@@ -223,8 +223,7 @@ func ReleasedSchemaFor(version int) (ReleasedSchema, error) {
 }
 `;
 
-  writeFileSync(outFile, body);
-  execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
+  writeGenerated(outFile, body, "go");
 }
 
 // The TypeScript half of the released-version registry. It carries the
@@ -302,5 +301,5 @@ export function releasedSchema(version: number): ReleasedSchema {
 }
 `;
 
-  writeFileSync(outFile, body);
+  writeGenerated(outFile, body);
 }

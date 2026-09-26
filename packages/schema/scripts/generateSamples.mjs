@@ -3,14 +3,13 @@
 // template has a sample in which language, and lazy loaders, so a page pulls
 // only the sample it shows. test/samples.test.ts validates the documents.
 
-import { execFileSync } from "node:child_process";
-import { readdirSync, writeFileSync } from "node:fs";
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import {
   generatedHeader,
   packageRoot,
-  prettierBin,
+  writeGenerated,
 } from "./generatePaths.mjs";
 
 export const sampleDirectory = join(packageRoot, "samples");
@@ -92,6 +91,5 @@ export function loadFiller(lng: SampleLanguage): Promise<Resume | undefined> {
   return load(\`_filler.\${lng}\`);
 }
 `;
-  writeFileSync(outFile, body);
-  execFileSync(prettierBin, ["--write", outFile], { stdio: "ignore" });
+  writeGenerated(outFile, body, "prettier");
 }

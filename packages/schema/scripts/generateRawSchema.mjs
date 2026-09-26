@@ -2,10 +2,7 @@
 // resume.schema.json (and each released version's schema) is outside gen/go's
 // module, so go:embed cannot reach it — this is the substitute.
 
-import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-
-import { generatedHeader } from "./generatePaths.mjs";
+import { generatedHeader, writeGenerated } from "./generatePaths.mjs";
 
 // Splits a base64 string into fixed-width lines so the generated Go source
 // doesn't put resume.schema.json's ~29 KB of encoded bytes on a single line
@@ -67,6 +64,5 @@ func mustDecodeRawSchemaBase64() []byte {
 }
 `;
 
-  writeFileSync(outFile, body);
-  execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
+  writeGenerated(outFile, body, "go");
 }
