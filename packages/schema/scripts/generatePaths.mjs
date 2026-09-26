@@ -1,10 +1,12 @@
-// Filesystem locations and the shared "generated" banner every generator in
-// this directory writes at the top of its output. Centralized here so every
-// sibling module derives the same paths regardless of which file computes
-// them (all live in packages/schema/scripts, so the relative depth is the
-// same either way).
+// Filesystem locations, the shared "generated" banner every generator in
+// this directory writes at the top of its output, and the one function that
+// writes each output. Centralized here so every sibling module derives the
+// same paths regardless of which file computes them (all live in
+// packages/schema/scripts, so the relative depth is the same either way).
 
-import { dirname, join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { renameSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -36,3 +38,38 @@ export const GO_MODULE_PATH = "github.com/dannyota/aboutme/packages/schema/gen/g
 
 export const generatedHeader = (sourceName) =>
   `// Code generated from ${sourceName}. DO NOT EDIT.`;
+
+// writeGenerated formats content with gofmt or Prettier (format "go" or
+// "prettier"; any other value writes it unchanged) and then replaces outFile
+// in one rename. `npm test` regenerates these files in place while other test
+// files compile and read them, so a reader must only ever see a complete,
+// formatted file. The temporary name starts with a dot, which Go builds
+// ignore, and carries the process ID, so concurrent generator runs never
+// share one.
+export function writeGenerated(outFile, content, format) {
+  let formatted = content;
+  if (format === "go") {
+    formatted = execFileSync("gofmt", [], {
+      input: content,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+  } else if (format === "prettier") {
+    formatted = execFileSync(prettierBin, ["--stdin-filepath", outFile], {
+      input: content,
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "inherit"],
+    });
+  }
+  const temporary = join(
+    dirname(outFile),
+    `.${basename(outFile)}.${process.pid}.tmp`,
+  );
+  try {
+    writeFileSync(temporary, formatted);
+    renameSync(temporary, outFile);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
+}

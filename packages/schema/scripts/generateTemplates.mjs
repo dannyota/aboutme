@@ -2,16 +2,15 @@
 // or $ABOUTME_TEMPLATE_DIR), then emits the frozen TypeScript template
 // registry consumed by apps/web.
 
-import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
 import {
   generatedHeader,
-  prettierBin,
   templateDirectory,
+  writeGenerated,
 } from "./generatePaths.mjs";
 
 function failTemplate(file, message) {
@@ -218,6 +217,5 @@ export const TEMPLATES: readonly Readonly<TemplatePreset>[] = deepFreeze(
   ${JSON.stringify(presets, null, 2)} satisfies TemplatePreset[],
 );
 `;
-  writeFileSync(outFile, body);
-  execFileSync(prettierBin, ["--write", outFile], { stdio: "ignore" });
+  writeGenerated(outFile, body, "prettier");
 }
