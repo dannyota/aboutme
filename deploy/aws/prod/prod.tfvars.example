@@ -11,7 +11,9 @@ alarm_email = ""
 site_alarm_enabled = false
 
 # Provider login: "" keeps it off; "google" enables Google sign-in and needs
-# /aboutme/prod/oauth/google-client-id and google-client-secret in SSM.
+# /aboutme/prod/oauth/google-client-id and google-client-secret in SSM;
+# "google,linkedin" also enables LinkedIn and needs
+# /aboutme/prod/oauth/linkedin-client-id and linkedin-client-secret.
 provider_login_enabled = ""
 
 # Same-account IAM user or role ARN behind the owner's `aws login` session,

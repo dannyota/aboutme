@@ -62,12 +62,12 @@ printf '%s\n' "$$" >>"$DEV_HTTPS_PID_AUDIT_FILE"
 printf 'start:%s\n' "$name" >>"$FAKE_MUTATIONS"
 case $name in
 mock-oauth)
-  printf 'service:%s host=%s port=%s origin=%s client=%s db=%s\n' \
-    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "${DATABASE_URL-}" >>"$FAKE_EFFECTS"
+  printf 'service:%s host=%s port=%s origin=%s client=%s linkedin=%s db=%s\n' \
+    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$GOOGLE_CLIENT_ID" "$LINKEDIN_CLIENT_ID" "${DATABASE_URL-}" >>"$FAKE_EFFECTS"
   ;;
 server)
-  printf 'service:%s host=%s port=%s origin=%s render=%s app=%s renderer=%s issuer=%s db=%s\n' \
-    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" "$GOOGLE_OIDC_ISSUER_URL" "$DATABASE_URL" >>"$FAKE_EFFECTS"
+  printf 'service:%s host=%s port=%s origin=%s render=%s app=%s renderer=%s issuer=%s linkedin=%s db=%s\n' \
+    "$name" "$LISTEN_HOST" "$PORT" "$PUBLIC_ORIGIN" "$PUBLIC_RENDER_ORIGIN" "$APP_BUILD_DIGEST" "$PUBLIC_RENDERER_BUILD_DIGEST" "$GOOGLE_OIDC_ISSUER_URL" "$LINKEDIN_OIDC_ISSUER_URL" "$DATABASE_URL" >>"$FAKE_EFFECTS"
   ;;
 web) printf 'service:web\n' >>"$FAKE_EFFECTS" ;;
 caddy)
@@ -183,7 +183,8 @@ count() { grep -Foc -- "$1" "$config"; }
 [ "$(count 'reverse_proxy 127.0.0.1:20441 {')" = 2 ]
 [ "$(count 'reverse_proxy 127.0.0.1:20440')" = 2 ]
 [ "$(count '@uat_google_authorize path /__uat/oauth/google/authorize')" = 1 ]
-[ "$(count 'reverse_proxy 127.0.0.1:20442')" = 1 ]
+[ "$(count '@uat_linkedin_authorize path /__uat/oauth/linkedin/authorize')" = 1 ]
+[ "$(count 'reverse_proxy 127.0.0.1:20442')" = 2 ]
 printf 'caddy-config-validated\n' >>"$FAKE_EFFECTS"
 exec fake-service caddy
 EOF
@@ -371,6 +372,8 @@ run_happy_path_and_lifecycle_checks() (
   output=$(bash scripts/dev-https.sh up 2>&1) || fail "happy-path up failed: $output"
   assert_not_contains "$output" 'not-a-secret-local-google'
   assert_not_contains "$output" 'GOOGLE_CLIENT_SECRET='
+  assert_not_contains "$output" 'not-a-secret-local-linkedin'
+  assert_not_contains "$output" 'LINKEDIN_CLIENT_SECRET='
   [ ! -s "$FAKE_FORBIDDEN" ] || fail "up invoked a forbidden command"
   assert_log_line "$FAKE_MUTATIONS" 'test-db-up'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:migrate:./cmd/migrate'
@@ -379,8 +382,8 @@ run_happy_path_and_lifecycle_checks() (
   assert_log_line "$FAKE_MUTATIONS" 'go-build:render-browser-supervisor:./cmd/render-browser-supervisor'
   assert_log_line "$FAKE_EFFECTS" 'migrate:db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'migrate:operation=apply'
-  assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google db='
-  assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
+  assert_log_line "$FAKE_EFFECTS" 'service:mock-oauth host=127.0.0.1 port=20442 origin=https://localhost:20443 client=aboutme-local-google linkedin=aboutme-local-linkedin db='
+  assert_log_line "$FAKE_EFFECTS" 'service:server host=127.0.0.1 port=20441 origin=https://localhost:20443 render=http://127.0.0.1:20440 app=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa renderer=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb issuer=http://127.0.0.1:20442/google linkedin=http://127.0.0.1:20442/linkedin db=postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
   assert_log_line "$FAKE_EFFECTS" 'npm:run dev -- --port 20440 --host 127.0.0.1'
   assert_log_line "$FAKE_EFFECTS" 'caddy-config-validated'
   assert_log_line "$FAKE_MUTATIONS" 'go-build:mail-capture:./cmd/mail-capture'
@@ -408,7 +411,10 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_URL=http://127.0.0.1:20444'
   assert_contains "$server_env" 'AUTH_EMAIL_CAPTURE_BEARER='
   assert_contains "$server_env" 'MCP_ENABLED=true'
-  assert_contains "$server_env" 'PROVIDER_LOGIN_ENABLED=true'
+  # The env file is written with printf %q, which escapes the comma; the
+  # supervisor sources it, so check the value the server receives.
+  [ "$(set -a && source .dev/native-https/run/server.env && printf '%s' "$PROVIDER_LOGIN_ENABLED")" = google,linkedin ] ||
+    fail 'server PROVIDER_LOGIN_ENABLED is not google,linkedin'
   assert_contains "$server_env" 'PASSKEY_ENROLLMENT_ENABLED=true'
   assert_contains "$server_env" 'TOTP_ACTIVE_KEY='
   assert_contains "$server_env" 'TOTP_ENROLLMENT_ENABLED=true'
@@ -425,6 +431,8 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'log_level=info'
   assert_contains "$manifest" 'google_client_id=aboutme-local-google'
   assert_contains "$manifest" 'google_issuer_url=http://127.0.0.1:20442/google'
+  assert_contains "$manifest" 'linkedin_client_id=aboutme-local-linkedin'
+  assert_contains "$manifest" 'linkedin_issuer_url=http://127.0.0.1:20442/linkedin'
   assert_contains "$manifest" 'mcp_enabled=true'
   assert_contains "$manifest" 'public_render_origin=http://127.0.0.1:20440'
   assert_contains "$manifest" 'app_build_digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -439,6 +447,7 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$manifest" 'mail_capture_binary_sha256='
   assert_contains "$manifest" 'mail_secrets_sha256='
   assert_not_contains "$manifest" 'not-a-secret-local-google'
+  assert_not_contains "$manifest" 'not-a-secret-local-linkedin'
   for service in mock-oauth mail-capture server web caddy; do
     mode=$(stat -c '%a' ".dev/native-https/run/$service.identity")
     [ "$mode" = 600 ] || fail "$service identity mode is $mode, want 600"
@@ -455,6 +464,8 @@ run_happy_path_and_lifecycle_checks() (
   assert_contains "$output" '20444'
   grep -F 'curl:' "$FAKE_EFFECTS" | grep -F -- '--cacert' | grep -Fq 'https://localhost:20443/healthz' || \
     fail "status did not probe public HTTPS with the exported CA"
+  grep -F 'curl:' "$FAKE_EFFECTS" | grep -Fq 'http://127.0.0.1:20442/linkedin/.well-known/openid-configuration' || \
+    fail "mock-oauth readiness did not wait for LinkedIn discovery"
 
   before=$(wc -l <"$FAKE_MUTATIONS")
   output=$(bash scripts/dev-https.sh up 2>&1) || fail "owned idempotent up failed: $output"
@@ -487,6 +498,7 @@ run_happy_path_and_lifecycle_checks() (
 
   for i in $(seq 1 260); do printf 'safe-log-line-%03d\n' "$i"; done >>.dev/native-https/log/server.log
   printf '%s\n' 'GOOGLE_CLIENT_SECRET=not-a-secret-local-google' \
+    'LINKEDIN_CLIENT_SECRET=not-a-secret-local-linkedin' \
     'access_token=token-sentinel-that-must-not-escape' \
     'Cookie: harmless=ok; __Host-session=cookie-session-sentinel; __Host-oauth-tx=cookie-oauth-sentinel' \
     'Set-Cookie: __Host-session=set-cookie-session-sentinel; Path=/; Secure; HttpOnly' \
@@ -507,6 +519,7 @@ run_happy_path_and_lifecycle_checks() (
   lines=$(wc -l <<<"$output")
   [ "$lines" -le 200 ] || fail "logs returned $lines lines, want at most 200"
   assert_not_contains "$output" 'not-a-secret-local-google'
+  assert_not_contains "$output" 'not-a-secret-local-linkedin'
   assert_not_contains "$output" 'token-sentinel-that-must-not-escape'
   assert_not_contains "$output" 'cookie-session-sentinel'
   assert_not_contains "$output" 'cookie-oauth-sentinel'

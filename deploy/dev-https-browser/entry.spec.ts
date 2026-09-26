@@ -166,13 +166,12 @@ test('landing, sign-in, and the signed-in shell', async ({ browser }) => {
     await expect(
       page.getByRole('button', { name: 'Show password', exact: true }),
     ).toBeVisible();
-    // The harness runs with PROVIDER_LOGIN_ENABLED=true, so the capabilities
-    // read must surface all three provider links.
+    // The harness runs with PROVIDER_LOGIN_ENABLED=google,linkedin, so the
+    // capabilities read must surface exactly Google then LinkedIn, and no
+    // GitHub link (docs/design/linkedin-sign-in.md "Design").
     await expect(
-      page.getByRole('link', {
-        name: /^Continue with (Google|GitHub|LinkedIn)$/,
-      }),
-    ).toHaveCount(3);
+      page.getByRole('link', { name: /^Continue with / }),
+    ).toHaveText(['Continue with Google', 'Continue with LinkedIn']);
     steps.providerLinks = true;
 
     stage('password-login');

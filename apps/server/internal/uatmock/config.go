@@ -9,15 +9,22 @@ import (
 	"time"
 )
 
-// Config defines the one local Google account and its exact OAuth boundary.
+// Config defines the local Google client and its exact OAuth boundary, and
+// optionally the LinkedIn client. LinkedIn's issuer sits beside Google's on
+// path /linkedin and its callback is the server's LinkedIn callback.
 type Config struct {
 	IssuerURL    string
 	PublicOrigin string
 	RedirectURL  string
 	ClientID     string
 	ClientSecret string
-	Now          func() time.Time
-	Random       io.Reader
+
+	// Both empty turns LinkedIn off; both set turns it on.
+	LinkedInClientID     string
+	LinkedInClientSecret string
+
+	Now    func() time.Time
+	Random io.Reader
 }
 
 func (c Config) validate() error {
@@ -44,6 +51,10 @@ func (c Config) validate() error {
 	}
 	if c.ClientSecret == "" || len(c.ClientSecret) > maxFieldBytes {
 		return fmt.Errorf("uatmock: invalid client secret")
+	}
+	if (c.LinkedInClientID == "") != (c.LinkedInClientSecret == "") ||
+		len(c.LinkedInClientID) > maxFieldBytes || len(c.LinkedInClientSecret) > maxFieldBytes {
+		return fmt.Errorf("uatmock: LinkedIn client ID and secret must both be set or both be empty")
 	}
 	if c.Now == nil {
 		return fmt.Errorf("uatmock: clock is required")

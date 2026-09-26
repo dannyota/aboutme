@@ -8,7 +8,9 @@
  * `?error=` is a closed vocabulary produced by the callback landing
  * redirect: `auth_failed`, `email_not_verified`, `cancelled`, and
  * `email_already_registered`. Copy for both languages lives in
- * `app/i18n/auth.ts`.
+ * `app/i18n/auth.ts`. `email_already_registered` also carries `?provider=`,
+ * the provider just used; only a value from the closed provider allowlist
+ * names it, and it is never rendered raw.
  *
  * The password form sends closed copy for every failure and never retains
  * the password after a successful login. An account enrolled in a second
@@ -29,7 +31,7 @@ import {
   type PasswordAuthFailure,
   usePasswordAuth,
 } from '../composables/usePasswordAuth';
-import { useCapabilities } from '../composables/useCapabilities';
+import { providerNames, useCapabilities } from '../composables/useCapabilities';
 import { pageTitle } from '@/i18n/meta';
 import {
   DEFAULT_RETURN_PATH,
@@ -61,7 +63,6 @@ const errorMessages: Record<string, AuthMessage> = {
   auth_failed: 'providerFailed',
   email_not_verified: 'providerEmailNotVerified',
   cancelled: 'providerCancelled',
-  email_already_registered: 'providerEmailRegistered',
 };
 
 const errorCode = computed(() => {
@@ -69,8 +70,21 @@ const errorCode = computed(() => {
   return typeof value === 'string' ? value : null;
 });
 
+const providerDisplayName = computed(() => {
+  const value = route.query.provider;
+  // Only a value from the closed allowlist names a provider; anything else,
+  // including a prototype property name, gets the copy's neutral wording and
+  // is never rendered (docs/design/linkedin-sign-in.md "Web").
+  return typeof value === 'string' && Object.hasOwn(providerNames, value)
+    ? providerNames[value as keyof typeof providerNames]
+    : null;
+});
+
 const errorMessage = computed(() => {
   if (!errorCode.value) return null;
+  if (errorCode.value === 'email_already_registered') {
+    return copy.value.providerEmailRegistered(providerDisplayName.value);
+  }
   // `errorMessages[code]` alone would resolve inherited properties too
   // (`?error=constructor` renders `Object`'s constructor function,
   // `?error=__proto__` renders `{}`) rather than falling back — restrict

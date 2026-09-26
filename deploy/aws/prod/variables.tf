@@ -37,7 +37,7 @@ variable "password_registration_enabled" {
 variable "provider_login_enabled" {
   type        = string
   default     = ""
-  description = "\"google\" turns on Google login once its SSM parameters exist; \"\" keeps it off"
+  description = "\"google\" turns on Google login and \"google,linkedin\" adds LinkedIn, once each provider's SSM parameters exist; \"\" keeps provider login off"
 }
 
 # Initial task definition images. deploy.sh registers later revisions.

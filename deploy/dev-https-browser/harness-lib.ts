@@ -166,6 +166,83 @@ export async function signInWithGoogle(
   ]);
 }
 
+// The mock LinkedIn accounts (docs/design/linkedin-sign-in.md "Design"), one
+// constant per fixed radio label. The verified account is first and
+// pre-selected, matching the authorize page's default.
+export const LINKEDIN_VERIFIED_LABEL = 'LinkedIn Verified (li-verified@example.invalid)';
+export const LINKEDIN_NO_EMAIL_LABEL = 'LinkedIn No Email (no email)';
+export const LINKEDIN_UNVERIFIED_LABEL = 'LinkedIn Unverified (li-unverified@example.invalid)';
+export const LINKEDIN_COLLISION_LABEL = 'LinkedIn Collision (li-collision@example.invalid)';
+export const LINKEDIN_LINK_LABEL = 'LinkedIn Link (li-link@example.invalid)';
+
+export interface SignInWithLinkedInOptions {
+  /** Account radio label on the authorize page (default: the verified account). */
+  readonly accountLabel?: string;
+  /** Navigate to /login and assert it rendered before starting. */
+  readonly fromLoginPage?: boolean;
+  /** Expected same-origin callback path (default: /app/resumes). */
+  readonly returnPath?: string;
+}
+
+// startLinkedInAuthorize activates the login anchor or link button and
+// returns once the same-origin LinkedIn authorize page has rendered, with
+// the named account selected (the verified account by default, already
+// checked, matching the authorize page's default selection). It leaves the
+// choice of submit button ("Allow", "Cancel sign-in", or "Cancel
+// authorization") to the caller, so it fits every LinkedIn proof case
+// (docs/design/linkedin-sign-in.md "Tests").
+export async function startLinkedInAuthorize(
+  page: Page,
+  activator: Locator,
+  accountLabel = LINKEDIN_VERIFIED_LABEL,
+): Promise<void> {
+  await Promise.all([
+    page.waitForURL((url) =>
+      url.origin === ALLOWED_ORIGIN
+      && url.pathname === '/__uat/oauth/linkedin/authorize'
+    ),
+    activator.click(),
+  ]);
+  await expect(page).toHaveTitle('Local LinkedIn sign-in');
+  await expect(
+    page.getByRole('heading', { name: 'Choose a local LinkedIn account' }),
+  ).toBeVisible();
+  const account = page.getByLabel(accountLabel);
+  if (accountLabel === LINKEDIN_VERIFIED_LABEL) {
+    await expect(account).toBeChecked();
+  } else {
+    await account.check();
+  }
+}
+
+// signInWithLinkedIn completes the happy-path LinkedIn login: it follows the
+// login anchor, selects the named account (the verified account by
+// default), and returns after "Allow" reaches the expected same-origin
+// callback path.
+export async function signInWithLinkedIn(
+  page: Page,
+  options: SignInWithLinkedInOptions = {},
+): Promise<void> {
+  if (options.fromLoginPage === true) {
+    await pinEnglish(page.context());
+    const response = await page.goto('/login');
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  }
+  await startLinkedInAuthorize(
+    page,
+    page.getByRole('link', { name: 'Continue with LinkedIn' }),
+    options.accountLabel,
+  );
+  const returnPath = options.returnPath ?? '/app/resumes';
+  await Promise.all([
+    page.waitForURL((url) =>
+      url.origin === ALLOWED_ORIGIN && url.pathname === returnPath
+    ),
+    page.getByRole('button', { name: 'Allow', exact: true }).click(),
+  ]);
+}
+
 // waitForHydration polls until the client Vue app has mounted on the given
 // SSR root, the deterministic signal that Vue-bound controls are interactive.
 export async function waitForHydration(

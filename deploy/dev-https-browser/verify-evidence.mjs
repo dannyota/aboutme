@@ -294,6 +294,23 @@ async function verify(mode, path) {
       signedIn: true,
       verified: true,
     },
+  } : mode === 'linkedin' ? {
+    ...common,
+    scenario: 'linkedin-sign-in',
+    schemaVersion: 1,
+    steps: {
+      cancelAuthorize: true,
+      cancelLogin: true,
+      collisionBlocked: true,
+      lastMethodGuard: true,
+      linked: true,
+      linkedSignIn: true,
+      noEmailBlocked: true,
+      signOutSignIn: true,
+      signUp: true,
+      unlinked: true,
+      unverifiedBlocked: true,
+    },
   } : {
     schemaVersion: 1,
     scenario: 'authenticated-editor',

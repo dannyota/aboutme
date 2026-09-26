@@ -13,6 +13,7 @@ const browserModes = [
   'exports',
   'privacy',
   'sample-start',
+  'linkedin',
   'second-factor',
   'second-factor-disabled',
   'totp',
@@ -52,6 +53,7 @@ const timeout = mode === 'totp'
       : mode === 'editor' || mode === 'public' || mode === 'password-auth'
         || mode === 'mcp' || mode === 'publish' || mode === 'exports'
         || mode === 'privacy' || mode === 'sample-start' || mode === 'entry'
+        || mode === 'linkedin'
         ? 120_000 : 30_000;
 
 // Both second-factor modes run one spec, and both TOTP modes run another.

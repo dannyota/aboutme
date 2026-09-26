@@ -7,9 +7,9 @@ without publishing an account profile.
 ## Core journeys
 
 1. Sign in with email and password, or with an enabled provider. Production can
-   enable only Google; GitHub and LinkedIn exist but stay off. Server
-   configuration may close new password registration without disabling existing
-   password sign-in. An account may add a passkey or authenticator app as a
+   enable Google and LinkedIn; GitHub exists but stays off. Server configuration
+   may close new password registration without disabling existing password
+   sign-in. An account may add a passkey or authenticator app as a
    [second factor](second-factor-authentication.md).
 2. Create up to three resumes and edit incomplete drafts without save-time
    completeness errors.

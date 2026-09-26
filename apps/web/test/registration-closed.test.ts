@@ -38,12 +38,14 @@ describe('email sign-up closed', () => {
   it.each([
     [
       'vi',
-      'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục với Google.',
+      'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục bằng một trong các '
+      + 'tài khoản sau.',
       'Tiếp tục với Google',
     ],
     [
       'en',
-      'Email sign-up is temporarily closed. Continue with Google instead.',
+      'Email sign-up is temporarily closed. Continue with one of these '
+      + 'accounts instead.',
       'Continue with Google',
     ],
   ] as const)('offers Google instead of the form (%s)', async (
@@ -68,6 +70,16 @@ describe('email sign-up closed', () => {
       & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
+
+  it('offers every listed provider, in capabilities order, when closed',
+    async () => {
+      closedWith(['linkedin', 'google']);
+      const wrapper = await mountResolved(RegisterPage);
+
+      const links = wrapper.findAll('a[data-provider]')
+        .map((link) => link.attributes('data-provider'));
+      expect(links).toEqual(['google', 'linkedin']);
+    });
 
   it('shows only the note and Sign in when no provider is listed', async () => {
     closedWith([]);
@@ -121,7 +133,8 @@ describe('email sign-up closed after the page loaded', () => {
 
     expect(wrapper.find('[data-testid="register-form"]').exists()).toBe(false);
     expect(wrapper.get('[data-testid="register-closed"]').text()).toBe(
-      'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục với Google.',
+      'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục bằng một trong các '
+      + 'tài khoản sau.',
     );
     expect(wrapper.find('[data-testid="register-error"]').exists()).toBe(
       false,

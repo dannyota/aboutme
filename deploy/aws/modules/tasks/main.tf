@@ -6,14 +6,18 @@ locals {
   db_url    = "postgres://%s@${var.db_endpoint}:5432/%s?sslmode=verify-full&sslrootcert=/etc/ssl/rds/global-bundle.pem"
   master_pw = "${var.db_master_secret_arn}:password::"
 
-  # The app task references Google's credentials only when Google login is on.
-  # With "", the parameters need not exist. With "google", they must exist
-  # before a deploy; deploy.sh refuses to start one while any task secret is
-  # missing.
-  google_login = var.provider_login_enabled == "google"
-  google_secrets = local.google_login ? [
+  # The app task references a provider's credentials only while that provider
+  # is listed. An unlisted provider's parameters need not exist; a listed
+  # provider's must exist before a deploy, and deploy.sh refuses to start one
+  # while any task secret is missing.
+  login_providers = var.provider_login_enabled == "" ? [] : split(",", var.provider_login_enabled)
+  google_secrets = contains(local.login_providers, "google") ? [
     { name = "GOOGLE_CLIENT_ID", valueFrom = "${local.param}/oauth/google-client-id" },
     { name = "GOOGLE_CLIENT_SECRET", valueFrom = "${local.param}/oauth/google-client-secret" },
+  ] : []
+  linkedin_secrets = contains(local.login_providers, "linkedin") ? [
+    { name = "LINKEDIN_CLIENT_ID", valueFrom = "${local.param}/oauth/linkedin-client-id" },
+    { name = "LINKEDIN_CLIENT_SECRET", valueFrom = "${local.param}/oauth/linkedin-client-secret" },
   ] : []
 
   # The previous key names no parameter when unset, so an absent slot never
@@ -64,7 +68,7 @@ locals {
     { name = "SES_FROM_ADDRESS", value = var.ses_from_address },
     { name = "SES_FROM_NAME", value = var.ses_from_name },
     { name = "SES_CONFIGURATION_SET", value = var.ses_configuration_set },
-    { name = "PROVIDER_LOGIN_ENABLED", value = local.google_login ? "google" : "false" },
+    { name = "PROVIDER_LOGIN_ENABLED", value = var.provider_login_enabled == "" ? "false" : var.provider_login_enabled },
     { name = "PASSWORD_REGISTRATION_ENABLED", value = var.password_registration_enabled ? "true" : "false" },
     { name = "PASSKEY_ENROLLMENT_ENABLED", value = var.passkey_enrollment_enabled ? "true" : "false" },
     { name = "TOTP_ENROLLMENT_ENABLED", value = var.totp_enrollment_enabled ? "true" : "false" },
@@ -108,7 +112,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "AUTH_EMAIL_ACTIVE_KEY", valueFrom = "${local.param}/auth-email/active-key" },
         { name = "PASSWORD_RATE_HMAC_KEY", valueFrom = "${local.param}/password-rate-hmac-key" },
         { name = "TOTP_ACTIVE_KEY", valueFrom = "${local.param}/totp/key-${var.totp_active_key_slot}" },
-      ], local.google_secrets, local.totp_previous_secret)
+      ], local.google_secrets, local.linkedin_secrets, local.totp_previous_secret)
       # SYS_ADMIN lets Docker's seccomp profile allow the user namespaces that
       # Chromium's sandbox needs. The image runs as a non-root user, so the
       # process gains no effective capability.

@@ -31,8 +31,8 @@ one provider link per name in the capabilities `providers` list
 registration shows a short note offering the listed providers instead of its
 form; a missing field counts as true, and the form holds its space hidden while
 the read is pending. After registration, a notice says to check spam and offers
-Google when listed; an expired verification link does the same. Verification and
-reset strip the `#token=` fragment before any network call and load no
+every listed provider; an expired verification link does the same. Verification
+and reset strip the `#token=` fragment before any network call and load no
 third-party resource.
 
 Account settings show whether a password is set and allow add or change after

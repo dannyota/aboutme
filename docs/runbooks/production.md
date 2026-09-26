@@ -71,34 +71,29 @@ List names only:
 aws ssm get-parameters-by-path --path /aboutme/prod --recursive --query 'Parameters[].Name'
 ```
 
-## Google sign-in
+## Provider sign-in
 
-Google is the only provider production can enable. The `provider_login_enabled`
-variable sets `PROVIDER_LOGIN_ENABLED`: `""` (the default) keeps provider login
-off, and `"google"` turns on Google. With `"google"`, the app task reads its
-credentials from two SecureString parameters:
+The `provider_login_enabled` variable sets `PROVIDER_LOGIN_ENABLED`: `""` (the
+default) keeps provider login off, `"google"` turns on Google, and
+`"google,linkedin"` adds LinkedIn
+([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)). The app task reads
+each listed provider's credentials from the SecureString parameters
+`/aboutme/prod/oauth/<provider>-client-id` and `<provider>-client-secret`. The
+server refuses to start when a listed provider's value is missing, and
+`deploy.sh` refuses to begin a deploy while any task secret is missing.
 
-- `/aboutme/prod/oauth/google-client-id`
-- `/aboutme/prod/oauth/google-client-secret`
+Turn a provider on as its own step, after the release that supports it is live
+and healthy, so a rollback never gives an older release a value it refuses.
 
-The server refuses to start when Google is enabled and either value is missing,
-and `deploy.sh` refuses to begin a deploy while any task secret is missing.
-
-Enable Google as its own step, after a release that contains the provider list
-parser (commit `b8460d9` or later) and a web build that reads the capabilities
-`providers` list is live and healthy. Never combine the switch with that
-release: a rollback from it would give an older release `google`, which it
-refuses at startup.
-
-1. In the Google Cloud Console, create an OAuth client of type "Web application"
-   with the authorized redirect URI
-   `https://aboutme.vn/api/v1/auth/google/callback`. The app requests the
-   `openid`, `email`, and `profile` scopes. Put the consent screen in production
-   so that sign-in is not limited to test users.
+1. Register the client. Google: create an OAuth client of type "Web application"
+   with the redirect URI `https://aboutme.vn/api/v1/auth/google/callback` and a
+   consent screen in production. LinkedIn: follow
+   [LinkedIn app setup](../design/linkedin-sign-in.md#linkedin-app-setup), and
+   never replace that app, because its subjects are per app.
 2. Store each value through a private tmpfs file, never a command argument.
    `mktemp` creates the file readable only by you. Copy each value in the
    console, then write it to the file and clear the clipboard; the server trims
-   the trailing newline.
+   the trailing newline. For LinkedIn, write the `linkedin-` names.
 
    ```sh
    f=$(mktemp -p "$XDG_RUNTIME_DIR")
@@ -111,19 +106,22 @@ refuses at startup.
    rm -f "$f"
    ```
 
-3. Set `provider_login_enabled = "google"` in `prod.tfvars`, then run
-   `tofu apply`. The plan changes the app task definition.
+3. Set `provider_login_enabled` in `prod.tfvars`, copy it to the private
+   infrastructure repository, then run `tofu apply`. The plan changes the app
+   task definition only.
 4. Redeploy the live tag with `deploy.sh <tag>`. It builds the new revision from
    the task definition that `tofu apply` registered.
-5. Check `https://aboutme.vn/api/v1/capabilities`. It reports
-   `"providers":["google"]`, and `/api/v1/auth/github/start` returns 404.
+5. Check `https://aboutme.vn/api/v1/capabilities`: `providers` lists exactly the
+   enabled providers, and `/api/v1/auth/github/start` returns 404. For LinkedIn,
+   also run steps 4 and 5 of
+   [Release and enable](../design/linkedin-sign-in.md#release-and-enable).
 
 To rotate a value, repeat step 2 with `--overwrite` on `put-parameter`. The
 running app keeps the old value until its task next starts, so deploy after
 rotating.
 
-To turn Google off, set `provider_login_enabled = ""`, apply, and deploy. Leave
-the parameters in place.
+To turn a provider off, remove it from `provider_login_enabled`, apply, and
+deploy. Leave the parameters in place.
 
 ## Email sign-up
 
@@ -296,7 +294,9 @@ A rollback builds from the current task definition, so it keeps the current
 settings. Before rolling back to a tag older than the provider list parser
 (older than `b8460d9`) while Google is on, set `provider_login_enabled = ""` and
 run `tofu apply`; that older release refuses to start with
-`PROVIDER_LOGIN_ENABLED=google`.
+`PROVIDER_LOGIN_ENABLED=google`. Before rolling back past the LinkedIn release
+(0.6.2) while LinkedIn is on, set `"google"`, apply, and deploy: older releases
+send LinkedIn a PKCE verifier and show the older privacy notice.
 
 A rollback also points the job schedules at the older `jobs` revision. Rolling
 back to a release that predates the `release-snapshot-sweep` command leaves that

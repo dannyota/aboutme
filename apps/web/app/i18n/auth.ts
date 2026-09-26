@@ -25,13 +25,18 @@ export type AuthMessage
     | 'verifyLinkExpired'
     | 'providerFailed'
     | 'providerEmailNotVerified'
-    | 'providerCancelled'
-    | 'providerEmailRegistered';
+    | 'providerCancelled';
 
 type Provider = 'google' | 'github' | 'linkedin';
 
 export type AuthCopy = {
   readonly messages: Readonly<Record<AuthMessage, string>>;
+  /**
+   * The email-collision message, naming the provider just used, or a neutral
+   * phrase when it is null. Never names the account's existing sign-in method
+   * (a targeted-phishing hint).
+   */
+  readonly providerEmailRegistered: (provider: string | null) => string;
   readonly brandPanel: {
     readonly statement: string;
     readonly points: readonly [string, string, string];
@@ -59,7 +64,7 @@ export type AuthCopy = {
     readonly afterVerify: string;
     readonly haveAccount: string;
     readonly noEmail: string;
-    readonly noEmailGoogle: string;
+    readonly noEmailProviders: string;
     readonly closed: string;
   };
   readonly forgot: {
@@ -81,7 +86,7 @@ export type AuthCopy = {
     readonly lead: string;
     readonly pending: string;
     readonly success: string;
-    readonly useGoogle: string;
+    readonly useProviders: string;
   };
 };
 
@@ -126,10 +131,10 @@ export const authCopy: Record<Locale, AuthCopy> = {
       providerEmailNotVerified:
         'Bạn cần xác minh địa chỉ email với nhà cung cấp trước khi đăng nhập.',
       providerCancelled: 'Đã hủy đăng nhập.',
-      providerEmailRegistered:
-        'Email này đã có tài khoản. Hãy đăng nhập bằng nhà cung cấp bạn đã '
-        + 'dùng trước đây.',
     },
+    providerEmailRegistered: (provider) =>
+      `Email này đã có tài khoản. Hãy đăng nhập như bạn vẫn làm, rồi liên `
+      + `kết ${provider ?? 'nhà cung cấp này'} trong Cài đặt.`,
     email: 'Email',
     password: 'Mật khẩu',
     newPassword: 'Mật khẩu mới',
@@ -158,8 +163,10 @@ export const authCopy: Record<Locale, AuthCopy> = {
       haveAccount: 'Đã có tài khoản?',
       noEmail:
         'Nếu sau vài phút vẫn chưa thấy email, hãy kiểm tra thư mục thư rác.',
-      noEmailGoogle: 'Hoặc đăng nhập bằng tài khoản Google của bạn:',
-      closed: 'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục với Google.',
+      noEmailProviders: 'Hoặc tiếp tục bằng một trong các tài khoản sau:',
+      closed:
+        'Đăng ký bằng email đang tạm đóng. Hãy tiếp tục bằng một trong các '
+        + 'tài khoản sau.',
     },
     forgot: {
       title: 'Quên mật khẩu',
@@ -180,7 +187,7 @@ export const authCopy: Record<Locale, AuthCopy> = {
       lead: 'Mở đường dẫn trong email để xác minh địa chỉ của bạn.',
       pending: 'Đang xác minh địa chỉ email…',
       success: 'Đã xác minh email. Hãy đăng nhập.',
-      useGoogle: 'Hoặc đăng nhập bằng tài khoản Google của bạn:',
+      useProviders: 'Hoặc tiếp tục bằng một trong các tài khoản sau:',
     },
   },
   en: {
@@ -221,12 +228,14 @@ export const authCopy: Record<Locale, AuthCopy> = {
         'Your email address must be verified with your provider before you '
         + 'can sign in.',
       providerCancelled: 'Sign-in was cancelled.',
-      // Deliberately does not name the existing provider: naming it hands an
-      // attacker a targeted-phishing hint (OAuth email-collision rule).
-      providerEmailRegistered:
-        'An account with this email already exists. Sign in with the provider '
-        + 'you used originally.',
     },
+    // Deliberately does not name the account's existing sign-in method:
+    // naming it hands an attacker a targeted-phishing hint (OAuth
+    // email-collision rule). It names only the provider just used, which
+    // the caller already knows.
+    providerEmailRegistered: (provider) =>
+      `An account with this email already exists. Sign in the way you `
+      + `usually do, then link ${provider ?? 'this provider'} in Settings.`,
     email: 'Email',
     password: 'Password',
     newPassword: 'New password',
@@ -256,9 +265,10 @@ export const authCopy: Record<Locale, AuthCopy> = {
       noEmail:
         'If the email has not arrived within a few minutes, check your spam '
         + 'folder.',
-      noEmailGoogle: 'Or sign in with your Google account instead:',
+      noEmailProviders: 'Or continue with one of these accounts instead:',
       closed:
-        'Email sign-up is temporarily closed. Continue with Google instead.',
+        'Email sign-up is temporarily closed. Continue with one of these '
+        + 'accounts instead.',
     },
     forgot: {
       title: 'Forgot password',
@@ -279,7 +289,7 @@ export const authCopy: Record<Locale, AuthCopy> = {
       lead: 'Follow the link in your email to verify your address.',
       pending: 'Verifying your email address…',
       success: 'Email verified. Sign in.',
-      useGoogle: 'Or sign in with your Google account instead:',
+      useProviders: 'Or continue with one of these accounts instead:',
     },
   },
 };

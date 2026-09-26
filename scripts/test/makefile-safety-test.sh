@@ -113,7 +113,7 @@ mkdir -p "$HTTPS_REPO/scripts" "$HTTPS_REPO/deploy/dev-https-browser" \
 chmod 0700 "$HTTPS_REPO/.dev/native-https" \
   "$HTTPS_REPO/.dev/native-https/input"
 cp "$ROOT/Makefile" "$HTTPS_REPO/Makefile"
-cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,mcp-sdk.spec.ts,second-factor.spec.ts,totp.spec.ts,totp-fixture.ts,totp-production.spec.ts,production.config.ts,entry.spec.ts,publish.spec.ts,exports.spec.ts,privacy.spec.ts,sample-start.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,second-factor-lib.ts,second-factor-pages.ts,proof-shards.mjs,run.sh,verify-evidence.mjs} \
+cp "$ROOT/deploy/dev-https-browser/"{Dockerfile,package.json,package-lock.json,playwright.config.ts,auth.spec.ts,transport.spec.ts,editor.spec.ts,public.spec.ts,password-auth.spec.ts,mcp.spec.ts,mcp-sdk.spec.ts,second-factor.spec.ts,totp.spec.ts,totp-fixture.ts,totp-production.spec.ts,production.config.ts,entry.spec.ts,publish.spec.ts,exports.spec.ts,privacy.spec.ts,sample-start.spec.ts,linkedin.spec.ts,editor-fixtures.ts,network-policy.ts,harness-lib.ts,second-factor-lib.ts,second-factor-pages.ts,proof-shards.mjs,run.sh,verify-evidence.mjs} \
   "$HTTPS_REPO/deploy/dev-https-browser/"
 cp "$ROOT/scripts/dev-https-check.sh" "$HTTPS_REPO/scripts/dev-https-check.sh"
 printf '%s\n' 'static test root' > \

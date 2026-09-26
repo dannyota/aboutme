@@ -80,10 +80,10 @@ if (token !== '') {
     });
 }
 
-// A dead or broken link can be sidestepped by signing in with Google, which
-// needs no verification email.
-const offerGoogle = computed(() =>
-  loginProviders.value.includes('google')
+// A dead or broken link can be sidestepped by signing in with a listed
+// provider, which needs no verification email.
+const offerProviders = computed(() =>
+  loginProviders.value.length > 0
   && (errorMessage.value === 'verifyLinkExpired'
     || errorMessage.value === 'verifyLinkIncomplete'));
 
@@ -121,14 +121,14 @@ function messageFor(failure: PasswordAuthFailure): AuthMessage {
       {{ errorMessage ? copy.messages[errorMessage] : '' }}
     </StatusBanner>
     <div
-      v-if="status === 'error' && offerGoogle"
+      v-if="status === 'error' && offerProviders"
       class="mt-6 grid gap-3 text-sm text-muted-foreground"
-      data-testid="verify-google"
+      data-testid="verify-providers"
     >
-      <p>{{ copy.verify.useGoogle }}</p>
+      <p>{{ copy.verify.useProviders }}</p>
       <ProviderButtons
         :locale="locale"
-        :providers="['google']"
+        :providers="loginProviders"
       />
     </div>
     <StatusBanner

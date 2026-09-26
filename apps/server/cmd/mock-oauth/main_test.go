@@ -12,11 +12,13 @@ func TestLoadConfigAcceptsOnlyNativeHTTPSHarnessValues(t *testing.T) {
 	t.Parallel()
 
 	valid := map[string]string{
-		"LISTEN_HOST":          "127.0.0.1",
-		"PORT":                 "20442",
-		"PUBLIC_ORIGIN":        "https://localhost:20443",
-		"GOOGLE_CLIENT_ID":     "aboutme-local-google",
-		"GOOGLE_CLIENT_SECRET": "not-a-secret-local-google",
+		"LISTEN_HOST":            "127.0.0.1",
+		"PORT":                   "20442",
+		"PUBLIC_ORIGIN":          "https://localhost:20443",
+		"GOOGLE_CLIENT_ID":       "aboutme-local-google",
+		"GOOGLE_CLIENT_SECRET":   "not-a-secret-local-google",
+		"LINKEDIN_CLIENT_ID":     "aboutme-local-linkedin",
+		"LINKEDIN_CLIENT_SECRET": "not-a-secret-local-linkedin",
 	}
 	tests := []struct {
 		name  string
@@ -28,6 +30,9 @@ func TestLoadConfigAcceptsOnlyNativeHTTPSHarnessValues(t *testing.T) {
 		{name: "origin", field: "PUBLIC_ORIGIN", value: "https://localhost"},
 		{name: "client id", field: "GOOGLE_CLIENT_ID", value: "real-looking"},
 		{name: "client secret", field: "GOOGLE_CLIENT_SECRET", value: "real-looking"},
+		{name: "linkedin client id", field: "LINKEDIN_CLIENT_ID", value: "real-looking"},
+		{name: "linkedin client secret", field: "LINKEDIN_CLIENT_SECRET", value: "real-looking"},
+		{name: "missing linkedin client id", field: "LINKEDIN_CLIENT_ID", value: ""},
 	}
 
 	getenv := func(values map[string]string) func(string) string {
@@ -42,6 +47,9 @@ func TestLoadConfigAcceptsOnlyNativeHTTPSHarnessValues(t *testing.T) {
 	}
 	if cfg.RedirectURL != "https://localhost:20443/api/v1/auth/google/callback" {
 		t.Fatalf("RedirectURL = %q", cfg.RedirectURL)
+	}
+	if cfg.LinkedInClientID != "aboutme-local-linkedin" || cfg.LinkedInClientSecret != "not-a-secret-local-linkedin" {
+		t.Fatal("LinkedIn client values were not loaded")
 	}
 
 	for _, tt := range tests {

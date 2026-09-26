@@ -86,13 +86,14 @@ variable "totp_previous_key_slot" {
   }
 }
 
-# Only Google's credentials are wired, so only Google may be enabled here.
+# Only Google's and LinkedIn's credentials are wired, and LinkedIn turns on
+# only beside Google (docs/adr/0058-linkedin-sign-in-in-production.md).
 variable "provider_login_enabled" {
   type        = string
-  description = "PROVIDER_LOGIN_ENABLED for the server: \"\" (off) or \"google\""
+  description = "PROVIDER_LOGIN_ENABLED for the server: \"\" (off), \"google\", or \"google,linkedin\""
   validation {
-    condition     = contains(["", "google"], var.provider_login_enabled)
-    error_message = "provider_login_enabled must be \"\" or \"google\"; no other provider has production credentials wired."
+    condition     = contains(["", "google", "google,linkedin"], var.provider_login_enabled)
+    error_message = "provider_login_enabled must be \"\", \"google\", or \"google,linkedin\"; no other provider has production credentials wired."
   }
 }
 

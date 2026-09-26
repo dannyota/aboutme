@@ -23,6 +23,7 @@ readonly -a SPEC_SOURCES=(
   exports.spec.ts
   privacy.spec.ts
   sample-start.spec.ts
+  linkedin.spec.ts
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts
@@ -81,7 +82,7 @@ validate_capture_token_file() {
 # mode_input_entries prints the sorted CA input filenames a mode requires.
 mode_input_entries() {
   case $1 in
-  password-auth | sample-start) printf 'caddy-root.crt\nmail-capture-token' ;;
+  password-auth | sample-start | linkedin) printf 'caddy-root.crt\nmail-capture-token' ;;
   mcp | privacy) printf 'caddy-root.crt\nmcp-client-name' ;;
   second-factor | totp)
     printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name'
@@ -96,7 +97,7 @@ mode_input_entries() {
 # mode_input_diagnostic prints the rejection text for a wrong CA input set.
 mode_input_diagnostic() {
   case $1 in
-  password-auth | sample-start)
+  password-auth | sample-start | linkedin)
     printf 'CA input must contain the Caddy root and the capture token'
     ;;
   mcp | privacy)
@@ -147,7 +148,7 @@ add_shard_env() {
 validate_mode_input_files() {
   local mode=$1 dir=$2 uid=$3
   case $mode in
-  password-auth | sample-start | second-factor | totp)
+  password-auth | sample-start | linkedin | second-factor | totp)
     validate_capture_token_file "$dir/mail-capture-token" "$uid"
     ;;
   esac
@@ -208,8 +209,8 @@ mount_has_option() {
 
 require_valid_mode() {
   case $1 in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
   esac
 }
 
@@ -358,6 +359,7 @@ inside_container() {
   exports) evidence_name=exports-proof.json evidence_limit=8192 proof_name=exports spec=exports.spec.ts ;;
   privacy) evidence_name=privacy-proof.json evidence_limit=8192 proof_name='account privacy' spec=privacy.spec.ts ;;
   sample-start) evidence_name=sample-start-proof.json evidence_limit=4096 proof_name='register and start a resume from a sample' spec=sample-start.spec.ts ;;
+  linkedin) evidence_name=linkedin-proof.json evidence_limit=8192 proof_name='LinkedIn sign-in' spec=linkedin.spec.ts ;;
   second-factor) evidence_name=passkey-second-factor-proof.json evidence_limit=8192 proof_name='passkey second factor' spec=second-factor.spec.ts ;;
   second-factor-disabled) evidence_name=passkey-enrollment-disabled-proof.json evidence_limit=8192 proof_name='disabled passkey enrollment' spec=second-factor.spec.ts ;;
   totp) evidence_name=totp-second-factor-proof.json evidence_limit=8192 evidence_extra_name=totp-timing.json evidence_extra_limit=4096 proof_name='authenticator-app second factor' spec=totp.spec.ts ;;

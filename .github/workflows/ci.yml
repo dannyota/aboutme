@@ -593,7 +593,7 @@ jobs:
           - group: editor
             proofs: editor exports
           - group: entry
-            proofs: entry publish
+            proofs: entry publish linkedin
           - group: account
             proofs: password privacy transport
           - group: mcp

@@ -40,6 +40,9 @@ readonly PRINT_LISTEN_ADDR=127.0.0.1:20445
 readonly GOOGLE_CLIENT_ID=aboutme-local-google
 readonly GOOGLE_CLIENT_SECRET=not-a-secret-local-google
 readonly GOOGLE_ISSUER_URL="http://127.0.0.1:${MOCK_PORT}/google"
+readonly LINKEDIN_CLIENT_ID=aboutme-local-linkedin
+readonly LINKEDIN_CLIENT_SECRET=not-a-secret-local-linkedin
+readonly LINKEDIN_ISSUER_URL="http://127.0.0.1:${MOCK_PORT}/linkedin"
 readonly DATABASE_URL='postgres://aboutme:aboutme_dev@127.0.0.1:20432/aboutme_dev?sslmode=disable'
 readonly LOG_LEVEL="${ABOUTME_DEV_LOG_LEVEL:-info}"
 
@@ -229,6 +232,7 @@ redact_logs() {
   [ -z "${TOTP_ACTIVE_KEY_B64-}" ] || secret_rules+=(-e "s/${TOTP_ACTIVE_KEY_B64}/[REDACTED]/g")
   sed -E \
     -e 's/(GOOGLE_CLIENT_SECRET[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/g' \
+    -e 's/(LINKEDIN_CLIENT_SECRET[=:][[:space:]]*)[^[:space:]]+/\1[REDACTED]/g' \
     -e 's/(__Host-(session|oauth-tx)=)[^;[:space:]]+/\1[REDACTED]/gI' \
     -e 's/("Authorization"[[:space:]]*:[[:space:]]*"Bearer[[:space:]]+)[^"]*(")/\1[REDACTED]\2/gI' \
     -e 's/("(access_token|id_token|refresh_token|X-CSRF-Token|csrfToken|code|state)"[[:space:]]*:[[:space:]]*")[^"]*(")/\1[REDACTED]\3/gI' \
@@ -237,6 +241,7 @@ redact_logs() {
     -e 's/([?&](code|state)=)[^&#[:space:]]+/\1[REDACTED]/g' \
     -e 's/((authorization_code|access_token|id_token|refresh_token|csrf_token|csrfToken|session_cookie)[[:space:]]*[=:][[:space:]]*)[^,;&[:space:]]+/\1[REDACTED]/gI' \
     -e "s/${GOOGLE_CLIENT_SECRET//\//\\\/}/[REDACTED]/g" \
+    -e "s/${LINKEDIN_CLIENT_SECRET//\//\\\/}/[REDACTED]/g" \
     "${secret_rules[@]}"
 }
 

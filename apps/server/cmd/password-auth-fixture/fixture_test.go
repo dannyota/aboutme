@@ -17,6 +17,7 @@ func TestParseConfigValidatesDatabase(t *testing.T) {
 	}{
 		{name: "seed ok", args: []string{"seed", "--database-url", validDSN}},
 		{name: "cleanup ok", args: []string{"cleanup", "--database-url", validDSN}},
+		{name: "linkedin cleanup ok", args: []string{"linkedin-cleanup", "--database-url", validDSN}},
 		{name: "missing subcommand", args: nil, want: "subcommand"},
 		{name: "unknown subcommand", args: []string{"drop", "--database-url", validDSN}, want: "unknown subcommand"},
 		{name: "missing database url", args: []string{"seed"}, want: "--database-url is required"},

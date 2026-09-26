@@ -73,17 +73,66 @@ describe('login.vue', () => {
     expect(banner.text()).toContain('cancelled');
   });
 
-  it('shows a provider-neutral message for email_already_registered',
+  it('names the provider just used for email_already_registered',
     async () => {
       const wrapper = await mountSuspended(LoginPage, {
-        route: '/login?error=email_already_registered',
+        route: '/login?error=email_already_registered&provider=linkedin',
       });
 
       const banner = wrapper.get('[data-testid="login-error"]');
-      expect(banner.text()).toContain('already exists');
-      // Must not name the existing provider (spec: targeted-phishing hint).
-      expect(banner.text().toLowerCase()).not.toMatch(
-        /google|github|linkedin/,
+      expect(banner.text()).toBe(
+        'An account with this email already exists. Sign in the way you '
+        + 'usually do, then link LinkedIn in Settings.',
+      );
+    });
+
+  it('shows the neutral fallback for email_already_registered with no '
+    + 'provider', async () => {
+    const wrapper = await mountSuspended(LoginPage, {
+      route: '/login?error=email_already_registered',
+    });
+
+    const banner = wrapper.get('[data-testid="login-error"]');
+    expect(banner.text()).toBe(
+      'An account with this email already exists. Sign in the way you '
+      + 'usually do, then link this provider in Settings.',
+    );
+  });
+
+  it('shows the neutral fallback for an unrecognized provider value and '
+    + 'never echoes it', async () => {
+    const wrapper = await mountSuspended(LoginPage, {
+      route: '/login?error=email_already_registered&provider=facebook',
+    });
+
+    const banner = wrapper.get('[data-testid="login-error"]');
+    expect(banner.text()).toBe(
+      'An account with this email already exists. Sign in the way you '
+      + 'usually do, then link this provider in Settings.',
+    );
+    expect(banner.text()).not.toContain('facebook');
+  });
+
+  it('falls back for a prototype property provider value', async () => {
+    const wrapper = await mountSuspended(LoginPage, {
+      route: '/login?error=email_already_registered&provider=constructor',
+    });
+
+    const banner = wrapper.get('[data-testid="login-error"]');
+    expect(banner.text()).toContain('link this provider in Settings');
+  });
+
+  it('shows the Vietnamese collision message with the provider named',
+    async () => {
+      setSiteLocale('vi');
+      const wrapper = await mountSuspended(LoginPage, {
+        route: '/login?error=email_already_registered&provider=google',
+      });
+
+      const banner = wrapper.get('[data-testid="login-error"]');
+      expect(banner.text()).toBe(
+        'Email này đã có tài khoản. Hãy đăng nhập như bạn vẫn làm, rồi '
+        + 'liên kết Google trong Cài đặt.',
       );
     });
 

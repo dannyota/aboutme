@@ -29,7 +29,7 @@ rows are never split by number range.
 | Prefix      | Rows | File                           |
 | ----------- | ---- | ------------------------------ |
 | `AC-DOC`    | 12   | [ac-doc.md](./ac-doc.md)       |
-| `AC-AUTH`   | 30   | [ac-auth.md](./ac-auth.md)     |
+| `AC-AUTH`   | 31   | [ac-auth.md](./ac-auth.md)     |
 | `AC-SAVE`   | 5    | [ac-save.md](./ac-save.md)     |
 | `AC-MEDIA`  | 9    | [ac-media.md](./ac-media.md)   |
 | `AC-PUB`    | 10   | [ac-pub.md](./ac-pub.md)       |

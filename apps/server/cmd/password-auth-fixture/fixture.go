@@ -31,11 +31,11 @@ type Config struct {
 
 func parseConfig(args []string) (string, Config, error) {
 	if len(args) == 0 {
-		return "", Config{}, errors.New("subcommand is required (seed or cleanup)")
+		return "", Config{}, errors.New("subcommand is required (seed, cleanup, or linkedin-cleanup)")
 	}
 	cmd := args[0]
-	if cmd != "seed" && cmd != "cleanup" {
-		return "", Config{}, fmt.Errorf("unknown subcommand %q (want seed or cleanup)", cmd)
+	if cmd != "seed" && cmd != "cleanup" && cmd != "linkedin-cleanup" {
+		return "", Config{}, fmt.Errorf("unknown subcommand %q (want seed, cleanup, or linkedin-cleanup)", cmd)
 	}
 
 	var databaseURL string
@@ -107,6 +107,8 @@ func run(ctx context.Context, cmd string, cfg Config) error {
 		return runSeed(ctx, cfg)
 	case "cleanup":
 		return runCleanup(ctx, cfg)
+	case "linkedin-cleanup":
+		return runLinkedInCleanup(ctx, cfg)
 	default:
 		return fmt.Errorf("unknown subcommand %q", cmd)
 	}

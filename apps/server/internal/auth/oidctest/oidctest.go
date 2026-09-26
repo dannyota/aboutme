@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
@@ -74,6 +75,26 @@ type Provider struct {
 	discoveryBlock        func() // see BlockDiscoveryForTest; nil means discovery never blocks
 	lastTokenRedirectURI  string
 	lastTokenRedirectSeen bool
+	lastTokenRequest      TokenRequest
+	tokenRequestCount     int
+}
+
+// TokenRequest is what the token endpoint received, so tests can prove how a
+// client authenticates and which parameters it sends.
+type TokenRequest struct {
+	// Form holds the decoded form body only, not URL query values.
+	Form url.Values
+
+	// Authorization is the raw Authorization header; empty when absent.
+	Authorization string
+}
+
+// LastTokenRequest returns the most recent token request and the number of
+// token requests served so far.
+func (p *Provider) LastTokenRequest() (req TokenRequest, count int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.lastTokenRequest, p.tokenRequestCount
 }
 
 // LastTokenRedirectURI exposes the last token-exchange redirect URI so tests can
@@ -239,6 +260,8 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	p.lastTokenRedirectURI = r.PostFormValue("redirect_uri")
 	p.lastTokenRedirectSeen = true
+	p.lastTokenRequest = TokenRequest{Form: cloneValues(r.PostForm), Authorization: r.Header.Get("Authorization")}
+	p.tokenRequestCount++
 	p.mu.Unlock()
 
 	code := r.PostFormValue("code")
@@ -273,6 +296,16 @@ func (p *Provider) serveToken(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil { //nolint:gosec // access_token here is a fixed placeholder string this mock always returns, not a real credential; the field name is the RFC 6749 §5.1 wire name go-oidc/oauth2 expects, not a leak of a real secret
 		p.t.Errorf("oidctest: encoding token response: %v", err)
 	}
+}
+
+// cloneValues copies v so a recorded request cannot change after the handler
+// returns.
+func cloneValues(v url.Values) url.Values {
+	out := make(url.Values, len(v))
+	for k, vals := range v {
+		out[k] = append([]string(nil), vals...)
+	}
+	return out
 }
 
 // signIDToken applies defaults and returns a compact signed JWT.

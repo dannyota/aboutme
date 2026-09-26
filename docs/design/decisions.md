@@ -1,8 +1,9 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. ADRs 0001–0052 and
-0054–0056 are accepted; ADR 0053 is rejected; ADRs 0057–0062 are proposed.
+supersession record; these pages state the resulting design. ADRs 0001–0052,
+0054–0056, and 0058 are accepted; ADR 0053 is rejected; ADRs 0057 and 0059–0062
+are proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -44,7 +45,7 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)      | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired            |
 | [0037](../adr/0037-single-host-production-without-hosted-uat.md)          | Accepted | First release deploys to single-host production, no hosted UAT until about 500 users; edge superseded by 0054          |
 | [0038](../adr/0038-single-baseline-and-plain-migrator.md)                 | Accepted | One baseline migration with explicit app grants; plain goose migrator; replica runtime removed until a second replica  |
-| [0039](../adr/0039-per-provider-login-enablement.md)                      | Accepted | `PROVIDER_LOGIN_ENABLED` enables providers one at a time; production can enable only Google                            |
+| [0039](../adr/0039-per-provider-login-enablement.md)                      | Accepted | `PROVIDER_LOGIN_ENABLED` enables providers one at a time; production can enable Google and, per 0058, LinkedIn         |
 | [0040](../adr/0040-contact-labels-beside-icons.md)                        | Accepted | Icons replace default contact labels; linked addresses display without scheme or trailing slash                        |
 | [0041](../adr/0041-contact-link-display-and-body-justify.md)              | Accepted | Document v3: custom https links, per-detail link display, justified body text; GitHub and X brand marks                |
 | [0042](../adr/0042-public-page-title-and-favicon.md)                      | Accepted | Owner-set public page title and one-emoji favicon as publication settings; exact server-computed head values           |
@@ -63,7 +64,7 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0055](../adr/0055-stored-link-preview-card.md)                           | Accepted | Stored, versioned link-preview card replaces the top-crop share image; supersedes 0032                                 |
 | [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
 | [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
-| [0058](../adr/0058-linkedin-sign-in-in-production.md)                     | Proposed | Production may enable LinkedIn sign-in; LinkedIn uses its documented flow with a nonce and no PKCE                     |
+| [0058](../adr/0058-linkedin-sign-in-in-production.md)                     | Accepted | Production may enable LinkedIn sign-in; LinkedIn uses its documented flow with a nonce and no PKCE                     |
 | [0059](../adr/0059-linkedin-import-in-the-browser.md)                     | Proposed | LinkedIn import reads the member's data download in the browser; the file is never uploaded                            |
 | [0060](../adr/0060-viewer-data-controller-and-consent.md)                 | Proposed | aboutme controls viewer data; three fixed modes; detail only after consent                                             |
 | [0061](../adr/0061-layered-human-view-counting.md)                        | Proposed | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |

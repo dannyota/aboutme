@@ -1,5 +1,5 @@
-// Command mock-oauth runs the local-only Google OIDC provider for the native
-// HTTPS authentication proof.
+// Command mock-oauth runs the local-only Google and LinkedIn OIDC providers for
+// the native HTTPS authentication proofs.
 package main
 
 import (
@@ -18,12 +18,14 @@ import (
 )
 
 const (
-	listenHost         = "127.0.0.1"
-	listenPort         = "20442"
-	publicOrigin       = "https://localhost:20443"
-	googleClientID     = "aboutme-local-google"
-	googleClientSecret = "not-a-secret-local-google"
-	shutdownTimeout    = 5 * time.Second
+	listenHost           = "127.0.0.1"
+	listenPort           = "20442"
+	publicOrigin         = "https://localhost:20443"
+	googleClientID       = "aboutme-local-google"
+	googleClientSecret   = "not-a-secret-local-google"
+	linkedinClientID     = "aboutme-local-linkedin"
+	linkedinClientSecret = "not-a-secret-local-linkedin"
+	shutdownTimeout      = 5 * time.Second
 )
 
 func main() {
@@ -62,6 +64,8 @@ func loadConfig(getenv func(string) string) (uatmock.Config, error) {
 		{name: "PUBLIC_ORIGIN", value: publicOrigin},
 		{name: "GOOGLE_CLIENT_ID", value: googleClientID},
 		{name: "GOOGLE_CLIENT_SECRET", value: googleClientSecret},
+		{name: "LINKEDIN_CLIENT_ID", value: linkedinClientID},
+		{name: "LINKEDIN_CLIENT_SECRET", value: linkedinClientSecret},
 	}
 	for _, item := range expected {
 		if getenv(item.name) != item.value {
@@ -74,8 +78,12 @@ func loadConfig(getenv func(string) string) (uatmock.Config, error) {
 		RedirectURL:  publicOrigin + "/api/v1/auth/google/callback",
 		ClientID:     googleClientID,
 		ClientSecret: googleClientSecret,
-		Now:          time.Now,
-		Random:       rand.Reader,
+
+		LinkedInClientID:     linkedinClientID,
+		LinkedInClientSecret: linkedinClientSecret,
+
+		Now:    time.Now,
+		Random: rand.Reader,
 	}, nil
 }
 
