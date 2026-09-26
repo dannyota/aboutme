@@ -19,6 +19,7 @@ import {
   signInWithGoogle,
   waitForHydration,
   pinEnglish,
+  warmPage,
 } from "./harness-lib";
 import { ALLOWED_ORIGIN, httpFailureStatus } from "./network-policy";
 
@@ -397,8 +398,10 @@ async function createOAuthGrant(
       status: 200,
     });
   });
-  await page.goto(`/oauth/authorize?${query.toString()}`);
-  await waitForHydration(page);
+  // This page's query carries the client this call just registered, so it
+  // cannot be pre-warmed with different, throwaway parameters; its one real
+  // visit takes the warm bound directly.
+  await warmPage(page, `/oauth/authorize?${query.toString()}`);
   await Promise.all([
     page.waitForURL(`${REDIRECT_URI}**`),
     page.getByRole("button", { name: "Approve" }).click(),
@@ -597,6 +600,12 @@ test("proves account export, reauthentication, and deletion", async ({
   };
 
   try {
+    // Warm /login before signInWithGoogle depends on it already being
+    // compiled on the harness's dev server (harness-lib.ts warmPage); the
+    // real sign-in below revisits it at its own tight bound.
+    stage("warm-login");
+    await warmPage(page, "/login");
+
     stage("auth");
     accountExists = true;
     await signInWithGoogle(page, {
@@ -605,6 +614,17 @@ test("proves account export, reauthentication, and deletion", async ({
       keyboard: true,
     });
     steps.auth = true;
+
+    // /app/resumes and /app/settings/sessions need a session, so they could
+    // not join the warm pass above; warm them now that one exists, before
+    // the resume and settings work below depends on either already being
+    // compiled.
+    stage("warm-app-resumes");
+    await warmPage(page, "/app/resumes");
+    stage("warm-app-settings-sessions");
+    await warmPage(page, "/app/settings/sessions");
+
+    stage("auth");
     const prepared = await preparePublishedResume(page);
     const grant = await createOAuthGrant(context, page);
     const oldSession = (await context.cookies()).find(

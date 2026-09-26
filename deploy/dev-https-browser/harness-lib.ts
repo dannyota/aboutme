@@ -245,9 +245,11 @@ export async function signInWithLinkedIn(
 
 // waitForHydration polls until the client Vue app has mounted on the given
 // SSR root, the deterministic signal that Vue-bound controls are interactive.
+// `timeoutMs` bounds the poll; omitted, it keeps Playwright's own default.
 export async function waitForHydration(
   page: Page,
   rootId = '__nuxt',
+  timeoutMs?: number,
 ): Promise<void> {
   await expect.poll(() =>
     page.evaluate((id) =>
@@ -257,7 +259,27 @@ export async function waitForHydration(
         } | null)?.__vue_app__,
       ),
     rootId),
-  ).toBe(true);
+  timeoutMs === undefined ? undefined : { timeout: timeoutMs }).toBe(true);
+}
+
+// A first visit to a page compiles its route on the harness's dev server, so
+// it is far slower than any later visit to the same route in this browser
+// process (second-factor.spec.ts and totp.spec.ts pay the same cost with
+// their own WARM_ROUTES pass, `second-factor-pages.ts`). This bound is a
+// ceiling for that one-time cost, not a typical duration, so widening it
+// touches no ordinary check.
+export const WAIT_WARM_MS = 90_000;
+
+// warmPage opens `url` once at the warm bound, so its first compile happens
+// here rather than during a later, tightly bounded hydration wait. It also
+// fits a page whose state comes from the URL fragment or another one-time
+// value, opened for the only time this call makes: there the warm bound
+// applies directly to that real, singular visit instead of to a throwaway
+// one before it, since replaying such a page a second time would not be
+// idempotent.
+export async function warmPage(page: Page, url: string): Promise<void> {
+  await page.goto(url, { timeout: WAIT_WARM_MS });
+  await waitForHydration(page, '__nuxt', WAIT_WARM_MS);
 }
 
 // --- Failure diagnosis in closed words ---------------------------------------
