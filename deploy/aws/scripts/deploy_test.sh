@@ -1401,8 +1401,58 @@ grep -qF "not an assumed-role session" "$work/verify_role_fails.out" ||
 [ -z "$(ls -A "$tmproot")" ] ||
   { echo "verify_role_fails: left a temp directory behind in TMPDIR" >&2; exit 1; }
 
+# Every image's build provenance is verified by digest, for this tag and the
+# commit it names, before the fence lock, the snapshot, or any registration
+# (provenance.sh). A rollback verifies its own tag's images the same way.
+f=$work/ok.calls
+sha=0123456789abcdef0123456789abcdef01234567
+for name in server web caddy; do
+  want="gh attestation verify oci://ghcr.io/dannyota/aboutme-$name@sha256:$(printf '%064d' 1) --repo dannyota/aboutme"
+  want+=" --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.1.0"
+  want+=" --source-ref refs/tags/v0.1.0 --source-digest $sha --deny-self-hosted-runners --format json"
+  [[ $(count "$f" "$want") == 1 ]] || { echo "ok: $name provenance was not verified once with the full policy" >&2; exit 1; }
+  before "$f" "$want" "operation_id=:o"
+  before "$f" "$want" "rds create-db-snapshot"
+  before "$f" "$want" "ecs register-task-definition"
+done
+policy() { # name tag
+  printf 'gh attestation verify oci://ghcr.io/dannyota/aboutme-%s@sha256:%064d --repo dannyota/aboutme' "$1" 1
+  printf ' --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/%s' "$2"
+  printf ' --source-ref refs/tags/%s --source-digest %s --deny-self-hosted-runners --format json' "$2" "$sha"
+}
+for name in server web caddy; do
+  [[ $(count "$work/rollback.calls" "$(policy "$name" v0.0.9)") == 1 ]] ||
+    { echo "rollback: $name provenance was not verified once for the rollback tag" >&2; exit 1; }
+done
+# The TOTP re-encryption one-shot runs the tag's server image, so it verifies
+# that image the same way before the lock or its registration.
+f=$work/totp_reencrypt_ok.calls
+[[ $(count "$f" "$(policy server v0.4.7)") == 1 ]] ||
+  { echo "totp_reencrypt_ok: server provenance was not verified once" >&2; exit 1; }
+before "$f" "$(policy server v0.4.7)" "operation_id=:o"
+before "$f" "$(policy server v0.4.7)" "ecs register-task-definition"
+run_case totp_reencrypt_provenance_fails fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_provenance_fails.calls
+absent "$f" "operation_id=:o"
+absent "$f" "ecs register-task-definition"
+absent "$f" "ecs run-task"
+grep -qF "provenance: no valid build provenance for server@" "$work/totp_reencrypt_provenance_fails.out" ||
+  { echo "totp_reencrypt_provenance_fails: did not stop on the provenance check" >&2; exit 1; }
+
+for case_ in provenance_fails provenance_wrong_subject; do
+  run_case "$case_" fail v0.1.0
+  f=$work/$case_.calls
+  absent "$f" "operation_id=:o"
+  absent "$f" "rds create-db-snapshot"
+  absent "$f" "ecs register-task-definition"
+  absent "$f" "ecs update-service"
+  absent "$f" "gh attestation verify oci://ghcr.io/dannyota/aboutme-web@"
+  grep -qF "provenance:" "$work/$case_.out" || { echo "$case_: no provenance message" >&2; exit 1; }
+done
+
 run_case usage 2
 
 # The pre-switch DNS comparison script (docs/runbooks/dns.md).
 bash "$here/dns-check_test.sh"
+bash "$here/provenance_test.sh"
 echo "deploy-script-test: ok"

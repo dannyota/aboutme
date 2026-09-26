@@ -96,7 +96,96 @@ jobs:
           subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+      # The SBOM lists the packages in the pushed digest: Go build information
+      # and the OS package database. The attestation binds it to that digest;
+      # docs/design/deployment-transparency/verification.md, "SBOM".
+      - name: SBOM
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          "$RUNNER_TEMP/trivy-bin/trivy" image --format spdx-json \
+            --output "aboutme-$NAME.spdx.json" "ghcr.io/dannyota/aboutme-$NAME@$DIGEST"
+          jq -e '.spdxVersion == "SPDX-2.3"' "aboutme-$NAME.spdx.json" >/dev/null
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: aboutme-${{ matrix.name }}.spdx.json
+          push-to-registry: true
+          create-storage-record: false
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digest-${{ matrix.name }}
           path: digest-${{ matrix.name }}.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.name }}
+          path: aboutme-${{ matrix.name }}.spdx.json
+          if-no-files-found: error
+
+  # Publishes the tag's SBOMs and digests as a GitHub Release, so they keep a
+  # permanent public link. The signed attestations above are the evidence; a
+  # release asset is a copy. This job holds no registry, OIDC, or attestation
+  # permission.
+  release:
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-*
+          path: artifacts
+          merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: sbom-*
+          path: artifacts
+          merge-multiple: true
+      - name: Assemble
+        run: |
+          [[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
+            { echo "release: $TAG is not a vMAJOR.MINOR.PATCH tag" >&2; exit 1; }
+          mkdir release
+          : >release/digests.txt
+          # server, web, and caddy are always built; the observer image is
+          # listed once the matrix builds it.
+          names=(server web caddy)
+          [[ ! -e artifacts/digest-observer.txt ]] || names+=(observer)
+          for name in "${names[@]}"; do
+            line=$(cat "artifacts/digest-$name.txt")
+            [[ $line =~ ^$name=(sha256:[0-9a-f]{64})$ ]] ||
+              { echo "release: malformed digest for $name" >&2; exit 1; }
+            echo "ghcr.io/dannyota/aboutme-$name@${BASH_REMATCH[1]}" >>release/digests.txt
+            jq -e '.spdxVersion == "SPDX-2.3"' "artifacts/aboutme-$name.spdx.json" >/dev/null
+            cp "artifacts/aboutme-$name.spdx.json" release/
+          done
+          cat >release/notes.md <<EOF
+          Images built from $TAG by the release-images workflow. \`digests.txt\`
+          lists each image by digest. Each \`.spdx.json\` file is a copy of the
+          signed SPDX 2.3 SBOM attested for that digest.
+
+          Verify an image's build provenance with the GitHub CLI:
+
+          \`\`\`sh
+          gh attestation verify \\
+            oci://ghcr.io/dannyota/aboutme-server@sha256:<digest> \\
+            --repo dannyota/aboutme \\
+            --signer-workflow dannyota/aboutme/.github/workflows/release-images.yml \\
+            --source-ref refs/tags/$TAG \\
+            --deny-self-hosted-runners
+          \`\`\`
+
+          Add \`--predicate-type https://spdx.dev/Document/v2.3\` to verify its SBOM.
+          EOF
+      - name: Publish
+        run: |
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes-file release/notes.md \
+            release/digests.txt release/aboutme-*.spdx.json

@@ -230,6 +230,13 @@ type Resume struct {
 	FaviconEmoji    *string
 }
 
+type ResumePreviewCard struct {
+	ResumeID   uuid.UUID
+	Version    string
+	PNG        []byte
+	RenderedAt time.Time
+}
+
 type SecondFactorPolicy struct {
 	UserID             uuid.UUID
 	WebauthnUserHandle []byte

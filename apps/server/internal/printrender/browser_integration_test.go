@@ -38,7 +38,7 @@ func TestPinnedBrowserOutputIsByteDeterministic(t *testing.T) {
 	defer server.Close()
 
 	renderer := newPinnedTestRenderer(t, server.URL)
-	for _, format := range []renderjob.Format{renderjob.PDF, renderjob.PNG} {
+	for _, format := range []renderjob.Format{renderjob.PDF, renderjob.PNG, renderjob.Card} {
 		t.Run(string(format), func(t *testing.T) {
 			first, err := renderer.Render(context.Background(), validTestNavigation(format))
 			if err != nil {

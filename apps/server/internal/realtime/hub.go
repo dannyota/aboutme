@@ -40,6 +40,9 @@ type Config struct {
 	QueueDepth int
 	// AdmitFD reports whether the process has sufficient file descriptor headroom.
 	AdmitFD func() bool
+	// Observe, when set, receives every published change before any stream
+	// does. It must not block; the preview card scheduler uses it.
+	Observe func(Change)
 }
 
 // Scope identifies either an account-owned or public resume stream.
@@ -62,6 +65,7 @@ type Hub struct {
 	mu                            sync.Mutex
 	max, maxIP, maxAccount, depth int
 	fd                            func() bool
+	observe                       func(Change)
 	available, closed             bool
 	next                          uint64
 	subs                          map[uint64]*Subscription
@@ -101,7 +105,7 @@ func NewHub(c Config) (*Hub, error) {
 	if c.AdmitFD == nil {
 		c.AdmitFD = processFDOK
 	}
-	return &Hub{max: c.MaxConnections, maxIP: c.MaxPerIP, maxAccount: c.MaxPerAccount, depth: c.QueueDepth, fd: c.AdmitFD, subs: make(map[uint64]*Subscription), ip: make(map[string]int), accounts: make(map[uuid.UUID]int)}, nil
+	return &Hub{max: c.MaxConnections, maxIP: c.MaxPerIP, maxAccount: c.MaxPerAccount, depth: c.QueueDepth, fd: c.AdmitFD, observe: c.Observe, subs: make(map[uint64]*Subscription), ip: make(map[string]int), accounts: make(map[uuid.UUID]int)}, nil
 }
 
 // SetAvailable changes listener readiness. Becoming unavailable closes streams.
@@ -153,6 +157,9 @@ func (s *Subscription) Close() {
 
 // Publish queues a metadata change for every matching stream.
 func (h *Hub) Publish(c Change) {
+	if h.observe != nil {
+		h.observe(c)
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.closed || !h.available {

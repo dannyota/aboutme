@@ -130,7 +130,9 @@ func (r *Renderer) Render(ctx context.Context, navigation renderjob.Navigation) 
 	if r == nil || r.render == nil || !validNavigation(navigation) {
 		return nil, ErrRenderFailed
 	}
-	if navigation.Format != renderjob.PDF && navigation.Format != renderjob.PNG {
+	switch navigation.Format {
+	case renderjob.PDF, renderjob.PNG, renderjob.Card:
+	default:
 		return nil, ErrRenderFailed
 	}
 	output, err := r.render(ctx, navigation)
