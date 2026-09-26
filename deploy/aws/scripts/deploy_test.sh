@@ -1402,4 +1402,7 @@ grep -qF "not an assumed-role session" "$work/verify_role_fails.out" ||
   { echo "verify_role_fails: left a temp directory behind in TMPDIR" >&2; exit 1; }
 
 run_case usage 2
+
+# The pre-switch DNS comparison script (docs/runbooks/dns.md).
+bash "$here/dns-check_test.sh"
 echo "deploy-script-test: ok"
