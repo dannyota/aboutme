@@ -159,9 +159,11 @@ start_stack() { # podman run options...
   # Caddy that exits must show its logs.
   wait_started "$name"
   # A stand-in for Go on 127.0.0.1:8080 that echoes the forwarded client
-  # address and any CloudFront-Viewer-Address that reached it.
+  # address, any CloudFront-Viewer-Address that reached it, and the two
+  # edge WAF headers (docs/design/viewer-analytics/counting.md, "Layers 2
+  # and 3: edge labels").
   podman run -d --name "$name-echo" --network "container:$name" --entrypoint sh "$image" -c \
-    'printf "{\n\tadmin off\n}\n:8080 {\n\trespond \"ip={http.request.header.X-Real-IP} cfva={http.request.header.CloudFront-Viewer-Address}\"\n}\n" >/tmp/echo && exec caddy run --config /tmp/echo --adapter caddyfile' \
+    'printf "{\n\tadmin off\n}\n:8080 {\n\trespond \"ip={http.request.header.X-Real-IP} cfva={http.request.header.CloudFront-Viewer-Address} bot={http.request.header.x-amzn-waf-aboutme-bot} dc={http.request.header.x-amzn-waf-aboutme-dc} other={http.request.header.x-amzn-waf-other}\"\n}\n" >/tmp/echo && exec caddy run --config /tmp/echo --adapter caddyfile' \
     >/dev/null
   wait_started "$name-echo"
 }
@@ -240,8 +242,8 @@ want_viewer() { # want-ip values...
   local want=$1 got
   shift
   got=$(viewer "$@")
-  [[ $got == "ip=$want cfva=" ]] ||
-    { echo "CloudFront-Viewer-Address '$*': Go received '$got', want 'ip=$want cfva='" >&2; exit 1; }
+  [[ $got == "ip=$want cfva= bot= dc= other=" ]] ||
+    { echo "CloudFront-Viewer-Address '$*': Go received '$got', want 'ip=$want cfva= bot= dc= other='" >&2; exit 1; }
 }
 want_viewer 203.0.113.7 203.0.113.7:46532
 want_viewer 2001:db8:0:0:0:0:0:1 2001:db8:0:0:0:0:0:1:60776
@@ -260,6 +262,31 @@ want_viewer '' ''
 # CF-Connecting-IP means nothing on the CloudFront listener.
 got=$(viewer)
 [[ $got != *203.0.113.50* ]] || { echo "listener trusted CF-Connecting-IP: '$got'" >&2; exit 1; }
+
+# The two names the web ACL's label rules can insert reach Go; any other
+# x-amzn-waf-* header, however it arrived, is stripped
+# (docs/design/viewer-analytics/counting.md, "Layers 2 and 3: edge labels").
+waf() { # extra curl header args... -> what Go receives
+  curl -s --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
+    "$@" "https://aboutme.vn:$port/api/v1/probe"
+}
+got=$(waf -H 'x-amzn-waf-aboutme-bot: 1' -H 'x-amzn-waf-aboutme-dc: 1' -H 'x-amzn-waf-other: 1')
+[[ $got == 'ip= cfva= bot=1 dc=1 other=' ]] ||
+  { echo "waf headers: Go received '$got', want bot=1 dc=1 and no other header" >&2; exit 1; }
+# Neither header set: both are absent (empty), not forwarded as empty.
+got=$(waf)
+[[ $got == 'ip= cfva= bot= dc= other=' ]] ||
+  { echo "waf headers: no headers sent, Go received '$got', want all empty" >&2; exit 1; }
+# The restore is always the constant 1, never the header's own (possibly
+# comma-joined) value: a repeated dc header, or a bot header a viewer set
+# to 0 alongside no matching WAF label, still becomes exactly 1, never an
+# unset-looking joined value or a literal 0.
+got=$(waf -H 'x-amzn-waf-aboutme-dc: 1' -H 'x-amzn-waf-aboutme-dc: 0')
+[[ $got == 'ip= cfva= bot= dc=1 other=' ]] ||
+  { echo "waf headers: repeated dc header, Go received '$got', want dc=1" >&2; exit 1; }
+got=$(waf -H 'x-amzn-waf-aboutme-bot: 0')
+[[ $got == 'ip= cfva= bot=1 dc= other=' ]] ||
+  { echo "waf headers: bot header sent as 0, Go received '$got', want bot=1" >&2; exit 1; }
 
 # Nothing listens on the web upstream here, so reverse_proxy logs the failed
 # request. Caddy's logs must keep the method and URI but never the visitor's

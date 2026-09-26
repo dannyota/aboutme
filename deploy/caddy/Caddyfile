@@ -31,6 +31,13 @@
 	request_header -X-Forwarded-For
 	request_header -Forwarded
 
+	# Only the CloudFront listener's edge WAF sets these
+	# (docs/design/viewer-analytics/counting.md, "Layers 2 and 3: edge
+	# labels"); no edge runs in front of this listener, so a viewer-forged
+	# value must never reach Go here.
+	request_header -x-amzn-waf-aboutme-bot
+	request_header -x-amzn-waf-aboutme-dc
+
 	# ABOUTME_PUBLIC_ROOTS_GENERATED
 	import /etc/caddy/generated/public-roots.generated.caddy
 
