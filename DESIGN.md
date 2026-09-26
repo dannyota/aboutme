@@ -36,7 +36,9 @@ carry their own toggle. A path outside this list renders in English.
 Public resume chrome follows the resume language: Vietnamese resumes show “Tạo
 bằng aboutme.vn” and “Tải PDF”; other languages show “Built with aboutme.vn” and
 “Download PDF”. Resume content and renderer labels follow the resume's own
-language, independent of the site language.
+language, independent of the site language. The
+[public page spec](docs/design/public-page-theme.md) sets the planned page bar
+and the owner's color scheme.
 
 ## Visual direction
 

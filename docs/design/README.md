@@ -41,6 +41,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [LinkedIn sign-in](linkedin-sign-in.md)                         | LinkedIn OIDC flow, account linking, and app setup             |
 | Other   | [LinkedIn import](linkedin-import.md)                           | New resume from the LinkedIn data download                     |
 | Other   | [Viewer analytics](viewer-analytics/README.md)                  | View counts, consented viewer tracking, and sign in to view    |
+| Other   | [Public page bar and theme](public-page-theme.md)               | Page bar, owner color scheme, and the dark palette rule        |
 
 ## System summary
 
