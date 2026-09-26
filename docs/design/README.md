@@ -37,6 +37,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Templates](templates/README.md)                                | Preset data, tokens, colors, geometry, and print behavior      |
 | Other   | [Scaling](scaling/README.md)                                    | What a second serving replica needs                            |
 | Other   | [Link previews](link-previews.md)                               | Page tags, preview card, and platform rules for shared links   |
+| Other   | [Deployment transparency](deployment-transparency/README.md)    | Running digests, signed provenance, SBOMs, and the verify page |
 
 ## System summary
 
