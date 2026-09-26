@@ -77,10 +77,12 @@ function captureClient(token: string): CaptureClient {
   const headers = { Authorization: `Bearer ${token}` };
   return {
     async reset() {
+      // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { method: 'DELETE', headers });
       if (!response.ok) throw new Error(`capture reset failed: ${response.status}`);
     },
     async messages() {
+      // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- loopback HTTP to the local mail capture harness
       const response = await fetch(CAPTURE_URL, { headers });
       if (!response.ok) throw new Error(`capture read failed: ${response.status}`);
       const body = (await response.json()) as { messages: CapturedMessage[] };

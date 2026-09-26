@@ -2437,8 +2437,8 @@ export interface components {
          * @example {
          *       "data": {
          *         "enrollmentId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-         *         "secret": "ABCD EFGH IJKL MNOP QRST UVWX YZ23 4567",
-         *         "provisioningUri": "otpauth://totp/aboutme.vn:user%40example.com?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30",
+         *         "secret": "AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA",
+         *         "provisioningUri": "otpauth://totp/aboutme.vn:user%40example.com?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30",
          *         "expiresAt": "2026-09-20T09:10:00Z"
          *       }
          *     }
@@ -2448,12 +2448,12 @@ export interface components {
                 enrollmentId: components["schemas"]["TOTPEnrollmentID"];
                 /**
                  * @description The 32 uppercase unpadded RFC 4648 Base32 secret characters, grouped into eight groups of four separated by one ASCII space. Shown once; never accepted back from the browser.
-                 * @example ABCD EFGH IJKL MNOP QRST UVWX YZ23 4567
+                 * @example AAAA AAAA AAAA AAAA AAAA AAAA AAAA AAAA
                  */
                 secret: string;
                 /**
                  * @description The `otpauth://totp/...` URI the browser renders as a QR code locally; no external QR or provisioning service receives it (docs/design/totp-second-factor-contract.md "Provisioning data").
-                 * @example otpauth://totp/aboutme.vn:user%40example.com?secret=ABCDEFGHIJKLMNOPQRSTUVWXYZ234567&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30
+                 * @example otpauth://totp/aboutme.vn:user%40example.com?secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&issuer=aboutme.vn&algorithm=SHA1&digits=6&period=30
                  */
                 provisioningUri: string;
                 /**
