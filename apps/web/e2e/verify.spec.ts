@@ -81,7 +81,9 @@ for (const { fixture, state, titleEn } of STATE_FIXTURES) {
     await expect(status).toContainText(titleEn);
     // Only the verified fixture may show the verified title (page.md#states,
     // "only the last row can show a success mark").
-    await expect(status).not.toContainText(VERIFIED_TITLE_EN);
+    if (state !== 'verified') {
+      await expect(status).not.toContainText(VERIFIED_TITLE_EN);
+    }
   });
 }
 
