@@ -25,6 +25,8 @@ func TestBuildStoresTheCardAndJoinsConcurrentRequests(t *testing.T) {
 	service := newTestService(t, cards, queue)
 	snapshot := testSnapshot(t, "Ada Lovelace", "Engineer", nil)
 	cards.setLive(snapshot)
+	version := mustVersion(t, snapshot)
+	key := flightKey{resumeID: snapshot.ResumeID, version: version, priority: renderjob.PriorityNormal}
 
 	results := make(chan error, 3)
 	for range 3 {
@@ -36,7 +38,16 @@ func TestBuildStoresTheCardAndJoinsConcurrentRequests(t *testing.T) {
 			results <- err
 		}()
 	}
-	waitUntil(t, func() bool { return queue.renderCalls() == 1 })
+	// Every caller must have joined the one flight before the gate opens.
+	// Releasing it as soon as the first render starts does not: a caller
+	// still on its way to join can arrive after that build finishes and
+	// its flight is removed, and start a second, redundant one.
+	waitUntil(t, func() bool {
+		service.mu.Lock()
+		defer service.mu.Unlock()
+		pending, found := service.flights[key]
+		return found && pending.joined == 3
+	})
 	close(queue.gate)
 	for range 3 {
 		if err := <-results; err != nil {
@@ -45,10 +56,6 @@ func TestBuildStoresTheCardAndJoinsConcurrentRequests(t *testing.T) {
 	}
 	if queue.renderCalls() != 1 {
 		t.Fatalf("renders = %d, want one joined build", queue.renderCalls())
-	}
-	version, err := VersionOf(snapshot)
-	if err != nil {
-		t.Fatal(err)
 	}
 	stored, found, err := cards.Stored(context.Background(), snapshot.ResumeID)
 	if err != nil || !found || stored.Version != version || !bytes.Equal(stored.PNG, testPNG) {
