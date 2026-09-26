@@ -68,7 +68,7 @@ generate_caddyfile() {
   node "$ROOT/scripts/generate-public-roots.mjs" --check >/dev/null || return 1
   content=$(<"$CADDYFILE_SRC") || return 1
   fragment=$(<"$PUBLIC_ROOTS_FRAGMENT") || return 1
-  generated=$'\t@uat_google_authorize path /__uat/oauth/google/authorize\n\thandle @uat_google_authorize {\n\t\treverse_proxy 127.0.0.1:'"${MOCK_PORT}"$'\n\t}\n\n'"$fragment"
+  generated=$'\t@uat_google_authorize path /__uat/oauth/google/authorize\n\thandle @uat_google_authorize {\n\t\treverse_proxy 127.0.0.1:'"${MOCK_PORT}"$'\n\t}\n\n\t@uat_linkedin_authorize path /__uat/oauth/linkedin/authorize\n\thandle @uat_linkedin_authorize {\n\t\treverse_proxy 127.0.0.1:'"${MOCK_PORT}"$'\n\t}\n\n'"$fragment"
   content=$(replace_exact "$content" "$PUBLIC_ROOTS_MARKER" "$generated") || return 1
   content=$(replace_exact "$content" $'\tadmin off' \
     $'\tadmin off\n\tskip_install_trust\n\tauto_https disable_redirects') || return 1
@@ -95,6 +95,8 @@ render_effective_config() {
   printf 'public_renderer_build_digest=%s\n' "$PUBLIC_RENDERER_BUILD_DIGEST"
   printf 'google_client_id=%s\n' "$GOOGLE_CLIENT_ID"
   printf 'google_issuer_url=%s\n' "$GOOGLE_ISSUER_URL"
+  printf 'linkedin_client_id=%s\n' "$LINKEDIN_CLIENT_ID"
+  printf 'linkedin_issuer_url=%s\n' "$LINKEDIN_ISSUER_URL"
   printf 'mcp_enabled=true\n'
   printf 'web_port=%s\nserver_port=%s\nmock_port=%s\ncaddy_port=%s\nmail_capture_port=%s\n' \
     "$WEB_PORT" "$SERVER_PORT" "$MOCK_PORT" "$CADDY_PORT" "$MAIL_CAPTURE_PORT"

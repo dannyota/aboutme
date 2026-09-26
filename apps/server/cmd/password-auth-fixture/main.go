@@ -8,6 +8,9 @@
 //
 //	password-auth-fixture seed    --database-url <dsn>
 //	password-auth-fixture cleanup --database-url <dsn>
+//	password-auth-fixture linkedin-cleanup --database-url <dsn>
+//
+// linkedin-cleanup removes the rows the LinkedIn browser proof creates.
 package main
 
 import (

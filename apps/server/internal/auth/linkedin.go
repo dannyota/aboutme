@@ -1,8 +1,11 @@
 package auth
 
-// LinkedIn follows the Google OIDC flow, but its email and email_verified
-// claims are optional. EmailVerified is therefore a *bool, and a missing claim
-// never counts as verified for registration.
+// LinkedIn follows its documented confidential web flow: no PKCE, client
+// credentials in the token request body, and the OIDC nonce as the
+// code-injection defense (RFC 9700 section 2.1.1). Its email and
+// email_verified claims are optional, so EmailVerified is a *bool and a missing
+// claim never counts as verified for registration. See
+// docs/design/linkedin-sign-in.md and ADR 0058.
 
 import (
 	"context"
@@ -25,6 +28,14 @@ const linkedinIssuer = "https://www.linkedin.com/oauth"
 // linkedinScopes are the OAuth2 scopes requested for LinkedIn login:
 // "openid profile email". See docs/design/security.md.
 var linkedinScopes = []string{oidc.ScopeOpenID, oidc.ScopeProfile, oidc.ScopeEmail}
+
+// linkedinCancelErrors are the callback error values that mean the person
+// canceled: LinkedIn's two documented values and the RFC 6749 access_denied.
+var linkedinCancelErrors = map[string]bool{
+	"user_cancelled_login":     true, //nolint:misspell // LinkedIn's exact wire value.
+	"user_cancelled_authorize": true, //nolint:misspell // LinkedIn's exact wire value.
+	"access_denied":            true,
+}
 
 // linkedinClaims keeps email verification nullable so an absent claim cannot
 // count as verified. Name is optional.
@@ -66,8 +77,11 @@ func (s *Service) linkedinProvider(ctx context.Context) (*oidc.Provider, error) 
 	return p, nil
 }
 
-// linkedinOAuth2Config builds a request-local configuration.
+// linkedinOAuth2Config builds a request-local configuration. LinkedIn documents
+// client_id and client_secret as token request form parameters, so the auth
+// style is fixed: auto-detection would first send HTTP Basic credentials.
 func (s *Service) linkedinOAuth2Config(endpoint oauth2.Endpoint, redirectURL string) oauth2.Config {
+	endpoint.AuthStyle = oauth2.AuthStyleInParams
 	return oauth2.Config{
 		ClientID:     s.linkedin.clientID,
 		ClientSecret: s.linkedin.clientSecret,
@@ -82,7 +96,9 @@ func (s *Service) linkedinRedirectURL() string {
 	return s.publicOrigin + LinkedInCallbackPath
 }
 
-// buildLinkedInAuthorizeURL binds PKCE S256 and an OIDC nonce.
+// buildLinkedInAuthorizeURL binds state and an OIDC nonce and sends no PKCE
+// challenge. The transaction still stores a verifier that LinkedIn never
+// receives, so storage matches the other providers.
 func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose, linkingUserID uuid.UUID, returnPath string) (handle, authURL, op string, err error) {
 	provider, err := s.linkedinProvider(ctx)
 	if err != nil {
@@ -96,10 +112,7 @@ func (s *Service) buildLinkedInAuthorizeURL(ctx context.Context, purpose Purpose
 	}
 
 	oauth2Cfg := s.linkedinOAuth2Config(provider.Endpoint(), redirectURI)
-	return handle, oauth2Cfg.AuthCodeURL(tx.State,
-		oauth2.S256ChallengeOption(tx.PKCEVerifier),
-		oidc.Nonce(tx.Nonce),
-	), "", nil
+	return handle, oauth2Cfg.AuthCodeURL(tx.State, oidc.Nonce(tx.Nonce)), "", nil
 }
 
 // handleLinkedInCallback verifies OIDC and applies LinkedIn's nullable-email
@@ -134,9 +147,14 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Check the provider's consent denial only after validating state.
-	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
+	// Check the provider's error only after validating state. Any error, even
+	// with a code beside it, stops the flow before the token exchange.
+	if providerError := r.URL.Query().Get("error"); providerError != "" {
+		if linkedinCancelErrors[providerError] {
+			s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
+			return
+		}
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonLinkedInProviderError)
 		return
 	}
 
@@ -152,9 +170,11 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Use the transaction's exact authorization-time redirect URI.
+	// Use the transaction's exact authorization-time redirect URI. No
+	// code_verifier: LinkedIn's token endpoint rejects it from a confidential
+	// client, and the nonce check below binds the code to this transaction.
 	oauth2Cfg := s.linkedinOAuth2Config(provider.Endpoint(), tx.RedirectURI)
-	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
+	token, err := oauth2Cfg.Exchange(ctx, code)
 	if err != nil {
 		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonTokenExchangeFailed)
 		return
@@ -173,7 +193,8 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// go-oidc exposes the nonce but does not validate it.
+	// go-oidc exposes the nonce but does not validate it. For LinkedIn this
+	// check is the code-injection defense, so it runs before any claim is used.
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
 		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonNonceMismatch)
 		return

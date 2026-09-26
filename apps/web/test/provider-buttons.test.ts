@@ -203,70 +203,100 @@ describe('provider space before the capabilities read', () => {
 });
 
 describe('missing verification email', () => {
-  it('offers spam advice and Google after registration', async () => {
-    registerCapabilities({ providerLogin: true, agentAccess: false });
-    const wrapper = await registerSuccessfully();
-    const notice = wrapper.get('[data-testid="register-no-email"]');
+  it('offers spam advice and every listed provider after registration',
+    async () => {
+      registerCapabilities({ providerLogin: true, agentAccess: false });
+      const wrapper = await registerSuccessfully();
+      const notice = wrapper.get('[data-testid="register-no-email"]');
 
-    expect(notice.text()).toContain(
-      'Nếu sau vài phút vẫn chưa thấy email, hãy kiểm tra thư mục thư rác.',
-    );
-    expect(notice.get('[data-testid="register-no-email-google"]').text())
-      .toBe('Hoặc đăng nhập bằng tài khoản Google của bạn:');
-    expect(providerLinks(notice)).toEqual({
-      google: 'Tiếp tục với Google',
+      expect(notice.text()).toContain(
+        'Nếu sau vài phút vẫn chưa thấy email, hãy kiểm tra thư mục thư rác.',
+      );
+      expect(notice.get('[data-testid="register-no-email-providers"]').text())
+        .toBe('Hoặc tiếp tục bằng một trong các tài khoản sau:');
+      expect(providerLinks(notice)).toEqual({
+        google: 'Tiếp tục với Google',
+        github: 'Tiếp tục với GitHub',
+        linkedin: 'Tiếp tục với LinkedIn',
+      });
+      expect(notice.text()).not.toMatch(/không gửi được|thất bại/u);
     });
-    expect(notice.text()).not.toMatch(/không gửi được|thất bại/u);
-  });
 
-  it('gives the English notice without Google when it is off', async () => {
-    registerCapabilities({ providerLogin: false, agentAccess: false });
-    setSiteLocale('en');
+  it('offers only one provider when only one is listed', async () => {
+    registerCapabilities({
+      providerLogin: true,
+      agentAccess: false,
+      providers: ['linkedin'],
+    });
     const wrapper = await registerSuccessfully();
     const notice = wrapper.get('[data-testid="register-no-email"]');
 
-    expect(notice.text()).toBe(
-      'If the email has not arrived within a few minutes, check your spam '
-      + 'folder.',
-    );
-    expect(
-      notice.find('[data-testid="register-no-email-google"]').exists(),
-    ).toBe(false);
-    expect(notice.find('a[data-provider]').exists()).toBe(false);
+    expect(providerLinks(notice)).toEqual({
+      linkedin: 'Tiếp tục với LinkedIn',
+    });
   });
 
-  it('offers Google on an expired verification link', async () => {
-    registerCapabilities({ providerLogin: true, agentAccess: false });
-    const wrapper = await mountExpiredVerification();
+  it('gives the English notice with no providers when none is listed',
+    async () => {
+      registerCapabilities({ providerLogin: false, agentAccess: false });
+      setSiteLocale('en');
+      const wrapper = await registerSuccessfully();
+      const notice = wrapper.get('[data-testid="register-no-email"]');
 
-    expect(wrapper.get('[data-testid="verify-error"]').text()).toBe(
-      'Đường dẫn xác minh này không hợp lệ hoặc đã hết hạn.',
-    );
-    const google = wrapper.get('[data-testid="verify-google"]');
-    expect(google.text()).toContain(
-      'Hoặc đăng nhập bằng tài khoản Google của bạn:',
-    );
-    expect(google.get('a[data-provider="google"]').attributes('href')).toBe(
-      '/api/v1/auth/google/start',
-    );
-  });
+      expect(notice.text()).toBe(
+        'If the email has not arrived within a few minutes, check your spam '
+        + 'folder.',
+      );
+      expect(
+        notice.find('[data-testid="register-no-email-providers"]').exists(),
+      ).toBe(false);
+      expect(notice.find('a[data-provider]').exists()).toBe(false);
+    });
 
-  it('offers Google on an incomplete link in English', async () => {
-    registerCapabilities({ providerLogin: true, agentAccess: false });
+  it('offers every listed provider on an expired verification link',
+    async () => {
+      registerCapabilities({ providerLogin: true, agentAccess: false });
+      const wrapper = await mountExpiredVerification();
+
+      expect(wrapper.get('[data-testid="verify-error"]').text()).toBe(
+        'Đường dẫn xác minh này không hợp lệ hoặc đã hết hạn.',
+      );
+      const providers = wrapper.get('[data-testid="verify-providers"]');
+      expect(providers.text()).toContain(
+        'Hoặc tiếp tục bằng một trong các tài khoản sau:',
+      );
+      expect(providerLinks(providers)).toEqual({
+        google: 'Tiếp tục với Google',
+        github: 'Tiếp tục với GitHub',
+        linkedin: 'Tiếp tục với LinkedIn',
+      });
+    });
+
+  it('offers one provider on an incomplete link in English', async () => {
+    registerCapabilities({
+      providerLogin: true,
+      agentAccess: false,
+      providers: ['google'],
+    });
     setSiteLocale('en');
     const wrapper = await mountAfterCapabilities(VerifyEmailPage);
 
-    expect(wrapper.get('[data-testid="verify-google"]').text()).toContain(
-      'Or sign in with your Google account instead:',
+    const providers = wrapper.get('[data-testid="verify-providers"]');
+    expect(providers.text()).toContain(
+      'Or continue with one of these accounts instead:',
     );
+    expect(providerLinks(providers)).toEqual({
+      google: 'Continue with Google',
+    });
   });
 
-  it('offers nothing on a bad link when Google is off', async () => {
+  it('offers nothing on a bad link when no provider is listed', async () => {
     registerCapabilities({ providerLogin: false, agentAccess: false });
     const wrapper = await mountExpiredVerification();
 
     expect(wrapper.find('[data-testid="verify-error"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="verify-google"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="verify-providers"]').exists())
+      .toBe(false);
   });
 
   it('offers nothing when verification is only rate limited', async () => {
@@ -282,6 +312,7 @@ describe('missing verification email', () => {
     const wrapper = await mountAfterCapabilities(VerifyEmailPage);
 
     expect(wrapper.find('[data-testid="verify-error"]').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="verify-google"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="verify-providers"]').exists())
+      .toBe(false);
   });
 });

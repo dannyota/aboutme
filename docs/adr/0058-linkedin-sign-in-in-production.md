@@ -1,6 +1,6 @@
 # 0058: LinkedIn sign-in in production
 
-Status: Proposed (2026-09-26).
+Status: Accepted (2026-09-26).
 
 Amends [ADR 0039](0039-per-provider-login-enablement.md) and the OAuth
 transaction rule in the [security design](../design/security.md). The detailed

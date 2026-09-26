@@ -40,7 +40,7 @@ type discoveryDocument struct {
 	ResponseTypesSupported            []string `json:"response_types_supported"`
 	SubjectTypesSupported             []string `json:"subject_types_supported"`
 	IDTokenSigningAlgValuesSupported  []string `json:"id_token_signing_alg_values_supported"`
-	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported,omitempty"`
 }
 
 type tokenResponse struct {
@@ -189,15 +189,23 @@ func oneBoundedValue(values url.Values, name string) bool {
 	return ok && len(items) == 1 && items[0] != "" && len(items[0]) <= maxFieldBytes
 }
 
+// randomCode returns a 256-bit authorization code.
+func randomCode(random io.Reader) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := io.ReadFull(random, raw); err != nil {
+		return "", fmt.Errorf("read code randomness: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
+}
+
 func (s *Service) storeCode(binding codeBinding) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for range 4 {
-		raw := make([]byte, 32)
-		if _, err := io.ReadFull(s.cfg.Random, raw); err != nil {
-			return "", fmt.Errorf("read code randomness: %w", err)
+		code, err := randomCode(s.cfg.Random)
+		if err != nil {
+			return "", err
 		}
-		code := base64.RawURLEncoding.EncodeToString(raw)
 		if _, exists := s.codes[code]; !exists {
 			s.codes[code] = binding
 			return code, nil
@@ -291,7 +299,12 @@ func (s *Service) signIDToken(nonce string, acct account) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshal claims: %w", err)
 	}
-	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.key}, &jose.SignerOptions{ExtraHeaders: map[jose.HeaderKey]any{jose.HeaderKey("kid"): signingKeyID}})
+	return s.sign(payload, signingKeyID)
+}
+
+// sign returns payload as a compact RS256 JWT under the service key.
+func (s *Service) sign(payload []byte, keyID string) (string, error) {
+	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: s.key}, &jose.SignerOptions{ExtraHeaders: map[jose.HeaderKey]any{jose.HeaderKey("kid"): keyID}})
 	if err != nil {
 		return "", fmt.Errorf("create signer: %w", err)
 	}
@@ -334,7 +347,11 @@ func (s *Service) parseForm(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func (s *Service) writeTokenError(w http.ResponseWriter, errorCode string) {
-	s.writeJSON(w, http.StatusBadRequest, oauthError{Error: errorCode})
+	s.writeOAuthError(w, http.StatusBadRequest, errorCode)
+}
+
+func (s *Service) writeOAuthError(w http.ResponseWriter, status int, errorCode string) {
+	s.writeJSON(w, status, oauthError{Error: errorCode})
 }
 
 func (s *Service) writeJSON(w http.ResponseWriter, status int, value any) {

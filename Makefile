@@ -420,6 +420,10 @@ dev-https-sample-start-check: dev-https-status ## Prove register-to-create from 
 dev-https-privacy-check: dev-https-status ## Prove account export, reauthentication, and deletion over trusted HTTPS
 	@bash scripts/dev-https-check.sh privacy
 
+.PHONY: dev-https-linkedin-check
+dev-https-linkedin-check: dev-https-status ## Prove LinkedIn sign-up, sign-in, linking, and cancellation over trusted HTTPS
+	@bash scripts/dev-https-check.sh linkedin
+
 .PHONY: dev-https-passkey-check
 dev-https-passkey-check: dev-https-status ## Prove the passkey second factor over trusted HTTPS, with enrollment on then off; stops the harness when it ends
 	@bash scripts/dev-https-check.sh passkey

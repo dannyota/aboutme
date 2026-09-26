@@ -16,7 +16,7 @@ const (
 	reasonTxCookieMissing            // no __Host-oauth-tx cookie, or it is malformed
 	reasonTxInvalid                  // Consume rejected the handle: unknown, expired, replayed, or wrong provider
 	reasonStateMismatch              // the OAuth state parameter is absent or differs from the transaction's
-	reasonConsentDenied              // the provider itself reported ?error=access_denied (RFC 6749 §4.1.2.1)
+	reasonConsentDenied              // the provider reported a cancel: access_denied (RFC 6749 §4.1.2.1) or a LinkedIn cancel error
 	reasonAuthorizationCodeMissing   // neither a code nor a recognized error parameter came back
 	reasonTokenExchangeFailed        // the authorization-code exchange failed at the provider
 	reasonIDTokenMissing             // the token response carried no id_token
@@ -30,6 +30,7 @@ const (
 
 	// LinkedIn.
 	reasonLinkedInRegistrationEmailUnverified // registration, not linking, needs a verified email
+	reasonLinkedInProviderError               // LinkedIn returned an error other than a cancel
 
 	// GitHub.
 	reasonGitHubUserAPIFailed          // GET /user: non-200, network error, or malformed body
@@ -70,6 +71,7 @@ var rejectReasonTokens = map[rejectReason]string{
 	reasonLinkIdentityAlreadyClaimed:          "link_identity_already_claimed",
 	reasonLinkOrReauthRejected:                "link_or_reauth_rejected",
 	reasonLinkedInRegistrationEmailUnverified: "linkedin_registration_email_unverified",
+	reasonLinkedInProviderError:               "linkedin_provider_error",
 	reasonGitHubUserAPIFailed:                 "github_user_api_failed",
 	reasonGitHubUserIDMissing:                 "github_user_id_missing",
 	reasonGitHubUserEmailsAPIFailed:           "github_user_emails_api_failed",

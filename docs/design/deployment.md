@@ -22,11 +22,11 @@ native development account or database. The native script idempotently seeds
 command refuses any other database and is never run by Compose or cloud
 environments.
 
-The native HTTPS harness sets `PROVIDER_LOGIN_ENABLED=true` for provider proofs.
-Native HTTP, Compose, and self-hosted configurations leave it unset for a
-password-only surface. Production sets it and `PASSWORD_REGISTRATION_ENABLED`
-from OpenTofu variables; [security](security.md#provider-identity) defines both
-flags.
+The native HTTPS harness sets `PROVIDER_LOGIN_ENABLED=google,linkedin` for
+provider proofs. Native HTTP, Compose, and self-hosted configurations leave it
+unset for a password-only surface. Production sets it and
+`PASSWORD_REGISTRATION_ENABLED` from OpenTofu variables;
+[security](security.md#provider-identity) defines both flags.
 
 Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI

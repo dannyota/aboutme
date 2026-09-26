@@ -50,7 +50,7 @@ const formState = computed<'pending' | 'open' | 'closed'>(() => {
   if (!resolved.value) return 'pending';
   return passwordRegistration.value ? 'open' : 'closed';
 });
-const googleEnabled = computed(() => loginProviders.value.includes('google'));
+const providersAvailable = computed(() => loginProviders.value.length > 0);
 const name = ref('');
 const email = ref('');
 const password = ref('');
@@ -167,14 +167,14 @@ async function onSubmit() {
       data-testid="register-no-email"
     >
       <p>{{ copy.register.noEmail }}</p>
-      <template v-if="googleEnabled">
-        <p data-testid="register-no-email-google">
-          {{ copy.register.noEmailGoogle }}
+      <template v-if="providersAvailable">
+        <p data-testid="register-no-email-providers">
+          {{ copy.register.noEmailProviders }}
         </p>
         <ProviderButtons
           :locale="locale"
           :next="explicitNext"
-          :providers="['google']"
+          :providers="loginProviders"
         />
       </template>
     </div>

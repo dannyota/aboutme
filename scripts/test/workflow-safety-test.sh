@@ -122,8 +122,8 @@ shard_proofs=$(
 ) || fail "cannot read the proof shard maps"
 [ -n "$shard_proofs" ] || fail "the proof shard maps are empty"
 expected_proofs=$(
-  printf '%s\n' auth editor entry exports mcp mcp-sdk password privacy public \
-    publish sample-start transport "$shard_proofs" | LC_ALL=C sort
+  printf '%s\n' auth editor entry exports linkedin mcp mcp-sdk password privacy \
+    public publish sample-start transport "$shard_proofs" | LC_ALL=C sort
 )
 # A TOTP proof may list several shards, comma-separated; each counts once.
 actual_proofs=$(awk '$1 == "proofs:" { for (i = 2; i <= NF; i++) {

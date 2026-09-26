@@ -1,29 +1,28 @@
 # LinkedIn sign-in
 
 People can sign up, sign in, link, and reauthenticate with LinkedIn, the same
-way they do with Google. The provider code, mock hooks, and tests already exist
-behind the per-provider flag. What is left is to follow LinkedIn's documented
-web flow exactly, wire production credentials, update the privacy notice, add
-browser proofs, and turn the flag on.
-[ADR 0058](../adr/0058-linkedin-sign-in-in-production.md) records the decision.
+way they do with Google. LinkedIn follows its documented web flow, production
+can enable it beside Google, the privacy notice names it, and browser proofs
+cover it against a local mock. The flag turns on as its own step after the
+release is live. [ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)
+records the decision.
 
-Status: proposed. Facts below were checked against LinkedIn's documentation and
-its live discovery document on 2026-09-26. **Verify** marks a fact that only the
-first production sign-in can confirm.
+Status: accepted and built. Facts below were checked against LinkedIn's
+documentation and its live discovery document on 2026-09-26. **Verify** marks a
+fact that only the first production sign-in can confirm.
 
-## What exists
+## Built state
 
-| Part          | State                                                                                                                                                                                                                         |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Flag          | `PROVIDER_LOGIN_ENABLED` takes a comma list; `linkedin` registers the start and callback routes ([ADR 0039](../adr/0039-per-provider-login-enablement.md)). Production can set only `""` or `"google"` today.                 |
-| Server        | `apps/server/internal/auth/linkedin.go`: OIDC discovery of `https://www.linkedin.com/oauth`, scopes `openid profile email`, PKCE S256, nonce, state, ID token checks, nullable `email_verified`.                              |
-| Registration  | A new subject needs an email that is present, `email_verified` true, and canonical. An existing subject signs in without an email check. Link and reauth ignore email.                                                        |
-| Linking       | Shared with Google: identity is `(provider, subject)`; an email already owned by any account returns the generic `email_already_registered` and writes nothing; linking starts only from a signed-in account.                 |
-| Config        | Prod and staging need `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` only when LinkedIn is enabled. `LINKEDIN_OIDC_ISSUER_URL` is allowed only with `ENV=dev` and only on loopback path `/linkedin`.                       |
-| Web           | Capabilities `providers` drives the buttons ("Tiếp tục với LinkedIn" / "Continue with LinkedIn"), settings link, and reauth. The authorize URL allowlist holds `https://www.linkedin.com/oauth/v2/authorization`.             |
-| Go tests      | `linkedin_test.go` and `linkedin_adversarial_test.go`: email rule, redirect URI, issuer, audience, signature, nonce, expiry, state, missing cookie, `access_denied`, enrolled second factor, no-oracle failures; link matrix. |
-| Mock provider | `internal/uatmock` and `cmd/mock-oauth` serve Google only. The native HTTPS harness enables all three providers, so its LinkedIn and GitHub buttons lead nowhere.                                                             |
-| Production    | `deploy/aws/modules/tasks` accepts only `""` or `"google"` and wires only Google's two SSM parameters. The execution role reads only Google's.                                                                                |
+| Part          | State                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Flag          | `PROVIDER_LOGIN_ENABLED` takes a comma list; `linkedin` registers the start and callback routes ([ADR 0039](../adr/0039-per-provider-login-enablement.md)). Production can set `""`, `"google"`, or `"google,linkedin"`.       |
+| Server        | `apps/server/internal/auth/linkedin.go`: OIDC discovery of `https://www.linkedin.com/oauth`, scopes `openid profile email`, state and nonce without PKCE, form client credentials, ID token checks, nullable `email_verified`. |
+| Registration  | A new subject needs an email that is present, `email_verified` true, and canonical. An existing subject signs in without an email check. Link and reauth ignore email.                                                         |
+| Linking       | Shared with Google: identity is `(provider, subject)`; an email already owned by any account returns the generic `email_already_registered` and writes nothing; linking starts only from a signed-in account.                  |
+| Config        | Prod and staging need `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` only when LinkedIn is enabled. `LINKEDIN_OIDC_ISSUER_URL` is allowed only with `ENV=dev` and only on loopback path `/linkedin`.                        |
+| Web           | Capabilities `providers` drives the buttons ("Tiếp tục với LinkedIn" / "Continue with LinkedIn"), settings link, reauth, and notices. The authorize URL allowlist holds `https://www.linkedin.com/oauth/v2/authorization`.     |
+| Mock provider | `internal/uatmock` and `cmd/mock-oauth` serve Google and LinkedIn. The native HTTPS harness enables `google,linkedin`.                                                                                                         |
+| Production    | `deploy/aws/modules/tasks` wires each listed provider's two SSM parameters. The app execution role may read Google's and LinkedIn's.                                                                                           |
 
 ## LinkedIn facts
 
@@ -250,8 +249,9 @@ argument, or a repository file.
    unchanged. Wait for it to be live and healthy.
 2. The owner finishes the app setup.
 3. Set `provider_login_enabled = "google,linkedin"` in `prod.tfvars` and copy it
-   to the private infrastructure repository. Run `tofu apply`; the plan changes
-   the task definition and the role policy only. Redeploy the live tag.
+   to the private infrastructure repository. Run `tofu apply`; the plan replaces
+   the app task definition only, because the release's own apply already gave
+   the role the two parameters. Redeploy the live tag.
 4. Check: capabilities report `"providers":["google","linkedin"]`;
    `/api/v1/auth/linkedin/start` redirects to LinkedIn's authorize URL with the
    exact redirect URI, the three scopes, a nonce, and no `code_challenge`;

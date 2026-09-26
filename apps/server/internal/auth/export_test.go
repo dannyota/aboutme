@@ -39,6 +39,10 @@ func SetSessionRotationProbeForTest(m *SessionManager, probe func()) {
 	m.rotationProbe = probe
 }
 
+// LinkedInIssuerForTest is the production LinkedIn issuer, for the discovery
+// snapshot test.
+const LinkedInIssuerForTest = linkedinIssuer
+
 // OIDCProviderEndpointForTest drives runtime provider discovery without
 // starting a transaction.
 func OIDCProviderEndpointForTest(ctx context.Context, svc *Service, provider Provider) (oauth2.Endpoint, error) {

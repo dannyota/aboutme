@@ -51,9 +51,10 @@ It takes blank or `false` (none), `true` (all three), or a comma list such as
 `google`. A disabled provider has no start or callback route, so its login,
 settings link, and reauthentication starts return the uniform not-found
 response. With `ENV` set to `prod` or `staging`, only an enabled provider needs
-its client ID and secret, and production can enable only Google.
-[ADR 0027](../adr/0027-provider-login-flag.md) and
-[ADR 0039](../adr/0039-per-provider-login-enablement.md) record the decision.
+its client ID and secret, and production can enable Google and LinkedIn.
+[ADR 0027](../adr/0027-provider-login-flag.md),
+[ADR 0039](../adr/0039-per-provider-login-enablement.md), and
+[ADR 0058](../adr/0058-linkedin-sign-in-in-production.md) record the decision.
 
 ## Password authentication
 
@@ -102,9 +103,11 @@ sealed under a runtime key ring, and a key failure disables TOTP only. The
 
 ## OAuth transaction
 
-All providers use authorization code with PKCE S256. OIDC providers also use a
-nonce and validate signature, issuer, audience, expiry, and nonce. GitHub has a
-distinct callback and no invented OIDC checks.
+Google and GitHub use authorization code with PKCE S256. LinkedIn uses its
+documented confidential flow without PKCE; the OIDC nonce defends against code
+injection ([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)). OIDC
+providers use a nonce and validate signature, issuer, audience, expiry, and
+nonce. GitHub has a distinct callback and no invented OIDC checks.
 
 The server stores transaction state, purpose, the opaque-handle hash, PKCE
 verifier, exact provider redirect URI, bounded login return path, expiry, and

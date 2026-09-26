@@ -71,8 +71,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Dữ liệu cá nhân chúng tôi thu thập',
           items: [
             'Tài khoản: email, tên, và mật khẩu của bạn. Mật khẩu chỉ được '
-            + 'lưu dưới dạng mã băm Argon2id. Nếu bạn đăng nhập bằng Google: '
-            + 'ID tài khoản Google, email và tên.',
+            + 'lưu dưới dạng mã băm Argon2id. Nếu bạn đăng nhập bằng Google '
+            + 'hoặc LinkedIn: ID tài khoản của bạn tại nhà cung cấp đó, '
+            + 'email và tên.',
             'Nội dung: các CV bạn viết, ảnh bạn tải lên, và, khi một CV '
             + 'đang công khai, ảnh xem trước chúng tôi tạo từ CV đó để hiển '
             + 'thị khi đường dẫn được chia sẻ.',
@@ -108,10 +109,10 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'thuận giữa bạn và aboutme.vn theo Điều khoản sử dụng: cung cấp '
             + 'tài khoản và các CV bạn tạo, giữ an toàn cho dịch vụ, và gửi '
             + 'email về tài khoản. Các tính năng tuỳ chọn (đăng CV công '
-            + 'khai, cho phép lập chỉ mục, kết nối trợ lý AI, đăng nhập '
-            + 'bằng Google) chỉ chạy khi bạn tự bật, và bạn có thể tắt bất '
-            + 'cứ lúc nào. Bạn có thể chấm dứt thỏa thuận bằng cách xoá tài '
-            + 'khoản.',
+            + 'khai, cho phép lập chỉ mục, kết nối trợ lý AI, đăng nhập bằng '
+            + 'Google hoặc LinkedIn) chỉ chạy khi bạn tự bật, và bạn có thể '
+            + 'tắt bất cứ lúc nào. Bạn có thể chấm dứt thỏa thuận bằng cách '
+            + 'xoá tài khoản.',
           ],
         },
         {
@@ -122,8 +123,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Không bán dữ liệu của bạn và không chia sẻ dữ liệu cho mục đích '
             + 'tiếp thị.',
             'Cookie chỉ dùng để giữ phiên đăng nhập, hoàn tất đăng nhập bằng '
-            + 'Google, giữ trạng thái xác thực hai bước đang chờ trong năm '
-            + 'phút, và ghi nhớ giao diện và ngôn ngữ bạn chọn.',
+            + 'Google hoặc LinkedIn, giữ trạng thái xác thực hai bước đang '
+            + 'chờ trong năm phút, và ghi nhớ giao diện và ngôn ngữ bạn '
+            + 'chọn.',
             'Bộ nhớ cục bộ của trình duyệt (localStorage) chỉ dùng để ghi '
             + 'nhớ đường dẫn quay lại sau khi bạn xác minh email (tối đa 24 '
             + 'giờ), và chế độ xem trước (PDF hoặc web) bạn chọn trong '
@@ -165,10 +167,12 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'xử lý địa chỉ IP của bạn. Amazon Route 53 cung cấp dịch vụ '
             + 'DNS. '
             + 'Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
-            + 'tài khoản của bạn. Email bạn gửi cho chúng tôi được lưu '
-            + 'trong hộp thư Google Workspace. Nếu bạn ở Việt Nam, dữ liệu '
-            + 'cá nhân của bạn được chuyển ra nước ngoài: chủ yếu đến '
-            + 'Singapore, và một phần đến Google.',
+            + 'tài khoản của bạn. Nếu bạn đăng nhập bằng LinkedIn, LinkedIn '
+            + '(Hoa Kỳ) xác thực tài khoản của bạn. Email bạn gửi cho '
+            + 'chúng tôi được lưu trong hộp thư Google Workspace. Nếu bạn '
+            + 'ở Việt Nam, dữ liệu cá nhân của bạn được chuyển ra nước '
+            + 'ngoài: chủ yếu đến Singapore, và một phần đến Google và '
+            + 'LinkedIn.',
             'Kiểm tra mật khẩu dùng dịch vụ Have I Been Pwned.',
           ],
         },
@@ -380,8 +384,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'What we collect',
           items: [
             'Account: your email, your name, and your password, stored only '
-            + 'as an Argon2id hash. If you sign in with Google: your Google '
-            + 'account ID, email, and name.',
+            + 'as an Argon2id hash. If you sign in with Google or LinkedIn: '
+            + 'your account ID with that provider, your email, and your '
+            + 'name.',
             'Content: the resumes you write, the photos you upload, and, '
             + 'while a resume is public, the preview image we make from it '
             + 'for link previews.',
@@ -415,9 +420,10 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'you under the Terms of Service: to provide your account and '
             + 'the resumes you create, keep the service secure, and send '
             + 'account emails. Optional features (publishing, search and '
-            + 'AI indexing, connected AI agents, Google sign-in) run only '
-            + 'when you turn them on, and you can turn them off at any '
-            + 'time. You can end the agreement by deleting your account.',
+            + 'AI indexing, connected AI agents, Google or LinkedIn '
+            + 'sign-in) run only when you turn them on, and you can turn '
+            + 'them off at any time. You can end the agreement by deleting '
+            + 'your account.',
           ],
         },
         {
@@ -427,8 +433,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'No analytics or tracking scripts.',
             'We don\'t sell your data or share it for marketing.',
             'Cookies are used only to keep you signed in, to complete '
-            + 'Google sign-in, to hold a pending second-factor sign-in for '
-            + 'five minutes, and to remember your theme and language.',
+            + 'Google or LinkedIn sign-in, to hold a pending second-factor '
+            + 'sign-in for five minutes, and to remember your theme and '
+            + 'language.',
             'Browser local storage is used only to remember the page to '
             + 'return to after you verify your email (for up to 24 hours), '
             + 'and your chosen preview mode (PDF or web) in the resume '
@@ -467,10 +474,12 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + '(the global network of Amazon Web Services) delivers the '
             + 'site and processes your IP address. Amazon Route 53 provides '
             + 'DNS. If you sign in with Google, Google (United '
-            + 'States) verifies your account. Emails you send us are kept '
-            + 'in a Google Workspace mailbox. If you are in Vietnam, your '
-            + 'personal data is transferred abroad: mainly to Singapore, '
-            + 'and in part to Google.',
+            + 'States) verifies your account. If you sign in with '
+            + 'LinkedIn, LinkedIn (United States) verifies your account. '
+            + 'Emails you send us are kept in a Google Workspace mailbox. '
+            + 'If you are in Vietnam, your personal data is transferred '
+            + 'abroad: mainly to Singapore, and in part to Google and '
+            + 'LinkedIn.',
             'Password checks use Have I Been Pwned.',
           ],
         },

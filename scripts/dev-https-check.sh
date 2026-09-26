@@ -43,6 +43,7 @@ readonly -a SPEC_SOURCES=(
   exports.spec.ts
   privacy.spec.ts
   sample-start.spec.ts
+  linkedin.spec.ts
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts
@@ -81,6 +82,7 @@ publish) evidence_prefix=publish ;;
 exports) evidence_prefix=exports ;;
 privacy) evidence_prefix=privacy ;;
 sample-start) evidence_prefix=sample-start ;;
+linkedin) evidence_prefix=linkedin ;;
 passkey)
   # Two bounded phases, one per server enrollment flag. Both evidence
   # directories start with "passkey-" so the hosted job uploads exactly them.
@@ -95,7 +97,7 @@ totp)
   ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|passkey|totp'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|linkedin|passkey|totp'
   ;;
 esac
 
@@ -174,6 +176,7 @@ password_input=
 mcp_input=
 passkey_input=
 totp_input=
+linkedin_input=
 mcp_fixture=
 mcp_client_name=
 mcp_seeded=0
@@ -183,6 +186,7 @@ cleanup() {
   [ -z "$mcp_input" ] || rm -rf -- "$mcp_input"
   [ -z "$passkey_input" ] || rm -rf -- "$passkey_input"
   [ -z "$totp_input" ] || rm -rf -- "$totp_input"
+  [ -z "$linkedin_input" ] || rm -rf -- "$linkedin_input"
   if [ "$mcp_seeded" -eq 1 ] && [ -n "$mcp_fixture" ]; then
     "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
       --client-name "$mcp_client_name" >/dev/null 2>&1 || true
@@ -429,6 +433,31 @@ if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
   "$REPO/.dev/bin/password-auth-fixture" seed --database-url "$NATIVE_DSN"
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
+elif [ "$MODE" = linkedin ]; then
+  # The proof registers and verifies its own password accounts through the
+  # capture mailbox. The fixture removes every row an earlier run left, so
+  # each run starts from the same state (docs/design/linkedin-sign-in.md
+  # "Tests").
+  capture_secret=$STATE/secrets/auth-email-capture-bearer
+  [ -f "$capture_secret" ] && [ ! -L "$capture_secret" ] &&
+    [ "$(stat -c %u "$capture_secret")" = "$UID_NOW" ] ||
+    fail 'invalid capture secret'
+  linkedin_input=$(mktemp -d "$STATE/linkedin-input.XXXXXX")
+  chmod 0700 "$linkedin_input"
+  cp -- "$INPUT/caddy-root.crt" "$linkedin_input/caddy-root.crt"
+  chmod 0600 "$linkedin_input/caddy-root.crt"
+  capture_token=$(base64 -w0 -- "$capture_secret" | tr '+/' '-_' | tr -d '=')
+  printf '%s' "$capture_token" >"$linkedin_input/mail-capture-token"
+  chmod 0600 "$linkedin_input/mail-capture-token"
+  run_input=$linkedin_input
+
+  install -d -m 0700 "$REPO/.dev/bin"
+  (cd "$REPO/apps/server" &&
+    go build -o "$REPO/.dev/bin/password-auth-fixture" \
+      ./cmd/password-auth-fixture) || fail 'fixture build failed'
+  "$REPO/.dev/bin/password-auth-fixture" linkedin-cleanup --database-url "$NATIVE_DSN"
+  curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
+    "http://127.0.0.1:20444/api/messages" >/dev/null
 elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   mcp_run_id=$(</proc/sys/kernel/random/uuid)
   [[ $mcp_run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
@@ -478,6 +507,9 @@ status=0
 
 if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
   "$REPO/.dev/bin/password-auth-fixture" cleanup --database-url "$NATIVE_DSN"
+elif [ "$MODE" = linkedin ]; then
+  "$REPO/.dev/bin/password-auth-fixture" linkedin-cleanup --database-url "$NATIVE_DSN" ||
+    status=1
 elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"; then

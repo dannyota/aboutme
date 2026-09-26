@@ -344,6 +344,28 @@ func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
 				t.Fatalf("ProviderLogin = %+v, want google only", got.ProviderLogin)
 			}
 		})
+		// Production may enable Google and LinkedIn together (ADR 0058).
+		t.Run(environment+" google,linkedin with both providers' credentials", func(t *testing.T) {
+			t.Parallel()
+			vars := base(environment, "google,linkedin")
+			vars["GOOGLE_CLIENT_ID"] = "google-id"
+			vars["GOOGLE_CLIENT_SECRET"] = "google-secret"
+			vars["LINKEDIN_CLIENT_ID"] = "linkedin-id"
+			vars["LINKEDIN_CLIENT_SECRET"] = "linkedin-secret"
+			got, err := config.Load(env(vars))
+			if err != nil {
+				t.Fatalf("Load() error = %v", err)
+			}
+			if got.ProviderLogin != (config.ProviderLogin{Google: true, LinkedIn: true}) {
+				t.Fatalf("ProviderLogin = %+v, want google and linkedin", got.ProviderLogin)
+			}
+			if got.LinkedInClientID != "linkedin-id" || got.LinkedInClientSecret != "linkedin-secret" {
+				t.Fatal("LinkedIn credentials were not loaded")
+			}
+			if got.LinkedInOIDCIssuerURL != "" {
+				t.Fatalf("LinkedInOIDCIssuerURL = %q, want empty outside dev", got.LinkedInOIDCIssuerURL)
+			}
+		})
 		for _, tc := range []struct {
 			flag, missing string
 			set           map[string]string
@@ -353,6 +375,8 @@ func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
 			{"github", "GITHUB_CLIENT_ID", map[string]string{"GOOGLE_CLIENT_ID": "i", "GOOGLE_CLIENT_SECRET": "s"}},
 			{"linkedin", "LINKEDIN_CLIENT_ID", map[string]string{"GITHUB_CLIENT_ID": "i", "GITHUB_CLIENT_SECRET": "s"}},
 			{"google,linkedin", "LINKEDIN_CLIENT_ID", map[string]string{"GOOGLE_CLIENT_ID": "i", "GOOGLE_CLIENT_SECRET": "s"}},
+			{"google,linkedin", "LINKEDIN_CLIENT_ID", map[string]string{"GOOGLE_CLIENT_ID": "i", "GOOGLE_CLIENT_SECRET": "s", "LINKEDIN_CLIENT_SECRET": "s"}},
+			{"google,linkedin", "LINKEDIN_CLIENT_SECRET", map[string]string{"GOOGLE_CLIENT_ID": "i", "GOOGLE_CLIENT_SECRET": "s", "LINKEDIN_CLIENT_ID": "i"}},
 		} {
 			t.Run(environment+" "+tc.flag+" missing "+tc.missing, func(t *testing.T) {
 				t.Parallel()

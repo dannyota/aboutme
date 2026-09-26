@@ -61,6 +61,10 @@ describe('privacy and terms pages', () => {
       + 'của họ sau khi bạn ngừng công khai.',
     );
     expect(wrapper.text()).toContain('Amazon Route 53 cung cấp dịch vụ DNS.');
+    expect(wrapper.text()).toContain(
+      'Nếu bạn đăng nhập bằng LinkedIn, LinkedIn (Hoa Kỳ) xác thực tài '
+      + 'khoản của bạn.',
+    );
     expect(wrapper.text()).not.toContain('Cloudflare');
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
@@ -88,9 +92,9 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain('It cannot publish or unpublish');
     expect(wrapper.text()).toContain('which does not store copies of them');
     expect(wrapper.text()).toContain(
-      'Cookies are used only to keep you signed in, to complete Google '
-      + 'sign-in, to hold a pending second-factor sign-in for five '
-      + 'minutes, and to remember your theme and language.',
+      'Cookies are used only to keep you signed in, to complete Google or '
+      + 'LinkedIn sign-in, to hold a pending second-factor sign-in for '
+      + 'five minutes, and to remember your theme and language.',
     );
     expect(wrapper.text()).not.toContain('CSRF');
     expect(wrapper.text()).toContain('Have I Been Pwned');
@@ -112,6 +116,10 @@ describe('privacy and terms pages', () => {
       + 'you unpublish.',
     );
     expect(wrapper.text()).toContain('Amazon Route 53 provides DNS.');
+    expect(wrapper.text()).toContain(
+      'If you sign in with LinkedIn, LinkedIn (United States) verifies '
+      + 'your account.',
+    );
     expect(wrapper.text()).not.toContain('Cloudflare');
     expect(wrapper.text()).toContain('Your rights');
     expect(wrapper.text()).toContain('Why we use your data');

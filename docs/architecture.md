@@ -31,11 +31,11 @@ Daily development runs Go, Nuxt, and Caddy as native processes at
 [native development runbook](runbooks/native-development.md).
 
 Authenticated development uses a separate native stack on ports 20440–20443. It
-serves only `https://localhost:20443`, runs a deterministic local Google OpenID
-Connect mock on 20442, and still uses the shared `aboutme_dev` database. Its
-disposable pinned Playwright image imports the invocation's Caddy root into an
-isolated NSS database and writes only bounded local verdicts. It does not change
-the host trust store or use a certificate bypass.
+serves only `https://localhost:20443`, runs deterministic local Google and
+LinkedIn OpenID Connect mocks on 20442, and still uses the shared `aboutme_dev`
+database. Its disposable pinned Playwright image imports the invocation's Caddy
+root into an isolated NSS database and writes only bounded local verdicts. It
+does not change the host trust store or use a certificate bypass.
 
 The Compose deployment runs PostgreSQL, MinIO, Go, Nuxt and Caddy. A one-shot
 `db-setup` command creates the fixed database roles and grants, a one-shot
