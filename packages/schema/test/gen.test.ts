@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -37,9 +37,35 @@ const files = [
 
 describe("generated code", () => {
   // Codegen can exceed Vitest's five-second default under concurrent load.
-  it("is byte-identical to a fresh generation", () => {
+  // Other test files compile and read these files while this one regenerates
+  // them in place, so the test also reads every file throughout the run: a
+  // reader must never see bytes other than the committed ones, such as a
+  // partial write or quicktype's raw output.
+  it("is byte-identical to a fresh generation, and at every moment of it", async () => {
     const before = files.map((f) => readFileSync(f, "utf8"));
-    execFileSync("node", ["scripts/generate.mjs"], { stdio: "inherit" });
+    const generator = spawn("node", ["scripts/generate.mjs"], {
+      stdio: "inherit",
+    });
+    let running = true;
+    const exit = new Promise<number | null>((resolve, reject) => {
+      generator.on("error", (error) => {
+        running = false;
+        reject(error);
+      });
+      generator.on("exit", (code) => {
+        running = false;
+        resolve(code);
+      });
+    });
+    const changedDuringRun = new Set<string>();
+    while (running) {
+      files.forEach((f, i) => {
+        if (readFileSync(f, "utf8") !== before[i]) changedDuringRun.add(f);
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(await exit).toBe(0);
+    expect([...changedDuringRun]).toEqual([]);
     const after = files.map((f) => readFileSync(f, "utf8"));
     expect(after).toEqual(before);
   }, 30_000);

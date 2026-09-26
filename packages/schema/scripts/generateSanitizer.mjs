@@ -1,14 +1,13 @@
 // Reads and validates the sanitizer allowlist and hostile-input corpus, then
 // emits the TypeScript and Go sanitizer policy artifacts derived from them.
 
-import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 import {
   generatedHeader,
   hostileCorpusPath,
-  prettierBin,
   sanitizerAllowlistPath,
+  writeGenerated,
 } from "./generatePaths.mjs";
 
 function requireStringArray(value, name) {
@@ -191,8 +190,7 @@ export const FORBIDDEN_URL_SCHEMES = ${tsFrozenArray(
 export const EXTERNAL_REL = ${JSON.stringify(contract.externalRel)} as const;
 `;
 
-  writeFileSync(outFile, body);
-  execFileSync(prettierBin, ["--write", outFile], { stdio: "ignore" });
+  writeGenerated(outFile, body, "prettier");
 }
 
 export function generateSanitizerTs(contract, outFile) {
@@ -223,8 +221,7 @@ ${payloads}
 ]);
 `;
 
-  writeFileSync(outFile, body);
-  execFileSync(prettierBin, ["--write", outFile], { stdio: "ignore" });
+  writeGenerated(outFile, body, "prettier");
 }
 
 function goStringSlice(values, indent = "") {
@@ -294,6 +291,5 @@ ${payloads}
 }
 `;
 
-  writeFileSync(outFile, body);
-  execFileSync("gofmt", ["-w", outFile], { stdio: "inherit" });
+  writeGenerated(outFile, body, "go");
 }
