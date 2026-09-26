@@ -318,37 +318,30 @@ const TOKEN_REFETCH_HOLD_MS = 1_000;
  * Holds the page's next /api/v1/me request, then passes it on. Call it before
  * the action that replaces the session; the returned wait resolves once the
  * page has the refetched response, and the next mutation awaits it. A page
- * that never refetches fails the wait within WAIT_RESPONSE_MS.
+ * that never refetches fails the wait. The request goes on from the browser,
+ * not from route.fetch, since only the browser trusts the harness CA.
  */
 async function holdTokenRefetch(page: Page): Promise<() => Promise<void>> {
-  let release = (): void => undefined;
-  const settled = new Promise<void>((resolve) => { release = resolve; });
   await page.route(`${ORIGIN}/api/v1/me`, async (route: Route) => {
-    try {
-      await new Promise((resolve) => {
-        setTimeout(resolve, TOKEN_REFETCH_HOLD_MS);
-      });
-      await route.fulfill({ response: await route.fetch() });
-    } finally {
-      release();
-    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, TOKEN_REFETCH_HOLD_MS);
+    });
+    // A stale-token retry refetches /api/v1/me itself and can cancel the
+    // held request, so continuing it may fail; the console check still
+    // reports the retry's 403.
+    await route.continue().catch(() => undefined);
   }, { times: 1 });
-  return async () => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        settled,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error('the page did not refetch its session')),
-            WAIT_RESPONSE_MS,
-          );
-        }),
-      ]);
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-    }
-  };
+  const refetched = page.waitForResponse(
+    (response) => response.url() === `${ORIGIN}/api/v1/me`
+      && response.request().method() === 'GET',
+    { timeout: WAIT_RESPONSE_MS + TOKEN_REFETCH_HOLD_MS },
+  ).then(async (response) => {
+    await response.finished();
+  });
+  // Awaited by the caller later; this only keeps an early failure from
+  // counting as unhandled before then.
+  refetched.catch(() => undefined);
+  return () => refetched;
 }
 
 interface FactorState {
