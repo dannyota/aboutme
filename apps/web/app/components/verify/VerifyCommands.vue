@@ -49,7 +49,7 @@ const selected = computed<CommandTarget | null>(() => (
   ?? null
 ));
 
-function select(key: string | number | undefined): void {
+function select(key: unknown): void {
   if (typeof key === 'string') selectedKey.value = key;
 }
 

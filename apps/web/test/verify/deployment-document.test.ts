@@ -411,7 +411,9 @@ describe('chain view', () => {
   });
 
   it('shows every stale chip as not rechecked', () => {
-    const view = chainView(stateOf('stale'))!;
+    const view = chainView(
+      stateOf('stale', Date.parse('2026-10-02T03:14:35Z')),
+    )!;
     expect(view.chips).toEqual(Array(4).fill('not_rechecked'));
     expect(view.connectors).toEqual(Array(3).fill('unknown'));
     expect(view.release?.version).toBe('v0.6.0');
