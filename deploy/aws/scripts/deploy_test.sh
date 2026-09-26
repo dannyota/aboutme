@@ -1415,8 +1415,29 @@ for name in server web caddy; do
   before "$f" "$want" "rds create-db-snapshot"
   before "$f" "$want" "ecs register-task-definition"
 done
-grep -qF "gh attestation verify oci://ghcr.io/dannyota/aboutme-server@sha256:$(printf '%064d' 1) --repo dannyota/aboutme --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/v0.0.9 --source-ref refs/tags/v0.0.9" \
-  "$work/rollback.calls" || { echo "rollback: provenance was not verified for the rollback tag" >&2; exit 1; }
+policy() { # name tag
+  printf 'gh attestation verify oci://ghcr.io/dannyota/aboutme-%s@sha256:%064d --repo dannyota/aboutme' "$1" 1
+  printf ' --cert-identity https://github.com/dannyota/aboutme/.github/workflows/release-images.yml@refs/tags/%s' "$2"
+  printf ' --source-ref refs/tags/%s --source-digest %s --deny-self-hosted-runners --format json' "$2" "$sha"
+}
+for name in server web caddy; do
+  [[ $(count "$work/rollback.calls" "$(policy "$name" v0.0.9)") == 1 ]] ||
+    { echo "rollback: $name provenance was not verified once for the rollback tag" >&2; exit 1; }
+done
+# The TOTP re-encryption one-shot runs the tag's server image, so it verifies
+# that image the same way before the lock or its registration.
+f=$work/totp_reencrypt_ok.calls
+[[ $(count "$f" "$(policy server v0.4.7)") == 1 ]] ||
+  { echo "totp_reencrypt_ok: server provenance was not verified once" >&2; exit 1; }
+before "$f" "$(policy server v0.4.7)" "operation_id=:o"
+before "$f" "$(policy server v0.4.7)" "ecs register-task-definition"
+run_case totp_reencrypt_provenance_fails fail --totp-key-reencrypt v0.4.7
+f=$work/totp_reencrypt_provenance_fails.calls
+absent "$f" "operation_id=:o"
+absent "$f" "ecs register-task-definition"
+absent "$f" "ecs run-task"
+grep -qF "provenance: no valid build provenance for server@" "$work/totp_reencrypt_provenance_fails.out" ||
+  { echo "totp_reencrypt_provenance_fails: did not stop on the provenance check" >&2; exit 1; }
 
 for case_ in provenance_fails provenance_wrong_subject; do
   run_case "$case_" fail v0.1.0

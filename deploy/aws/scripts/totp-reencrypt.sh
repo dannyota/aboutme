@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Sourced by deploy.sh. Implements deploy.sh --totp-key-reencrypt, the
 # one-shot key re-encryption operation (docs/design/totp-key-management.md,
 # "Rotation", and docs/design/passkey-release-fence.md, "Authenticator-app
@@ -6,10 +7,11 @@
 # registers migrate, jobs, and db-setup, so the task always runs the tag's
 # server image under a DEPLOY_RELEASE_* stamp rather than OpenTofu's
 # placeholder registration. It never registers or changes a service.
-# Needs $region, $cluster, $work, $tag, $candidate, $repo, $fence_epoch_totp,
-# $fence_min, say(), digest(), current_def(), describe_task_def(), aws_(),
-# task_def_release_number(), fence_lock, and fence_checkpoint already defined
-# by deploy.sh and fence.sh.
+# Needs $region, $cluster, $work, $tag, $commit, $candidate, $repo,
+# $fence_epoch_totp, $fence_min, say(), digest(), current_def(),
+# describe_task_def(), aws_(), task_def_release_number(), fence_lock,
+# fence_checkpoint, and provenance_verify() already defined by deploy.sh,
+# fence.sh, and provenance.sh.
 
 # Extracts TOTP_ACTIVE_KEY/TOTP_PREVIOUS_KEY valueFrom names from one
 # container of a task definition, sorted so set order never causes a false
@@ -28,6 +30,7 @@ totp_reencrypt_run() {
   local d
   d=$(digest server)
   [[ $d == sha256:* ]] || { say "no server image for $tag"; exit 1; }
+  provenance_verify server "$d" "$tag" "$commit" || exit 1
   current_def totp-reencrypt | jq \
     --arg server "ghcr.io/$repo-server@$d" --arg tag "$tag" --argjson rel "$candidate" '
     .containerDefinitions |= map(

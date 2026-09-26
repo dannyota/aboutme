@@ -38,7 +38,7 @@ case "$cmd $args" in
     [[ $args =~ oci://(ghcr\.io/dannyota/aboutme-[a-z]+)@sha256:([0-9a-f]{64}) ]] || exit 1
     subject=${BASH_REMATCH[1]}
     case $STUB_CASE in
-      provenance_fails) echo "verification failed" >&2; exit 1 ;;
+      *provenance_fails) echo "verification failed" >&2; exit 1 ;;
       provenance_wrong_subject) subject=ghcr.io/dannyota/aboutme-web ;;
     esac
     printf '[{"verificationResult":{"statement":{"subject":[{"name":"%s","digest":{"sha256":"%s"}}]}}}]\n' \
@@ -89,7 +89,8 @@ case "$cmd $args" in
       fence_equal | fence_activate) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
       fence_activate_4002_then_4007) echo '{"Item":{"minimum_release":{"N":"4002"},"minimum_tag":{"S":"v0.4.2"}}}' ;;
       totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | totp_reencrypt_tag_mismatch | \
-      totp_reencrypt_register_fails | totp_reencrypt_slot_mismatch | totp_reencrypt_wait_timeout)
+      totp_reencrypt_register_fails | totp_reencrypt_slot_mismatch | totp_reencrypt_wait_timeout | \
+      totp_reencrypt_provenance_fails)
         echo '{"Item":{"minimum_release":{"N":"4007"},"minimum_tag":{"S":"v0.4.7"}}}' ;;
       totp_reencrypt_below_floor) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
       fence_malformed) echo '{"Item":{"minimum_release":{"N":"abc"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
