@@ -71,9 +71,8 @@ describe('privacy and terms pages', () => {
       + 'theo ngày.',
     );
     expect(wrapper.text()).toContain(
-      'Không dùng công cụ phân tích hay mã theo dõi của bên thứ ba, không '
-      + 'dùng mã quảng cáo. Chúng tôi chỉ đếm lượt xem CV công khai như mô '
-      + 'tả ở trên.',
+      'Không dùng công cụ phân tích hay mã theo dõi quảng cáo của bên thứ '
+      + 'ba. Chúng tôi chỉ đếm lượt xem CV công khai như mô tả ở trên.',
     );
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
