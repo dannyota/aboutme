@@ -355,6 +355,8 @@ jobs:
         with:
           working-directory: deploy/observer
           version: v2.14.0
+        env:
+          GOWORK: "off"
       - if: ${{ !cancelled() }}
         name: go mod tidy is a no-op (deploy/observer)
         run: |
