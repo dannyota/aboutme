@@ -233,9 +233,14 @@ jobs:
   # release asset is a copy. This job holds no registry, OIDC, or attestation
   # permission. It needs only the app images: the observer image's own
   # outcome never gates or blocks this release (see the "image" job comment).
+  # needs still lists observer-image so this job waits for it and can pick up
+  # its digest artifact, but !cancelled() keeps this job from being skipped
+  # outright by GitHub's default "skip on a failed need" behavior when only
+  # observer-image fails; the explicit needs.image.result check is the real
+  # gate.
   release:
     needs: [image, observer-image]
-    if: ${{ needs.image.result == 'success' }}
+    if: ${{ !cancelled() && needs.image.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

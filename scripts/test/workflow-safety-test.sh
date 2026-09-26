@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORKFLOW=$ROOT/.github/workflows/ci.yml
+RELEASE_WORKFLOW=$ROOT/.github/workflows/release-images.yml
 
 fail() {
   printf 'workflow-safety-test: %s\n' "$*" >&2
@@ -232,5 +233,22 @@ done
   fail "ci gate accepts a skipped result in more than one place"
 grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
   fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
+
+# The release job must not be skipped outright by GitHub's default
+# skip-on-failed-need behavior when only observer-image fails: it needs a
+# status function alongside the explicit result check, and it still waits
+# on both image jobs so it can pick up the observer digest artifact when
+# that job succeeds.
+release_job_body() { # job-id
+  awk -v job="  $1:" '$0 == job { flag = 1; next } /^  [a-z]/ { flag = 0 } flag' "$RELEASE_WORKFLOW"
+}
+RELEASE_JOB=$(release_job_body release)
+[ -n "$RELEASE_JOB" ] || fail "release-images workflow lacks the release job"
+grep -Fxq '    needs: [image, observer-image]' <<<"$RELEASE_JOB" ||
+  fail "release job must wait on both image jobs to pick up the observer digest"
+grep -Fxq "    if: \${{ !cancelled() && needs.image.result == 'success' }}" <<<"$RELEASE_JOB" ||
+  fail "release job condition lacks !cancelled(), so an observer-image failure skips the release"
+grep -Fq '[[ ! -e artifacts/digest-observer.txt ]] || names+=(observer)' <<<"$RELEASE_JOB" ||
+  fail "release job does not gate observer assets on the observer digest artifact"
 
 printf 'hosted workflow safety tests passed\n'
