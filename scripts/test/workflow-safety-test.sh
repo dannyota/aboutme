@@ -190,12 +190,29 @@ actual_semgrep_jobs=$(sed -n 's/^  \(semgrep[a-z-]*\):$/\1/p' "$WORKFLOW" | LC_A
 semgrep_job_body() { # job-id
   awk -v job="  $1:" '$0 == job { flag = 1; next } /^  [a-z]/ { flag = 0 } flag' "$WORKFLOW"
 }
+# Each scan writes its JSON, and the step right after it blocks on that JSON
+# in the repository, whatever the Semgrep platform policy marks as blocking.
+semgrep_json='"$RUNNER_TEMP/semgrep.json"'
 SEMGREP_CODE_JOB=$(semgrep_job_body semgrep-code)
-grep -Fxq '      - run: semgrep ci --code --secrets --no-suppress-errors' <<<"$SEMGREP_CODE_JOB" ||
-  fail "semgrep-code does not select Code and Secrets and fail closed"
+grep -Fxq "      - run: semgrep ci --code --secrets --no-suppress-errors --json-output=$semgrep_json" <<<"$SEMGREP_CODE_JOB" ||
+  fail "semgrep-code does not select Code and Secrets, fail closed, and write its JSON"
+grep -Fxq -- '      - run: scripts/test/semgrep-gate-test.sh' <<<"$SEMGREP_CODE_JOB" ||
+  fail "semgrep-code does not test its blocking gate"
 SEMGREP_SCA_JOB=$(semgrep_job_body semgrep-supply-chain)
-grep -Fxq '      - run: semgrep ci --supply-chain --no-suppress-errors' <<<"$SEMGREP_SCA_JOB" ||
-  fail "semgrep-supply-chain does not select Supply Chain and fail closed"
+grep -Fxq "      - run: semgrep ci --supply-chain --no-suppress-errors --json-output=$semgrep_json" <<<"$SEMGREP_SCA_JOB" ||
+  fail "semgrep-supply-chain does not select Supply Chain, fail closed, and write its JSON"
+semgrep_gate_follows_scan() { # job-body mode
+  awk -v gate="        run: scripts/semgrep-gate.sh $2 $semgrep_json" '
+    /^      - run: semgrep ci / { scan = NR }
+    /^      - / && scan && NR > scan && !next_step { next_step = NR }
+    $0 == gate { gates++; at = NR }
+    END { exit !(gates == 1 && scan && next_step && at == next_step + 1) }
+  ' <<<"$1"
+}
+semgrep_gate_follows_scan "$SEMGREP_CODE_JOB" code ||
+  fail "semgrep-code does not block on Code findings in the step after its scan"
+semgrep_gate_follows_scan "$SEMGREP_SCA_JOB" supply-chain ||
+  fail "semgrep-supply-chain does not block on Supply Chain findings in the step after its scan"
 grep -Fxq -- '      - run: scripts/test/semgrep-sca-inputs-test.sh' <<<"$SEMGREP_SCA_JOB" ||
   fail "semgrep-supply-chain does not verify its dependency inputs"
 for job in "${semgrep_jobs[@]}"; do

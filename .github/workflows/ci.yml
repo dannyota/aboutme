@@ -607,10 +607,15 @@ jobs:
   # Chain (SCA for Go + npm), and Secrets, all free for public repositories.
   # Each product set runs as its own `semgrep ci` scan in its own job, so the
   # two scans overlap instead of adding up. Every scan uploads to the same
-  # Semgrep project and ref, and each blocks on its own products' blocking
-  # findings. Secrets runs with Code: both use the Pro engine, and a scan
-  # that selects only products the Semgrep deployment does not enable stops
-  # with an error. The scans authenticate with SEMGREP_APP_TOKEN, which
+  # Semgrep project and ref. The platform policy decides what fails `semgrep
+  # ci` itself; a gate step after each scan blocks in the repository, whatever
+  # that policy says. scripts/semgrep-gate.sh reads the scan's JSON and fails
+  # on any Code finding of severity ERROR, HIGH, or CRITICAL, and on any
+  # reachable Supply Chain finding of those severities. A reviewed false
+  # positive is suppressed in place with `nosemgrep: <rule-id>` and a reason.
+  # Secrets runs with Code: both use the Pro engine, and a scan that selects
+  # only products the Semgrep deployment does not enable stops with an error.
+  # The scans authenticate with SEMGREP_APP_TOKEN, which
   # GitHub withholds from FORK pull requests, so they run on pushes, manual
   # runs, and same-repo PRs only. A fork PR would have no token and fail.
   semgrep-code:
@@ -631,9 +636,12 @@ jobs:
           path: ~/.cache/pip
           key: pip-semgrep-1.178.0-${{ runner.os }}
       - run: pip install semgrep==1.178.0
-      - run: semgrep ci --code --secrets --no-suppress-errors
+      - run: scripts/test/semgrep-gate-test.sh
+      - run: semgrep ci --code --secrets --no-suppress-errors --json-output="$RUNNER_TEMP/semgrep.json"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      - name: Block on ERROR, HIGH, and CRITICAL Code findings
+        run: scripts/semgrep-gate.sh code "$RUNNER_TEMP/semgrep.json"
 
   semgrep-supply-chain:
     runs-on: ubuntu-latest
@@ -653,9 +661,11 @@ jobs:
           key: pip-semgrep-1.178.0-${{ runner.os }}
       - run: pip install semgrep==1.178.0
       - run: scripts/test/semgrep-sca-inputs-test.sh
-      - run: semgrep ci --supply-chain --no-suppress-errors
+      - run: semgrep ci --supply-chain --no-suppress-errors --json-output="$RUNNER_TEMP/semgrep.json"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+      - name: Block on reachable ERROR, HIGH, and CRITICAL Supply Chain findings
+        run: scripts/semgrep-gate.sh supply-chain "$RUNNER_TEMP/semgrep.json"
 
   # Aggregate gate: the branch protection target. Each proof shard's own
   # evidence passed the closed-list check in verify-evidence.mjs when its

@@ -271,6 +271,7 @@ func startPrivateServer(ctx context.Context, queue *renderjob.Queue) (*http.Serv
 func readBrowserVersion(ctx context.Context, executable string) (string, error) {
 	versionCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- executable is the operator's --chromium-executable flag and never request data
 	command := exec.CommandContext(versionCtx, executable, "--version")
 	command.Env = []string{"TZ=UTC", "LANG=C.UTF-8", "LC_ALL=C.UTF-8"}
 	output, err := command.Output()

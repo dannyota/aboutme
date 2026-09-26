@@ -368,5 +368,6 @@ func writeRedeemResponse(response http.ResponseWriter, status int, body []byte, 
 		header.Set("Allow", http.MethodPost)
 	}
 	response.WriteHeader(status)
+	// nosemgrep: go.net.xss.no-direct-write-to-responsewriter-taint.no-direct-write-to-responsewriter-taint -- application/json body from a stored snapshot on the private print boundary
 	_, _ = response.Write(body) //nolint:errcheck // The response is committed; retrying can duplicate bytes, and this private boundary must not log details.
 }
