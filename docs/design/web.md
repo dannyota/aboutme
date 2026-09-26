@@ -263,22 +263,22 @@ forbidden.
   server computes both exact values; the renderer writes them and the public
   HTML validator accepts nothing else
   ([ADR 0042](../adr/0042-public-page-title-and-favicon.md)).
-- When download is enabled, the public page shows a plain link to its own PDF
-  (`/api/v1/public/resumes/{slug}/pdf`) above the resume, at the top right of
-  the measure. It works without JavaScript and is hidden in print. Its label
-  follows the resume language: "Tải PDF" for Vietnamese, "Download PDF"
-  otherwise. The public HTML validator allows exactly that link, once, only
-  while download is enabled. The public PDF and the owner's PDF download as
+- When download is enabled, the public page shows a link to its own PDF
+  (`/api/v1/public/resumes/{slug}/pdf`) in the page bar above the resume, at the
+  right of the measure; the [page bar spec](public-page-theme.md) sets its look.
+  It works without JavaScript and is hidden in print. Its label follows the
+  resume language: "Tải PDF" for Vietnamese, "Download PDF" otherwise. The
+  public HTML validator allows exactly that link, once, only while download is
+  enabled. The public PDF and the owner's PDF download as
   `<Full-Name>-Resume.pdf`: `filename` carries the name folded to ASCII, and an
   RFC 5987 `filename*` carries it in UTF-8
   ([ADR 0045](../adr/0045-pdf-download-name-and-metadata.md)).
 - Every public page shows a "Built with aboutme.vn" link ("Tạo bằng aboutme.vn"
   for Vietnamese, English for any other language) at the left of the same row,
   or alone in that row when download is off. It links the canonical origin's
-  home page (`https://aboutme.vn/`) with no query and no `rel`, matches the
-  download link's size, color, and underline, and is hidden in print. The PDF
-  never carries it. The public HTML validator requires exactly this anchor,
-  once, outside the resume article.
+  home page (`https://aboutme.vn/`) with no query and no `rel`, and is hidden in
+  print. The PDF never carries it. The public HTML validator requires exactly
+  this anchor, once, outside the resume article.
 - Chromium and CSS `@page` own PDF pagination.
 
 Content, order, type, color, and visibility must agree across targets; only page

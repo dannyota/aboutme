@@ -10,6 +10,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |[link-previews.md](link-previews.md)|Link previews, releases 0.6.0 to 0.6.2, waiting for owner approvals|
 |[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0057](../adr/0057-deployment-transparency-observer.md)), waiting for owner approvals|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0051](../adr/0051-vietnam-hosted-production.md))|
+|[public-page-theme.md](public-page-theme.md)|Public page bar (0.6.8) and owner color scheme (0.6.9)|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
