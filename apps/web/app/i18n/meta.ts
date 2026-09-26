@@ -1,6 +1,6 @@
 // Page titles and search metadata for the site pages. Only the homepage, the
-// Privacy Policy, the Terms, and the template gallery are indexable; every
-// other route is noindex.
+// Privacy Policy, the Terms, the Verify page, and the template gallery are
+// indexable; every other route is noindex.
 import type { Locale } from './locale';
 import type { WorkspaceCopy } from './workspace';
 
@@ -12,6 +12,7 @@ export const indexablePaths: ReadonlySet<string> = new Set([
   '/',
   '/privacy',
   '/terms',
+  '/verify',
 ]);
 
 const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;

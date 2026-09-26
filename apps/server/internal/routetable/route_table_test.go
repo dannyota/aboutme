@@ -442,6 +442,11 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "templates_page", method: http.MethodGet, path: "/templates/ats-plain", want: wantWeb},
 		{name: "templates_markdown", method: http.MethodGet, path: "/templates.md", want: wantWeb},
 		{name: "templates_prefixed_slug", method: http.MethodGet, path: "/templates-by-ada", want: wantGo},
+		// The deployment verify page is a fixed Nuxt root; verify-email stays
+		// its own root and a longer slug still reaches Go.
+		{name: "verify_page", method: http.MethodGet, path: "/verify", want: wantWeb},
+		{name: "verify_markdown", method: http.MethodGet, path: "/verify.md", want: wantWeb},
+		{name: "verify_prefixed_slug", method: http.MethodGet, path: "/verify-me", want: wantGo},
 		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
 		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
 		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},

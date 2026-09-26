@@ -10,7 +10,7 @@ func TestReservedAPI(t *testing.T) {
 	}
 }
 
-// wantRoutes is the v8 registry in authority order. It is written by hand so a
+// wantRoutes is the v9 registry in authority order. It is written by hand so a
 // regenerated generated.go that silently drops, reorders, or reclassifies a
 // root fails here instead of shipping.
 var wantRoutes = []Route{
@@ -38,10 +38,11 @@ var wantRoutes = []Route{
 	{Root: "templates", Dispatch: DispatchNuxt},
 	{Root: "terms", Dispatch: DispatchNuxt},
 	{Root: "u", Dispatch: DispatchReserved},
+	{Root: "verify", Dispatch: DispatchNuxt},
 	{Root: "verify-email", Dispatch: DispatchNuxt},
 }
 
-func TestRoutesMatchTheV8Authority(t *testing.T) {
+func TestRoutesMatchTheV9Authority(t *testing.T) {
 	t.Parallel()
 
 	if len(Routes) != len(wantRoutes) {
@@ -142,6 +143,34 @@ func TestTemplatesRootIsNuxtAndUnclaimable(t *testing.T) {
 		t.Error(`ValidSlug("templates") = true, want false for a reserved root`)
 	}
 	for _, slug := range []string{"templates-by-ada", "my-templates"} {
+		if !ValidSlug(slug) {
+			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
+		}
+	}
+}
+
+// TestVerifyRootIsNuxtAndUnclaimable proves the Nuxt deployment verify page
+// owns its root, so "verify" cannot be claimed as a resume slug, while the
+// separate verify-email root and longer slugs stay distinct.
+func TestVerifyRootIsNuxtAndUnclaimable(t *testing.T) {
+	t.Parallel()
+
+	found := false
+	for _, route := range Routes {
+		if route.Root == "verify" {
+			found = true
+			if route.Dispatch != DispatchNuxt {
+				t.Errorf("verify dispatches to %q, want %q", route.Dispatch, DispatchNuxt)
+			}
+		}
+	}
+	if !found {
+		t.Error("verify is missing from the registry")
+	}
+	if ValidSlug("verify") {
+		t.Error(`ValidSlug("verify") = true, want false for a reserved root`)
+	}
+	for _, slug := range []string{"verify-me", "my-verify", "verifyer"} {
 		if !ValidSlug(slug) {
 			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
 		}

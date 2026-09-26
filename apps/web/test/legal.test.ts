@@ -232,7 +232,7 @@ describe('links to the legal pages', () => {
       .toBe(false);
   });
 
-  it('links both pages from the homepage footer', async () => {
+  it('links Terms, Privacy, and Verify from the homepage footer', async () => {
     const wrapper = await mountSuspended(LandingPage);
     expect(
       wrapper.get('[data-testid="landing-terms-link"]').attributes('href'),
@@ -242,6 +242,25 @@ describe('links to the legal pages', () => {
     ).toBe('/privacy');
     expect(wrapper.get('[data-testid="landing-privacy-link"]').text()).toBe(
       'Chính sách quyền riêng tư',
+    );
+    expect(
+      wrapper.get('[data-testid="landing-verify-link"]').attributes('href'),
+    ).toBe('/verify');
+    expect(wrapper.get('[data-testid="landing-verify-link"]').text()).toBe(
+      'Kiểm chứng',
+    );
+    const footer = wrapper.get('[data-testid="landing-footer"]');
+    const order = footer.findAll('a').map((a) => a.attributes('data-testid'));
+    expect(order).toEqual([
+      'landing-terms-link',
+      'landing-privacy-link',
+      'landing-verify-link',
+    ]);
+
+    setSiteLocale('en');
+    const english = await mountSuspended(LandingPage);
+    expect(english.get('[data-testid="landing-verify-link"]').text()).toBe(
+      'Verify',
     );
   });
 });

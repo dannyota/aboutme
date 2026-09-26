@@ -62,6 +62,7 @@ const onMarketingPath = computed(() => (
   || route.path === '/templates'
   || route.path === '/terms'
   || route.path === '/privacy'
+  || route.path === '/verify'
   || TEMPLATE_PAGE_PATH.test(route.path)
 ));
 const ctaLabel = computed(() => (onMarketingPath.value

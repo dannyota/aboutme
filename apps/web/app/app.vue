@@ -34,7 +34,8 @@ const theme = computed(() => {
 
 const locale = useRouteLocale();
 
-// Only the homepage, Privacy Policy, Terms, and gallery are for search engines.
+// Only the homepage, Privacy Policy, Terms, Verify, and gallery are for
+// search engines.
 const indexable = computed(() => isIndexablePath(route.path));
 
 useHead(

@@ -544,6 +544,7 @@ describe('AppShell', () => {
     ['/templates/engineer-compact', 'Create your resume'],
     ['/terms', 'Create your resume'],
     ['/privacy', 'Create your resume'],
+    ['/verify', 'Create your resume'],
     ['/login', 'Create account'],
     ['/register', 'Create account'],
     // /authorize is excluded: it is an authRequiredPath, so its header never
