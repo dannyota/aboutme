@@ -270,6 +270,15 @@ resource "aws_cloudfront_origin_access_control" "transparency" {
 # cross-site scripting. Every rule starts in count mode (var.waf_block =
 # false) for a week before the owner switches it to block.
 #
+# Layers 2 and 3 of viewer analytics (docs/design/viewer-analytics/
+# counting.md, "Layers 2 and 3: edge labels") add Bot Control (Common) and
+# the Anonymous IP list, scoped to the view-collect path, plus two rules
+# that turn their labels into request headers. These four rules count only,
+# always, regardless of var.waf_block: the labels are a counting signal,
+# never a filter, so blocking would drop real viewers and crawlers still
+# need every page to load (docs/design/link-previews.md). About USD 15 a
+# month (docs/design/viewer-analytics/delivery.md, "Cost").
+#
 # sampled_requests_enabled stays false everywhere: sampled requests keep the
 # viewer's IP address and headers, and the privacy policy promises no IP
 # address in request logs. No logging configuration is set either.
@@ -374,6 +383,247 @@ resource "aws_wafv2_web_acl" "edge" {
       cloudwatch_metrics_enabled = true
       sampled_requests_enabled   = false
       metric_name                = "${var.name}-edge-known-bad-inputs"
+    }
+  }
+
+  # Common-level Bot Control, count always, scoped to POST requests whose
+  # path starts with the collect route (docs/design/viewer-analytics/
+  # counting.md, "Layers 2 and 3: edge labels").
+  rule {
+    name     = "view-bot-control"
+    priority = 3
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesBotControlRuleSet"
+        vendor_name = "AWS"
+
+        managed_rule_group_configs {
+          aws_managed_rules_bot_control_rule_set {
+            inspection_level = "COMMON"
+          }
+        }
+
+        scope_down_statement {
+          and_statement {
+            statement {
+              byte_match_statement {
+                field_to_match {
+                  method {}
+                }
+                positional_constraint = "EXACTLY"
+                search_string         = "POST"
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+            # URL_DECODE, not NONE: WAF matches the raw path, and Go decodes
+            # it before routing, so an undecoded match lets
+            # /api/v1/public/views/%63ollect skip this scope-down
+            # (https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.64.0/website/docs/r/wafv2_web_acl.html.markdown,
+            # "text_transformation" Block).
+            statement {
+              byte_match_statement {
+                field_to_match {
+                  uri_path {}
+                }
+                positional_constraint = "STARTS_WITH"
+                search_string         = "/api/v1/public/views/collect"
+                text_transformation {
+                  priority = 0
+                  type     = "URL_DECODE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = false
+      metric_name                = "${var.name}-edge-view-bot-control"
+    }
+  }
+
+  # Anonymous IP list, count always, same scope-down as view-bot-control.
+  # rule_action_override forces both of the group's own rules to count too:
+  # without it, the group's override_action only reaches the first rule
+  # that would otherwise match, so AnonymousIPList (checked first) can
+  # short-circuit evaluation and hide HostingProviderIPList
+  # (https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-rule-group-override-options.html).
+  # rule_action_override nests inside managed_rule_group_statement, not the
+  # rule itself
+  # (https://raw.githubusercontent.com/hashicorp/terraform-provider-aws/v6.64.0/website/docs/r/wafv2_web_acl.html.markdown,
+  # "managed_rule_group_statement" and "rule_action_override" Blocks).
+  rule {
+    name     = "view-anonymous-ip"
+    priority = 4
+
+    override_action {
+      count {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesAnonymousIpList"
+        vendor_name = "AWS"
+
+        rule_action_override {
+          name = "AnonymousIPList"
+          action_to_use {
+            count {}
+          }
+        }
+        rule_action_override {
+          name = "HostingProviderIPList"
+          action_to_use {
+            count {}
+          }
+        }
+
+        scope_down_statement {
+          and_statement {
+            statement {
+              byte_match_statement {
+                field_to_match {
+                  method {}
+                }
+                positional_constraint = "EXACTLY"
+                search_string         = "POST"
+                text_transformation {
+                  priority = 0
+                  type     = "NONE"
+                }
+              }
+            }
+            # URL_DECODE: see the same statement in view-bot-control above.
+            statement {
+              byte_match_statement {
+                field_to_match {
+                  uri_path {}
+                }
+                positional_constraint = "STARTS_WITH"
+                search_string         = "/api/v1/public/views/collect"
+                text_transformation {
+                  priority = 0
+                  type     = "URL_DECODE"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = false
+      metric_name                = "${var.name}-edge-view-anonymous-ip"
+    }
+  }
+
+  # Reads the labels view-bot-control added and inserts the request header
+  # Caddy's CloudFront listener passes to Go as x-amzn-waf-aboutme-bot
+  # (docs/design/viewer-analytics/counting.md, "Layers 2 and 3: edge
+  # labels"). Runs after view-bot-control, so the labels already exist.
+  rule {
+    name     = "view-bot-label"
+    priority = 5
+
+    action {
+      count {
+        custom_request_handling {
+          insert_header {
+            name  = "aboutme-bot"
+            value = "1"
+          }
+        }
+      }
+    }
+
+    statement {
+      or_statement {
+        statement {
+          label_match_statement {
+            scope = "NAMESPACE"
+            key   = "awswaf:managed:aws:bot-control:bot:"
+          }
+        }
+        statement {
+          label_match_statement {
+            scope = "LABEL"
+            key   = "awswaf:managed:aws:bot-control:signal:automated_browser"
+          }
+        }
+        statement {
+          label_match_statement {
+            scope = "LABEL"
+            key   = "awswaf:managed:aws:bot-control:signal:non_browser_user_agent"
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = false
+      metric_name                = "${var.name}-edge-view-bot-label"
+    }
+  }
+
+  # Reads labels view-bot-control and view-anonymous-ip added and inserts
+  # x-amzn-waf-aboutme-dc (docs/design/viewer-analytics/counting.md, "Layers
+  # 2 and 3: edge labels").
+  rule {
+    name     = "view-dc-label"
+    priority = 6
+
+    action {
+      count {
+        custom_request_handling {
+          insert_header {
+            name  = "aboutme-dc"
+            value = "1"
+          }
+        }
+      }
+    }
+
+    statement {
+      or_statement {
+        statement {
+          label_match_statement {
+            scope = "LABEL"
+            key   = "awswaf:managed:aws:anonymous-ip-list:HostingProviderIPList"
+          }
+        }
+        statement {
+          label_match_statement {
+            scope = "LABEL"
+            key   = "awswaf:managed:aws:bot-control:signal:known_bot_data_center"
+          }
+        }
+        statement {
+          label_match_statement {
+            scope = "NAMESPACE"
+            key   = "awswaf:managed:aws:bot-control:signal:cloud_service_provider:"
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      sampled_requests_enabled   = false
+      metric_name                = "${var.name}-edge-view-dc-label"
     }
   }
 

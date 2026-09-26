@@ -4,6 +4,12 @@
 # client certificate from our own CA. entrypoint.sh includes this file when
 # EDGES includes cloudfront. The apex_site snippet comes from the Caddyfile
 # that imports this file.
+#
+# Any future edge listener in this directory must strip
+# x-amzn-waf-aboutme-bot and x-amzn-waf-aboutme-dc, as the CloudFront
+# listener does below for every other x-amzn-waf-* header: a header one
+# edge sets is never trusted on another's (docs/design/viewer-analytics/
+# counting.md, "Layers 2 and 3: edge labels").
 (cloudfront_tls) {
 	tls /run/caddy/origin.pem /run/caddy/origin-key.pem {
 		client_auth {
@@ -56,6 +62,35 @@ aboutme.vn:8443 {
 	@viewer_address vars_regexp viewer {http.request.header.CloudFront-Viewer-Address} ^([0-9A-Fa-f:.]+):([0-9]{1,5})$
 	vars @viewer_address client_address {re.viewer.1}
 	request_header -CloudFront-Viewer-Address
+
+	# The web ACL's two label rules insert x-amzn-waf-aboutme-bot and
+	# x-amzn-waf-aboutme-dc (docs/design/viewer-analytics/counting.md,
+	# "Layers 2 and 3: edge labels"). Note whether the request already
+	# carries either one, delete every x-amzn-waf-* header (a viewer can
+	# send its own; WAF overwrites a header of the same name, and no other
+	# rule in the web ACL inserts one), then restore only the two Go
+	# trusts, and only when one was actually present. The restore is
+	# always the constant 1, never the header's own value: the
+	# placeholder joins repeated fields with a comma, so a bot sending
+	# "x-amzn-waf-aboutme-dc: 1, 0" alongside WAF's own value would
+	# otherwise produce "1,0", which Go reads as unset, defeating the
+	# label. Any value present, including a viewer's own forged header,
+	# becomes 1, which only ever moves that request out of the count.
+	#
+	# Caddy runs same-directive calls with a matcher in the order they are
+	# written, but hoists an unmatched call ahead of or behind that group
+	# depending on directive type, so the plain wildcard delete below carries
+	# an always-true matcher to keep it in the same ordered group as the two
+	# restores that must follow it. The restores match on the saved vars, not
+	# the headers themselves, since the headers are already gone by then.
+	vars waf_bot {http.request.header.x-amzn-waf-aboutme-bot}
+	vars waf_dc {http.request.header.x-amzn-waf-aboutme-dc}
+	@waf_headers expression true
+	@had_waf_bot expression {vars.waf_bot} != ""
+	@had_waf_dc expression {vars.waf_dc} != ""
+	request_header @waf_headers -x-amzn-waf-*
+	request_header @had_waf_bot x-amzn-waf-aboutme-bot 1
+	request_header @had_waf_dc x-amzn-waf-aboutme-dc 1
 
 	import apex_site
 }
