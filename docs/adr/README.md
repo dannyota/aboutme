@@ -9,9 +9,8 @@ not edit the old record to make it appear that the later choice was always in
 force. A draft ADR may change until accepted.
 
 The most recent accepted decision is
-[ADR 0054](0054-cloudfront-edge-for-single-host-production.md), which puts
-production behind Amazon CloudFront instead of Cloudflare until the move to
-Vietnam.
+[ADR 0056](0056-route-53-production-dns.md), which moves production DNS from
+Cloudflare to Route 53 so that CloudFront picks edges near the viewer.
 
 [ADR 0053](0053-public-pdf-tab-renders-the-download-in-the-browser.md) is
 rejected: public pages have no PDF tab.

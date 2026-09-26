@@ -184,7 +184,7 @@ After step 4 has passed its two-week watch:
    Access line and Cloudflare DNS section, the email runbook's DNS section, the
    CloudFront runbook's return path to Cloudflare, the
    [CloudFront edge design](../design/cloudfront-edge.md), which should then
-   cite the ADR that supersedes ADR 0054's DNS decision. Set this runbook's
+   cite [ADR 0056](../adr/0056-route-53-production-dns.md). Set this runbook's
    status to in production.
 
 [r53-price]: https://aws.amazon.com/route53/pricing/

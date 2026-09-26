@@ -2,11 +2,11 @@
 
 Production at `https://aboutme.vn` runs behind Amazon CloudFront, in front of
 the same EC2 host, with no load balancer, under
-[ADR 0054](../adr/0054-cloudfront-edge-for-single-host-production.md).
-Cloudflare answers DNS only; see the
-[production runbook's Cloudflare DNS section](../runbooks/production.md#cloudflare-dns).
-This edge is interim: [ADR 0051](../adr/0051-vietnam-hosted-production.md) still
-governs the later move to Vietnam, which replaces this edge with vCDN.
+[ADR 0054](../adr/0054-cloudfront-edge-for-single-host-production.md). Route 53
+serves DNS ([ADR 0056](../adr/0056-route-53-production-dns.md),
+[DNS runbook](../runbooks/dns.md)). This edge is interim:
+[ADR 0051](../adr/0051-vietnam-hosted-production.md) still governs the later
+move to Vietnam, which replaces this edge with vCDN.
 
 Status: built and serving production. **Owner approval** marks a choice the
 owner makes before the work that depends on it starts. **Verify** marks a fact
@@ -29,7 +29,7 @@ that it is as secure as today.
 
 ```mermaid
 flowchart TD
-  U[Browser or MCP client] -->|HTTPS aboutme.vn, www| DNS[Cloudflare DNS only]
+  U[Browser or MCP client] -->|HTTPS aboutme.vn, www| DNS[Route 53 alias records]
   U -->|TLS 1.2+, ACM viewer certificate| CF
   subgraph CF[CloudFront distribution, pay as you go]
     E[WAF web ACL, Shield Standard<br/>cache only /_nuxt/*<br/>adds CloudFront-Viewer-Address]
@@ -127,21 +127,14 @@ the host. The viewer certificate stays separate so its key never leaves ACM.
   answers; price class All.
 - The viewer `Host` is forwarded, so Caddy sees the same hosts as behind
   Cloudflare, and `www` keeps redirecting at the origin.
-- **DNS stays at Cloudflare, DNS-only** (**Owner approval**). The apex becomes a
-  CNAME to the distribution domain, which Cloudflare flattens at the apex on
-  every plan; a DNS-only flattened answer carries the target's addresses
-  ([flattening][cfl-flatten], [answers][cfl-flatten-ttl]). `www` becomes a plain
-  DNS-only CNAME. Reasons: the zone already has DNSSEC with a DS record at the
-  `.vn` registry, the mail records stay put, rollback is a record edit, and ADR
-  0051's cutover switches records at Cloudflare anyway, so the domain changes
-  nameservers once, to vDNS, instead of twice. Cloudflare then answers DNS
-  queries from resolvers and no longer carries HTTP traffic.
-- The alternative is Route 53 with alias records: USD 0.50 per month for the
-  zone, and alias queries to CloudFront are free ([Route 53
-  pricing][r53-price]). It needs a DNSSEC move at the `.vn` registrar now and
-  another NS move later. **Verify:** whether Cloudflare's flattening sends EDNS
-  client subnet; if Vietnamese viewers land on distant edges (`x-amz-cf-pop` not
-  `HAN` or `SGN`), move to Route 53.
+- **DNS is Route 53** ([ADR 0056](../adr/0056-route-53-production-dns.md)). The
+  apex and `www` are alias A, AAAA, and HTTPS records to the distribution in a
+  DNSSEC-signed zone ([DNS runbook](../runbooks/dns.md)). An alias answer
+  follows the resolver's client subnet: a Vietnamese subnet got `HAN50`.
+  Cloudflare's flattened apex CNAME ([flattening][cfl-flatten]) got edges near
+  Cloudflare's resolver instead: Singapore through `1.1.1.1` and Marseille
+  (first byte 1.0 s) through `8.8.8.8`. Alias queries to CloudFront are free
+  ([Route 53 pricing][r53-price]).
 
 ## Cache and forwarding
 
@@ -254,8 +247,8 @@ bodies ([baseline groups][waf-crs]). WAF logging stays off.
 
 ## Privacy
 
-Cloudflare stops handling page traffic, IP addresses, and decrypted content; it
-still answers DNS queries, which come from resolvers. AWS, already the hosting
+Cloudflare handles no page traffic, IP addresses, or decrypted content, and
+after the DNS move it answers no queries either. AWS, already the hosting
 processor, terminates TLS at CloudFront edges worldwide, including in Vietnam,
 so data still leaves Vietnam until the ADR 0051 move. CloudFront access logs and
 WAF logs stay off, as the privacy policy promises no IP address in request logs.
@@ -264,7 +257,8 @@ The notice in `apps/web/app/i18n/legal.ts` changes in both languages at cutover:
 CloudFront (Amazon Web Services, global edge network) delivers the site and
 processes IP addresses; public pages are not stored at the edge; Cloudflare only
 provides DNS; transfer abroad goes mainly to Singapore and in part to Google.
-**Owner approval:** the exact text.
+When the Cloudflare zone is removed, the Cloudflare DNS sentence goes (**Owner
+approval:** the exact text).
 
 ## Cost
 
@@ -384,7 +378,8 @@ Before cutover with pinned hostnames and again after; evidence under
    OpenTofu (the locked AWS provider 6.64.0 has `origin_mtls_config`).
 6. Changing the instance's security groups applies in place.
 7. The exported leaf and chain fit the 4 KB parameter limit.
-8. Cloudflare's flattened apex sends Vietnamese viewers to a nearby edge.
+8. From Vietnam, the apex through `1.1.1.1` and `8.8.8.8` reaches `HAN` or `SGN`
+   after the name server change.
 9. Imported ACM certificates carry no charge.
 
 [acm-dns]: https://docs.aws.amazon.com/acm/latest/userguide/dns-validation.html
@@ -428,8 +423,6 @@ Before cutover with pinned hostnames and again after; evidence under
 [cfl-ddos]: https://developers.cloudflare.com/ddos-protection/
 [cfl-flatten]:
   https://developers.cloudflare.com/dns/cname-flattening/set-up-cname-flattening/
-[cfl-flatten-ttl]:
-  https://developers.cloudflare.com/dns/cname-flattening/cname-flattening-diagram/
 [cfl-strict]:
   https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/
 [cfl-ttl]:
