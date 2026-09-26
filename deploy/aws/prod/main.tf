@@ -89,11 +89,24 @@ module "edge" {
     aws           = aws
     aws.us_east_1 = aws.us_east_1
   }
-  name                       = local.name
-  alerts_topic_arn           = module.ops.alerts_topic_arn
-  origin_domain_name         = module.host.public_dns
-  alerts_topic_arn_us_east_1 = module.ops.alerts_topic_arn_us_east_1
-  waf_block                  = var.waf_block
+  name                            = local.name
+  alerts_topic_arn                = module.ops.alerts_topic_arn
+  origin_domain_name              = module.host.public_dns
+  alerts_topic_arn_us_east_1      = module.ops.alerts_topic_arn_us_east_1
+  waf_block                       = var.waf_block
+  transparency_enabled            = var.observer_image_digest != ""
+  transparency_bucket_domain_name = module.observer.bucket_regional_domain_name
+}
+
+module "observer" {
+  source               = "../modules/observer"
+  name                 = local.name
+  account_id           = var.account_id
+  bucket_name          = coalesce(var.transparency_bucket_name, "${local.name}-transparency-${var.account_id}")
+  distribution_arn     = module.edge.distribution_arn
+  alerts_topic_arn     = module.ops.alerts_topic_arn
+  image_digest         = var.observer_image_digest
+  reserved_concurrency = var.observer_reserved_concurrency
 }
 
 module "dns" {

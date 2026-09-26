@@ -32,7 +32,7 @@ flowchart TD
   U[Browser or MCP client] -->|HTTPS aboutme.vn, www| DNS[Route 53 alias records]
   U -->|TLS 1.2+, ACM viewer certificate| CF
   subgraph CF[CloudFront distribution, pay as you go]
-    E[WAF web ACL, Shield Standard<br/>cache only /_nuxt/*<br/>adds CloudFront-Viewer-Address]
+    E[WAF web ACL, Shield Standard<br/>cache /_nuxt/* and deployment.json<br/>adds CloudFront-Viewer-Address]
   end
   CF -->|HTTPS to EIP public DNS name :8443<br/>public certificate, origin mTLS| SG
   subgraph AWS[AWS ap-southeast-1]
@@ -139,18 +139,21 @@ the host. The viewer certificate stays separate so its key never leaves ACM.
 ## Cache and forwarding
 
 ADR 0022 stands: edge storage is never publication authority. CloudFront caches
-only hashed assets and passes everything else through uncached, which is
+only hashed assets and the deployment document, and passes the rest uncached,
 stricter than the 60-second revalidated maximum ADR 0022 allows.
 
-| Behavior      | Cache policy                                                   | Origin request policy                                                                    | Methods   |
-| ------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------- |
-| `/_nuxt/*`    | Custom: TTL 0 / 0 / 1 year, key = `Host` and all query strings | None                                                                                     | GET, HEAD |
-| Default (`*`) | Managed `CachingDisabled` ([cache policies][cf-cache])         | Custom: all viewer headers, cookies, and query strings, plus `CloudFront-Viewer-Address` | All seven |
+| Behavior                       | Cache policy                                                   | Origin request policy                                                                    | Methods   |
+| ------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------- |
+| `/_nuxt/*`                     | Custom: TTL 0 / 0 / 1 year, key = `Host` and all query strings | None                                                                                     | GET, HEAD |
+| `/.well-known/deployment.json` | Custom: TTL 0 / 30 / 30, nothing in the key                    | None; the transparency bucket through origin access control                              | GET, HEAD |
+| Default (`*`)                  | Managed `CachingDisabled` ([cache policies][cf-cache])         | Custom: all viewer headers, cookies, and query strings, plus `CloudFront-Viewer-Address` | All seven |
 
 - The `/_nuxt/*` key includes query strings because the renderer stylesheets are
   fixed names versioned by `?v=`, which the managed `CachingOptimized` policy
   would drop. The origin's `Cache-Control` decides what stays; `Host` in the key
   keeps a `www` redirect from being served for the apex.
+- The deployment document comes from the private transparency bucket, with the
+  headers policy in its [design](deployment-transparency/README.md).
 - The default origin request policy uses header behavior
   `allViewerAndWhitelistCloudFront` ([API][cf-orp-api]), so `Authorization`
   reaches the origin on every method, as MCP and bearer calls need; CloudFront
@@ -294,7 +297,7 @@ Cloudflare's pages give no price, so that figure is unverified.
 | Network DDoS         | Cloudflare                             | Shield Standard                                 |
 | Application DDoS     | Free L7 mitigation, managed ruleset    | WAF rate rule, two managed groups (approval)    |
 | HSTS, `nosniff`      | Cloudflare settings                    | Caddy                                           |
-| Edge cache           | `/_nuxt/*` only                        | `/_nuxt/*` only                                 |
+| Edge cache           | `/_nuxt/*` only                        | `/_nuxt/*` and the deployment document          |
 | Decrypts traffic     | Cloudflare                             | AWS, already the hosting processor              |
 
 Without the WAF, application-layer protection is weaker than Cloudflare's.

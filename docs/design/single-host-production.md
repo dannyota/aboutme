@@ -316,13 +316,17 @@ All alarms notify one SNS topic that emails the owner.
 | Jobs     | ECS task stopped with nonzero exit; Scheduler invocation failures              |
 | TOTP     | Log metric filter on `totp_unavailable`, alarm `aboutme-prod-totp-unavailable` |
 | Mail     | SES bounce and complaint alarms from the existing email stack                  |
+| Observer | Observer errors (five in ten minutes) and missing runs (none in ten minutes)   |
 | Spend    | Budget filtered to `Project=aboutme`, managed outside this repository          |
 
 Expected monthly cost is about $45–55: EC2 $15.48, RDS $18.25 plus $2.76
 storage, root disk $1.92, Elastic IP $3.65, the state KMS key $1, and a few
 dollars for logs, the HTTPS health check, Secrets Manager, S3 and SES, using
 [recorded prices](../research/aws-cost/pricing.csv). The CloudFront edge adds
-about $11 ([edge cost](cloudfront-edge.md#cost)).
+about $11 ([edge cost](cloudfront-edge.md#cost)). The deployment observer, a
+Lambda function off the host that publishes `/.well-known/deployment.json` every
+minute, adds under $0.50
+([deployment transparency](deployment-transparency/README.md)).
 
 ## Infrastructure code
 

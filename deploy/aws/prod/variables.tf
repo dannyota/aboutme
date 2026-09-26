@@ -127,3 +127,21 @@ variable "google_workspace" {
   })
   description = "Google Workspace domain verification CNAME and google._domainkey TXT value"
 }
+
+variable "transparency_bucket_name" {
+  type        = string
+  default     = ""
+  description = "Private bucket for the deployment document; \"\" names it aboutme-prod-transparency-<account id>"
+}
+
+variable "observer_image_digest" {
+  type        = string
+  default     = ""
+  description = "Digest observer.sh copied into the observer ECR repository; \"\" until the first copy"
+}
+
+variable "observer_reserved_concurrency" {
+  type        = number
+  default     = null
+  description = "Reserved concurrency for the observer function; null until the account's Lambda concurrency quota allows it"
+}
