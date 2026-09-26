@@ -288,6 +288,6 @@
       }
     },
     "pageFormat": "a4",
-    "dateFormat": "Mon YYYY"
+    "dateFormat": "MM/YYYY"
   }
 }

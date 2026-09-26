@@ -70,13 +70,36 @@ describe("sample files", () => {
     documents
       .filter(({ filler }) => !filler)
       .map(({ name, document }) => [name, document] as const),
-  )("%s keeps its template's customization", (name, document) => {
-    const template = TEMPLATES.find(({ id }) => name.startsWith(`${id}.`))!;
-    const { layout, ...rest } = document.customization;
-    const { layout: presetLayout, ...presetRest } = template.customization;
-    expect(rest).toEqual(presetRest);
-    expect(layout.columns).toBe(presetLayout.columns);
-    expect(layout.surfaceTarget).toBe(presetLayout.surfaceTarget);
+  )(
+    "%s keeps its template's customization, apart from date format",
+    (name, document) => {
+      const template = TEMPLATES.find(({ id }) => name.startsWith(`${id}.`))!;
+      const { layout, dateFormat: _dateFormat, ...rest }
+        = document.customization;
+      const {
+        layout: presetLayout,
+        dateFormat: _presetDateFormat,
+        ...presetRest
+      } = template.customization;
+      expect(rest).toEqual(presetRest);
+      expect(layout.columns).toBe(presetLayout.columns);
+      expect(layout.surfaceTarget).toBe(presetLayout.surfaceTarget);
+    },
+  );
+
+  // Vietnamese and English resumes read dates differently (docs/design/
+  // vietnam-tech-resumes.md, Dates), so a sample may override its template's
+  // date format for this reason alone; the test above already keeps every
+  // other setting exact.
+  it.each(
+    documents
+      .filter(({ filler }) => !filler)
+      .map(({ name, document }) => [name, document] as const),
+  )("%s sets a date format that matches its language", (name, document) => {
+    const lng = name.endsWith(".vi.json") ? "vi" : "en";
+    expect(document.customization.dateFormat).toBe(
+      lng === "vi" ? "MM/YYYY" : "Mon YYYY",
+    );
   });
 
   it.each(documents.map(({ name, document }) => [name, document] as const))(

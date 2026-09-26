@@ -170,16 +170,23 @@ if (isCorpus) {
   }
 
   const resolvedDocument = resumeDocument ?? badQuery();
-  // The fixture owner already prints on the preset's paper; a template switch
-  // keeps the owner's page format.
-  resolvedDocument.customization = applyTemplate(
-    {
-      ...resolvedDocument.customization,
-      pageFormat: template.customization.pageFormat,
-    },
-    template,
-    resolvedDocument.content,
-  );
+  // A gallery sample already wears its own template, settings and all
+  // (documents.ts `galleryDocument`); applying the template again here would
+  // reset the one setting a sample may override, its date format
+  // (docs/design/vietnam-tech-resumes.md, Dates). Filler and the full/vn-full
+  // fixtures have no settings of their own, so they still take the preset.
+  if (!fixture.startsWith('sample-')) {
+    // The fixture owner already prints on the preset's paper; a template
+    // switch keeps the owner's page format.
+    resolvedDocument.customization = applyTemplate(
+      {
+        ...resolvedDocument.customization,
+        pageFormat: template.customization.pageFormat,
+      },
+      template,
+      resolvedDocument.content,
+    );
+  }
   // Every preset prints on A4 (colors.md §4), so a screenshot cell that
   // needs Letter coverage asks for it explicitly, after the template applies.
   const requestedPaper = singleton('paper');

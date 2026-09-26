@@ -37,14 +37,23 @@ const template = (id: string) => TEMPLATES.find((preset) => preset.id === id)!;
 
 describe('gallery samples', () => {
   it.each(SAMPLES.map(({ templateId, lng }) => [templateId, lng] as const))(
-    '%s (%s) is its template applied to its content',
+    '%s (%s) is its template applied to its content, apart from date format',
     async (templateId, lng) => {
       const sample = (await loadSample(templateId, lng))!;
-      expect(applyTemplate(
+      const preset = template(templateId);
+      const applied = applyTemplate(
         sample.customization,
-        template(templateId),
+        preset,
         sample.content,
-      )).toEqual(sample.customization);
+      );
+      const { dateFormat: appliedDateFormat, ...appliedRest } = applied;
+      const { dateFormat: _sampleDateFormat, ...sampleRest }
+        = sample.customization;
+      expect(appliedRest).toEqual(sampleRest);
+      // A template switch always sets its own date format (formatDate.ts,
+      // applyTemplate.ts); a sample keeps its language's format only until
+      // its reader picks a different template.
+      expect(appliedDateFormat).toBe(preset.customization.dateFormat);
     },
   );
 
