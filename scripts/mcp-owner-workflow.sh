@@ -477,10 +477,10 @@ stop_process() {
   kill -KILL "$pid" 2>/dev/null || true
 }
 
-# run_joined starts the host runner and the browser container together and
-# waits for both. A failure of either stops the other; both are reaped. When
-# the runner succeeds without a browser handoff (a production sentinel stop or
-# revocation-only recovery), the idle helper is stopped as expected.
+# run_joined starts the host runner and the browser container together and waits for both. A
+# failure of either stops the other, but a helper that already wrote its result may exit by itself
+# within the stop grace, so its final stage names the failed step. Both are reaped. When the runner
+# succeeds without a handoff (sentinel stop or revocation-only recovery), the idle helper is stopped.
 run_joined() {
   local supplied=0 deadline=$((SECONDS + RUN_LIMIT_SECONDS)) runner_done_at=
   RUNNER_STATUS= BROWSER_STATUS= BROWSER_STOPPED=0 BROWSER_SIGNALLED=0 OUTCOME=
@@ -502,10 +502,10 @@ run_joined() {
     if [ -z "$RUNNER_STATUS" ] && ! kill -0 "$RUNNER_PID" 2>/dev/null; then
       if wait "$RUNNER_PID"; then RUNNER_STATUS=0; else RUNNER_STATUS=$?; fi
       RUNNER_PID= runner_done_at=$SECONDS
-      if [ "$RUNNER_STATUS" -ne 0 ]; then
+      if [ "$RUNNER_STATUS" -ne 0 ] && [ ! -e "$RUN/browser/browser-result.json" ]; then
         [ -z "$BROWSER_PID" ] || BROWSER_SIGNALLED=1
         stop_process "$BROWSER_PID"
-      else
+      elif [ "$RUNNER_STATUS" -eq 0 ]; then
         # A sentinel stop or revocation recovery needs no browser handoff.
         OUTCOME=$(check_evidence) || OUTCOME=rejected
         if [ -n "$BROWSER_PID" ] && [ "$OUTCOME" != completed ] && [ "$OUTCOME" != rejected ]; then

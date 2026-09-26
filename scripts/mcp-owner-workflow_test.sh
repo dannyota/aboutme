@@ -328,6 +328,20 @@ result-login-failed)
   publish browser-result.json login_failed
   exit 1
   ;;
+result-login-failed-late)
+  publish browser-ready ready
+  i=0
+  while [ ! -e "$browser/browser-request.json" ]; do
+    i=$((i + 1))
+    [ "$i" -lt 400 ] || exit 1
+    sleep 0.05
+  done
+  rm -f -- "$browser/browser-request.json"
+  publish browser-result.json login_failed
+  sleep 1
+  echo 'dev-https-browser: mcp-sdk-stage:handoff-failed-login-failed-at-session-consent-none-on-login'
+  exit 1
+  ;;
 fail)
   echo 'dev-https-browser: mcp-sdk-stage:login'
   echo 'dev-https-browser: https://localhost:20443/login?next=leak-marker'
@@ -859,6 +873,13 @@ check 'a failed login fails the workflow' [ "$STATUS" -eq 1 ]
 check 'the browser result code is reported' has 'mcp-owner-workflow: browser result login_failed' "$CTL/out"
 check 'a failed login reports the helper exit' has 'mcp-owner-workflow: browser helper failed with exit 1' "$CTL/out"
 check 'a failed login output is fixed' fixed_output
+
+CONTAINER_BEHAVIOR=result-login-failed-late run_workflow local
+check 'a helper with a result is not stopped when the runner fails first' \
+  has 'mcp-owner-workflow: browser helper failed with exit 1' "$CTL/out"
+check 'the helper names the failed step after the runner fails' \
+  has 'mcp-owner-workflow: browser mcp-sdk-stage:handoff-failed-login-failed-at-session-consent-none-on-login' "$CTL/out"
+check 'a late helper stage keeps the output fixed' fixed_output
 
 RUNNER_BEHAVIOR=hang CONTAINER_BEHAVIOR=fail run_workflow local
 check 'browser failure fails the workflow' [ "$STATUS" -eq 1 ]
