@@ -160,7 +160,8 @@ bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
 
 The script verifies the caller, assumes the operator then deploy role, reads the
 release fence, and rejects a target below its minimum before any AWS mutation.
-It then checks the tag and CI, resolves image digests, refuses when the origin
+It then checks the tag and CI, resolves image digests, verifies each digest's
+tag-bound build provenance (`gh attestation verify`), refuses when the origin
 certificate expires within 21 days, runs a distribution preflight (origin
 domain, port 8443, HTTPS only, the origin mTLS client certificate), checks that
 every secret the new revisions reference exists (by name, never reading a

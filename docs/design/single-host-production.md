@@ -218,14 +218,19 @@ variables choose which parameters the app receives as `TOTP_ACTIVE_KEY` and
 
 A version tag triggers a public workflow on `ubuntu-24.04-arm`. It builds the
 server, web and Caddy images for `linux/arm64`, runs smoke checks, pushes to
-`ghcr.io/dannyota/aboutme-{server,web,caddy}`, attests build provenance and
-prints the digests. The Caddy image carries the Caddyfile and generated route
-table; its entrypoint writes the origin key to a tmpfs file before Caddy starts.
+`ghcr.io/dannyota/aboutme-{server,web,caddy}`, attests build provenance and an
+SPDX SBOM for each digest, and prints the digests. A final job with only
+`contents: write` publishes a GitHub Release for the tag holding the SBOMs and a
+`digests.txt` ([build evidence](deployment-transparency/verification.md#sbom)).
+The Caddy image carries the Caddyfile and generated route table; its entrypoint
+writes the origin key to a tmpfs file before Caddy starts.
 
 `deploy/aws/scripts/deploy.sh <tag>` runs from the laptop:
 
-1. Resolve the tag to digests. Require the tag on `main` with green CI. Refuse
-   to continue if the app or maintenance task definition still maps port 443
+1. Resolve the tag to digests. Require the tag on `main` with green CI, and each
+   digest's build provenance signed by `release-images.yml` for that tag and
+   commit on a GitHub-hosted runner (`gh attestation verify`). Refuse to
+   continue if the app or maintenance task definition still maps port 443
    or 8443. Check the CloudFront distribution's origin and require at least 21
    days on the origin certificate.
 2. Take an RDS snapshot named for the tag, tagged
