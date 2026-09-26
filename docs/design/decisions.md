@@ -66,9 +66,9 @@ are proposed.
 | [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
 | [0058](../adr/0058-linkedin-sign-in-in-production.md)                     | Accepted | Production may enable LinkedIn sign-in; LinkedIn uses its documented flow with a nonce and no PKCE                     |
 | [0059](../adr/0059-linkedin-import-in-the-browser.md)                     | Proposed | LinkedIn import reads the member's data download in the browser; the file is never uploaded                            |
-| [0060](../adr/0060-viewer-data-controller-and-consent.md)                 | Proposed | aboutme controls viewer data; three fixed modes; detail only after consent                                             |
-| [0061](../adr/0061-layered-human-view-counting.md)                        | Proposed | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |
-| [0062](../adr/0062-sign-in-to-view-without-an-account.md)                 | Proposed | Sign in to view with per-resume viewer identities and passes, no account                                               |
+| [0060](../adr/0060-viewer-data-controller-and-consent.md)                 | Accepted | aboutme controls viewer counting and keeps no viewer data; consented tracking dropped                                  |
+| [0061](../adr/0061-layered-human-view-counting.md)                        | Accepted | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |
+| [0062](../adr/0062-sign-in-to-view-without-an-account.md)                 | Accepted | Sign in to view with a signed pass cookie, no account, nothing kept about the viewer                                   |
 
 ## Remaining gates
 

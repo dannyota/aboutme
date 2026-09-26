@@ -178,12 +178,16 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create realtime service: %w", err)
 	}
+	views, err := newViewCounts(cfg, logger, queries, sessionManager)
+	if err != nil {
+		return err
+	}
 	publicService, err := publicapi.NewService(publicapi.ServiceDependencies{
 		Reader: reader, DiscoveryStore: queries, Coordinator: coordinator, Cache: cache, Renderer: renderer,
 		PublicOrigin: runtime.PublicOrigin, AppDigest: runtime.AppDigest, RendererDigest: runtime.RendererDigest,
 		Live: streams.PublicHandler(), PrintQueue: printQueue,
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now, Logger: logger,
-		Cards: cards.public,
+		Cards: cards.public, Views: views.counter,
 	})
 	if err != nil {
 		return fmt.Errorf("create public service: %w", err)
@@ -231,7 +235,7 @@ func run() error {
 		// directly: api.TrustedProxies is a named []netip.Prefix, the same
 		// underlying type config.Config.TrustedProxyCIDRs already is.
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, secondFactor.RegisterRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes)
+	}, publicService, authService.RegisterRoutes, accountService.RegisterRoutes, resumeService.RegisterRoutes, passwordAuth.service.RegisterRoutes, agentRoutes, secondFactor.RegisterRoutes, capabilitiesRegistrar(cfg), streams.RegisterRoutes, views.service.RegisterRoutes)
 
 	var lc net.ListenConfig
 	addr := net.JoinHostPort(cfg.ListenHost, strconv.Itoa(cfg.Port))
@@ -282,6 +286,11 @@ func run() error {
 		logger.Error("totp key health check failed at startup", "err", "query failed")
 	}
 	cardsDone := cards.run(workerCtx, logger)
+	// The view flusher outlives the signal so counts from requests that
+	// finish while the server drains still reach the database.
+	viewsCtx, stopViews := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopViews()
+	viewsDone := views.run(viewsCtx)
 	totpHealthDone := make(chan struct{})
 	go func() {
 		defer close(totpHealthDone)
@@ -291,10 +300,12 @@ func run() error {
 	logger.Info("starting", "env", cfg.Env)
 	err = servePair(ctx, logger, ln, handler, printListener, printHandler, closePrintQueue)
 	cancelWorker()
+	stopViews()
 	<-workerDone
 	<-listenerDone
 	<-totpHealthDone
 	<-cardsDone
+	<-viewsDone
 	return err
 }
 

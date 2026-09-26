@@ -64,6 +64,13 @@ func (tp TrustedProxies) trusts(remoteAddr string) bool {
 	return false
 }
 
+// TrustsPeer reports whether r's socket peer is a trusted proxy, the same
+// decision ClientIP makes. Callers that honor another proxy-set header use
+// it instead of re-deriving the trust boundary.
+func (tp TrustedProxies) TrustsPeer(r *http.Request) bool {
+	return tp.trusts(r.RemoteAddr)
+}
+
 // maxAddrLen bounds how much of a claimed address string peerAddr will
 // even attempt to parse: the longest valid textual IP address (IPv6 with
 // an embedded IPv4 tail, e.g.

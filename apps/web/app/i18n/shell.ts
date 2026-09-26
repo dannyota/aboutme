@@ -9,6 +9,7 @@ export type ShellCopy = {
   readonly openSource: string;
   readonly templates: string;
   readonly resumes: string;
+  readonly views: string;
   readonly settings: string;
   readonly localeLabel: string;
   readonly accountMenu: string;
@@ -30,6 +31,7 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     openSource: 'Mã nguồn mở',
     templates: 'Thư viện',
     resumes: 'CV',
+    views: 'Lượt xem',
     settings: 'Cài đặt',
     localeLabel: 'Ngôn ngữ',
     accountMenu: 'Tài khoản',
@@ -49,6 +51,7 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     openSource: 'Open source',
     templates: 'Library',
     resumes: 'Resumes',
+    views: 'Views',
     settings: 'Settings',
     localeLabel: 'Language',
     accountMenu: 'Account menu',

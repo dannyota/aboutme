@@ -50,6 +50,7 @@ const copy = computed(() => shellCopy[shellLocale.value]);
 const onTemplatesPath = computed(() =>
   route.path === '/templates' || route.path.startsWith('/templates/'));
 const onResumesPath = computed(() => route.path.startsWith('/app/resumes'));
+const onViewsPath = computed(() => route.path.startsWith('/app/views'));
 const onSettingsPath = computed(
   () => route.path.startsWith('/app/settings/sessions'),
 );
@@ -78,9 +79,10 @@ const linkClass = cn(
 // links the gallery. Signed out, it is the header's only gallery link.
 const templatesLinkClass = computed(() =>
   cn(linkClass, signedIn.value && 'max-sm:hidden'));
-// Settings is also one tap away from the account menu, so it is the other
-// link to drop on phones when signed in.
+// Settings and Views are also one tap away from the account menu, so they
+// are the other links to drop on phones when signed in.
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
+const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
 </script>
 
 <template>
@@ -110,8 +112,13 @@ const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
           :class="linkClass"
           to="/app/resumes"
         >{{ copy.resumes }}</NuxtLink>
-        <!-- The account menu also opens Settings, so it stays reachable on
-             phones with this link hidden. -->
+        <!-- The account menu also opens Views and Settings, so they stay
+             reachable on phones with these links hidden. -->
+        <NuxtLink
+          :aria-current="onViewsPath ? 'page' : undefined"
+          :class="viewsLinkClass"
+          to="/app/views"
+        >{{ copy.views }}</NuxtLink>
         <NuxtLink
           :aria-current="onSettingsPath ? 'page' : undefined"
           :class="settingsLinkClass"

@@ -197,6 +197,7 @@ describe('AppShell', () => {
     await flushPromises();
     const found = links(wrapper);
     expect(found['Resumes']).toBe('/app/resumes');
+    expect(found['Views']).toBe('/app/views');
     expect(found['Settings']).toBe('/app/settings/sessions');
     expect(found['Library']).toBe('/templates');
     expect(found['Sign in']).toBeUndefined();
@@ -208,20 +209,28 @@ describe('AppShell', () => {
     me.data.user.name = originalName;
     wrapper.unmount();
   });
-  it('hides Settings but keeps Resumes on phones when signed in', async () => {
-    meStatus = 200;
-    const wrapper = await mountShell();
-    await flushPromises();
-    const resumes = wrapper.findAll('a')
-      .find((a) => a.attributes('href') === '/app/resumes');
-    const settings = wrapper.findAll('a')
-      .find((a) => a.attributes('href') === '/app/settings/sessions');
-    expect(resumes?.classes()).not.toContain('max-sm:hidden');
-    expect(settings?.classes()).toContain('max-sm:hidden');
-    // The account menu (tested below) keeps Settings one tap away on phones.
-    expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(true);
-    wrapper.unmount();
-  });
+  it(
+    'hides Views and Settings but keeps Resumes on phones when signed in',
+    async () => {
+      meStatus = 200;
+      const wrapper = await mountShell();
+      await flushPromises();
+      const resumes = wrapper.findAll('a')
+        .find((a) => a.attributes('href') === '/app/resumes');
+      const views = wrapper.findAll('a')
+        .find((a) => a.attributes('href') === '/app/views');
+      const settings = wrapper.findAll('a')
+        .find((a) => a.attributes('href') === '/app/settings/sessions');
+      expect(resumes?.classes()).not.toContain('max-sm:hidden');
+      expect(views?.classes()).toContain('max-sm:hidden');
+      expect(settings?.classes()).toContain('max-sm:hidden');
+      // The account menu (tested below) keeps both one tap away on phones.
+      expect(wrapper.find('[data-testid="account-menu"]').exists()).toBe(
+        true,
+      );
+      wrapper.unmount();
+    },
+  );
 
   it(
     'hides the Library link on phones when signed in, keeps it when signed out',
@@ -514,6 +523,8 @@ describe('AppShell', () => {
     await wrapper.get('[data-testid="account-menu"]').trigger('click');
     await flushPromises();
     expect(wrapper.get('[aria-label="Tài khoản"]').exists()).toBe(true);
+    expect(document.body.querySelector('[data-testid="account-menu-views"]')
+      ?.textContent).toContain('Lượt xem');
     expect(document.body.querySelector('[data-testid="account-menu-settings"]')
       ?.textContent).toContain('Cài đặt');
     expect(document.body.querySelector('[data-testid="account-menu-logout"]')

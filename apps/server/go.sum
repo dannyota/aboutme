@@ -1,3 +1,5 @@
+github.com/altcha-org/altcha-lib-go/v2 v2.0.0-20260923082747-352eeeca913a h1:5BTO9WaGkkjWDjABLo4nCAXZIcQAcyZHg+flinUe0aA=
+github.com/altcha-org/altcha-lib-go/v2 v2.0.0-20260923082747-352eeeca913a/go.mod h1:SpmAda2tBJcOIZJ4P8zjHyKq5MrE3kQic0h9UT+m4IY=
 github.com/aws/aws-sdk-go-v2 v1.47.0 h1:0jsHallhJCeaU0Ko48c/3FK1ctOQ7NpzggxriJOQ8MQ=
 github.com/aws/aws-sdk-go-v2 v1.47.0/go.mod h1:bttEH6JqnUL8LepvDVfdrds/fZ5bCIxzpe3abyUrhDU=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 h1:GPRlPwz40I2B2VrBEASOA3Bi77NyeqejNLkifosX0rs=

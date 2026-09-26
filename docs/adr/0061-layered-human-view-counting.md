@@ -1,7 +1,7 @@
 # 0061: Layered human-view counting without fingerprinting
 
-Status: Proposed (2026-09-26). The owner approved the seven layers; the cost and
-the count label wait for approval in the
+Status: Accepted (2026-09-26). The owner approved the seven layers, the label
+"real views", and the WAF cost in the
 [viewer analytics design](../design/viewer-analytics/README.md#owner-approval).
 
 ## Context
@@ -26,14 +26,16 @@ A view counts when it passes every layer
 3. Hosting and data-center networks are counted separately.
 4. The page's script collects only after 8 s of visible time and one trusted
    interaction.
-5. The script gets a one-time HMAC token from a start call at page load; collect
-   accepts it 8 s to 30 min later, once. The token is not embedded in the HTML,
-   so the HTML stays shared and cacheable.
+5. The script gets a one-time token from a start call at page load, sealed with
+   AES-256-GCM under a per-process key so it is both authenticated and opaque;
+   collect accepts it 8 s to 30 min later, once. The token is not embedded in
+   the HTML, so the HTML stays shared and cacheable.
 6. An ALTCHA v2 proof of work, self-hosted with the MIT Go and JavaScript
-   libraries, solved on the main thread.
+   libraries, solved on the main thread and bound to its token.
 7. One count per network per resume per day, through an HMAC key that lives only
    in memory for that day; the owner's views are dropped; an hourly cap per
-   resume turns bursts into anomalies.
+   resume turns bursts into anomalies. Every filtered outcome is also recorded
+   at most once per network per resume per day.
 
 Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 
@@ -45,6 +47,7 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 | Bot Control Targeted, or CAPTCHA and Challenge | Targeted uses browser interrogation and fingerprints; challenges interrupt readers |
 | A third-party analytics or CAPTCHA service     | Sends viewer data to another processor abroad                                      |
 | Token embedded in the HTML                     | Breaks the shared HTML, the public cache, and `ETag` revalidation                  |
+| An HMAC token with a new random resume column  | Needs a column that every resume export would carry; sealing hides the ID instead  |
 | Stored hashed IP addresses for dedupe          | An IPv4 hash is reversible by brute force; a stored key makes it personal data     |
 
 ## Consequences

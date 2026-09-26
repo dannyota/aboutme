@@ -41,6 +41,9 @@ type ServiceDependencies struct {
 	// Cards turns on stored preview cards (ADR 0055). Nil keeps the og.png
 	// share image, so the server can deploy before the web card renderer.
 	Cards PreviewCards
+	// Views records crawler and link-preview fetches of resume pages. Nil
+	// records nothing.
+	Views ViewObserver
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
@@ -65,7 +68,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
 	}
-	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger, Cards: dependencies.Cards})
+	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger, Cards: dependencies.Cards, Views: dependencies.Views})
 	if err != nil {
 		return nil, err
 	}

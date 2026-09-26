@@ -13,6 +13,7 @@ import {
   type RevisionDecision,
 } from '../realtime/controller';
 import validatePublicResume from '#public-render-validator';
+import { startViewBeacon } from './viewBeacon';
 
 type PublicResume = components['schemas']['PublicResume'];
 
@@ -388,6 +389,9 @@ function boot(): void {
   ) {
     return;
   }
+  // Counts a human view of this resume (counting.md); never on any other
+  // path, including a missing or invalid slug.
+  startViewBeacon({ slug: slug[0]! });
   void hydratePublicResume(root, slug[0]!, rawRevision).then(() => {
     const realtime = createPublicResumeRealtime({
       root,

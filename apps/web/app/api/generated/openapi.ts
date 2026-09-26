@@ -853,6 +853,46 @@ export interface paths {
         patch: operations["updateResumePhotoCrop"];
         trace?: never;
     };
+    "/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List view counts for the owner's resumes
+         * @description Returns, for every owned resume that is live or has any stored count, the real and filtered views over the last 7, 30, and 90 days. Days are Asia/Ho_Chi_Minh dates and include today. Counts hold no personal data (docs/design/viewer-analytics/counting.md). The route reads the session cookie only; bearer tokens and agents never reach it.
+         */
+        get: operations["listResumeViewCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/views/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one resume's daily view counts
+         * @description Returns 90 daily rows (oldest first, ending today), 12 monthly totals (oldest first, ending this month), and link-preview fetches by platform over the last 90 days. `real` is the counted views; the other day fields are the filtered outcomes. A resume owned by another account answers exactly like a missing one.
+         */
+        get: operations["getResumeViewCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/resumes/{slug}": {
         parameters: {
             query?: never;
@@ -970,6 +1010,46 @@ export interface paths {
          * @description Performs the same admission, build, and conditional comparison as GET. Sends the selected status and headers, including Content-Length for a 200 response, without body bytes.
          */
         head: operations["headPublicResumePreviewCard"];
+        patch?: never;
+        trace?: never;
+    };
+    "/public/resumes/{slug}/views/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start counting a view of a published resume
+         * @description Called once by the public page's script at load. Returns a one-time sealed view token and an ALTCHA v2 proof-of-work challenge bound to it (docs/adr/0061-layered-human-view-counting.md). The request needs an `Origin` equal to the site origin and a JSON body; it carries no CSRF token because it holds no session authority. A `__Host-session` cookie is read only to recognize the resume's owner: then `owner` is true, no token is issued, and the owner's network is excluded from the day's count. Limited to 30 requests a minute per client IP.
+         */
+        post: operations["startPublicResumeView"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/views/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a view that passed the page's visible-time check
+         * @description Sent by the page's script after 8 seconds of visible time and one trusted interaction, with the start token, its challenge, and the solution. The server checks the token age (8 seconds to 30 minutes), single use, the proof of work, the edge bot and hosting-network labels, the day's per-network dedupe, the owner, and the hourly cap, then answers `204` whatever the outcome, so a client cannot learn which check rejected it. Only a malformed body is a `400`. Same `Origin`, JSON, and rate rules as start.
+         */
+        post: operations["collectPublicResumeView"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1432,6 +1512,106 @@ export interface components {
         OAuthAgentGrantsResponse: {
             data: {
                 grants: components["schemas"]["OAuthAgentGrant"][];
+            };
+        };
+        /** @description An empty object; start takes no input beyond the path. */
+        ViewStartRequest: Record<string, never>;
+        /** @description An ALTCHA v2 challenge, signed by the server. The client returns it unchanged with its solution. `data.view` binds it to one view token. */
+        ViewChallenge: {
+            parameters: {
+                /** @constant */
+                algorithm: "PBKDF2/SHA-256";
+                nonce: string;
+                salt: string;
+                cost: number;
+                keyLength: number;
+                keyPrefix: string;
+                keySignature: string;
+                data: {
+                    view: string;
+                };
+            };
+            signature: string;
+        };
+        ViewStartResponse: {
+            data: {
+                /** @description True only when the request carries the resume owner's own session. Then `token` and `challenge` are absent. */
+                owner: boolean;
+                /** @description Opaque one-time view token. */
+                token?: string;
+                challenge?: components["schemas"]["ViewChallenge"];
+            };
+        };
+        ViewCollectRequest: {
+            token: string;
+            challenge: components["schemas"]["ViewChallenge"];
+            solution: {
+                counter: number;
+                derivedKey: string;
+            };
+        };
+        ViewTotals: {
+            /** @description Views that passed every layer. */
+            real: number;
+            /** @description Bots, hosting networks, anomalies, failed checks, and crawlers. */
+            filtered: number;
+        };
+        ViewSummary: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            slug: string | null;
+            live: boolean;
+            last7: components["schemas"]["ViewTotals"];
+            last30: components["schemas"]["ViewTotals"];
+            last90: components["schemas"]["ViewTotals"];
+        };
+        ViewSummaryResponse: {
+            data: {
+                /**
+                 * Format: date
+                 * @description Today's Asia/Ho_Chi_Minh date.
+                 */
+                today: string;
+                resumes: components["schemas"]["ViewSummary"][];
+            };
+        };
+        ViewDay: {
+            /** Format: date */
+            date: string;
+            real: number;
+            bot: number;
+            datacenter: number;
+            anomaly: number;
+            invalid: number;
+            crawler: number;
+        };
+        ViewMonth: {
+            month: string;
+            real: number;
+            filtered: number;
+        };
+        /**
+         * @description The app whose link-preview fetcher requested the page.
+         * @enum {string}
+         */
+        ViewPreviewPlatform: "facebook" | "linkedin" | "x" | "telegram" | "whatsapp" | "slack" | "discord" | "skype" | "viber" | "zalo";
+        ViewPreviews: {
+            platform: components["schemas"]["ViewPreviewPlatform"];
+            fetches: number;
+        };
+        ResumeViewCountsResponse: {
+            data: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+                slug: string | null;
+                live: boolean;
+                /** Format: date */
+                today: string;
+                days: components["schemas"]["ViewDay"][];
+                months: components["schemas"]["ViewMonth"][];
+                previews: components["schemas"]["ViewPreviews"][];
             };
         };
         /** @description Failure response wrapper. */
@@ -3366,6 +3546,178 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /** @description `request_invalid`: the body is not the documented JSON object. */
+        ViewBadRequest: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "request is invalid"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `origin_rejected`: the `Origin` header is missing, repeated, or not the site origin. */
+        ViewOriginRejected: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "origin_rejected",
+                 *         "message": "request origin is not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `public_not_found`: the uniform answer for a missing, private, renamed, or deleted resume. A percent-encoded spelling of the path answers `not_found` instead, before any lookup. */
+        ViewResumeNotFound: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "public_not_found",
+                 *         "message": "public resume not found"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `not_found`: the path was percent-encoded. Only the plain spelling is served, so the edge's path match and the server's agree. */
+        ViewRouteNotFound: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "not_found",
+                 *         "message": "no route for this path"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `internal_error`: the optional session check failed. The body carries no internal detail. */
+        ViewInternalError: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "internal_error",
+                 *         "message": "an internal error occurred"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `body_too_large`: the body is over 4 KiB. */
+        ViewBodyTooLarge: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "body_too_large",
+                 *         "message": "request body exceeds the 4096 byte limit"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `media_type_unsupported`: `Content-Type` is not exactly one `application/json` value. */
+        ViewMediaTypeUnsupported: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "media_type_unsupported",
+                 *         "message": "Content-Type must be application/json"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `rate_limited`: the 30-per-minute client IP budget is spent. */
+        ViewRateLimited: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 2
+                 */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `temporarily_unavailable`: the one-time token store is full or the database is unreachable. Nothing is counted. */
+        ViewUnavailable: {
+            headers: {
+                "Cache-Control": components["headers"]["ViewNoStore"];
+                /**
+                 * @description Whole seconds to wait before retrying.
+                 * @example 60
+                 */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "temporarily_unavailable",
+                 *         "message": "service temporarily unavailable"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description `public_not_found`: the uniform answer for missing, private, renamed, deleted, tombstoned, malformed, wrong-target, or flag-disabled public state. No ETag is sent. */
         PublicNotFound: {
             headers: {
@@ -4178,6 +4530,8 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /** @description View counting responses are never stored. */
+        ViewNoStore: "no-store, no-transform";
         /**
          * @description Public PDF download filename, `<Full-Name>-Resume.pdf`. `filename` carries the full name folded to ASCII letters and digits, words joined by hyphens; `filename*` (RFC 5987) carries the same words in UTF-8. A name with no usable words downloads as `Resume.pdf` without `filename*`. See `docs/adr/0045-pdf-download-name-and-metadata.md`.
          * @example attachment; filename="Nguyen-Van-Duc-Resume.pdf"; filename*=UTF-8''Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf
@@ -7055,6 +7409,121 @@ export interface operations {
             500: components["responses"]["ResumeInternalError"];
         };
     };
+    listResumeViewCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The owner's view summaries, newest resume first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "today": "2026-09-26",
+                     *         "resumes": [
+                     *           {
+                     *             "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                     *             "title": "Backend engineer",
+                     *             "slug": "ada-lovelace",
+                     *             "live": true,
+                     *             "last7": {
+                     *               "real": 4,
+                     *               "filtered": 9
+                     *             },
+                     *             "last30": {
+                     *               "real": 12,
+                     *               "filtered": 31
+                     *             },
+                     *             "last90": {
+                     *               "real": 20,
+                     *               "filtered": 55
+                     *             }
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ViewSummaryResponse"];
+                };
+            };
+            401: components["responses"]["ResumeUnauthorized"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
+    getResumeViewCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description A resume's id (`resumes.id`, `uuidv7`). A resume owned by another account answers exactly like a missing one.
+                 * @example 018f5b6a-9a3e-7c21-8b1e-000000000010
+                 */
+                id: components["parameters"]["ResumeID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resume's view counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "id": "018f5b6a-9a3e-7c21-8b1e-000000000010",
+                     *         "title": "Backend engineer",
+                     *         "slug": "ada-lovelace",
+                     *         "live": true,
+                     *         "today": "2026-09-26",
+                     *         "days": [
+                     *           {
+                     *             "date": "2026-09-26",
+                     *             "real": 2,
+                     *             "bot": 1,
+                     *             "datacenter": 3,
+                     *             "anomaly": 0,
+                     *             "invalid": 1,
+                     *             "crawler": 4
+                     *           }
+                     *         ],
+                     *         "months": [
+                     *           {
+                     *             "month": "2026-09",
+                     *             "real": 12,
+                     *             "filtered": 31
+                     *           }
+                     *         ],
+                     *         "previews": [
+                     *           {
+                     *             "platform": "zalo",
+                     *             "fetches": 3
+                     *           }
+                     *         ]
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ResumeViewCountsResponse"];
+                };
+            };
+            401: components["responses"]["ResumeUnauthorized"];
+            404: components["responses"]["ResumeNotFound"];
+            429: components["responses"]["ResumeRateLimited"];
+            500: components["responses"]["ResumeInternalError"];
+        };
+    };
     getPublicResume: {
         parameters: {
             query?: never;
@@ -7379,6 +7848,123 @@ export interface operations {
             405: components["responses"]["PublicMethodNotAllowed"];
             429: components["responses"]["PublicArtifactRateLimited"];
             503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    startPublicResumeView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Public resume slug. The router applies this closed grammar, but a malformed, missing, private, renamed, deleted, tombstoned, or flag-disabled slug receives the same `404 public_not_found` response.
+                 * @example ada-lovelace
+                 */
+                slug: components["parameters"]["PublicSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /** @example {} */
+                "application/json": components["schemas"]["ViewStartRequest"];
+            };
+        };
+        responses: {
+            /** @description A token and challenge, or `owner: true` with neither. */
+            200: {
+                headers: {
+                    "Cache-Control": components["headers"]["ViewNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "data": {
+                     *         "owner": false,
+                     *         "token": "3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                     *         "challenge": {
+                     *           "parameters": {
+                     *             "algorithm": "PBKDF2/SHA-256",
+                     *             "nonce": "0f1e2d3c4b5a69788796a5b4",
+                     *             "salt": "a1b2c3d4e5f60718293a4b5c",
+                     *             "cost": 1000,
+                     *             "keyLength": 32,
+                     *             "keyPrefix": "3f9a0c",
+                     *             "keySignature": "9d2c",
+                     *             "data": {
+                     *               "view": "3q2-7wAAAAAAAAAAAAAAAA"
+                     *             }
+                     *           },
+                     *           "signature": "5e8f"
+                     *         }
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["ViewStartResponse"];
+                };
+            };
+            400: components["responses"]["ViewBadRequest"];
+            403: components["responses"]["ViewOriginRejected"];
+            404: components["responses"]["ViewResumeNotFound"];
+            413: components["responses"]["ViewBodyTooLarge"];
+            415: components["responses"]["ViewMediaTypeUnsupported"];
+            429: components["responses"]["ViewRateLimited"];
+            500: components["responses"]["ViewInternalError"];
+            503: components["responses"]["ViewUnavailable"];
+        };
+    };
+    collectPublicResumeView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "token": "3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                 *       "challenge": {
+                 *         "parameters": {
+                 *           "algorithm": "PBKDF2/SHA-256",
+                 *           "nonce": "0f1e2d3c4b5a69788796a5b4",
+                 *           "salt": "a1b2c3d4e5f60718293a4b5c",
+                 *           "cost": 1000,
+                 *           "keyLength": 32,
+                 *           "keyPrefix": "3f9a0c",
+                 *           "keySignature": "9d2c",
+                 *           "data": {
+                 *             "view": "3q2-7wAAAAAAAAAAAAAAAA"
+                 *           }
+                 *         },
+                 *         "signature": "5e8f"
+                 *       },
+                 *       "solution": {
+                 *         "counter": 412,
+                 *         "derivedKey": "3f9a0c"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ViewCollectRequest"];
+            };
+        };
+        responses: {
+            /** @description The report was accepted for evaluation. */
+            204: {
+                headers: {
+                    "Cache-Control": components["headers"]["ViewNoStore"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ViewBadRequest"];
+            403: components["responses"]["ViewOriginRejected"];
+            404: components["responses"]["ViewRouteNotFound"];
+            413: components["responses"]["ViewBodyTooLarge"];
+            415: components["responses"]["ViewMediaTypeUnsupported"];
+            429: components["responses"]["ViewRateLimited"];
+            500: components["responses"]["ViewInternalError"];
         };
     };
     postAuthPasswordRegister: {

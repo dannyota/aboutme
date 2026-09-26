@@ -269,10 +269,10 @@ wrong-password login states stay byte-identical.
 
 ## Viewer analytics
 
-Public pages may set three `__Host-` viewer cookies, only from server endpoints,
-and `sign_in` resumes gate their public routes behind a hashed per-resume viewer
-pass. The OAuth purpose `view` authenticates a viewer for one resume and never
-reads, creates, or signs in an account.
+View counting sets no cookie and stores nothing about viewers. Resumes that
+require sign-in to view gate their public routes behind a signed per-resume pass
+cookie. The OAuth purpose `view` verifies a viewer for one resume, keeps nothing
+about them, and never reads, creates, or signs in an account.
 [Viewer analytics](viewer-analytics/README.md) owns the rules.
 
 ## No operator surface

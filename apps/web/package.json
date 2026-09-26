@@ -22,6 +22,7 @@
     "@vueuse/core": "14.4.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "altcha-lib": "2.5.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "dompurify": "3.4.16",

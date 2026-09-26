@@ -38,6 +38,8 @@ type HTMLDependencies struct {
 	// Cards turns on stored preview cards: the page names the current card
 	// version. Nil keeps the og.png share image.
 	Cards PreviewCards
+	// Views records crawler and link-preview fetches. Nil records nothing.
+	Views ViewObserver
 }
 
 // NewHTMLHandler creates the handler for public resume HTML pages.
@@ -64,6 +66,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			return
 		}
 		defer lease.Release()
+		observeHTMLView(dependencies.Views, request, snapshot.ResumeID)
 
 		variant := publiccache.Variant("nondiscoverable")
 		if snapshot.DiscoveryEnabled {

@@ -217,21 +217,18 @@ Notes on rows whose reason is not obvious:
 
 [Viewer analytics](viewer-analytics/README.md) adds these bounds.
 
-| Bound                               | Value                                              |
-| ----------------------------------- | -------------------------------------------------- |
-| Visible time before collect         | ≥ 8 s, plus one trusted interaction                |
-| View token age at collect           | 8 s to 30 min; one use                             |
-| Proof of work                       | Median ≤ 1 s on a mid-range 2021 Android phone     |
-| Counted views per resume            | ≤ 30 per clock hour; the rest are anomalies        |
-| Dedupe map / used-nonce set         | ≤ 100,000 / ≤ 100,000 entries per process          |
-| Aggregate buffer                    | ≤ 10,000 cells; flushed every 60 s and at shutdown |
-| Share-signal dedupe                 | One per platform per resume per 10 min             |
-| Start / collect and duration per IP | ≤ 30/min / ≤ 30/min                                |
-| Consent per IP                      | ≤ 20/min                                           |
-| Viewer data per IP                  | ≤ 30/min; `DELETE` ≤ 10/h                          |
-| `__Host-view-choice`                | ≤ 30 entries                                       |
-| City header                         | ≤ 64 bytes after decoding                          |
-| Time on page                        | ≤ 3,600 s                                          |
+| Bound                          | Value                                                                                                       |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Visible time before collect    | ≥ 8 s, plus one trusted interaction                                                                         |
+| View token age at collect      | 8 s to 30 min; one use                                                                                      |
+| Proof of work                  | PBKDF2/SHA-256, cost 1,000, counter 200 to 999; median ≤ 1 s on a mid-range 2021 Android phone (**Verify**) |
+| Counted views per resume       | ≤ 30 per clock hour; the rest are anomalies                                                                 |
+| Network map / used view-ID set | ≤ 100,000 / ≤ 100,000 entries per process                                                                   |
+| Share-signal dedupe            | ≤ 100,000 entries; one per fetcher per resume per 10 min                                                    |
+| Aggregate buffer               | ≤ 10,000 cells; flushed every 60 s and at shutdown                                                          |
+| Start and collect body         | ≤ 4 KiB                                                                                                     |
+| Start / collect per IP         | ≤ 30/min / ≤ 30/min                                                                                         |
+| Sign-in pass cookie            | ≤ 10 passes; 7 days                                                                                         |
 
 ## Benchmark protocol
 
