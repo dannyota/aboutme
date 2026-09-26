@@ -37,11 +37,6 @@ if grep -Fq 'git diff --name-status "$base"...HEAD' "$WORKFLOW"; then
   fail "released-schema job still uses a merge-base diff"
 fi
 
-grep -Fq 'semgrep ci --code --supply-chain --secrets --no-suppress-errors' "$WORKFLOW" ||
-  fail "hosted Semgrep does not explicitly select every product and fail closed"
-grep -Fq -- '- run: scripts/test/semgrep-sca-inputs-test.sh' "$WORKFLOW" ||
-  fail "hosted Semgrep does not verify its dependency inputs"
-
 grep -Fq 'runs-on: ubuntu-24.04' "$WORKFLOW" ||
   fail "hosted S3 conformance does not pin a runner with Podman"
 grep -Fq 'run: make test-s3-up' "$WORKFLOW" ||
@@ -183,5 +178,42 @@ grep -Fq 'node deploy/dev-https-browser/check-shard-coverage.mjs passkey \' <<<"
   fail "ci gate does not check passkey shard coverage"
 grep -Fq '      - dev-https-proofs' <<<"$CI_JOB" ||
   fail "ci gate does not require the dev-https-proofs job"
+
+# Hosted Semgrep runs one scan per product set, each in its own job. Together
+# the jobs select every product and fail closed, the gate requires each job,
+# and the gate lets exactly these jobs, and no other, be skipped.
+semgrep_jobs=(semgrep-code semgrep-supply-chain)
+semgrep_if="    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository"
+actual_semgrep_jobs=$(sed -n 's/^  \(semgrep[a-z-]*\):$/\1/p' "$WORKFLOW" | LC_ALL=C sort)
+[ "$actual_semgrep_jobs" = "$(printf '%s\n' "${semgrep_jobs[@]}" | LC_ALL=C sort)" ] ||
+  fail "hosted Semgrep jobs are not exactly ${semgrep_jobs[*]}: $(tr '\n' ' ' <<<"$actual_semgrep_jobs")"
+semgrep_job_body() { # job-id
+  awk -v job="  $1:" '$0 == job { flag = 1; next } /^  [a-z]/ { flag = 0 } flag' "$WORKFLOW"
+}
+SEMGREP_CODE_JOB=$(semgrep_job_body semgrep-code)
+grep -Fxq '      - run: semgrep ci --code --secrets --no-suppress-errors' <<<"$SEMGREP_CODE_JOB" ||
+  fail "semgrep-code does not select Code and Secrets and fail closed"
+SEMGREP_SCA_JOB=$(semgrep_job_body semgrep-supply-chain)
+grep -Fxq '      - run: semgrep ci --supply-chain --no-suppress-errors' <<<"$SEMGREP_SCA_JOB" ||
+  fail "semgrep-supply-chain does not select Supply Chain and fail closed"
+grep -Fxq -- '      - run: scripts/test/semgrep-sca-inputs-test.sh' <<<"$SEMGREP_SCA_JOB" ||
+  fail "semgrep-supply-chain does not verify its dependency inputs"
+for job in "${semgrep_jobs[@]}"; do
+  body=$(semgrep_job_body "$job")
+  [ "$(grep -c -- '- run: semgrep ci ' <<<"$body")" -eq 1 ] ||
+    fail "$job does not run exactly one semgrep ci scan"
+  grep -Fxq "$semgrep_if" <<<"$body" ||
+    fail "$job is not skipped only when a fork pull request withholds the token"
+  grep -Fxq '          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}' <<<"$body" ||
+    fail "$job does not scan with the Semgrep platform token"
+  ! grep -Fq 'continue-on-error' <<<"$body" ||
+    fail "$job must block the release"
+  grep -Fxq "      - $job" <<<"$CI_JOB" ||
+    fail "ci gate does not require the $job job"
+done
+[ "$(grep -Fc '"skipped"' <<<"$CI_JOB")" -eq 1 ] ||
+  fail "ci gate accepts a skipped result in more than one place"
+grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
+  fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
 
 printf 'hosted workflow safety tests passed\n'
