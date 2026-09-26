@@ -1,5 +1,5 @@
 {
-  "version": 8,
+  "version": 9,
   "roots": [
     {
       "root": ".well-known",
@@ -96,6 +96,10 @@
     {
       "root": "u",
       "dispatch": "reserved"
+    },
+    {
+      "root": "verify",
+      "dispatch": "nuxt"
     },
     {
       "root": "verify-email",

@@ -32,6 +32,7 @@ export const publicRootRoutes = [
   { root: 'templates', dispatch: 'nuxt' },
   { root: 'terms', dispatch: 'nuxt' },
   { root: 'u', dispatch: 'reserved' },
+  { root: 'verify', dispatch: 'nuxt' },
   { root: 'verify-email', dispatch: 'nuxt' },
 ] as const satisfies readonly PublicRootRoute[];
 
