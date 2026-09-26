@@ -32,9 +32,9 @@ Release 1 adds, per image, after the push:
 2. `actions/attest` (the action that `attest-sbom` now wraps) with
    `subject-name`, `subject-digest`, `sbom-path`, and `push-to-registry: true`
    signs an SPDX 2.3 attestation bound to the same digest. The job keeps its
-   `id-token: write` and `attestations: write` permissions and adds
-   `artifact-metadata: write` if the pinned action version requires it
-   (**Verify** on the first run).
+   `id-token: write` and `attestations: write` permissions. It sets
+   `create-storage-record: false`, so it needs no `artifact-metadata: write`;
+   the action skips storage records for a user-owned repository anyway.
 3. The SBOM and digest files are uploaded as job artifacts.
 
 **Owner approval (A3):** a final `release` job, which needs every image job,
