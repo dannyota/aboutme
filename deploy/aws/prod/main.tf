@@ -40,6 +40,7 @@ module "tasks" {
   password_registration_enabled = var.password_registration_enabled
   passkey_enrollment_enabled    = var.passkey_enrollment_enabled
   totp_enrollment_enabled       = var.totp_enrollment_enabled
+  preview_card_enabled          = var.preview_card_enabled
   totp_active_key_slot          = var.totp_active_key_slot
   totp_previous_key_slot        = var.totp_previous_key_slot
   exec_role_arns                = module.identity.exec_role_arns

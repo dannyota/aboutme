@@ -68,6 +68,7 @@ locals {
     { name = "PASSWORD_REGISTRATION_ENABLED", value = var.password_registration_enabled ? "true" : "false" },
     { name = "PASSKEY_ENROLLMENT_ENABLED", value = var.passkey_enrollment_enabled ? "true" : "false" },
     { name = "TOTP_ENROLLMENT_ENABLED", value = var.totp_enrollment_enabled ? "true" : "false" },
+    { name = "PREVIEW_CARD_ENABLED", value = var.preview_card_enabled ? "true" : "false" },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
   ])

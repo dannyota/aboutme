@@ -88,6 +88,12 @@ variable "passkey_enrollment_enabled" {
 # minimum-release fence to numeric 4007; see
 # docs/design/passkey-release-fence.md, "Authenticator-app key
 # re-encryption".
+variable "preview_card_enabled" {
+  type        = bool
+  default     = false
+  description = "PREVIEW_CARD_ENABLED for the server"
+}
+
 variable "totp_enrollment_enabled" {
   type        = bool
   default     = false

@@ -48,6 +48,13 @@ variable "passkey_enrollment_enabled" {
 # minimum-release fence to numeric 4007. See
 # docs/design/passkey-release-fence.md, "Authenticator-app key
 # re-encryption".
+# Turns on stored link-preview cards (docs/design/link-previews.md). The web
+# image that renders cards must be live first; see the production runbook.
+variable "preview_card_enabled" {
+  type        = bool
+  description = "PREVIEW_CARD_ENABLED for the server"
+}
+
 variable "totp_enrollment_enabled" {
   type        = bool
   description = "TOTP_ENROLLMENT_ENABLED for the server"
