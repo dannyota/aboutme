@@ -81,12 +81,13 @@ The runtime trust boundaries are:
 - Caddy removes every viewer forwarding header and sets the header Go accepts
   only from one well-formed `CloudFront-Viewer-Address`.
 - `app` and `maintenance` both run Caddy with host networking and declare no ECS
-  port mapping. Caddy binds every TCP listener with `SO_REUSEPORT`, so both
-  services can listen on 8443 at once and the kernel spreads new connections
-  across them. Every handoff starts the incoming service and confirms its task
-  before it stops the outgoing one, so something always accepts connections
-  on 8443. A failed confirmation stops the handoff before the outgoing service
-  is touched.
+  port mapping. Caddy runs as uid 10001 with no capabilities and binds only
+  8443, an unprivileged port. It binds with `SO_REUSEPORT`, which requires the
+  same uid on both processes, so both services can listen on 8443 at once and
+  the kernel spreads new connections across them. Every handoff starts the
+  incoming service and confirms its task before it stops the outgoing one, so
+  something always accepts connections on 8443. A failed confirmation stops the
+  handoff before the outgoing service is touched.
 - Nuxt has its own network namespace and is never a trusted proxy. It reaches
   only Go's private print listener on the bridge gateway, where the one-use
   capability still applies.

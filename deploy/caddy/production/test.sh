@@ -2,7 +2,8 @@
 # Builds the production Caddy image and checks route rendering, the
 # CloudFront listener's client certificate trust and client address rule
 # (EDGES), that the origin key does not stay in the process environment, and
-# maintenance mode's page, headers, and CSP hashes. See
+# maintenance mode's page, headers, and CSP hashes, and that Caddy runs as its
+# non-root user with no capability and binds only 8443. See
 # docs/design/cloudfront-edge.md.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
@@ -71,6 +72,9 @@ want_csp=$(bash "$maintenance_render" "$maintenance_html" |
   grep '^header Content-Security-Policy' | sed -E 's/^header Content-Security-Policy "(.*)"$/\1/')
 
 podman build -q -f "$root/deploy/caddy/production/Dockerfile" -t localhost/aboutme/caddy:test "$root" >/dev/null
+# Production runs the image's own user; the task definitions set none.
+user=$(podman image inspect --format '{{.Config.User}}' localhost/aboutme/caddy:test)
+[[ $user == 10001:10001 ]] || { echo "image user is '$user', want 10001:10001" >&2; exit 1; }
 
 ec=(-newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes)
 openssl req -x509 "${ec[@]}" -days 1 -subj /CN=aboutme.vn \
@@ -90,6 +94,49 @@ image=localhost/aboutme/caddy:test
 tls_env=(-e ORIGIN_CERT="$(cat "$work/origin.pem")" -e ORIGIN_KEY="$(cat "$work/origin.key")")
 cf_ca_env=(-e CLOUDFRONT_CLIENT_CA="$(cat "$work/cf-ca.pem")")
 
+# Production runs Caddy with host networking, where the host's
+# ip_unprivileged_port_start (default 1024) applies. Podman lowers it inside a
+# container's network namespace, so every Caddy here runs with it set back to
+# 1024: a Caddy that binds a privileged port fails to start, as it would in
+# production.
+#
+# ECS runs containers with runc, which gives a tmpfs the mode of the image's
+# directory (see the Dockerfile), so Caddy runs under runc here too when it is
+# installed; CI requires it.
+unprivileged=(--sysctl net.ipv4.ip_unprivileged_port_start=1024)
+if runc=$(command -v runc); then
+  unprivileged+=(--runtime "$runc")
+elif [[ ${CI:-} == true ]]; then
+  echo "runc is not installed" >&2
+  exit 1
+fi
+
+# Caddy (PID 1, exec'd by the entrypoint) runs as 10001 with no capability,
+# on the tmpfs and under the default privileged-port boundary production
+# has, and listens on exactly the given ports (hex, sorted, from
+# /proc/net/tcp and tcp6).
+check_unprivileged() { # container want-ports
+  local status ports
+  status=$(podman exec "$1" cat /proc/1/status)
+  [[ $(podman exec "$1" cat /proc/1/comm) == caddy ]] || { echo "$1: PID 1 is not caddy" >&2; exit 1; }
+  grep -qP '^Uid:\t10001\t10001\t10001\t10001$' <<<"$status" ||
+    { echo "$1: Caddy does not run as uid 10001:" >&2; grep '^Uid:' <<<"$status" >&2; exit 1; }
+  grep -qP '^Gid:\t10001\t10001\t10001\t10001$' <<<"$status" ||
+    { echo "$1: Caddy does not run as gid 10001:" >&2; grep '^Gid:' <<<"$status" >&2; exit 1; }
+  for cap in CapInh CapPrm CapEff CapAmb; do
+    grep -qP "^$cap:\t0{16}$" <<<"$status" ||
+      { echo "$1: Caddy holds a capability:" >&2; grep "^$cap:" <<<"$status" >&2; exit 1; }
+  done
+  [[ $(podman exec "$1" stat -f -c %T /run/caddy) == tmpfs ]] || { echo "$1: /run/caddy is not a tmpfs" >&2; exit 1; }
+  [[ $(podman exec "$1" stat -c %a:%u /run/caddy) == 1777:0 ]] ||
+    { echo "$1: /run/caddy is not root-owned 1777" >&2; exit 1; }
+  [[ $(podman exec "$1" cat /proc/sys/net/ipv4/ip_unprivileged_port_start) == 1024 ]] ||
+    { echo "$1: ip_unprivileged_port_start is not 1024" >&2; exit 1; }
+  ports=$(podman exec "$1" cat /proc/net/tcp /proc/net/tcp6 |
+    awk '$4 == "0A" { split($2, a, ":"); print a[2] }' | sort -u | paste -sd ' ')
+  [[ $ports == "$2" ]] || { echo "$1: listening ports '$ports', want '$2'" >&2; exit 1; }
+}
+
 wait_started() { # container... -> waits for each to serve its configuration
   local c logs
   for c in "$@"; do
@@ -107,13 +154,16 @@ wait_started() { # container... -> waits for each to serve its configuration
 start_stack() { # podman run options...
   podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
   podman run -d --name "$name" -p "127.0.0.1:$port:8443" -p "127.0.0.1:$closed_port:443" \
-    --tmpfs /run/caddy "${tls_env[@]}" "$@" "$image" >/dev/null
+    --tmpfs /run/caddy "${unprivileged[@]}" "${tls_env[@]}" "$@" "$image" >/dev/null
+  # Caddy must be up before the stand-in joins its network namespace, and a
+  # Caddy that exits must show its logs.
+  wait_started "$name"
   # A stand-in for Go on 127.0.0.1:8080 that echoes the forwarded client
   # address and any CloudFront-Viewer-Address that reached it.
   podman run -d --name "$name-echo" --network "container:$name" --entrypoint sh "$image" -c \
     'printf "{\n\tadmin off\n}\n:8080 {\n\trespond \"ip={http.request.header.X-Real-IP} cfva={http.request.header.CloudFront-Viewer-Address}\"\n}\n" >/tmp/echo && exec caddy run --config /tmp/echo --adapter caddyfile' \
     >/dev/null
-  wait_started "$name" "$name-echo"
+  wait_started "$name-echo"
 }
 
 request() {
@@ -144,7 +194,9 @@ if podman exec "$name" sh -c 'tr "\0" "\n" </proc/1/environ | grep -q "^ORIGIN_K
   echo "ORIGIN_KEY remains in the Caddy process environment" >&2
   exit 1
 fi
-podman exec "$name" sh -c 'test "$(stat -c %a /run/caddy/origin-key.pem)" = 600'
+podman exec "$name" sh -c 'test "$(stat -c %a:%u /run/caddy/origin-key.pem)" = 600:10001'
+# 20FB is Caddy's 8443 and 1F90 the stand-in's 8080; nothing listens on 80.
+check_unprivileged "$name" "1F90 20FB"
 
 # ---- CloudFront listener: routing, client certificate trust, response headers ----
 start_stack "${cf_ca_env[@]}" -e EDGES=cloudfront
@@ -267,9 +319,10 @@ podman run --rm -e EDGES=cloudfront "$image" adapt || { echo "adapt failed for E
 # ---- Maintenance mode: same image, MAINTENANCE=1 selects Caddyfile.maintenance ----
 podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
 podman run -d --name "$name" -p "127.0.0.1:$port:8443" --tmpfs /run/caddy \
-  "${tls_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudfront -e MAINTENANCE=1 \
+  "${unprivileged[@]}" "${tls_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudfront -e MAINTENANCE=1 \
   "$image" >/dev/null
 wait_started "$name"
+check_unprivileged "$name" "20FB"
 
 # The origin still rejects a direct request with no client certificate, and
 # one with a certificate another CA signed.
