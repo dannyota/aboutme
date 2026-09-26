@@ -12,8 +12,11 @@
 	# privileged port and runs as a non-root user with no capability.
 	auto_https disable_redirects
 	import /run/caddy/edges.global
-	# Request logs keep the method, URI, and status but never the visitor's
-	# address or request headers (privacy policy: no IP in request logs).
+	# No site below turns on Caddy's access log, so an ordinary request is
+	# never logged. This shapes the format for whatever Caddy still writes
+	# on its own, such as a failed reverse_proxy dial: it keeps the method
+	# and URI but never the visitor's address or request headers (privacy
+	# policy: no IP in logs).
 	log default {
 		output stderr
 		format filter {
