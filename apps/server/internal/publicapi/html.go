@@ -12,6 +12,7 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/contactlink"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
 	"github.com/dannyota/aboutme/apps/server/internal/publicpage"
@@ -19,7 +20,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 )
 
-const htmlFormatVersion = 1
+// htmlFormatVersion names the cached page format. It rises whenever the page
+// head changes, so no cached page with an older head is served.
+const htmlFormatVersion = 2
 
 // HTMLDependencies contains the dependencies for public HTML responses.
 type HTMLDependencies struct {
@@ -85,14 +88,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 		}
 		page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
 		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
-		result, err := dependencies.Renderer.Render(lease.Context(), directrender.PublicRenderRequest{
-			PublicResume:     snapshot.Public,
-			Mode:             directrender.PublicRenderMode,
-			CanonicalOrigin:  dependencies.PublicOrigin.String(),
-			DiscoveryEnabled: snapshot.DiscoveryEnabled,
-			PageTitle:        page.Title,
-			FaviconHref:      page.FaviconHref,
-		})
+		result, err := dependencies.Renderer.Render(lease.Context(), publicRenderRequest(snapshot.Public, snapshot.DiscoveryEnabled, page, dependencies.PublicOrigin))
 		if err != nil {
 			logHTMLUnavailable(dependencies.Logger, request, "render_failed", "")
 			serveHTMLError(w, request, http.StatusServiceUnavailable)
@@ -169,14 +165,19 @@ func validPublicHTML(source []byte, resume publicresume.PublicResume, origin pub
 }
 
 // publicPage is the head the renderer must emit for the owner's stored page
-// settings: the exact <title> text, and the exact favicon href or "" for none.
+// settings: the exact <title> text, the exact favicon href or "" for none, and
+// the preview text (docs/design/link-previews.md).
 type publicPage struct {
 	Title       string
 	FaviconHref string
+	Preview     previewmeta.Meta
 }
 
 func expectedPublicPage(resume publicresume.PublicResume, publicTitle, faviconEmoji *string) publicPage {
-	page := publicPage{Title: publicpage.EffectiveTitle(publicTitle, resume.Document.PersonalDetails.FullName)}
+	page := publicPage{
+		Title:   publicpage.EffectiveTitle(publicTitle, resume.Document.PersonalDetails.FullName),
+		Preview: previewmeta.For(resume, publicTitle),
+	}
 	if faviconEmoji != nil && *faviconEmoji != "" {
 		page.FaviconHref = publicpage.FaviconHref(*faviconEmoji)
 	}
@@ -200,9 +201,8 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 		return "doctype"
 	}
 	var title, canonical, main *html.Node
-	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, creditLinks, favicons, charsetMeta, viewportMeta, formatDetectionMeta int
-	var ogImageMeta, ogImageWidthMeta, ogImageHeightMeta, twitterCardMeta, twitterImageMeta int
-	imageURL := origin.Resolve("/api/v1/public/resumes/" + resume.Slug + "/og.png")
+	var scriptCount, externalScripts, dataScripts, mainCount, images, skipLinks, downloadLinks, creditLinks, favicons int
+	meta := newHeadMeta(resume, page.Preview, origin)
 	stylesheets := map[string]bool{}
 	contactLinks := derivedContactLinks(resume)
 	rule := ""
@@ -227,71 +227,10 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 			}
 			switch node.Data {
 			case "meta":
-				if len(node.Attr) == 1 && attributeCount(node, "charset") == 1 && attribute(node, "charset") == "utf-8" {
-					charsetMeta++
-					break
+				if name := meta.visit(node); name != "" {
+					reject(name)
+					return
 				}
-				if len(node.Attr) == 2 && attributeCount(node, "name") == 1 && attribute(node, "name") == "viewport" && attributeCount(node, "content") == 1 && attribute(node, "content") == "width=device-width, initial-scale=1" {
-					viewportMeta++
-					break
-				}
-				if len(node.Attr) == 2 && attributeCount(node, "property") == 1 && attributeCount(node, "content") == 1 {
-					switch attribute(node, "property") {
-					case "og:image":
-						if attribute(node, "content") != imageURL {
-							reject("meta_og_image")
-							return
-						}
-						ogImageMeta++
-					case "og:image:width":
-						if attribute(node, "content") != "1200" {
-							reject("meta_og_image_size")
-							return
-						}
-						ogImageWidthMeta++
-					case "og:image:height":
-						if attribute(node, "content") != "630" {
-							reject("meta_og_image_size")
-							return
-						}
-						ogImageHeightMeta++
-					default:
-						reject("meta_unknown")
-						return
-					}
-					break
-				}
-				if len(node.Attr) == 2 && attributeCount(node, "name") == 1 && attributeCount(node, "content") == 1 {
-					switch attribute(node, "name") {
-					case "twitter:card":
-						if attribute(node, "content") != "summary_large_image" {
-							reject("meta_twitter")
-							return
-						}
-						twitterCardMeta++
-					case "twitter:image":
-						if attribute(node, "content") != imageURL {
-							reject("meta_twitter")
-							return
-						}
-						twitterImageMeta++
-					case "format-detection":
-						// Stops Safari from auto-linking digit runs, such as date
-						// ranges, into tel: links. At most one; zero keeps HTML from
-						// a renderer without the tag valid.
-						if attribute(node, "content") != "telephone=no, date=no, address=no, email=no" {
-							reject("meta_format_detection")
-							return
-						}
-						formatDetectionMeta++
-					default:
-						reject("meta_unknown")
-						return
-					}
-					break
-				}
-				reject("meta_unknown")
-				return
 			case "style":
 				reject("style_element")
 				return
@@ -412,8 +351,8 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	if rule != "" {
 		return rule
 	}
-	if formatDetectionMeta > 1 {
-		return "meta_format_detection"
+	if name := meta.finish(); name != "" {
+		return name
 	}
 	if page.FaviconHref != "" && favicons != 1 {
 		return "favicon"
@@ -421,7 +360,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 	if creditLinks != 1 {
 		return "credit_link"
 	}
-	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || charsetMeta != 1 || viewportMeta != 1 || externalScripts != 1 || ogImageMeta != 1 || ogImageWidthMeta != 1 || ogImageHeightMeta != 1 || twitterCardMeta != 1 || twitterImageMeta != 1 {
+	if title == nil || canonical == nil || main == nil || mainCount != 1 || skipLinks != 1 || externalScripts != 1 {
 		return "required_elements"
 	}
 	if (resume.Document.PersonalDetails.Photo == nil && images != 0) || (resume.Document.PersonalDetails.Photo != nil && images != 1) {

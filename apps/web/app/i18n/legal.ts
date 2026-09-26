@@ -70,7 +70,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Tài khoản: email, tên, và mật khẩu của bạn. Mật khẩu chỉ được '
             + 'lưu dưới dạng mã băm Argon2id. Nếu bạn đăng nhập bằng Google: '
             + 'ID tài khoản Google, email và tên.',
-            'Nội dung: các CV bạn viết và ảnh bạn tải lên.',
+            'Nội dung: các CV bạn viết, ảnh bạn tải lên, và, khi một CV '
+            + 'đang công khai, ảnh xem trước chúng tôi tạo từ CV đó để hiển '
+            + 'thị khi đường dẫn được chia sẻ.',
             'Phiên đăng nhập: thông tin trình duyệt (user-agent) và địa chỉ '
             + 'IP của từng phiên, dùng cho bảo mật. Settings → Sessions liệt '
             + 'kê các thiết bị đang đăng nhập. Chúng tôi xoá địa chỉ IP và '
@@ -143,6 +145,10 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'tải về bản PDF của CV; bạn có thể tắt tính năng này. Đừng '
             + 'đưa dữ liệu cá nhân nhạy cảm, như số giấy tờ tuỳ thân, tình '
             + 'trạng sức khoẻ, hoặc tôn giáo, vào một CV công khai.',
+            'Khi bất kỳ ai chia sẻ đường dẫn công khai của bạn trong một ứng '
+            + 'dụng nhắn tin hoặc mạng xã hội, dịch vụ đó sẽ lấy tiêu đề '
+            + 'trang, phần tóm tắt và ảnh xem trước của trang, và có thể giữ '
+            + 'bản sao riêng của họ sau khi bạn ngừng công khai.',
           ],
         },
         {
@@ -152,7 +158,8 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + '(ap-southeast-1): cơ sở dữ liệu, bản sao lưu, kho ảnh, và '
             + 'việc gửi email qua Amazon SES. Amazon CloudFront (mạng máy '
             + 'chủ toàn cầu của Amazon Web Services) phân phối trang web và '
-            + 'xử lý địa chỉ IP của bạn. Cloudflare chỉ cung cấp dịch vụ DNS. '
+            + 'xử lý địa chỉ IP của bạn. Amazon Route 53 cung cấp dịch vụ '
+            + 'DNS. '
             + 'Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
             + 'tài khoản của bạn. Email bạn gửi cho chúng tôi được lưu '
             + 'trong hộp thư Google Workspace. Nếu bạn ở Việt Nam, dữ liệu '
@@ -370,7 +377,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Account: your email, your name, and your password, stored only '
             + 'as an Argon2id hash. If you sign in with Google: your Google '
             + 'account ID, email, and name.',
-            'Content: the resumes you write and the photos you upload.',
+            'Content: the resumes you write, the photos you upload, and, '
+            + 'while a resume is public, the preview image we make from it '
+            + 'for link previews.',
             'Sessions: the browser user-agent and IP address of each '
             + 'session, used for security. Settings → Sessions lists your '
             + 'signed-in devices. We delete the IP address and browser '
@@ -438,6 +447,10 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'the resume\'s PDF; you can turn this off. Avoid putting '
             + 'sensitive personal data, such as ID numbers, health '
             + 'information, or religion, in a public resume.',
+            'When anyone shares your public link in a chat app or social '
+            + 'network, that service fetches the page\'s title, summary, and '
+            + 'preview image, and may keep its own copy after you '
+            + 'unpublish.',
           ],
         },
         {
@@ -447,7 +460,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + '(ap-southeast-1): the database, its backups, photo storage, '
             + 'and email sending through Amazon SES. Amazon CloudFront '
             + '(the global network of Amazon Web Services) delivers the '
-            + 'site and processes your IP address. Cloudflare only provides '
+            + 'site and processes your IP address. Amazon Route 53 provides '
             + 'DNS. If you sign in with Google, Google (United '
             + 'States) verifies your account. Emails you send us are kept '
             + 'in a Google Workspace mailbox. If you are in Vietnam, your '

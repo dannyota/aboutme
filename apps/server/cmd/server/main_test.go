@@ -23,6 +23,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/config"
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
@@ -232,9 +233,16 @@ func TestReadinessRenderRequestPostsValidMinimalPublicResume(t *testing.T) {
 		Discovery    bool                      `json:"discoveryEnabled"`
 		PageTitle    string                    `json:"pageTitle"`
 		FaviconHref  *string                   `json:"faviconHref"`
+		Preview      *previewmeta.Meta         `json:"preview"`
 	}
 	if err := json.Unmarshal(body, &envelope); err != nil {
 		t.Fatal(err)
+	}
+	// The worker reads the preview head values from every render request,
+	// probes included (docs/design/link-previews.md).
+	wantPreview := previewmeta.Meta{Title: "Readiness Probe", Description: "Resume on aboutme.vn", Locale: "en_US", ImageAlt: "Readiness Probe"}
+	if envelope.Preview == nil || *envelope.Preview != wantPreview {
+		t.Fatalf("render envelope preview = %#v, want %#v", envelope.Preview, wantPreview)
 	}
 	if envelope.PageTitle != "Readiness Probe — Resume" || envelope.FaviconHref == nil || *envelope.FaviconHref != "" {
 		t.Fatalf("render envelope head = %q, %v; want the default title and an empty favicon", envelope.PageTitle, envelope.FaviconHref)

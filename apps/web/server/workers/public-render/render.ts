@@ -84,6 +84,53 @@ const jsonLd = (request: PublicRenderRequest): string => {
   return `<script type="application/ld+json">${json}</script>`;
 };
 
+const meta = (
+  attribute: 'name' | 'property',
+  key: string,
+  value: string,
+): string =>
+  `<meta ${attribute}="${key}" content="${escapeAttribute(value)}">`;
+
+// The link-preview tags in the order of docs/design/link-previews.md, "Page
+// head". The server's validator accepts each exactly once with the value it
+// computed, and rejects twitter:title, twitter:description and theme-color.
+// A request without preview text gets only the image tags.
+const previewHead = (
+  request: PublicRenderRequest,
+  imageURL: string,
+): string => {
+  const preview = request.preview;
+  const image = [
+    meta('property', 'og:image', imageURL),
+    ...(preview === undefined
+      ? []
+      : [meta('property', 'og:image:type', 'image/png')]),
+    meta('property', 'og:image:width', '1200'),
+    meta('property', 'og:image:height', '630'),
+  ];
+  const card = [
+    meta('name', 'twitter:card', 'summary_large_image'),
+    meta('name', 'twitter:image', imageURL),
+  ];
+  if (preview === undefined) return [...image, ...card].join('');
+  const pageURL = `${request.canonicalOrigin}/${request.publicResume.slug}`;
+  return [
+    meta('name', 'description', preview.description),
+    meta('property', 'og:type', 'profile'),
+    meta('property', 'og:site_name', 'aboutme.vn'),
+    meta('property', 'og:title', preview.title),
+    meta('property', 'og:description', preview.description),
+    meta('property', 'og:url', pageURL),
+    ...(preview.locale === ''
+      ? []
+      : [meta('property', 'og:locale', preview.locale)]),
+    ...image,
+    meta('property', 'og:image:alt', preview.imageAlt),
+    ...card,
+    meta('name', 'twitter:image:alt', preview.imageAlt),
+  ].join('');
+};
+
 /**
  * Content versions of the fixed-name, immutable assets the public page loads;
  * each is 16 lowercase hex characters.
@@ -135,11 +182,7 @@ export async function renderPublicResume(
         : `<link rel="icon" href="${escapeAttribute(request.faviconHref)}">`,
       `<link rel="canonical" href="${request.canonicalOrigin}/`,
       `${request.publicResume.slug}">`,
-      `<meta property="og:image" content="${escapeAttribute(imageURL)}">`,
-      '<meta property="og:image:width" content="1200">',
-      '<meta property="og:image:height" content="630">',
-      '<meta name="twitter:card" content="summary_large_image">',
-      `<meta name="twitter:image" content="${escapeAttribute(imageURL)}">`,
+      previewHead(request, imageURL),
       // Template CSS and fonts, self-hosted and shared with the print document.
       // The version query fetches fresh copies of these fixed-name, immutable
       // files after each release that changes them.

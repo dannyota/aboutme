@@ -8,6 +8,18 @@ export const PUBLIC_RENDER_FAILURE = 'public render failed';
 
 export type PublicResume = components['schemas']['PublicResume'];
 
+/**
+ * The link-preview text for the page head, computed by the server
+ * (docs/design/link-previews.md, "Page head").
+ */
+export interface PublicRenderPreview {
+  title: string;
+  description: string;
+  /** og:locale, or '' when the resume language maps to none. */
+  locale: string;
+  imageAlt: string;
+}
+
 export interface PublicRenderRequest {
   publicResume: PublicResume;
   mode: 'continuous';
@@ -17,6 +29,8 @@ export interface PublicRenderRequest {
   pageTitle: string;
   /** The exact favicon data: URL, or '' when the owner set no icon. */
   faviconHref: string;
+  /** Absent from a server that predates link previews. */
+  preview?: PublicRenderPreview;
 }
 
 // The server percent-encodes every byte outside the URL-unreserved set, so a
@@ -28,6 +42,27 @@ const validPageTitle = (value: unknown): value is string =>
 
 const validFaviconHref = (value: unknown): value is string =>
   value === '' || (typeof value === 'string' && FAVICON_HREF.test(value));
+
+const PREVIEW_LOCALE = /^[a-z]{2,3}_[A-Z]{2}$/u;
+const PREVIEW_KEYS = ['description', 'imageAlt', 'locale', 'title'].join(',');
+
+const boundedText = (value: unknown, maxBytes: number): value is string =>
+  typeof value === 'string'
+  && value.length > 0
+  && Buffer.byteLength(value, 'utf8') <= maxBytes;
+
+const validPreview = (value: unknown): value is PublicRenderPreview => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const preview = value as Record<string, unknown>;
+  return Object.keys(preview).sort().join(',') === PREVIEW_KEYS
+    && boundedText(preview.title, 2240)
+    && boundedText(preview.description, 1024)
+    && boundedText(preview.imageAlt, 1024)
+    && typeof preview.locale === 'string'
+    && (preview.locale === '' || PREVIEW_LOCALE.test(preview.locale));
+};
 
 const fail = (): never => {
   throw new Error(PUBLIC_RENDER_FAILURE);
@@ -173,15 +208,23 @@ export function decodePublicRenderEnvelope(
     }
     const envelope = value as Record<string, unknown>;
     const keys = Object.keys(envelope).sort();
-    const expectedKeys = [
+    const baseKeys = [
       'canonicalOrigin',
       'discoveryEnabled',
       'faviconHref',
       'mode',
       'pageTitle',
       'publicResume',
-    ].join(',');
+    ];
+    // A server that predates link previews sends no preview object.
+    const hasPreview = keys.includes('preview');
+    const expectedKeys = [...baseKeys, ...(hasPreview ? ['preview'] : [])]
+      .sort()
+      .join(',');
     if (keys.join(',') !== expectedKeys) {
+      fail();
+    }
+    if (hasPreview && !validPreview(envelope.preview)) {
       fail();
     }
     if (

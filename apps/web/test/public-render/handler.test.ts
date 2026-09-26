@@ -147,6 +147,9 @@ describe('internal public render handler', () => {
         faviconHref: 'data:image/svg+xml,<svg onload=alert(1)>',
       }),
       JSON.stringify({ ...request, faviconHref: 'data:image/svg+xml,%3C"' }),
+      // So is the preview text (docs/design/link-previews.md).
+      JSON.stringify({ ...request, preview: { title: 'Ada' } }),
+      JSON.stringify({ ...request, preview: null }),
     ];
     for (const body of bodies) {
       const response = await fetch(url, {
