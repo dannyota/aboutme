@@ -92,38 +92,49 @@ runs a task.
 Every object is closed: the schema sets `additionalProperties: false` at every
 level. Readers ignore fields they do not know (see [versions](#versions)).
 
-| Field                                 | Type and rule                                                               | Source                                   |
-| ------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
-| `schema_version`                      | Integer, `1`                                                                | Constant                                 |
-| `project`                             | `"aboutme"`                                                                 | Constant                                 |
-| `environment`                         | `"production"`                                                              | Observer configuration                   |
-| `site`                                | `"https://aboutme.vn"`                                                      | Observer configuration                   |
-| `source_repository`                   | `"https://github.com/dannyota/aboutme"`                                     | Constant                                 |
-| `platform.provider`                   | `aws` or `greennode`                                                        | Observer platform adapter                |
-| `platform.orchestrator`               | `ecs` or `kubernetes`                                                       | Observer platform adapter                |
-| `platform.region`                     | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                | Observer configuration                   |
-| `observed_at`, `stale_after`          | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s      | Observer clock                           |
-| `summary`                             | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)        | Computed from the components             |
-| `release`                             | Object or `null` (rules below)                                              | Computed from the components             |
-| `components[].name`                   | `server`, `web`, `caddy`, or `maintenance`, in that order                   | Fixed mapping from service and container |
-| `components[].image`                  | `ghcr.io/dannyota/aboutme-server`, `-web`, or `-caddy`                      | Fixed mapping, never the platform text   |
-| `running_images[]`                    | One entry per distinct digest, ordered by `running_since`, at most 8        | Platform                                 |
-| `running_images[].digest`             | `^sha256:[0-9a-f]{64}$`                                                     | Platform                                 |
-| `running_images[].replicas`           | Integer 1 to 64                                                             | Platform, counted by the observer        |
-| `running_images[].running_since`      | RFC 3339 UTC; earliest start among that digest's running tasks or pods      | Platform                                 |
-| `running_images[].version`            | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                       | Signed certificate's source ref          |
-| `running_images[].commit`             | `^[0-9a-f]{40}$` or `null`                                                  | Signed certificate's source digest       |
-| `signature.status`                    | `verified`, `not_found`, `invalid`, or `unchecked`                          | Observer verification                    |
-| `signature.checked_at`                | RFC 3339 UTC or `null`                                                      | Observer clock                           |
-| `signature.signer_workflow`           | The exact certificate identity, matching the pattern in [verification][ver] | Signed certificate                       |
-| `signature.transparency_log_index`    | Integer or `null`                                                           | Bundle's Rekor entry                     |
-| `sbom.status`, `sbom.format`          | Status as above; format `spdx-2.3` or `null`                                | Observer verification                    |
-| `links.*`                             | Built from constants plus verified values; each matches a fixed URL pattern | Observer                                 |
-| `observer.version`, `observer.commit` | The observer binary's own build information                                 | Self-reported, and labelled so           |
+| Field                              | Type and rule                                                                                           | Source                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `schema_version`                   | Integer, `1`                                                                                            | Constant                                 |
+| `project`                          | `"aboutme"`                                                                                             | Constant                                 |
+| `environment`                      | `"production"`                                                                                          | Observer configuration                   |
+| `site`                             | `"https://aboutme.vn"`                                                                                  | Observer configuration                   |
+| `source_repository`                | `"https://github.com/dannyota/aboutme"`                                                                 | Constant                                 |
+| `platform.provider`                | `aws` or `greennode`                                                                                    | Observer platform adapter                |
+| `platform.orchestrator`            | `ecs` or `kubernetes`                                                                                   | Observer platform adapter                |
+| `platform.region`                  | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                                            | Observer configuration                   |
+| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock                           |
+| `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
+| `release`                          | Object or `null` (rules below)                                                                          | Computed from the components             |
+| `components[].name`                | `server`, `web`, `caddy`, or `maintenance`, in that order                                               | Fixed mapping from service and container |
+| `components[].image`               | Fixed by `name`: `ghcr.io/dannyota/aboutme-server`, `-web`, `-caddy`; `maintenance` also takes `-caddy` | Fixed mapping, never the platform text   |
+| `running_images[]`                 | One entry per distinct digest, ordered by `running_since`, at most 8                                    | Platform                                 |
+| `running_images[].digest`          | `^sha256:[0-9a-f]{64}$`                                                                                 | Platform                                 |
+| `running_images[].replicas`        | Integer 1 to 64                                                                                         | Platform, counted by the observer        |
+| `running_images[].running_since`   | RFC 3339 UTC; earliest start among that digest's running tasks or pods                                  | Platform                                 |
+| `running_images[].version`         | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                   | Signed certificate's source ref          |
+| `running_images[].commit`          | `^[0-9a-f]{40}$` or `null`                                                                              | Signed certificate's source digest       |
+| `signature.status`                 | `verified`, `not_found`, `invalid`, or `unchecked`                                                      | Observer verification                    |
+| `signature.checked_at`             | RFC 3339 UTC or `null`                                                                                  | Observer clock                           |
+| `signature.signer_workflow`        | The exact certificate identity, matching the pattern in [verification][ver]                             | Signed certificate                       |
+| `signature.transparency_log_index` | Integer or `null`                                                                                       | Bundle's Rekor entry                     |
+| `sbom.status`, `sbom.format`       | Status as above; format `spdx-2.3` or `null`                                                            | Observer verification                    |
+| `links.*`                          | Built from constants plus verified values; each matches a fixed URL pattern                             | Observer                                 |
+| `observer.version`                 | `^v[0-9]+\.[0-9]+\.[0-9]+$` or `null`                                                                   | Self-reported, and labelled so           |
+| `observer.commit`                  | `^[0-9a-f]{40}$` or `null`                                                                              | Self-reported, and labelled so           |
 
-`version`, `commit`, `signer_workflow`, `transparency_log_index`, and every link
-except `provenance` are `null` unless `signature.status` is `verified`, so an
-unverified digest never carries a claimed version.
+Within a `running_images[]` entry, `version`, `commit`,
+`signature.signer_workflow`, and `signature.transparency_log_index` are `null`
+unless `signature.status` is `verified`, so an unverified image never carries a
+claimed version. The same gate nulls `links.commit`, `links.build`, and
+`links.transparency_log`. `sbom.format` is `null` unless `sbom.status` is
+`verified`. `links.release` and `links.sbom` need both gates verified, since a
+GitHub Release and its SBOM asset exist only for a signed, attested build;
+neither falls back to an attestation-API link when unverified.
+`links.provenance` is the one link the observer builds from the digest alone: it
+needs no verification and is never `null`, so an unverified image still resolves
+to its attestations. `observer.version` and `observer.commit` are `null` when
+the running binary's self-reported build stamp does not match its pattern, such
+as a local or pre-release build.
 
 [ver]: verification.md#what-verified-means
 
