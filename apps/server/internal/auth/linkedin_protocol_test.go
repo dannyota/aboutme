@@ -1,7 +1,8 @@
 // These tests pin LinkedIn's documented confidential web flow: no PKCE, client
-// credentials in the token request body, the OIDC nonce as the code-injection
-// defense, and LinkedIn's cancel errors. See docs/design/linkedin-sign-in.md
-// and docs/adr/0058-linkedin-sign-in-in-production.md.
+// credentials in the token request body, a nonce claim that LinkedIn omits but
+// that must match when present, and LinkedIn's cancel errors. See
+// docs/design/linkedin-sign-in.md, docs/adr/0058-linkedin-sign-in-in-production.md,
+// and docs/adr/0063-linkedin-sign-in-without-a-nonce-claim.md.
 package auth_test
 
 import (
@@ -19,6 +20,7 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/auth/oidctest"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 // linkedinDiscoverySnapshot is LinkedIn's public discovery document as served
@@ -192,15 +194,70 @@ func TestLinkedInCallback_OtherProviderError_GenericFailure(t *testing.T) {
 	}
 }
 
-// TestLinkedInCallback_NonceCheckedAfterExchange proves the nonce, not PKCE,
-// stops an injected code: the exchange succeeds, the ID token verifies, and
-// the callback still rejects a missing or foreign nonce without writing.
+// TestLinkedInCallback_AbsentNonceClaim_SignsIn pins LinkedIn's observed
+// behavior: its ID token has no nonce claim even though the authorize request
+// sends one. The callback accepts that token once, and the consumed
+// transaction still refuses a second callback before any token exchange.
+func TestLinkedInCallback_AbsentNonceClaim_SignsIn(t *testing.T) {
+	t.Parallel()
+
+	p := oidctest.NewProvider(t)
+	logger, logBuf := newCapturingLogger()
+	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withLogger(logger))
+
+	subject := uniqueLinkedInSubject(t)
+	email := uniqueEmail(t)
+	txCookie, state, nonce := beginLinkedIn(t, handler)
+	if nonce == "" {
+		t.Fatal("authorize URL nonce is empty, want the transaction's nonce sent to LinkedIn")
+	}
+	p.RegisterCode("code-no-nonce", oidctest.Claims{
+		Subject: subject, Email: email, EmailVerified: ptrTrue(),
+	})
+
+	resp := doLinkedInCallback(t, handler, "code-no-nonce", state, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
+	assertLinkedInLoginAccepted(t, resp)
+	if containsLogReason(logBuf.Bytes(), "nonce_mismatch") {
+		t.Errorf("log = %q, want no nonce_mismatch for an ID token without a nonce claim", logBuf.String())
+	}
+	identity, err := q.GetIdentityByProviderSubject(context.Background(), store.GetIdentityByProviderSubjectParams{
+		Provider:       string(auth.ProviderLinkedIn),
+		ProviderUserID: subject,
+	})
+	if err != nil {
+		t.Fatalf("GetIdentityByProviderSubject(linkedin, %q) error = %v, want the created identity", subject, err)
+	}
+	usr, err := q.GetUserByEmail(context.Background(), email)
+	if err != nil {
+		t.Fatalf("GetUserByEmail(%q) error = %v, want the created user", email, err)
+	}
+	if identity.UserID != usr.ID {
+		t.Errorf("identity.UserID = %v, want %v", identity.UserID, usr.ID)
+	}
+
+	// A replayed callback on the same transaction cookie and state stops at
+	// the consumed transaction and never reaches the token endpoint.
+	p.RegisterCode("code-no-nonce-replay", oidctest.Claims{
+		Subject: uniqueLinkedInSubject(t), Email: uniqueEmail(t), EmailVerified: ptrTrue(),
+	})
+	replay := doLinkedInCallback(t, handler, "code-no-nonce-replay", state, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.
+	assertRejected(t, replay)
+	if _, count := p.LastTokenRequest(); count != 1 {
+		t.Errorf("token requests = %d, want 1 (the replay must not reach the token endpoint)", count)
+	}
+	if !containsLogReason(logBuf.Bytes(), "tx_invalid") {
+		t.Errorf("log = %q, want reason tx_invalid for the replay", logBuf.String())
+	}
+}
+
+// TestLinkedInCallback_NonceCheckedAfterExchange proves a nonce claim that is
+// present must equal the transaction's: the exchange succeeds, the ID token
+// verifies, and the callback still rejects a foreign nonce without writing.
 func TestLinkedInCallback_NonceCheckedAfterExchange(t *testing.T) {
 	t.Parallel()
 
 	for name, nonceFor := range map[string]func(real string) string{
 		"foreign nonce": func(string) string { return "nonce-from-another-transaction" },
-		"missing nonce": func(string) string { return "" },
 		"prefix nonce":  func(real string) string { return real[:len(real)-1] },
 	} {
 		t.Run(name, func(t *testing.T) {

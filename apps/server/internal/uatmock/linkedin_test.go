@@ -170,18 +170,22 @@ func TestLinkedInFlowUsesDocumentedRequestsAndRealVerification(t *testing.T) {
 		t.Fatalf("verify ID token: %v", err)
 	}
 	var claims struct {
-		Subject       string `json:"sub"`
-		Email         string `json:"email"`
-		EmailVerified *bool  `json:"email_verified"`
-		Name          string `json:"name"`
-		Nonce         string `json:"nonce"`
+		Subject       string  `json:"sub"`
+		Email         string  `json:"email"`
+		EmailVerified *bool   `json:"email_verified"`
+		Name          string  `json:"name"`
+		Nonce         *string `json:"nonce"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		t.Fatalf("decode claims: %v", err)
 	}
 	if claims.Subject != "lnkd-Q7x2mP4tVa" || claims.Email != "li-verified@example.invalid" ||
-		claims.EmailVerified == nil || !*claims.EmailVerified || claims.Name != "LinkedIn Verified" || claims.Nonce != "linkedin-nonce" {
+		claims.EmailVerified == nil || !*claims.EmailVerified || claims.Name != "LinkedIn Verified" {
 		t.Fatalf("claims = %+v", claims)
+	}
+	// LinkedIn accepts the nonce parameter but returns no nonce claim.
+	if claims.Nonce != nil {
+		t.Fatalf("ID token nonce claim = %q, want absent as LinkedIn returns it", *claims.Nonce)
 	}
 }
 

@@ -21,7 +21,7 @@ const (
 	reasonTokenExchangeFailed        // the authorization-code exchange failed at the provider
 	reasonIDTokenMissing             // the token response carried no id_token
 	reasonIDTokenVerificationFailed  // signature, issuer, audience, or expiry check failed
-	reasonNonceMismatch              // the id_token's nonce is absent or differs from the transaction's
+	reasonNonceMismatch              // the id_token's nonce differs from the transaction's, or is absent from a Google token
 	reasonIDTokenClaimsDecodeFailed  // the id_token verified but its claims would not decode
 	reasonEmailNotVerified           // Google registration email is absent or unverified
 	reasonEmailAlreadyRegistered     // the verified email already belongs to an account reached another way
