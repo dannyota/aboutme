@@ -46,7 +46,7 @@
         {
           "id": "dbbb38d7-53aa-5118-84b3-af166367acdd",
           "isHidden": false,
-          "text": "<p>Senior Frontend Engineer với 6 năm làm web thương mại điện tử và SaaS cho hơn 2 triệu người dùng mỗi tháng. Thế mạnh: hiệu năng web, design system, Playwright.</p>"
+          "text": "<p>Senior Frontend Engineer với 6 năm làm web thương mại điện tử và SaaS cho hơn 2 triệu người dùng mỗi tháng. Thế mạnh: hiệu năng web, design system, accessibility và kiểm thử bằng Playwright. Dẫn dắt nhóm 4 người, duy trì một thư viện địa chỉ mã nguồn mở được 40 shop Việt Nam sử dụng.</p>"
         }
       ]
     },
@@ -70,7 +70,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Dẫn dắt nhóm 4 người chuyển ứng dụng mua sắm từ React SPA sang Next.js, giảm LCP từ 4,1 giây xuống 1,9 giây.</li><li>Duy trì design system 60 component bằng React và TypeScript cho 5 nhóm sản phẩm, rút ngắn khoảng 30% thời gian làm tính năng mới.</li><li>Chạy 6 A/B test trên luồng thanh toán, tăng tỷ lệ chuyển đổi 9%.</li><li>Giảm bundle JavaScript trang chủ từ 480 KB xuống 210 KB bằng code splitting.</li></ul>"
+          "description": "<ul><li>Dẫn dắt nhóm 4 người chuyển ứng dụng mua sắm từ React SPA sang Next.js, giảm LCP từ 4,1 giây xuống 1,9 giây.</li><li>Duy trì design system 60 component bằng React và TypeScript cho 5 nhóm sản phẩm, rút ngắn khoảng 30% thời gian làm tính năng mới.</li><li>Chạy 6 A/B test trên luồng thanh toán, tăng tỷ lệ chuyển đổi 9%.</li><li>Giảm bundle JavaScript trang chủ từ 480 KB xuống 210 KB bằng code splitting.</li><li>Đưa luồng thanh toán đạt chuẩn WCAG 2.1 AA, thêm kiểm tra axe vào CI và sửa 140 lỗi accessibility trong 3 tháng.</li></ul>"
         },
         {
           "id": "d25c8861-1fa2-5086-b068-81083b0e2602",
@@ -90,7 +90,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Làm dashboard quản lý kho bằng React và GraphQL cho 800 nhà bán lẻ.</li><li>Thiết lập E2E test bằng Playwright trong GitLab CI, giảm 70% lỗi regression lọt lên production.</li><li>Áp dụng virtual scrolling cho bảng 10.000 dòng, giảm độ trễ khi cuộn từ 3 giây xuống 0,3 giây.</li></ul>"
+          "description": "<ul><li>Làm dashboard quản lý kho bằng React và GraphQL cho 800 nhà bán lẻ.</li><li>Thiết lập E2E test bằng Playwright trong GitLab CI, giảm 70% lỗi regression lọt lên production.</li><li>Áp dụng virtual scrolling cho bảng 10.000 dòng, giảm độ trễ khi cuộn từ 3 giây xuống 0,3 giây.</li><li>Xây dựng màn hình bán hàng offline-first bằng IndexedDB, giúp 300 cửa hàng vẫn bán được khi mất mạng.</li></ul>"
         },
         {
           "id": "0432218a-7a97-555a-859c-f5ef154ca838",
@@ -110,7 +110,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Đặt lịch khám cho chuỗi phòng khám Nhật (8 tháng): 12 màn hình quản trị bằng React.</li><li>Dự án website tuyển dụng cho khách hàng Singapore (6 tháng): làm giao diện responsive bằng Vue.js, đạt 95 điểm Lighthouse trên mobile.</li></ul>"
+          "description": "<ul><li>Đặt lịch khám cho chuỗi phòng khám Nhật (8 tháng): 12 màn hình quản trị bằng React.</li><li>Dự án website tuyển dụng cho khách hàng Singapore (6 tháng): làm giao diện responsive bằng Vue.js, đạt 95 điểm Lighthouse trên mobile.</li><li>Viết unit test bằng Jest cho luồng đặt lịch, tăng coverage từ 30% lên 80%.</li></ul>"
         }
       ]
     },
@@ -124,7 +124,7 @@
           "isHidden": false,
           "title": "vn-address-kit",
           "link": "https://example.com/do-hoang-nam/vn-address-kit",
-          "description": "<p>Thư viện chuẩn hóa địa chỉ Việt Nam: 300 sao GitHub, 3.000 lượt tải npm mỗi tuần.</p>",
+          "description": "<p>Thư viện TypeScript tách và chuẩn hóa địa chỉ Việt Nam theo đơn vị hành chính sau sáp nhập tỉnh năm 2025: 300 sao GitHub, 3.000 lượt tải npm mỗi tuần.</p>",
           "dates": {
             "start": {
               "y": 2024,
@@ -133,6 +133,24 @@
             "end": null,
             "present": true
           }
+        },
+        {
+          "id": "07466edf-fe8c-5029-a421-2f27b58b4dd8",
+          "isHidden": false,
+          "title": "Next.js performance checklist",
+          "link": "https://example.com/do-hoang-nam/nextjs-perf",
+          "dates": {
+            "start": {
+              "y": 2024,
+              "m": 9
+            },
+            "end": {
+              "y": 2025,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<p>Checklist và repo demo tối ưu Core Web Vitals cho Next.js; 3 nhóm trong nước áp dụng, 1.200 sao GitHub.</p>"
         }
       ]
     },

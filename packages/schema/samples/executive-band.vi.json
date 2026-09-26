@@ -39,32 +39,7 @@
         {
           "id": "c3f652c6-d84c-57b7-829c-deeaa74d5140",
           "isHidden": false,
-          "text": "<p>17 năm trong lĩnh vực công nghệ, 8 năm ở cấp quản lý cao nhất khối công nghệ tại tài chính và bán lẻ. Dẫn dắt chuyển đổi số giúp 70% giao dịch chuyển sang kênh số, đồng thời giảm 22% chi phí vận hành công nghệ. Xây dựng đội ngũ 350 kỹ sư, đặt nền tảng an toàn thông tin đạt chuẩn quốc tế.</p>"
-        }
-      ]
-    },
-    "503b2a51-9cc2-580f-98bc-d61665ee5f2e": {
-      "sectionType": "custom",
-      "displayName": "Thành tựu nổi bật",
-      "iconKey": "trophy",
-      "entries": [
-        {
-          "id": "ca745b50-f94f-5425-98b2-d2b32ab14c72",
-          "isHidden": false,
-          "title": "Chuyển đổi số toàn diện",
-          "description": "<p>Tỷ lệ giao dịch qua kênh số tăng từ 28% lên 70% trong 3 năm; ứng dụng di động đạt 4,7 sao với 3,5 triệu người dùng.</p>"
-        },
-        {
-          "id": "19662234-90d4-5596-86a1-d518795deb2f",
-          "isHidden": false,
-          "title": "Hiện đại hóa hạ tầng lõi",
-          "description": "<p>Chuyển hệ thống lõi sang kiến trúc dịch vụ và điện toán đám mây lai, không gián đoạn giao dịch; chi phí hạ tầng giảm 22%.</p>"
-        },
-        {
-          "id": "8b5ec424-b88c-5dc9-bfda-e85e83439409",
-          "isHidden": false,
-          "title": "Đạt chuẩn an toàn thông tin",
-          "description": "<p>Đạt ISO/IEC 27001 và PCI DSS lần đầu; không có sự cố nghiêm trọng trong 4 năm liên tiếp.</p>"
+          "text": "<p>17 năm trong lĩnh vực công nghệ, 8 năm ở cấp quản lý cao nhất khối công nghệ tại tài chính và bán lẻ. Dẫn dắt chuyển đổi số giúp 70% giao dịch chuyển sang kênh số, đồng thời giảm 22% chi phí vận hành công nghệ. Tiếng Anh thành thạo; thành viên Ban chấp hành Câu lạc bộ Giám đốc Công nghệ Tài chính Việt Nam.</p>"
         }
       ]
     },
@@ -88,7 +63,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Phụ trách toàn bộ công nghệ, dữ liệu và an toàn thông tin; quản lý 350 nhân sự và ngân sách 900 tỷ đồng/năm.</li><li>Báo cáo Tổng Giám đốc và Hội đồng Quản trị; thành viên Ủy ban Quản lý rủi ro.</li><li>Xây dựng nền tảng cho vay số, giải ngân trong 15 phút, đóng góp 40% dư nợ mới.</li><li>Thành lập Trung tâm Dữ liệu và AI; mô hình chấm điểm tín dụng giảm tỷ lệ nợ xấu mới 1,3 điểm phần trăm.</li></ul>"
+          "description": "<ul><li>Đưa giao dịch qua kênh số từ 28% lên 70% trong 3 năm; app đạt 4,7 sao, 3,5 triệu người dùng.</li><li>Phụ trách công nghệ, dữ liệu, an toàn thông tin: 350 nhân sự, 900 tỷ đồng/năm.</li><li>Xây dựng nền tảng cho vay số, giải ngân trong 15 phút, đóng góp 40% dư nợ mới.</li></ul>"
         },
         {
           "id": "faca1cf8-871e-56d9-af1d-76de5adf3307",
@@ -108,32 +83,12 @@
             },
             "present": false
           },
-          "description": "<ul><li>Quản lý 120 nhân sự; triển khai ERP và hệ thống bán hàng đa kênh cho 900 cửa hàng.</li><li>Đưa thương mại điện tử từ 3% lên 18% doanh thu trong 3 năm.</li></ul>"
+          "description": "<ul><li>Quản lý 120 nhân sự, triển khai ERP và bán hàng đa kênh cho 900 cửa hàng, đưa thương mại điện tử từ 3% lên 18% doanh thu trong 3 năm.</li></ul>"
         },
         {
           "id": "3889d82b-b6a8-5994-97f3-c389f8e1f44a",
           "isHidden": false,
-          "jobTitle": "Trưởng phòng Phát triển Phần mềm",
-          "employer": "Công ty CP Giải pháp Phần mềm Đông Á Việt",
-          "city": "Hà Nội",
-          "country": "Việt Nam",
-          "dates": {
-            "start": {
-              "y": 2012,
-              "m": 8
-            },
-            "end": {
-              "y": 2016,
-              "m": 4
-            },
-            "present": false
-          },
-          "description": "<ul><li>Dẫn dắt 4 nhóm phát triển 60 kỹ sư, bàn giao 25 dự án ngân hàng lõi cho khách hàng trong và ngoài nước.</li></ul>"
-        },
-        {
-          "id": "083ef12f-4144-580d-96de-efeba0b50773",
-          "isHidden": false,
-          "jobTitle": "Kỹ sư phần mềm, rồi Trưởng nhóm",
+          "jobTitle": "Kỹ sư phần mềm, rồi Trưởng phòng Phát triển Phần mềm",
           "employer": "Công ty CP Giải pháp Phần mềm Đông Á Việt",
           "city": "Hà Nội",
           "country": "Việt Nam",
@@ -143,39 +98,12 @@
               "m": 7
             },
             "end": {
-              "y": 2012,
-              "m": 7
+              "y": 2016,
+              "m": 4
             },
             "present": false
           },
-          "description": "<ul><li>Phát triển phân hệ thanh toán cho hệ thống ngân hàng lõi; được thăng chức Trưởng nhóm sau 2 năm.</li></ul>"
-        }
-      ]
-    },
-    "1cab5534-39ce-57df-99d6-6dd455e1cbb9": {
-      "sectionType": "custom",
-      "displayName": "Vai trò cộng đồng",
-      "iconKey": "briefcase",
-      "entries": [
-        {
-          "id": "6cd086d2-4dcd-5a41-a33a-92984dda44fb",
-          "isHidden": false,
-          "title": "Thành viên Ban chấp hành",
-          "subtitle": "Câu lạc bộ Giám đốc Công nghệ Tài chính Việt Nam",
-          "dates": {
-            "start": {
-              "y": 2022,
-              "m": 1
-            },
-            "end": null,
-            "present": true
-          }
-        },
-        {
-          "id": "70dddaf5-7588-5327-a57b-8ec9f9549ee6",
-          "isHidden": false,
-          "title": "Diễn giả",
-          "subtitle": "Diễn đàn Chuyển đổi số Ngân hàng, 2023 và 2025"
+          "description": "<ul><li>Dẫn dắt 4 nhóm, 60 kỹ sư, bàn giao 25 dự án ngân hàng lõi trong và ngoài nước.</li><li>Phát triển phân hệ thanh toán cho ngân hàng lõi; lên Trưởng nhóm sau 2 năm.</li></ul>"
         }
       ]
     },
@@ -223,46 +151,6 @@
           }
         }
       ]
-    },
-    "certificate": {
-      "sectionType": "certificate",
-      "displayName": "Chứng chỉ",
-      "iconKey": "award",
-      "entries": [
-        {
-          "id": "c03ce210-d1a2-5b46-8d94-2ee3de2861a6",
-          "isHidden": false,
-          "title": "TOGAF Enterprise Architecture Practitioner",
-          "issuer": "The Open Group",
-          "date": {
-            "y": 2019,
-            "m": 10
-          }
-        },
-        {
-          "id": "4d8666e9-ef7d-5022-823a-48a12384c288",
-          "isHidden": false,
-          "title": "Certified Information Security Manager (CISM)",
-          "issuer": "ISACA",
-          "date": {
-            "y": 2021,
-            "m": 6
-          }
-        }
-      ]
-    },
-    "language": {
-      "sectionType": "language",
-      "displayName": "Ngoại ngữ",
-      "iconKey": "languages",
-      "entries": [
-        {
-          "id": "0a52359b-545d-52d8-b7d7-ed60e54170fe",
-          "isHidden": false,
-          "name": "Tiếng Anh",
-          "level": 5
-        }
-      ]
     }
   },
   "customization": {
@@ -301,12 +189,8 @@
       "sections": {
         "main": [
           "profile",
-          "503b2a51-9cc2-580f-98bc-d61665ee5f2e",
           "work",
-          "1cab5534-39ce-57df-99d6-6dd455e1cbb9",
-          "education",
-          "certificate",
-          "language"
+          "education"
         ],
         "sidebar": []
       }

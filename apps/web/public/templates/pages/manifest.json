@@ -102,23 +102,21 @@
   {
     "templateId": "executive-band",
     "lng": "en",
-    "pages": 2,
+    "pages": 1,
     "width": 1240,
     "height": 1754,
     "files": [
-      "executive-band-en-p1.png",
-      "executive-band-en-p2.png"
+      "executive-band-en-p1.png"
     ]
   },
   {
     "templateId": "executive-band",
     "lng": "vi",
-    "pages": 2,
+    "pages": 1,
     "width": 1240,
     "height": 1754,
     "files": [
-      "executive-band-vi-p1.png",
-      "executive-band-vi-p2.png"
+      "executive-band-vi-p1.png"
     ]
   },
   {

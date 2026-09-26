@@ -39,7 +39,7 @@
         {
           "id": "bf6f1a37-a8f2-5528-b56a-bbb0a89f5a07",
           "isHidden": false,
-          "text": "<p>Senior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month. Strong in web performance, design systems, and Playwright.</p>"
+          "text": "<p>Senior Frontend Engineer with 6 years on e-commerce and SaaS web apps for more than 2 million users a month. Strong in web performance, design systems, accessibility, and Playwright testing. Lead a team of 4 and maintain an open-source address library used by 40 Vietnamese shops.</p>"
         }
       ]
     },
@@ -63,7 +63,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Lead a team of 4 moving the shopping app from a React SPA to Next.js; LCP fell from 4.1 s to 1.9 s.</li><li>Maintain a 60-component React and TypeScript design system for 5 product teams, which cut feature build time by about 30%.</li><li>Run A/B tests on the checkout flow; 6 tests raised conversion by 9%.</li><li>Cut the home page JavaScript bundle from 480 KB to 210 KB with code splitting.</li></ul>"
+          "description": "<ul><li>Lead a team of 4 moving the shopping app from a React SPA to Next.js; LCP fell from 4.1 s to 1.9 s.</li><li>Maintain a 60-component React and TypeScript design system for 5 product teams, which cut feature build time by about 30%.</li><li>Run A/B tests on the checkout flow; 6 tests raised conversion by 9%.</li><li>Cut the home page JavaScript bundle from 480 KB to 210 KB with code splitting.</li><li>Keep the checkout at WCAG 2.1 AA with axe checks in CI, after fixing 140 accessibility issues in 3 months.</li></ul>"
         },
         {
           "id": "39159c90-3b96-5a8d-8768-8724df347584",
@@ -83,7 +83,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Built the inventory dashboard in React and GraphQL for 800 retail businesses.</li><li>Set up Playwright end-to-end tests in GitLab CI, cutting regressions that reached production by 70%.</li><li>Added virtual scrolling to a 10,000-row table, bringing scroll lag down from 3 s to 0.3 s.</li></ul>"
+          "description": "<ul><li>Built the inventory dashboard in React and GraphQL for 800 retail businesses.</li><li>Set up Playwright end-to-end tests in GitLab CI, cutting regressions that reached production by 70%.</li><li>Added virtual scrolling to a 10,000-row table, bringing scroll lag down from 3 s to 0.3 s.</li><li>Built an offline-first point-of-sale screen with IndexedDB, so 300 stores kept selling through network outages.</li></ul>"
         },
         {
           "id": "8c53131a-bf53-5953-a5a7-8773fcc88ca8",
@@ -103,7 +103,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Booking system for a Japanese clinic chain (8 months): built 12 admin screens in React.</li><li>Recruitment website for a Singapore client (6 months): built the responsive UI in Vue.js, scoring 95 in mobile Lighthouse.</li></ul>"
+          "description": "<ul><li>Booking system for a Japanese clinic chain (8 months): built 12 admin screens in React.</li><li>Recruitment website for a Singapore client (6 months): built the responsive UI in Vue.js, scoring 95 in mobile Lighthouse.</li><li>Wrote Jest unit tests for the booking flow, raising coverage from 30% to 80%.</li></ul>"
         }
       ]
     },
@@ -117,7 +117,7 @@
           "isHidden": false,
           "title": "vn-address-kit",
           "link": "https://example.com/do-hoang-nam/vn-address-kit",
-          "description": "<p>Vietnamese address library: 300 GitHub stars, 3,000 npm downloads a week.</p>",
+          "description": "<p>Vietnamese address library in TypeScript that parses and normalizes addresses after the 2025 province merger: 300 GitHub stars, 3,000 npm downloads a week.</p>",
           "dates": {
             "start": {
               "y": 2024,
@@ -126,6 +126,24 @@
             "end": null,
             "present": true
           }
+        },
+        {
+          "id": "2ffd46bf-7cc3-5497-bd46-13fbe94653a4",
+          "isHidden": false,
+          "title": "Next.js performance checklist",
+          "link": "https://example.com/do-hoang-nam/nextjs-perf",
+          "dates": {
+            "start": {
+              "y": 2024,
+              "m": 9
+            },
+            "end": {
+              "y": 2025,
+              "m": 2
+            },
+            "present": false
+          },
+          "description": "<p>Open checklist and demo repository for Core Web Vitals in Next.js; used by 3 local teams, 1,200 GitHub stars.</p>"
         }
       ]
     },

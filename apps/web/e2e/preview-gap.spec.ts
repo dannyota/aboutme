@@ -1003,6 +1003,13 @@ for (const { templateId, lng } of SAMPLES) {
           pdfPages: pdfPageCount,
         };
         caseResults.push(result);
+        // One line per case, so a ceiling change can cite the observed
+        // counts from the CI log.
+        console.log(
+          `preview-gap counts ${caseKey(templateId, lng, engine)}`
+          + ` ${zoomLabel}: ${JSON.stringify(result.counts)}`
+          + ` pages ${String(previewPageCount)}/${String(pdfPageCount)}`,
+        );
         try {
           assertWithinExpectation(result);
           // A one-page PDF that spills into two preview pages (or the

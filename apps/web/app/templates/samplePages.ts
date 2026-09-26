@@ -9,7 +9,7 @@ export const SAMPLE_PAGES: Readonly<Record<string, number>> = Object.freeze({
   'creative-accent': 1,
   'elegant-serif-two': 1,
   'engineer-compact': 1,
-  'executive-band': 2,
+  'executive-band': 1,
   'graduate-friendly': 1,
   'international-lang': 1,
   'minimal-air': 1,

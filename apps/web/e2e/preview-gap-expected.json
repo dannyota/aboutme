@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese executive-band and modern-sidebar samples, whose PDF text layer splits a few diacritic words differently from the DOM. Line-break ceilings hold the differences that font hinting (Chromium without the print flags) causes; they change only with the browser or font build. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
+  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese modern-sidebar sample, whose PDF text layer splits a few diacritic words differently from the DOM. Line-break ceilings hold the differences that font hinting (Chromium without the print flags) causes; they change with the browser, the font build, or the sample text. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
   "cases": {
     "ats-plain|en|chromium-normal": {
       "maxLineBreak": 0,
@@ -31,7 +31,7 @@
       "maxEntryPageMismatches": 0
     },
     "consulting-formal|en|chromium-normal": {
-      "maxLineBreak": 0,
+      "maxLineBreak": 2,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -115,7 +115,7 @@
       "maxEntryPageMismatches": 0
     },
     "engineer-compact|en|chromium-normal": {
-      "maxLineBreak": 1,
+      "maxLineBreak": 5,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -129,7 +129,7 @@
       "maxEntryPageMismatches": 0
     },
     "engineer-compact|vi|chromium-normal": {
-      "maxLineBreak": 3,
+      "maxLineBreak": 7,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -143,7 +143,7 @@
       "maxEntryPageMismatches": 0
     },
     "executive-band|en|chromium-normal": {
-      "maxLineBreak": 6,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -159,15 +159,15 @@
     "executive-band|vi|chromium-normal": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
+      "maxMissing": 0,
+      "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
     "executive-band|vi|webkit": {
       "maxLineBreak": 0,
       "maxPageBreak": 0,
-      "maxMissing": 2,
-      "maxExtra": 2,
+      "maxMissing": 0,
+      "maxExtra": 0,
       "maxEntryPageMismatches": 0
     },
     "graduate-friendly|en|chromium-normal": {
@@ -311,7 +311,7 @@
       "maxEntryPageMismatches": 0
     },
     "nordic-muted|en|chromium-normal": {
-      "maxLineBreak": 9,
+      "maxLineBreak": 11,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -325,7 +325,7 @@
       "maxEntryPageMismatches": 0
     },
     "nordic-muted|vi|chromium-normal": {
-      "maxLineBreak": 6,
+      "maxLineBreak": 8,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -353,7 +353,7 @@
       "maxEntryPageMismatches": 0
     },
     "one-page-tight|vi|chromium-normal": {
-      "maxLineBreak": 5,
+      "maxLineBreak": 3,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,

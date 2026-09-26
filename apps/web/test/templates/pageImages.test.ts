@@ -43,17 +43,21 @@ describe('samplePageImage', () => {
 });
 
 describe('samplePageImages', () => {
-  it('returns every stored page of a multi-page sample in order', () => {
-    const entry = manifest.find((candidate) =>
-      candidate.templateId === 'executive-band' && candidate.lng === 'en')!;
-    const images = samplePageImages('executive-band', 'en');
-    expect(images).toHaveLength(2);
-    expect(images.map((image) => image.number)).toEqual([1, 2]);
-    images.forEach((image, index) => {
-      expect(image.src).toBe(`/templates/pages/${entry.files[index]}`);
-      expect(image.width).toBe(entry.width);
-      expect(image.height).toBe(entry.height);
-    });
+  it('returns every stored page of each sample in order', () => {
+    for (const entry of manifest) {
+      const images = samplePageImages(
+        entry.templateId,
+        entry.lng as 'en' | 'vi',
+      );
+      expect(images).toHaveLength(entry.pages);
+      expect(images.map((image) => image.number))
+        .toEqual(entry.files.map((_, index) => index + 1));
+      images.forEach((image, index) => {
+        expect(image.src).toBe(`/templates/pages/${entry.files[index]}`);
+        expect(image.width).toBe(entry.width);
+        expect(image.height).toBe(entry.height);
+      });
+    }
   });
 
   it('is empty for a template without a sample', () => {

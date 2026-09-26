@@ -46,7 +46,7 @@
         {
           "id": "73429370-8b37-54ae-8443-3b9c01c6c88c",
           "isHidden": false,
-          "text": "<p>Senior DevOps Engineer với 10 năm vận hành hạ tầng, đi lên từ quản trị hệ thống. Vận hành Kubernetes trên AWS cho 60 microservices, uptime 99,95%. Có chứng chỉ CKA, quen Terraform và GitOps.</p>"
+          "text": "<p>Senior DevOps Engineer với 10 năm vận hành hạ tầng, đi lên từ quản trị hệ thống. Vận hành Kubernetes trên AWS cho 60 microservices, uptime 99,95%. Có chứng chỉ CKA, quen Terraform và GitOps; giảm khoảng 35% chi phí AWS.</p>"
         }
       ]
     },
@@ -70,7 +70,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Vận hành 4 cluster Kubernetes (EKS) trên AWS cho 60 microservices.</li><li>Viết lại hạ tầng thành 40 module Terraform, rút thời gian dựng môi trường mới từ 3 ngày còn 2 giờ.</li><li>Triển khai GitOps với Argo CD và GitLab CI, tăng số lần deploy từ 5 lên 60 lần/tuần.</li><li>Dựng monitoring bằng Prometheus và Grafana kèm runbook on-call, giảm MTTR từ 50 xuống 12 phút.</li></ul>"
+          "description": "<ul><li>Vận hành 4 cluster Kubernetes (EKS) trên AWS cho 60 microservices.</li><li>Viết lại hạ tầng thành 40 module Terraform, rút thời gian dựng môi trường mới từ 3 ngày còn 2 giờ.</li><li>Triển khai GitOps với Argo CD và GitLab CI, tăng số lần deploy từ 5 lên 60 lần/tuần.</li><li>Dựng monitoring bằng Prometheus và Grafana kèm runbook on-call, giảm MTTR từ 50 xuống 12 phút.</li><li>Giảm khoảng 35% chi phí AWS nhờ Karpenter, Spot instance và rightsizing, không ảnh hưởng uptime.</li></ul>"
         },
         {
           "id": "1ad8f622-483e-5891-9688-d5cb8e544510",
@@ -90,7 +90,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Dự án thương mại điện tử cho khách hàng Úc (14 tháng): chuyển 25 service từ VM lên Kubernetes, không gây downtime.</li><li>Xây dựng pipeline CI/CD dùng chung trên GitLab CI cho 12 dự án, rút ngắn thời gian release từ 2 giờ còn 15 phút.</li></ul>"
+          "description": "<ul><li>Dự án thương mại điện tử cho khách hàng Úc (14 tháng): chuyển 25 service từ VM lên Kubernetes, không gây downtime.</li><li>Xây dựng pipeline CI/CD dùng chung trên GitLab CI cho 12 dự án, rút ngắn thời gian release từ 2 giờ còn 15 phút.</li><li>Đưa Trivy quét image vào mọi pipeline, loại bỏ 200 CVE mức Critical và High khỏi base image.</li></ul>"
         },
         {
           "id": "ea8eabb8-6b68-564f-b7ca-58c6db658374",

@@ -39,7 +39,7 @@
         {
           "id": "06aa3761-8697-5d09-ae49-aa50fac1c098",
           "isHidden": false,
-          "text": "<p>Senior Backend Engineer with 9 years building payment, banking, and logistics systems in Go and Java. Lead a team of 5 and run on-call and design reviews.</p>"
+          "text": "<p>Senior Backend Engineer with 9 years building payment, banking, and logistics systems in Go and Java. Lead a team of 5, run on-call and design reviews, and maintain an open-source Go library.</p>"
         }
       ]
     },
@@ -63,7 +63,7 @@
             "end": null,
             "present": true
           },
-          "description": "<ul><li>Design and run the payment service in Go and PostgreSQL, handling 3 million transactions a day at 99.95% uptime.</li><li>Moved end-of-day reconciliation to Kafka events: 25 minutes instead of 4 hours.</li><li>Lead a team of 5; brought in design reviews and on-call runbooks that cut MTTR from 45 to 15 minutes.</li></ul>"
+          "description": "<ul><li>Design and run the payment service in Go and PostgreSQL, handling 3 million transactions a day at 99.95% uptime.</li><li>Run end-of-day reconciliation on Kafka events: 25 minutes instead of 4 hours.</li><li>Cut p99 latency of the top-up API from 800 ms to 120 ms by rewriting PostgreSQL queries and adding a Redis cache.</li><li>Use idempotency keys and a transactional outbox in 12 payment flows; duplicate charges fell from about 40 a month to zero.</li><li>Lead a team of 5 with design reviews and on-call runbooks that cut MTTR from 45 to 15 minutes.</li></ul>"
         },
         {
           "id": "a6d3347c-6586-5e6c-86d4-687897f78d3a",
@@ -83,7 +83,7 @@
             },
             "present": false
           },
-          "description": "<ul><li>Built the shipment-tracking API in Go, gRPC, and Redis for 20 million requests a day.</li><li>Split a PHP monolith into 9 Go microservices on Kubernetes, moving releases from weekly to daily.</li></ul>"
+          "description": "<ul><li>Built the shipment-tracking API in Go, gRPC, and Redis for 20 million requests a day.</li><li>Split a PHP monolith into 9 Go microservices on Kubernetes, moving releases from weekly to daily.</li><li>Built a GitHub Actions CI/CD pipeline with integration tests, taking a release from 2 hours to 15 minutes.</li><li>Added Prometheus metrics and Grafana alerts to every service; incidents found by customers fell from 12 to 3 a quarter.</li></ul>"
         },
         {
           "id": "c6e7f6e3-8148-540e-a488-bc23abedbf04",
