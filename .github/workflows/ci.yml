@@ -24,7 +24,7 @@ concurrency:
 
 # Job layout: GitHub Free runs at most 20 jobs of one account at once, and a
 # job past that limit waits in the queue, including behind other branches'
-# runs. This workflow starts 19 jobs (6 single jobs, 2 Semgrep product
+# runs. This workflow starts 18 jobs (5 single jobs, 2 Semgrep product
 # scans, 2 web-e2e shards, 9 proof groups), each sized to finish in about 4
 # minutes, then the ci gate. Short checks join a longer job that already has
 # their setup instead of paying for a runner of their own, and independent
@@ -136,9 +136,15 @@ jobs:
       - if: ${{ !cancelled() }}
         name: Start the deploy-script static tests
         run: bash scripts/ci-background.sh start deploy-tests make operational-test-deploy
+      # This job's own Go work is small (building/vetting/testing one
+      # generated schema module, and `go install`-ing gitleaks), so it uses
+      # its own light-scoped cache instead of the full shared build/module
+      # cache the server job needs.
       - if: ${{ !cancelled() }}
         id: go
         uses: ./.github/actions/setup-go
+        with:
+          light: "true"
       - if: ${{ !cancelled() }}
         run: npm ci
       - if: ${{ !cancelled() }}
@@ -219,13 +225,18 @@ jobs:
           toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
 
   # The Go build/vet/test/lint gate, the sqlc-drift and route-table gates,
-  # govulncheck, and the media package's slow normalization corpus test,
-  # which runs in the background beside the rest.
+  # govulncheck, the media package's slow normalization corpus test (which
+  # runs in the background beside the rest), and the deployment transparency
+  # observer's own build/vet/test/lint/govulncheck (deploy/observer/README.md,
+  # a separate Go module outside go.work with no database, browser, or live
+  # AWS access needed; its platform adapters and S3 publisher are tested
+  # against httptest servers).
   #
   # govulncheck runs in source mode for every Go module in the repository: it
   # fails only on a vulnerability reachable from the module's own call graph,
-  # not on every dependency with a known advisory. The Caddy build module
-  # lives outside go.work (it pins its own Caddy version), so it needs
+  # not on every dependency with a known advisory. The Caddy build module and
+  # the observer module live outside go.work (the former pins its own Caddy
+  # version; the latter is a standalone deployment tool), so both need
   # GOWORK=off or govulncheck would refuse to run there at all. Two
   # module-level advisories are known and not reachable: GO-2026-6094
   # (cel-go 0.28.1; Caddy 2.11.4 cannot build against cel-go >= 0.29) and
@@ -315,52 +326,56 @@ jobs:
         working-directory: deploy/caddy/production/build
         env:
           GOWORK: "off"
+      # The deployment transparency observer (deploy/observer/README.md): its
+      # own Go module outside go.work, so every step below runs with
+      # GOWORK=off. No database, browser, or live AWS access is needed; the
+      # platform adapters and the S3 publisher are tested against httptest
+      # servers. It reuses this job's checkout, Go toolchain, and the
+      # govulncheck already installed above.
       - if: ${{ !cancelled() }}
-        name: Wait for the media corpus test
-        run: bash scripts/ci-background.sh wait media-corpus 1200
-      - if: always()
-        run: make test-s3-down
-      - uses: ./.github/actions/save-go-cache
-        with:
-          cache-hit: ${{ steps.go.outputs.cache-hit }}
-          cache-key: ${{ steps.go.outputs.cache-key }}
-          toolchain-hit: ${{ steps.go.outputs.toolchain-hit }}
-
-  # The deployment transparency observer (deploy/observer/README.md): its own
-  # Go module outside go.work, so every step runs with GOWORK=off. No
-  # database, browser, or live AWS access is needed; the platform adapters
-  # and the S3 publisher are tested against httptest servers.
-  observer:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    defaults:
-      run:
+        name: observer build
+        run: go build ./...
         working-directory: deploy/observer
-    env:
-      GOWORK: "off"
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: go
-        uses: ./.github/actions/setup-go
-      - run: go build ./...
-      - run: go vet ./...
-      - run: go test -race ./...
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        env:
+          GOWORK: "off"
+      - if: ${{ !cancelled() }}
+        name: observer vet
+        run: go vet ./...
+        working-directory: deploy/observer
+        env:
+          GOWORK: "off"
+      - if: ${{ !cancelled() }}
+        name: observer test
+        run: go test -race ./...
+        working-directory: deploy/observer
+        env:
+          GOWORK: "off"
+      - if: ${{ !cancelled() }}
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           working-directory: deploy/observer
           version: v2.14.0
-      - name: go mod tidy is a no-op
+      - if: ${{ !cancelled() }}
+        name: go mod tidy is a no-op (deploy/observer)
         run: |
           cp go.mod /tmp/observer-go.mod.before && cp go.sum /tmp/observer-go.sum.before
           go mod tidy
           diff /tmp/observer-go.mod.before go.mod && diff /tmp/observer-go.sum.before go.sum \
             || { echo "go.mod/go.sum are not tidy: run 'go mod tidy' in deploy/observer and commit"; exit 1; }
-      - name: Install the pinned govulncheck (1.8.0)
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-      - name: govulncheck deploy/observer
+        working-directory: deploy/observer
+        env:
+          GOWORK: "off"
+      - if: ${{ !cancelled() }}
+        name: govulncheck deploy/observer
         run: govulncheck ./...
+        working-directory: deploy/observer
+        env:
+          GOWORK: "off"
+      - if: ${{ !cancelled() }}
+        name: Wait for the media corpus test
+        run: bash scripts/ci-background.sh wait media-corpus 1200
+      - if: always()
+        run: make test-s3-down
       - uses: ./.github/actions/save-go-cache
         with:
           cache-hit: ${{ steps.go.outputs.cache-hit }}
@@ -593,11 +608,11 @@ jobs:
           - group: editor
             proofs: editor exports
           - group: entry
-            proofs: entry publish linkedin
+            proofs: entry publish
           - group: account
             proofs: password privacy transport
           - group: mcp
-            proofs: mcp mcp-sdk sample-start
+            proofs: mcp mcp-sdk sample-start linkedin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: setup
@@ -721,7 +736,6 @@ jobs:
     needs:
       - contracts
       - server
-      - observer
       - server-integration
       - server-resumeapi
       - web

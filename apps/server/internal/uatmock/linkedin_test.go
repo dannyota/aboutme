@@ -172,15 +172,16 @@ func TestLinkedInFlowUsesDocumentedRequestsAndRealVerification(t *testing.T) {
 	var claims struct {
 		Subject       string  `json:"sub"`
 		Email         string  `json:"email"`
-		EmailVerified *bool   `json:"email_verified"`
+		EmailVerified *string `json:"email_verified"`
 		Name          string  `json:"name"`
 		Nonce         *string `json:"nonce"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		t.Fatalf("decode claims: %v", err)
 	}
+	// LinkedIn's ID token sends email_verified as a JSON string, not a boolean.
 	if claims.Subject != "lnkd-Q7x2mP4tVa" || claims.Email != "li-verified@example.invalid" ||
-		claims.EmailVerified == nil || !*claims.EmailVerified || claims.Name != "LinkedIn Verified" {
+		claims.EmailVerified == nil || *claims.EmailVerified != "true" || claims.Name != "LinkedIn Verified" {
 		t.Fatalf("claims = %+v", claims)
 	}
 	// LinkedIn accepts the nonce parameter but returns no nonce claim.
@@ -290,13 +291,13 @@ func TestLinkedInAccountsIssueOptionalEmailClaims(t *testing.T) {
 	tests := []struct {
 		subject      string
 		wantEmail    string
-		wantVerified string // "" means the claim is absent
+		wantVerified string // "" means the claim is absent; else the raw JSON value, quoted like LinkedIn's string encoding
 	}{
-		{subject: "lnkd-Q7x2mP4tVa", wantEmail: "li-verified@example.invalid", wantVerified: "true"},
+		{subject: "lnkd-Q7x2mP4tVa", wantEmail: "li-verified@example.invalid", wantVerified: `"true"`},
 		{subject: "lnkd-N3v8cR1sKe"},
-		{subject: "lnkd-U5b9hW2yLo", wantEmail: "li-unverified@example.invalid", wantVerified: "false"},
-		{subject: "lnkd-C2k6jT8fMu", wantEmail: "li-collision@example.invalid", wantVerified: "true"},
-		{subject: "lnkd-L4r1dZ7gNi", wantEmail: "li-link@example.invalid", wantVerified: "true"},
+		{subject: "lnkd-U5b9hW2yLo", wantEmail: "li-unverified@example.invalid", wantVerified: `"false"`},
+		{subject: "lnkd-C2k6jT8fMu", wantEmail: "li-collision@example.invalid", wantVerified: `"true"`},
+		{subject: "lnkd-L4r1dZ7gNi", wantEmail: "li-link@example.invalid", wantVerified: `"true"`},
 	}
 	for _, tt := range tests {
 		code := linkedinAuthorize(t, svc.Handler(), "allow", tt.subject).Get("code")

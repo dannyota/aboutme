@@ -37,6 +37,12 @@ type Claims struct {
 	// Nil EmailVerified omits the claim and never means true.
 	EmailVerified *bool
 
+	// Non-nil EmailVerifiedRaw overrides EmailVerified and is marshaled as the
+	// email_verified claim verbatim, so a test can send a string ("true",
+	// "false", or a garbage value) or any other wire shape a provider might
+	// send in place of a JSON boolean.
+	EmailVerifiedRaw any
+
 	// Empty Nonce omits the claim; go-oidc does not validate it.
 	Nonce string
 
@@ -337,7 +343,9 @@ func (p *Provider) signIDToken(claims Claims) (token string, err error) {
 	if claims.Email != "" {
 		payload["email"] = claims.Email
 	}
-	if claims.EmailVerified != nil {
+	if claims.EmailVerifiedRaw != nil {
+		payload["email_verified"] = claims.EmailVerifiedRaw
+	} else if claims.EmailVerified != nil {
 		payload["email_verified"] = *claims.EmailVerified
 	}
 	if claims.Nonce != "" {

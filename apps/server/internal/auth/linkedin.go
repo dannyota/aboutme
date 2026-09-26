@@ -4,12 +4,15 @@ package auth
 // credentials in the token request body. LinkedIn accepts the OIDC nonce
 // parameter but leaves the nonce claim out of its ID tokens, so the callback
 // accepts an absent claim and rejects a present one that differs. Its email and
-// email_verified claims are optional, so EmailVerified is a *bool and a missing
-// claim never counts as verified for registration. See
+// email_verified claims are optional, and email_verified arrives as a JSON
+// string on the ID token though LinkedIn's userinfo endpoint (not used here)
+// sends a real boolean, so EmailVerified is a *linkedinBool and a missing claim
+// never counts as verified for registration. See
 // docs/design/linkedin-sign-in.md, ADR 0058, and ADR 0063.
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -41,9 +44,33 @@ var linkedinCancelErrors = map[string]bool{
 // linkedinClaims keeps email verification nullable so an absent claim cannot
 // count as verified. Name is optional.
 type linkedinClaims struct {
-	Email         string `json:"email"`
-	EmailVerified *bool  `json:"email_verified"`
-	Name          string `json:"name"`
+	Email         string        `json:"email"`
+	EmailVerified *linkedinBool `json:"email_verified"`
+	Name          string        `json:"name"`
+}
+
+// linkedinBool decodes LinkedIn's email_verified claim, which its ID tokens
+// send as the JSON string "true" or "false" rather than a JSON boolean. Any
+// other value, including a garbage string or a number, decodes to false so a
+// claim is never treated as verified by accident.
+type linkedinBool bool
+
+// UnmarshalJSON treats a JSON true or the string "true" as verified; any
+// other value is false.
+func (b *linkedinBool) UnmarshalJSON(data []byte) error {
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	switch v := raw.(type) {
+	case bool:
+		*b = linkedinBool(v)
+	case string:
+		*b = linkedinBool(v == "true")
+	default:
+		*b = false
+	}
+	return nil
 }
 
 // linkedinProviderConfig holds LinkedIn's credentials and lazy discovery cache.
@@ -239,7 +266,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	// Only a new identity requires a present, true, canonical email.
 	// Existing identities do not re-evaluate email. See docs/design/security.md.
-	if claims.Email == "" || claims.EmailVerified == nil || !*claims.EmailVerified {
+	if claims.Email == "" || claims.EmailVerified == nil || !bool(*claims.EmailVerified) {
 		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
 			reasonLinkedInRegistrationEmailUnverified)
 		return

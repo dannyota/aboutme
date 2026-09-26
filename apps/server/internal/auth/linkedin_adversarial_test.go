@@ -5,6 +5,7 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -46,24 +47,33 @@ func assertLinkedInLoginAccepted(t *testing.T, resp *http.Response) {
 // ==== registration email rule ====
 
 // TestLinkedInCallback_RegistrationEmailRuleAdversarial covers verified,
-// unverified, absent-verification, and absent-email claims. Each case uses a
-// unique email, subject, and provider so rows in the shared live test database
-// cannot make a rejected case appear successful.
+// unverified, absent-verification, and absent-email claims, plus LinkedIn's
+// documented string encoding of email_verified and garbage wire values. Each
+// case uses a unique email, subject, and provider so rows in the shared live
+// test database cannot make a rejected case appear successful.
 //
 // A nil EmailVerified claim is never treated as true.
 func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name          string
-		emailPresent  bool
-		emailVerified *bool // nil = claim absent -- never treated as true
-		wantCreated   bool
+		name             string
+		emailPresent     bool
+		emailVerified    *bool // nil = claim absent -- never treated as true
+		emailVerifiedRaw any   // non-nil overrides emailVerified with a raw wire value
+		wantCreated      bool
 	}{
-		{"verified email present", true, ptrTrue(), true},
-		{"unverified email present", true, ptrFalse(), false},
-		{"email present, verified claim absent", true, nil, false},
-		{"email absent entirely", false, nil, false},
+		{"verified email present", true, ptrTrue(), nil, true},
+		{"unverified email present", true, ptrFalse(), nil, false},
+		{"email present, verified claim absent", true, nil, nil, false},
+		{"email absent entirely", false, nil, nil, false},
+		{"string true email_verified", true, nil, "true", true},
+		{"string false email_verified", true, nil, "false", false},
+		{"garbage string email_verified", true, nil, "yes", false},
+		{"garbage number email_verified", true, nil, 1, false},
+		{"explicit null email_verified", true, nil, json.RawMessage("null"), false},
+		{"uppercase TRUE email_verified", true, nil, "TRUE", false},
+		{"padded true email_verified", true, nil, " true", false},
 	}
 
 	for _, tc := range cases {
@@ -81,10 +91,11 @@ func TestLinkedInCallback_RegistrationEmailRuleAdversarial(t *testing.T) {
 
 			txCookie, state, nonce := beginLinkedIn(t, handler)
 			p.RegisterCode("code-"+tc.name, oidctest.Claims{
-				Subject:       subject,
-				Email:         email,
-				EmailVerified: tc.emailVerified,
-				Nonce:         nonce, // pass every OTHER check so only the email rule is under test
+				Subject:          subject,
+				Email:            email,
+				EmailVerified:    tc.emailVerified,
+				EmailVerifiedRaw: tc.emailVerifiedRaw,
+				Nonce:            nonce, // pass every OTHER check so only the email rule is under test
 			})
 
 			resp := doLinkedInCallback(t, handler, "code-"+tc.name, state, txCookie) //nolint:bodyclose // doLinkedInCallback -> doGet closes the body itself before returning.

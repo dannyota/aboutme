@@ -2,6 +2,18 @@ name: Set up Go
 description: >-
   Installs the pinned Go toolchain and restores the calling job's Go build and
   module cache. Pair it with save-go-cache at the end of the job.
+inputs:
+  light:
+    description: >-
+      Set to "true" for a job whose Go work is small (a single small module,
+      or a `go install` of one tool) and does not need the full shared
+      build/module cache. A light job gets its own cache key namespace with
+      no restore-keys fallback to the server job's much larger cache, so it
+      never inherits (and re-saves) gigabytes it does not use. The first run
+      under a new light key is a cold cache; it shrinks to whatever that
+      job's own Go work actually downloads and builds from then on.
+    required: false
+    default: "false"
 outputs:
   cache-hit:
     description: Whether the job's own cache key matched exactly.
@@ -28,19 +40,31 @@ runs:
         go-version: "1.27.1"
         cache: false
     # A key ending in the ISO week lets a cache live past one run instead of
-    # being replaced by it. Restore keys fall back to the same job's older
-    # cache, then to the server job's, before building from nothing.
+    # being replaced by it. A normal job's restore keys fall back to the same
+    # job's older cache, then to the server job's, before building from
+    # nothing. A light job (inputs.light) gets its own "light-JOB" key
+    # namespace and falls back only to its own older cache, never to the
+    # server job's, so it can never inherit that much larger cache.
     - id: key
       shell: bash
       env:
-        SUMS: ${{ hashFiles('apps/server/go.sum', 'go.work.sum') }}
+        SUMS: ${{ hashFiles('apps/server/go.sum', 'go.work.sum', 'deploy/observer/go.sum') }}
         JOB: ${{ github.job }}
+        LIGHT: ${{ inputs.light }}
       run: |
         week=$(date -u +%G-%V)
+        if [ "$LIGHT" = true ]; then
+          prefix="go-$RUNNER_OS-light-$JOB-$SUMS-"
+          restore_keys=$prefix
+        else
+          prefix="go-$RUNNER_OS-$JOB-$SUMS-"
+          restore_keys=$(printf '%s\n%s' "$prefix" "go-$RUNNER_OS-server-$SUMS-")
+        fi
         {
-          echo "key=go-$RUNNER_OS-$JOB-$SUMS-$week"
-          echo "job-prefix=go-$RUNNER_OS-$JOB-$SUMS-"
-          echo "server-prefix=go-$RUNNER_OS-server-$SUMS-"
+          echo "key=$prefix$week"
+          echo "restore-keys<<RESTORE_KEYS_EOF"
+          echo "$restore_keys"
+          echo "RESTORE_KEYS_EOF"
         } >> "$GITHUB_OUTPUT"
     - id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -49,6 +73,4 @@ runs:
           ~/.cache/go-build
           ~/go/pkg/mod
         key: ${{ steps.key.outputs.key }}
-        restore-keys: |
-          ${{ steps.key.outputs.job-prefix }}
-          ${{ steps.key.outputs.server-prefix }}
+        restore-keys: ${{ steps.key.outputs.restore-keys }}
