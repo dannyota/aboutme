@@ -2,8 +2,8 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052,
-0054–0056, 0058, and 0060–0063 are accepted; ADR 0053 is rejected; ADRs 0057,
-0059, and 0064 are proposed.
+0054–0056, 0058, and 0060–0064 are accepted; ADR 0053 is rejected; ADRs 0057 and
+0059 are proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -70,7 +70,7 @@ supersession record; these pages state the resulting design. ADRs 0001–0052,
 | [0061](../adr/0061-layered-human-view-counting.md)                        | Accepted | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |
 | [0062](../adr/0062-sign-in-to-view-without-an-account.md)                 | Accepted | Sign in to view with a signed pass cookie, no account, nothing kept about the viewer                                   |
 | [0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md)             | Accepted | LinkedIn returns no nonce claim; its callback checks the nonce only when present, with the code-injection risk named   |
-| [0064](../adr/0064-linkedin-import-from-save-to-pdf.md)                   | Proposed | LinkedIn import reads the English Save to PDF with pdf.js in a worker; app pages allow same-origin workers             |
+| [0064](../adr/0064-linkedin-import-from-save-to-pdf.md)                   | Accepted | LinkedIn import reads the English Save to PDF with pdf.js in a worker; app pages allow same-origin workers             |
 
 ## Remaining gates
 

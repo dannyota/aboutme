@@ -1,6 +1,6 @@
 # LinkedIn import from Save to PDF (0.6.5)
 
-Status: planned; waiting for owner approvals I1 to I10 in [LinkedIn import](../design/linkedin-import.md#owner-approval) and acceptance of [ADR 0064](../adr/0064-linkedin-import-from-save-to-pdf.md). One release, one feature: `/app/import/linkedin` reads an English LinkedIn Save to PDF in the browser, shows a review, and creates a new resume. Risk: medium to high (hostile PDF parsing in the browser, a new runtime dependency, an app page CSP change, the privacy claim).
+Status: planned; the owner approved I1 to I10 in [LinkedIn import](../design/linkedin-import.md#owner-approval) and [ADR 0064](../adr/0064-linkedin-import-from-save-to-pdf.md) on 2026-09-27. One release, one feature: `/app/import/linkedin` reads an English LinkedIn Save to PDF in the browser, shows a review, and creates a new resume. Risk: medium to high (hostile PDF parsing in the browser, a new runtime dependency, an app page CSP change, the privacy claim).
 
 LinkedIn sign-in is done: it shipped in v0.6.2 and is on in production from v0.6.3 ([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md), [ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md)). Git keeps its release plan.
 
