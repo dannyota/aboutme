@@ -1,6 +1,6 @@
 # Deployment transparency (0.6.x)
 
-Status: planned; waiting for owner approvals A1 to A5 in [the design](../design/deployment-transparency/README.md#owner-approval) and acceptance of [ADR 0057](../adr/0057-deployment-transparency-observer.md). Three small releases, one feature each, in order. The manager assigns version numbers after the [link previews](link-previews.md) releases (proposed 0.6.3, 0.6.4, 0.6.5). Briefs repeat the writing rules: code, comments, tests, and living docs cite the design pages or ADR 0057, never this plan or its release names.
+Status: planned; waiting for owner approvals A1 to A5 in [the design](../design/deployment-transparency/README.md#owner-approval) and acceptance of [ADR 0057](../adr/0057-deployment-transparency-observer.md). Three small releases, one feature each, in order. The owner put the Verify page in 0.6.1 with the [link previews](link-previews.md) card. The page reads the observer's document, so the manager confirms whether the release evidence and observer releases also ship in 0.6.1 or the page ships first and shows its unavailable state. Briefs repeat the writing rules: code, comments, tests, and living docs cite the design pages or ADR 0057, never this plan or its release names.
 
 |Release|Outcome|Risk|
 |-|-|-|

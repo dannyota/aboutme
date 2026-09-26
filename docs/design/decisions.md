@@ -2,7 +2,7 @@
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
 supersession record; these pages state the resulting design. ADRs 0001–0052 and
-0054–0056 are accepted; ADR 0053 is rejected; ADR 0057 is proposed.
+0054–0056 are accepted; ADR 0053 is rejected; ADRs 0057–0059 are proposed.
 
 | ADR                                                                       | Status   | Integrated outcome                                                                                                     |
 | ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -63,6 +63,8 @@ supersession record; these pages state the resulting design. ADRs 0001–0052 an
 | [0055](../adr/0055-stored-link-preview-card.md)                           | Accepted | Stored, versioned link-preview card replaces the top-crop share image; supersedes 0032                                 |
 | [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
 | [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
+| [0058](../adr/0058-linkedin-sign-in-in-production.md)                     | Proposed | Production may enable LinkedIn sign-in; LinkedIn uses its documented flow with a nonce and no PKCE                     |
+| [0059](../adr/0059-linkedin-import-in-the-browser.md)                     | Proposed | LinkedIn import reads the member's data download in the browser; the file is never uploaded                            |
 
 ## Remaining gates
 
