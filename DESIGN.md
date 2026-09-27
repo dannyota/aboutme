@@ -386,8 +386,8 @@ agents and sign-in providers appear only when their capabilities are enabled.
 
 At widths up to 72 rem, the editor tool rail becomes a horizontal bar, the
 outline and inspector share the lower workspace, the preview spans the available
-editor area, and the bottom Edit/Preview tab bar switches between the inspector
-and preview. At widths up to 42 rem, the outline moves into a Sections sheet.
+editor area, and the bottom Edit/Preview tab bar switches between the editor and
+preview. At widths up to 42 rem, the outline moves into a Sections sheet.
 
 At widths up to 42 rem, the editor top bar grows to 96 px and splits into two
 rows. The first holds the logo mark alone, save state, and the language toggle;

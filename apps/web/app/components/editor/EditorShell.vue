@@ -403,7 +403,7 @@ async function discardAndSignIn(): Promise<void> {
     >
       <Collapsible
         v-model:open="outlineOpen"
-        class="flex min-h-0 flex-1 flex-col"
+        class="flex min-h-0 flex-1 flex-col max-[72rem]:min-h-fit"
       >
         <div class="flex items-center justify-between p-4">
           <h2 class="text-base font-semibold">
