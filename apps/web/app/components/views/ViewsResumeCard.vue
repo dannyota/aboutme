@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { components } from '@/api/generated/openapi';
+import StateMark from '@/components/app/StateMark.vue';
 import type { ViewsIndexCopy } from '@/i18n/views';
 
 type ViewSummary = components['schemas']['ViewSummary'];
@@ -12,53 +13,67 @@ const props = defineProps<{
 
 <template>
   <li
-    class="rounded-lg border p-4"
+    class="relative flex min-h-48 flex-col rounded-[var(--radius)]
+      border border-border bg-card shadow-[var(--shadow-product)]
+      transition-transform duration-200 ease-out hover:-translate-y-1
+      motion-reduce:transition-none motion-reduce:hover:translate-y-0"
     :data-testid="`views-resume-${props.resume.id}`"
   >
     <NuxtLink
-      class="flex items-start justify-between gap-4"
+      class="block p-6 pb-3 after:absolute after:inset-0"
       :to="`/app/views/${props.resume.id}`"
     >
-      <div>
-        <p class="font-medium">
-          {{ props.resume.title }}
-        </p>
-        <p class="text-sm text-muted-foreground">
-          {{ props.resume.live ? props.copy.live : props.copy.draft }}
-        </p>
-      </div>
+      <span class="block truncate pr-4 text-lg font-semibold">
+        {{ props.resume.title }}
+      </span>
+      <dl class="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+        <div>
+          <dt class="text-xs text-muted-foreground">
+            {{ props.copy.last7 }}
+          </dt>
+          <dd class="tabular-nums">
+            {{ props.copy.realFiltered(
+              props.resume.last7.real, props.resume.last7.filtered,
+            ) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">
+            {{ props.copy.last30 }}
+          </dt>
+          <dd class="tabular-nums">
+            {{ props.copy.realFiltered(
+              props.resume.last30.real, props.resume.last30.filtered,
+            ) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs text-muted-foreground">
+            {{ props.copy.last90 }}
+          </dt>
+          <dd class="tabular-nums">
+            {{ props.copy.realFiltered(
+              props.resume.last90.real, props.resume.last90.filtered,
+            ) }}
+          </dd>
+        </div>
+      </dl>
     </NuxtLink>
-    <dl class="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-      <div>
-        <dt class="text-muted-foreground">
-          {{ props.copy.last7 }}
-        </dt>
-        <dd>
-          {{ props.copy.realFiltered(
-            props.resume.last7.real, props.resume.last7.filtered,
-          ) }}
-        </dd>
-      </div>
-      <div>
-        <dt class="text-muted-foreground">
-          {{ props.copy.last30 }}
-        </dt>
-        <dd>
-          {{ props.copy.realFiltered(
-            props.resume.last30.real, props.resume.last30.filtered,
-          ) }}
-        </dd>
-      </div>
-      <div>
-        <dt class="text-muted-foreground">
-          {{ props.copy.last90 }}
-        </dt>
-        <dd>
-          {{ props.copy.realFiltered(
-            props.resume.last90.real, props.resume.last90.filtered,
-          ) }}
-        </dd>
-      </div>
-    </dl>
+    <span
+      class="relative z-10 mt-auto block px-6 pb-5"
+      :class="{
+        'pointer-events-none': !props.resume.live || !props.resume.slug,
+      }"
+    >
+      <StateMark
+        v-if="props.resume.live && props.resume.slug"
+        state="public"
+        :link="`/${props.resume.slug}`"
+      />
+      <StateMark
+        v-else
+        state="draft"
+      />
+    </span>
   </li>
 </template>

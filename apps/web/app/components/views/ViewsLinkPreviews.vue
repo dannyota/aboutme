@@ -14,14 +14,24 @@ const props = defineProps<{
 <template>
   <section
     v-if="props.previews.length > 0"
+    aria-labelledby="views-previews-heading"
+    class="mt-8 border-t py-8"
     data-testid="views-link-previews"
   >
-    <ul class="space-y-1 text-sm">
+    <h2
+      id="views-previews-heading"
+      class="text-lg font-semibold"
+    >
+      {{ props.copy.previewsHeading }}
+    </h2>
+    <ul class="mt-4 space-y-1 text-sm">
       <li
         v-for="item in props.previews"
         :key="item.platform"
       >
-        {{ props.copy.previewLine(platformNames[item.platform], item.fetches) }}
+        {{ props.copy.previewLine(
+          platformNames[item.platform], item.fetches,
+        ) }}
       </li>
     </ul>
     <p class="mt-2 text-xs text-muted-foreground">

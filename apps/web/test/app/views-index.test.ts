@@ -15,7 +15,22 @@ const summary = {
       live: true,
       last7: { real: 4, filtered: 9 },
       last30: { real: 12, filtered: 31 },
-      last90: { real: 20, filtered: 55 },
+      last90: { real: 20, filtered: 12345 },
+    },
+  ],
+};
+
+const draftSummary = {
+  today: '2026-09-26',
+  resumes: [
+    {
+      id: 'resume-2',
+      title: 'Designer',
+      slug: null,
+      live: false,
+      last7: { real: 0, filtered: 0 },
+      last30: { real: 0, filtered: 0 },
+      last90: { real: 0, filtered: 0 },
     },
   ],
 };
@@ -34,11 +49,22 @@ describe('views index page', () => {
 
       const row = wrapper.get('[data-testid="views-resume-resume-1"]');
       expect(row.text()).toContain('Backend engineer');
-      expect(row.text()).toContain('Live');
+      expect(row.text()).toContain('aboutme.vn/ada-lovelace');
       expect(row.text()).toContain('4 real views · 9 filtered');
       expect(row.text()).toContain('12 real views · 31 filtered');
-      expect(row.text()).toContain('20 real views · 55 filtered');
+      expect(row.text()).toContain('20 real views · 12,345 filtered');
       expect(row.get('a').attributes('href')).toBe('/app/views/resume-1');
+    });
+
+  it('marks an unpublished resume as a draft, with no public link',
+    async () => {
+      registerEndpoint('/api/v1/views', () => ({ data: draftSummary }));
+      const wrapper = await mountSuspended(ViewsIndexPage);
+      await flushPromises();
+
+      const row = wrapper.get('[data-testid="views-resume-resume-2"]');
+      expect(row.text()).toContain('Draft');
+      expect(row.find('[data-public-link]').exists()).toBe(false);
     });
 
   it('shows an empty state when no resume has stored counts', async () => {
@@ -74,5 +100,6 @@ describe('views index page', () => {
 
     expect(wrapper.text()).toContain('Lượt xem');
     expect(wrapper.text()).toContain('4 lượt xem thật · 9 bị lọc');
+    expect(wrapper.text()).toContain('20 lượt xem thật · 12.345 bị lọc');
   });
 });

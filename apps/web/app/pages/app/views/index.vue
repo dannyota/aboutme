@@ -16,22 +16,29 @@ const copy = computed(() => viewsIndexCopy[locale.value]);
 useHead({ title: computed(() => workspaceTitles[locale.value].views) });
 
 // The session cookie is only available client-side (no proxy at SSR).
-const { data, error, pending } = await useFetch<ViewSummaryEnvelope>(
+const { data, error, status } = await useFetch<ViewSummaryEnvelope>(
   '/api/v1/views',
   { credentials: 'include', server: false },
 );
+
+// server:false leaves `status` 'idle' during SSR, but hydration starts the
+// fetch (setting status 'pending') before the client's first render;
+// treating both as loading keeps the SSR and hydration renders identical.
+const loading = computed(() => (
+  status.value === 'idle' || status.value === 'pending'
+));
 
 const resumes = computed(() => data.value?.data.resumes ?? []);
 </script>
 
 <template>
   <main
-    class="app-page space-y-6"
+    class="mx-auto w-full max-w-7xl space-y-8 px-4 py-10 sm:px-8 sm:py-12"
     data-testid="views-page"
   >
     <PageHeader :title="copy.title" />
     <LoadingState
-      v-if="pending && !data"
+      v-if="loading"
       :label="copy.loading"
       testid="views-loading"
     />
@@ -50,7 +57,7 @@ const resumes = computed(() => data.value?.data.resumes ?? []);
     />
     <ul
       v-else
-      class="grid gap-4"
+      class="grid gap-6 md:grid-cols-3 md:gap-8"
       data-testid="views-resume-list"
     >
       <ViewsResumeCard

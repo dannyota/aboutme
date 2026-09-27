@@ -30,7 +30,10 @@ const totals = computed(() => {
 </script>
 
 <template>
-  <section aria-labelledby="views-filtered-heading">
+  <section
+    aria-labelledby="views-filtered-heading"
+    class="mt-8 border-t py-8"
+  >
     <h2
       id="views-filtered-heading"
       class="text-lg font-semibold"
@@ -38,7 +41,7 @@ const totals = computed(() => {
       {{ props.copy.filteredHeading }}
     </h2>
     <dl
-      class="mt-2 grid grid-cols-2 gap-2 text-sm sm:grid-cols-5"
+      class="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-5"
       data-testid="views-filtered-breakdown"
     >
       <div
@@ -48,7 +51,9 @@ const totals = computed(() => {
         <dt class="text-muted-foreground">
           {{ props.copy.filteredLabels[key] }}
         </dt>
-        <dd>{{ totals[key] }}</dd>
+        <dd class="text-lg font-semibold tabular-nums">
+          {{ props.copy.count(totals[key]) }}
+        </dd>
       </div>
     </dl>
   </section>
