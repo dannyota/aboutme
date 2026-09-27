@@ -1,8 +1,7 @@
-# 0020: Application visual identity: the seal, the aurora canvas, and a white resume
+# 0020: Application visual identity: the seal, the aurora canvas, and the resume ground
 
 Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27). The owner chose each
-direction. The public page color scheme below is Proposed, pending owner
-approval.
+direction, including the public page color scheme below.
 
 ## Context
 
@@ -91,8 +90,8 @@ maintenance page does. The sheet keeps its 2 px radius, neutral paper shadow,
 and white ground in both application themes; only the owner's dark scheme below
 changes its ground.
 
-**Public page color scheme (Proposed).** The resume stays white unless its owner
-picks otherwise for the public page on screen.
+**Public page color scheme.** The resume stays white unless its owner picks
+otherwise for the public page on screen.
 
 - The owner picks Light (the default), Dark, or Match device per resume, as the
   document field `customization.colorScheme` (ADR 0004). Match device follows
@@ -164,6 +163,8 @@ picks otherwise for the public page on screen.
 - Former ADR 0065 (2026-09-27): Logo B, `AppSeal` v2, `--seal-text`, two blues,
   burnt-orange outline destructive, the type scale, spacing tokens, and brand
   art from tokens.
-- Proposed (2026-09-27, pending owner approval): the owner's public page color
-  scheme and the page bar's scoped token copy. It narrows the white-ground rule
-  to "white unless the owner picks a dark scheme for the public page on screen".
+- Accepted (2026-09-27): the owner's public page color scheme and the page bar's
+  scoped token copy. It narrows the white-ground rule to "white unless the owner
+  picks a dark scheme for the public page on screen" and retitles this record
+  from "a white resume" to "the resume ground", since the resume is no longer
+  always white.

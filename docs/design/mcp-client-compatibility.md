@@ -1,6 +1,7 @@
 # MCP client compatibility
 
-Status: proposed, waiting for owner approval of the numbered choices below.
+Status: approved (2026-09-27), ready to build. The owner approved every numbered
+choice below as written.
 
 aboutme's OAuth server and MCP endpoint are proven with one client, the official
 Go SDK runner in the [MCP owner workflow](mcp-owner-workflow.md). Claude's
@@ -181,25 +182,25 @@ name and redirects.
 
 ## Owner approvals
 
-1. **Resource `/mcp` in metadata, origin still accepted.** Recommended: Claude
-   requires it and the runner keeps working.
-2. **Ignore unknown registration members; check three known ones.** Recommended:
-   RFC 7591 requires ignoring them.
-3. **`localhost` for native loopback redirects.** Recommended: the current rule
-   is bypassable and blocks Claude Code.
-4. **`client_id` and `resource` on refresh.** Recommended: without it every
-   Claude user reconnects each hour and piles up grants.
+1. **Resource `/mcp` in metadata, origin still accepted.** Approved
+   (2026-09-27): Claude requires it and the runner keeps working.
+2. **Ignore unknown registration members; check three known ones.** Approved
+   (2026-09-27): RFC 7591 requires ignoring them.
+3. **`localhost` for native loopback redirects.** Approved (2026-09-27): the
+   current rule is bypassable and blocks Claude Code.
+4. **`client_id` and `resource` on refresh.** Approved (2026-09-27): without it
+   every Claude user reconnects each hour and piles up grants.
 5. **Egress-range registration bucket: 120 an hour per range, 600 global.**
-   Recommended: a handful of Claude users an hour would otherwise lock everyone
-   out. Alternative: build CIMD first, a larger release.
-6. **Consent line naming where approval returns.** Recommended: the MCP
-   specification requires the host, and the guide relies on it.
-7. **`agent_limit_reached` with its own message.** Recommended: reconnects
-   accumulate grants and the generic error hides the cause.
-8. **`401 invalid_client` for an unknown client.** Recommended: lets Claude
-   recover from a swept registration.
-9. **One backend and frontend release before the guide.** Recommended: small,
-   additive, and provable in CI before the owner's production proof.
+   Approved (2026-09-27): a handful of Claude users an hour would otherwise lock
+   everyone out. Alternative: build CIMD first, a larger release.
+6. **Consent line naming where approval returns.** Approved (2026-09-27): the
+   MCP specification requires the host, and the guide relies on it.
+7. **`agent_limit_reached` with its own message.** Approved (2026-09-27):
+   reconnects accumulate grants and the generic error hides the cause.
+8. **`401 invalid_client` for an unknown client.** Approved (2026-09-27): lets
+   Claude recover from a swept registration.
+9. **One backend and frontend release before the guide.** Approved (2026-09-27):
+   small, additive, and provable in CI before the owner's production proof.
 
 [claude-auth]: https://claude.com/docs/connectors/building/authentication
 [ts-auth]:

@@ -1,5 +1,7 @@
 # MCP guide copy
 
+Status: approved (2026-09-27), ready to build.
+
 The Vietnamese and English text of the [MCP guide](mcp-guide.md), in page order.
 Vietnamese is the default. **Bold** marks a UI name set in weight 600; backticks
 mark inline code. Claude's UI names stay in English in both languages. `{url}`
