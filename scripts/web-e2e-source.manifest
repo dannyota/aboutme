@@ -72,6 +72,7 @@ apps/web/app/components/editor/InspectorPanel.vue
 apps/web/app/components/editor/PDFDownloadButton.vue
 apps/web/app/components/editor/PanelResizeHandle.vue
 apps/web/app/components/editor/PreviewZoomControls.vue
+apps/web/app/components/editor/PublishAccess.vue
 apps/web/app/components/editor/PublishDialog.vue
 apps/web/app/components/editor/PublishPageFields.vue
 apps/web/app/components/editor/PublishPreview.vue
@@ -130,6 +131,8 @@ apps/web/app/components/preview/cardLayout.ts
 apps/web/app/components/preview/preview-card.css
 apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
+apps/web/app/components/public/JoinInvite.vue
+apps/web/app/components/public/PublicGate.vue
 apps/web/app/components/public/PublicResumeApp.vue
 apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
@@ -415,6 +418,7 @@ apps/web/app/pages/terms.vue
 apps/web/app/pages/verify-email.vue
 apps/web/app/pages/verify.vue
 apps/web/app/public-roots.generated.ts
+apps/web/app/public/joinInvite.ts
 apps/web/app/public/public-resume.client.ts
 apps/web/app/public/viewBeacon.ts
 apps/web/app/realtime/controller.ts

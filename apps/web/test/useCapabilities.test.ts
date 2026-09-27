@@ -8,7 +8,8 @@ import { registerCapabilities } from './support/capabilities';
 const Probe = defineComponent({
   setup() {
     const {
-      providerLogin, agentAccess, passkeyEnrollment, totpEnrollment, resolved,
+      providerLogin, agentAccess, passkeyEnrollment, totpEnrollment,
+      signInToView, resolved,
     } = useCapabilities();
     return () =>
       h('div', {
@@ -16,6 +17,7 @@ const Probe = defineComponent({
         'data-agent': String(agentAccess.value),
         'data-passkey-enrollment': String(passkeyEnrollment.value),
         'data-totp-enrollment': String(totpEnrollment.value),
+        'data-sign-in-to-view': String(signInToView.value),
         'data-resolved': String(resolved.value),
       });
   },
@@ -33,6 +35,7 @@ async function probe(): Promise<Record<string, string | undefined>> {
     agent: el.attributes('data-agent'),
     passkeyEnrollment: el.attributes('data-passkey-enrollment'),
     totpEnrollment: el.attributes('data-totp-enrollment'),
+    signInToView: el.attributes('data-sign-in-to-view'),
     resolved: el.attributes('data-resolved'),
   };
 }
@@ -49,6 +52,7 @@ describe('useCapabilities', () => {
       agent: 'false',
       passkeyEnrollment: 'false',
       totpEnrollment: 'false',
+      signInToView: 'false',
       resolved: 'true',
     });
   });
@@ -64,6 +68,7 @@ describe('useCapabilities', () => {
       agent: 'false',
       passkeyEnrollment: 'true',
       totpEnrollment: 'false',
+      signInToView: 'false',
       resolved: 'true',
     });
   });
@@ -79,6 +84,23 @@ describe('useCapabilities', () => {
       agent: 'false',
       passkeyEnrollment: 'false',
       totpEnrollment: 'true',
+      signInToView: 'false',
+      resolved: 'true',
+    });
+  });
+
+  it('reflects an open sign-in-to-view flag', async () => {
+    registerCapabilities({
+      providerLogin: false,
+      agentAccess: false,
+      signInToView: true,
+    });
+    expect(await probe()).toEqual({
+      provider: 'false',
+      agent: 'false',
+      passkeyEnrollment: 'false',
+      totpEnrollment: 'false',
+      signInToView: 'true',
       resolved: 'true',
     });
   });
@@ -97,6 +119,7 @@ describe('useCapabilities', () => {
       agent: 'false',
       passkeyEnrollment: 'false',
       totpEnrollment: 'false',
+      signInToView: 'false',
       resolved: 'true',
     });
   });
@@ -107,12 +130,14 @@ describe('useCapabilities', () => {
       agentAccess: 1 as unknown as boolean,
       passkeyEnrollment: 'true' as unknown as boolean,
       totpEnrollment: 'true' as unknown as boolean,
+      signInToView: 'true' as unknown as boolean,
     });
     expect(await probe()).toEqual({
       provider: 'false',
       agent: 'false',
       passkeyEnrollment: 'false',
       totpEnrollment: 'false',
+      signInToView: 'false',
       resolved: 'true',
     });
   });
@@ -127,6 +152,7 @@ describe('useCapabilities', () => {
       agent: 'false',
       passkeyEnrollment: 'false',
       totpEnrollment: 'false',
+      signInToView: 'false',
       resolved: 'true',
     });
   });

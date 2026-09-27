@@ -63,6 +63,9 @@ export type PublishCopy = {
   readonly downloadHelp: string;
   readonly discovery: string;
   readonly discoveryHelp: string;
+  readonly discoveryOffForSignIn: string;
+  readonly signInToView: string;
+  readonly signInToViewHelp: string;
   readonly publish: string;
   readonly update: string;
   readonly unpublish: string;
@@ -120,6 +123,10 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     discoveryHelp:
       'SEO và GEO cho phép công cụ tìm kiếm và công cụ trả lời AI '
       + 'tìm thấy và dùng lại nội dung CV công khai.',
+    discoveryOffForSignIn: 'Tắt vì CV yêu cầu đăng nhập để xem.',
+    signInToView: 'Yêu cầu đăng nhập để xem',
+    signInToViewHelp:
+      'Người xem đăng nhập bằng Google hoặc LinkedIn. Bạn không thấy họ là ai.',
     publish: 'Xuất bản',
     update: 'Cập nhật xuất bản',
     unpublish: 'Hủy xuất bản',
@@ -230,6 +237,10 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     discoveryHelp:
       'SEO and GEO allow search crawlers and AI answer engines to '
       + 'discover and reuse public resume content.',
+    discoveryOffForSignIn: 'Off because this resume requires sign-in to view.',
+    signInToView: 'Require sign-in to view',
+    signInToViewHelp:
+      'Viewers sign in with Google or LinkedIn. You do not see who they are.',
     publish: 'Publish',
     update: 'Update publication',
     unpublish: 'Unpublish',

@@ -4,7 +4,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { renderPublicResume } from '../../server/workers/public-render/render';
+import {
+  renderPublicGate,
+  renderPublicResume,
+} from '../../server/workers/public-render/render';
+import type {
+  PublicRenderGateRequest,
+} from '../../server/utils/public-render/envelope';
 
 const request = () => {
   const document = JSON.parse(
@@ -163,6 +169,27 @@ describe('public Vue worker document', () => {
     expect(html).toContain(
       '<meta name="twitter:image" content="https://resume.example/api/v1/public/resumes/ada1/og.png">',
     );
+  });
+});
+
+describe('sign-in-to-view join-invite marker', () => {
+  it('omits the marker by default', async () => {
+    const html = await renderPublicResume(request(), VERSIONS);
+    expect(html).not.toContain('data-join-invite');
+    expect(html).toContain('<main id="public-resume" data-revision="1">');
+  });
+
+  it('writes the marker exactly when the envelope carries it', async () => {
+    for (const value of ['/register', '/login'] as const) {
+      const html = await renderPublicResume(
+        { ...request(), joinInvite: value },
+        VERSIONS,
+      );
+      expect(html).toContain(
+        `<main id="public-resume" data-join-invite="${value}" `
+        + 'data-revision="1">',
+      );
+    }
   });
 });
 
@@ -428,5 +455,131 @@ describe('link-preview head', () => {
       `<meta name="twitter:image" content="${imageUrl}">`,
     );
     expect(html).not.toContain('/og.png');
+  });
+});
+
+describe('public sign-in gate', () => {
+  const gateRequest = (): PublicRenderGateRequest => ({
+    mode: 'gate',
+    canonicalOrigin: 'https://resume.example',
+    slug: 'ada1',
+    lng: 'en',
+    pageTitle: 'Ada — Resume',
+    faviconHref: '',
+    preview: {
+      title: 'Ada Lovelace',
+      description: 'Writes the first program.',
+      locale: 'en_US',
+      imageAlt: 'Ada Lovelace',
+    },
+    providers: ['google', 'linkedin'],
+    message: 'none',
+  });
+
+  it('carries no script and only the print-fonts stylesheet', async () => {
+    const html = await renderPublicGate(gateRequest(), VERSIONS);
+    expect(html).not.toMatch(/<script\b/iu);
+    expect(html).not.toMatch(/<img\b|<iframe\b|<form\b/iu);
+    expect(html).not.toMatch(/ on[a-z]+="/iu);
+    expect(html).not.toMatch(/ style="/iu);
+    expect(html).toContain(
+      '<link rel="stylesheet" '
+      + `href="/_nuxt/assets/print-fonts.css?v=${STYLE_VERSION}">`,
+    );
+    expect(html).not.toContain('print.css');
+    expect(html.match(/<style>/gu)).toHaveLength(1);
+  });
+
+  it('writes one anchor per offered provider in envelope order', async () => {
+    const html = await renderPublicGate(gateRequest(), VERSIONS);
+    expect(html).toContain(
+      '<a class="gate-provider" '
+      + 'href="/api/v1/auth/google/start?purpose=view&amp;slug=ada1">'
+      + 'Continue with Google</a>',
+    );
+    const googleIndex = html.indexOf('Continue with Google');
+    const linkedinIndex = html.indexOf('Continue with LinkedIn');
+    expect(googleIndex).toBeGreaterThan(-1);
+    expect(linkedinIndex).toBeGreaterThan(googleIndex);
+  });
+
+  it('writes only the offered providers', async () => {
+    const html = await renderPublicGate(
+      { ...gateRequest(), providers: ['linkedin'] },
+      VERSIONS,
+    );
+    expect(html).not.toContain('Continue with Google');
+    expect(html).toContain('Continue with LinkedIn');
+  });
+
+  it('links home to the canonical origin', async () => {
+    const html = await renderPublicGate(gateRequest(), VERSIONS);
+    expect(html).toContain(
+      '<a class="gate-home" href="https://resume.example/">'
+      + 'Back to aboutme.vn</a>',
+    );
+  });
+
+  it('shows the closed message only when not none', async () => {
+    const none = await renderPublicGate(gateRequest(), VERSIONS);
+    expect(none).not.toContain('gate-message');
+
+    const cancelled = await renderPublicGate(
+      { ...gateRequest(), message: 'cancelled' },
+      VERSIONS,
+    );
+    expect(cancelled).toContain(
+      'You cancelled sign-in. Choose a button above to try again.',
+    );
+
+    const failed = await renderPublicGate(
+      { ...gateRequest(), message: 'failed' },
+      VERSIONS,
+    );
+    expect(failed).toContain(
+      'We could not verify your sign-in. Please try again.',
+    );
+  });
+
+  it('renders Vietnamese copy for a vi envelope', async () => {
+    const html = await renderPublicGate(
+      { ...gateRequest(), lng: 'vi' },
+      VERSIONS,
+    );
+    expect(html).toContain('<html lang="vi">');
+    expect(html).toContain('Đăng nhập để xem CV này.');
+    expect(html).toContain('Tiếp tục với Google');
+    expect(html).toContain('Về trang chủ aboutme.vn');
+  });
+
+  it('escapes the page title as text', async () => {
+    const html = await renderPublicGate(
+      { ...gateRequest(), pageTitle: 'Danny <b>&</b> "friends"' },
+      VERSIONS,
+    );
+    expect(html).toContain(
+      '<title>Danny &lt;b&gt;&amp;&lt;/b&gt; &quot;friends&quot;</title>',
+    );
+    expect(html).toContain(
+      '<h1 class="gate-title">Danny &lt;b&gt;&amp;&lt;/b&gt; '
+      + '&quot;friends&quot;</h1>',
+    );
+  });
+
+  it('writes the same link-preview head as the resume page', async () => {
+    const html = await renderPublicGate(gateRequest(), VERSIONS);
+    expect(html).toContain(
+      '<meta property="og:title" content="Ada Lovelace">',
+    );
+    expect(html).toContain(
+      '<link rel="canonical" href="https://resume.example/ada1">',
+    );
+  });
+
+  it('refuses a missing or malformed style version', async () => {
+    await expect(renderPublicGate(gateRequest(), {
+      style: '',
+      script: SCRIPT_VERSION,
+    })).rejects.toThrow();
   });
 });
