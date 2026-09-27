@@ -157,6 +157,7 @@ type OAuthTransaction struct {
 	ExpiresAt     time.Time
 	ConsumedAt    *time.Time
 	ReturnPath    string
+	ResumeID      *uuid.UUID
 }
 
 type PasswordCredential struct {
@@ -229,6 +230,8 @@ type Resume struct {
 	UpdatedAt       time.Time
 	PublicTitle     *string
 	FaviconEmoji    *string
+	SignInToView    bool
+	ViewPassEpoch   int32
 }
 
 type ResumePreviewCard struct {

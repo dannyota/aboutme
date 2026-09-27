@@ -140,7 +140,7 @@ export interface paths {
          * Begin "Sign in with Google"
          * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
          *
-         *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts only the login purpose. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set.
+         *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts the login and view purposes. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set. `purpose=view` requires `slug` and requests scope `openid` only, so Google returns no name or email (see `AuthPurpose`, `AuthViewSlug`).
          */
         get: operations["getAuthGoogleStart"];
         put?: never;
@@ -240,7 +240,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with GitHub"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created. `purpose=view` returns `400 bad_request`: GitHub never appears on the sign-in-to-view gate (see `AuthPurpose`).
          */
         get: operations["getAuthGitHubStart"];
         put?: never;
@@ -288,7 +288,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with LinkedIn"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's token endpoint takes client credentials in the request body, ADR 0016) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's token endpoint takes client credentials in the request body, ADR 0016) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts the login and view purposes. `link` and `reauth` return `405` with `Allow: POST` before any transaction is created. `purpose=view` requires `slug`, requests scope `openid` only, and offers LinkedIn on the gate only while both LinkedIn account login and `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` are on (see `AuthPurpose`, `AuthViewSlug`).
          */
         get: operations["getAuthLinkedInStart"];
         put?: never;
@@ -1535,6 +1535,8 @@ export interface components {
             data: {
                 /** @description True only when the request carries the resume owner's own session. Then `token` and `challenge` are absent. */
                 owner: boolean;
+                /** @description True when the request carries any valid account session, owner or not. Authorizes nothing by itself; the sign-in-to-view join invite uses it, together with `owner`, to decide whether to show the invite (see `docs/design/viewer-analytics/sign-in-to-view.md#join-invite`). */
+                signedIn: boolean;
                 /** @description Opaque one-time view token. */
                 token?: string;
                 challenge?: components["schemas"]["ViewChallenge"];
@@ -1690,6 +1692,8 @@ export interface components {
             passkeyEnrollment: boolean;
             /** @description New authenticator-app enrollment and replacement are open (`TOTP_ENROLLMENT_ENABLED`). Verification, removal, recovery, and state routes are always registered and are unaffected by this flag. Never derived from any account's own state — this is a deployment-wide switch. See `docs/design/totp-second-factor-contract.md`. */
             totpEnrollment: boolean;
+            /** @description Owners may turn the per-resume sign-in-to-view switch on (`SIGN_IN_TO_VIEW_ENABLED`). Never derived from any account's own state, and never lifts a gate already set on a resume. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
+            signInToView: boolean;
         };
         /**
          * @description One linked OAuth provider identity. `GET /me` exposes the link's own id, its provider, and when it was linked — never the provider's own subject/user id, an internal correlation key with no reason to ever reach a client. `id` is the value `DELETE /me/identities/{identityId}` takes.
@@ -1799,12 +1803,14 @@ export interface components {
             publicTitle?: string;
             /** @description Public page icon. Omitted keeps the stored value; empty clears it. Otherwise the trimmed value must be exactly one emoji grapheme: an Extended_Pictographic base with only modifiers, variation selectors, ZWJ, and tags after it, or one Regional Indicator flag (`invalid_emoji`). */
             faviconEmoji?: string;
+            /** @description Require sign-in to view. Omitted keeps the stored value. Turning it on is a `disabled` publish issue while `SIGN_IN_TO_VIEW_ENABLED` is false; turning it off always works. Turning it on for an already-live resume revokes the old public state through the existing revocation fence and raises the resume's pass epoch, ending every earlier pass. Forces effective discovery off while on; the stored `seoGeoEnabled` value is kept. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
+            signInToView?: boolean;
         };
         /** @description One deterministic semantic publish-policy issue. */
         PublishValidationIssue: {
             path: string;
             /** @enum {string} */
-            code: "required_for_live" | "requires_live" | "invalid_format" | "reserved" | "required" | "visible_entry_required" | "too_long" | "invalid_characters" | "invalid_emoji";
+            code: "required_for_live" | "requires_live" | "invalid_format" | "reserved" | "required" | "visible_entry_required" | "too_long" | "invalid_characters" | "invalid_emoji" | "disabled";
             message: string;
         };
         /** @description The standard Error envelope narrowed to `publish_invalid` issue details. Its outer shape and required code/message fields are the same API-wide error family. */
@@ -2122,6 +2128,7 @@ export interface components {
          *       "seoGeoEnabled": true,
          *       "publicTitle": "Danny from aboutme.vn",
          *       "faviconEmoji": "🚀",
+         *       "signInToView": false,
          *       "schemaVersion": 4,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
@@ -2150,6 +2157,8 @@ export interface components {
             publicTitle: string | null;
             /** @description One emoji shown as the public page's icon, or null for none. Public, like the slug. */
             faviconEmoji: string | null;
+            /** @description Whether viewers must sign in with Google or LinkedIn before this resume shows. Never part of the document and never changes the rendered resume. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
+            signInToView: boolean;
             /** @description Document version this response was emitted at. Equal to the `X-Resume-Schema-Version` response header. */
             schemaVersion: number;
             /** Format: date-time */
@@ -2779,6 +2788,7 @@ export interface components {
                  *         "seoGeoEnabled": true,
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
+                 *         "signInToView": false,
                  *         "schemaVersion": 4,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
@@ -2814,6 +2824,7 @@ export interface components {
                  *         "seoGeoEnabled": true,
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
+                 *         "signInToView": false,
                  *         "schemaVersion": 4,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
@@ -4405,12 +4416,20 @@ export interface components {
     };
     parameters: {
         /**
-         * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
+         * @description Why this OAuth transaction is being started. `GET` serves `login` (the default) and `view`. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
          *
          *     - `login` (default): an ordinary, unauthenticated sign-in/
          *       registration attempt. Reachable from anywhere — a bookmarked or
          *       shared link, another site's "continue with aboutme" button —
          *       with no session, CSRF, or same-site requirement at all.
+         *
+         *     - `view`: an unauthenticated sign-in-to-view start, bound to
+         *       `slug` (required with this purpose; see `AuthViewSlug`). Shares
+         *       the anonymous login start's rate limit. Never on `/auth/github/start`,
+         *       which returns `400 bad_request` for `purpose=view`: GitHub never
+         *       appears on the sign-in-to-view gate, so a `view` start naming it
+         *       would authenticate a provider the viewer was never offered. See
+         *       `docs/design/viewer-analytics/sign-in-to-view.md`.
          *
          *     - `link` / `reauth`: **not served by `GET`**. Both
          *       are `405` here, with `Allow: POST`, before any session read,
@@ -4421,7 +4440,12 @@ export interface components {
          *     The unconditional refusal prevents a cross-site page from chaining reauthentication and linking through browser navigations. Privileged starts use the CSRF-protected `POST` operation instead.
          * @example login
          */
-        AuthPurpose: "login";
+        AuthPurpose: "login" | "view";
+        /**
+         * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+         * @example ada-lovelace
+         */
+        AuthViewSlug: string;
         /**
          * @description Same-origin relative path to open after a successful provider login. The server accepts at most 2,048 bytes, requires one leading `/`, and rejects a leading `//`, any URI scheme, malformed URL syntax, or a backslash. An absent or invalid value is bound as `/app/resumes` in the OAuth transaction. Link and reauthentication callbacks ignore it.
          * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
@@ -4816,12 +4840,20 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
+                 * @description Why this OAuth transaction is being started. `GET` serves `login` (the default) and `view`. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
                  *
                  *     - `login` (default): an ordinary, unauthenticated sign-in/
                  *       registration attempt. Reachable from anywhere — a bookmarked or
                  *       shared link, another site's "continue with aboutme" button —
                  *       with no session, CSRF, or same-site requirement at all.
+                 *
+                 *     - `view`: an unauthenticated sign-in-to-view start, bound to
+                 *       `slug` (required with this purpose; see `AuthViewSlug`). Shares
+                 *       the anonymous login start's rate limit. Never on `/auth/github/start`,
+                 *       which returns `400 bad_request` for `purpose=view`: GitHub never
+                 *       appears on the sign-in-to-view gate, so a `view` start naming it
+                 *       would authenticate a provider the viewer was never offered. See
+                 *       `docs/design/viewer-analytics/sign-in-to-view.md`.
                  *
                  *     - `link` / `reauth`: **not served by `GET`**. Both
                  *       are `405` here, with `Allow: POST`, before any session read,
@@ -4838,6 +4870,11 @@ export interface operations {
                  * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
                  */
                 next?: components["parameters"]["AuthReturnPath"];
+                /**
+                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+                 * @example ada-lovelace
+                 */
+                slug?: components["parameters"]["AuthViewSlug"];
             };
             header?: never;
             path?: never;
@@ -4845,7 +4882,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success — a redirect to Google's own authorize endpoint. */
+            /** @description Success — a redirect to Google's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
             302: {
                 headers: {
                     /** @example https://accounts.google.com/o/oauth2/v2/auth?... */
@@ -4853,6 +4890,23 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `purpose=view` with a malformed `slug`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "bad_request",
+                     *         "message": "slug is malformed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description Either an unsupported method, including `HEAD`, or a `GET` carrying `?purpose=link` or `?purpose=reauth`. The latter purposes are served only by `POST` and return `Allow: POST`. */
             405: {
@@ -4990,12 +5044,20 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
+                 * @description Why this OAuth transaction is being started. `GET` serves `login` (the default) and `view`. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
                  *
                  *     - `login` (default): an ordinary, unauthenticated sign-in/
                  *       registration attempt. Reachable from anywhere — a bookmarked or
                  *       shared link, another site's "continue with aboutme" button —
                  *       with no session, CSRF, or same-site requirement at all.
+                 *
+                 *     - `view`: an unauthenticated sign-in-to-view start, bound to
+                 *       `slug` (required with this purpose; see `AuthViewSlug`). Shares
+                 *       the anonymous login start's rate limit. Never on `/auth/github/start`,
+                 *       which returns `400 bad_request` for `purpose=view`: GitHub never
+                 *       appears on the sign-in-to-view gate, so a `view` start naming it
+                 *       would authenticate a provider the viewer was never offered. See
+                 *       `docs/design/viewer-analytics/sign-in-to-view.md`.
                  *
                  *     - `link` / `reauth`: **not served by `GET`**. Both
                  *       are `405` here, with `Allow: POST`, before any session read,
@@ -5012,6 +5074,11 @@ export interface operations {
                  * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
                  */
                 next?: components["parameters"]["AuthReturnPath"];
+                /**
+                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+                 * @example ada-lovelace
+                 */
+                slug?: components["parameters"]["AuthViewSlug"];
             };
             header?: never;
             path?: never;
@@ -5027,6 +5094,23 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `purpose=view`, which GitHub never serves. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "bad_request",
+                     *         "message": "GitHub does not serve sign-in-to-view"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description Either an unsupported method, including `HEAD`, or a `GET` carrying `?purpose=link` or `?purpose=reauth`. The latter purposes are served only by `POST` and return `Allow: POST`. */
             405: {
@@ -5164,12 +5248,20 @@ export interface operations {
         parameters: {
             query?: {
                 /**
-                 * @description Why this OAuth transaction is being started. `GET` serves only `login`, which is also the default. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
+                 * @description Why this OAuth transaction is being started. `GET` serves `login` (the default) and `view`. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
                  *
                  *     - `login` (default): an ordinary, unauthenticated sign-in/
                  *       registration attempt. Reachable from anywhere — a bookmarked or
                  *       shared link, another site's "continue with aboutme" button —
                  *       with no session, CSRF, or same-site requirement at all.
+                 *
+                 *     - `view`: an unauthenticated sign-in-to-view start, bound to
+                 *       `slug` (required with this purpose; see `AuthViewSlug`). Shares
+                 *       the anonymous login start's rate limit. Never on `/auth/github/start`,
+                 *       which returns `400 bad_request` for `purpose=view`: GitHub never
+                 *       appears on the sign-in-to-view gate, so a `view` start naming it
+                 *       would authenticate a provider the viewer was never offered. See
+                 *       `docs/design/viewer-analytics/sign-in-to-view.md`.
                  *
                  *     - `link` / `reauth`: **not served by `GET`**. Both
                  *       are `405` here, with `Allow: POST`, before any session read,
@@ -5186,6 +5278,11 @@ export interface operations {
                  * @example /oauth/authorize?client_id=018f5b6a-9a3e-7c21-8b1e-000000000001
                  */
                 next?: components["parameters"]["AuthReturnPath"];
+                /**
+                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+                 * @example ada-lovelace
+                 */
+                slug?: components["parameters"]["AuthViewSlug"];
             };
             header?: never;
             path?: never;
@@ -5193,7 +5290,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success — a redirect to LinkedIn's own authorize endpoint. */
+            /** @description Success — a redirect to LinkedIn's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
             302: {
                 headers: {
                     /** @example https://www.linkedin.com/oauth/v2/authorization?... */
@@ -5201,6 +5298,23 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `purpose=view` with a malformed `slug`. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "bad_request",
+                     *         "message": "slug is malformed"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description Either an unsupported method, including `HEAD`, or a `GET` carrying `?purpose=link` or `?purpose=reauth`. The latter purposes are served only by `POST` and return `Allow: POST`. */
             405: {
@@ -5740,7 +5854,8 @@ export interface operations {
                      *         "agentAccess": false,
                      *         "passwordRegistration": true,
                      *         "passkeyEnrollment": false,
-                     *         "totpEnrollment": false
+                     *         "totpEnrollment": false,
+                     *         "signInToView": false
                      *       }
                      *     }
                      */
@@ -6347,6 +6462,7 @@ export interface operations {
                      *           "seoGeoEnabled": true,
                      *           "publicTitle": "Danny from aboutme.vn",
                      *           "faviconEmoji": "🚀",
+                     *           "signInToView": false,
                      *           "schemaVersion": 4,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
@@ -6439,6 +6555,7 @@ export interface operations {
                      *         "seoGeoEnabled": false,
                      *         "publicTitle": null,
                      *         "faviconEmoji": null,
+                     *         "signInToView": false,
                      *         "schemaVersion": 4,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
@@ -7910,6 +8027,7 @@ export interface operations {
                      * @example {
                      *       "data": {
                      *         "owner": false,
+                     *         "signedIn": false,
                      *         "token": "3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                      *         "challenge": {
                      *           "parameters": {

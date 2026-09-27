@@ -211,13 +211,14 @@ func run() error {
 		projector,
 		blobs,
 		resumeapi.Options{
-			Logger:         logger,
-			SessionManager: sessionManager,
-			PublicOrigin:   cfg.PublicOrigin,
-			TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
-			Coordinator:    coordinator,
-			RecoveryPool:   pool,
-			PrintQueue:     printQueue,
+			Logger:              logger,
+			SessionManager:      sessionManager,
+			PublicOrigin:        cfg.PublicOrigin,
+			TrustedProxies:      api.TrustedProxies(cfg.TrustedProxyCIDRs),
+			Coordinator:         coordinator,
+			RecoveryPool:        pool,
+			PrintQueue:          printQueue,
+			SignInToViewEnabled: cfg.SignInToViewEnabled,
 		},
 	)
 	agentRoutes, err := newAgentAccessRoutes(ctx, cfg, pool, queries, resumeService, sessionManager)
@@ -332,6 +333,7 @@ func capabilitiesRegistrar(cfg config.Config) func(*http.ServeMux) {
 		AgentAccess:          cfg.AgentAccess.Enabled,
 		PasskeyEnrollment:    cfg.PasskeyEnrollment,
 		TotpEnrollment:       cfg.TOTPEnrollment,
+		SignInToView:         cfg.SignInToViewEnabled,
 	})
 	return func(mux *http.ServeMux) {
 		mux.Handle("/api/v1/capabilities", handler)

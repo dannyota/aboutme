@@ -7,6 +7,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -73,22 +74,46 @@ func (q *Queries) ListAccountExportProviders(ctx context.Context, userID uuid.UU
 const listAccountExportResumes = `-- name: ListAccountExportResumes :many
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
     schema_version, revision, lng, personal_details, content, customization,
-    created_at, updated_at, public_title, favicon_emoji
+    created_at, updated_at, public_title, favicon_emoji, sign_in_to_view
 FROM resumes
 WHERE user_id = $1
 ORDER BY created_at, id
 LIMIT 4
 `
 
-func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
+type ListAccountExportResumesRow struct {
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	Title           string
+	Slug            *string
+	Live            bool
+	DownloadEnabled bool
+	SEOGeoEnabled   bool
+	SchemaVersion   int32
+	Revision        int64
+	Lng             *string
+	PersonalDetails json.RawMessage
+	Content         json.RawMessage
+	Customization   json.RawMessage
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	PublicTitle     *string
+	FaviconEmoji    *string
+	SignInToView    bool
+}
+
+// Carries sign_in_to_view with the other publish settings; the pass epoch
+// never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
+// "Setting").
+func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error) {
 	rows, err := q.db.Query(ctx, listAccountExportResumes, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Resume
+	var items []ListAccountExportResumesRow
 	for rows.Next() {
-		var i Resume
+		var i ListAccountExportResumesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -107,6 +132,7 @@ func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID
 			&i.UpdatedAt,
 			&i.PublicTitle,
 			&i.FaviconEmoji,
+			&i.SignInToView,
 		); err != nil {
 			return nil, err
 		}

@@ -41,7 +41,7 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 		return mutationRunResult{}, err
 	}
 	state := currentPublishOf(current)
-	validated := validatePublish(current.Doc, state, input.Input)
+	validated := op.service.validateSignInToView(state, validatePublish(current.Doc, mergeSignInToView(state, input.Input), input.Input))
 	if len(validated.Issues) != 0 {
 		return mutationRunResult{}, publishInvalidError(validated.Issues)
 	}
@@ -78,7 +78,7 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 			return mutationRunResult{}, tombstoneErr
 		}
 	}
-	updated, err := qtx.PublishResumeCAS(ctx, store.PublishResumeCASParams{ID: current.ID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision, Slug: validated.Effective.Slug, Live: validated.Effective.Live, DownloadEnabled: validated.Effective.DownloadEnabled, SEOGeoEnabled: validated.Effective.SEOGeoEnabled, PublicTitle: validated.Effective.PublicTitle, FaviconEmoji: validated.Effective.FaviconEmoji, UpdatedAt: op.service.clock()})
+	updated, err := qtx.PublishResumeCAS(ctx, store.PublishResumeCASParams{ID: current.ID, UserID: mutation.UserID, ExpectedRevision: *mutation.ExpectedRevision, Slug: validated.Effective.Slug, Live: validated.Effective.Live, DownloadEnabled: validated.Effective.DownloadEnabled, SEOGeoEnabled: validated.Effective.SEOGeoEnabled, PublicTitle: validated.Effective.PublicTitle, FaviconEmoji: validated.Effective.FaviconEmoji, SignInToView: validated.Effective.SignInToView, UpdatedAt: op.service.clock()})
 	if err != nil {
 		return mutationRunResult{}, err
 	}
@@ -134,7 +134,7 @@ func (s *Service) publishTransition(ctx context.Context, current resume.Resume, 
 		return mutationTransition{}, errors.New("resumeapi: publish mutation has no resume target")
 	}
 	before := currentPublishOf(current)
-	next := validatePublish(current.Doc, before, input.Input)
+	next := s.validateSignInToView(before, validatePublish(current.Doc, mergeSignInToView(before, input.Input), input.Input))
 	if len(next.Issues) != 0 {
 		return mutationTransition{}, publishInvalidError(next.Issues)
 	}
@@ -152,12 +152,16 @@ func (s *Service) publishTransition(ctx context.Context, current resume.Resume, 
 		return mutationTransition{}, err
 	}
 	discovery := publishChangesDiscovery(before, next.Effective)
-	revoking := (next.ChangedSlug && before.Slug != nil) || (before.Live && !next.Effective.Live) || (before.SEOGeoEnabled && !next.Effective.SEOGeoEnabled) || (before.DownloadEnabled && !next.Effective.DownloadEnabled)
+	// Turning sign-in-to-view on for an already-live resume revokes the old
+	// public state through the same fence as any other revoking publish
+	// change (docs/design/viewer-analytics/sign-in-to-view.md "Gated
+	// routes"; AC-VIEW-007).
+	revoking := (next.ChangedSlug && before.Slug != nil) || (before.Live && !next.Effective.Live) || (before.SEOGeoEnabled && !next.Effective.SEOGeoEnabled) || (before.DownloadEnabled && !next.Effective.DownloadEnabled) || (before.Live && next.Effective.Live && !before.SignInToView && next.Effective.SignInToView)
 	class := publicstate.NonDraining
 	if revoking {
 		class = publicstate.Revoking
 	}
-	descriptor := mutationTransition{ResumeID: input.ResumeID, Class: class, Global: discovery, Slugs: sortedPublishSlugs(before.Slug, next.Effective.Slug), Publish: &publishRecoveryProof{ResumeID: input.ResumeID, Effective: currentPublish{Slug: next.Effective.Slug, Live: next.Effective.Live, DownloadEnabled: next.Effective.DownloadEnabled, SEOGeoEnabled: next.Effective.SEOGeoEnabled, PublicTitle: next.Effective.PublicTitle, FaviconEmoji: next.Effective.FaviconEmoji, Revision: current.Revision + 1}}}
+	descriptor := mutationTransition{ResumeID: input.ResumeID, Class: class, Global: discovery, Slugs: sortedPublishSlugs(before.Slug, next.Effective.Slug), Publish: &publishRecoveryProof{ResumeID: input.ResumeID, Effective: currentPublish{Slug: next.Effective.Slug, Live: next.Effective.Live, DownloadEnabled: next.Effective.DownloadEnabled, SEOGeoEnabled: next.Effective.SEOGeoEnabled, PublicTitle: next.Effective.PublicTitle, FaviconEmoji: next.Effective.FaviconEmoji, SignInToView: next.Effective.SignInToView, Revision: current.Revision + 1}}}
 	if next.ChangedSlug && before.Slug != nil {
 		releasedAt := normalizePostgresTimestamp(s.clock())
 		oldSlug := *before.Slug
@@ -199,8 +203,35 @@ func currentPublishOf(current resume.Resume) currentPublish {
 	return currentPublish{
 		Slug: current.Slug, Live: current.Live, DownloadEnabled: current.DownloadEnabled,
 		SEOGeoEnabled: current.SEOGeoEnabled, PublicTitle: current.PublicTitle,
-		FaviconEmoji: current.FaviconEmoji, Revision: current.Revision,
+		FaviconEmoji: current.FaviconEmoji, SignInToView: current.SignInToView, Revision: current.Revision,
 	}
+}
+
+// mergeSignInToView resolves the request's optional signInToView field
+// against the stored value: absent keeps it (docs/design/viewer-analytics/sign-in-to-view.md
+// "Setting"; AC-VIEW-001). It returns a copy of current with SignInToView set
+// to the merged result, which validatePublish's effective:=current copy
+// then carries through untouched, since validatePublish knows nothing about
+// this field.
+func mergeSignInToView(current currentPublish, input publishInput) currentPublish {
+	merged := current
+	if input.SignInToView.Present {
+		merged.SignInToView = input.SignInToView.Value
+	}
+	return merged
+}
+
+// validateSignInToView adds the one sign-in-to-view publish issue
+// validatePublish cannot express: turning the switch on while
+// SIGN_IN_TO_VIEW_ENABLED is false. Turning it off, or leaving it on, is
+// always allowed regardless of the flag, because gating never depends on
+// the flag once a resume is already gated (design "Setting").
+func (s *Service) validateSignInToView(before currentPublish, prepared publishPrepared) publishPrepared {
+	if prepared.Effective.SignInToView && !before.SignInToView && !s.signInToViewEnabled {
+		prepared.Issues = sortedUniquePublishIssues(append(append([]publishIssue(nil), prepared.Issues...),
+			publishIssue{Path: "signInToView", Code: "disabled", Message: "sign in to view is not enabled"}))
+	}
+	return prepared
 }
 
 func publishInvalidError(issues []publishIssue) *clientError {
@@ -215,8 +246,13 @@ func slugTakenError() *clientError {
 	return &clientError{Status: http.StatusConflict, Code: "slug_taken", Message: "slug is unavailable"}
 }
 
+// publishChangesDiscovery reports whether this transition changes aggregate
+// discovery membership: an ordinary publish-state change, or the
+// sign-in-to-view switch flipping, which alone moves a resume in or out of
+// the sitemap and llms.txt (docs/design/viewer-analytics/delivery.md
+// "Schema"; AC-VIEW-010).
 func publishChangesDiscovery(before, after currentPublish) bool {
-	return before.Slug == nil != (after.Slug == nil) || (before.Slug != nil && after.Slug != nil && *before.Slug != *after.Slug) || before.Live != after.Live || before.SEOGeoEnabled != after.SEOGeoEnabled
+	return before.Slug == nil != (after.Slug == nil) || (before.Slug != nil && after.Slug != nil && *before.Slug != *after.Slug) || before.Live != after.Live || before.SEOGeoEnabled != after.SEOGeoEnabled || before.SignInToView != after.SignInToView
 }
 
 func sortedPublishSlugs(old, next *string) []string {

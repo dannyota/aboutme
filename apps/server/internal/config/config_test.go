@@ -64,6 +64,12 @@ func env(vars map[string]string) func(string) string {
 		// proving a rejection.
 		case "TOTP_ACTIVE_KEY":
 			return testBase64URL32
+		// VIEW_PASS_KEY is required startup configuration regardless of
+		// SIGN_IN_TO_VIEW_ENABLED (see internal/config/view_pass.go); the
+		// sign-in-to-view tests override it, including with an empty or
+		// short value when proving a rejection.
+		case "VIEW_PASS_KEY":
+			return testBase64URL32
 		}
 		return vars[key]
 	}

@@ -17,6 +17,13 @@ type optionalText struct {
 	Value   string
 }
 
+// optionalBool is an optional publish switch: absent keeps the stored value
+// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"; AC-VIEW-001).
+type optionalBool struct {
+	Present bool
+	Value   bool
+}
+
 type publishInput struct {
 	Slug            optionalSlug
 	Live            bool
@@ -24,6 +31,7 @@ type publishInput struct {
 	SEOGeoEnabled   bool
 	PublicTitle     optionalText
 	FaviconEmoji    optionalText
+	SignInToView    optionalBool
 }
 
 type currentPublish struct {
@@ -33,7 +41,13 @@ type currentPublish struct {
 	SEOGeoEnabled   bool
 	PublicTitle     *string
 	FaviconEmoji    *string
-	Revision        int64
+	// SignInToView is the resolved effective value: for the current state it
+	// is the stored switch, and for the validated result it is the caller's
+	// merged final value (input.SignInToView.Value when present, else the
+	// stored value), computed in resumes_publish.go before validatePublish
+	// runs (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
+	SignInToView bool
+	Revision     int64
 }
 
 type publishPrepared struct {
@@ -71,7 +85,7 @@ func decodePublish(body io.Reader) (publishInput, error) {
 	}
 	for name := range fields {
 		switch name {
-		case "slug", "live", "downloadEnabled", "seoGeoEnabled", "publicTitle", "faviconEmoji":
+		case "slug", "live", "downloadEnabled", "seoGeoEnabled", "publicTitle", "faviconEmoji", "signInToView":
 		default:
 			return publishInput{}, &publishShapeError{Field: "body"}
 		}
@@ -107,7 +121,27 @@ func decodePublish(body io.Reader) (publishInput, error) {
 		return publishInput{}, emojiErr
 	}
 	input.PublicTitle, input.FaviconEmoji = publicTitle, faviconEmoji
+	signInToView, signInErr := decodePublishOptionalBool(fields, "signInToView")
+	if signInErr != nil {
+		return publishInput{}, signInErr
+	}
+	input.SignInToView = signInToView
 	return input, nil
+}
+
+// decodePublishOptionalBool accepts an absent field or a JSON boolean; null
+// and every other type are malformed. Absent keeps the caller's stored
+// value (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
+func decodePublishOptionalBool(fields map[string]json.RawMessage, field string) (optionalBool, error) {
+	raw, ok := fields[field]
+	if !ok {
+		return optionalBool{}, nil
+	}
+	var value *bool
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return optionalBool{}, &publishShapeError{Field: field}
+	}
+	return optionalBool{Present: true, Value: *value}, nil
 }
 
 // decodePublishOptionalText accepts an absent field or a JSON string; null
