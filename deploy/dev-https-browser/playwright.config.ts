@@ -14,6 +14,7 @@ const browserModes = [
   'privacy',
   'sample-start',
   'linkedin',
+  'linkedin-import',
   'second-factor',
   'second-factor-disabled',
   'totp',
@@ -42,7 +43,9 @@ const secondFactor = mode === 'second-factor'
 // test.setTimeout with its own handoff and step bounds once it runs; this
 // default only covers setup before that call. The entry journey audits four
 // pages in both themes in one test, which took 22 to 30 seconds on hosted
-// runners, so it gets the multi-page budget too.
+// runners, so it gets the multi-page budget too. linkedin-import's
+// cross-engine test waits out the real 15-second read.ts time cap on a
+// hostile fixture, plus filling the resume cap, so it gets a still wider one.
 const timeout = mode === 'totp'
   ? 1_800_000
   : mode === 'second-factor'
@@ -50,11 +53,13 @@ const timeout = mode === 'totp'
     : mode === 'second-factor-disabled' || mode === 'totp-disabled'
       || mode === 'mcp-sdk'
       ? 420_000
-      : mode === 'editor' || mode === 'public' || mode === 'password-auth'
-        || mode === 'mcp' || mode === 'publish' || mode === 'exports'
-        || mode === 'privacy' || mode === 'sample-start' || mode === 'entry'
-        || mode === 'linkedin'
-        ? 120_000 : 30_000;
+      : mode === 'linkedin-import'
+        ? 180_000
+        : mode === 'editor' || mode === 'public' || mode === 'password-auth'
+          || mode === 'mcp' || mode === 'publish' || mode === 'exports'
+          || mode === 'privacy' || mode === 'sample-start' || mode === 'entry'
+          || mode === 'linkedin'
+          ? 120_000 : 30_000;
 
 // Both second-factor modes run one spec, and both TOTP modes run another.
 // The server enrollment flag, not the spec file, is what differs within

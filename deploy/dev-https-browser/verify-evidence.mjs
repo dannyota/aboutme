@@ -311,6 +311,20 @@ async function verify(mode, path) {
       unlinked: true,
       unverifiedBlocked: true,
     },
+  } : mode === 'linkedin-import' ? {
+    ...common,
+    scenario: 'linkedin-import',
+    schemaVersion: 1,
+    steps: {
+      contactDefaults: true,
+      created: true,
+      cspWorkerSrc: true,
+      deselectSection: true,
+      editorContent: true,
+      entryLink: true,
+      localePersists: true,
+      requestWindowClean: true,
+    },
   } : {
     schemaVersion: 1,
     scenario: 'authenticated-editor',

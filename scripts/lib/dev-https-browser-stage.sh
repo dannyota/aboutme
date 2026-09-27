@@ -25,6 +25,8 @@ readonly -a DEV_HTTPS_BROWSER_SPEC_SOURCES=(
   privacy.spec.ts
   sample-start.spec.ts
   linkedin.spec.ts
+  linkedin-import.spec.ts
+  linkedin-import-fixtures.ts
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts

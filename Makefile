@@ -426,6 +426,10 @@ dev-https-privacy-check: dev-https-status ## Prove account export, reauthenticat
 dev-https-linkedin-check: dev-https-status ## Prove LinkedIn sign-up, sign-in, linking, and cancellation over trusted HTTPS
 	@bash scripts/dev-https-check.sh linkedin
 
+.PHONY: dev-https-linkedin-import-check
+dev-https-linkedin-import-check: dev-https-status ## Prove the LinkedIn PDF import review-and-create flow over trusted HTTPS, in Chromium and WebKit
+	@bash scripts/dev-https-check.sh linkedin-import
+
 .PHONY: dev-https-passkey-check
 dev-https-passkey-check: dev-https-status ## Prove the passkey second factor over trusted HTTPS, with enrollment on then off; stops the harness when it ends
 	@bash scripts/dev-https-check.sh passkey
