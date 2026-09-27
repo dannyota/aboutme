@@ -54,6 +54,8 @@ describe('views index page', () => {
       expect(row.text()).toContain('12 real views · 31 filtered');
       expect(row.text()).toContain('20 real views · 12,345 filtered');
       expect(row.get('a').attributes('href')).toBe('/app/views/resume-1');
+      const markRow = row.get('[data-state-mark]').element.parentElement;
+      expect(markRow?.classList.contains('pt-8')).toBe(true);
     });
 
   it('marks an unpublished resume as a draft, with no public link',

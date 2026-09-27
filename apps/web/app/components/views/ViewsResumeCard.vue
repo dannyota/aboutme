@@ -59,8 +59,11 @@ const props = defineProps<{
         </div>
       </dl>
     </NuxtLink>
+    <!-- The fixed top padding keeps the resume list card's space above the
+         state mark even when the counts fill the card
+         (docs/design/ui/shell-and-editor.md). -->
     <span
-      class="relative z-10 mt-auto block px-6 pb-5"
+      class="relative z-10 mt-auto block px-6 pt-8 pb-5"
       :class="{
         'pointer-events-none': !props.resume.live || !props.resume.slug,
       }"
