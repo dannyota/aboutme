@@ -135,6 +135,23 @@ describe('index.vue', () => {
   });
 
   it(
+    'ends the "Bring your own AI" card with a link to the MCP guide',
+    async () => {
+      const wrapper = await mountLanding('en');
+      const links = wrapper.findAll('[data-testid="landing-point-link"]');
+      expect(links).toHaveLength(1);
+      expect(links[0]!.attributes('href')).toBe('/guide/mcp');
+      expect(links[0]!.text()).toBe('See how to connect');
+
+      const vi = await mountLanding('vi');
+      const viLinks = vi.findAll('[data-testid="landing-point-link"]');
+      expect(viLinks).toHaveLength(1);
+      expect(viLinks[0]!.attributes('href')).toBe('/guide/mcp');
+      expect(viLinks[0]!.text()).toBe('Xem cách kết nối');
+    },
+  );
+
+  it(
     'offers registration before sign-in and nothing into the app',
     async () => {
       const wrapper = await mountLanding('en');

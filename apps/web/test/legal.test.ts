@@ -266,35 +266,46 @@ describe('links to the legal pages', () => {
       .toBe(false);
   });
 
-  it('links Terms, Privacy, and Verify from the homepage footer', async () => {
-    const wrapper = await mountSuspended(LandingPage);
-    expect(
-      wrapper.get('[data-testid="landing-terms-link"]').attributes('href'),
-    ).toBe('/terms');
-    expect(
-      wrapper.get('[data-testid="landing-privacy-link"]').attributes('href'),
-    ).toBe('/privacy');
-    expect(wrapper.get('[data-testid="landing-privacy-link"]').text()).toBe(
-      'Chính sách quyền riêng tư',
-    );
-    expect(
-      wrapper.get('[data-testid="landing-verify-link"]').attributes('href'),
-    ).toBe('/verify');
-    expect(wrapper.get('[data-testid="landing-verify-link"]').text()).toBe(
-      'Kiểm chứng',
-    );
-    const footer = wrapper.get('[data-testid="landing-footer"]');
-    const order = footer.findAll('a').map((a) => a.attributes('data-testid'));
-    expect(order).toEqual([
-      'landing-terms-link',
-      'landing-privacy-link',
-      'landing-verify-link',
-    ]);
+  it(
+    'links Terms, Privacy, Verify, and the MCP guide from the homepage '
+    + 'footer',
+    async () => {
+      const wrapper = await mountSuspended(LandingPage);
+      expect(
+        wrapper.get('[data-testid="landing-terms-link"]').attributes('href'),
+      ).toBe('/terms');
+      expect(
+        wrapper.get('[data-testid="landing-privacy-link"]')
+          .attributes('href'),
+      ).toBe('/privacy');
+      expect(wrapper.get('[data-testid="landing-privacy-link"]').text())
+        .toBe('Chính sách quyền riêng tư');
+      expect(
+        wrapper.get('[data-testid="landing-verify-link"]').attributes('href'),
+      ).toBe('/verify');
+      expect(wrapper.get('[data-testid="landing-verify-link"]').text())
+        .toBe('Kiểm chứng');
+      expect(
+        wrapper.get('[data-testid="landing-guide-link"]').attributes('href'),
+      ).toBe('/guide/mcp');
+      expect(wrapper.get('[data-testid="landing-guide-link"]').text())
+        .toBe('Kết nối AI');
+      const footer = wrapper.get('[data-testid="landing-footer"]');
+      const order = footer.findAll('a')
+        .map((a) => a.attributes('data-testid'));
+      expect(order).toEqual([
+        'landing-terms-link',
+        'landing-privacy-link',
+        'landing-verify-link',
+        'landing-guide-link',
+      ]);
 
-    setSiteLocale('en');
-    const english = await mountSuspended(LandingPage);
-    expect(english.get('[data-testid="landing-verify-link"]').text()).toBe(
-      'Verify',
-    );
-  });
+      setSiteLocale('en');
+      const english = await mountSuspended(LandingPage);
+      expect(english.get('[data-testid="landing-verify-link"]').text())
+        .toBe('Verify');
+      expect(english.get('[data-testid="landing-guide-link"]').text())
+        .toBe('Connect AI');
+    },
+  );
 });

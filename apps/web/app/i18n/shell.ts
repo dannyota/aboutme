@@ -8,6 +8,8 @@ export type ShellCopy = {
   readonly createResume: string;
   readonly openSource: string;
   readonly templates: string;
+  /** Header link to the MCP guide (docs/design/mcp-guide.md Navigation). */
+  readonly guideMcp: string;
   readonly resumes: string;
   readonly views: string;
   readonly settings: string;
@@ -30,6 +32,7 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     createResume: 'Tạo CV của bạn',
     openSource: 'Mã nguồn mở',
     templates: 'Thư viện',
+    guideMcp: 'Kết nối AI',
     resumes: 'CV',
     views: 'Lượt xem',
     settings: 'Cài đặt',
@@ -50,6 +53,7 @@ export const shellCopy: Record<Locale, ShellCopy> = {
     createResume: 'Create your resume',
     openSource: 'Open source',
     templates: 'Library',
+    guideMcp: 'Connect AI',
     resumes: 'Resumes',
     views: 'Views',
     settings: 'Settings',

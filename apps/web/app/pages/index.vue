@@ -272,6 +272,13 @@ useHead(computed(() => ({
           <p class="mt-2 text-md leading-relaxed text-muted-foreground">
             {{ point.text }}
           </p>
+          <NuxtLink
+            v-if="point.link"
+            class="mt-2 inline-block text-md font-medium text-link
+              underline-offset-4 hover:underline"
+            data-testid="landing-point-link"
+            :to="point.link.to"
+          >{{ point.link.label }}</NuxtLink>
         </li>
       </ul>
     </section>
@@ -496,6 +503,11 @@ useHead(computed(() => ({
         data-testid="landing-verify-link"
         to="/verify"
       >{{ legal.verifyLink }}</NuxtLink>
+      <NuxtLink
+        class="text-link underline-offset-4 hover:underline"
+        data-testid="landing-guide-link"
+        to="/guide/mcp"
+      >{{ legal.guideLink }}</NuxtLink>
     </footer>
   </main>
 </template>

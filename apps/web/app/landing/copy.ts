@@ -1,7 +1,13 @@
 // Homepage copy in both site languages (see app/i18n/locale.ts).
 import type { Locale } from '@/i18n/locale';
 
-type Point = { readonly title: string; readonly text: string };
+type Point = {
+  readonly title: string;
+  readonly text: string;
+  /** A trailing text link, used only by the "bring your own AI" card
+   * (docs/design/mcp-guide.md Navigation). */
+  readonly link?: { readonly label: string; readonly to: string };
+};
 
 export type LandingCopy = {
   readonly description: string;
@@ -75,6 +81,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
         text:
           'Kết nối trợ lý hỗ trợ MCP với các quyền do bạn cấp và có thể thu '
           + 'hồi.',
+        link: { label: 'Xem cách kết nối', to: '/guide/mcp' },
       },
     ],
     templatesTitle: 'Chọn phong cách cho CV',
@@ -150,6 +157,7 @@ export const landingCopy: Record<Locale, LandingCopy> = {
         text:
           'Connect an MCP-capable assistant with scopes you grant and can '
           + 'revoke.',
+        link: { label: 'See how to connect', to: '/guide/mcp' },
       },
     ],
     templatesTitle: 'Choose your style',

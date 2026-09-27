@@ -49,6 +49,9 @@ const copy = computed(() => shellCopy[shellLocale.value]);
 // visitors alike, unlike the account-only links below.
 const onTemplatesPath = computed(() =>
   route.path === '/templates' || route.path.startsWith('/templates/'));
+// The MCP guide is public like the gallery (docs/design/mcp-guide.md
+// Navigation), so it renders for signed-out and signed-in visitors alike.
+const onGuidePath = computed(() => route.path === '/guide/mcp');
 const onResumesPath = computed(() => route.path.startsWith('/app/resumes'));
 const onViewsPath = computed(() => route.path.startsWith('/app/views'));
 const onSettingsPath = computed(
@@ -64,6 +67,7 @@ const onMarketingPath = computed(() => (
   || route.path === '/terms'
   || route.path === '/privacy'
   || route.path === '/verify'
+  || route.path === '/guide/mcp'
   || TEMPLATE_PAGE_PATH.test(route.path)
 ));
 const ctaLabel = computed(() => (onMarketingPath.value
@@ -79,6 +83,14 @@ const linkClass = cn(
 // links the gallery. Signed out, it is the header's only gallery link.
 const templatesLinkClass = computed(() =>
   cn(linkClass, signedIn.value && 'max-sm:hidden'));
+// Signed out, the guide link shows from 44rem, the width where the account
+// buttons appear. Signed in, the signed-in bar also carries Resumes, Views,
+// and Settings, so it shows only from 64rem (docs/design/mcp-guide.md
+// Navigation).
+const guideLinkClass = computed(() => cn(
+  linkClass,
+  signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden',
+));
 // Settings and Views are also one tap away from the account menu, so they
 // are the other links to drop on phones when signed in.
 const settingsLinkClass = cn(linkClass, 'max-sm:hidden');
@@ -106,6 +118,11 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
         :class="templatesLinkClass"
         to="/templates"
       >{{ copy.templates }}</NuxtLink>
+      <NuxtLink
+        :aria-current="onGuidePath ? 'page' : undefined"
+        :class="guideLinkClass"
+        to="/guide/mcp"
+      >{{ copy.guideMcp }}</NuxtLink>
       <template v-if="signedIn">
         <NuxtLink
           :aria-current="onResumesPath ? 'page' : undefined"

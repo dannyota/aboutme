@@ -130,12 +130,38 @@ describe('ConnectedAgents', () => {
     expect(wrapper.text()).toContain('Chưa từng dùng');
   });
 
-  it('explains MCP in the empty state without an external link', async () => {
+  it(
+    'explains MCP in the empty state and links the MCP guide, not an '
+    + 'external site',
+    async () => {
+      agentHandler = () => ({ data: { grants: [] } });
+      const wrapper = await mountSuspended(ConnectedAgents);
+      await flushPromises();
+      expect(wrapper.text()).toContain('connect through MCP');
+      const link = wrapper.get('[data-testid="agents-guide-link"]');
+      expect(link.attributes('href')).toBe('/guide/mcp');
+      expect(link.text()).toBe('See how to connect an AI assistant');
+      expect(wrapper.findAll('[href]')).toHaveLength(1);
+    },
+  );
+
+  it('links the MCP guide under the connected agent list too', async () => {
+    const wrapper = await mountSuspended(ConnectedAgents);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="agent-row"]').exists()).toBe(true);
+    const link = wrapper.get('[data-testid="agents-guide-link"]');
+    expect(link.attributes('href')).toBe('/guide/mcp');
+    expect(link.text()).toBe('See how to connect an AI assistant');
+  });
+
+  it('speaks Vietnamese for the connected-agents guide link', async () => {
+    setSiteLocale('vi');
     agentHandler = () => ({ data: { grants: [] } });
     const wrapper = await mountSuspended(ConnectedAgents);
     await flushPromises();
-    expect(wrapper.text()).toContain('connect through MCP');
-    expect(wrapper.find('[href]').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="agents-guide-link"]').text()).toBe(
+      'Xem cách kết nối trợ lý AI',
+    );
   });
 
   it(
