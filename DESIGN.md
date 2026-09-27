@@ -26,7 +26,8 @@ Vietnamese is the default site language. The language choice persists in the
 - `/templates` and `/templates/{id}`.
 - `/login`, `/login/second-factor`, `/register`, `/forgot-password`,
   `/reset-password`, and `/verify-email`.
-- `/app/resumes`, `/app/new`, and the editor at `/app/resumes/{id}`.
+- `/app/resumes`, `/app/new`, the editor at `/app/resumes/{id}`, and
+  [LinkedIn import](docs/design/linkedin-import-ui.md) `/app/import/linkedin`.
 - `/app/settings/sessions` and the agent-consent page `/authorize`.
 
 The shell shows the language toggle on these routes. The editor top bar, the
@@ -425,9 +426,8 @@ on Library cards, the new-resume confirmation, and the Create resume dialog, and
 the editor's template thumbnails. The full document on a template page and the
 editor preview keep the default h1.
 
-The theme choice persists across visits. The app reset and focus styles apply
-under `data-ui="app"` only; `.resume-document`, `.paged-resume`, and their
-descendants are excluded so application CSS cannot alter the renderer.
+The app reset and focus styles apply under `data-ui="app"` only and skip
+`.resume-document`, `.paged-resume`, and their descendants.
 
 ## Component guardrails
 
