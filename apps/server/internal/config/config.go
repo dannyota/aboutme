@@ -139,6 +139,21 @@ type Config struct {
 	// (docs/design/totp-key-management.md "Key ring").
 	TOTPActiveKey   string
 	TOTPPreviousKey string
+	// SignInToViewEnabled reports whether owners may turn the per-resume
+	// sign-in-to-view switch on (SIGN_IN_TO_VIEW_ENABLED=true). It defaults
+	// to false. It never lifts a gate already set on a resume; only turning
+	// the switch off ever bypasses it (docs/design/viewer-analytics/sign-in-to-view.md
+	// "Setting").
+	SignInToViewEnabled bool
+	// SignInToViewLinkedInEnabled reports whether the sign-in gate may also
+	// offer LinkedIn (SIGN_IN_TO_VIEW_LINKEDIN_ENABLED=true), in addition to
+	// LinkedIn account login being enabled. It defaults to false.
+	SignInToViewLinkedInEnabled bool
+	// ViewPassKey is the canonical 43-character unpadded base64url encoding
+	// of the 32 random bytes that seal the sign-in-to-view pass cookie
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"). It is
+	// always required, like TOTPActiveKey, and never logged.
+	ViewPassKey string
 }
 
 const (
@@ -285,6 +300,19 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, err
 	}
 
+	signInToViewEnabled, err := loadSignInToViewFlag(getenv("SIGN_IN_TO_VIEW_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
+	signInToViewLinkedInEnabled, err := loadSignInToViewLinkedInFlag(getenv("SIGN_IN_TO_VIEW_LINKEDIN_ENABLED"))
+	if err != nil {
+		return Config{}, err
+	}
+	viewPassKey, err := loadViewPassKey(getenv("VIEW_PASS_KEY"))
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		PrintListenAddr:              printListenAddr,
 		ChromiumPath:                 chromiumPath,
@@ -326,6 +354,9 @@ func Load(getenv func(string) string) (Config, error) {
 		TOTPEnrollment:               totpEnrollment,
 		TOTPActiveKey:                totpActiveKey,
 		TOTPPreviousKey:              totpPreviousKey,
+		SignInToViewEnabled:          signInToViewEnabled,
+		SignInToViewLinkedInEnabled:  signInToViewLinkedInEnabled,
+		ViewPassKey:                  viewPassKey,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {
 		return Config{}, err

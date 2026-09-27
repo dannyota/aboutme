@@ -26,6 +26,12 @@ type Capabilities struct {
 	// this flag; it is never derived from any account's own state
 	// (docs/design/totp-second-factor-contract.md "Release surface").
 	TotpEnrollment bool `json:"totpEnrollment"`
+	// SignInToView reports whether owners may turn the per-resume
+	// sign-in-to-view switch on (SIGN_IN_TO_VIEW_ENABLED). It is never
+	// derived from any account's own state, and it never lifts a gate
+	// already set on a resume (docs/design/viewer-analytics/sign-in-to-view.md
+	// "Setting").
+	SignInToView bool `json:"signInToView"`
 }
 
 // CapabilitiesHandler serves GET /api/v1/capabilities. The router's default

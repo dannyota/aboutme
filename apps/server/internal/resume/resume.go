@@ -32,6 +32,13 @@ type Resume struct {
 	PublicTitle  *string
 	FaviconEmoji *string
 
+	// SignInToView is the sign-in-to-view publish switch and ViewPassEpoch
+	// is its pass epoch (docs/design/viewer-analytics/sign-in-to-view.md
+	// "Setting", "Gated routes"). The epoch never leaves this process in
+	// any API response.
+	SignInToView  bool
+	ViewPassEpoch int32
+
 	// StoredSchemaVersion is the row's own schema_version column, BEFORE
 	// projection: observable so a caller can tell backfill progress
 	// apart from Doc.SchemaVersion, which is always CurrentVersion.

@@ -144,6 +144,8 @@ type Querier interface {
 	// clamped to the family's own death so no token can outlive the family it
 	// belongs to; the table's ordering check is the backstop for raw SQL.
 	CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenParams) (OAuthToken, error)
+	// resume_id is set only for purpose 'view' (docs/design/viewer-analytics/sign-in-to-view.md
+	// "Sign-in flow"; AC-VIEW-004); every other purpose passes it as NULL.
 	CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error)
 	CreatePasswordRegistration(ctx context.Context, arg CreatePasswordRegistrationParams) (PasswordRegistration, error)
 	CreatePasswordResetToken(ctx context.Context, arg CreatePasswordResetTokenParams) (PasswordResetToken, error)
@@ -364,6 +366,11 @@ type Querier interface {
 	// A stored card is derived data (ADR 0014); every public read passes the
 	// live-state gate before it reads one.
 	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)
+	// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
+	// and the pass epoch, by resume ID, with no user scoping since the callback
+	// authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
+	// "Sign-in flow"; AC-VIEW-005).
+	GetResumeViewGateState(ctx context.Context, id uuid.UUID) (GetResumeViewGateStateRow, error)
 	GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error)
 	// Loads a target so the caller can revoke its rotation partner.
 	// RevokeSessionForUser returns only a row count, and the target need not be the
@@ -439,7 +446,10 @@ type Querier interface {
 	InstallTOTPCredential(ctx context.Context, arg InstallTOTPCredentialParams) (TotpCredential, error)
 	ListAccountDeletionResumeSetForUpdate(ctx context.Context, userID uuid.UUID) ([]ListAccountDeletionResumeSetForUpdateRow, error)
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
-	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]Resume, error)
+	// Carries sign_in_to_view with the other publish settings; the pass epoch
+	// never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
+	// "Setting").
+	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error)
 	// Discovery bytes contain only eligible slugs in raw byte order. The
 	// COALESCE is unreachable under the predicate and gives sqlc a non-null Go
 	// string instead of a pointer.
@@ -540,6 +550,16 @@ type Querier interface {
 	// reservation must account for — the one canonical byte expression shared
 	// with backfill, insert, and cleanup.
 	NormalizeIdempotencyResponse(ctx context.Context, arg NormalizeIdempotencyResponseParams) (NormalizeIdempotencyResponseRow, error)
+	// sign_in_to_view is the caller's already-merged final value (an omitted
+	// publish field keeps the stored value before this query ever runs; see
+	// docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
+	// view_pass_epoch rises exactly when the switch turns on (from false to
+	// true, whatever the live transition) or when it stays on and the resume
+	// becomes live again after not being live, so passes from an earlier
+	// period stop working (design "Gated routes"; AC-VIEW-007). Both
+	// conditions read resume.* as the pre-update row, since a single UPDATE
+	// statement evaluates its FROM/SET expressions against the row as it was
+	// before this statement.
 	PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error)
 	RecordPendingAuthenticationFailure(ctx context.Context, arg RecordPendingAuthenticationFailureParams) (PendingAuthentication, error)
 	// Increments the consecutive-failure counter, saturating at 1,000, and on
