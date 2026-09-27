@@ -57,7 +57,10 @@ export function startJoinInviteTiming(
 
   function scrollFraction(): number {
     const scrollable = doc.documentElement.scrollHeight - win.innerHeight;
-    if (scrollable <= 0) return 1;
+    // A resume shorter than the viewport has nothing to scroll: the scroll
+    // criterion never fires, and only the 20 s dwell timer can show the
+    // invite, rather than treating an unscrollable page as fully scrolled.
+    if (scrollable <= 0) return 0;
     return Math.min(1, Math.max(0, win.scrollY / scrollable));
   }
 

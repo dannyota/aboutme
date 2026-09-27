@@ -522,7 +522,9 @@ describe('public sign-in gate', () => {
 
   it('shows the closed message only when not none', async () => {
     const none = await renderPublicGate(gateRequest(), VERSIONS);
-    expect(none).not.toContain('gate-message');
+    // The `<style>` block always defines the .gate-message rule; only the
+    // element itself is conditional (v-if="message !== 'none'").
+    expect(none).not.toMatch(/<p class="gate-message"/u);
 
     const cancelled = await renderPublicGate(
       { ...gateRequest(), message: 'cancelled' },
