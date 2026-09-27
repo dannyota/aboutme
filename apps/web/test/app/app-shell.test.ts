@@ -556,6 +556,7 @@ describe('AppShell', () => {
     ['/terms', 'Create your resume'],
     ['/privacy', 'Create your resume'],
     ['/verify', 'Create your resume'],
+    ['/guide/mcp', 'Create your resume'],
     ['/login', 'Create account'],
     ['/register', 'Create account'],
     // /authorize is excluded: it is an authRequiredPath, so its header never
@@ -569,6 +570,63 @@ describe('AppShell', () => {
       .find((link) => link.attributes('href')?.startsWith('/register'));
     expect(createAccount?.text()).toBe(label);
   });
+
+  it(
+    'links the MCP guide directly after Library with aria-current on it',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const wrapper = await mountShell('/guide/mcp');
+      await flushPromises();
+      const anchors = wrapper.findAll('a');
+      const labels = anchors.map((a) => a.text().trim());
+      const libraryIndex = labels.indexOf('Library');
+      const guideIndex = labels.indexOf('Connect AI');
+      expect(libraryIndex).toBeGreaterThanOrEqual(0);
+      expect(guideIndex).toBe(libraryIndex + 1);
+      const guideLink = anchors[guideIndex]!;
+      expect(guideLink.attributes('href')).toBe('/guide/mcp');
+      expect(guideLink.attributes('aria-current')).toBe('page');
+
+      const elsewhere = await mountShell('/templates');
+      await flushPromises();
+      const other = elsewhere.findAll('a')
+        .find((a) => a.attributes('href') === '/guide/mcp');
+      expect(other?.attributes('aria-current')).toBeUndefined();
+    },
+  );
+
+  it('speaks Vietnamese for the MCP guide header link', async () => {
+    meStatus = 401;
+    setSiteLocale('vi');
+    const wrapper = await mountShell('/');
+    await flushPromises();
+    expect(links(wrapper)['Kết nối AI']).toBe('/guide/mcp');
+  });
+
+  it(
+    'hides the MCP guide link below 44rem signed out, 64rem signed in',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const signedOut = await mountShell('/');
+      await flushPromises();
+      const signedOutGuide = signedOut.findAll('a')
+        .find((a) => a.attributes('href') === '/guide/mcp');
+      expect(signedOutGuide?.classes()).toContain('max-[44rem]:hidden');
+      expect(signedOutGuide?.classes()).not.toContain('max-[64rem]:hidden');
+      signedOut.unmount();
+
+      meStatus = 200;
+      clearNuxtData();
+      const signedIn = await mountShell();
+      await flushPromises();
+      const signedInGuide = signedIn.findAll('a')
+        .find((a) => a.attributes('href') === '/guide/mcp');
+      expect(signedInGuide?.classes()).toContain('max-[64rem]:hidden');
+      expect(signedInGuide?.classes()).not.toContain('max-[44rem]:hidden');
+    },
+  );
 
   it('shows the open source link only when signed out', async () => {
     meStatus = 401;
