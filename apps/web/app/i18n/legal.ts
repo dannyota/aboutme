@@ -282,9 +282,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Không dùng aboutme.vn để:',
           ],
           items: [
-            'công khai nội dung vi phạm pháp luật;',
+            'đăng nội dung vi phạm pháp luật;',
             'mạo danh người khác;',
-            'công khai dữ liệu cá nhân của người khác khi chưa được họ cho '
+            'đăng dữ liệu cá nhân của người khác khi chưa được họ cho '
             + 'phép;',
             'gửi thư rác, phát tán phần mềm độc hại, hoặc lạm dụng dịch vụ '
             + 'hay người khác.',
