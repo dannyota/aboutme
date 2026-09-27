@@ -48,16 +48,19 @@ export type EditorControlId
     | 'sectionTypeProject' | 'sectionTypeCustom' | 'templateApplied'
     | 'templateChangeProgress'
     | 'templateChangesReady'
-    | 'templateChangesReview'
+    | 'templatePartialTitle' | 'templatePartialFailed'
+    | 'templatePartialConnection' | 'templatePartialChanged'
+    | 'templatePartLayout' | 'templatePartStyle' | 'templatePartApplied'
+    | 'templatePartNotApplied' | 'templatePart' | 'templateKeepHint'
+    | 'templateUndoHint' | 'templateRetryHint' | 'templateApplyAgain'
     | 'templateCurrentChanged'
     | 'templateFormatWarning'
     | 'templateMarginWarning'
     | 'templateNeedsAttention'
-    | 'templateResultReview' | 'templateSaving' | 'templateSizeWarning'
+    | 'templateSaving' | 'templateSizeWarning'
     | 'templateSaved' | 'templateUndoUnavailable' | 'tryAgainLater'
     | 'uploadPhoto' | 'validationAttention' | 'validationFormat'
-    | 'validationRange' | 'warningCustomization' | 'warningPlacement'
-    | 'warningAccepted' | 'warningRemains'
+    | 'validationRange'
     | 'sections' | 'entryOrderChanged' | 'reopenPlacement' | 'reopenOrder'
     | 'reopenCrop' | 'retryRemaining' | 'restorePreApply' | 'keepPartial'
     | 'selectPhoto' | 'imageType' | 'imageLarge' | 'imageInvalid'
@@ -80,6 +83,7 @@ type EditorControlCopy = Record<
     | 'movedToSidebar'
     | 'photoStatusBusy'
     | 'photoStatusRateLimited'
+    | 'templatePart'
     | 'tryAgainLater'
   >,
   string
@@ -89,6 +93,7 @@ type EditorControlCopy = Record<
   readonly movedToSidebar: (names: string) => string;
   readonly photoStatusBusy: (wait: string) => string;
   readonly photoStatusRateLimited: (wait: string) => string;
+  readonly templatePart: (part: string, status: string) => string;
   readonly tryAgainLater: (seconds?: number) => string;
 };
 
@@ -161,7 +166,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       imageLarge: 'Ảnh này vượt quá kích thước cho phép.',
       imageType: 'Chọn ảnh JPEG hoặc PNG.',
       keepObservedPhoto: 'Giữ ảnh đã thấy',
-      keepPartial: 'Giữ phần đã áp dụng',
+      keepPartial: 'Giữ như hiện tại',
       noChanges: 'Không có thay đổi',
       noPhoto: 'Chưa có ảnh.',
       observedChanged: 'Ảnh đã thấy đã thay đổi.',
@@ -189,9 +194,9 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       reopenOrder: 'Mở lại thứ tự',
       reopenPlacement: 'Mở lại vị trí',
       replaceObservedPhoto: 'Thay ảnh',
-      restorePreApply: 'Khôi phục trước khi áp dụng',
+      restorePreApply: 'Hoàn tác mẫu',
       retry: 'Thử lại',
-      retryRemaining: 'Thử lại phần còn lại',
+      retryRemaining: 'Áp dụng phần còn lại',
       sectionChanged:
         'Phần này đã thay đổi. Mở lại thao tác xóa và xác nhận lại.',
       sectionCreateDuplicate: 'Phần này đã tồn tại. Chọn loại phần khác.',
@@ -209,27 +214,41 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       sectionTypeCustom: 'Tùy chỉnh',
       selectPhoto: 'Chọn ảnh thay thế',
       templateApplied: 'Đã áp dụng mẫu',
-      templateChangeProgress: 'Tiến độ thay đổi mẫu',
+      templateChangeProgress: 'Các phần của mẫu',
       templateChangesReady: 'Các thay đổi mẫu đã sẵn sàng để lưu.',
-      templateChangesReview: 'Các thay đổi mẫu cần được xem lại',
+      templatePartialTitle: 'Mẫu mới chỉ được áp dụng một phần',
+      templatePartialFailed: 'Máy chủ không nhận một phần của mẫu.',
+      templatePartialConnection:
+        'Kết nối bị gián đoạn khi đang lưu mẫu nên một phần chưa được lưu.',
+      templatePartialChanged:
+        'Hồ sơ đã thay đổi trong lúc lưu mẫu, ví dụ từ một thẻ khác.',
+      templatePartLayout: 'Vị trí các mục',
+      templatePartStyle: 'Phông chữ, màu sắc và khoảng cách',
+      templatePartApplied: 'đã áp dụng',
+      templatePartNotApplied: 'chưa áp dụng',
+      templatePart: (part, status) => `${part}: ${status}.`,
+      templateKeepHint: 'Giữ như hiện tại: để nguyên hồ sơ như bây giờ.',
+      templateUndoHint:
+        'Hoàn tác mẫu: đưa hồ sơ về như trước khi áp dụng mẫu này.',
+      templateRetryHint: 'Áp dụng phần còn lại: lưu phần chưa được áp dụng.',
+      templateApplyAgain:
+        'Để hoàn tất, hãy chọn Giữ như hiện tại rồi áp dụng lại mẫu '
+        + 'từ danh sách.',
       templateCurrentChanged:
-        'Ngữ cảnh hồ sơ đã thay đổi. Xem lại hồ sơ hiện tại trước khi thử lại.',
+        'Hồ sơ đã được thêm hoặc xóa mục sau khi lưu mẫu nên không thể '
+        + 'làm việc này nữa. Hãy chọn Giữ như hiện tại, rồi áp dụng lại mẫu.',
       templateFormatWarning: 'Định dạng ngày sẽ thay đổi.',
       templateMarginWarning: 'Mẫu này đặt lề dưới 5 mm.',
       templateNeedsAttention: 'Mẫu cần được xem lại',
-      templateResultReview: 'Kết quả mẫu cần được xem lại.',
       templateSaving: 'Đang lưu mẫu',
       templateSaved: 'Đã lưu mẫu',
       templateSizeWarning: 'Mẫu này dùng cỡ chữ cơ bản 10 pt.',
       templateUndoUnavailable:
-        'Không thể hoàn tác thay đổi mẫu trên hồ sơ hiện tại.',
+        'Hồ sơ đã thay đổi sau khi lưu mẫu nên không thể làm việc này nữa. '
+        + 'Hãy chọn Giữ như hiện tại, rồi áp dụng lại mẫu nếu muốn.',
       tryAgainLater: (seconds?: number) => seconds === undefined
         ? 'Vui lòng thử lại sau.'
         : `Thử lại sau ${seconds} giây.`,
-      warningPlacement: 'Thay đổi vị trí',
-      warningCustomization: 'Thay đổi tùy chỉnh',
-      warningAccepted: 'đã chấp nhận',
-      warningRemains: 'còn lại',
       sections: 'Phần',
       entryOrder: 'Thứ tự mục',
       moveEntryUp: 'Di chuyển mục lên',
@@ -269,7 +288,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       undoTemplate: 'Hoàn tác thay đổi mẫu',
       templatePresets: 'Mẫu có sẵn',
       templateWarnings: 'Cảnh báo mẫu',
-      templateReadRequired: 'Tải hồ sơ hiện tại trước khi thử lại.',
+      templateReadRequired: 'Tải lại trang để lấy hồ sơ mới nhất, rồi thử lại.',
     },
     customization: {
       'font.family': 'Phông chữ',
@@ -388,7 +407,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       imageLarge: 'This image exceeds the allowed size.',
       imageType: 'Choose a JPEG or PNG image.',
       keepObservedPhoto: 'Keep observed photo',
-      keepPartial: 'Keep partial',
+      keepPartial: 'Keep as is',
       noChanges: 'No changes',
       noPhoto: 'No photo has been added.',
       observedChanged: 'The observed photo changed.',
@@ -419,9 +438,9 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       reopenOrder: 'Reopen order',
       reopenPlacement: 'Reopen placement',
       replaceObservedPhoto: 'Replace photo',
-      restorePreApply: 'Restore pre-apply',
+      restorePreApply: 'Undo template',
       retry: 'Retry',
-      retryRemaining: 'Retry remaining',
+      retryRemaining: 'Apply the rest',
       sectionChanged:
         'This section changed. Reopen deletion and confirm again.',
       sectionCreateDuplicate:
@@ -441,28 +460,45 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       sectionTypeCustom: 'Custom',
       selectPhoto: 'Select a replacement photo',
       templateApplied: 'Template applied',
-      templateChangeProgress: 'Template change progress',
+      templateChangeProgress: 'Template parts',
       templateChangesReady: 'Template changes are ready to save.',
-      templateChangesReview: 'Template changes need review',
+      templatePartialTitle: 'Template only partly applied',
+      templatePartialFailed: 'The server did not accept part of the template.',
+      templatePartialConnection:
+        'The connection dropped while the template was saving, '
+        + 'so part of it was not saved.',
+      templatePartialChanged:
+        'The resume changed while the template was saving, '
+        + 'for example in another tab.',
+      templatePartLayout: 'Section placement',
+      templatePartStyle: 'Fonts, colors, and spacing',
+      templatePartApplied: 'applied',
+      templatePartNotApplied: 'not applied',
+      templatePart: (part, status) => `${part}: ${status}.`,
+      templateKeepHint: 'Keep as is: leave the resume as it is now.',
+      templateUndoHint:
+        'Undo template: return the resume to how it was before this template.',
+      templateRetryHint: 'Apply the rest: save the part that was not applied.',
+      templateApplyAgain:
+        'To finish, choose Keep as is, then apply the template again '
+        + 'from the list.',
       templateCurrentChanged:
-        'The resume context changed. '
-        + 'Review the current resume before trying again.',
+        'Sections were added or removed after the template was saved, '
+        + 'so this is no longer possible. '
+        + 'Choose Keep as is, then apply the template again.',
       templateFormatWarning: 'Date format will change.',
       templateMarginWarning: 'This template sets margins below 5 mm.',
       templateNeedsAttention: 'Template needs attention',
-      templateResultReview: 'The template result needs review.',
       templateSaving: 'Saving template',
       templateSaved: 'Template saved',
       templateSizeWarning: 'This template uses a 10 pt base size.',
       templateUndoUnavailable:
-        'Template changes cannot be undone on the current resume.',
+        'The resume changed after the template was saved, '
+        + 'so this is no longer possible. '
+        + 'Choose Keep as is, then apply a template again if you want.',
       tryAgainLater: (seconds?: number) => seconds === undefined
         ? 'Please try again later.'
         : `Try again in ${seconds} seconds.`,
-      warningPlacement: 'Placement change',
-      warningCustomization: 'Customization change',
-      warningAccepted: 'accepted',
-      warningRemains: 'remains',
       sections: 'Sections',
       entryOrder: 'Entry order',
       moveEntryUp: 'Move entry up',
@@ -502,7 +538,8 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       undoTemplate: 'Undo template changes',
       templatePresets: 'Template presets',
       templateWarnings: 'Template warnings',
-      templateReadRequired: 'Load the current resume before trying again.',
+      templateReadRequired:
+        'Reload the page to get the latest resume, then try again.',
     },
     customization: {
       'font.family': 'Font',
