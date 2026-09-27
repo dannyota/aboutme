@@ -175,6 +175,45 @@ describe('PanelResizeHandle', () => {
     wrapper.unmount();
   });
 
+  it('restores the body when pointer capture is lost mid-drag', async () => {
+    const wrapper = mount(PanelResizeHandle);
+    await wrapper.vm.$nextTick();
+    const element = handle(wrapper);
+
+    await element.trigger('pointerdown', { clientX: 200, pointerId: 1 });
+    await element.trigger('lostpointercapture', { pointerId: 1 });
+    expect(document.body.style.userSelect).not.toBe('none');
+    await element.trigger('pointermove', { clientX: 100, pointerId: 1 });
+    expect(element.attributes('aria-valuenow')).toBe('22');
+    wrapper.unmount();
+  });
+
+  it('restores the body when the editor unmounts mid-drag', async () => {
+    const wrapper = mount(PanelResizeHandle);
+    await wrapper.vm.$nextTick();
+    await handle(wrapper).trigger('pointerdown', {
+      clientX: 200,
+      pointerId: 1,
+    });
+    wrapper.unmount();
+    expect(document.body.style.userSelect).not.toBe('none');
+    expect(document.body.style.cursor).not.toBe('col-resize');
+  });
+
+  it('ignores a secondary button', async () => {
+    const wrapper = mount(PanelResizeHandle);
+    await wrapper.vm.$nextTick();
+    const element = handle(wrapper);
+
+    await element.trigger('pointerdown', {
+      button: 2,
+      clientX: 200,
+      pointerId: 1,
+    });
+    expect(document.body.style.userSelect).not.toBe('none');
+    wrapper.unmount();
+  });
+
   it(
     'announces a whole rem while a fractional drag is still live',
     async () => {
