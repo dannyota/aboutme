@@ -72,20 +72,24 @@ const describedBy = computed(() => {
       :model-value="modelValue"
       @update:model-value="(value) => emit('update:modelValue', Boolean(value))"
     />
-    <div class="grid flex-1 gap-1">
-      <Label
-        class="cursor-pointer text-sm font-medium"
-        :for="fieldId"
-      >{{ label }}</Label>
-      <p
+    <!-- The label wraps the whole text column, not just the heading, so the
+      whole row is the hit area (docs/design/linkedin-import-ui.md, "Review
+      state"). Its lines are spans, phrasing content, since a label cannot
+      hold block-level children. -->
+    <Label
+      class="grid flex-1 cursor-pointer items-start gap-1 font-normal"
+      :for="fieldId"
+    >
+      <span class="text-sm font-medium">{{ label }}</span>
+      <span
         v-if="description !== undefined"
         :id="descriptionId"
         class="whitespace-pre-line text-sm text-muted-foreground"
         :class="entry.section === 'profile' && 'line-clamp-3'"
       >
         {{ description }}
-      </p>
-      <p
+      </span>
+      <span
         v-if="indicator === 'invalid'"
         :id="noticeId"
         class="flex items-center gap-1 text-xs text-destructive"
@@ -95,8 +99,8 @@ const describedBy = computed(() => {
           class="size-3.5"
         />
         <span>{{ copy.entryInvalid }}</span>
-      </p>
-      <p
+      </span>
+      <span
         v-else-if="indicator !== undefined"
         :id="noticeId"
         class="flex items-center gap-1 text-xs text-foreground"
@@ -108,7 +112,7 @@ const describedBy = computed(() => {
         <span>{{
           indicator === 'noDates' ? copy.entryNoDates : copy.entryCut
         }}</span>
-      </p>
-    </div>
+      </span>
+    </Label>
   </li>
 </template>

@@ -9,6 +9,7 @@ import StatusBanner from '@/components/app/StatusBanner.vue';
 import { Button, buttonVariants } from '@/components/ui/button';
 import type { ImportCopy } from '@/i18n/import';
 import type { ResumeCreateCopy } from '@/i18n/resume-create';
+import type { SchemaCheck } from '@/import/linkedin/build';
 import { MAX_REQUEST_KB, requestKb } from '@/import/linkedin/pageState';
 
 const props = defineProps<{
@@ -18,7 +19,7 @@ const props = defineProps<{
   readonly s: number;
   readonly bytes: number;
   readonly sizeOver: boolean;
-  readonly schemaBlocked: boolean;
+  readonly schemaCheck: SchemaCheck;
   readonly creating: boolean;
   /** A resolved create-error message (cap, createFailed, retryLater, or
    * sessionLost), or null. `uncertain` is separate: it keeps its own
@@ -28,11 +29,24 @@ const props = defineProps<{
   readonly uncertain: boolean;
 }>();
 
+// Both Cancel variants (fix 6: a disabled button while creating, not a
+// styled link) share the same layout and DOM-order classes.
+const CANCEL_CLASS = 'w-full min-[900px]:order-2';
+
 const kb = computed(() => requestKb(props.bytes));
 const meterFillClass = computed(() =>
   props.sizeOver ? 'bg-destructive' : 'bg-primary');
 const blockReasonId = 'import-panel-block-reason';
-const blocked = computed(() => props.sizeOver || props.schemaBlocked);
+const schemaBlocked = computed(() => !props.schemaCheck.ok);
+// A schema failure outside any entry or detail has no row to point to, so
+// the reason names the whole document instead of asking to deselect
+// entries (docs/design/linkedin-import-ui.md, "Action panel").
+const schemaGeneralOnly = computed(() =>
+  !props.schemaCheck.ok && props.schemaCheck.entryIds.length === 0);
+const blocked = computed(() => props.sizeOver || schemaBlocked.value);
+
+const reasonRef = ref<HTMLParagraphElement>();
+defineExpose({ focusReason: (): void => reasonRef.value?.focus() });
 
 // Announces once per crossing, per "Accessibility": sizeOver when the size
 // passes the limit, sizeOk when it drops back below it.
@@ -46,8 +60,19 @@ watch(() => props.sizeOver, (over, wasOver) => {
 </script>
 
 <template>
-  <div class="grid gap-3 rounded-lg border bg-card p-6 shadow-product">
-    <h2 class="hidden text-base font-semibold min-[900px]:block">
+  <aside
+    aria-labelledby="import-panel-heading"
+    class="sticky bottom-0 -mx-4 grid gap-3 border-t bg-card px-4 pt-3
+      pb-[max(12px,env(safe-area-inset-bottom))] shadow-product
+      sm:-mx-6
+      min-[900px]:bottom-auto min-[900px]:top-6 min-[900px]:mx-0
+      min-[900px]:self-start min-[900px]:rounded-lg min-[900px]:border
+      min-[900px]:p-6"
+  >
+    <h2
+      id="import-panel-heading"
+      class="sr-only text-base font-semibold min-[900px]:not-sr-only"
+    >
       {{ copy.panelHeading }}
     </h2>
     <p class="text-sm max-[899px]:text-xs">
@@ -83,9 +108,13 @@ watch(() => props.sizeOver, (over, wasOver) => {
     <p
       v-if="blocked"
       :id="blockReasonId"
+      ref="reasonRef"
       class="text-sm text-destructive"
+      tabindex="-1"
     >
-      {{ sizeOver ? copy.sizeOver(MAX_REQUEST_KB) : copy.invalid }}
+      {{ sizeOver
+        ? copy.sizeOver(MAX_REQUEST_KB)
+        : (schemaGeneralOnly ? copy.invalidGeneral : copy.invalid) }}
     </p>
 
     <StatusBanner
@@ -112,26 +141,33 @@ watch(() => props.sizeOver, (over, wasOver) => {
 
     <div class="grid gap-2 min-[900px]:grid-cols-1 max-[899px]:grid-flow-col">
       <Button
+        v-if="creating"
+        :class="CANCEL_CLASS"
+        data-action="import-cancel"
+        disabled
+        type="button"
+        variant="outline"
+      >
+        {{ createCopy.cancel }}
+      </Button>
+      <NuxtLink
+        v-else
+        :class="[buttonVariants({ variant: 'outline' }), CANCEL_CLASS]"
+        data-action="import-cancel"
+        to="/app/resumes"
+      >
+        {{ createCopy.cancel }}
+      </NuxtLink>
+      <Button
         :aria-describedby="blocked ? blockReasonId : undefined"
         :aria-disabled="blocked || undefined"
-        class="w-full max-[899px]:order-2 max-[899px]:flex-1"
+        class="w-full max-[899px]:flex-1"
         data-action="import-create"
         :disabled="creating"
         type="submit"
       >
         {{ creating ? createCopy.creating : createCopy.createAndOpen }}
       </Button>
-      <NuxtLink
-        :aria-disabled="creating || undefined"
-        :class="[
-          buttonVariants({ variant: 'outline' }), 'w-full',
-          'max-[899px]:order-1',
-          creating && 'pointer-events-none opacity-50',
-        ]"
-        to="/app/resumes"
-      >
-        {{ createCopy.cancel }}
-      </NuxtLink>
     </div>
-  </div>
+  </aside>
 </template>

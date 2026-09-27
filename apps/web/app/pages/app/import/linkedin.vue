@@ -125,6 +125,7 @@ const creating = ref(false);
 const createErrorMessage = ref<string | null>(null);
 const uncertain = ref(false);
 const reviewHeading = ref<HTMLHeadingElement>();
+const actionPanel = ref<InstanceType<typeof ImportActionPanel>>();
 
 function resetReview(): void {
   review.value = undefined;
@@ -258,8 +259,18 @@ async function submit(): Promise<void> {
   if (sizeOver.value) return;
   const check = schemaCheck.value;
   if (!check.ok) {
-    // Focus the first marked entry, in review order (spec "Action panel").
-    const first = review.value.sections
+    if (check.entryIds.length === 0) {
+      // A failure outside any entry or detail: no row to focus, so the
+      // panel's reason text explains it and takes focus (docs/design/
+      // linkedin-import-ui.md, "Action panel").
+      actionPanel.value?.focusReason();
+      return;
+    }
+    // Focus the first marked detail, then the first marked entry, in review
+    // order (spec "Action panel").
+    const firstDetail = review.value.details
+      .find((detail) => check.entryIds.includes(detail.id));
+    const first = firstDetail ?? review.value.sections
       .flatMap((section) => section.entries)
       .find((entry) => check.entryIds.includes(entry.id));
     if (first !== undefined) {
@@ -380,14 +391,6 @@ async function submit(): Promise<void> {
         :description="copy.lead"
         :title="copy.heading"
       />
-      <StatusBanner
-        v-if="stoppedNotice"
-        class="mb-4"
-        data-import-stopped
-        kind="info"
-      >
-        {{ copy.stopped }}
-      </StatusBanner>
       <ImportPick
         ref="pickPanel"
         :copy="copy"
@@ -396,6 +399,7 @@ async function submit(): Promise<void> {
         :page-count="pageCount"
         :pages-read="pagesRead"
         :reading="reading"
+        :stopped="stoppedNotice"
         @drop-multiple="onDropMultiple"
         @pick="pick"
         @stop="stop"
@@ -420,7 +424,7 @@ async function submit(): Promise<void> {
             <h1
               id="import-review-heading"
               ref="reviewHeading"
-              class="text-2xl font-bold tracking-tight"
+              class="text-2xl font-bold tracking-tight outline-none"
               tabindex="-1"
             >
               {{ copy.reviewHeading }}
@@ -430,7 +434,7 @@ async function submit(): Promise<void> {
             </p>
           </div>
           <Button
-            class="self-start"
+            class="self-start max-sm:-ml-4"
             data-action="import-choose-another"
             :disabled="creating"
             type="button"
@@ -462,7 +466,7 @@ async function submit(): Promise<void> {
         />
       </div>
       <ImportActionPanel
-        class="min-[900px]:sticky min-[900px]:top-6 min-[900px]:self-start"
+        ref="actionPanel"
         :bytes="bytes"
         :copy="copy"
         :create-copy="createCopy"
@@ -470,7 +474,7 @@ async function submit(): Promise<void> {
         :creating="creating"
         :n="summary.n"
         :s="summary.s"
-        :schema-blocked="!schemaCheck.ok"
+        :schema-check="schemaCheck"
         :size-over="sizeOver"
         :uncertain="uncertain"
       />

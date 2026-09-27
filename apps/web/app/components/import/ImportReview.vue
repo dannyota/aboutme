@@ -4,6 +4,7 @@
  * per found section, the check line, and the not-imported card
  * (docs/design/linkedin-import-ui.md, "Review state").
  */
+import { CircleAlert } from '@lucide/vue';
 import { computed } from 'vue';
 import CheckboxField from '@/components/app/CheckboxField.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -47,6 +48,9 @@ const emit = defineEmits<{
 }>();
 
 const notices = computed(() => buildNoticeLines(props.locale, props.review));
+// checkDocument maps a failing path to the entry or detail id it belongs to,
+// so this set covers both (apps/web/app/import/linkedin/build.ts,
+// `checkDocument`).
 const invalidEntryIds = computed((): ReadonlySet<string> =>
   props.schemaCheck.ok ? new Set() : new Set(props.schemaCheck.entryIds));
 const personal = computed(() => editorFieldsCopy[props.locale].personal);
@@ -66,11 +70,27 @@ type DetailType = 'email' | 'phone' | 'location' | 'linkedin' | 'website';
 function detailFieldName(type: DetailType): string {
   return personal.value[type];
 }
-function detailDescription(type: DetailType): string {
-  const name = detailFieldName(type);
-  return type === 'email' || type === 'phone'
-    ? `${name} ${props.copy.contactOffHint}`
-    : name;
+/** Email and phone start unchecked, because a published resume shows them;
+ * `contactOffHint` explains that on its own line under the value (docs/
+ * design/linkedin-import-ui.md, "Personal details card"). */
+function isContactField(type: DetailType): boolean {
+  return type === 'email' || type === 'phone';
+}
+function detailHintId(id: string): string {
+  return `import-detail-${id}-hint`;
+}
+function detailInvalidId(id: string): string {
+  return `import-detail-${id}-invalid`;
+}
+function detailDescribedBy(detail: { id: string; type: DetailType }):
+string | undefined {
+  const ids = [
+    isContactField(detail.type) ? detailHintId(detail.id) : undefined,
+    invalidEntryIds.value.has(detail.id)
+      ? detailInvalidId(detail.id)
+      : undefined,
+  ].filter((id): id is string => id !== undefined);
+  return ids.length > 0 ? ids.join(' ') : undefined;
 }
 function toggleDetail(id: string, checked: boolean): void {
   const next = new Set(props.detailIds);
@@ -182,12 +202,32 @@ function groupModel(section: OneSection): boolean | 'indeterminate' {
           :key="detail.id"
         >
           <CheckboxField
-            :description="detailDescription(detail.type)"
+            :aria-describedby="detailDescribedBy(detail)"
+            :data-import-entry="detail.id"
+            :description="detailFieldName(detail.type)"
             :disabled="disabled"
             :label="detail.value"
             :model-value="detailIds.has(detail.id)"
             @update:model-value="(value) => toggleDetail(detail.id, value)"
           />
+          <p
+            v-if="isContactField(detail.type)"
+            :id="detailHintId(detail.id)"
+            class="pl-6 text-sm text-muted-foreground"
+          >
+            {{ copy.contactOffHint }}
+          </p>
+          <p
+            v-if="invalidEntryIds.has(detail.id)"
+            :id="detailInvalidId(detail.id)"
+            class="flex items-center gap-1 pl-6 text-xs text-destructive"
+          >
+            <CircleAlert
+              aria-hidden="true"
+              class="size-3.5"
+            />
+            <span>{{ copy.entryInvalid }}</span>
+          </p>
         </li>
       </ul>
     </section>

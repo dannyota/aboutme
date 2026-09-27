@@ -15,6 +15,10 @@ const props = defineProps<{
   readonly copy: ImportCopy;
   /** The message key for the error banner above the drop zone, or null. */
   readonly error: string | null;
+  /** Shows the `stopped` info banner in the same slot as `error`, since only
+   * one banner shows at a time (docs/design/linkedin-import-ui.md,
+   * "Messages"). */
+  readonly stopped: boolean;
   readonly reading: boolean;
   readonly fileName: string | null;
   readonly pagesRead: number;
@@ -118,10 +122,19 @@ defineExpose({
 
     <StatusBanner
       v-if="errorText !== null"
+      class="-mb-2"
       data-import-error
       kind="error"
     >
       {{ errorText }}
+    </StatusBanner>
+    <StatusBanner
+      v-else-if="stopped"
+      class="-mb-2"
+      data-import-stopped
+      kind="info"
+    >
+      {{ copy.stopped }}
     </StatusBanner>
 
     <section
@@ -142,88 +155,100 @@ defineExpose({
         {{ copy.pickHeading }}
       </h2>
 
-      <div
-        v-if="!reading"
-        class="grid justify-items-center gap-3 text-center"
-      >
-        <FileUp
-          aria-hidden="true"
-          class="size-8 text-brand-blue"
-        />
-        <p class="hidden font-medium sm:block">
-          {{ dropPrompt }}
-        </p>
-        <p class="hidden text-muted-foreground sm:block">
-          {{ copy.or }}
-        </p>
-        <Button
-          ref="chooseButton"
-          class="w-full sm:w-auto"
-          data-action="import-choose"
-          type="button"
-          @click="openPicker"
-        >
-          {{ chooseLabel }}
-        </Button>
-        <p class="text-xs text-muted-foreground">
-          {{ copy.limits }}
-        </p>
-      </div>
-
-      <div
-        v-else
-        class="grid gap-2"
-      >
-        <p
-          class="truncate font-medium"
-          :title="fileName ?? ''"
-        >
-          {{ fileName }}
-        </p>
-        <p
-          role="status"
-        >
-          {{ copy.reading }}
-        </p>
+      <!-- Both states stay mounted, stacked in the same grid cell, so the
+        zone keeps the same height in Reading as in Pick (docs/design/
+        linkedin-import-ui.md, "Reading state"). The inactive one is
+        `invisible` (still sized) and `aria-hidden`, which also drops it from
+        the tab order. -->
+      <div class="grid">
         <div
-          :aria-label="copy.progressLabel"
-          :aria-valuemax="progressMax"
-          aria-valuemin="0"
-          :aria-valuenow="pagesRead"
-          class="h-1.5 overflow-hidden rounded-full bg-muted"
-          role="progressbar"
+          :aria-hidden="reading || undefined"
+          class="col-start-1 row-start-1 grid justify-items-center gap-3
+            text-center"
+          :class="reading && 'invisible'"
         >
-          <div
-            class="h-full rounded-full bg-primary transition-[width]
-              duration-150 motion-reduce:transition-none"
-            :style="{
-              width: progressMax > 0
-                ? `${(pagesRead / progressMax) * 100}%`
-                : '0%',
-            }"
+          <FileUp
+            aria-hidden="true"
+            class="size-8 text-brand-blue"
           />
+          <p class="hidden font-medium sm:block">
+            {{ dropPrompt }}
+          </p>
+          <p class="hidden text-muted-foreground sm:block">
+            {{ copy.or }}
+          </p>
+          <Button
+            ref="chooseButton"
+            class="w-full sm:w-auto"
+            data-action="import-choose"
+            type="button"
+            @click="openPicker"
+          >
+            {{ chooseLabel }}
+          </Button>
+          <p class="text-xs text-muted-foreground">
+            {{ copy.limits }}
+          </p>
         </div>
-        <p
-          aria-hidden="true"
-          class="text-sm text-muted-foreground"
+
+        <div
+          :aria-hidden="!reading || undefined"
+          class="col-start-1 row-start-1 grid gap-2"
+          :class="!reading && 'invisible'"
         >
-          {{ pageCount === null ? '' : copy.readingPage(pagesRead, pageCount) }}
-        </p>
-        <p class="text-xs text-muted-foreground">
-          {{ copy.readingNote }}
-        </p>
-        <Button
-          ref="stopButton"
-          :aria-label="copy.stopLabel"
-          class="justify-self-start"
-          data-action="import-stop"
-          size="sm"
-          type="button"
-          variant="outline"
-          @click="emit('stop')"
-        >
-          {{ copy.stop }}
-        </Button>
+          <p
+            class="truncate font-medium"
+            :title="fileName ?? ''"
+          >
+            {{ fileName }}
+          </p>
+          <p
+            role="status"
+          >
+            {{ copy.reading }}
+          </p>
+          <div
+            :aria-label="copy.progressLabel"
+            :aria-valuemax="progressMax"
+            aria-valuemin="0"
+            :aria-valuenow="pagesRead"
+            class="h-1.5 overflow-hidden rounded-full bg-input"
+            role="progressbar"
+          >
+            <div
+              class="h-full rounded-full bg-primary transition-[width]
+                duration-150 motion-reduce:transition-none"
+              :style="{
+                width: progressMax > 0
+                  ? `${(pagesRead / progressMax) * 100}%`
+                  : '0%',
+              }"
+            />
+          </div>
+          <p
+            aria-hidden="true"
+            class="text-sm text-muted-foreground"
+          >
+            {{
+              pageCount === null ? '' : copy.readingPage(pagesRead, pageCount)
+            }}
+          </p>
+          <p class="text-xs text-muted-foreground">
+            {{ copy.readingNote }}
+          </p>
+          <Button
+            ref="stopButton"
+            :aria-label="copy.stopLabel"
+            class="justify-self-start"
+            data-action="import-stop"
+            size="sm"
+            type="button"
+            variant="outline"
+            @click="emit('stop')"
+          >
+            {{ copy.stop }}
+          </Button>
+        </div>
       </div>
 
       <input
