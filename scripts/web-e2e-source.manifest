@@ -69,6 +69,7 @@ apps/web/app/components/editor/ErrorSummary.vue
 apps/web/app/components/editor/InspectorPanel.vue
 apps/web/app/components/editor/PDFDownloadButton.vue
 apps/web/app/components/editor/PanelResizeHandle.vue
+apps/web/app/components/editor/PreviewZoomControls.vue
 apps/web/app/components/editor/PublishDialog.vue
 apps/web/app/components/editor/PublishPageFields.vue
 apps/web/app/components/editor/PublishPreview.vue
@@ -328,6 +329,7 @@ apps/web/app/editor/pageCountObserver.ts
 apps/web/app/editor/pdfDownload.ts
 apps/web/app/editor/photoController.ts
 apps/web/app/editor/photoCrop.ts
+apps/web/app/editor/previewZoom.ts
 apps/web/app/editor/projections.ts
 apps/web/app/editor/publicPageMeta.ts
 apps/web/app/editor/publishApi.ts
