@@ -79,6 +79,9 @@ describe('views detail page', () => {
       expect(breakdown.text()).toContain('Anomalies');
       expect(breakdown.text()).toContain('Failed checks');
       expect(breakdown.text()).toContain('Crawlers');
+      for (const label of breakdown.findAll('dt')) {
+        expect(label.classes()).toContain('text-balance');
+      }
       const previews = wrapper.get('[data-testid="views-link-previews"]');
       expect(previews.text()).toContain('Link previews');
       expect(previews.text()).toContain('Link previews on Zalo × 3');
