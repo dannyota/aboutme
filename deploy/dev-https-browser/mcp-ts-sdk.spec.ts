@@ -150,15 +150,19 @@ function makeRecordingFetch(observation: RefreshObservation): FetchLike {
   return async (url, init) => {
     const target = url instanceof URL ? url : new URL(url);
     const body = init?.body;
+    // The pinned SDK's executeTokenRequest (client/auth.js) posts token
+    // requests with a URLSearchParams body, not a pre-encoded string; only
+    // a hand-built request would use a string. Accept either so a real
+    // refresh grant is never missed.
+    const params = body instanceof URLSearchParams
+      ? body
+      : typeof body === 'string' ? new URLSearchParams(body) : null;
     if (
-      target.origin === ORIGIN && target.pathname === '/oauth/token'
-      && typeof body === 'string'
+      target.origin === ORIGIN && target.pathname === '/oauth/token' &&
+      params?.get('grant_type') === 'refresh_token'
     ) {
-      const params = new URLSearchParams(body);
-      if (params.get('grant_type') === 'refresh_token') {
-        observation.seen = true;
-        observation.keys = [...params.keys()].sort();
-      }
+      observation.seen = true;
+      observation.keys = [...params.keys()].sort();
     }
     return fetch(url, init);
   };
