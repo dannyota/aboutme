@@ -63,6 +63,7 @@ apps/web/app/components/auth/PasswordSettings.vue
 apps/web/app/components/auth/ProviderButtons.vue
 apps/web/app/components/editor/ConflictPanel.vue
 apps/web/app/components/editor/EditorPreview.vue
+apps/web/app/components/editor/EditorRegionTabs.vue
 apps/web/app/components/editor/EditorShell.vue
 apps/web/app/components/editor/EntryCard.vue
 apps/web/app/components/editor/ErrorSummary.vue

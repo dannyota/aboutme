@@ -51,6 +51,7 @@ import { defaultSectionNames } from './sectionTypes';
 import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
 import EditorPreview from './EditorPreview.vue';
+import EditorRegionTabs from './EditorRegionTabs.vue';
 import ErrorSummary from './ErrorSummary.vue';
 import PanelResizeHandle from './PanelResizeHandle.vue';
 import SaveStatus from './SaveStatus.vue';
@@ -394,7 +395,8 @@ async function discardAndSignIn(): Promise<void> {
         overflow-auto border-r bg-card max-[72rem]:col-start-1
         max-[72rem]:row-start-2 max-[72rem]:w-full max-[72rem]:max-w-[38rem]
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
-        max-[72rem]:data-[narrow-active=false]:invisible max-[42rem]:hidden"
+        max-[72rem]:data-[narrow-active=false]:invisible max-[72rem]:pb-16
+        max-[42rem]:hidden"
       data-region="outline"
       data-responsive-region="editor"
       :data-narrow-active="narrowRegion === 'editor'"
@@ -476,7 +478,8 @@ async function discardAndSignIn(): Promise<void> {
         min-w-0 grid-rows-[minmax(0,1fr)] overflow-hidden bg-editor-canvas
         max-[72rem]:col-span-2 max-[72rem]:col-start-1 max-[72rem]:row-start-2
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
-        max-[72rem]:data-[narrow-active=false]:invisible"
+        max-[72rem]:data-[narrow-active=false]:invisible
+        min-[42rem]:max-[72rem]:pb-16"
       data-region="preview"
       data-responsive-region="preview"
       :data-narrow-active="narrowRegion === 'preview'"
@@ -497,7 +500,7 @@ async function discardAndSignIn(): Promise<void> {
         overflow-auto border-l bg-card p-4 max-[72rem]:col-start-2
         max-[72rem]:row-start-2 max-[72rem]:ml-0 max-[72rem]:w-full
         max-[72rem]:max-w-none max-[72rem]:pt-20 max-[42rem]:col-start-1
-        max-[42rem]:w-full max-[42rem]:max-w-none max-[42rem]:pb-24
+        max-[42rem]:w-full max-[42rem]:max-w-none max-[72rem]:pb-24
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
         max-[72rem]:data-[narrow-active=false]:invisible"
       data-region="inspector"
@@ -623,38 +626,7 @@ async function discardAndSignIn(): Promise<void> {
       />
     </aside>
 
-    <div
-      :aria-label="copy.editorView"
-      class="fixed inset-x-0 bottom-0 z-40 grid grid-cols-2 border-t
-        bg-card p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]
-        min-[42rem]:hidden"
-      role="tablist"
-    >
-      <Button
-        :aria-pressed="narrowRegion === 'editor'"
-        :aria-selected="narrowRegion === 'editor'"
-        class="aria-selected:text-link aria-selected:font-semibold"
-        data-action="show-editor"
-        role="tab"
-        type="button"
-        :variant="narrowRegion === 'editor' ? 'secondary' : 'ghost'"
-        @click="narrowRegion = 'editor'"
-      >
-        {{ copy.edit }}
-      </Button>
-      <Button
-        :aria-pressed="narrowRegion === 'preview'"
-        :aria-selected="narrowRegion === 'preview'"
-        class="aria-selected:text-link aria-selected:font-semibold"
-        data-action="show-preview"
-        role="tab"
-        type="button"
-        :variant="narrowRegion === 'preview' ? 'secondary' : 'ghost'"
-        @click="narrowRegion = 'preview'"
-      >
-        {{ copy.preview }}
-      </Button>
-    </div>
+    <EditorRegionTabs v-model="narrowRegion" />
 
     <AlertDialog :open="record.sessionLost">
       <AlertDialogContent
