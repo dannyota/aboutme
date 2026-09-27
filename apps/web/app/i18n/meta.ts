@@ -6,7 +6,7 @@ import type { WorkspaceCopy } from './workspace';
 
 export const siteName = 'aboutme.vn';
 export const siteOrigin = 'https://aboutme.vn';
-export const ogImageUrl = `${siteOrigin}/og-image-v2.jpg`;
+export const ogImageUrl = `${siteOrigin}/og-image-v3.jpg`;
 
 export const indexablePaths: ReadonlySet<string> = new Set([
   '/',

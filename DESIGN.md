@@ -77,8 +77,8 @@ one image named “aboutme.vn”. Under `forced-colors: active`, the mark and
 `me.vn` use the text color. `public/favicon-v2.svg` is the mark with a plain
 fold. Home-screen and install icons use the glossy square app icon; icon file
 names carry a version so browsers fetch a changed icon. Source art (wordmark,
-light and dark banners) is in `docs/brand/`; `public/og-image-v2.jpg` is the
-light banner cropped to 1200 × 630.
+light and dark banners) is in `docs/brand/`; `public/og-image-v3.jpg` is the
+share image, 1200 × 630.
 
 ## Typography and tokens
 
