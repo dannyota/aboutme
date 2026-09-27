@@ -9,6 +9,13 @@ import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildDocument,
+  checkDocument,
+  importLinkedInPdf,
+  REQUEST_MAX_BYTES,
+  requestBytes,
+} from '../../../app/import/linkedin/build';
+import {
   analyzeLayout,
   type LayoutResult,
 } from '../../../app/import/linkedin/layout';
@@ -242,5 +249,54 @@ describe('injection-en.pdf', () => {
       '<script>@example.com',
       'https://example.com/%3Cscript%3E',
     ]);
+  });
+});
+
+describe('each readable fixture\'s default import', () => {
+  let counter = 0;
+  const uuid = (): string => {
+    counter += 1;
+    return `00000000-0000-4000-8000-${counter.toString(16).padStart(12, '0')}`;
+  };
+
+  it.each([
+    'basic-en',
+    'wraps-en',
+    'dates-en',
+    'dropped-en',
+    'vietnamese-letters',
+    'limits-en',
+    'injection-en',
+  ])('%s passes the schema and store checks and fits the request', async (
+    name,
+  ) => {
+    const bytes = readFileSync(join(FIXTURES, `${name}.pdf`));
+    const result = await importLinkedInPdf(new Blob([bytes]), { pdfjs }, uuid);
+    if (!result.ok) throw new Error(`${name}: ${result.reason}`);
+    const { review } = result;
+    const choices = {
+      title: 'LinkedIn resume',
+      fullName: review.fullName,
+      headline: review.headline,
+      detailIds: new Set(review.details
+        .filter((detail) => detail.selectedByDefault)
+        .map((detail) => detail.id)),
+      entryIds: new Set(review.sections.flatMap((section) => section.entries)
+        .filter((entry) => entry.selectedByDefault)
+        .map((entry) => entry.id)),
+    };
+    const document = buildDocument(review, choices);
+    expect(checkDocument(document, review, choices)).toEqual({ ok: true });
+    expect(requestBytes(choices.title, document))
+      .toBeLessThanOrEqual(REQUEST_MAX_BYTES);
+  });
+
+  it.each([
+    ['localized-vi', 'notEnglish'],
+    ['other', 'notLinkedIn'],
+  ])('%s creates nothing: %s', async (name, reason) => {
+    const bytes = readFileSync(join(FIXTURES, `${name}.pdf`));
+    expect(await importLinkedInPdf(new Blob([bytes]), { pdfjs }, uuid))
+      .toEqual({ ok: false, reason });
   });
 });
