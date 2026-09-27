@@ -302,6 +302,32 @@ describe('EditorShell', () => {
       .not.toContain('max-[72rem]:col-span-full');
   });
 
+  it('lets the title and public link give way to the top bar actions', () => {
+    const record = editorRecord();
+    record.current.metadata.live = true;
+    record.current.metadata.slug = 'nguyen-thi-thanh-huong-backend';
+    record.accepted.metadata.live = true;
+    record.accepted.metadata.slug = 'nguyen-thi-thanh-huong-backend';
+    const wrapper = mount(EditorShell, {
+      props: { actions: actionsFor(record), record },
+      global: { stubs: heavyStubs() },
+    });
+
+    expect(wrapper.get('[data-region="topbar"]').classes()).toEqual(
+      expect.arrayContaining(['min-w-0', 'max-[56rem]:gap-2']),
+    );
+    expect(wrapper.get('[data-resume-title]').classes()).toEqual(
+      expect.arrayContaining(['min-w-0', 'truncate']),
+    );
+    expect(wrapper.get('[data-testid="public-mark"]').classes()).not.toContain(
+      'shrink-0',
+    );
+    // The full wordmark gives way to the mark alone below 56rem.
+    const brand = wrapper.get('.editor-brand').html();
+    expect(brand).toContain('max-[56rem]:hidden');
+    expect(brand).toContain('min-[56rem]:hidden');
+  });
+
   it(
     'uses two phone rows for editor actions without changing their order',
     () => {

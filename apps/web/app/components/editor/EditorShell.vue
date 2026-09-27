@@ -217,9 +217,10 @@ async function discardAndSignIn(): Promise<void> {
     ]"
   >
     <header
-      class="editor-topbar col-span-full flex h-16 items-center gap-4
-        border-b bg-card px-4 max-[42rem]:h-24 max-[42rem]:flex-col
-        max-[42rem]:gap-0 max-[42rem]:px-2 max-[42rem]:py-2"
+      class="editor-topbar col-span-full flex h-16 min-w-0 items-center
+        gap-4 border-b bg-card px-4 max-[56rem]:gap-2 max-[42rem]:h-24
+        max-[42rem]:flex-col max-[42rem]:gap-0 max-[42rem]:px-2
+        max-[42rem]:py-2"
       data-region="topbar"
     >
       <div
@@ -234,12 +235,12 @@ async function discardAndSignIn(): Promise<void> {
         >
           <AppLogo
             size="sm"
-            class="max-[42rem]:hidden"
+            class="max-[56rem]:hidden"
           />
           <AppLogo
             mark-only
             size="sm"
-            class="min-[42rem]:hidden"
+            class="min-[56rem]:hidden"
           />
         </NuxtLink>
         <span
@@ -259,7 +260,7 @@ async function discardAndSignIn(): Promise<void> {
         />
         <StateMark
           v-if="displayLink !== null"
-          class="shrink-0 max-[42rem]:hidden"
+          class="max-[42rem]:hidden"
           :data-stamp="stampState === 'idle' ? undefined : stampState"
           data-testid="public-mark"
           :link="displayLink"
