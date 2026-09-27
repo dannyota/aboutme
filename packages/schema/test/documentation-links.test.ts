@@ -14,6 +14,21 @@ const schemaFiles = readdirSync(schemaRoot)
   )
   .sort();
 
+// Published schema files are frozen, so they keep citing ADR paths from before
+// the records were consolidated. docs/adr/README.md maps each former number and
+// slug to its current record; a cited former path must appear in that table.
+const formerAdrPaths = new Set(
+  [
+    ...readFileSync(
+      join(repositoryRoot, "docs/adr/README.md"),
+      "utf8",
+    ).matchAll(/^\| (\d{4}) +\| `([a-z0-9-]+)` +\|/gm),
+  ].map(([, number, slug]) => `docs/adr/${number}-${slug}.md`),
+);
+
+const citedPathResolves = (citation: string): boolean =>
+  existsSync(join(repositoryRoot, citation)) || formerAdrPaths.has(citation);
+
 const stringsIn = (value: unknown): string[] => {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(stringsIn);
@@ -47,7 +62,7 @@ describe.each(schemaFiles)("%s documentation citations", (schemaFile) => {
         `${schemaFile} cites retired path ${citation}`,
       ).toBe(false);
       expect(
-        existsSync(join(repositoryRoot, citation)),
+        citedPathResolves(citation),
         `${schemaFile} cites missing path ${citation}`,
       ).toBe(true);
     }
