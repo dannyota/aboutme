@@ -56,13 +56,18 @@ for the SDK and assumed for Claude until the proof in [Proofs](#proofs) runs:
 `"resource":"https://aboutme.vn/mcp"`, the URL a person enters. The
 authorization endpoint, the code exchange, and refresh accept zero or one
 `resource`, byte for byte one of two values: `https://aboutme.vn/mcp` or the
-origin `https://aboutme.vn`. The origin stays accepted so the Go SDK runner and
-any client that cached the old metadata keep working. The raw-field check
-applies to both spellings. Every other value, including the trailing-slash
-origin, keeps the closed `invalid_request` at authorize and `invalid_grant` at
-the token endpoint. Both spellings name the one protected resource, so tokens,
-grants, and tables do not change. The `/mcp` challenge still names the metadata
-URL.
+origin `https://aboutme.vn`. The origin stays accepted so any client that cached
+the old metadata keeps working. The Go SDK runner itself needed an update, not
+just backward-compat acceptance: `go-sdk` v1.8.0 checks the challenge's
+protected-resource metadata against the MCP endpoint URL and then sends that
+metadata `resource` back, so the pinned runner
+([owner workflow](mcp-owner-workflow.md#sdk-and-http-boundary)) now requires
+exactly `https://aboutme.vn/mcp` and fails closed on anything else. The
+raw-field check applies to both spellings. Every other value, including the
+trailing-slash origin, keeps the closed `invalid_request` at authorize and
+`invalid_grant` at the token endpoint. Both spellings name the one protected
+resource, so tokens, grants, and tables do not change. The `/mcp` challenge
+still names the metadata URL.
 
 ### 2. Registration members
 
@@ -75,13 +80,21 @@ consent still decides. The 4,096-byte body cap, duplicate-member rejection,
 required `client_name` and `redirect_uris`, the redirect grammar, and
 `token_endpoint_auth_method` `none` stay.
 
-### 3. Native loopback host
+### 3. Native loopback host and web application type
 
 `application_type` `native` accepts `http://localhost` redirects on any port, as
 well as `127.0.0.1` and `[::1]`. RFC 8252 section 8.3 prefers IP literals, but a
 client that omits `application_type` can already register `localhost` under the
 general grammar, so the narrower native rule protects nothing and breaks Claude
 Code. Redirects still match the registered value exactly, port included.
+
+Registration also accepts `application_type` `web`, which must name only `https`
+redirect URIs. The [TypeScript SDK][ts-auth] sends `web` for an https callback
+such as claude.ai's, and an `https` redirect was already accepted without any
+`application_type` under the general grammar, so honoring the label adds no
+reach beyond what an omitted `application_type` already allowed; it only lets a
+client that sends the member register at all. This was answered during the
+build, not a separate owner approval.
 
 ### 4. Refresh parameters
 
@@ -128,34 +141,73 @@ agents. Revoke one in Settings, then try again.” with a link to
 ### 8. Unknown client at the token endpoint
 
 A token request naming a client that no longer exists returns `401` with
-`invalid_client`, as RFC 6749 section 5.2 allows, so Claude registers again. A
-known client with a bad grant keeps `400` `invalid_grant`.
+`invalid_client`, as RFC 6749 section 5.2 allows, so Claude registers again.
+Deleting a client cascades to delete its authorization codes, so an
+`authorization_code` exchange looks up the client before the code: a swept
+client must fail `invalid_client`, not the `invalid_grant` that a merely missing
+code would give for an unrelated reason. A `refresh_token` request looks up the
+refresh token first; only when the token itself is missing and the request named
+`client_id` does it check the client, returning `invalid_client` for a swept
+registration and `invalid_grant` for any other missing or dead token. A known
+client with a bad grant keeps `400` `invalid_grant`.
 
 ## Older clients and loss
 
-Every change widens what the server accepts or adds text. The Go SDK runner, its
-local proof, and any registered client keep working: the origin `resource`, the
-four registration members, IP loopback redirects, and the two-member refresh
+Every change widens what the server accepts or adds text, with one exception:
+the Go SDK runner needed a matching update, because `go-sdk` v1.8.0 requires the
+`/mcp` resource rather than the origin (rule 1). Every other older client keeps
+working: the origin `resource` for a client that never adopts `/mcp`, the four
+original registration members, IP loopback redirects, and the two-member refresh
 stay valid. Nothing is stored in a new shape, so there is no migration,
-backfill, or loss rule. Rolling back restores today's rejections; clients
-registered under the wider rules stay usable, because stored clients hold only a
-name and redirects.
+backfill, or loss rule.
+
+Rolling back does not leave Claude working. A refresh request naming
+`client_id`, which Claude always sends once it holds a token issued under this
+change, gets `invalid_grant` from the older code, and the protected-resource
+metadata reverts to naming the origin instead of `/mcp`. A registered client
+keeps its stored name and redirects, but every connected Claude agent must
+re-register and reconnect after a rollback, the same as after any other
+client-visible incompatibility.
 
 ## Security
 
 - Ignored registration members never reach storage, logs, or the consent page.
-- `localhost` for native clients adds no reach beyond the general grammar.
+- `localhost` for native clients adds no reach beyond the general grammar, and
+  `https`-only redirects for `web` clients add none either.
 - Accepting `/mcp` as a second resource spelling does not widen the audience:
   both name the one resource server.
-- The egress-range bucket is the only rate change, and the global ceiling bounds
-  it. The range list must come from Anthropic's published page and be reviewed
-  like any production configuration.
+- Two rate changes apply, not one: the egress-range bucket, and a global
+  600-an-hour registration ceiling that bounds every admitted registration
+  together, ranged or not. An IPv6 address outside a configured range is keyed
+  on its `/64`, not its full address, since one host usually controls a whole
+  `/64` and could otherwise spread registrations across it. The range list must
+  come from Anthropic's published page and be reviewed like any production
+  configuration.
 - The consent host line and the grant-limit message make impersonation and
   silent failure easier to spot. The guide teaches people to check the line.
 - The OAuth routes keep cookie isolation, closed errors, and body caps. The
   reviewer confirms by name: PKCE S256, exact redirect match, refresh rotation
   and reuse revocation, cross-client refresh rejection, scope enforcement per
   tool, and revocation reaching `/mcp` as `401`.
+
+## Open questions
+
+Neither item below is decided; both are for the owner to weigh separately from
+the approvals recorded below.
+
+- **Reserved room for Claude's range under the global ceiling.** The 600-an-hour
+  global registration ceiling is shared by every range and every ordinary
+  address. A surge of registrations from ranges other than `160.79.104.0/21`
+  could exhaust the ceiling before Claude's own users hit their 120-an-hour
+  range budget. Whether to reserve room for Claude's range inside the global
+  ceiling is open.
+- **RFC 9728 per-resource metadata path.** [RFC 9728][rfc9728] section 3.1
+  places protected-resource metadata for the `/mcp` resource at
+  `/.well-known/oauth-protected-resource/mcp`. The server serves only the root
+  `/.well-known/oauth-protected-resource`. Clients work today either through the
+  `/mcp` challenge's `resource_metadata` URL, which already names the root path,
+  or the SDK's fallback discovery. Whether to add the resource-specific path is
+  open.
 
 ## Proofs
 
@@ -183,7 +235,9 @@ name and redirects.
 ## Owner approvals
 
 1. **Resource `/mcp` in metadata, origin still accepted.** Approved
-   (2026-09-27): Claude requires it and the runner keeps working.
+   (2026-09-27): Claude requires it, and the origin stays valid for any older
+   client; the Go SDK runner itself needed a matching update (see
+   [Older clients and loss](#older-clients-and-loss)).
 2. **Ignore unknown registration members; check three known ones.** Approved
    (2026-09-27): RFC 7591 requires ignoring them.
 3. **`localhost` for native loopback redirects.** Approved (2026-09-27): the
@@ -207,3 +261,4 @@ name and redirects.
   https://github.com/modelcontextprotocol/typescript-sdk/blob/main/packages/client/src/client/auth.ts
 [mcp-auth]:
   https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization
+[rfc9728]: https://www.rfc-editor.org/rfc/rfc9728
