@@ -69,10 +69,10 @@ func TestCallbackFetcherRejectsRemoteAuthorizationURLBeforeBrowserHandoff(t *tes
 	browser := &countingBrowser{}
 	fetcher := newCallbackFetcher("http://127.0.0.1:20090/oauth/callback", "https://aboutme.vn", browser, nil)
 	for _, raw := range []string{
-		"https://evil.example/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn",
-		"https://aboutme.vn/other?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn",
-		"https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn",
-		"https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme%2Evn",
+		"https://evil.example/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp",
+		"https://aboutme.vn/other?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp",
+		"https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp",
+		"https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme%2Evn%2Fmcp",
 	} {
 		if _, err := fetcher(t.Context(), &auth.AuthorizationArgs{URL: raw}); !errors.Is(err, errInvalidCallback) {
 			t.Fatalf("fetcher(%q) error = %v, want %v", raw, err, errInvalidCallback)
@@ -86,7 +86,7 @@ func TestCallbackFetcherRejectsRemoteAuthorizationURLBeforeBrowserHandoff(t *tes
 func TestAuthorizationURLValidationAcceptsSDKShape(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"
-	raw := "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
+	raw := "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp"
 	openURL, state, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: raw}, redirectURI, issuer)
 	if err != nil || state != "state" || openURL != raw {
 		t.Fatalf("validateAuthorizationURL = %q, %q, %v", openURL, state, err)
@@ -101,7 +101,7 @@ func TestAuthorizationURLValidationAcceptsSDKShape(t *testing.T) {
 func TestAuthorizationURLValidationAcceptsEitherSDKScopeOrder(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"
-	const canonical = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
+	const canonical = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp"
 	reversed := strings.Replace(canonical, "scope=resumes%3Aread+resumes%3Awrite", "scope=resumes%3Awrite+resumes%3Aread", 1)
 	for _, tc := range []struct {
 		name string
@@ -129,7 +129,7 @@ func TestAuthorizationURLValidationAcceptsEitherSDKScopeOrder(t *testing.T) {
 func TestAuthorizationURLValidationRejectsScopeOutsideTheClosedSet(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"
-	const valid = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
+	const valid = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp"
 	for _, tc := range []struct {
 		name string
 		raw  string
@@ -150,7 +150,7 @@ func TestAuthorizationURLValidationRejectsScopeOutsideTheClosedSet(t *testing.T)
 func TestAuthorizationURLValidationRejectsContractMismatch(t *testing.T) {
 	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
 	const issuer = "https://aboutme.vn"
-	const valid = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn"
+	const valid = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp"
 	for _, tc := range []struct {
 		name string
 		raw  string
@@ -165,6 +165,35 @@ func TestAuthorizationURLValidationRejectsContractMismatch(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, _, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: tc.raw}, redirectURI, issuer); !errors.Is(err, errInvalidCallback) {
 				t.Fatalf("validateAuthorizationURL error = %v, want %v", err, errInvalidCallback)
+			}
+		})
+	}
+}
+
+// The pinned SDK checks the challenge's protected-resource metadata against
+// the MCP endpoint URL and then sends that metadata resource, so the runner
+// expects exactly origin + "/mcp" in its raw url.QueryEscape form. See rule 1
+// of docs/design/mcp-client-compatibility.md.
+func TestAuthorizationURLValidationRequiresMCPEndpointResource(t *testing.T) {
+	const redirectURI = "http://127.0.0.1:20090/oauth/callback"
+	const issuer = "https://aboutme.vn"
+	const valid = "https://aboutme.vn/oauth/authorize?response_type=code&client_id=client&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Foauth%2Fcallback&scope=resumes%3Aread+resumes%3Awrite&state=state&code_challenge=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&code_challenge_method=S256&resource=https%3A%2F%2Faboutme.vn%2Fmcp"
+	const mcpField = "resource=https%3A%2F%2Faboutme.vn%2Fmcp"
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{"origin", strings.Replace(valid, mcpField, "resource=https%3A%2F%2Faboutme.vn", 1)},
+		{"trailing slash origin", strings.Replace(valid, mcpField, "resource=https%3A%2F%2Faboutme.vn%2F", 1)},
+		{"mcp trailing slash", strings.Replace(valid, mcpField, "resource=https%3A%2F%2Faboutme.vn%2Fmcp%2F", 1)},
+		{"mcp upper case", strings.Replace(valid, mcpField, "resource=https%3A%2F%2Faboutme.vn%2FMCP", 1)},
+		{"raw slash", strings.Replace(valid, mcpField, "resource=https%3A%2F%2Faboutme.vn/mcp", 1)},
+		{"lower case hex", strings.Replace(valid, mcpField, "resource=https%3a%2f%2faboutme.vn%2fmcp", 1)},
+		{"other host", strings.Replace(valid, mcpField, "resource=https%3A%2F%2Fagent.example%2Fmcp", 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, err := validateAuthorizationURL(&auth.AuthorizationArgs{URL: tc.raw}, redirectURI, issuer); !errors.Is(err, errAuthorizationResource) {
+				t.Fatalf("validateAuthorizationURL error = %v, want %v", err, errAuthorizationResource)
 			}
 		})
 	}

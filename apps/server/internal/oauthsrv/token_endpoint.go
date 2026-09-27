@@ -33,8 +33,10 @@ type tokenResponse struct {
 }
 
 // HandleToken exchanges a single-use code or rotates a refresh token. It is a
-// bearer-world endpoint: it deliberately never reads a cookie.
+// bearer-world endpoint: it deliberately never reads a cookie. No response,
+// success or error, may be cached (RFC 6749 section 5.1).
 func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodPost {
 		writeOAuthError(w, http.StatusMethodNotAllowed)
 		return
@@ -98,11 +100,15 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 		}
 		response, err = s.exchangeAuthorizationCode(r.Context(), form)
 	case "refresh_token":
-		if !exactFormKeys(form, "grant_type", "refresh_token") {
+		if !exactRefreshForm(form) {
 			writeOAuthError(w, http.StatusBadRequest)
 			return
 		}
-		response, err = s.rotateRefreshToken(r.Context(), form.Get("refresh_token"))
+		if !s.canonicalResource(form, form.Get(rawResourceFormKey)) {
+			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_grant", "The request is invalid.")
+			return
+		}
+		response, err = s.rotateRefreshToken(r.Context(), form.Get("refresh_token"), form["client_id"])
 	default:
 		writeOAuthErrorBody(w, http.StatusBadRequest, "unsupported_grant_type", "The request is invalid.")
 		return
@@ -112,6 +118,10 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 			attemptResult = grantAttemptFailure
 		}
 		switch {
+		case errors.Is(err, errOAuthUnknownClient):
+			// RFC 6749 section 5.2: a client that no longer exists gets 401,
+			// so an MCP client whose registration was swept registers again.
+			writeOAuthErrorBody(w, http.StatusUnauthorized, "invalid_client", "The request is invalid.")
 		case errors.Is(err, errOAuthInvalidClient):
 			writeOAuthErrorBody(w, http.StatusBadRequest, "invalid_client", "The request is invalid.")
 		case errors.Is(err, errOAuthInvalidGrant):
@@ -123,7 +133,6 @@ func (s *Service) HandleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	attemptResult = grantAttemptSuccess
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	// nosemgrep: go.net.xss.no-direct-write-to-responsewriter-taint.no-direct-write-to-responsewriter-taint -- application/json body of server-minted tokens and a canonical closed-set scope
 	if _, writeErr := w.Write([]byte(`{"access_token":"` + response.AccessToken + `","token_type":"Bearer","expires_in":` + strconv.FormatInt(response.ExpiresIn, 10) + `,"refresh_token":"` + response.RefreshToken + `","scope":"` + response.Scope + `"}`)); writeErr != nil {
@@ -153,6 +162,7 @@ func (s *Service) grantRateClientID(ctx context.Context, form url.Values) (uuid.
 
 var (
 	errOAuthInvalidClient = errors.New("oauth invalid client")
+	errOAuthUnknownClient = errors.New("oauth unknown client")
 	errOAuthInvalidGrant  = errors.New("oauth invalid grant")
 	errOAuthResourceParse = errors.New("oauth resource parse")
 )
@@ -217,6 +227,34 @@ func exactFormKeys(form url.Values, keys ...string) bool {
 	return true
 }
 
+// exactRefreshForm allows grant_type and refresh_token, plus at most one
+// non-empty client_id and a resource that canonicalResource checks. See rule 4
+// of docs/design/mcp-client-compatibility.md.
+func exactRefreshForm(form url.Values) bool {
+	count := len(form)
+	if _, ok := form[rawResourceFormKey]; ok {
+		count--
+	}
+	want := 2
+	for _, optional := range []string{"client_id", "resource"} {
+		if _, ok := form[optional]; ok {
+			want++
+		}
+	}
+	if count != want {
+		return false
+	}
+	for _, key := range []string{"grant_type", "refresh_token"} {
+		if len(form[key]) != 1 || form.Get(key) == "" {
+			return false
+		}
+	}
+	if clientIDs, ok := form["client_id"]; ok && (len(clientIDs) != 1 || clientIDs[0] == "") {
+		return false
+	}
+	return true
+}
+
 func exactAuthorizationCodeForm(form url.Values) bool {
 	keys := []string{"grant_type", "code", "redirect_uri", "client_id", "code_verifier"}
 	if _, ok := form["resource"]; ok {
@@ -246,6 +284,15 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	if err != nil {
 		return tokenResponse{}, errOAuthInvalidClient
 	}
+	// A code belongs to its client and is deleted with it, so the client is
+	// looked up first: a swept client must get invalid_client, not the
+	// invalid_grant of a missing code. The row is locked again below.
+	if _, err = s.queries.GetOAuthClient(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tokenResponse{}, errOAuthUnknownClient
+		}
+		return tokenResponse{}, err
+	}
 	// This unlocked lookup only discovers the lock-order identities. The row is
 	// loaded again under lock before any validation or mutation.
 	preCode, err := s.queries.GetOAuthAuthorizationCodeByDigest(ctx, digest[:])
@@ -265,7 +312,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	q := store.New(tx)
 	if _, err = q.GetOAuthClientForUpdate(ctx, clientID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tokenResponse{}, errOAuthInvalidClient
+			return tokenResponse{}, errOAuthUnknownClient
 		}
 		return tokenResponse{}, err
 	}
@@ -347,10 +394,15 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, form url.Values
 	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessTokenTTL / time.Second), RefreshToken: refresh, Scope: code.Scopes}, nil
 }
 
-func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response tokenResponse, err error) {
+// rotateRefreshToken rotates a live refresh token. claimedClientIDs is the
+// request's client_id field, absent or exactly one value. A present client_id
+// must name the token's own client (rule 4 of
+// docs/design/mcp-client-compatibility.md); when the token is not found and the
+// client_id names no stored client, the result is errOAuthUnknownClient.
+func (s *Service) rotateRefreshToken(ctx context.Context, raw string, claimedClientIDs []string) (response tokenResponse, err error) {
 	kind, digest, err := ParseToken(raw)
 	if err != nil || kind != TokenKindRefresh {
-		return tokenResponse{}, errOAuthInvalidGrant
+		return tokenResponse{}, missingRefreshTokenError(ctx, s.queries, claimedClientIDs)
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -366,7 +418,7 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response 
 	authority, err := q.GetOAuthTokenAuthorityByDigest(ctx, digest[:])
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return tokenResponse{}, errOAuthInvalidGrant
+			return tokenResponse{}, missingRefreshTokenError(ctx, q, claimedClientIDs)
 		}
 		return tokenResponse{}, err
 	}
@@ -387,6 +439,15 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response 
 	}
 	now := s.clock()
 	token := authority.OAuthToken
+	// A client_id naming another client, or none, must not rotate or revoke
+	// the family, so it fails before the reuse check below and the deferred
+	// rollback discards the transaction.
+	if len(claimedClientIDs) == 1 {
+		claimed, parseErr := uuid.Parse(claimedClientIDs[0])
+		if parseErr != nil || claimed != token.ClientID {
+			return tokenResponse{}, errOAuthInvalidGrant
+		}
+	}
 	// The refresh token's grant must still be live, belong to this account,
 	// and carry the account's current authentication epoch. A stale epoch --
 	// an intervening factor change -- rejects rotation exactly like a revoked
@@ -434,4 +495,28 @@ func (s *Service) rotateRefreshToken(ctx context.Context, raw string) (response 
 		return tokenResponse{}, err
 	}
 	return tokenResponse{AccessToken: access, TokenType: "Bearer", ExpiresIn: int64(accessExpiresAt.Sub(now) / time.Second), RefreshToken: refresh, Scope: grant.Scopes}, nil
+}
+
+// missingRefreshTokenError classifies a refresh token that does not exist. A
+// client_id naming no stored client is errOAuthUnknownClient; every other case
+// is errOAuthInvalidGrant.
+func missingRefreshTokenError(ctx context.Context, q oauthClientReader, claimedClientIDs []string) error {
+	if len(claimedClientIDs) != 1 {
+		return errOAuthInvalidGrant
+	}
+	clientID, err := uuid.Parse(claimedClientIDs[0])
+	if err != nil {
+		return errOAuthInvalidGrant
+	}
+	if _, err = q.GetOAuthClient(ctx, clientID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return errOAuthUnknownClient
+		}
+		return err
+	}
+	return errOAuthInvalidGrant
+}
+
+type oauthClientReader interface {
+	GetOAuthClient(context.Context, uuid.UUID) (store.OAuthClient, error)
 }
