@@ -147,3 +147,101 @@ describe('ImportReview with hostile LinkedIn text', () => {
       .toBe('unchecked');
   });
 });
+
+describe('ImportReview personal details', () => {
+  it('puts contactOffHint on its own line under email and phone, but not '
+    + 'other details', async () => {
+    const review = buildReview({
+      profile: {
+        fullName: 'Sample Person',
+        headline: 'Product Manager',
+        location: 'Hanoi, Vietnam',
+      },
+      contacts: [{ type: 'email', value: 'sample@example.com' }],
+      work: [],
+      education: [],
+      skills: [],
+      languages: [],
+      certificates: [],
+      dropped: [],
+    }, makeUuid());
+    const choices = initialChoiceSets(review);
+    const wrapper = await mountSuspended(ImportReview, {
+      props: {
+        copy: importCopy.en,
+        createCopy: resumeCreateCopy.en,
+        locale: 'en',
+        review,
+        dateFormat: 'Mon YYYY',
+        title: 'LinkedIn resume',
+        fullName: review.fullName,
+        headline: review.headline,
+        detailIds: choices.detailIds,
+        entryIds: choices.entryIds,
+        schemaCheck: { ok: true },
+        disabled: false,
+        titleInvalid: false,
+      },
+    });
+
+    const emailDetail = review.details.find((d) => d.type === 'email')!;
+    const emailRow = wrapper.findAll('li')
+      .find((row) => row.text().includes(emailDetail.value))!;
+    const emailLines = emailRow.findAll('p').map((p) => p.text());
+    // The field name and the off-by-default hint are separate lines, not one
+    // concatenated description (docs/design/linkedin-import-ui.md,
+    // "Personal details card").
+    expect(emailLines).toContain('Email');
+    expect(emailLines).toContain(importCopy.en.contactOffHint);
+
+    const locationDetail = review.details.find((d) => d.type === 'location')!;
+    const locationRow = wrapper.findAll('li')
+      .find((row) => row.text().includes(locationDetail.value))!;
+    expect(locationRow.text()).not.toContain(importCopy.en.contactOffHint);
+  });
+
+  it('marks a detail that fails the schema check and exposes its checkbox '
+    + 'for focus', async () => {
+    const review = buildReview({
+      profile: { fullName: 'Sample Person', headline: 'Product Manager' },
+      // A non-https website value fails validatePersonalDetailUrlSchemes
+      // (packages/schema/validation/store.ts).
+      contacts: [
+        { type: 'website', value: 'javascript:alert(1)', label: 'Site' },
+      ],
+      work: [],
+      education: [],
+      skills: [],
+      languages: [],
+      certificates: [],
+      dropped: [],
+    }, makeUuid());
+    const choices = initialChoiceSets(review);
+    const websiteDetail = review.details[0]!;
+    const wrapper = await mountSuspended(ImportReview, {
+      props: {
+        copy: importCopy.en,
+        createCopy: resumeCreateCopy.en,
+        locale: 'en',
+        review,
+        dateFormat: 'Mon YYYY',
+        title: 'LinkedIn resume',
+        fullName: review.fullName,
+        headline: review.headline,
+        detailIds: choices.detailIds,
+        entryIds: choices.entryIds,
+        schemaCheck: {
+          ok: false, entryIds: [websiteDetail.id], general: false,
+        },
+        disabled: false,
+        titleInvalid: false,
+      },
+    });
+
+    const row = wrapper.findAll('li')
+      .find((candidate) => candidate.text().includes(websiteDetail.value))!;
+    expect(row.text()).toContain(importCopy.en.entryInvalid);
+    expect(row.get('[data-import-entry]').attributes('data-import-entry'))
+      .toBe(websiteDetail.id);
+  });
+});

@@ -3,6 +3,11 @@
 // i18n/resume-create.ts next to the dialog's other copy.
 import type { WorkspaceCopy } from './workspace';
 
+// noticeCut's {max} is a character count, formatted per locale's own
+// grouping (docs/design/linkedin-import-ui.md, "Messages").
+const enNumberFormat = new Intl.NumberFormat('en-US');
+const viNumberFormat = new Intl.NumberFormat('vi-VN');
+
 export type ImportCopy = {
   readonly documentTitle: string;
   readonly back: string;
@@ -70,6 +75,10 @@ export type ImportCopy = {
   readonly sizeOver: (max: number) => string;
   readonly sizeOk: string;
   readonly invalid: string;
+  /** A schema failure outside any entry or detail: no row to deselect, so
+   * this names the whole document instead (docs/design/
+   * linkedin-import-ui.md, "Action panel"). */
+  readonly invalidGeneral: string;
 };
 
 export const importCopy: WorkspaceCopy<ImportCopy> = {
@@ -135,7 +144,7 @@ export const importCopy: WorkspaceCopy<ImportCopy> = {
     noticeStartOnly: (entry) => `${entry}: chỉ tìm thấy ngày bắt đầu. Hãy `
       + 'thêm ngày kết thúc trong trình chỉnh sửa.',
     noticeCut: (field, max) =>
-      `${field} đã được rút gọn còn ${max} ký tự.`,
+      `${field} đã được rút gọn còn ${viNumberFormat.format(max)} ký tự.`,
     noticeOverLimit: (section) => `${section} có hơn 64 mục. 64 mục đầu đã `
       + 'được chọn; các mục còn lại không được chọn.',
     resumeHeading: 'CV',
@@ -167,6 +176,8 @@ export const importCopy: WorkspaceCopy<ImportCopy> = {
     sizeOk: 'CV đã vừa dung lượng cho phép.',
     invalid: 'Một số mục không lưu được như hiện tại. Hãy bỏ chọn các mục '
       + 'được đánh dấu.',
+    invalidGeneral: 'Không lưu được CV này như hiện tại. Hãy quay lại chọn '
+      + 'tệp PDF khác, hoặc tạo CV trống.',
   },
   en: {
     documentTitle: 'Import from LinkedIn',
@@ -229,7 +240,8 @@ export const importCopy: WorkspaceCopy<ImportCopy> = {
       `${entry}: we could not read the dates. Add them in the editor.`,
     noticeStartOnly: (entry) => `${entry}: only a start date was found. Add `
       + 'the end in the editor.',
-    noticeCut: (field, max) => `${field} was shortened to ${max} characters.`,
+    noticeCut: (field, max) =>
+      `${field} was shortened to ${enNumberFormat.format(max)} characters.`,
     noticeOverLimit: (section) => `${section} has more than 64 entries. The `
       + 'first 64 are selected; the rest stay off.',
     resumeHeading: 'Resume',
@@ -262,5 +274,7 @@ export const importCopy: WorkspaceCopy<ImportCopy> = {
     sizeOk: 'The resume fits again.',
     invalid: 'Some entries cannot be saved as they are. Deselect the marked '
       + 'entries.',
+    invalidGeneral: 'This resume cannot be saved as it is. Go back and '
+      + 'choose another PDF, or create a blank resume.',
   },
 };
