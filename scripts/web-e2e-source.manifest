@@ -114,6 +114,10 @@ apps/web/app/components/editor/structure/StructurePanel.vue
 apps/web/app/components/editor/templates/TemplatePanel.vue
 apps/web/app/components/editor/templates/TemplatePartialDialog.vue
 apps/web/app/components/editor/templates/TemplateThumbnail.vue
+apps/web/app/components/import/ImportActionPanel.vue
+apps/web/app/components/import/ImportEntryRow.vue
+apps/web/app/components/import/ImportPick.vue
+apps/web/app/components/import/ImportReview.vue
 apps/web/app/components/legal/LegalAgreement.vue
 apps/web/app/components/legal/LegalDocument.vue
 apps/web/app/components/preview/PreviewCard.vue
@@ -345,6 +349,7 @@ apps/web/app/i18n/editor-sections.ts
 apps/web/app/i18n/editor-shell.ts
 apps/web/app/i18n/error.ts
 apps/web/app/i18n/identity-settings.ts
+apps/web/app/i18n/import.ts
 apps/web/app/i18n/legal.ts
 apps/web/app/i18n/locale.ts
 apps/web/app/i18n/meta.ts
@@ -362,6 +367,15 @@ apps/web/app/i18n/templates.ts
 apps/web/app/i18n/verify.ts
 apps/web/app/i18n/views.ts
 apps/web/app/i18n/workspace.ts
+apps/web/app/import/linkedin/build.ts
+apps/web/app/import/linkedin/dates.ts
+apps/web/app/import/linkedin/layout.ts
+apps/web/app/import/linkedin/lines.ts
+apps/web/app/import/linkedin/pageState.ts
+apps/web/app/import/linkedin/pdfWorker.ts
+apps/web/app/import/linkedin/read.ts
+apps/web/app/import/linkedin/richText.ts
+apps/web/app/import/linkedin/sections.ts
 apps/web/app/landing/copy.ts
 apps/web/app/landing/sampleContext.ts
 apps/web/app/landing/sampleResume.ts
@@ -374,6 +388,7 @@ apps/web/app/pages/_harness/photo-fixture.ts
 apps/web/app/pages/_harness/print-fixtures.ts
 apps/web/app/pages/_harness/render.vue
 apps/web/app/pages/_harness/sample-fixtures.ts
+apps/web/app/pages/app/import/linkedin.vue
 apps/web/app/pages/app/new.vue
 apps/web/app/pages/app/resumes/[id].vue
 apps/web/app/pages/app/resumes/index.vue
