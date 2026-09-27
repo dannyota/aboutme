@@ -404,7 +404,7 @@ async function readShape(filePath) {
     return { pageSizes, boundary, lines: rawLines, metadataResult,
       numPages: pdfDocument.numPages };
   } finally {
-    await pdfDocument.destroy();
+    await loadingTask.destroy();
   }
 }
 
