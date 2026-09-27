@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
+  <fo:layout-master-set>
+    <fo:simple-page-master master-name="page" page-width="612pt" page-height="792pt" margin="0pt">
+      <fo:region-body margin="0pt"/>
+    </fo:simple-page-master>
+  </fo:layout-master-set>
+  <fo:page-sequence master-reference="page">
+    <fo:flow flow-name="xsl-region-body">
+    <fo:block-container position="absolute" top="42.238pt" left="223.6pt" width="364.4pt" overflow="visible">
+      <fo:block font-family="NotoSans" font-size="16pt" line-height="16pt" wrap-option="no-wrap" space-before="0.000pt">Sample Document</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="12.540pt">This is an ordinary two-page document with no LinkedIn export</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="6.000pt">footer, used to test the not-a-LinkedIn-export message.</fo:block>
+    </fo:block-container>
+    </fo:flow>
+  </fo:page-sequence>
+  <fo:page-sequence master-reference="page">
+    <fo:flow flow-name="xsl-region-body">
+    <fo:block-container position="absolute" top="45.279pt" left="223.6pt" width="364.4pt" overflow="visible">
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="0.000pt">It has a second page of unrelated text.</fo:block>
+    </fo:block-container>
+    </fo:flow>
+  </fo:page-sequence>
+</fo:root>

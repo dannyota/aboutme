@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
+  <fo:layout-master-set>
+    <fo:simple-page-master master-name="page" page-width="612pt" page-height="792pt" margin="0pt">
+      <fo:region-body margin="0pt"/>
+    </fo:simple-page-master>
+  </fo:layout-master-set>
+  <fo:page-sequence master-reference="page">
+    <fo:flow flow-name="xsl-region-body">
+    <fo:block-container position="absolute" top="44.519pt" left="21.6pt" width="566.4pt" overflow="visible">
+      <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="0.000pt">Contact</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">0900000000 (Home)</fo:block>
+      <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="22.100pt">Honors-Awards</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">Example Award, Example Co.</fo:block>
+      <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="22.100pt">Publications</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">Example Publication Title</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">Example Journal · 2021</fo:block>
+      <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="22.100pt">Patents</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">Example Patent, US0000000</fo:block>
+    </fo:block-container>
+    <fo:block-container position="absolute" top="34.637pt" left="223.6pt" width="364.4pt" overflow="visible">
+      <fo:block font-family="NotoSans" font-size="26pt" line-height="26pt" wrap-option="no-wrap" space-before="0.000pt">Sample Droppedperson</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="5.641pt">Example Engineer</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="3.500pt">Ho Chi Minh City, Vietnam</fo:block>
+      <fo:block font-family="NotoSans" font-size="16pt" line-height="16pt" wrap-option="no-wrap" space-before="38.960pt">Volunteer Experience</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="17.540pt">Example Nonprofit</fo:block>
+      <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="4.380pt">Volunteer</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="3.760pt">2019 - 2020 (1 year)</fo:block>
+      <fo:block font-family="NotoSans" font-size="16pt" line-height="16pt" wrap-option="no-wrap" space-before="39.319pt">Projects</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="17.540pt">Example Side Project</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="10.640pt">An internal tool built with a small team.</fo:block>
+    </fo:block-container>
+    <fo:block-container position="absolute" top="771.259pt" left="223.6pt" width="364.4pt" overflow="visible">
+      <fo:block font-family="NotoSans" font-size="9pt" line-height="9pt" wrap-option="no-wrap" text-align="right">Page 1 of 1</fo:block>
+    </fo:block-container>
+    </fo:flow>
+  </fo:page-sequence>
+</fo:root>
