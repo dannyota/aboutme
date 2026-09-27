@@ -21,30 +21,33 @@ The exact tool registry has 15 tools: `list_resumes`, `get_resume`,
 
 ## OAuth server contract
 
-The SDK needs three server behaviors, and each keeps older clients working.
-
 `/.well-known/oauth-protected-resource` includes the exact ordered field
 `"scopes_supported":["resumes:read","resumes:write"]`; the SDK derives its
 requested scopes from it. The unauthenticated `/mcp` challenge still names only
-the protected-resource metadata URL.
+the protected-resource metadata URL, which stays at the root
+`/.well-known/oauth-protected-resource` rather than a `/mcp`-specific path (see
+[MCP client compatibility](mcp-client-compatibility.md#open-questions)).
 
-The authorization endpoint accepts zero or one `resource`, which must equal the
-canonical public origin byte for byte. Missing keeps legacy behavior. Empty,
-duplicate, malformed, non-canonical, or different values get the closed
-`invalid_request`. An `authorization_code` token exchange applies the same rule
-with `invalid_grant`; refresh-token requests reject `resource`. One protected
-resource means no database or token-shape change.
+The authorization endpoint, the code exchange, and refresh each accept zero or
+one `resource`, which must equal the canonical public origin or the origin plus
+`/mcp`, byte for byte. Missing keeps legacy behavior. Empty, duplicate,
+malformed, non-canonical, or any other value gets the closed `invalid_request`
+at authorize and `invalid_grant` at the token endpoint. One protected resource
+means no database or token-shape change. See
+[rule 1](mcp-client-compatibility.md#1-resource-identifier).
 
 Dynamic client registration (DCR) accepts zero or one `application_type`. A
-present value must be exactly `native`, and every redirect must be an HTTP
-loopback URI; any other shape fails closed. The response echoes `native` only
-when supplied. The runner registers only `client_name`
-`"aboutme MCP owner workflow"`, its exact loopback `redirect_uris`, and
-`token_endpoint_auth_method: "none"`; the SDK adds `application_type`.
+present value of `native` requires every redirect to be an HTTP loopback URI; a
+present value of `web` requires every redirect to be `https`; any other value or
+shape fails closed. The response echoes the supplied value. The runner registers
+only `client_name` `"aboutme MCP owner workflow"`, its exact loopback
+`redirect_uris`, and `token_endpoint_auth_method: "none"`; the SDK adds
+`application_type: native` for the runner's loopback redirect. See
+[rule 3](mcp-client-compatibility.md#3-native-loopback-host-and-web-application-type).
 
 ## SDK and HTTP boundary
 
-The runner uses the pinned `github.com/modelcontextprotocol/go-sdk v1.7.0`,
+The runner uses the pinned `github.com/modelcontextprotocol/go-sdk v1.8.0`,
 `mcp.StreamableClientTransport`, and the SDK authorization-code handler, and
 reimplements none of JSON-RPC, discovery, DCR, PKCE, or token exchange. Consent
 requests exactly `resumes:read resumes:write`. The callback binds `127.0.0.1` on
