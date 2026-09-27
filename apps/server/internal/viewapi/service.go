@@ -42,6 +42,9 @@ type Dependencies struct {
 	TrustedProxies api.TrustedProxies
 	Now            func() time.Time
 	Logger         *slog.Logger
+	// ViewPassKey seals and opens the __Host-view-pass cookie
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie").
+	ViewPassKey []byte
 }
 
 // Service owns the view-count routes.
@@ -53,6 +56,7 @@ type Service struct {
 	trustedProxies api.TrustedProxies
 	now            func() time.Time
 	logger         *slog.Logger
+	viewPassKey    []byte
 }
 
 // New validates the dependencies.
@@ -66,7 +70,7 @@ func New(deps Dependencies) (*Service, error) {
 	return &Service{
 		counter: deps.Counter, queries: deps.Queries, sessions: deps.Sessions,
 		publicOrigin: deps.PublicOrigin, trustedProxies: deps.TrustedProxies,
-		now: deps.Now, logger: deps.Logger,
+		now: deps.Now, logger: deps.Logger, viewPassKey: deps.ViewPassKey,
 	}, nil
 }
 

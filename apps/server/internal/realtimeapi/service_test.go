@@ -2,6 +2,7 @@ package realtimeapi
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/realtime"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
+	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
 )
 
 type manualTicker struct {
@@ -323,6 +325,57 @@ func TestPublicStreamRejectsHostilePathsAndMissingLiveState(t *testing.T) {
 	service.PublicHandler().ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/live/test-resume", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("listener-down status = %d", w.Code)
+	}
+}
+
+// TestPublicStreamRequiresPassForSignInToView proves a sign-in-to-view
+// resume's live stream needs a pass, that a missing or wrong pass is the
+// uniform public 404, and that a valid pass is admitted
+// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
+// AC-VIEW-003).
+func TestPublicStreamRequiresPassForSignInToView(t *testing.T) {
+	hub, err := realtime.NewHub(realtime.Config{AdmitFD: func() bool { return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub.SetAvailable(true)
+	t.Cleanup(hub.Close)
+	coordinator, err := publicstate.NewCoordinator(publicstate.CoordinatorConfig{DiscoveryGeneration: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
+	key := bytes.Repeat([]byte{0x33}, 32)
+	data := &streamStore{row: store.GetPublicRealtimeResumeRow{ID: testResume, Revision: 1, SignInToView: true, ViewPassEpoch: 1}}
+	service, err := New(Dependencies{
+		Hub: hub, Store: data, Sessions: auth.NewSessionManager(nil), Coordinator: coordinator,
+		Clock: func() time.Time { return now }, ViewPassKey: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	noPass := httptest.NewRecorder()
+	service.PublicHandler().ServeHTTP(noPass, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/live/test-resume", nil))
+	if noPass.Code != http.StatusNotFound {
+		t.Fatalf("no-pass status = %d, want 404 (uniform public not-found)", noPass.Code)
+	}
+
+	wrongEpoch := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/live/test-resume", nil)
+	wrongEpoch.AddCookie(&http.Cookie{Name: viewpass.CookieName, Value: viewpass.Seal(key, data.row.ID, 0, time.Now().Add(time.Hour))})
+	wrongEpochResp := httptest.NewRecorder()
+	service.PublicHandler().ServeHTTP(wrongEpochResp, wrongEpoch)
+	if wrongEpochResp.Code != http.StatusNotFound {
+		t.Fatalf("old-epoch pass status = %d, want 404", wrongEpochResp.Code)
+	}
+
+	// The handshake needs a real streaming connection (it flushes headers
+	// before writing a body), so it is driven through openStreamWithCookies
+	// rather than an httptest.ResponseRecorder.
+	resp, _ := openStreamWithCookies(t, service.PublicHandler(), "/api/v1/live/test-resume", //nolint:bodyclose // openStreamWithCookies registers Body.Close in t.Cleanup.
+		&http.Cookie{Name: viewpass.CookieName, Value: viewpass.Seal(key, data.row.ID, 1, time.Now().Add(time.Hour))})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("valid-pass status = %d, want 200", resp.StatusCode)
 	}
 }
 

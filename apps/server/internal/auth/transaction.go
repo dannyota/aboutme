@@ -37,6 +37,10 @@ const (
 	PurposeLogin  Purpose = "login"
 	PurposeLink   Purpose = "link"
 	PurposeReauth Purpose = "reauth"
+	// PurposeView is the unauthenticated purpose that gates one public resume
+	// for sign in to view rather than any account (docs/design/viewer-analytics/
+	// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004, AC-VIEW-005, AC-VIEW-006).
+	PurposeView Purpose = "view"
 )
 
 // oauthTxTTL also governs the transaction cookie lifetime.
@@ -57,6 +61,9 @@ type Transaction struct {
 	Nonce         string // empty for ProviderGitHub
 	RedirectURI   string
 	ReturnPath    string
+	// ResumeID is set only for PurposeView (docs/design/viewer-analytics/
+	// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004).
+	ResumeID uuid.UUID
 }
 
 // ErrTransactionInvalid collapses unknown, expired, replayed, and wrong-provider
@@ -177,7 +184,48 @@ func transactionFromRow(row store.OAuthTransaction) Transaction {
 	if row.Nonce != nil {
 		tx.Nonce = *row.Nonce
 	}
+	if row.ResumeID != nil {
+		tx.ResumeID = *row.ResumeID
+	}
 	return tx
+}
+
+// beginView stores an unauthenticated purpose-view transaction bound to
+// resumeID instead of a login return path (docs/design/viewer-analytics/
+// sign-in-to-view.md "Sign-in flow"; AC-VIEW-004). ReturnPath is filled with
+// the same closed default as every other transaction only to satisfy the
+// column's NOT NULL constraint; the view callback never reads it.
+func (s *TransactionStore) beginView(ctx context.Context, provider Provider, resumeID uuid.UUID, redirectURI string) (string, Transaction, error) {
+	handle, err := randomToken()
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin view transaction: generate handle: %w", err)
+	}
+	state, err := randomToken()
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin view transaction: generate state: %w", err)
+	}
+	verifier := oauth2.GenerateVerifier()
+	nonce, err := randomToken()
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin view transaction: generate nonce: %w", err)
+	}
+
+	row, err := s.q.CreateOAuthTransaction(ctx, store.CreateOAuthTransactionParams{
+		HandleHash:   hashHandle(handle),
+		Provider:     string(provider),
+		Purpose:      string(PurposeView),
+		State:        state,
+		PKCEVerifier: verifier,
+		Nonce:        &nonce,
+		RedirectURI:  redirectURI,
+		ReturnPath:   defaultLoginReturnPath,
+		ExpiresAt:    s.now().Add(oauthTxTTL),
+		ResumeID:     &resumeID,
+	})
+	if err != nil {
+		return "", Transaction{}, fmt.Errorf("auth: begin view transaction: %w", err)
+	}
+	return handle, transactionFromRow(row), nil
 }
 
 // randomToken returns an unpadded base64url random value.

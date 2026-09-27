@@ -31,6 +31,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
 )
 
 type artifactQueueFunc func(context.Context, renderjob.Request) (renderjob.Result, error)
@@ -1122,5 +1123,93 @@ func TestPublicPDFCacheHitNamesTheFileAfterTheServedName(t *testing.T) {
 	}
 	if got := response.Header().Get("Content-Disposition"); got != `attachment; filename="Ada-Resume.pdf"; filename*=UTF-8''Ada-Resume.pdf` {
 		t.Fatalf("Content-Disposition = %q", got)
+	}
+}
+
+// TestPublicPDFRequiresPassAndOgPNGStaysPublic proves the PDF representation
+// of a sign-in-to-view resume needs a pass, that a cached PDF is never
+// served without one, that a valid pass reaches it with a private
+// Cache-Control, and that og.png -- which the design keeps public -- is
+// unaffected (docs/design/viewer-analytics/sign-in-to-view.md "Gated
+// routes"; AC-VIEW-003).
+func TestPublicPDFRequiresPassAndOgPNGStaysPublic(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
+	key := bytes.Repeat([]byte{0x22}, 32)
+	queue := artifactQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
+		snapshot, err := request.Prepare(ctx)
+		if err != nil {
+			return renderjob.Result{}, err
+		}
+		body := []byte("%PDF-1.7\npublic")
+		if request.Format == renderjob.PNG {
+			body = []byte("\x89PNG\r\npublic")
+		}
+		return renderjob.Result{Bytes: body, Digest: sha256.Sum256(body), Revision: snapshot.Revision}, nil
+	})
+	_, reader, _, backing := publicServiceReaderWithStore(t)
+	backing.row.DownloadEnabled = true
+	backing.row.SignInToView = true
+	backing.row.ViewPassEpoch = 1
+	cache, err := publiccache.New(4, time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlers, err := newArtifactHandlers(ArtifactDependencies{
+		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
+		Clock: now, ViewPassKey: key,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	get := func(path string, cookie *http.Cookie) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		request.RemoteAddr = "192.0.2.20:1234"
+		if cookie != nil {
+			request.AddCookie(cookie)
+		}
+		response := httptest.NewRecorder()
+		handlers.pdf.ServeHTTP(response, request)
+		return response
+	}
+	pdfPath := "/api/v1/public/resumes/ada-lovelace/pdf"
+
+	noPass := get(pdfPath, nil)
+	if noPass.Code != http.StatusNotFound {
+		t.Fatalf("PDF with no pass = %d, want 404 (the uniform public not-found)", noPass.Code)
+	}
+
+	pass := viewpass.Seal(key, backing.row.ID, 1, now().Add(time.Hour))
+	withPass := get(pdfPath, &http.Cookie{Name: viewpass.CookieName, Value: pass})
+	if withPass.Code != http.StatusOK {
+		t.Fatalf("PDF with a valid pass = %d, want 200", withPass.Code)
+	}
+	if cc := withPass.Header().Get("Cache-Control"); !strings.Contains(cc, "private") {
+		t.Errorf("PDF with a valid pass Cache-Control = %q, want it to contain %q", cc, "private")
+	}
+
+	oldEpoch := viewpass.Seal(key, backing.row.ID, 0, now().Add(time.Hour))
+	staleEpoch := get(pdfPath, &http.Cookie{Name: viewpass.CookieName, Value: oldEpoch})
+	if staleEpoch.Code != http.StatusNotFound {
+		t.Fatalf("PDF with an old-epoch pass = %d, want 404; cached bytes must never be served without a valid pass", staleEpoch.Code)
+	}
+
+	otherResume := viewpass.Seal(key, uuid.New(), 1, now().Add(time.Hour))
+	wrongResume := get(pdfPath, &http.Cookie{Name: viewpass.CookieName, Value: otherResume})
+	if wrongResume.Code != http.StatusNotFound {
+		t.Fatalf("PDF with another resume's pass = %d, want 404", wrongResume.Code)
+	}
+
+	// og.png stays public, exactly as today, on the same gated resume.
+	pngPath := "/api/v1/public/resumes/ada-lovelace/og.png"
+	pngRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, pngPath, nil)
+	pngRequest.RemoteAddr = "192.0.2.21:1234"
+	pngResponse := httptest.NewRecorder()
+	handlers.png.ServeHTTP(pngResponse, pngRequest)
+	if pngResponse.Code != http.StatusOK {
+		t.Fatalf("og.png on a sign-in-to-view resume = %d, want 200 (public)", pngResponse.Code)
+	}
+	if cc := pngResponse.Header().Get("Cache-Control"); strings.Contains(cc, "private") {
+		t.Errorf("og.png Cache-Control = %q, want no %q token", cc, "private")
 	}
 }
