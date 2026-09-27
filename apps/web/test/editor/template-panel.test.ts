@@ -94,7 +94,7 @@ describe('TemplatePanel', () => {
       (template) => template.attributes('data-template'),
     )).toEqual(templateIds);
     expect(document.body.textContent).toContain(
-      'Các thay đổi mẫu cần được xem lại',
+      'Mẫu mới chỉ được áp dụng một phần',
     );
     wrapper.unmount();
   });
@@ -314,12 +314,19 @@ describe('TemplatePartialDialog', () => {
 
     await nextTick();
 
-    expect(document.body.textContent).toContain('Placement change accepted.');
     expect(document.body.textContent).toContain(
-      'Customization change remains.',
+      'Template only partly applied',
+    );
+    expect(document.body.textContent).toContain('Section placement: applied.');
+    expect(document.body.textContent).toContain(
+      'Fonts, colors, and spacing: not applied.',
     );
     expect(document.body.textContent).toContain(
-      'The template result needs review.',
+      'The connection dropped while the template was saving, '
+      + 'so part of it was not saved.',
+    );
+    expect(document.body.textContent).toContain(
+      'Apply the rest: save the part that was not applied.',
     );
     expect(document.body.textContent).not.toContain('unknown-outcome');
     expect(document.body.textContent).not.toContain(group.id);
@@ -356,10 +363,9 @@ describe('TemplatePartialDialog', () => {
     ).not.toBeNull();
     const alerts = document.body.querySelectorAll('[role="alert"]');
     expect(alerts[alerts.length - 1]!.textContent).toBe(
-      [
-        'The resume context changed.',
-        'Review the current resume before trying again.',
-      ].join(' '),
+      'Sections were added or removed after the template was saved, '
+      + 'so this is no longer possible. '
+      + 'Choose Keep as is, then apply the template again.',
     );
 
     locale.value = 'vi';
@@ -369,8 +375,94 @@ describe('TemplatePartialDialog', () => {
       document.body.querySelector('[role="alertdialog"]'),
     ).not.toBeNull();
     expect(alerts[alerts.length - 1]!.textContent).toBe(
-      'Ngữ cảnh hồ sơ đã thay đổi. Xem lại hồ sơ hiện tại trước khi thử lại.',
+      'Hồ sơ đã được thêm hoặc xóa mục sau khi lưu mẫu nên không thể '
+      + 'làm việc này nữa. Hãy chọn Giữ như hiện tại, rồi áp dụng lại mẫu.',
     );
+    wrapper.unmount();
+  });
+
+  it('offers only Keep as is once the sections changed', async () => {
+    const group = templateGroup();
+    const latest = partialLatest(group);
+    const changed: AcceptedResume = {
+      ...latest,
+      document: {
+        ...latest.document,
+        content: {
+          ...latest.document.content,
+          added: { sectionType: 'language', entries: [] },
+        },
+      },
+      revision: parseRevision('3'),
+    };
+    const record = ref<ResumeRecord | undefined>({
+      ...recordFor(changed),
+      templateState: partialState(latest),
+    });
+    const wrapper = mount(TemplatePartialDialog, {
+      attachTo: document.body,
+      props: {
+        actions: actionsFor(vi.fn(), record),
+        group,
+        state: { ...partialState(latest), reason: 'context-change' },
+      },
+    });
+
+    await nextTick();
+
+    const actions = [...document.body.querySelectorAll<HTMLElement>(
+      '[data-action]',
+    )].map((button) => button.dataset.action);
+    expect(actions).toEqual(['keep-partial']);
+    expect(document.activeElement?.getAttribute('data-action'))
+      .toBe('keep-partial');
+    expect(document.body.textContent).toContain(
+      'The resume changed while the template was saving, '
+      + 'for example in another tab.',
+    );
+    expect(document.body.textContent).toContain(
+      'To finish, choose Keep as is, then apply the template again '
+      + 'from the list.',
+    );
+    expect(document.body.textContent).not.toContain('Apply the rest');
+    expect(document.body.textContent).not.toContain('Undo template');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(document.body.textContent).toContain('Giữ như hiện tại');
+    expect(document.body.textContent).toContain('Vị trí các mục: đã áp dụng.');
+    expect(document.body.textContent).toContain(
+      'Phông chữ, màu sắc và khoảng cách: chưa áp dụng.',
+    );
+    wrapper.unmount();
+  });
+
+  it('names the buttons in both languages', async () => {
+    const group = templateGroup();
+    const wrapper = mount(TemplatePartialDialog, {
+      attachTo: document.body,
+      props: {
+        actions: actionsFor(vi.fn()),
+        group,
+        state: partialState(partialLatest(group)),
+      },
+    });
+
+    await nextTick();
+    const labels = () => [...document.body.querySelectorAll<HTMLElement>(
+      '[data-action]',
+    )].map((button) => button.textContent?.trim());
+    expect(labels()).toEqual(['Keep as is', 'Undo template', 'Apply the rest']);
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(labels()).toEqual([
+      'Giữ như hiện tại',
+      'Hoàn tác mẫu',
+      'Áp dụng phần còn lại',
+    ]);
     wrapper.unmount();
   });
 

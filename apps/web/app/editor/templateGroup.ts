@@ -337,24 +337,9 @@ export function recoverTemplateGroup(
   runtime: EditorRuntime,
 ): TemplateRecovery {
   if (action === 'keep-partial') return { kind: 'keep-partial' };
-  if (!contextMatches(group, latest)) {
-    return { kind: 'unavailable', reason: 'context-changed' };
-  }
-  if (action === 'retry-remaining') {
-    const expected = expectedIntermediate(group, state.nextChild);
-    return equalProjection(
-      projectTemplateTarget(latest),
-      projectTemplateTarget(expected),
-    )
-      ? { kind: 'enqueue', group }
-      : { kind: 'unavailable', reason: 'state-changed' };
-  }
-  if (!equalProjection(
-    projectTemplateTarget(latest),
-    projectTemplateTarget(expectedIntermediate(group, state.nextChild)),
-  )) {
-    return { kind: 'unavailable', reason: 'state-changed' };
-  }
+  const blocked = recoveryBlock(group, state, latest);
+  if (blocked !== null) return { kind: 'unavailable', reason: blocked };
+  if (action === 'retry-remaining') return { kind: 'enqueue', group };
   const reverse = createGroup(
     latest,
     group.preApply,
@@ -369,7 +354,51 @@ export function recoverTemplateGroup(
     : { kind: 'enqueue', group: reverse };
 }
 
-function projectTemplateTarget(snapshot: ResumeSnapshot): Projection {
+/**
+ * Whether a recovery action can still succeed on `latest`. Recovery is exact
+ * (AC-EDITOR-012): it resumes or reverses the recorded children only while the
+ * resume still holds the state those children left, so the dialog offers an
+ * action only when this holds.
+ */
+export function templateRecoveryAvailable(
+  group: TemplateGroupCommand,
+  state: Extract<TemplateGroupState, { kind: 'partial' }>,
+  latest: ResumeSnapshot,
+  action: 'retry-remaining' | 'restore-pre-apply',
+): boolean {
+  if (recoveryBlock(group, state, latest) !== null) return false;
+  if (action === 'restore-pre-apply') return true;
+  return group.children
+    .slice(state.nextChild)
+    .some((child) => !templateChildApplied(child, latest));
+}
+
+/** Whether `snapshot` holds the values `child` set, whatever else changed. */
+export function templateChildApplied(
+  child: TemplateChildCommand,
+  snapshot: ResumeSnapshot,
+): boolean {
+  return equalProjection(
+    { target: projectChild(snapshot, child).target, context: {} },
+    { target: child.intended!.target, context: {} },
+  );
+}
+
+function recoveryBlock(
+  group: TemplateGroupCommand,
+  state: Extract<TemplateGroupState, { kind: 'partial' }>,
+  latest: ResumeSnapshot,
+): 'context-changed' | 'state-changed' | null {
+  if (!contextMatches(group, latest)) return 'context-changed';
+  return equalProjection(
+    projectTemplateTarget(latest),
+    projectTemplateTarget(expectedIntermediate(group, state.nextChild)),
+  )
+    ? null
+    : 'state-changed';
+}
+
+export function projectTemplateTarget(snapshot: ResumeSnapshot): Projection {
   const { sections, ...layout } = snapshot.document.customization.layout;
   return {
     target: {
@@ -383,20 +412,28 @@ function projectTemplateTarget(snapshot: ResumeSnapshot): Projection {
   };
 }
 
+/**
+ * The sections a template group is bound to. `content` is an unordered map
+ * and `layout.sections` alone orders sections (ADR 0009,
+ * docs/design/data.md#resume-aggregate), and the server re-encodes content
+ * keys in its own order. So the identity lists keys in byte order: only an
+ * added, removed, or retyped section changes it.
+ */
 function contentContext(snapshot: ResumeSnapshot): Projection['context'] {
   return {
     resumeId: { present: true, value: snapshot.metadata.id },
     schemaVersion: { present: true, value: snapshot.document.schemaVersion },
     contentIdentity: {
       present: true,
-      value: Object.entries(snapshot.document.content).map(
-        ([key, section]) => ({
-          key,
-          sectionType: section.sectionType,
-        }),
-      ),
+      value: Object.entries(snapshot.document.content)
+        .map(([key, section]) => ({ key, sectionType: section.sectionType }))
+        .sort((left, right) => byteOrder(left.key, right.key)),
     },
   };
+}
+
+function byteOrder(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function contextMatches(

@@ -3,6 +3,7 @@ import { createAtomicReplacement, makeAtomicConflict } from './conflicts';
 import type { AtomicConflictRecord, ConflictConfirmation } from './conflicts';
 import type { AtomicEditorCommand } from './commands';
 import type { AcceptedResume, Projection, ResumeSnapshot } from './types';
+import { projectTemplateTarget } from './templateGroup';
 import type { TemplateGroupCommand } from './templateGroup';
 
 export type { ConflictConfirmation, ConflictKind } from './conflicts';
@@ -113,32 +114,6 @@ function withOwnerContext(
     context: {
       ...projection.context,
       ownerId: { present: true, value: command.ownerId },
-    },
-  };
-}
-
-function projectTemplateTarget(snapshot: ResumeSnapshot): Projection {
-  const { sections, ...layout } = snapshot.document.customization.layout;
-  return {
-    target: {
-      present: true,
-      value: {
-        placement: sections,
-        customization: { ...snapshot.document.customization, layout },
-      },
-    },
-    context: {
-      resumeId: { present: true, value: snapshot.metadata.id },
-      schemaVersion: { present: true, value: snapshot.document.schemaVersion },
-      contentIdentity: {
-        present: true,
-        value: Object.entries(snapshot.document.content).map(
-          ([key, section]) => ({
-            key,
-            sectionType: section.sectionType,
-          }),
-        ),
-      },
     },
   };
 }

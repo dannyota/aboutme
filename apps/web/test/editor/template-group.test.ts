@@ -8,6 +8,8 @@ import {
   captureTemplateGroup,
   nextTemplateChild,
   recoverTemplateGroup,
+  templateChildApplied,
+  templateRecoveryAvailable,
 } from '../../app/editor/templateGroup';
 import { replayCommand } from '../../app/editor/commands';
 import { applyTemplate } from '../../app/components/resume/applyTemplate';
@@ -360,6 +362,143 @@ describe('template groups', () => {
         intendedFinal: captured.preApply,
       },
     });
+  });
+
+  // docs/design/data.md#resume-aggregate: content is an unordered map, and
+  // the server re-encodes its keys in byte order.
+  it('completes when the accepted resume lists content keys in another order',
+    () => {
+      const fixture = acceptedFixture();
+      const current = {
+        ...fixture,
+        document: {
+          ...fixture.document,
+          content: {
+            work: { sectionType: 'work' as const, entries: [] },
+            education: { sectionType: 'education' as const, entries: [] },
+          },
+          customization: {
+            ...fixture.document.customization,
+            layout: {
+              ...fixture.document.customization.layout,
+              sections: { main: ['work', 'education'], sidebar: [] },
+            },
+          },
+        },
+      };
+      const keep = TEMPLATES.find(
+        ({ customization }) => customization.layout.placement === 'keep',
+      )!;
+      const captured = captureTemplateGroup({
+        resumeId: current.metadata.id,
+        ownerId: 'owner-1',
+        sequence: 1,
+        current,
+        preset: keep,
+        dependencyIds: [],
+        runtime: {
+          nowEpochMs: () => 0,
+          uuid: () => 'id',
+          delay: async () => {},
+        },
+      })!;
+      const saved = captured.children.reduce(replayCommand, captured.preApply);
+      const { work, education } = saved.document.content;
+      const accepted = {
+        ...saved,
+        document: { ...saved.document, content: { education, work } },
+        revision: parseRevision('2'),
+        metadataFreshness: 'complete' as const,
+      };
+
+      expect(captured.children.map(({ kind }) => kind)).toEqual([
+        'customization',
+      ]);
+      expect(
+        advanceTemplateGroup(
+          captured,
+          { kind: 'queued', nextChild: 0 },
+          accepted,
+        ),
+      ).toMatchObject({ kind: 'complete' });
+    });
+
+  it('stays partial when another writer adds a section', () => {
+    const captured = group()!;
+    const final = captured.children.reduce(replayCommand, captured.preApply);
+    const accepted = {
+      ...final,
+      document: {
+        ...final.document,
+        content: {
+          ...final.document.content,
+          added: { sectionType: 'language' as const, entries: [] },
+        },
+      },
+      revision: parseRevision('3'),
+      metadataFreshness: 'complete' as const,
+    };
+
+    expect(
+      advanceTemplateGroup(
+        captured,
+        { kind: 'running', nextChild: 1, lastRevision: parseRevision('2') },
+        accepted,
+      ),
+    ).toMatchObject({ kind: 'partial', reason: 'context-change' });
+  });
+
+  it('offers recovery only where it can succeed', () => {
+    const captured = group()!;
+    const intermediate = {
+      ...replayCommand(captured.preApply, captured.children[0]!),
+      revision: parseRevision('2'),
+      metadataFreshness: 'complete' as const,
+    };
+    const failed: Extract<TemplateGroupState, { kind: 'partial' }> = {
+      kind: 'partial',
+      accepted: intermediate,
+      nextChild: 1,
+      reason: 'child-failed',
+    };
+    const changed = {
+      ...intermediate,
+      document: {
+        ...intermediate.document,
+        content: {
+          ...intermediate.document.content,
+          added: { sectionType: 'language' as const, entries: [] },
+        },
+      },
+      revision: parseRevision('3'),
+    };
+
+    for (const action of ['retry-remaining', 'restore-pre-apply'] as const) {
+      expect(
+        templateRecoveryAvailable(captured, failed, intermediate, action),
+      ).toBe(true);
+      expect(templateRecoveryAvailable(captured, failed, changed, action))
+        .toBe(false);
+      expect(
+        recoverTemplateGroup(captured, failed, changed, action, {
+          nowEpochMs: () => 0,
+          uuid: () => 'unused',
+          delay: async () => {},
+        }),
+      ).toEqual({ kind: 'unavailable', reason: 'context-changed' });
+    }
+  });
+
+  it('reports each child as applied only from the accepted resume', () => {
+    const captured = group()!;
+    const [structure, customization] = captured.children;
+    const intermediate = replayCommand(captured.preApply, structure!);
+
+    expect(templateChildApplied(structure!, captured.preApply)).toBe(false);
+    expect(templateChildApplied(structure!, intermediate)).toBe(true);
+    expect(templateChildApplied(customization!, intermediate)).toBe(false);
+    expect(templateChildApplied(customization!, captured.intendedFinal))
+      .toBe(true);
   });
 
   it('captures structure and customization child context separately', () => {
