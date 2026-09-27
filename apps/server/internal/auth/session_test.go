@@ -903,7 +903,7 @@ func TestAuthenticate_RotatesAfter24h_SequentialSingleRequest(t *testing.T) {
 // A successor's raw token is delivered on exactly ONE response and is
 // never stored, so a lost response would make the successor unreachable.
 // The predecessor remains usable until the successor is first used, which
-// proves delivery. See docs/adr/0015-session-rotation-delivery.md.
+// proves delivery. See docs/adr/0015-accounts-passwords-and-sessions.md.
 
 // sessionRowRotationGraceUntil reads the rotation_grace_until column of
 // one sessions row, NULL included (nil out), so a test can assert on the

@@ -11,7 +11,7 @@ import (
 // PasswordQueries is the exact data-layer surface the password service
 // consumes. It freezes the row-lock order (user, credential, reset token,
 // then sessions) behind the user-lock fence in
-// docs/adr/0025-password-authentication-and-identity-linking.md and hides
+// docs/adr/0015-accounts-passwords-and-sessions.md and hides
 // every raw-SQL detail behind one transactional contract. Existing provider identity and
 // session methods remain on *Queries through the broader Querier interface;
 // the password service uses only this surface.

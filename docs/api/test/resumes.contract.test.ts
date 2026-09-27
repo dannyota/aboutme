@@ -6,7 +6,7 @@ const doc = parse(readFileSync("docs/api/openapi.yaml", "utf8"));
 const redoclyConfig = parse(readFileSync("docs/api/redocly.yaml", "utf8"));
 
 // The private resume surface, exactly (docs/design/api.md, "Endpoint groups").
-// operationIds are frozen: ADR 0016's idempotency operation identity hashes the
+// operationIds are frozen: ADR 0006's idempotency operation identity hashes the
 // exact OpenAPI operationId string, so renaming one silently changes every
 // stored replay record's identity.
 const SURFACE: Record<string, Record<string, string>> = {

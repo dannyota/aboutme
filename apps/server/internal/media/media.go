@@ -2,10 +2,10 @@
 // contract with two implementations: a rooted filesystem store (native
 // development and unit tests) and an S3-compatible store (compose/UAT,
 // staging, production). See docs/design/deployment.md ("Media") and
-// docs/adr/0019-private-media-delivery.md.
+// docs/adr/0009-private-media-delivery.md.
 //
 // Object creation is conditional and fails on an existing key: no overwrite
-// path exists anywhere in this package (ADR 0019). Put distinguishes a
+// path exists anywhere in this package (ADR 0009). Put distinguishes a
 // proved create, a proved non-create, and an unknown remote outcome so a
 // request path can never delete a key that might belong to a collision
 // winner. Deletion reports an already-absent object as ErrNotFound.

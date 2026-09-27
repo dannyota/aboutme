@@ -362,7 +362,7 @@ paths:
       summary: Begin "Sign in with Google"
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
+        path returns the uniform not-found response (ADR 0016). Begins a fresh
         OAuth2/OIDC login transaction (PKCE S256, an OIDC
         nonce) and redirects the browser to Google's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
@@ -407,7 +407,7 @@ paths:
       summary: Begin a Google link or reauthentication
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth
+        path returns the uniform not-found response (ADR 0016). Begins an OAuth
         transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
@@ -500,7 +500,7 @@ paths:
       summary: Complete "Sign in with Google"
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
+        path returns the uniform not-found response (ADR 0016). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (PKCE), verifies the ID
         token (issuer/audience/signature/expiry, plus the OIDC nonce),
@@ -604,7 +604,7 @@ paths:
       summary: Begin "Sign in with GitHub"
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
+        path returns the uniform not-found response (ADR 0016). Begins a fresh
         OAuth2 login transaction (PKCE S256; GitHub has no
         OIDC ID token, so no nonce) and redirects the browser to GitHub's
         own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque
@@ -644,7 +644,7 @@ paths:
       summary: Begin a GitHub link or reauthentication
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth
+        path returns the uniform not-found response (ADR 0016). Begins an OAuth
         transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
@@ -737,7 +737,7 @@ paths:
       summary: Complete "Sign in with GitHub"
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
+        path returns the uniform not-found response (ADR 0016). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code, and — for
         `purpose=login` only — fetches the authenticated user's verified
@@ -791,10 +791,10 @@ paths:
       summary: Begin "Sign in with LinkedIn"
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh
+        path returns the uniform not-found response (ADR 0016). Begins a fresh
         OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's
         token endpoint takes client credentials in the request body, ADR
-        0063) and redirects the browser to LinkedIn's own authorize
+        0016) and redirects the browser to LinkedIn's own authorize
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
         handle, 10-minute TTL) that the matching `GET
         /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`.
@@ -832,7 +832,7 @@ paths:
       summary: Begin a LinkedIn link or reauthentication
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth
+        path returns the uniform not-found response (ADR 0016). Begins an OAuth
         transaction for the CALLER's own already-
         authenticated account — `purpose=link` (attach this provider
         identity to that account) or `purpose=reauth` (refresh the
@@ -925,13 +925,13 @@ paths:
       summary: Complete "Sign in with LinkedIn"
       description: >-
         Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this
-        path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the
+        path returns the uniform not-found response (ADR 0016). Consumes the
         pending OAuth transaction (`__Host-oauth-tx`
         cookie), exchanges the authorization code (client credentials in the
         request body, no PKCE), verifies the ID token
         (issuer/audience/signature/expiry; a present nonce claim must match
         the transaction's nonce, but LinkedIn's ID tokens omit the claim and
-        an absent one is accepted, ADR 0063), and
+        an absent one is accepted, ADR 0016), and
         resolves the local user per `purpose`, exactly like `GET
         /auth/google/callback` — see that
         operation's own description for the full `purpose=login` vs
@@ -1984,7 +1984,7 @@ paths:
 
         A create has no prior revision, so it takes `Idempotency-Key` and
         rejects `If-Match` with `400 precondition_not_supported` rather than
-        ignoring it (ADR 0016, plan D6). The per-account resume cap is a
+        ignoring it (ADR 0006). The per-account resume cap is a
         domain conflict: the fourth create returns `409
         resume_cap_exceeded`, never `412`.
       parameters:
@@ -2097,7 +2097,7 @@ paths:
         Returns one owned resume and its whole document, projected to the
         requested wire version. A read never writes: a stored document below
         the current version is projected in memory and the row keeps its
-        revision and `updated_at` (ADR 0017).
+        revision and `updated_at` (ADR 0004).
 
 
         Another account's resume id is indistinguishable from a missing one:
@@ -2195,7 +2195,7 @@ paths:
       summary: Delete a resume
       description: >-
         Deletes one owned resume and enqueues exact-key deletion of its photo
-        object in the same transaction (ADR 0019). The response is `204` with
+        object in the same transaction (ADR 0009). The response is `204` with
         zero bytes and no `ETag`: the parent no longer exists, so there is no
         successor revision to report.
 
@@ -2423,7 +2423,7 @@ paths:
       description: >-
         Updates a section's display name, icon, or entry order. This route
         never moves a section between columns and never changes section
-        order: `layout.sections` is the sole placement authority (ADR 0009)
+        order: `layout.sections` is the sole placement authority (ADR 0004)
         and only `PATCH /resumes/{id}/structure` writes it.
 
 
@@ -2770,7 +2770,7 @@ paths:
         that cannot acquire it within one second is `503 media_busy` with
         `Retry-After: 1`, before any body read. Replacement clears any crop
         attached to the old pixels and enqueues exact-key deletion of the old
-        object in the same transaction (ADR 0019).
+        object in the same transaction (ADR 0009).
       parameters:
         - $ref: "#/components/parameters/ResumeID"
         - $ref: "#/components/parameters/IfMatch"
@@ -2831,7 +2831,7 @@ paths:
       description: >-
         Streams the stored normalized JPEG or PNG to the owner. Objects are
         private: existence never grants access, and every read passes the
-        ownership check first (ADR 0019).
+        ownership check first (ADR 0009).
 
 
         The strong `ETag` is derived from the immutable object key, so it
@@ -2947,7 +2947,7 @@ paths:
         Removes the photo reference and its crop, and enqueues exact-key
         deletion of the object in the same transaction. Access is revoked at
         commit; the bytes are removed by the deletion worker within the
-        24-hour target (ADR 0019).
+        24-hour target (ADR 0009).
 
 
         The request has no body. Its idempotency fingerprint hashes a
@@ -3212,7 +3212,7 @@ paths:
         While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this
         path is an alias of the current preview card that
         `/public/resumes/{slug}/og/{version}.png` serves, so share images that
-        platforms fetched earlier keep working (ADR 0055).
+        platforms fetched earlier keep working (ADR 0014).
         The current generation gate runs before cache reuse or conditional
         evaluation. Query parameters and request bodies are rejected.
         PDF and PNG misses share a 20-render-per-minute client IP limit;
@@ -3267,7 +3267,7 @@ paths:
         parameters and request bodies are rejected. A build shares the
         20-render-per-minute client IP limit with PDF and PNG misses; every
         request also passes the 300-per-minute IP limit
-        (docs/adr/0055-stored-link-preview-card.md).
+        (docs/adr/0014-public-page-head-and-link-preview.md).
       parameters:
         - $ref: "#/components/parameters/PublicSlug"
         - $ref: "#/components/parameters/PreviewCardVersion"
@@ -3310,7 +3310,7 @@ paths:
       description: >-
         Called once by the public page's script at load. Returns a one-time
         sealed view token and an ALTCHA v2 proof-of-work challenge bound to
-        it (docs/adr/0061-layered-human-view-counting.md). The request needs
+        it (docs/adr/0022-viewer-privacy-and-counting.md). The request needs
         an `Origin` equal to the site origin and a JSON body; it carries no
         CSRF token because it holds no session authority. A `__Host-session`
         cookie is read only to recognize the resume's owner: then `owner` is
@@ -6044,7 +6044,7 @@ components:
         carries the full name folded to ASCII letters and digits, words joined
         by hyphens; `filename*` (RFC 5987) carries the same words in UTF-8. A
         name with no usable words downloads as `Resume.pdf` without
-        `filename*`. See `docs/adr/0045-pdf-download-name-and-metadata.md`.
+        `filename*`. See `docs/adr/0011-print-capability-and-pdf-output.md`.
       schema:
         $ref: "#/components/schemas/PDFAttachment"
       example: attachment; filename="Nguyen-Van-Duc-Resume.pdf"; filename*=UTF-8''Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf
@@ -7011,7 +7011,7 @@ components:
           enum: [short, full, label]
           description: >-
             Anchor text for a detail that renders as a link. Absent means
-            `short`. See `docs/adr/0041-contact-link-display-and-body-justify.md`.
+            `short`. See `docs/adr/0013-resume-header-and-contacts.md`.
     PublicPhoto:
       type: object
       additionalProperties: false
@@ -7863,7 +7863,7 @@ components:
       description: >-
         A section's own metadata. Placement is never here: moving a section
         between columns or changing section order goes through
-        `PATCH /resumes/{id}/structure` (ADR 0009).
+        `PATCH /resumes/{id}/structure` (ADR 0004).
       additionalProperties: false
       minProperties: 1
       properties:

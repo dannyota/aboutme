@@ -1,6 +1,6 @@
 /**
  * The link-preview card layout (docs/design/link-previews.md, "Preview
- * card"; docs/adr/0055-stored-link-preview-card.md).
+ * card"; docs/adr/0014-public-page-head-and-link-preview.md).
  *
  * CARD_LAYOUT_VERSION equals the server's card layout version. The server
  * hashes it into every card version, and a test pins a hash of the card

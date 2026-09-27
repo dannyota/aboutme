@@ -87,7 +87,7 @@ variable "totp_previous_key_slot" {
 }
 
 # Only Google's and LinkedIn's credentials are wired, and LinkedIn turns on
-# only beside Google (docs/adr/0058-linkedin-sign-in-in-production.md).
+# only beside Google (docs/adr/0016-sign-in-providers.md).
 variable "provider_login_enabled" {
   type        = string
   description = "PROVIDER_LOGIN_ENABLED for the server: \"\" (off), \"google\", or \"google,linkedin\""

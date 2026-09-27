@@ -225,7 +225,7 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'en' },
       script: [{ src: '/theme-bootstrap.js' }],
-      // The seal mark (DESIGN.md; ADR 0065). Order
+      // The seal mark (DESIGN.md; ADR 0020). Order
       // matters: a PNG `sizes="32x32"` link goes first so browsers that
       // pick the first suitable icon (notably iOS/iPadOS Safari, which
       // does not resolve the SVG for the tab switcher and pinned-tab
@@ -234,7 +234,7 @@ export default defineNuxtConfig({
       // `sizes="180x180"` is the opaque, full-bleed icon iOS uses for the
       // home screen and app switcher. The manifest link and theme-color
       // meta back the same icon set for Android/desktop "add to home
-      // screen" (docs/adr/0050-aurora-application-identity.md).
+      // screen" (docs/adr/0020-application-visual-identity.md).
       link: [
         {
           rel: 'icon',
@@ -259,7 +259,7 @@ export default defineNuxtConfig({
           name: 'format-detection',
           content: 'telephone=no, date=no, address=no, email=no',
         },
-        // Matches the manifest's theme_color (ADR 0050's brand blue): the
+        // Matches the manifest's theme_color (ADR 0020's brand blue): the
         // browser chrome color on Android and the pull-to-refresh tint.
         { name: 'theme-color', content: '#1a5ceb' },
       ],

@@ -1,7 +1,7 @@
 /**
  * Reads a picked PDF with pdf.js and returns each page's text items, or the
  * check it failed (docs/design/linkedin-import.md, "Reading the file"; ADR
- * 0064 decisions 3 and 5). Every limit counts bytes read and items received,
+ * 0023 decisions 3 and 5). Every limit counts bytes read and items received,
  * never `File.size` or a value the file declares. The worker is terminated
  * when the read ends, however it ends, so each pick needs a fresh one.
  */

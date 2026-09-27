@@ -56,7 +56,7 @@ const onSettingsPath = computed(
 );
 // The gradient CTA reads "Create your resume" on the pages that sell the
 // product; every other route (account flows, settings, authorize) keeps the
-// generic "Create account" label (DESIGN.md; ADR 0050).
+// generic "Create account" label (DESIGN.md; ADR 0020).
 const TEMPLATE_PAGE_PATH = /^\/templates\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 const onMarketingPath = computed(() => (
   route.path === '/'

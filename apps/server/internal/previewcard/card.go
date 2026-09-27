@@ -2,7 +2,7 @@
 // card of a live resume: a 1200 by 630 PNG drawn from a closed card envelope
 // that holds no contact data. See docs/design/link-previews.md, "Preview
 // card" and "Build, storage, and serving", and
-// docs/adr/0055-stored-link-preview-card.md.
+// docs/adr/0014-public-page-head-and-link-preview.md.
 package previewcard
 
 import (

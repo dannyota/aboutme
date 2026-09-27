@@ -16,6 +16,6 @@ to Phase 10.
 The existing rows prove the local implementation. The accepted
 [scaling contract](../../design/scaling/admission.md) adds cross-replica
 admission, revocation and reconnect checks (R2/R3/R6) plus hosted loss/reconnect
-proof; its runtime schema was removed by ADR 0038 and is kept as a design
+proof; its runtime schema was removed by ADR 0005 and is kept as a design
 reference. Those extensions remain pending for both rows; no new SSE frame is
 introduced.

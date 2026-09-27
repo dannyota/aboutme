@@ -1,8 +1,8 @@
 // These tests pin LinkedIn's documented confidential web flow: no PKCE, client
 // credentials in the token request body, a nonce claim that LinkedIn omits but
 // that must match when present, and LinkedIn's cancel errors. See
-// docs/design/linkedin-sign-in.md, docs/adr/0058-linkedin-sign-in-in-production.md,
-// and docs/adr/0063-linkedin-sign-in-without-a-nonce-claim.md.
+// docs/design/linkedin-sign-in.md, docs/adr/0016-sign-in-providers.md,
+// and docs/adr/0016-sign-in-providers.md.
 package auth_test
 
 import (

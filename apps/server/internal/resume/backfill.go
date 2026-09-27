@@ -62,7 +62,7 @@ func (r BackfillResult) String() string {
 // It returns ErrNotFound for an unknown id, and an error -- with no write --
 // when the stored document cannot be projected, decoded, or validated.
 //
-// See docs/adr/0017-resume-document-versioning.md.
+// See docs/adr/0004-resume-document-contract.md.
 func (s *Store) BackfillOne(ctx context.Context, id uuid.UUID) (BackfillResult, error) {
 	return s.backfillOne(ctx, id, nil)
 }

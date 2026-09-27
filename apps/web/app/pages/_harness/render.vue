@@ -195,7 +195,7 @@ if (isCorpus) {
     resolvedDocument.customization.pageFormat
       = requestedPaper as Resume['customization']['pageFormat'];
   }
-  // Presets never set text alignment (ADR 0041), so a justify cell asks
+  // Presets never set text alignment (ADR 0013), so a justify cell asks
   // for it after the template applies, with body text that wraps.
   const requestedAlign = singleton('align');
   if (requestedAlign !== undefined) {

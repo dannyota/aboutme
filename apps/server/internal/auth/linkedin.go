@@ -8,7 +8,7 @@ package auth
 // string on the ID token though LinkedIn's userinfo endpoint (not used here)
 // sends a real boolean, so EmailVerified is a *linkedinBool and a missing claim
 // never counts as verified for registration. See
-// docs/design/linkedin-sign-in.md, ADR 0058, and ADR 0063.
+// docs/design/linkedin-sign-in.md, ADR 0016.
 
 import (
 	"context"
@@ -224,7 +224,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	// go-oidc exposes the nonce but does not validate it. LinkedIn omits the
 	// claim, so only a present claim is compared; a present claim that differs
-	// is rejected before any other claim is used. ADR 0063 records the
+	// is rejected before any other claim is used. ADR 0016 records the
 	// remaining code-injection risk.
 	if idToken.Nonce != "" && idToken.Nonce != tx.Nonce {
 		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonNonceMismatch)

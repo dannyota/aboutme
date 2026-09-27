@@ -45,15 +45,12 @@ published service. The current Compose Caddyfile serves HTTP; this is suitable
 for deployment smoke checks.
 
 Production runs on one AWS Singapore host behind Amazon CloudFront, with RDS and
-private S3, per
-[ADR 0037](adr/0037-single-host-production-without-hosted-uat.md),
-[ADR 0054](adr/0054-cloudfront-edge-for-single-host-production.md), and the
+private S3, per [ADR 0025](adr/0025-single-host-production.md), and the
 [single-host design](design/single-host-production.md). It runs one replica
-under [ADR 0036](adr/0036-single-replica-launch-and-pipeline-migrations.md).
-Revocation leases, print jobs, event subscribers, and limiters hold
-process-local state, which is correct only with one replica. The
-[scaling contract](design/scaling/README.md) records which parts of a
-multi-replica runtime are deferred.
+under [ADR 0026](adr/0026-replica-scaling.md). Revocation leases, print jobs,
+event subscribers, and limiters hold process-local state, which is correct only
+with one replica. The [scaling contract](design/scaling/README.md) records which
+parts of a multi-replica runtime are deferred.
 
 Production enables email-and-password sign-up, Google sign-in, passkey and TOTP
 second factors, and agent access. The public capabilities endpoint reports these
@@ -64,8 +61,8 @@ Successful job-run evidence is not yet recorded.
 The database uses two fixed roles, `aboutme_migrator` and `aboutme_app`:
 `db-setup` creates and grants them, and every migration runs as
 `aboutme_migrator` behind a PostgreSQL session advisory lock
-([ADR 0038](adr/0038-single-baseline-and-plain-migrator.md)). `aboutme_app`
-holds exactly SELECT/INSERT/UPDATE/DELETE on each business table and nothing on
+([ADR 0005](adr/0005-database-migrations.md)). `aboutme_app` holds exactly
+SELECT/INSERT/UPDATE/DELETE on each business table and nothing on
 `goose_db_version`. Live tests prove the exact grant set, migrator ownership of
 every object, and a store smoke flow under `aboutme_app`.
 
@@ -73,7 +70,7 @@ every object, and a store smoke flow under `aboutme_app`.
 
 The [OpenAPI document](api/openapi.yaml) is the exact JSON API authority. OAuth
 protocol and MCP endpoints follow their protocol contracts and the accepted
-[agent-access ADR](adr/0026-mcp-agent-access.md). The implemented surface
+[agent-access ADR](adr/0018-mcp-agent-access.md). The implemented surface
 includes:
 
 - `GET` and `HEAD` health and readiness probes;
@@ -183,7 +180,7 @@ resume HTTP surface. The implemented boundary provides:
   adjacent converters, and released/accepted/emitted version registries;
 - hand-written, append-only Goose migrations as the sole relational schema
   source, with the frozen baseline described in
-  [ADR 0038](adr/0038-single-baseline-and-plain-migrator.md);
+  [ADR 0005](adr/0005-database-migrations.md);
 - sqlc-generated data access from those migrations and `sql/` query sources;
 - schema-derived bounds, aggregate validation, and a bounded codec;
 - owner-scoped CRUD primitives, a three-resume cap, and revision

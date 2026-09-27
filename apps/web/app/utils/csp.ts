@@ -65,7 +65,7 @@ export const HTML_CSP
  *
  * `worker-src 'self'` lets the LinkedIn import page start a same-origin
  * module Web Worker that runs pdf.js (docs/design/linkedin-import.md's
- * "Reading the file"; ADR 0064 decision 4). `script-src 'self'` already
+ * "Reading the file"; ADR 0023 decision 4). `script-src 'self'` already
  * lets same-origin code run, so this adds no new code source; `blob:` and
  * `data:` workers stay blocked. Public resume HTML, the print route, and
  * the harness keep `worker-src 'none'` (`HTML_CSP` above).

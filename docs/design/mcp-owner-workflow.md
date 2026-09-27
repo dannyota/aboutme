@@ -10,7 +10,7 @@ The runner (`apps/server/cmd/mcp-workflow/`) uses the official Go MCP SDK. A
 local proof with synthetic data (`make dev-https-mcp-sdk-check`) runs in CI; the
 production run is `scripts/mcp-owner-workflow.sh production` and runs once. The
 raw JSON-RPC browser proof stays a separate server regression test. The workflow
-follows [ADR 0026](../adr/0026-mcp-agent-access.md) and changes no MCP tool,
+follows [ADR 0018](../adr/0018-mcp-agent-access.md) and changes no MCP tool,
 resume schema, or public contract.
 
 The exact tool registry has 15 tools: `list_resumes`, `get_resume`,

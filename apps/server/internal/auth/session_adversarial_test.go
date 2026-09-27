@@ -2,7 +2,7 @@
 // a bounded predecessor grace interval, inherited absolute expiry and recent
 // reauthentication, and indistinguishable invalid-session outcomes. Row-level
 // queries verify the compare-and-swap and lineage state that black-box return
-// values alone cannot prove. See docs/adr/0015-session-rotation-delivery.md.
+// values alone cannot prove. See docs/adr/0015-accounts-passwords-and-sessions.md.
 package auth_test
 
 import (

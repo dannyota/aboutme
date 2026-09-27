@@ -398,7 +398,7 @@ test('proves a published resume hydrates in a real browser', async ({
       .textContent();
     expect(JSON.parse(structured ?? '{}').mainEntity?.sameAs).toEqual([CUSTOM_LINK]);
     await expect(publicPage.locator(`a[href="${CUSTOM_LINK}"]`)).toHaveText('orcid.example/0000-0001');
-    // Email and phone link after the server-checked rules (ADR 0043).
+    // Email and phone link after the server-checked rules (ADR 0013).
     await expect(publicPage.locator('a[href="mailto:proof@example.com"]')).toHaveText('proof@example.com');
     await expect(publicPage.locator('a[href="tel:+84374837720"]')).toHaveText('(+84) 374837720');
 

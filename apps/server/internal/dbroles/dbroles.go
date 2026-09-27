@@ -40,7 +40,7 @@ type role struct {
 
 // fixedRoles are the two login roles: aboutme_migrator owns every schema
 // object, and aboutme_app is the server's runtime identity. Neither holds a
-// role membership (ADR 0038).
+// role membership (ADR 0005).
 var fixedRoles = []role{
 	{name: "aboutme_migrator", login: true},
 	{name: "aboutme_app", login: true},

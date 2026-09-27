@@ -175,7 +175,7 @@ function startingPoints(order: KeyOrder) {
  * Applies driven through the store and coordinator. The pure matrix above
  * already proves the group state machine for every start and preset pair.
  * The store path adds dispatch and the reconcile of each re-encoded server
- * response (content is an unordered map, ADR 0009), which does not depend on
+ * response (content is an unordered map, ADR 0004), which does not depend on
  * which pair it carries. So it runs every preset as the target from each
  * base, and each preset once as the one already applied, followed by the
  * next preset in the list. Both key orders run through describe.each.

@@ -2,7 +2,7 @@
 // linkedin-pdf-shape.mjs: read one LinkedIn "Save to PDF" file and print only
 // its layout shape, so the design in docs/design/linkedin-import.md ("Facts
 // to confirm before the build") can be confirmed before the import parser is
-// built. docs/adr/0064-linkedin-import-from-save-to-pdf.md records why the
+// built. docs/adr/0023-linkedin-import.md records why the
 // parser reads this file with pdf.js in the browser; this script reads it the
 // same way, locally, so the owner can run it on his own file and send back
 // the printed shape instead of the file itself.
@@ -160,7 +160,7 @@ const DURATION_RE = new RegExp(
   'iu',
 );
 
-// Producer/Creator tool names safe to print verbatim (design and ADR 0064
+// Producer/Creator tool names safe to print verbatim (design and ADR 0023
 // expect Apache FOP and possibly a LinkedIn value); anything else prints as
 // "other" so an unexpected tool string, which could carry more than a name,
 // never reaches the output.

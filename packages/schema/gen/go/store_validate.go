@@ -532,7 +532,7 @@ func ValidatePhotoKeyTraversal(photo *Photo) []ValidationIssue {
 // actually emits into Path/Rule/Message.
 // ValidateDetailIDUniqueness mirrors validation/store.ts's
 // validateDetailIdUniqueness. Old-client writes restore each detail's display
-// by id (docs/adr/0041-contact-link-display-and-body-justify.md), so detail
+// by id (docs/adr/0013-resume-header-and-contacts.md), so detail
 // ids must be unique; every occurrence of a repeated id is reported.
 func ValidateDetailIDUniqueness(details []PersonalDetail) []ValidationIssue {
 	pathsByID := make(map[string][]string)

@@ -77,7 +77,7 @@ func TestResumePreviewCardConstraints(t *testing.T) {
 
 // Unpublish and rename delete the stored card in the same transaction that
 // changes the public state; resume delete removes it by cascade. Updates
-// that keep the resume live under the same slug keep the card (ADR 0055).
+// that keep the resume live under the same slug keep the card (ADR 0014).
 func TestResumePreviewCardRevocation(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)

@@ -24,7 +24,7 @@ const copy = computed(() => landingCopy[locale.value]);
 const legal = computed(() => legalCopy[locale.value]);
 const gallery = computed(() => galleryCopy[locale.value]);
 // The head of the second headline line, with the emphasized suffix removed
-// (DESIGN.md; ADR 0050): "Your link. " before "Your control." lights up.
+// (DESIGN.md; ADR 0020): "Your link. " before "Your control." lights up.
 const head = computed(() => copy.value.title[1].slice(
   0,
   copy.value.title[1].length - copy.value.titleEmphasis.length,

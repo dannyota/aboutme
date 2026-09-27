@@ -1,7 +1,7 @@
 import type { Locale } from '@/i18n/locale';
 
 /**
- * Geometry of the AppSeal stamp (DESIGN.md, ADR 0065): a rounded ticket with
+ * Geometry of the AppSeal stamp (DESIGN.md, ADR 0020): a rounded ticket with
  * the logo's seal mark and a word on top and the public link underneath.
  *
  * SVG text cannot wrap or shrink to fit, so the ticket is sized from measured

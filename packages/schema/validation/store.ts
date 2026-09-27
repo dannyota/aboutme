@@ -117,7 +117,7 @@ interface LayoutSections {
 /**
  * Enforces that every content key appears exactly once across both layout
  * arrays. Duplicate placements, missing references, and orphan content use
- * distinct rule IDs. See docs/adr/0009-section-order-authority.md.
+ * distinct rule IDs. See docs/adr/0004-resume-document-contract.md.
  */
 export function validateLayoutSections(
   content: Record<string, DocumentSection> | undefined,
@@ -224,7 +224,7 @@ export function validateEntryIdUniqueness(
 
 /**
  * Enforces unique contact detail IDs. Old-client writes restore each detail's
- * display by ID (docs/adr/0041-contact-link-display-and-body-justify.md).
+ * display by ID (docs/adr/0013-resume-header-and-contacts.md).
  * Missing or non-string IDs normalize to the empty Go string value.
  */
 export function validateDetailIdUniqueness(
@@ -324,7 +324,7 @@ export function validateDateRanges(
 
 // Only known plain-text contact types are exempt. URL types and malformed
 // discriminators default to the https requirement. See
-// docs/adr/0013-contact-detail-rendering.md.
+// docs/adr/0013-resume-header-and-contacts.md.
 const DETAIL_TYPES_WITHOUT_URL_CONSTRAINT = new Set([
   "email",
   "phone",
@@ -351,7 +351,7 @@ interface PersonalDetails {
  * Requires exact lowercase https:// for linkable or malformed contact types;
  * an empty value remains valid. This store check protects the Go boundary,
  * which does not execute JSON Schema. AJV separately checks full URI syntax.
- * See docs/adr/0013-contact-detail-rendering.md.
+ * See docs/adr/0013-resume-header-and-contacts.md.
  */
 export function validatePersonalDetailUrlSchemes(
   personalDetails: PersonalDetails | undefined,

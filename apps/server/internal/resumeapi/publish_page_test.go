@@ -14,7 +14,7 @@ import (
 )
 
 // The public page title and emoji favicon are publication settings
-// (docs/adr/0042-public-page-title-and-favicon.md): absent keeps the stored
+// (docs/adr/0014-public-page-head-and-link-preview.md): absent keeps the stored
 // value, "" clears it, and any other value is validated.
 
 const publishFlags = `"live":false,"downloadEnabled":true,"seoGeoEnabled":false`

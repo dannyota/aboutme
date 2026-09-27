@@ -212,7 +212,7 @@ body:has(> #public-resume) {
 
 /*
  * A side photo sits beside the name, headline, and details, vertically
- * centered, with header.align applying inside the text column (ADR 0044).
+ * centered, with header.align applying inside the text column (ADR 0013).
  * Only a continuous document narrower than 36em stacks the photo on top
  * again; pages and print always keep the side layout.
  */

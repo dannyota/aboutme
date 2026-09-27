@@ -15,7 +15,7 @@ import (
 )
 
 // previewCards is the stored link-preview card wiring
-// (docs/adr/0055-stored-link-preview-card.md). With PREVIEW_CARD_ENABLED off
+// (docs/adr/0014-public-page-head-and-link-preview.md). With PREVIEW_CARD_ENABLED off
 // every field is nil: pages keep the og.png share image and no scheduler
 // runs.
 type previewCards struct {

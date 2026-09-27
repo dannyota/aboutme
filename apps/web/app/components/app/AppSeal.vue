@@ -5,7 +5,7 @@ import type { Locale } from '@/i18n/locale';
 
 import { SEAL_WORD, sealLayout, STAMP_HEIGHT } from './sealLayout';
 
-// The public seal (DESIGN.md, ADR 0065). The stamp is a rounded ticket: the
+// The public seal (DESIGN.md, ADR 0020). The stamp is a rounded ticket: the
 // logo's seal mark (outer ring and "a") and the word PUBLIC (CÔNG KHAI in
 // Vietnamese) on top, a hairline, then the public link. It grows with the
 // link so a slug never overlaps itself (sealLayout.ts). The mark is a 20 px

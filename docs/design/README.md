@@ -75,5 +75,4 @@ Five rules cut across every page:
 4. Caddy is the sole client-IP trust boundary. Go accepts the canonical client
    address only from configured trusted proxies.
 5. GitHub CI is the full delivery gate; a tag or deploy waits for green CI on
-   the exact release commit
-   ([ADR 0046](../adr/0046-github-ci-delivery-gate.md)).
+   the exact release commit ([ADR 0024](../adr/0024-delivery-gates.md)).

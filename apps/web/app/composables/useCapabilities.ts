@@ -50,7 +50,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const providerLogin = computed(
     () => data.value?.data?.providerLogin === true,
   );
-  // ADR 0039: only the providers the server lists render a button. A missing
+  // ADR 0016: only the providers the server lists render a button. A missing
   // or malformed list renders none, never all three.
   const loginProviders = computed<readonly LoginProvider[]>(() => {
     const listed: unknown = data.value?.data?.providers;

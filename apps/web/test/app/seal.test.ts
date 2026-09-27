@@ -11,7 +11,7 @@ import {
   STAMP_MIN_WIDTH,
 } from '../../app/components/app/sealLayout';
 
-// AppSeal v2 (ADR 0065): a rounded ticket stamp carrying the logo's seal, the
+// AppSeal v2 (ADR 0020): a rounded ticket stamp carrying the logo's seal, the
 // word PUBLIC or CÔNG KHAI, and the public link; and a 20 px seal tile mark.
 describe('AppSeal', () => {
   it('renders the word, the logo seal, and the public link in the stamp',

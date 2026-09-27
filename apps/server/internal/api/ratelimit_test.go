@@ -1620,7 +1620,7 @@ func TestRateLimit_ClockRollback_DoesNotSuppressEvictionSweep(t *testing.T) {
 }
 
 // TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver proves the
-// exported ADR 0018 admission store used by the password rate policies maps
+// exported ADR 0007 admission store used by the password rate policies maps
 // an allowed admission to (true, 0) and a rejected one to (false, >= 1), with
 // no phantom debt after rejection.
 func TestPasswordRateBoundedLimiter_AllowsWithinBudgetAndRejectsOver(t *testing.T) {

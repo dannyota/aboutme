@@ -1,6 +1,6 @@
 /**
  * LinkedIn import browser proof (docs/design/linkedin-import.md, "Tests" and
- * "Browser proof"; docs/design/linkedin-import-ui.md; ADR 0064).
+ * "Browser proof"; docs/design/linkedin-import-ui.md; ADR 0023).
  *
  * One Chromium test proves the case the design's own "Browser proof"
  * paragraph describes: the create dialog's entry link, the app-page CSP,
@@ -264,7 +264,7 @@ test('entry link, review, and create land the imported content in the editor', a
     steps.entryLink = true;
 
     stage('create-csp');
-    // ADR 0064 decision 4; docs/design/linkedin-import.md "Security": the
+    // ADR 0023 decision 4; docs/design/linkedin-import.md "Security": the
     // app page policy is the only one carrying worker-src 'self'.
     expect(importResponse.headers()['content-security-policy'])
       .toContain('worker-src \'self\'');

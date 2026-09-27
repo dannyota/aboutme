@@ -104,7 +104,7 @@ type Config struct {
 	// enable or disable the feature but cannot silently widen those bounds.
 	AgentAccess AgentAccessConfig
 	// ProviderLogin names the providers whose login, callback, link, and
-	// reauthentication routes are registered (ADR 0027, ADR 0039). The zero
+	// reauthentication routes are registered (ADR 0016). The zero
 	// value is password-only; each provider turns on without a code change.
 	ProviderLogin ProviderLogin
 	// PasswordRegistrationDisabled unregisters POST /auth/password/register
@@ -128,7 +128,7 @@ type Config struct {
 	// (PREVIEW_CARD_ENABLED=true): pages name the versioned card, og.png
 	// serves it, and the card scheduler runs. It defaults to false, which
 	// keeps the og.png share image, because the card needs a web renderer
-	// that draws the card envelope (docs/adr/0055-stored-link-preview-card.md).
+	// that draws the card envelope (docs/adr/0014-public-page-head-and-link-preview.md).
 	PreviewCards bool
 	// TOTPActiveKey and TOTPPreviousKey are the canonical 43-character
 	// unpadded base64url TOTP sealing keys from TOTP_ACTIVE_KEY and the

@@ -214,7 +214,7 @@ func contactLabel(kind string) string {
 }
 
 // isLinkContact follows the renderer: a URL type or custom detail links only
-// when its value has the exact lowercase https:// prefix (ADR 0013, ADR 0041).
+// when its value has the exact lowercase https:// prefix (ADR 0013).
 func isLinkContact(kind, value string) bool {
 	switch kind {
 	case "website", "linkedin", "github", "twitter", "custom":

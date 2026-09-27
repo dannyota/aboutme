@@ -11,7 +11,7 @@ import (
 )
 
 // Document v4 adds customization.header.photoPosition and a project entry
-// subtitle (docs/adr/0044-header-photo-position-and-project-subtitle.md). A v1
+// subtitle (docs/adr/0013-resume-header-and-contacts.md). A v1
 // to v3 client cannot express either, so its writes must keep the stored
 // values.
 

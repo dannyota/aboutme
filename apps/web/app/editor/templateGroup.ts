@@ -414,7 +414,7 @@ export function projectTemplateTarget(snapshot: ResumeSnapshot): Projection {
 
 /**
  * The sections a template group is bound to. `content` is an unordered map
- * and `layout.sections` alone orders sections (ADR 0009,
+ * and `layout.sections` alone orders sections (ADR 0004,
  * docs/design/data.md#resume-aggregate), and the server re-encodes content
  * keys in its own order. So the identity lists keys in byte order: only an
  * added, removed, or retyped section changes it.

@@ -103,7 +103,7 @@ the run, so rotation stops at step 4 with the previous key still configured and
 nothing else broken. The owner of that account can replace or remove TOTP after
 proving a passkey or recovery code, because neither action decrypts the row.
 That removes the blocking row. No operator deletes or rewrites a credential
-([ADR 0028](../adr/0028-no-operator-surface.md)).
+([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
 
 ## Key failures
 

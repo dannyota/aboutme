@@ -4,7 +4,7 @@
  * BASIC_EN_PDF_BASE64, OTHER_PDF_BASE64, and LOCALIZED_VI_PDF_BASE64 are the
  * same synthetic fixtures committed at
  * apps/web/test/import/linkedin/fixtures/{basic-en,other,localized-vi}.pdf
- * (docs/design/linkedin-import.md, "Tests"; ADR 0064), base64-encoded here
+ * (docs/design/linkedin-import.md, "Tests"; ADR 0023), base64-encoded here
  * because this package runs in its own container with no access to the
  * apps/web workspace at proof time. No real LinkedIn PDF, or text copied
  * from one, appears anywhere in this repository.

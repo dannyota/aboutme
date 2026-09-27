@@ -4,7 +4,7 @@ How work is reviewed and shipped. The manager, devops, and reviewer read this fi
 
 ## Delivery and review
 
-[ADR 0024](../docs/adr/0024-single-pass-delivery-gates.md) governs:
+[ADR 0024](../docs/adr/0024-delivery-gates.md) governs:
 
 1. **One author per task.** Write the failing test first, make the smallest correct change, and use CI for the affected checks. A local red test is not required when it would violate [resource rules](resources.md); record that it was not run. Adversarial cases (write safety, races, bounds, hostile input, authz, CSRF) are the author's job.
 2. **One fresh review per plan or release,** by the reviewer role, before push. Local-only and test-only changes skip it. Findings go back to the author; the reviewer confirms the fix.

@@ -1,6 +1,6 @@
 // @vitest-environment node
 // The read checks and hostile files of docs/design/linkedin-import.md
-// ("Reading the file", "Tests") and ADR 0064 decisions 3 and 5.
+// ("Reading the file", "Tests") and ADR 0023 decisions 3 and 5.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';

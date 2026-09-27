@@ -2,7 +2,7 @@
 /**
  * `TotpSettings` — authenticator-app (TOTP) setup, replacement, and removal
  * for the account settings second-factor section
- * (`docs/design/totp-second-factor-contract.md`, ADR 0049).
+ * (`docs/design/totp-second-factor-contract.md`, ADR 0017).
  *
  * Mounted from `SecondFactorSettings.vue`, which owns the one shared
  * reauthentication flow for the whole second-factor section: a

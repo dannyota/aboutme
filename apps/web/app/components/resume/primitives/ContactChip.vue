@@ -44,7 +44,7 @@ const iconKeys: Record<PersonalDetail['type'], string> = {
 };
 const href = computed(() => contactHref(props.detail));
 // Display modes apply to web addresses only; an email or phone link always
-// shows its value (ADR 0043).
+// shows its value (ADR 0013).
 const isLink = computed(() => href.value?.startsWith('https://') ?? false);
 const iconKey = computed(() =>
   props.detail.type === 'custom' && isLink.value

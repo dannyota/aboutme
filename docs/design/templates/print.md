@@ -218,14 +218,14 @@ pinned PDF 1.4 classic xref table and its trailer Info object, then replaces the
 two UTC date values without changing byte lengths or offsets. Unsupported or
 ambiguous PDF structures fail the job. The PDF Title is the print page title,
 `<full name> - Resume`
-([ADR 0045](../../adr/0045-pdf-download-name-and-metadata.md)). Repeated real
+([ADR 0011](../../adr/0011-print-capability-and-pdf-output.md)). Repeated real
 PDF and PNG captures of the same revision must match byte for byte.
 
 The link-preview card render uses the same pipeline and the same pinned
 environment, at a 1200 by 630 viewport rather than `@page`; it inherits every
 determinism rule here. The card envelope, image path, live-state gate, and
 storage are defined in [link previews](../link-previews.md) and
-[ADR 0055](../../adr/0055-stored-link-preview-card.md).
+[ADR 0014](../../adr/0014-public-page-head-and-link-preview.md).
 
 Operationally, prints run one at a time inside the Go task's 512 MiB whole-task
 budget, with a configured 20-second cancellation deadline from admission and

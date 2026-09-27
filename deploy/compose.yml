@@ -75,7 +75,7 @@ services:
       - db
 
   # Creates or verifies the fixed aboutme_migrator/aboutme_app roles and
-  # grants their database and schema privileges (cmd/db-setup; ADR 0038).
+  # grants their database and schema privileges (cmd/db-setup; ADR 0005).
   db-setup:
     build:
       context: ..

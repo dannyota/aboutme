@@ -1,5 +1,5 @@
 {
-  "$comment": "Shared by internal/contactlink (Go) and the web renderer tests (TS). href is the anchor target, or null when the value stays text. See docs/adr/0043-email-and-phone-links.md.",
+  "$comment": "Shared by internal/contactlink (Go) and the web renderer tests (TS). href is the anchor target, or null when the value stays text. See docs/adr/0013-resume-header-and-contacts.md.",
   "cases": [
     {
       "type": "email",

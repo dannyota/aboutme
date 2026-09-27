@@ -4,7 +4,7 @@
 // grants their database and schema privileges. If MIGRATOR_PASSWORD and
 // APP_PASSWORD are both set, it also stores their SCRAM verifiers. If only
 // one is set, or a set password fails dbroles.ValidatePasswords, it fails
-// before connecting. See ADR 0038.
+// before connecting. See ADR 0005.
 package main
 
 import (

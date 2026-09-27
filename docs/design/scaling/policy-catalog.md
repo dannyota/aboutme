@@ -1,8 +1,7 @@
 # Admission policy catalog
 
 This catalog lists the production rate limiters and concurrency caps and the
-fleet scope each takes under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). The
+fleet scope each takes under [ADR 0026](../../adr/0026-replica-scaling.md). The
 current columns describe built behavior. The fleet column is accepted design;
 [admission](admission.md) defines it. Numeric budgets come from
 [`budgets.md`](../budgets.md).
@@ -10,7 +9,7 @@ current columns describe built behavior. The fleet column is accepted design;
 ## Current rules
 
 Every limiter is process-local under
-[ADR 0018](../../adr/0018-bounded-rate-limiter.md). Token buckets use the listed
+[ADR 0007](../../adr/0007-bounded-rate-limiter.md). Token buckets use the listed
 limit as burst and refill over the window. Each instance tracks at most 10,000
 keys and sends new keys to one shared overflow bucket when full. Active keys are
 never evicted. Denials consume no token. A denial returns HTTP 429 with a

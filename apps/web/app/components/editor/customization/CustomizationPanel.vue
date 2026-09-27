@@ -92,7 +92,7 @@ function commitEnum(field: CustomizationField, value: string | number): void {
   commit([{ op: 'set', path: field.path, value: typed }]);
 }
 
-// Absent `font.textAlign` means left (ADR 0041), so Left clears the key.
+// Absent `font.textAlign` means left (ADR 0013), so Left clears the key.
 function commitTextAlign(value: string | number): void {
   const stored = valueAt('font.textAlign');
   if (value === 'justify') {
@@ -112,7 +112,7 @@ const hasPhoto = computed(
   () => record.value?.current.document.personalDetails.photo !== undefined,
 );
 
-// Absent means top (ADR 0044). Left or right on a resume with no header
+// Absent means top (ADR 0013). Left or right on a resume with no header
 // creates it with the Header switch's defaults; Top clears the stored value.
 function commitPhotoPosition(value: string): void {
   if (value !== 'top' && value !== 'left' && value !== 'right') return;

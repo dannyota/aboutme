@@ -1,5 +1,5 @@
 // Package viewcount counts real views of public resumes without storing
-// personal data (docs/design/viewer-analytics/counting.md, ADR 0061). It
+// personal data (docs/design/viewer-analytics/counting.md, ADR 0022). It
 // keeps tokens, dedupe keys, and pending counts in memory, and writes only
 // daily aggregates.
 package viewcount

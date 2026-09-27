@@ -115,7 +115,7 @@ func setLoginVerifiers(ctx context.Context, tx *sql.Tx, p LoginPasswords, random
 	}
 	// Every verifier is derived before any SQL runs. The lock then
 	// serializes the role writes with Ensure and other SetLoginVerifiers
-	// calls on this database (ADR 0038).
+	// calls on this database (ADR 0005).
 	if err := lockCatalog(ctx, tx); err != nil {
 		return fmt.Errorf("dbroles: acquire lock: %w", err)
 	}

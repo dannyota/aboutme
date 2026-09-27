@@ -7,8 +7,8 @@ It extends [the production runbook](production.md), which owns the shared
 deploy, rollback, and release-fence mechanics.
 [Key management](../design/totp-key-management.md) and
 [the release-fence contract](../design/passkey-release-fence.md#authenticator-app-key-re-encryption)
-own the design; [ADR 0049](../adr/0049-totp-second-factor-authentication.md)
-owns the decision.
+own the design; [ADR 0017](../adr/0017-second-factor-authentication.md) owns the
+decision.
 
 ## Bootstrap
 
@@ -109,7 +109,7 @@ A decrypt failure during rotation leaves the affected row unchanged, emits the
 with the previous key still configured and nothing else broken. The account
 owner can clear the blocking row by proving a passkey or recovery code and
 replacing or removing TOTP; no operator deletes or rewrites a credential
-([ADR 0028](../adr/0028-no-operator-surface.md)).
+([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
 
 ## The totp-unavailable alarm
 

@@ -50,8 +50,7 @@ intended model, not replacement DDL.
 Runtime coordination tables, such as the write barrier, replica membership,
 claims, rate buckets and publication transitions, are not part of the current
 schema. Their design is kept in [the scaling contract](scaling/README.md) as
-reference for a later fleet
-([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
+reference for a later fleet ([ADR 0005](../adr/0005-database-migrations.md)).
 
 Server-owned relational rows use PostgreSQL UUIDv7 defaults, except the two TOTP
 tables described below. Client-generated UUIDs occur only inside resume
@@ -112,8 +111,8 @@ The canonical document has these top-level values:
 `content` is an **unordered** map from a stable section key to a section.
 `customization.layout.sections.main` and `.sidebar` are the sole section-order
 and placement authority. Every content key appears exactly once across those two
-arrays. [ADR 0009](../adr/0009-section-order-authority.md) records why `content`
-key order cannot be authoritative in PostgreSQL `jsonb`.
+arrays. [ADR 0004](../adr/0004-resume-document-contract.md) records why
+`content` key order cannot be authoritative in PostgreSQL `jsonb`.
 
 Every section carries a `sectionType`, an ordered `entries` array, and optional
 display metadata. Entry IDs are unique across the entire resume, not only inside
@@ -141,7 +140,7 @@ Stored documents are draft-permissive. Each entry requires only its ID and the
 enclosing section's discriminator; domain fields may be absent or empty while
 the user types. Absence means “never entered.” An empty string means “explicitly
 cleared.” Both states survive every round trip.
-[ADR 0005](../adr/0005-draft-permissive-documents.md) records the rationale.
+[ADR 0004](../adr/0004-resume-document-contract.md) records the rationale.
 
 Publishing runs a separate versioned policy. It requires a non-blank full name,
 at least one visible entry, and the declared required fields for each visible
@@ -185,10 +184,10 @@ value must remain equal:
 
 - Emitting v1, v2, or v3 drops v4's `customization.header.photoPosition` and
   every project entry's `subtitle`
-  ([ADR 0044](../adr/0044-header-photo-position-and-project-subtitle.md)).
+  ([ADR 0013](../adr/0013-resume-header-and-contacts.md)).
 - Emitting v1 or v2 drops v3's `personalDetails.details[].display` and
   `customization.font.textAlign`
-  ([ADR 0041](../adr/0041-contact-link-display-and-body-justify.md)).
+  ([ADR 0013](../adr/0013-resume-header-and-contacts.md)).
 - Emitting v1 replaces a font ID that v1 cannot represent with the catalog
   entry's explicit v1 fallback.
 
@@ -199,7 +198,7 @@ stored `photoPosition` while both documents have a header, and each surviving
 project entry's `subtitle`, matched by entry id. Retained types support
 compatibility testing; HTTP delta application may remain generic so handlers do
 not need one compiled code path per old version.
-[ADR 0017](../adr/0017-resume-document-versioning.md) records this boundary. A
+[ADR 0004](../adr/0004-resume-document-contract.md) records this boundary. A
 release that raises the document version cannot be rolled back once it has
 stored the new version; see the
 [production runbook](../runbooks/production.md#rollback).
@@ -210,13 +209,11 @@ stored the new version; see the
 - `packages/schema/released-versions.json` declares immutable releases.
 - Code generation derives discriminators and entry definitions from the schema;
   conformance tests keep JSON Schema, TypeScript, and Go aligned
-  ([ADR 0006](../adr/0006-schema-derived-codegen.md)).
+  ([ADR 0004](../adr/0004-resume-document-contract.md)).
 - `apps/server/migrations/*.sql` is the sole relational schema source. Migration
   DDL is hand-written, applied by the embedded goose command, read by sqlc, and
   is append-only under the baseline marker
-  ([ADR 0010](../adr/0010-goose-only-migrations.md),
-  [ADR 0020](../adr/0020-uat-migration-baseline.md),
-  [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
+  ([ADR 0005](../adr/0005-database-migrations.md)).
 - Generated artifacts are committed and changed only through their source and
   generator.
 

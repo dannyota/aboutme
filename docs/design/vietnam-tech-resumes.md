@@ -327,7 +327,7 @@ Link a GitHub profile only when its pinned repositories show real work
 first **(judgment)**, so say which number takes Zalo in a `custom` detail, such
 as `Zalo: cùng số` or `Zalo: same number`. Keep the `phone` value to digits,
 spaces, and `+`, so it stays a tap-to-call link
-([ADR 0043](../adr/0043-email-and-phone-links.md)).
+([ADR 0013](../adr/0013-resume-header-and-contacts.md)).
 
 ## What an ATS reads
 

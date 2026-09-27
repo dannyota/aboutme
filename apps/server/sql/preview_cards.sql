@@ -1,5 +1,5 @@
 -- name: GetResumePreviewCard :one
--- A stored card is derived data (ADR 0055); every public read passes the
+-- A stored card is derived data (ADR 0014); every public read passes the
 -- live-state gate before it reads one.
 SELECT version, png FROM resume_preview_cards
 WHERE resume_id = sqlc.arg(resume_id);

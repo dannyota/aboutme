@@ -19,7 +19,7 @@ import (
 // numeric values the policy tests assert against the exact budgets.md rows; the
 // route handlers never re-derive them.
 const (
-	// passwordRateMaxKeys bounds every password rate store (ADR 0018): at most
+	// passwordRateMaxKeys bounds every password rate store (ADR 0007): at most
 	// this many active keys plus one shared overflow bucket.
 	passwordRateMaxKeys = 10_000
 
@@ -66,7 +66,7 @@ type RateDecision struct {
 
 // admissionLimiter admits a single string key against a per-key budget.
 // PasswordRatePolicies holds only this narrow interface so the failure limiter
-// (a fixed-window counter) and the admission limiters (ADR 0018 token buckets)
+// (a fixed-window counter) and the admission limiters (ADR 0007 token buckets)
 // can be composed behind the same policy object.
 type admissionLimiter interface {
 	Admit(time.Time, string) RateDecision
@@ -231,7 +231,7 @@ func (p *PasswordRatePolicies) canonicalEmailDigest(canonicalEmail string) ([32]
 	return emailDigest(p.emailHMACKey, canonical), true
 }
 
-// boundedAdmission adapts the exported ADR 0018 store to admissionLimiter.
+// boundedAdmission adapts the exported ADR 0007 store to admissionLimiter.
 type boundedAdmission struct {
 	inner *api.BoundedRateLimiter
 }

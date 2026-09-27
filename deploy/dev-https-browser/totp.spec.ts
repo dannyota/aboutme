@@ -17,7 +17,7 @@
  * the evidence schema never covers.
  *
  * Contract: docs/design/totp-second-factor-contract.md,
- * docs/design/totp-key-management.md, and ADR 0049.
+ * docs/design/totp-key-management.md, and ADR 0017.
  */
 import {
   expect,

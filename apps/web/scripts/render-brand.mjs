@@ -8,7 +8,7 @@
 // `out` is relative to docs/brand/src. A `.jpg` renders opaque; a `.png`
 // keeps a transparent background unless the source adds `opaque=1`. The art
 // is plain HTML and CSS set in the vendored Be Vietnam Pro, so the tokens and
-// the fonts match the product (docs/brand/README.md, ADR 0065).
+// the fonts match the product (docs/brand/README.md, ADR 0020).
 //
 // Usage, from apps/web:  node scripts/render-brand.mjs [name ...]
 // With names (e.g. banner-dark og-image-vi), only those sources render.

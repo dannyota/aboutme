@@ -1,7 +1,6 @@
 # Fleet admission, render and realtime
 
-Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). Not built.
+Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md). Not built.
 The [scaling index](README.md) holds the shared rules.
 
 With two replicas, every limit in the [policy catalog](policy-catalog.md) must
@@ -17,7 +16,7 @@ and `anomaly_count`. Each rate mutation locks its clock, samples
 `effective_now = greatest(high_water_at, raw)`. The high-water value never moves
 back. A backward step refills nothing and extends no window. A forward jump
 refills only up to capacity. Anomaly counts are metrics only. This replaces ADR
-0018's injected process clock for fleet policies.
+0007's injected process clock for fleet policies.
 
 Tests replace the owner-only sampling helper only in a disposable database.
 Production has no time input.

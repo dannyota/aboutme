@@ -3,7 +3,7 @@
 A view counts when a real browser shows a live resume for a while and a person
 interacts with it. Seven layers remove automation without fingerprinting. The
 count is a number per resume per day, with no cookie and no stored personal data
-([ADR 0061](../../adr/0061-layered-human-view-counting.md)).
+([ADR 0022](../../adr/0022-viewer-privacy-and-counting.md)).
 
 ## Flow
 
@@ -29,7 +29,7 @@ sequenceDiagram
 
 The resume HTML stays identical for every viewer, so the in-process public cache
 and `ETag` revalidation keep working
-([ADR 0022](../../adr/0022-public-artifact-revocation.md)). The token is
+([ADR 0010](../../adr/0010-public-artifact-revocation.md)). The token is
 therefore issued by the page's own script when the page loads, not embedded in
 the HTML.
 
@@ -178,8 +178,8 @@ records nothing; a malformed body is a 400 and records nothing.
 
 A restart loses the day's map, so a person who views before and after a deploy
 may count twice that day. Production has one replica
-([ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md)); a
-second replica needs a shared dedupe store ([scaling](../scaling/README.md)).
+([ADR 0026](../../adr/0026-replica-scaling.md)); a second replica needs a shared
+dedupe store ([scaling](../scaling/README.md)).
 
 ## Aggregation
 

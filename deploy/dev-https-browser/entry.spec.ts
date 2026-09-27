@@ -47,7 +47,7 @@ function consoleStage(message: { location(): { url: string }; text(): string }):
 
 // The header CTA reads "Create your resume" on marketing routes (the
 // homepage among them) and "Create account" everywhere else (DESIGN.md;
-// ADR 0050).
+// ADR 0020).
 async function expectSignedOutShell(
   page: Page,
   ctaLabel: 'Create account' | 'Create your resume' = 'Create account',

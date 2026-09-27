@@ -54,24 +54,23 @@ a new fixed root cannot be added only to Caddy, Go, or Nuxt.
 `/healthz` is liveness and never touches PostgreSQL. `/readyz` checks required
 dependencies and render-queue saturation. A dependency outage must remove the
 task from service without causing a liveness restart loop. Probe responses use
-the standard JSON envelope.
-[ADR 0007](../adr/0007-unversioned-health-endpoints.md) records why these routes
-are outside `/api/v1`.
+the standard JSON envelope. [ADR 0002](../adr/0002-system-architecture.md)
+records why these routes are outside `/api/v1`.
 
 Public resume, discovery, media, and generated-artifact routes revalidate
 current live state before reusing cached bytes. The internal print route accepts
 only a 60-second one-use capability bound to an authorized render snapshot; a
 resume ID and network location grant nothing. These boundaries are defined by
-[ADR 0022](../adr/0022-public-artifact-revocation.md) and
-[ADR 0023](../adr/0023-private-print-capability.md).
+[ADR 0010](../adr/0010-public-artifact-revocation.md) and
+[ADR 0011](../adr/0011-print-capability-and-pdf-output.md).
 
 ## Renderer boundary
 
 The renderer is a pure Vue component tree. The editor renders it in the browser,
 Nuxt renders it for public HTML, and Chromium prints an internal Nuxt route for
 PDF and images. Go never implements resume layout. This removes a second
-rendering authority; [ADR 0002](../adr/0002-go-api-nuxt-ssr-split.md) records
-the choice.
+rendering authority; [ADR 0002](../adr/0002-system-architecture.md) records the
+choice.
 
 For public HTML, Go remains the response controller while Nuxt remains the sole
 renderer. Go freezes a leased snapshot, calls the direct Nuxt origin at exact

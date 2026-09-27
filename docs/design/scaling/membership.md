@@ -1,7 +1,6 @@
 # Replica membership and lifecycle
 
-Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). Not built.
+Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md). Not built.
 The [scaling index](README.md) holds the shared rules.
 
 A replica may serve, own work, or be reclaimed only through durable membership
@@ -12,7 +11,7 @@ has stopped.
 
 - One EC2 node runs one complete replica: Caddy, Go with Chromium, and Nuxt, in
   separate task cgroups. The Go task keeps its 512 MiB bound.
-- Production capacity is one or two nodes (ADR 0034). No deploy or replacement
+- Production capacity is one or two nodes (ADR 0026). No deploy or replacement
   may start a third node, so deploys replace one node at a time.
 - A node is eligible only when its three tasks carry the same approved release
   digest and coordination reports the replica ready. A partial or mixed replica
@@ -180,7 +179,7 @@ failure but never turns it into success.
 
 ## Lifecycle controller
 
-ADR 0035 runs the controller on EventBridge Scheduler and one Step Functions
+ADR 0026 runs the controller on EventBridge Scheduler and one Step Functions
 Standard state machine. A conditional-write object in the private state bucket
 holds ownership.
 

@@ -68,8 +68,7 @@ diagnostics.
 
 ## Recreate a database that predates the release baseline
 
-The release baseline
-([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)) has no
+The release baseline ([ADR 0005](../adr/0005-database-migrations.md)) has no
 ownership-adoption path: an `aboutme` or `aboutme_dev` database created before
 it cannot be migrated forward and must be recreated. Stop native and HTTPS
 services first. Keep the shared database container running and wait for database

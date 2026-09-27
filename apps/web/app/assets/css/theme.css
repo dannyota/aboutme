@@ -1,4 +1,4 @@
-/* Application chrome tokens (DESIGN.md, ADR 0050). Resume documents keep their
+/* Application chrome tokens (DESIGN.md, ADR 0020). Resume documents keep their
    own renderer tokens; nothing here may reach the renderer. */
 :root {
   --radius: 10px;
@@ -20,7 +20,7 @@
   --accent: #eaf2ff;
   --accent-foreground: #101b3f;
   /* Burnt orange, kept apart from seal red so Delete never reads as Publish
-     (ADR 0065). */
+     (ADR 0020). */
   --destructive: #b54708;
   --border: #dce5f5;
   --input: #7886ae;
@@ -28,11 +28,11 @@
   --seal: #cc2649;
   --seal-foreground: #ffffff;
   /* Seal red for text and thin strokes: the stamp's words and ring and the
-     logo mark (ADR 0065). Equal to --seal in light theme. */
+     logo mark (ADR 0020). Equal to --seal in light theme. */
   --seal-text: #cc2649;
   /* Text-safe blue for links and blue text on tinted surfaces. */
   --link: #123edb;
-  /* Two blues only (ADR 0065): brand-blue is the primary fill and
+  /* Two blues only (ADR 0020): brand-blue is the primary fill and
      brand-deep-blue the text-safe link blue. */
   --brand-blue: var(--primary);
   --brand-deep-blue: var(--link);
@@ -47,7 +47,7 @@
   --surface-destructive: color-mix(in srgb, var(--destructive) 7%, var(--card));
   --editor-canvas: #eef3fc;
   /* Chrome spacing (DESIGN.md): the 8 px module and the named rhythms that
-     were only written down before (ADR 0065). */
+     were only written down before (ADR 0020). */
   --space-module: 8px;
   --space-dialog-title: 6px;
   --space-field: 16px;
@@ -97,7 +97,7 @@
   --shadow-paper:
     0 1px 2px rgba(23, 26, 24, 0.06), 0 12px 32px rgba(23, 26, 24, 0.1);
   /* Homepage hero: the gradient CTA's hover state, its resting shadow, and
-     the glow behind the sample sheet (DESIGN.md; ADR 0050). */
+     the glow behind the sample sheet (DESIGN.md; ADR 0020). */
   --gradient-brand-strong: linear-gradient(90deg, #1a5ceb, #5144f0);
   --gradient-hero-glow:
     radial-gradient(55% 40% at 22% 28%, rgb(53 200 245 / 0.3), transparent 70%),
@@ -275,7 +275,7 @@ html[data-theme="dark"] {
   --text-2xl: 2rem;
   --text-2xl--line-height: 1.3;
   /* The scale grows steadily and leaves room for stacked Vietnamese
-     diacritics (ệ, ở, Ử) above a heading line (ADR 0065). */
+     diacritics (ệ, ở, Ử) above a heading line (ADR 0020). */
   --text-3xl: 2.5rem;
   --text-3xl--line-height: 1.25;
   --text-4xl: 3rem;

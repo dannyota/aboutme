@@ -22,7 +22,7 @@ function detail(
 
 // The corpus is shared with the server's internal/contactlink tests, so the
 // renderer and the public page validator link exactly the same values
-// (docs/adr/0043-email-and-phone-links.md).
+// (docs/adr/0013-resume-header-and-contacts.md).
 interface CorpusCase {
   type: PersonalDetail['type'];
   value: string;

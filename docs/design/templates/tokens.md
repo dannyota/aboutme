@@ -88,8 +88,8 @@ contact details (`contract.md` §5.1). `customization.heading` is the **section
 heading**: a section's `displayName` and its rule (`contract.md` §5.3).
 
 `layout.sections` is marked derived because `applyTemplate` computes it from the
-document's content keys (ADR 0008) and only `PATCH /resumes/{id}/structure` may
-rewrite it (ADR 0009). A preset never contains section keys.
+document's content keys (ADR 0012) and only `PATCH /resumes/{id}/structure` may
+rewrite it (ADR 0004). A preset never contains section keys.
 
 ## 3. Typography
 
@@ -114,7 +114,7 @@ Every size is a renderer-fixed multiple of `--fs-base`, which is
 paragraphs and list items and sets `hyphens: auto`, which hyphenates by the
 resume's `lang`. Headings, the header, dates and meta lines, contact rows, and
 skill or language tags never justify. A template switch keeps the user's choice,
-so presets do not set it (ADR 0041).
+so presets do not set it (ADR 0013).
 
 ### 3.2 Weights
 
@@ -169,7 +169,7 @@ keeps `--photo-size` and is vertically centered against the text block
 
 With `outline`, a typed detail's icon stands in for its default label, which is
 omitted. A non-empty user `label` and a `custom` detail's label still render,
-and no value is ever hidden (ADR 0040).
+and no value is ever hidden (ADR 0013).
 
 The enum is `none` | `outline`. Lucide is stroke-only, so a `solid` value would
 require a second icon family or a `fill: currentColor` hack that turns many
@@ -177,7 +177,7 @@ marks into blobs. The schema and every preset therefore use `outline` for a
 visible header icon. The GitHub, LinkedIn, and X contacts are the exception:
 they render their filled brand marks (Simple Icons for GitHub and X, Font
 Awesome Free for LinkedIn) in the icon colour, because those brands have no
-stroked mark (ADR 0041).
+stroked mark (ADR 0013).
 
 Header intervals grow outward, so each icon reads with its own value and the
 details read as one group under the headline. The renderer fixes them for every

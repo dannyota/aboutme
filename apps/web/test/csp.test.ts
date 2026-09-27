@@ -20,7 +20,7 @@ describe('HTML_CSP (public resume HTML and the harness)', () => {
   });
 
   it('keeps worker-src \'none\' for public HTML, print, and the harness '
-    + '(docs/design/linkedin-import.md, ADR 0064 decision 4)', () => {
+    + '(docs/design/linkedin-import.md, ADR 0023 decision 4)', () => {
     expect(HTML_CSP).toContain('worker-src \'none\'');
   });
 });
@@ -37,10 +37,10 @@ describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
   });
 
   it('allows only a same-origin worker, per docs/design/linkedin-import.md '
-    + 'and ADR 0064, with every other directive unchanged', () => {
+    + 'and ADR 0023, with every other directive unchanged', () => {
     // The LinkedIn import page starts a same-origin module worker for
     // pdf.js (docs/design/linkedin-import.md's "Reading the file", ADR
-    // 0064 decision 4). worker-src 'self' adds no new code source, since
+    // 0023 decision 4). worker-src 'self' adds no new code source, since
     // script-src 'self' already lets same-origin code run; blob: and
     // data: workers must stay blocked.
     const workerSrc = APP_CSP.split(';')

@@ -3,7 +3,7 @@
  * the reviewed choices into the resume document and the create request. See
  * docs/design/linkedin-import.md, "Mapping" (including "Limits") and "What
  * is dropped", and docs/design/linkedin-import-ui.md, "Review state"; ADR
- * 0064.
+ * 0023.
  */
 import type {
   Content,

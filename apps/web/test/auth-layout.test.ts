@@ -10,7 +10,7 @@ import { setSiteLocale } from './support/locale';
 
 // `AuthLayout` frames every account page with a form-first shell and a
 // brand panel shown only from 1024 px (DESIGN.md "Authenticated chrome and
-// editor"; ADR 0050 keeps this chrome off the renderer).
+// editor"; ADR 0020 keeps this chrome off the renderer).
 
 registerCapabilities();
 

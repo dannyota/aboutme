@@ -18,11 +18,10 @@ numbers after the migrations already queued.
 | `oauth_transactions`       | Sign in to view | Purpose check gains `view`; nullable `resume_id` required exactly when purpose is `view`                                                                    |
 
 View counts is migration `00008_resume_view_counts.sql`. Every new table grants
-`aboutme_app` explicitly
-([ADR 0038](../../adr/0038-single-baseline-and-plain-migrator.md)). A `day` is
-an Asia/Ho_Chi_Minh date. Both day tables have a `day` index for the privacy
-sweep, which deletes rows older than 400 days in bounded pages. No resume column
-is added for counts: the view token carries the resume ID sealed
+`aboutme_app` explicitly ([ADR 0005](../../adr/0005-database-migrations.md)). A
+`day` is an Asia/Ho_Chi_Minh date. Both day tables have a `day` index for the
+privacy sweep, which deletes rows older than 400 days in bounded pages. No
+resume column is added for counts: the view token carries the resume ID sealed
 ([counting](counting.md#layers-5-and-6-token-and-proof-of-work)). No table holds
 anything about a viewer.
 
@@ -74,7 +73,7 @@ publish route's request with its switch in its own release.
 ## Rate limits
 
 New policies on the existing bounded limiter
-([ADR 0018](../../adr/0018-bounded-rate-limiter.md)):
+([ADR 0007](../../adr/0007-bounded-rate-limiter.md)):
 
 | Route                | Limit                                              |
 | -------------------- | -------------------------------------------------- |
@@ -130,7 +129,7 @@ closed; when the buffer is full, the outcome is dropped and logged.
 
 ## Tests
 
-Tests cite this design, ADRs 0060 to 0062, or `AC-*` IDs.
+Tests cite this design, ADR 0022, or `AC-*` IDs.
 
 - Go, counting: each layer's outcome with an injected clock and random source;
   token seal, age bounds, replay; ALTCHA verify with a solved challenge, a

@@ -11,7 +11,7 @@ const webRoot = resolve(import.meta.dirname, '../..');
 const workspaceRoot = resolve(webRoot, '../..');
 const themePath = resolve(webRoot, 'app/assets/css/theme.css');
 
-// Aurora application chrome tokens (ADR 0050, amended by ADR 0065). Resume
+// Aurora application chrome tokens (ADR 0020). Resume
 // renderer tokens are covered separately below; they must never move with
 // this palette.
 const lightTokens = {
@@ -180,7 +180,7 @@ describe('application theme', () => {
     ]) {
       expect(theme[`--color-brand-${brand}`]).toBe(`var(--brand-${brand})`);
     }
-    // Pink and orange were retired as brand colors (ADR 0065).
+    // Pink and orange were retired as brand colors (ADR 0020).
     expect(theme['--color-brand-pink']).toBeUndefined();
     expect(theme['--color-brand-orange']).toBeUndefined();
     for (const surface of ['blue', 'indigo', 'pink', 'destructive']) {
@@ -206,7 +206,7 @@ describe('application theme', () => {
     expect(theme['--text-6xl']).toBe('3.75rem');
     expect(theme['--text-6xl--line-height']).toBe('1.2');
     // The gallery page uses the Tailwind default text-5xl; the homepage
-    // hero does not need it overridden (DESIGN.md; ADR 0050).
+    // hero does not need it overridden (DESIGN.md; ADR 0020).
     expect(theme['--text-5xl']).toBeUndefined();
     for (const step of ['xs', 'sm', 'base', 'md']) {
       expect(theme[`--text-${step}--line-height`]).toBe('1.5');
@@ -243,7 +243,7 @@ describe('application theme', () => {
         .map((path) => path.slice(webRoot.length + 1))
         .sort();
 
-      // The logo carries the seal (ADR 0065): its mark and the dot of .vn.
+      // The logo carries the seal (ADR 0020): its mark and the dot of .vn.
       expect(consumers).toEqual([
         'app/components/app/AppLogo.vue',
         'app/components/app/AppSeal.vue',

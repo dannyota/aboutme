@@ -38,7 +38,7 @@ type ServiceDependencies struct {
 	Live           http.Handler
 	// Logger receives closed, content-free diagnostics. Nil disables them.
 	Logger *slog.Logger
-	// Cards turns on stored preview cards (ADR 0055). Nil keeps the og.png
+	// Cards turns on stored preview cards (ADR 0014). Nil keeps the og.png
 	// share image, so the server can deploy before the web card renderer.
 	Cards PreviewCards
 	// Views records crawler and link-preview fetches of resume pages. Nil

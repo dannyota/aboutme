@@ -745,7 +745,7 @@ func TestResumeSchemaPatterns_CompileUnderGoRE2(t *testing.T) {
 }
 
 // Old-client writes restore each detail's display by id
-// (docs/adr/0041-contact-link-display-and-body-justify.md), so detail ids must
+// (docs/adr/0013-resume-header-and-contacts.md), so detail ids must
 // be unique. The messages mirror test/store-validation.test.ts.
 func TestValidateDocument_DuplicateDetailID(t *testing.T) {
 	resume := loadResumeFixture(t, "store", "invalid-duplicate-detail-id.json")

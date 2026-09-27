@@ -1,7 +1,7 @@
 /**
  * Loads pdf.js 6.3.289 (legacy build) for the LinkedIn import page and starts
  * its dedicated module worker (docs/design/linkedin-import.md, "Reading the
- * file"; ADR 0064 decision 3). Only the import page calls this, in the
+ * file"; ADR 0023 decision 3). Only the import page calls this, in the
  * browser; the `import.meta.client` guard keeps pdf.js out of the server
  * bundle.
  */

@@ -27,14 +27,13 @@ lost later is left to the page.
 
 The login page always shows the email and password form. Each auth page shows
 one provider link per name in the capabilities `providers` list
-([ADR 0039](../adr/0039-per-provider-login-enablement.md)). When
-`passwordRegistration` is false, or a register request returns `404`,
-registration shows a short note offering the listed providers instead of its
-form; a missing field counts as true, and the form holds its space hidden while
-the read is pending. After registration, a notice says to check spam and offers
-every listed provider; an expired verification link does the same. Verification
-and reset strip the `#token=` fragment before any network call and load no
-third-party resource.
+([ADR 0016](../adr/0016-sign-in-providers.md)). When `passwordRegistration` is
+false, or a register request returns `404`, registration shows a short note
+offering the listed providers instead of its form; a missing field counts as
+true, and the form holds its space hidden while the read is pending. After
+registration, a notice says to check spam and offers every listed provider; an
+expired verification link does the same. Verification and reset strip the
+`#token=` fragment before any network call and load no third-party resource.
 
 Account settings show whether a password is set and allow add or change after
 recent reauthentication. The sign-in providers block lists every linked identity
@@ -72,7 +71,7 @@ Vietnamese default.
 
 The application chrome is every page and editor panel outside the pure renderer.
 It is built on Tailwind CSS v4 and shadcn-vue primitives with reka-ui
-underneath. [ADR 0029](../adr/0029-application-ui-toolkit.md) owns the choice.
+underneath. [ADR 0019](../adr/0019-application-ui-toolkit.md) owns the choice.
 
 Three layers own every look and behavior:
 
@@ -83,12 +82,11 @@ Three layers own every look and behavior:
 | Surfaces          | `app/pages/**`, editor panels | Compose the two layers; layout utilities only; no element-level CSS               |
 
 Generated primitives are not hand-styled, with one exception
-([ADR 0052](../adr/0052-guarded-token-edits-to-generated-primitives.md)): a
-variant may swap its utilities for chrome tokens when a unit test asserts each
-edited class. After `apps/web/scripts/ui-add.sh` regenerates the primitive, the
-edits are re-applied before the change lands. The button's `default`, `link`,
-and `seal` variants carry such edits, guarded by
-`apps/web/test/ui/button-variants.test.ts`.
+([ADR 0019](../adr/0019-application-ui-toolkit.md)): a variant may swap its
+utilities for chrome tokens when a unit test asserts each edited class. After
+`apps/web/scripts/ui-add.sh` regenerates the primitive, the edits are re-applied
+before the change lands. The button's `default`, `link`, and `seal` variants
+carry such edits, guarded by `apps/web/test/ui/button-variants.test.ts`.
 
 A surface renders no raw `<button>`, `<input>`, `<select>`, or `<textarea>` and
 no hand-written dialog. The two exceptions are the crop stage and the
@@ -108,11 +106,9 @@ seal on the sheet means "public at this link", pressed by a person and never by
 an agent. Draft or saved states are pencil marks, and the chrome typeface is Be
 Vietnam Pro. No chrome token, gradient, or shadow reaches the renderer; the
 preview sheet keeps its own document background in both themes and is never
-cropped. [ADR 0050](../adr/0050-aurora-application-identity.md) owns the
-identity, building on
-[ADR 0030](../adr/0030-stamped-document-visual-identity.md). Copy is sentence
-case, buttons name the action they perform, an empty state says what to do next,
-and an error says what happened and how to fix it.
+cropped. [ADR 0020](../adr/0020-application-visual-identity.md) owns the
+identity. Copy is sentence case, buttons name the action they perform, an empty
+state says what to do next, and an error says what happened and how to fix it.
 
 Text fields commit on blur or Enter. A non-empty changed value is set, an empty
 value removes the field, an unchanged value sends nothing, and Escape reverts to
@@ -173,7 +169,7 @@ Print authority is a one-use Go capability sent in a redacted authorization
 header, never a URL or cookie. A resume ID or direct Nuxt access grants nothing,
 and only the controlling Go render job can accept the output.
 [Security](security.md#internal-print-authority) and
-[ADR 0023](../adr/0023-private-print-capability.md) define the protocol.
+[ADR 0011](../adr/0011-print-capability-and-pdf-output.md) define the protocol.
 
 The server supplies `renderContext.lng` from the total language projection in
 [the data design](data.md#relational-model). Null, empty, and invalid legacy
@@ -187,7 +183,7 @@ then `SectionRenderer` with section components and renderer primitives.
 `ResumeHeader` renders contact details in array order with the link rules of
 [template contract §5.1](templates/contract.md#51-header): web links only after
 an exact lowercase `https://` check, and `mailto:` or `tel:` only after a strict
-check ([ADR 0043](../adr/0043-email-and-phone-links.md)).
+check ([ADR 0013](../adr/0013-resume-header-and-contacts.md)).
 
 `LayoutColumns` reads order only from `customization.layout.sections`. In
 one-column mode it renders `main` then `sidebar`, preserving all sections. No
@@ -198,8 +194,8 @@ stored content becomes invisible because a column mode changed.
 A template is data, not a component. A preset sets supported customization
 values and carries a placement rule instead of literal section keys. Applying a
 preset computes placement against the current document and leaves content
-untouched. [ADR 0008](../adr/0008-template-apply-semantics.md) defines the
-algorithm; the detailed contract lives in [templates/](templates/README.md).
+untouched. [ADR 0012](../adr/0012-template-placement.md) defines the algorithm;
+the detailed contract lives in [templates/](templates/README.md).
 
 The template contract accepts these limits:
 
@@ -265,7 +261,7 @@ forbidden.
   When the owner sets an emoji, the page links it as an SVG `data:` icon. The
   server computes both exact values; the renderer writes them and the public
   HTML validator accepts nothing else
-  ([ADR 0042](../adr/0042-public-page-title-and-favicon.md)).
+  ([ADR 0014](../adr/0014-public-page-head-and-link-preview.md)).
 - When download is enabled, the public page shows a link to its own PDF
   (`/api/v1/public/resumes/{slug}/pdf`) in the page bar above the resume, at the
   right of the measure; the [page bar spec](public-page-theme.md) sets its look.
@@ -275,7 +271,7 @@ forbidden.
   enabled. The public PDF and the owner's PDF download as
   `<Full-Name>-Resume.pdf`: `filename` carries the name folded to ASCII, and an
   RFC 5987 `filename*` carries it in UTF-8
-  ([ADR 0045](../adr/0045-pdf-download-name-and-metadata.md)).
+  ([ADR 0011](../adr/0011-print-capability-and-pdf-output.md)).
 - Every public page shows a "Built with aboutme.vn" link ("Tạo bằng aboutme.vn"
   for Vietnamese, English for any other language) at the left of the same row,
   or alone in that row when download is off. It links the canonical origin's
@@ -292,7 +288,7 @@ accepted residual risk.
 
 Golden HTML covers every preset and both display modes against two in-memory
 starting states of the `full` fixture: populated one-column and populated two-
-column layouts, as ADR 0008 requires. Focused tests cover draft emptiness and
+column layouts, as ADR 0012 requires. Focused tests cover draft emptiness and
 optional fields. A pinned browser, fonts, timezone, locale, and representative
 screenshot subset cover visual output, including Vietnamese text.
 
@@ -302,7 +298,7 @@ Published HTML uses `Cache-Control: no-cache, must-revalidate` and a strong
 entity tag. A shared cache may keep it for up to 60 seconds, but every reuse
 revalidates through the origin live-state gate, and private render caches key
 artifacts by public generation. A cache hit is never authorization
-([ADR 0022](../adr/0022-public-artifact-revocation.md)).
+([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
 An open public page listens for SSE invalidations, refetches uncached public
 JSON, and renders in place. A client never treats an SSE event as document data.

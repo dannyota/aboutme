@@ -2,7 +2,7 @@ package auth
 
 // Link and reauthentication callbacks must authenticate as the transaction's
 // user. Provider identity, not email, determines the target. See
-// docs/design/security.md and docs/adr/0014-oauth-start-methods.md.
+// docs/design/security.md and docs/adr/0016-sign-in-providers.md.
 
 import (
 	"context"

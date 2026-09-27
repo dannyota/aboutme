@@ -4,7 +4,7 @@ Code rules and the checks each change area needs. Implementers, qa, reviewers, a
 
 - Pin the latest stable dependency at scaffold time; upgrades need review. Exact tool versions live in `.tool-versions`; `make tools-check` rejects drift. When an installed tool is newer than the pin, update `.tool-versions` and every mirror, then run the affected checks.
 - Follow Google Go and TypeScript style with `gofmt`/`goimports` and the configured ESLint. Tests inject clocks, randomness, and UUIDs and pin renderer inputs. Never retry a flaky test into a pass.
-- Never hand-edit generated files; change the source and regenerate. Migrations are append-only; roll back with a forward migration and grant `aboutme_app` explicitly ([ADR 0038](../docs/adr/0038-single-baseline-and-plain-migrator.md)).
+- Never hand-edit generated files; change the source and regenerate. Migrations are append-only; roll back with a forward migration and grant `aboutme_app` explicitly ([ADR 0005](../docs/adr/0005-database-migrations.md)).
 - A contract change updates schema or OpenAPI sources, generated clients, tests, examples, design docs, and traceability in one change.
 - Do not weaken security controls: least privilege, strict input bounds, versioned sanitizing, CSRF and Origin checks, `__Host-` cookies, route-specific rate limits, CSP, secret-free logs.
 

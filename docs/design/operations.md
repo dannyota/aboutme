@@ -23,7 +23,7 @@ applicable deletion job commit together. Object-storage latency does not extend
 the API transaction and cannot restore access. The 24-hour physical-removal
 target is measured from reference revocation. A breach creates a lifecycle audit
 event and alert and remains queued until a terminal outcome is recorded.
-[ADR 0019](../adr/0019-private-media-delivery.md) owns this boundary.
+[ADR 0009](../adr/0009-private-media-delivery.md) owns this boundary.
 
 Public delivery and discovery disclosures are product requirements. The final
 legal wording and any jurisdiction-specific data-residency obligations require
@@ -49,7 +49,7 @@ Export and deletion are cookie-only account operations. They accept no body,
 query, resume-schema, conditional, or idempotency input. Export emits the
 current schema response header and exact `no-store, no-transform`. Deletion
 rechecks a live recently reauthenticated session under the account lock, drains
-all affected public generations under ADR 0022, and removes account state in one
+all affected public generations under ADR 0010, and removes account state in one
 transaction. A concurrent resume creation invalidates the planned set; three
 fresh attempts are allowed before a closed `account_changed` conflict.
 
@@ -129,9 +129,9 @@ notification path do not satisfy the gate.
 - Hostile-corpus and browser tests cover rich-text and content security policy.
 - Golden and visual tests cover renderer determinism.
 - GitHub CI is the full delivery gate
-  ([ADR 0046](../adr/0046-github-ci-delivery-gate.md)); native HTTPS browser
-  checks prove features CI cannot cover.
+  ([ADR 0024](../adr/0024-delivery-gates.md)); native HTTPS browser checks prove
+  features CI cannot cover.
 - Production at `https://aboutme.vn` is where the owner tests the complete
   product, restore, migration, alarms, real email, and edge behavior. A separate
   UAT environment returns at about 500 users
-  ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)).
+  ([ADR 0025](../adr/0025-single-host-production.md)).

@@ -2,7 +2,7 @@
 // Tests for turning a parsed LinkedIn profile into the review and the resume
 // document. See docs/design/linkedin-import.md, "Mapping" (including
 // "Limits") and "What is dropped", and docs/design/linkedin-import-ui.md,
-// "Review state"; ADR 0064.
+// "Review state"; ADR 0023.
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { describe, expect, it } from 'vitest';
 

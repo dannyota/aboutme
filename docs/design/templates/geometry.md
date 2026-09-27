@@ -54,7 +54,7 @@ rich text, in preview, SSR, and print alike. No preset can remove it
 - Remove the inline-link underline. It is renderer-fixed (§6).
 - Ship CSS, a component, or a class hook. Nothing records which preset produced
   a document's values, so nothing can key styling off it.
-- Set `layout.sections`. ADR 0008 computes it.
+- Set `layout.sections`. ADR 0012 computes it.
 - Reference a color by hex anywhere in the renderer. Roles only.
 - Depend on a color surviving the clamp unchanged. Design against the roles, and
   verify the preset's own palette passes `colors.md` §5 before clamping.

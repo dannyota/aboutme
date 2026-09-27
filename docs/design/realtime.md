@@ -2,7 +2,7 @@
 
 Realtime has separate write and read paths. Autosave is ordinary HTTP;
 Server-Sent Events (SSE) carry invalidation only
-([ADR 0003](../adr/0003-sse-over-websocket.md)).
+([ADR 0002](../adr/0002-system-architecture.md)).
 
 ## Writes
 
@@ -37,7 +37,7 @@ loss closes subscriptions, and admission resumes after `LISTEN` succeeds.
 
 SSE is not the revocation authority. Every shared-cache reuse revalidates
 through the live-state gate, and state mutations wait on the revocation fence
-([ADR 0022](../adr/0022-public-artifact-revocation.md)). An unpublish closes the
+([ADR 0010](../adr/0010-public-artifact-revocation.md)). An unpublish closes the
 public stream, and the next refetch returns `404`.
 
 ## Stream contract

@@ -133,7 +133,7 @@ describe('internal public render handler', () => {
           document: { ...document, nope: true },
         },
       }),
-      // The page head values are closed too (ADR 0042).
+      // The page head values are closed too (ADR 0014).
       JSON.stringify({ ...request, pageTitle: undefined }),
       JSON.stringify({ ...request, pageTitle: '' }),
       JSON.stringify({ ...request, pageTitle: 7 }),

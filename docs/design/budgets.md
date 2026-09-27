@@ -7,7 +7,7 @@ changing a number requires a reviewed change with evidence.
 ## Operating budget
 
 Production costs about $45–55 a month before tax
-([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)); the
+([ADR 0025](../adr/0025-single-host-production.md)); the
 [single-host design](single-host-production.md#monitoring-and-cost) itemizes it.
 The CloudFront edge adds about $11, mostly WAF and the exportable origin
 certificate. CloudFront is pay-as-you-go: its free tier covers 1 TB and 10
@@ -174,14 +174,14 @@ Notes on rows whose reason is not obvious:
 - **Documents.** The `lng` row is the database's coarse bound; the HTTP boundary
   canonicalizes BCP 47 tags first ([data design](data.md#relational-model)).
   Request-path idempotency cleanup is opportunistic; the hourly sweep is the
-  retention guarantee ([ADR 0016](../adr/0016-transactional-idempotency.md)).
+  retention guarantee ([ADR 0006](../adr/0006-transactional-idempotency.md)).
 - **Photos.** The edge and pixel caps admit a 4,032×3,024 photo while bounding
   an eight-byte-per-pixel working image at 128 MiB. The decoders are
   synchronous, so the five-second normalization ceiling is a measured gate on a
   frozen hostile corpus, repeated on the production host, not a timer. A failing
   fixture blocks release; it never creates detached work.
 - **Rate limiters.** Each instance keeps at most 10,000 keys with the shared
-  overflow of [ADR 0018](../adr/0018-bounded-rate-limiter.md). Resume read and
+  overflow of [ADR 0007](../adr/0007-bounded-rate-limiter.md). Resume read and
   write limits leave room for several editor tabs above the one-second autosave
   cadence. Operation counts per request are separate from the 256 KiB body cap.
 - **Public render.** `canonicalOrigin` is one normalized ASCII origin with no

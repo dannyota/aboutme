@@ -1,6 +1,6 @@
 # AWS cost workload
 
-Status: historical research input from 2026-09-06. ADR 0037 superseded the UAT,
+Status: historical research input from 2026-09-06. ADR 0025 superseded the UAT,
 CloudFront, load-balancer, and autoscaling release path. Amounts are US dollars
 before tax and describe the saved model, not the live production service.
 

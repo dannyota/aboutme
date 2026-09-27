@@ -67,7 +67,7 @@ beforeEach(() => {
   clearNuxtData();
 });
 
-describe('settings sign-in providers (ADR 0039)', () => {
+describe('settings sign-in providers (ADR 0016)', () => {
   it('offers only Google when only Google is enabled', async () => {
     const wrapper = await mountSettings(['google']);
     expect(await linkButtons(wrapper)).toEqual(['Link Google']);

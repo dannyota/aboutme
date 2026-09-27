@@ -2,7 +2,7 @@
 
 These limits are accepted for the current template contract. The editor must
 warn where noted. Changing a stored field requires the document-version process
-in [ADR 0017](../../adr/0017-resume-document-versioning.md).
+in [ADR 0004](../../adr/0004-resume-document-contract.md).
 
 ## 9. Known contract limits
 
@@ -12,13 +12,13 @@ in [ADR 0017](../../adr/0017-resume-document-versioning.md).
    `layout.surfaceTarget`, and the `header` object make a tinted header band or
    sidebar and a distinct header treatment expressible. Deeper structural
    variety — a timeline rail, per-template markup — remains unreachable. ADR
-   0008 fixed placement expressiveness; the residue of its concern ("templates
+   0012 fixed placement expressiveness; the residue of its concern ("templates
    would differ only by fonts and spacing") survives in much weaker form. _Cost
    of leaving it out:_ every preset must reuse the fixed renderer structure.
    Adding a timeline, a new region, or other structural template requires a
    later document release rather than a new JSON file.
 2. **Template apply resets `dateFormat`.** It is a regional preference, not
-   visual design, but ADR 0008's wholesale replace covers it. `pageFormat` is
+   visual design, but ADR 0012's wholesale replace covers it. `pageFormat` is
    the exception: paper follows where the owner prints, so a switch keeps it, as
    it keeps `font.textAlign` and `header.photoPosition`, and every preset ships
    on A4. _Cost of leaving it out:_ a switch can change how dates read. The

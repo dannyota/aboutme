@@ -52,18 +52,15 @@ It takes blank or `false` (none), `true` (all three), or a comma list such as
 settings link, and reauthentication starts return the uniform not-found
 response. With `ENV` set to `prod` or `staging`, only an enabled provider needs
 its client ID and secret, and production can enable Google and LinkedIn.
-[ADR 0027](../adr/0027-provider-login-flag.md),
-[ADR 0039](../adr/0039-per-provider-login-enablement.md), and
-[ADR 0058](../adr/0058-linkedin-sign-in-in-production.md) record the decision.
+[ADR 0016](../adr/0016-sign-in-providers.md) record the decision.
 
 ## Password authentication
 
 An account holds zero or one password credential alongside its linked provider
 identities. A provider-only account has no credential; adding a password never
 removes a provider identity, and a provider identity cannot move between
-accounts.
-[ADR 0025](../adr/0025-password-authentication-and-identity-linking.md) records
-why authentication authority stays in the application.
+accounts. [ADR 0015](../adr/0015-accounts-passwords-and-sessions.md) records why
+authentication authority stays in the application.
 
 One canonical email parser is shared by provider account creation, password
 registration, login lookup, database writes, and rate-limit keys. It accepts a
@@ -104,13 +101,12 @@ sealed under a runtime key ring, and a key failure disables TOTP only. The
 ## OAuth transaction
 
 Google and GitHub use authorization code with PKCE S256. LinkedIn uses its
-documented confidential flow without PKCE
-([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)) and returns no nonce
-claim, so no check binds a LinkedIn code to the starting browser
-([ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md), proposed).
-OIDC providers send a nonce and validate signature, issuer, audience, expiry,
-and nonce; LinkedIn's nonce is checked only when present. GitHub has a distinct
-callback and no invented OIDC checks.
+documented confidential flow without PKCE and returns no nonce claim, so no
+check binds a LinkedIn code to the starting browser
+([ADR 0016](../adr/0016-sign-in-providers.md)). OIDC providers send a nonce and
+validate signature, issuer, audience, expiry, and nonce; LinkedIn's nonce is
+checked only when present. GitHub has a distinct callback and no invented OIDC
+checks.
 
 The server stores transaction state, purpose, the opaque-handle hash, PKCE
 verifier, exact provider redirect URI, bounded login return path, expiry, and
@@ -153,7 +149,7 @@ OAuth start methods are purpose-specific:
 - A `GET` carrying `purpose=link` or `purpose=reauth` returns `405` and creates
   no transaction.
 
-[ADR 0014](../adr/0014-oauth-start-methods.md) records why privileged starts do
+[ADR 0016](../adr/0016-sign-in-providers.md) records why privileged starts do
 not use links or redirects.
 
 ## Sessions
@@ -176,8 +172,8 @@ attribute.
 Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
 Logout-everywhere revokes all sessions. Password reset revokes every session and
 creates none; password add/change revokes every session and creates one fresh
-current session. [ADR 0015](../adr/0015-session-rotation-delivery.md) defines
-rotation convergence and the lost-response case.
+current session. [ADR 0015](../adr/0015-accounts-passwords-and-sessions.md)
+defines rotation convergence and the lost-response case.
 
 ## CSRF and canonical origin
 
@@ -244,7 +240,7 @@ markup. Token material, code material, PKCE verifiers, and resume content never
 enter logs, traces, metrics labels, errors, or panic text; logs carry client ID,
 grant ID, token row ID, tool name, resume ID, and closed outcomes only. Existing
 per-user resume caps, sanitizer versioning, and media privacy bounds apply to
-agent writes unchanged. [ADR 0026](../adr/0026-mcp-agent-access.md) records this
+agent writes unchanged. [ADR 0018](../adr/0018-mcp-agent-access.md) records this
 boundary.
 
 ## Client address and rate limits
@@ -260,7 +256,7 @@ is the hard idle expiry. Active entries are never evicted to give an attacker a
 fresh bucket. When the map is full, every untracked key shares one bounded
 global overflow bucket with the same budget as one ordinary key. Admission
 refusal is not an alternative. Policies can key by IP, account, or
-account-and-IP. [ADR 0018](../adr/0018-bounded-rate-limiter.md) records the
+account-and-IP. [ADR 0007](../adr/0007-bounded-rate-limiter.md) records the
 failure model.
 
 Anonymous login starts, privileged provider starts, password routes, and agent
@@ -283,15 +279,16 @@ about them, and never reads, creates, or signs in an account.
 The public application has no privileged role, operator session, or route that
 reads or changes another account's data. `/admin` is a reserved public root that
 Caddy denies. Operator actions are command-line tools that require a database
-URL and a database-name guard. [ADR 0028](../adr/0028-no-operator-surface.md)
-owns this boundary.
+URL and a database-name guard.
+[ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) owns this
+boundary.
 
 ## Public artifact revocation
 
 A cache hit, an object key, and an SSE event are never authorization. Every
 public reuse revalidates at the origin, and unpublish, delete, and rename wait
 for the revocation fence
-([ADR 0022](../adr/0022-public-artifact-revocation.md)).
+([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
 ## Internal print authority
 
@@ -309,7 +306,7 @@ Only the controlling render job may submit completed bytes for a terminal
 generation and digest check. Completion has one atomic winner; later attempts
 receive a generic not-active result without a terminal tombstone. Nuxt and
 Chromium never publish artifacts.
-[ADR 0023](../adr/0023-private-print-capability.md) defines the protocol.
+[ADR 0011](../adr/0011-print-capability-and-pdf-output.md) defines the protocol.
 
 ## Content Security Policy and framework headers
 
@@ -328,7 +325,7 @@ policy, so only a same-origin script file can start a worker, never a `blob:` or
 `data:` URL. `script-src 'self'` already runs same-origin code, so `'self'` adds
 no code source. The [LinkedIn import](linkedin-import.md#security) page is the
 only page that starts one: a module worker that runs pdf.js
-([ADR 0064](../adr/0064-linkedin-import-from-save-to-pdf.md)).
+([ADR 0023](../adr/0023-linkedin-import.md)).
 
 `script-src` never carries `'unsafe-inline'` on either policy: Nuxt's own
 hydration payload is externalized into a same-origin script file for every
@@ -363,7 +360,7 @@ rendering (SSR) surface, including public HTML and the internal print route.
 DOMPurify runs before client-side `innerHTML` assignments only; it does not ship
 in the server-rendered bundle. SSR proves neutralization of the Go-sanitized
 input rather than running a Node DOM sanitizer. A strict content security policy
-remains a backstop. [ADR 0012](../adr/0012-ssr-sanitizer-authority.md) owns this
+remains a backstop. [ADR 0008](../adr/0008-ssr-sanitizer-authority.md) owns this
 split.
 
 ## Untrusted media
@@ -378,7 +375,7 @@ object write leaves PostgreSQL and storage unchanged; an object write with an
 unknown outcome is never deleted by the request and is left to reconciliation.
 [The API design](api.md#photo-intake) owns normalization, the
 [deployment design](deployment.md#media) owns the write and deletion order, and
-[ADR 0019](../adr/0019-private-media-delivery.md) owns the storage boundary.
+[ADR 0009](../adr/0009-private-media-delivery.md) owns the storage boundary.
 
 Secrets never enter source, OpenTofu state where avoidable, URLs, or logs.
 Production fails closed when trusted proxies, provider credentials, origin

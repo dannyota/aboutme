@@ -6,7 +6,7 @@ import AppLogo from '../../app/components/app/AppLogo.vue';
 /**
  * Reads the accessible name a role="img" svg exposes, however the mark
  * supplies it (an `aria-label`, an `aria-labelledby` reference, or a nested
- * `<title>`), per the AppLogo contract in ADR 0050.
+ * `<title>`), per the AppLogo contract in ADR 0020.
  */
 function accessibleName(svg: Element): string | null {
   const label = svg.getAttribute('aria-label');
@@ -61,7 +61,7 @@ describe('AppLogo', () => {
 
   it('uses no ids or gradients, so any number of logos can share a page',
     () => {
-      // ADR 0065 retired the gradient mark; the seal and the dot take seal
+      // ADR 0020 retired the gradient mark; the seal and the dot take seal
       // red through currentColor, and nothing is referenced by id.
       const svg = svgOf(mount(AppLogo));
 

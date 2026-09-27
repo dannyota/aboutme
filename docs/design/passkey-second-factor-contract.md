@@ -2,7 +2,7 @@
 
 This contract fixes the wire shapes for primary login with a second factor, the
 shared pending routes, passkeys, recovery codes, and the shared security-mail
-events ([ADR 0048](../adr/0048-passkey-second-factor-authentication.md)). The
+events ([ADR 0017](../adr/0017-second-factor-authentication.md)). The
 [second-factor design](second-factor-authentication.md) owns the rules. The
 [authenticator-app contract](totp-second-factor-contract.md) adds the TOTP
 routes. [Numeric budgets](budgets.md) owns every size and rate.

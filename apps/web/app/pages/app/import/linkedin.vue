@@ -2,7 +2,7 @@
 /**
  * /app/import/linkedin: create a resume from a LinkedIn "Save to PDF" file,
  * read entirely in the browser (docs/design/linkedin-import.md and
- * docs/design/linkedin-import-ui.md; ADR 0064). This page wires the states
+ * docs/design/linkedin-import-ui.md; ADR 0023). This page wires the states
  * the design names; the pieces live under components/import.
  */
 import type { Resume } from '@aboutme/schema';

@@ -3,9 +3,8 @@
 An account may add passkeys, an authenticator app, or both as an optional second
 factor. A password or linked provider stays the required primary factor. A
 passkey never replaces a password, and the service offers no usernameless login.
-[ADR 0048](../adr/0048-passkey-second-factor-authentication.md) and
-[ADR 0049](../adr/0049-totp-second-factor-authentication.md) record the choices
-and their residual risk.
+[ADR 0017](../adr/0017-second-factor-authentication.md) record the choices and
+their residual risk.
 
 This page holds the rules shared by every factor. Exact wire, storage, and mail
 shapes live in:
@@ -52,8 +51,9 @@ mutation time. Factor-proof time is:
 - null after final-factor removal.
 
 With no current session, the change revokes every session and issues none.
-Ordinary 24-hour rotation ([ADR 0015](../adr/0015-session-rotation-delivery.md))
-copies the epoch and factor-proof time unchanged.
+Ordinary 24-hour rotation
+([ADR 0015](../adr/0015-accounts-passwords-and-sessions.md)) copies the epoch
+and factor-proof time unchanged.
 
 Every session, grant, and authorization-code issuer takes the user-row lock
 before reading the epoch. A cookie-authenticated sensitive mutation carries its
@@ -94,7 +94,7 @@ under the user lock. Each row allows five failed completions across all methods.
 Starting a passkey ceremony is not a failure. Exhaustion consumes the row,
 clears the cookie, and forces primary authentication again. Factor attempts also
 use per-`(account, client IP)` and per-IP limits on the bounded limiter of
-[ADR 0018](../adr/0018-bounded-rate-limiter.md).
+[ADR 0007](../adr/0007-bounded-rate-limiter.md).
 
 Missing, expired, consumed, wrong-epoch, wrong-session, and foreign pending
 credentials all return the same `401 authentication_required`. A failed factor
@@ -189,8 +189,8 @@ rotates the current session, and returns the new set once.
 
 Recovery codes are the only lost-factor path. Password reset, provider login,
 linking, and relinking all keep enforcement. There is no operator or support
-override ([ADR 0028](../adr/0028-no-operator-surface.md)). Losing every factor
-and every recovery code is permanent account loss.
+override ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
+Losing every factor and every recovery code is permanent account loss.
 
 ## Enrollment and management
 

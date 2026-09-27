@@ -269,7 +269,7 @@ RETURNING revision;
 -- name: BackfillResumeDocumentCAS :execrows
 -- This system backfill intentionally does not change revision or updated_at:
 -- it persists the same projected document already served to readers. It is
--- not user-scoped. See docs/adr/0017-resume-document-versioning.md.
+-- not user-scoped. See docs/adr/0004-resume-document-contract.md.
 -- Fully named parameters distinguish the from/to schema versions. Both are
 -- int32, and sqlc's positional naming would emit
 -- `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
@@ -464,7 +464,7 @@ SELECT EXISTS (
          AS earliest_expiry;
 
 -- name: EnqueueMediaDeletionJob :execrows
--- Records exact-key cleanup work in the caller's transaction (ADR 0019).
+-- Records exact-key cleanup work in the caller's transaction (ADR 0009).
 -- Duplicate enqueue of the immutable key is idempotent (zero rows); the
 -- table's own check constraint rejects a malformed or cross-resume key.
 INSERT INTO media_deletion_jobs (resume_id, object_key)

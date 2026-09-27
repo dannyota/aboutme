@@ -30,7 +30,7 @@ export interface PublicRenderRequest {
   mode: 'continuous';
   canonicalOrigin: string;
   discoveryEnabled: boolean;
-  /** The exact <title> text, computed by the server (ADR 0042). */
+  /** The exact <title> text, computed by the server (ADR 0014). */
   pageTitle: string;
   /** The exact favicon data: URL, or '' when the owner set no icon. */
   faviconHref: string;

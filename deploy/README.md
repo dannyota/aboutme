@@ -96,8 +96,7 @@ existing privilege drift. `migrate` then applies goose migrations, always as
 prerequisite failure prevents the server from starting.
 
 Roles live at the cluster level, so a PostgreSQL volume created before the
-release baseline
-([ADR 0038](../docs/adr/0038-single-baseline-and-plain-migrator.md)) can still
+release baseline ([ADR 0005](../docs/adr/0005-database-migrations.md)) can still
 hold a role the baseline retired. `db-setup` correctly fails on that drift. Fix
 it by recreating the volume: stop the stack, remove its `postgres-data` volume
 (`podman volume ls` shows the exact name), then start the stack again.

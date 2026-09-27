@@ -15,7 +15,7 @@ sources and the sanitizer are in
 [`document.md`](../../docs/design/deployment-transparency/document.md). What
 "verified" means is in
 [`verification.md`](../../docs/design/deployment-transparency/verification.md).
-[ADR 0057](../../docs/adr/0057-deployment-transparency-observer.md) records the
+[ADR 0028](../../docs/adr/0028-deployment-transparency-observer.md) records the
 choice.
 
 ## Modes

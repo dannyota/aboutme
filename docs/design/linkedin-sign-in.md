@@ -4,10 +4,8 @@ People can sign up, sign in, link, and reauthenticate with LinkedIn, the same
 way they do with Google. LinkedIn follows its documented web flow, production
 can enable it beside Google, the privacy notice names it, and browser proofs
 cover it against a local mock. The flag turns on as its own step after the
-release is live. [ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)
-records the decision, and
-[ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md) (accepted)
-records that LinkedIn returns no nonce claim.
+release is live. [ADR 0016](../adr/0016-sign-in-providers.md) records the
+decision, including that LinkedIn returns no nonce claim.
 
 Status: accepted and built. Facts below were checked against LinkedIn's
 documentation and its live discovery document on 2026-09-26. **Verify** marks a
@@ -17,7 +15,7 @@ fact that only the first production sign-in can confirm.
 
 | Part          | State                                                                                                                                                                                                                                                       |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Flag          | `PROVIDER_LOGIN_ENABLED` takes a comma list; `linkedin` registers the start and callback routes ([ADR 0039](../adr/0039-per-provider-login-enablement.md)). Production can set `""`, `"google"`, or `"google,linkedin"`.                                    |
+| Flag          | `PROVIDER_LOGIN_ENABLED` takes a comma list; `linkedin` registers the start and callback routes ([ADR 0016](../adr/0016-sign-in-providers.md)). Production can set `""`, `"google"`, or `"google,linkedin"`.                                                |
 | Server        | `apps/server/internal/auth/linkedin.go`: OIDC discovery of `https://www.linkedin.com/oauth`, scopes `openid profile email`, state and nonce without PKCE, form client credentials, ID token checks with an optional nonce claim, nullable `email_verified`. |
 | Registration  | A new subject needs an email that is present, `email_verified` true, and canonical. An existing subject signs in without an email check. Link and reauth ignore email.                                                                                      |
 | Linking       | Shared with Google: identity is `(provider, subject)`; an email already owned by any account returns the generic `email_already_registered` and writes nothing; linking starts only from a signed-in account.                                               |
@@ -69,7 +67,7 @@ LinkedIn follows its documented confidential web flow:
   to the browser that started the flow, as RFC 9700 section 2.1.1 asks [9].
   State, the one-time transaction, the exact redirect URI, the single-use
   30-minute code, and the client secret limit a code injection to an attacker
-  who takes the victim's code before the victim's browser delivers it. ADR 0063
+  who takes the victim's code before the victim's browser delivers it. ADR 0016
   sets out that risk for the owner.
 - The transaction row keeps its PKCE verifier column, so storage does not
   change; LinkedIn simply never receives it. Google and GitHub keep PKCE S256.
@@ -168,7 +166,7 @@ No schema, API, OpenAPI, or database change. Every live release accepts the
 back to a release before this one while LinkedIn is on would bring back the PKCE
 flow and the old notice, so turn LinkedIn off (`"google"`, apply, deploy) before
 such a rollback. An account whose only method is LinkedIn cannot sign in while
-LinkedIn is off, as ADR 0039 already states.
+LinkedIn is off, as ADR 0016 already states.
 
 ### Size
 
@@ -176,7 +174,7 @@ No new dependency. Mock and test code grow; the web bundle changes only by copy.
 
 ## Tests
 
-Tests cite this design and ADR 0058.
+Tests cite this design and ADR 0016.
 
 - Go, `internal/auth`: the authorize URL has `nonce` and no `code_challenge`;
   the token request has `client_id` and `client_secret` in the body, no
@@ -279,7 +277,7 @@ argument, or a repository file.
 | L2  | LinkedIn uses its documented flow without PKCE; approved with the nonce as the defense, which L5 replaces | Yes; LinkedIn documents no PKCE for web apps and one report shows 401 |
 | L3  | New collision message, above                                                                              | Yes                                                                   |
 | L4  | Privacy notice text, above; the owner reviews the Vietnamese                                              | Yes                                                                   |
-| L5  | Accept ADR 0063: LinkedIn sign-in without a returned nonce, with the code-injection risk it names         | Yes, or keep LinkedIn off                                             |
+| L5  | Accept ADR 0016: LinkedIn sign-in without a returned nonce, with the code-injection risk it names         | Yes, or keep LinkedIn off                                             |
 
 ## Sources
 

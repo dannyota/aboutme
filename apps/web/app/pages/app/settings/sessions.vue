@@ -82,7 +82,7 @@ const {
   mutate,
   refresh: refreshMe,
 } = useAuth();
-// Only providers the server enables (ADR 0039) get link or reauth controls;
+// Only providers the server enables (ADR 0016) get link or reauth controls;
 // a disabled provider's start route answers not found.
 const { loginProviders, agentAccess, passkeyEnrollment } = useCapabilities();
 const enabledIdentities = computed(() =>

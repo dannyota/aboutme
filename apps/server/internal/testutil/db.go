@@ -70,7 +70,7 @@ var newMigratedTestDatabaseCounter atomic.Uint64
 // prepareMigratedTestDatabase), and returns its DSN and an open pool. The
 // database is dropped, and the pool closed, in t.Cleanup.
 //
-// Every call migrates a brand-new database from scratch (ADR 0038): there
+// Every call migrates a brand-new database from scratch (ADR 0005): there
 // is no shared head-state template to clone. Callers that only need a
 // single shared, already-migrated database should prefer
 // RequireMigratedTestDatabaseURL instead.

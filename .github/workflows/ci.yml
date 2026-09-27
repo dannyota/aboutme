@@ -280,7 +280,7 @@ jobs:
           go mod tidy
           diff /tmp/go.mod.before go.mod && diff /tmp/go.sum.before go.sum \
             || { echo "go.mod/go.sum are not tidy — run 'go mod tidy' in apps/server and commit"; exit 1; }
-      # Enforces the single-source-of-truth contract (ADR 0010): apps/server/
+      # Enforces the single-source-of-truth contract (ADR 0005): apps/server/
       # migrations/ is the only declared source for BOTH goose and sqlc's
       # generated data layer. Fails on any drift, including an untracked
       # generated file, so `make sqlc-check` uses `git status --porcelain`
