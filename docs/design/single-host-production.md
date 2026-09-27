@@ -207,12 +207,15 @@ and read only the origin certificate, origin private key, and CloudFront client
 CA parameters needed to terminate production TLS.
 
 Non-secret configuration is plain task definition values: `ENV=prod`,
-`PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`, `PROVIDER_LOGIN_ENABLED`
-from the `provider_login_enabled` variable (`false` or `google`),
-`MEDIA_BACKEND=s3` without static keys, the SES settings,
-`PASSWORD_REGISTRATION_ENABLED`, and both enrollment flags. The TOTP key slot
-variables choose which parameters the app receives as `TOTP_ACTIVE_KEY` and
-`TOTP_PREVIOUS_KEY`.
+`PUBLIC_ORIGIN=https://aboutme.vn`, `MCP_ENABLED=true`,
+`OAUTH_REGISTER_EGRESS_CIDRS=160.79.104.0/21`, `PROVIDER_LOGIN_ENABLED` from the
+`provider_login_enabled` variable (`false` or `google`), `MEDIA_BACKEND=s3`
+without static keys, the SES settings, `PASSWORD_REGISTRATION_ENABLED`, and both
+enrollment flags. The TOTP key slot variables choose which parameters the app
+receives as `TOTP_ACTIVE_KEY` and `TOTP_PREVIOUS_KEY`. The CIDR list keys
+Anthropic's published Claude egress range to a shared registration bucket
+instead of the per-address budget, per
+[MCP client compatibility](mcp-client-compatibility.md#5-registration-rate-from-shared-egress).
 
 ## Release and deploy
 

@@ -154,8 +154,9 @@ separately closed: `validation_failed`, `revision_conflict`, `not_found`,
 **These routes are not in the OpenAPI contract.** The named RFCs and the MCP
 specification define them. OpenAPI holds only the session-authenticated consent
 and connected-agent operations listed above. The
-[MCP owner workflow](mcp-owner-workflow.md#oauth-server-contract) adds the
-`resource` and native-client registration rules the official SDK needs.
+[MCP owner workflow](mcp-owner-workflow.md#oauth-server-contract) and
+[MCP client compatibility](mcp-client-compatibility.md) add the `resource` and
+native and web `application_type` registration rules official SDK clients need.
 
 Every tool dispatches through a closed in-process facade to the same handler as
 its REST counterpart. Both protocols therefore execute one validation,
