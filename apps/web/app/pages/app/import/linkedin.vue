@@ -147,6 +147,7 @@ async function pick(file: File): Promise<void> {
   pagesRead.value = 0;
   pageCount.value = null;
   const usedWorker = worker.value;
+  void nextTick(() => pickPanel.value?.focusStop());
   // No request follows a pick: this worker was already started, and each
   // pick gets its own, ended whatever the outcome (docs/design/
   // linkedin-import.md, "Reading the file").
@@ -254,7 +255,20 @@ async function submit(): Promise<void> {
       ?.focus();
     return;
   }
-  if (sizeOver.value || !schemaCheck.value.ok) return;
+  if (sizeOver.value) return;
+  const check = schemaCheck.value;
+  if (!check.ok) {
+    // Focus the first marked entry, in review order (spec "Action panel").
+    const first = review.value.sections
+      .flatMap((section) => section.entries)
+      .find((entry) => check.entryIds.includes(entry.id));
+    if (first !== undefined) {
+      document.querySelector<HTMLElement>(
+        `[data-import-entry="${first.id}"]`,
+      )?.focus();
+    }
+    return;
+  }
 
   titleInvalid.value = false;
   creating.value = true;

@@ -65,6 +65,7 @@ const describedBy = computed(() => {
   <li class="flex min-h-11 items-start gap-2 border-t py-3 first:border-t-0">
     <Checkbox
       :id="fieldId"
+      :data-import-entry="entry.id"
       :aria-describedby="describedBy"
       class="mt-0.5"
       :disabled="disabled"
