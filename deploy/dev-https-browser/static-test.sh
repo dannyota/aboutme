@@ -22,6 +22,7 @@ readonly -a SPEC_FILES=(
   password-auth.spec.ts
   mcp.spec.ts
   mcp-sdk.spec.ts
+  mcp-ts-sdk.spec.ts
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
@@ -184,7 +185,7 @@ run)
     before_index=$(($# - 2))
     [ "${!previous_index}" = mcp-sdk ] && [ "${!before_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
-  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | linkedin-import | second-factor | second-factor-disabled | mcp-sdk)
+  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | linkedin-import | second-factor | second-factor-disabled | mcp-sdk | mcp-ts-sdk)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -371,6 +372,19 @@ grep -Fq 'MCP client name must contain a lowercase UUIDv4' <<<"$output" ||
 printf '%s\n' 'aboutme MCP UAT 11111111-1111-4111-8111-111111111111' \
   >"$MCP_INPUT/mcp-client-name"
 
+readonly MCP_TS_SDK_EVIDENCE=$WORK/mcp-ts-sdk-evidence
+install -d -m 0700 "$MCP_TS_SDK_EVIDENCE"
+: >"$CALL_LOG"
+FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
+  "$IMAGE_ID" "$MCP_INPUT" "$SPEC_INPUT" "$MCP_TS_SDK_EVIDENCE" mcp-ts-sdk
+tr '\0' '\n' <"$CALL_LOG" >"$READABLE_LOG"
+grep -Fxq mcp-ts-sdk "$READABLE_LOG" || fail 'mcp-ts-sdk mode did not reach the image'
+image_line=$(grep -Fnx -- "$IMAGE_ID" "$READABLE_LOG" | tail -n 1 | cut -d: -f1)
+[ "$(sed -n "$((image_line + 1))p" "$READABLE_LOG")" = mcp-ts-sdk ] ||
+  fail 'mcp-ts-sdk mode was not passed after the verified image ID'
+grep -Fxq -- "--mount=type=bind,src=$MCP_INPUT,dst=/uat-input,ro=true" \
+  "$READABLE_LOG" || fail 'closed MCP input mount is missing for mcp-ts-sdk mode'
+
 readonly MCP_SDK_CREDENTIAL=$WORK/mcp-sdk-credential.env
 printf '%s\n' 'ABOUTME_TEST_EMAIL=owner@example.invalid' \
   'ABOUTME_TEST_PASSWORD=static-test-only' >"$MCP_SDK_CREDENTIAL"
@@ -522,7 +536,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, mcp-sdk, or mcp-ts-sdk' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -1509,7 +1523,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, mcp-sdk, or mcp-ts-sdk' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 

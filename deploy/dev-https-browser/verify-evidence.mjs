@@ -152,6 +152,21 @@ async function verify(mode, path) {
       grantRevoked: true,
       revokedRejected: true,
     },
+  } : mode === 'mcp-ts-sdk' ? {
+    ...common,
+    scenario: 'mcp-ts-sdk-agent-access',
+    schemaVersion: 1,
+    steps: {
+      clientRegistered: true,
+      authorizeRedirected: true,
+      consentApproved: true,
+      tokenExchanged: true,
+      toolsListed: true,
+      resumeCreated: true,
+      refreshedAfterForcedExpiry: true,
+      grantRevoked: true,
+      revokedRejected: true,
+    },
   } : mode === 'privacy' ? {
     ...common,
     scenario: 'account-privacy',
