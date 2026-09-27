@@ -10,8 +10,8 @@ func TestReservedAPI(t *testing.T) {
 	}
 }
 
-// wantRoutes is the v9 registry in authority order. It is written by hand so a
-// regenerated generated.go that silently drops, reorders, or reclassifies a
+// wantRoutes is the v10 registry in authority order. It is written by hand so
+// a regenerated generated.go that silently drops, reorders, or reclassifies a
 // root fails here instead of shipping.
 var wantRoutes = []Route{
 	{Root: ".well-known", Dispatch: DispatchGo},
@@ -20,6 +20,7 @@ var wantRoutes = []Route{
 	{Root: "app", Dispatch: DispatchNuxt},
 	{Root: "authorize", Dispatch: DispatchNuxt},
 	{Root: "forgot-password", Dispatch: DispatchNuxt},
+	{Root: "guide", Dispatch: DispatchNuxt},
 	{Root: "healthz", Dispatch: DispatchGo},
 	{Root: "_nuxt", Dispatch: DispatchNuxt},
 	{Root: "internal-render", Dispatch: DispatchDeny},
@@ -42,7 +43,7 @@ var wantRoutes = []Route{
 	{Root: "verify-email", Dispatch: DispatchNuxt},
 }
 
-func TestRoutesMatchTheV9Authority(t *testing.T) {
+func TestRoutesMatchTheV10Authority(t *testing.T) {
 	t.Parallel()
 
 	if len(Routes) != len(wantRoutes) {
@@ -174,5 +175,47 @@ func TestVerifyRootIsNuxtAndUnclaimable(t *testing.T) {
 		if !ValidSlug(slug) {
 			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
 		}
+	}
+}
+
+// TestGuideRootIsNuxtAndUnclaimable proves the Nuxt MCP guide page owns the
+// "guide" root, so it cannot be claimed as a resume slug, while "mcp" itself
+// stays a distinct Go root the guide can never shadow.
+func TestGuideRootIsNuxtAndUnclaimable(t *testing.T) {
+	t.Parallel()
+
+	found := false
+	for _, route := range Routes {
+		if route.Root == "guide" {
+			found = true
+			if route.Dispatch != DispatchNuxt {
+				t.Errorf("guide dispatches to %q, want %q", route.Dispatch, DispatchNuxt)
+			}
+		}
+	}
+	if !found {
+		t.Error("guide is missing from the registry")
+	}
+	if ValidSlug("guide") {
+		t.Error(`ValidSlug("guide") = true, want false for a reserved root`)
+	}
+	for _, slug := range []string{"guide-me", "my-guide", "guides"} {
+		if !ValidSlug(slug) {
+			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
+		}
+	}
+
+	mcpDispatch, mcpFound := DispatchGo, false
+	for _, route := range Routes {
+		if route.Root == "mcp" {
+			mcpFound = true
+			mcpDispatch = route.Dispatch
+		}
+	}
+	if !mcpFound {
+		t.Error("mcp is missing from the registry")
+	}
+	if mcpDispatch != DispatchGo {
+		t.Errorf("mcp dispatches to %q, want %q", mcpDispatch, DispatchGo)
 	}
 }
