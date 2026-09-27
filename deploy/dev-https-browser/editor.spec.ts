@@ -771,7 +771,7 @@ async function proveConflictAndTemplate(
   editorDiagnosticStage = 'template-partial-first-child';
   expect((await firstTemplateChild).status()).toBe(200);
   editorDiagnosticStage = 'template-partial-dialog';
-  const partial = page.getByRole('alertdialog', { name: 'Template changes need review' });
+  const partial = page.getByRole('alertdialog', { name: 'Template only partly applied' });
   await expect(partial).toBeVisible();
   await expect(partial.getByRole('button', { name: 'English', exact: true }))
     .toBeVisible();
@@ -782,11 +782,11 @@ async function proveConflictAndTemplate(
     '[data-action="keep-partial"], [data-action="restore-pre-apply"], [data-action="retry-remaining"]',
   );
   await expect(partialActions).toHaveText([
-    'Keep partial',
-    'Restore pre-apply',
-    'Retry remaining',
+    'Keep as is',
+    'Undo template',
+    'Apply the rest',
   ]);
-  await partial.getByRole('button', { name: 'Keep partial' }).press('Enter');
+  await partial.getByRole('button', { name: 'Keep as is' }).press('Enter');
   editorDiagnosticStage = 'template-keep-partial-saved';
   await expectSavedOrDiagnose(page, 'template-keep-partial');
   diagnostics.assertTemplateFailureSecondChild();
