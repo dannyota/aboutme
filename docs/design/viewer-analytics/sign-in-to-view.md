@@ -117,7 +117,8 @@ resume ID.
    checks for both, with LinkedIn's nonce checked only when present
    ([security](../security.md#oauth-transaction)). The `view` start requests the
    scope `openid` only, so the provider returns no name or email (**Owner
-   approval** V10, open; **Verify** that LinkedIn accepts `openid` alone).
+   approval** V10, approved 2026-09-27; **Verify** that LinkedIn accepts
+   `openid` alone).
 3. The callback, for purpose `view`, never looks up, creates, links, or signs in
    an account and never creates a session. It verifies the ID token, re-reads
    the resume by ID, discards every claim, and then:
@@ -135,8 +136,8 @@ resume ID.
 4. The resume renders; the counting script runs as for any viewer.
 
 The owner is gated like any viewer: public routes never read the account session
-to admit a request (**Owner approval** V9, open). The owner can read the resume
-in the editor preview or sign in through the gate.
+to admit a request (**Owner approval** V9, approved 2026-09-27). The owner can
+read the resume in the editor preview or sign in through the gate.
 
 ## Pass cookie
 
@@ -208,9 +209,9 @@ operator raises the production release fence to the release's own number
 ([release fence](../passkey-release-fence.md#serialized-production-operation)),
 then turns the flag on and redeploys the same tag. The deployer refuses an app
 revision with the flag on while the fence is below that number (**Owner
-approval** V11, open).
+approval** V11, approved 2026-09-27).
 
 Once the fence is raised, `deploy.sh --rollback` below the release is refused,
 because an older image would serve `sign_in` resumes publicly. Going lower is a
 forward fix or privileged administration, as for the second-factor floors
-(**Owner approval** V12, open).
+(**Owner approval** V12, approved 2026-09-27).

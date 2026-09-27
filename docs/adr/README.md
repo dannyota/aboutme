@@ -35,7 +35,7 @@ record may change until accepted.
 | [0017](0017-second-factor-authentication.md)             | Accepted | Optional passkeys and TOTP, recovery codes, the epoch, the release fence         |
 | [0018](0018-mcp-agent-access.md)                         | Accepted | Remote MCP endpoint and first-party OAuth 2.1; editor parity minus publish       |
 | [0019](0019-application-ui-toolkit.md)                   | Accepted | Tailwind and shadcn-vue chrome, renderer isolation, guarded token edits          |
-| [0020](0020-application-visual-identity.md)              | Accepted | Seal logo and stamp, aurora canvas, two blues, type scale, white resume          |
+| [0020](0020-application-visual-identity.md)              | Accepted | Seal logo and stamp, aurora canvas, two blues, type scale, resume ground colors  |
 | [0021](0021-bilingual-resume-workspace.md)               | Accepted | Vietnamese and English workspace, separate from resume language                  |
 | [0022](0022-viewer-privacy-and-counting.md)              | Accepted | Anonymous layered view counts; sign in to view with nothing stored               |
 | [0023](0023-linkedin-import.md)                          | Accepted | LinkedIn import from the English Save to PDF, parsed in the browser              |
@@ -44,7 +44,7 @@ record may change until accepted.
 | [0026](0026-replica-scaling.md)                          | Accepted | One serving replica; the designed path to a second                               |
 | [0027](0027-vietnam-hosted-production.md)                | Accepted | Move production to Vietnam-hosted providers                                      |
 | [0028](0028-deployment-transparency-observer.md)         | Accepted | An independent observer publishes the running image digests                      |
-| [0029](0029-community-showcase.md)                       | Proposed | Opt-in, reviewed, uncached, never-indexed showcase of published resumes          |
+| [0029](0029-community-showcase.md)                       | Accepted | Opt-in, reviewed, uncached, never-indexed showcase of published resumes          |
 
 ## Former numbers
 

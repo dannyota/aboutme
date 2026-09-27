@@ -1,6 +1,7 @@
 # MCP guide page
 
-Status: proposed, waiting for owner approval of the numbered choices below.
+Status: approved (2026-09-27), ready to build. The owner approved every numbered
+choice below as written.
 
 The MCP guide is a public, static page that shows a person how to connect an AI
 assistant they already use to their aboutme.vn resumes through the Model Context
@@ -199,30 +200,31 @@ and the page must come down in the same release.
 
 ## Owner approvals
 
-1. **Route `/guide/mcp`, reserving `guide`.** Recommended: it cannot collide
-   with the MCP endpoint and leaves room for later guides. Alternative: `/ai`,
-   shorter but vague for search and for a later guide.
-2. **Header label “Kết nối AI” / “Connect AI”, hidden on phones.** Recommended:
-   people know “AI” better than “MCP”, and the phone header already drops the
-   account buttons for space. Alternative: “MCP” on every width, shorter but
-   unclear to most visitors.
-3. **Links from the footer, the landing card, and Connected agents.**
-   Recommended: they are the phone paths and the place a person looks after
+1. **Route `/guide/mcp`, reserving `guide`.** Approved (2026-09-27): it cannot
+   collide with the MCP endpoint and leaves room for later guides. Alternative:
+   `/ai`, shorter but vague for search and for a later guide.
+2. **Header label “Kết nối AI” / “Connect AI”, hidden on phones.** Approved
+   (2026-09-27): people know “AI” better than “MCP”, and the phone header
+   already drops the account buttons for space. Alternative: “MCP” on every
+   width, shorter but unclear to most visitors.
+3. **Links from the footer, the landing card, and Connected agents.** Approved
+   (2026-09-27): they are the phone paths and the place a person looks after
    connecting.
-4. **Indexable, in the sitemap and `llms.txt`.** Recommended: an assistant that
-   reads `llms.txt` learns the endpoint, and search brings people who look for
-   “Claude resume”.
-5. **Claude first; other clients only after proof.** Recommended: one working
-   path beats a list that fails. Visual Studio Code is the next candidate.
+4. **Indexable, in the sitemap and `llms.txt`.** Approved (2026-09-27): an
+   assistant that reads `llms.txt` learns the endpoint, and search brings people
+   who look for “Claude resume”.
+5. **Claude first; other clients only after proof.** Approved (2026-09-27): one
+   working path beats a list that fails. Visual Studio Code is the next
+   candidate.
 6. **Public copy says “trợ lý AI”; Settings keeps “Tác nhân đã kết nối”.**
-   Recommended: the landing page and privacy policy already say “trợ lý AI”; the
-   guide quotes the Settings label as the screen shows it.
+   Approved (2026-09-27): the landing page and privacy policy already say “trợ
+   lý AI”; the guide quotes the Settings label as the screen shows it.
 7. **Ship the compatibility fix first, as its own release, and the guide after
-   an owner-run Claude proof in production.** Recommended: the guide must not
-   teach steps that fail. Alternative: ship the guide with only the Other apps
-   section, which helps almost nobody.
+   an owner-run Claude proof in production.** Approved (2026-09-27): the guide
+   must not teach steps that fail. Alternative: ship the guide with only the
+   Other apps section, which helps almost nobody.
 8. **Link Anthropic's custom connector help page from the Claude section.**
-   Recommended: it covers plan changes the guide cannot track.
+   Approved (2026-09-27): it covers plan changes the guide cannot track.
 
 [claude-connectors]:
   https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp

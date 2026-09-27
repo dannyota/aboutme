@@ -5,10 +5,12 @@
 owner, state, and evidence before independent approval. Acceptance IDs are
 stable and referenced by phase acceptance and UAT reports.
 
-States are `PLANNED`, `LANDED`, `PROVEN`, `BLOCKED`, or `DEFERRED`. `LANDED`
-means the code or configuration ships but no named test or proof asserts the
-whole statement; the row names what is missing. `DEFERRED` means an accepted
-ADR removed the target; the row names the ADR and the condition that brings it
+States are `OPEN`, `PLANNED`, `LANDED`, `PROVEN`, `BLOCKED`, or `DEFERRED`.
+`OPEN` means the owner approved the design clause but no phase or task has
+started it; the row names no phase or task until one does. `LANDED` means the
+code or configuration ships but no named test or proof asserts the whole
+statement; the row names what is missing. `DEFERRED` means an accepted ADR
+removed the target; the row names the ADR and the condition that brings it
 back. A concrete test reference is evidence, not a substitute for adjudicating
 the row. Each phase
 closes its owned rows before its exit checklist.
@@ -45,5 +47,7 @@ rows are never split by number range.
 | `AC-EDITOR` | 18   | [ac-editor.md](./ac-editor.md) |
 | `AC-MCP`    | 10   | [ac-mcp.md](./ac-mcp.md)       |
 | `AC-UI`     | 14   | [ac-ui.md](./ac-ui.md)         |
+| `AC-VIEW`   | 10   | [ac-view.md](./ac-view.md)     |
+| `AC-SHOW`   | 15   | [ac-showcase.md](./ac-showcase.md) |
 
-Total: 175 rows across 17 prefixes.
+Total: 200 rows across 19 prefixes.
