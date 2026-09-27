@@ -5,14 +5,12 @@ compact page bar in the application identity, and an owner-chosen color scheme
 that can show the resume on a dark ground. The PDF, print, and the link-preview
 card stay light in every case.
 
-Status: proposed. The owner approved the direction: light by default, the owner
-chooses the scheme per resume, and viewers see the owner's choice. The dark
-scheme changes the white-sheet rule of
+Status: approved (2026-09-27), ready to build. The owner approved the direction:
+light by default, the owner chooses the scheme per resume, and viewers see the
+owner's choice. The dark scheme changes the white-sheet rule of
 [ADR 0020](../adr/0020-application-visual-identity.md) and adds document v5 to
-[ADR 0004](../adr/0004-resume-document-contract.md). Both records carry the
-change as a proposed edit; the color scheme is not built before the owner
-approves them and the [open decisions](#open-decisions). The page bar needs no
-contract change.
+[ADR 0004](../adr/0004-resume-document-contract.md). Both records now carry the
+change as accepted (2026-09-27); the page bar needs no contract change.
 
 ## Owner decisions
 
@@ -25,9 +23,10 @@ contract change.
 
 ## Open decisions
 
-Each item names the recommendation this page is written to.
+Each item names the recommendation this page is written to. The owner approved
+every item as written on 2026-09-27.
 
-1. **Where the setting lives.** Recommended: a document field,
+1. **Where the setting lives.** Approved (2026-09-27): a document field,
    `customization.colorScheme`, in document v5. The dark rule derives from the
    document's own colors, the Design panel and its preview already edit document
    fields, and agents can set it like any other leaf. The alternative is a
@@ -36,18 +35,19 @@ Each item names the recommendation this page is written to.
    version and no loss rule, but a migration, a publish request field, an
    OpenAPI change, and no agent access. Both block a rollback across the
    release.
-2. **Two releases.** Recommended: the page bar ships as its own release, then
-   the color scheme, one feature per release.
-3. **The bar's mark in seal red.** Recommended: yes. The mark is the logo, which
-   ADR 0020 already allows in seal red, and the page it sits on is public.
-4. **Sign-in gate.** Recommended: the gate page stays light in both schemes. It
-   is aboutme chrome shown before the resume, and its closed envelope stays
-   unchanged.
-5. **Join invite.** Recommended: the invite on a sign-in resume follows the
-   page's scheme with the bar's tokens, so a light card never sits on a dark
-   page.
-6. **Editor copy and preview.** Recommended: the field copy below, and a Web
-   preview that follows the editing device for Match device.
+2. **Two releases.** Approved (2026-09-27): the page bar ships as its own
+   release, then the color scheme, one feature per release.
+3. **The bar's mark in seal red.** Approved (2026-09-27): yes. The mark is the
+   logo, which ADR 0020 already allows in seal red, and the page it sits on is
+   public.
+4. **Sign-in gate.** Approved (2026-09-27): the gate page stays light in both
+   schemes. It is aboutme chrome shown before the resume, and its closed
+   envelope stays unchanged.
+5. **Join invite.** Approved (2026-09-27): the invite on a sign-in resume
+   follows the page's scheme with the bar's tokens, so a light card never sits
+   on a dark page.
+6. **Editor copy and preview.** Approved (2026-09-27): the field copy below, and
+   a Web preview that follows the editing device for Match device.
 
 ## Page bar
 

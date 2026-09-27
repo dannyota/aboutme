@@ -1,8 +1,8 @@
 # 0016: Sign-in providers: start methods, per-provider enablement, and LinkedIn
 
-Status: Accepted (2026-08-12, 2026-09-02, 2026-09-18, 2026-09-26). The owner
-accepted the LinkedIn code-injection risk stated below; LinkedIn sign-in is on
-from v0.6.3.
+Status: Accepted (2026-08-12, 2026-09-02, 2026-09-18, 2026-09-26, 2026-09-27).
+The owner accepted the LinkedIn code-injection risk stated below; LinkedIn
+sign-in is on from v0.6.3.
 
 ## Context
 
@@ -30,9 +30,13 @@ LinkedIn subjects are pairwise per app.
 
 ### Start methods
 
-`GET /api/v1/auth/{provider}/start` starts login only. A query that requests
-`link` or `reauth` returns `405` and creates no transaction. Linking and recent
-reauthentication use authenticated
+`GET /api/v1/auth/{provider}/start` starts login by default. It also starts the
+unauthenticated `view` purpose on `GET ...?purpose=view&slug={slug}`, which
+gates a sign-in-to-view public resume rather than an account
+([sign in to view](../design/viewer-analytics/sign-in-to-view.md#sign-in-flow)).
+A query that requests `link` or `reauth` returns `405` and creates no
+transaction; any other or unrecognized `purpose` value still starts login.
+Linking and recent reauthentication use authenticated
 `POST /api/v1/auth/{provider}/start?purpose=link|reauth`. The bodiless request
 passes the normal origin and CSRF checks and returns an authorize URL in the
 normal data envelope; the browser opens it as a top-level navigation. OAuth
@@ -168,6 +172,8 @@ take the resulting session cookie as well.
   nonce as its code-injection defense.
 - Former ADR 0063 (2026-09-26): LinkedIn returns no nonce claim, so the nonce
   check applies only when present, and the owner accepted the remaining risk.
+- 2026-09-27: `GET` also starts the unauthenticated `view` purpose, for sign in
+  to view; an unrecognized `purpose` still starts login.
 
 ## Sources
 

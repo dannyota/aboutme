@@ -1,6 +1,6 @@
 # MCP guide page (0.6.11)
 
-Status: planned, waiting for owner approvals. Design: [MCP guide](../design/mcp-guide.md), [copy](../design/mcp-guide-copy.md), and [MCP client compatibility](../design/mcp-client-compatibility.md). No code starts before the owner answers both approval lists.
+Status: approved, ready to build. Design: [MCP guide](../design/mcp-guide.md), [copy](../design/mcp-guide-copy.md), and [MCP client compatibility](../design/mcp-client-compatibility.md). The owner approved both approval lists on 2026-09-27.
 
 Two releases, in order. Claude's clients fail against today's OAuth server, so the compatibility release ships first and the owner proves Claude in production before the guide goes live. The manager assigns the version numbers; the guide keeps 0.6.11 only if compatibility takes an earlier free number.
 

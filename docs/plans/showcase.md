@@ -1,6 +1,6 @@
 # Community showcase
 
-Status: proposed; waits for the owner's answers to S1 to S13 in [the design](../design/showcase.md). Design: [showcase](../design/showcase.md), [ADR 0029](../adr/0029-community-showcase.md) (Proposed). One release, the last of the four upcoming ones; the manager assigns its version and its migration number after the queued ones.
+Status: approved, ready to build. The owner answered S1 to S13 on 2026-09-27 in [the design](../design/showcase.md). Design: [showcase](../design/showcase.md), [ADR 0029](../adr/0029-community-showcase.md) (Accepted). One release, the last of the four upcoming ones; the manager assigns its version and its migration number after the queued ones.
 
 |Release|Outcome|Risk|
 |-|-|-|
@@ -8,10 +8,10 @@ Status: proposed; waits for the owner's answers to S1 to S13 in [the design](../
 
 ## Before any code
 
-1. The owner answers S1 to S13. The architect folds the answers into the design and ADR 0029 and sets the ADR to Accepted.
-2. The architect updates the living design pages the contract touches: `docs/design/product.md` (publish controls, V1 scope row), `docs/design/data.md` (table row), `docs/design/api.md` (endpoint rows), `docs/design/budgets.md` (listing rate limit, page size), `docs/design/decisions.md` (status), `docs/design/ui/landing-and-library.md` pointer for the designer.
-3. The manager adds `docs/plans/traceability/ac-showcase.md` with `AC-SHOW-*` rows: opt-in rules, review key, listing conditions, filters and order, noindex, no-store, revocation, copy, export.
-4. The manager confirms no production resume holds the slug `showcase` (the migration also refuses).
+1. Done 2026-09-27: the owner answered S1 to S13; the design and ADR 0029 carry the approved answers, and the ADR reads Accepted.
+2. Still open: the architect updates the living design pages the contract touches: `docs/design/product.md` (publish controls, V1 scope row), `docs/design/data.md` (table row), `docs/design/api.md` (endpoint rows), `docs/design/budgets.md` (listing rate limit, page size), `docs/design/ui/landing-and-library.md` pointer for the designer. `docs/design/decisions.md` is done.
+3. Done: `docs/plans/traceability/ac-showcase.md` holds the `AC-SHOW-*` rows, state `OPEN`.
+4. Still open: the manager confirms no production resume holds the slug `showcase` (the migration also refuses).
 
 ## Steps
 

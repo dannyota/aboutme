@@ -1,6 +1,6 @@
 # Public page bar and light/dark theme
 
-Status: planned; ships after [sign in to view](viewer-analytics.md). Design: [public page bar and color scheme](../design/public-page-theme.md). The decision change is a proposed edit to [ADR 0020](../adr/0020-application-visual-identity.md) and [ADR 0004](../adr/0004-resume-document-contract.md); no new ADR. Mockups: `.dev/design/public-theme/` in the main checkout (ignored), rendered from production template pages by a scratch script; they predate the seal logo, so the bar's mark in them is stale.
+Status: approved, ready to build; ships after [sign in to view](viewer-analytics.md). Design: [public page bar and color scheme](../design/public-page-theme.md). The owner approved the ADR 0020 and ADR 0004 edits on 2026-09-27; no new ADR. Mockups: `.dev/design/public-theme/` in the main checkout (ignored), rendered from production template pages by a scratch script; they predate the seal logo, so the bar's mark in them is stale.
 
 |Part|Outcome|Risk|
 |-|-|-|
@@ -11,8 +11,8 @@ Recommended release split (open decision 2 in the design): the page bar as one r
 
 ## Before any code
 
-- The owner answers the design's open decisions 1 to 6. The page bar needs only decisions 2 and 3.
-- The owner approves the proposed ADR 0020 and ADR 0004 edits before any color scheme code. The manager then turns each "Proposed" History line into the accepted wording, folds ADR 0004's v5 subsection into its version table, and updates `docs/adr/README.md` (the 0020 row says "white resume") and `docs/design/decisions.md` if its 0020 or 0004 row needs it.
+- Done 2026-09-27: the owner answered the design's open decisions 1 to 6.
+- Done: the owner approved the ADR 0020 and ADR 0004 edits; both History lines read accepted 2026-09-27, `docs/adr/README.md`'s 0020 row and `docs/design/decisions.md` are updated. Folding ADR 0004's v5 subsection into its version table is still open, due with the document v5 code change.
 - Sign in to view is on `main`. Its `PublicResumeApp.vue` changes, `apps/web/app/public/overlay/JoinInvite.vue`, and `PublicGate.vue` are the base these steps edit; recheck the file list against them.
 
 ## Order

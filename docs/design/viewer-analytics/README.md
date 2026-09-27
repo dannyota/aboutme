@@ -13,10 +13,10 @@ Consented viewer tracking (per-view detail, a consent popup, viewer cookies, a
 viewer rights page) is dropped for good and will not be built. The owner never
 learns who viewed a resume, in either release.
 
-Status: view counts approved and built; sign in to view approved for a later
-release, with V9 to V13 still open. **Owner approval** marks a product-visible
-choice for the owner; the [list](#owner-approval) collects them. **Verify**
-marks a fact from documentation or inference that the live checks must confirm.
+Status: view counts approved and built; sign in to view approved (2026-09-27),
+ready to build. **Owner approval** marks a product-visible choice for the owner;
+the [list](#owner-approval) collects them. **Verify** marks a fact from
+documentation or inference that the live checks must confirm.
 
 ## Pages
 
@@ -61,21 +61,21 @@ own switch in its release.
 
 ## Owner approval
 
-| ID  | Choice                                                                                                                                                  | Decision                                                                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| V1  | Build order: view counts and the Views page first, then sign in to view in a later release                                                              | Approved                                                                                                   |
-| V2  | The count label "N lượt xem thật · M bị lọc" / "N real views · M filtered", with the one-line definition in [counting](counting.md#what-the-owner-sees) | Approved                                                                                                   |
-| V3  | Per-resume counting mode                                                                                                                                | Approved as counting always on, no setting ([above](#counting-is-always-on))                               |
-| V4  | All viewer-facing text: the privacy notice change, the Views page, the sign-in gate, and the join invite; the owner reviews the Vietnamese              | Approved; Vietnamese in review                                                                             |
-| V5  | A `sign_in` resume keeps its link-preview card and page title public                                                                                    | Carried into sign in to view                                                                               |
-| V6  | AWS WAF Bot Control and the Anonymous IP list in Count mode only: about USD 15 a month ([cost](delivery.md#cost))                                       | Approved                                                                                                   |
-| V7  | DPIA and cross-border assessment for viewer tracking                                                                                                    | Dropped with viewer tracking; counting keeps no viewer data ([legal](legal.md#assessments))                |
-| V8  | The join invite shows only to signed-in viewers of a `sign_in` resume, never on ordinary public pages                                                   | Approved                                                                                                   |
-| V9  | The owner is gated on their own `sign_in` resume like any viewer; public routes never read the session to admit                                         | Open; recommended, so public routes stay session-free ([sign in to view](sign-in-to-view.md#sign-in-flow)) |
-| V10 | The `view` sign-in requests the scope `openid` only, so the provider returns no name or email                                                           | Open; recommended, subject to a check that LinkedIn accepts `openid` alone                                 |
-| V11 | Ship with sign-in to view off by a server flag, raise the release fence, then turn the flag on and redeploy                                             | Open; recommended ([release](sign-in-to-view.md#release-and-rollback))                                     |
-| V12 | Below the raised fence, rollback is a forward fix or privileged administration; no operator command to switch every resume off                          | Open; recommended, as for the second-factor floors                                                         |
-| V13 | While sign-in is on, the publish dialog shows the discovery switch disabled and keeps its stored value                                                  | Open; recommended                                                                                          |
+| ID  | Choice                                                                                                                                                  | Decision                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| V1  | Build order: view counts and the Views page first, then sign in to view in a later release                                                              | Approved                                                                                                       |
+| V2  | The count label "N lượt xem thật · M bị lọc" / "N real views · M filtered", with the one-line definition in [counting](counting.md#what-the-owner-sees) | Approved                                                                                                       |
+| V3  | Per-resume counting mode                                                                                                                                | Approved as counting always on, no setting ([above](#counting-is-always-on))                                   |
+| V4  | All viewer-facing text: the privacy notice change, the Views page, the sign-in gate, and the join invite; the owner reviews the Vietnamese              | Approved (2026-09-27), Vietnamese included                                                                     |
+| V5  | A `sign_in` resume keeps its link-preview card and page title public                                                                                    | Carried into sign in to view                                                                                   |
+| V6  | AWS WAF Bot Control and the Anonymous IP list in Count mode only: about USD 15 a month ([cost](delivery.md#cost))                                       | Approved                                                                                                       |
+| V7  | DPIA and cross-border assessment for viewer tracking                                                                                                    | Dropped with viewer tracking; counting keeps no viewer data ([legal](legal.md#assessments))                    |
+| V8  | The join invite shows only to signed-in viewers of a `sign_in` resume, never on ordinary public pages                                                   | Approved                                                                                                       |
+| V9  | The owner is gated on their own `sign_in` resume like any viewer; public routes never read the session to admit                                         | Approved (2026-09-27), so public routes stay session-free ([sign in to view](sign-in-to-view.md#sign-in-flow)) |
+| V10 | The `view` sign-in requests the scope `openid` only, so the provider returns no name or email                                                           | Approved (2026-09-27), subject to a check that LinkedIn accepts `openid` alone                                 |
+| V11 | Ship with sign-in to view off by a server flag, raise the release fence, then turn the flag on and redeploy                                             | Approved (2026-09-27) ([release](sign-in-to-view.md#release-and-rollback))                                     |
+| V12 | Below the raised fence, rollback is a forward fix or privileged administration; no operator command to switch every resume off                          | Approved (2026-09-27), as for the second-factor floors                                                         |
+| V13 | While sign-in is on, the publish dialog shows the discovery switch disabled and keeps its stored value                                                  | Approved (2026-09-27)                                                                                          |
 
 ## Releases
 

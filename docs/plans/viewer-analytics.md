@@ -1,6 +1,6 @@
 # Sign in to view (next release after the MCP guide)
 
-Status: planned; ready to build once the owner settles V9 to V13 in [the design](../design/viewer-analytics/README.md#owner-approval). Design: [sign in to view](../design/viewer-analytics/sign-in-to-view.md), [delivery](../design/viewer-analytics/delivery.md), [legal](../design/viewer-analytics/legal.md), [ADR 0022](../adr/0022-viewer-privacy-and-counting.md). View counts shipped in v0.6.4. Consented viewer tracking is dropped for good (ADR 0022): no viewer tables, no consent migrations, no viewer list, no overlay. This is the one release left in this plan.
+Status: approved, ready to build. The owner settled V9 to V13 on 2026-09-27 in [the design](../design/viewer-analytics/README.md#owner-approval). Design: [sign in to view](../design/viewer-analytics/sign-in-to-view.md), [delivery](../design/viewer-analytics/delivery.md), [legal](../design/viewer-analytics/legal.md), [ADR 0022](../adr/0022-viewer-privacy-and-counting.md). View counts shipped in v0.6.4. Consented viewer tracking is dropped for good (ADR 0022): no viewer tables, no consent migrations, no viewer list, no overlay. This is the one release left in this plan.
 
 Ships as the next release after the MCP guide page, one feature, its own version number. Migration: one file, numbered next after the latest in `apps/server/migrations` (`00008_resume_view_counts.sql` today); the manager assigns the number when the backend brief starts and serializes it with any other queued migration.
 
@@ -10,10 +10,10 @@ Ships as the next release after the MCP guide page, one feature, its own version
 
 ## Before any code
 
-1. The owner settles V9 to V13 and reviews the Vietnamese of V4 (gate text, invite, notice rows, publish switch line).
-2. The manager adds `docs/plans/traceability/ac-view.md` with `AC-VIEW-*` rows from the design: gated routes table, pass cookie rules, `view` callback rules, fence wait and epoch, flag behavior, invite who/when/where/close, notice rows. Briefs cite those IDs.
-3. The architect amends [ADR 0016](../adr/0016-sign-in-providers.md) (start methods: `GET` also accepts `purpose=view`; an unknown purpose still means login) and the OAuth start list in `docs/design/security.md`, and checks `docs/design/budgets.md` (pass cookie row) against the design. Docs only; no code.
-4. Verify before the backend brief: LinkedIn accepts an authorize request with scope `openid` alone (V10). If it does not, the `view` start keeps the account scopes and still discards every claim; the design line changes, not the gate text.
+1. Done 2026-09-27: the owner settled V9 to V13 and reviewed the Vietnamese of V4 (gate text, invite, notice rows, publish switch line).
+2. Done: `docs/plans/traceability/ac-view.md` holds the `AC-VIEW-*` rows from the design, state `OPEN`. Briefs cite those IDs.
+3. Done: [ADR 0016](../adr/0016-sign-in-providers.md) (start methods: `GET` also accepts `purpose=view`; an unknown purpose still means login) and the OAuth start list in `docs/design/security.md` are amended; `docs/design/budgets.md` already carries the pass cookie row and needs no change.
+4. Still open, before the backend brief: verify LinkedIn accepts an authorize request with scope `openid` alone (V10). If it does not, the `view` start keeps the account scopes and still discards every claim; the design line changes, not the gate text.
 
 ## Order and roles
 
