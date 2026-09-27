@@ -326,17 +326,6 @@ func TestDeleteSession_RevokingRotatedCurrentSession_RevokesPredecessorToo(t *te
 		t.Fatalf("look up successor row by its new token: %v", err)
 	}
 
-	// DELETE /sessions/{id} requires a RECENT reauthentication. Rotation
-	// copies reauthenticated_at forward from the predecessor unchanged
-	// (session.go's tryRotate, by design -- rotation must never itself
-	// satisfy the recent-reauth gate), which by the fake clock's own
-	// 25h-advanced "now" is stale. Touch it using the same fake clock so
-	// the test isolates lineage revocation from the reauthentication gate.
-	pool := newRowInspectorPool(t)
-	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1`, successorSess.ID, clk.Now()); err != nil {
-		t.Fatalf("touch successor's reauthenticated_at fresh: %v", err)
-	}
-
 	delResp := doJSON(t, handler, http.MethodDelete, sessionIDPath(successorSess.ID), testPublicOrigin, csrfTokenFor(successorSess), "", sessionRequestCookie(successor.Value)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if delResp.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE own current (rotated) session status = %d, want %d", delResp.StatusCode, http.StatusNoContent)
@@ -380,15 +369,6 @@ func TestDeleteSession_TargetsPredecessorOfCurrentSession_ClearsCurrentCookie(t 
 	bRow, err := q.GetSessionByTokenHash(context.Background(), sessionTokenHash(rawB))
 	if err != nil {
 		t.Fatalf("look up B's row: %v", err)
-	}
-
-	// DELETE /sessions/{id} requires a RECENT reauthentication. Rotation
-	// copies reauthenticated_at forward from A unchanged, which by the
-	// fake clock's own 25h-advanced "now" is stale. Touch B using the same
-	// fake clock so the test isolates lineage revocation.
-	pool := newRowInspectorPool(t)
-	if _, err := pool.Exec(context.Background(), `UPDATE sessions SET reauthenticated_at = $2 WHERE id = $1`, bRow.ID, clk.Now()); err != nil {
-		t.Fatalf("touch B's reauthenticated_at fresh: %v", err)
 	}
 
 	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(aRow.ID), testPublicOrigin, csrfTokenFor(bRow), "", sessionRequestCookie(rawB)) //nolint:bodyclose // doJSON closes the body itself before returning.
@@ -497,9 +477,9 @@ func TestDeleteSession_NonCurrentTargetWithLineagePartner_RevokesBoth(t *testing
 	}
 
 	// A separate, unrelated CURRENT session, issued fresh (at the SAME,
-	// already-advanced fake-clock instant) so its own recent-reauth check
-	// passes trivially -- the caller is browsing via this session and
-	// revokes A (neither their current session, nor a fresh one) by id.
+	// already-advanced fake-clock instant): the caller is browsing via this
+	// session and revokes A (neither their current session, nor this one) by
+	// id.
 	rawCurrent, currentSess, err := sm.Issue(context.Background(), userID, "ua", "203.0.113.96")
 	if err != nil {
 		t.Fatalf("Issue() (current) error = %v", err)
@@ -887,25 +867,26 @@ func TestDeleteSession_MalformedSessionID_Returns404(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive is
-// the per-session-revoke reauthentication gate: a stale
-// reauthenticated_at rejects the request before RevokeForUser ever runs.
-func TestDeleteSession_WithoutRecentReauth_Returns403AndLeavesSessionLive(t *testing.T) {
+// TestDeleteSession_StaleReauth_Succeeds proves per-session revoke needs no
+// recent reauthentication: ending a session only reduces access, so a stale
+// reauthenticated_at still lets RevokeForUser run and clears the cookie.
+func TestDeleteSession_StaleReauth_Succeeds(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
 	raw, sess := issueTestSession(t, q, userID)
 	forceReauthenticatedAtStale(t, sess.ID)
 
 	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(sess.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	if got := decodeErrorCode(t, resp); got != "reauth_required" {
-		t.Errorf("error.code = %q, want %q", got, "reauth_required")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
 	}
 
-	if revokedAt := rowRevokedAt(t, sess.ID); revokedAt != nil {
-		t.Error("session row's revoked_at is non-NULL after a reauth-rejected DELETE, want NULL (never touched)")
+	if revokedAt := rowRevokedAt(t, sess.ID); revokedAt == nil {
+		t.Error("session row's revoked_at is NULL after a DELETE with a stale primary proof, want non-NULL")
+	}
+	cleared := extractCookie(resp, auth.SessionCookieName)
+	if cleared == nil || cleared.MaxAge >= 0 {
+		t.Error("revoking the current session with a stale primary proof did not clear its cookie")
 	}
 }
 
@@ -994,13 +975,11 @@ func TestDeleteAllSessions_RevokesEveryLiveSessionForCaller(t *testing.T) {
 	}
 }
 
-// TestDeleteAllSessions_StaleReauth_RejectsBeforeRevoking is
-// a row-level proof that stale reauthenticated_at returns 403
-// reauth_required before RevokeAll touches a row. It proves this by
-// asserting, directly against the table, that every one of the caller's
-// sessions still has revoked_at NULL afterward, and that they still
-// authenticate.
-func TestDeleteAllSessions_StaleReauth_RejectsBeforeRevoking(t *testing.T) {
+// TestDeleteAllSessions_StaleReauth_Succeeds is a row-level proof that
+// logout-everywhere needs no recent reauthentication: a stale
+// reauthenticated_at still revokes every one of the caller's sessions and
+// clears the cookie, because ending sessions only reduces access.
+func TestDeleteAllSessions_StaleReauth_Succeeds(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
 	rawCurrent, current := issueTestSession(t, q, userID)
@@ -1008,40 +987,34 @@ func TestDeleteAllSessions_StaleReauth_RejectsBeforeRevoking(t *testing.T) {
 	forceReauthenticatedAtStale(t, current.ID)
 
 	resp := doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(current), "", sessionRequestCookie(rawCurrent)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	if got := decodeErrorCode(t, resp); got != "reauth_required" {
-		t.Errorf("error.code = %q, want %q", got, "reauth_required")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
 	}
 
-	if resp.Header.Get("Clear-Site-Data") != "" {
-		t.Error("Clear-Site-Data was set on a reauth-rejected logout-everywhere, want none")
+	if got := resp.Header.Get("Clear-Site-Data"); got != `"cookies", "storage"` {
+		t.Errorf("Clear-Site-Data = %q, want %q", got, `"cookies", "storage"`)
 	}
-	if extractCookie(resp, auth.SessionCookieName) != nil {
-		t.Error("__Host-session was cleared on a reauth-rejected logout-everywhere, want it untouched")
+	cleared := extractCookie(resp, auth.SessionCookieName)
+	if cleared == nil || cleared.MaxAge >= 0 {
+		t.Error("logout-everywhere with a stale primary proof did not clear __Host-session")
 	}
 
-	// Row-count proof: NEITHER of the caller's two sessions was revoked --
-	// a bug that revoked-then-discovered-it-should-refuse would fail this,
-	// even though the response itself already looked like a clean 403.
-	if revokedAt := rowRevokedAt(t, current.ID); revokedAt != nil {
-		t.Error("current session's revoked_at is non-NULL after a reauth-rejected logout-everywhere, want NULL")
+	if revokedAt := rowRevokedAt(t, current.ID); revokedAt == nil {
+		t.Error("current session's revoked_at is NULL after logout-everywhere with a stale primary proof, want non-NULL")
 	}
-	if revokedAt := rowRevokedAt(t, other.ID); revokedAt != nil {
-		t.Error("other session's revoked_at is non-NULL after a reauth-rejected logout-everywhere, want NULL")
+	if revokedAt := rowRevokedAt(t, other.ID); revokedAt == nil {
+		t.Error("other session's revoked_at is NULL after logout-everywhere with a stale primary proof, want non-NULL")
 	}
 
 	sm := auth.NewSessionManager(q)
-	if _, _, err := sm.Authenticate(context.Background(), rawOther); err != nil {
-		t.Errorf("Authenticate(other session's token) after a reauth-rejected logout-everywhere error = %v, want nil", err)
+	if _, _, err := sm.Authenticate(context.Background(), rawOther); !errors.Is(err, auth.ErrSessionInvalid) {
+		t.Errorf("Authenticate(other session's token) after logout-everywhere error = %v, want ErrSessionInvalid", err)
 	}
 }
 
-// TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing
-// proves RequireCSRF gates logout-everywhere too, running even before the
-// reauth check: with no X-CSRF-Token, nothing is revoked regardless of
-// how recent reauthenticated_at is.
+// TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing proves
+// RequireCSRF gates logout-everywhere: with no X-CSRF-Token, nothing is
+// revoked.
 func TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing(t *testing.T) {
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -1060,13 +1033,13 @@ func TestDeleteAllSessions_WithoutCSRFToken_Returns403AndTouchesNothing(t *testi
 	}
 }
 
-// ---- sensitive-mutation gate and lock-order races ---------------------------
+// ---- lock-order races -------------------------------------------------------
 //
-// Logout everywhere and single-session revocation are sensitive actions in
-// docs/design/second-factor-authentication.md: they lock the user, then lock
-// and recheck the caller's session, epoch, and recent proofs before writing.
-// Every session issuer, rotation successor, and epoch-change replacement takes
-// the same user lock, so none can commit a session a revocation misses.
+// Logout everywhere and single-session revocation lock the user, then lock and
+// recheck the caller's session and epoch before writing, per
+// docs/design/second-factor-authentication.md. Every session issuer, rotation
+// successor, and epoch-change replacement takes the same user lock, so none
+// can commit a session a revocation misses.
 
 // raceWait bounds every wait in the lock-order races below.
 const raceWait = 15 * time.Second
@@ -1318,45 +1291,63 @@ func TestRevokeAll_LogoutFirstRotationMintsNoSuccessor(t *testing.T) {
 	}
 }
 
-// TestSensitiveRevocation_EnrolledAccountNeedsFactorProof proves logout
-// everywhere and single-session revocation require a recent factor proof for
-// an enrolled account and change nothing without it.
-func TestSensitiveRevocation_EnrolledAccountNeedsFactorProof(t *testing.T) {
+// TestDeleteSession_CallerSessionRevokedFirst proves single-session revoke's
+// locked recheck of the caller's own session: a concurrent revoke of the
+// caller session that commits first, while the request waits on the same user
+// lock, makes the request fail closed instead of revoking the named target.
+func TestDeleteSession_CallerSessionRevokedFirst(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	rawCaller, caller := issueTestSession(t, q, userID)
+	_, target := issueTestSession(t, q, userID)
+
+	holder, qtx, pid := beginUserLockHolder(t, pool, userID)
+	revokedAt := time.Now()
+	if err := qtx.RevokeSession(t.Context(), store.RevokeSessionParams{ID: caller.ID, RevokedAt: &revokedAt}); err != nil {
+		t.Fatalf("revoke caller session under the holder lock: %v", err)
+	}
+
+	done := serveAsync(t.Context(), handler, http.MethodDelete, sessionIDPath(target.ID), csrfTokenFor(caller), rawCaller)
+	waitBlockedBy(t, pid)
+	if err := holder.Commit(t.Context()); err != nil {
+		t.Fatalf("commit caller revoke: %v", err)
+	}
+	rec := awaitRecorder(t, done)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("DELETE %s with the caller session revoked mid-request status = %d (%s), want 401", sessionIDPath(target.ID), rec.Code, rec.Body)
+	}
+	if rowRevokedAt(t, target.ID) != nil {
+		t.Error("target session was revoked even though the caller's own session was invalid, want untouched")
+	}
+}
+
+// TestRevocation_EnrolledAccountStaleFactorProofSucceeds proves logout
+// everywhere and single-session revocation are not sensitive mutations: an
+// enrolled account with a stale primary and factor proof still revokes,
+// because ending sessions only reduces access.
+func TestRevocation_EnrolledAccountStaleFactorProofSucceeds(t *testing.T) {
 	handler, _, q := newRevocationRaceService(t)
 	userID := createTestUser(t, q)
 	enrollForTest(t, q, userID)
 	raw, sess := issueTestSession(t, q, userID)
 	_, other := issueTestSession(t, q, userID)
 
-	for name, path := range map[string]string{"revoke one": sessionIDPath(other.ID), "revoke all": auth.SessionsPath} {
-		resp := doJSON(t, handler, http.MethodDelete, path, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
-		if resp.StatusCode != http.StatusForbidden || decodeErrorCode(t, resp) != "reauth_required" {
-			t.Errorf("%s without factor proof = %d, want 403 reauth_required", name, resp.StatusCode)
-		}
-	}
-	if rowRevokedAt(t, other.ID) != nil || rowRevokedAt(t, sess.ID) != nil {
-		t.Fatal("a rejected sensitive revocation revoked a session")
-	}
-
 	stale := time.Now().Add(-20 * time.Minute)
 	setFactorProofForTest(t, sess.ID, &stale)
-	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(other.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if resp.StatusCode != http.StatusForbidden {
-		t.Errorf("revoke one with stale factor proof = %d, want 403", resp.StatusCode)
-	}
+	forceReauthenticatedAtStale(t, sess.ID)
 
-	fresh := time.Now()
-	setFactorProofForTest(t, sess.ID, &fresh)
-	resp = doJSON(t, handler, http.MethodDelete, sessionIDPath(other.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
+	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(other.ID), testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("revoke one with both proofs = %d, want 204", resp.StatusCode)
+		t.Fatalf("revoke one with a stale primary and factor proof = %d, want 204", resp.StatusCode)
 	}
 	if rowRevokedAt(t, other.ID) == nil {
-		t.Error("target live after an authorized revocation")
+		t.Error("target session live after a revoke with a stale primary and factor proof")
 	}
+
 	resp = doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
 	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("revoke all with both proofs = %d, want 204", resp.StatusCode)
+		t.Fatalf("revoke all with a stale primary and factor proof = %d, want 204", resp.StatusCode)
 	}
 	if n := unrevokedSessionCount(t, userID); n != 0 {
 		t.Errorf("live sessions after logout everywhere = %d, want 0", n)

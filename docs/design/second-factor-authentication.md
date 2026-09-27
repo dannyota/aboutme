@@ -67,8 +67,9 @@ Regular routes accept a live current-epoch session whatever the age of its
 factor proof. Sensitive actions keep the 15-minute window and, on an enrolled
 account, require both proof times: provider link and unlink, password add or
 change, factor management, recovery-code regeneration, account deletion, slug
-release, session revocation, logout everywhere, and approving or silently
-reusing an agent grant. Denying an agent grant needs no recent proof.
+release, and approving or silently reusing an agent grant. Denying an agent
+grant, revoking one session, and logout everywhere need only a live
+current-epoch session, because ending sessions only reduces access.
 
 ## Pending authentication
 
