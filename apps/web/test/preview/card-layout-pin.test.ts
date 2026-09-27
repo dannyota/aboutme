@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest';
 import { CARD_LAYOUT_VERSION } from '../../app/components/preview/cardLayout';
 
 // Every live card's URL carries the layout version, and platforms refetch an
-// image only when its URL changes (docs/adr/0014-public-page-head-and-link-preview.md).
+// image only when its URL changes
+// (docs/adr/0014-public-page-head-and-link-preview.md).
 // A change to any file that draws the card must raise CARD_LAYOUT_VERSION
 // here and LayoutVersion in apps/server/internal/previewcard/card.go, then
 // pin the new hash.
