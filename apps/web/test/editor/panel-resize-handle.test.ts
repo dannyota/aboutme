@@ -11,9 +11,9 @@ import { setSiteLocale } from '../support/locale';
 
 const originalClientWidth = document.documentElement.clientWidth;
 
-// A viewport wide enough that the preview's 32rem floor never limits the
-// panel (needs more than 100.5rem), so the default max reads as the flat
-// 48rem ceiling.
+// A viewport wide enough that the preview's 29.5rem floor never limits the
+// panel (needs more than 98rem), so the default max reads as the flat 48rem
+// ceiling.
 function useWideViewport(): void {
   Object.defineProperty(document.documentElement, 'clientWidth', {
     configurable: true,

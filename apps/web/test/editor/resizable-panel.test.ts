@@ -10,14 +10,14 @@ import {
   EDITOR_PANEL_MAX_REM,
   EDITOR_PANEL_MIN_REM,
   EDITOR_PANEL_STORAGE_KEY,
+  EDITOR_PREVIEW_MIN_REM,
   maxPanelWidthRem,
   parseStoredPanelWidthRem,
   useResizablePanel,
 } from '../../app/composables/useResizablePanel';
 
-// A viewport wide enough that the preview's 32rem floor never limits the
-// panel (needs more than 100.5rem), so tests can assert the flat 48rem
-// ceiling.
+// A viewport wide enough that the preview's 29.5rem floor never limits the
+// panel (needs more than 98rem), so tests can assert the flat 48rem ceiling.
 const WIDE_VIEWPORT_REM = 200;
 const originalClientWidth = document.documentElement.clientWidth;
 
@@ -49,14 +49,22 @@ describe('maxPanelWidthRem', () => {
     expect(maxPanelWidthRem(WIDE_VIEWPORT_REM)).toBe(48);
   });
 
-  it('keeps the preview at its 32rem floor on a mid-size viewport', () => {
-    // 90rem viewport - 20.5rem rail/outline - 32rem preview floor = 37.5rem.
-    expect(maxPanelWidthRem(90)).toBe(37.5);
+  it('keeps the preview at its 29.5rem floor on a mid-size viewport', () => {
+    expect(EDITOR_PREVIEW_MIN_REM).toBe(29.5);
+    // 90rem viewport - 20.5rem rail/outline - 29.5rem preview floor = 40rem.
+    expect(maxPanelWidthRem(90)).toBe(40);
+  });
+
+  it('fits the 22rem minimum exactly at the 72rem breakpoint', () => {
+    // 72rem - 20.5rem - 29.5rem = 22rem: the narrowest four-region layout
+    // holds the default panel and the preview floor with no overflow.
+    expect(maxPanelWidthRem(72)).toBe(EDITOR_PANEL_MIN_REM);
+    expect(maxPanelWidthRem(73)).toBe(23);
   });
 
   it('never drops the max below the 22rem minimum', () => {
-    // 72.5rem - 20.5rem - 32rem = 20rem of room, less than the minimum.
-    expect(maxPanelWidthRem(72.5)).toBe(EDITOR_PANEL_MIN_REM);
+    // 70rem - 20.5rem - 29.5rem = 20rem of room, less than the minimum.
+    expect(maxPanelWidthRem(70)).toBe(EDITOR_PANEL_MIN_REM);
   });
 });
 
@@ -151,7 +159,7 @@ describe('createResizablePanelController', () => {
     panel.setWidthRem(40);
     expect(panel.widthRem.value).toBe(40);
 
-    viewportRem.value = 72.5;
+    viewportRem.value = 72;
     expect(panel.maxRem.value).toBe(EDITOR_PANEL_MIN_REM);
     panel.setWidthRem(panel.widthRem.value);
     expect(panel.widthRem.value).toBe(EDITOR_PANEL_MIN_REM);
@@ -360,7 +368,7 @@ describe('useResizablePanel', () => {
     wrapper.vm.panel.commit();
     expect(wrapper.vm.panel.widthRem.value).toBe(40);
 
-    setClientWidthPx(72.5 * 16);
+    setClientWidthPx(72 * 16);
     window.dispatchEvent(new Event('resize'));
     await wrapper.vm.$nextTick();
 
@@ -377,7 +385,7 @@ describe('useResizablePanel', () => {
       expect(wrapper.vm.panel.widthRem.value).toBe(30);
 
       // 1100px (68.75rem) leaves no room for the panel beyond the preview's
-      // 32rem floor, so the display clamps to the 22rem minimum.
+      // 29.5rem floor, so the display clamps to the 22rem minimum.
       setClientWidthPx(1100);
       window.dispatchEvent(new Event('resize'));
       await wrapper.vm.$nextTick();

@@ -50,7 +50,8 @@ no canvas glows:
 1. A 4 rem tool rail for Document, Structure, Design, Templates, and Photo.
 2. A 16.5 rem resume outline with Personal details, indigo section icons, a
    collapsible list, and Add section actions.
-3. A preview region, at least 32 rem wide, holding the rendered sheet.
+3. A preview region, at least 29.5 rem wide, holding the rendered sheet. The
+   four columns fill exactly 72 rem at the default inspector width.
 4. An inspector for details, sections, structure, customization, templates, and
    photo: 22 rem, or dragged to 48 rem above 72 rem width, kept per browser.
 

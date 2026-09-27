@@ -27,12 +27,17 @@ const EDITOR_PANEL_SNAP_REM = 0.25;
 
 /** The 4rem rail plus the 16.5rem outline (DESIGN.md's fixed columns). */
 const FIXED_COLUMNS_REM = 4 + 16.5;
-/** The preview's own floor in the four-region workspace (DESIGN.md). */
-const PREVIEW_MIN_REM = 32;
+/**
+ * The preview's own floor in the four-region workspace (DESIGN.md). With the
+ * rail, outline, and 22rem panel it sums to 72rem, the width where the
+ * four-region layout starts, so the grid never overflows the viewport.
+ */
+export const EDITOR_PREVIEW_MIN_REM = 29.5;
 
-/** The widest the panel can be while the preview keeps its 32rem floor. */
+/** The widest the panel can be while the preview keeps its floor. */
 export function maxPanelWidthRem(viewportRem: number): number {
-  const roomForPanel = viewportRem - FIXED_COLUMNS_REM - PREVIEW_MIN_REM;
+  const roomForPanel = viewportRem - FIXED_COLUMNS_REM
+    - EDITOR_PREVIEW_MIN_REM;
   return Math.min(
     EDITOR_PANEL_MAX_REM,
     Math.max(EDITOR_PANEL_MIN_REM, roomForPanel),
@@ -185,7 +190,7 @@ function readViewportRem(): number {
   if (typeof document === 'undefined') {
     // No layout depends on this before hydration; a generous sentinel keeps
     // the default bounds from clamping unnecessarily.
-    return EDITOR_PANEL_MAX_REM + FIXED_COLUMNS_REM + PREVIEW_MIN_REM;
+    return EDITOR_PANEL_MAX_REM + FIXED_COLUMNS_REM + EDITOR_PREVIEW_MIN_REM;
   }
   // clientWidth excludes the page scrollbar that innerWidth counts, so the
   // panel's computed max never reserves room for a scrollbar that isn't
