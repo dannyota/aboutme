@@ -76,6 +76,7 @@ export type EditorControlId
     | 'templatePresets' | 'templateWarnings' | 'templateReadRequired'
     | 'templateSearchLabel' | 'templateSearchPlaceholder'
     | 'templateSearchClear' | 'templateSearchNoMatch'
+    | 'templateSearchNoMatchAnnounced'
     | 'templateSearchCount';
 
 type EditorControlCopy = Record<
@@ -100,9 +101,12 @@ type EditorControlCopy = Record<
   readonly photoStatusRateLimited: (wait: string) => string;
   readonly templatePart: (part: string, status: string) => string;
   readonly tryAgainLater: (seconds?: number) => string;
-  /** "No templates match "{q}"." (DESIGN.md, editor Templates panel). */
+  /**
+   * The visible no-match message, quoting the query (DESIGN.md, editor
+   * Templates panel).
+   */
   readonly templateSearchNoMatch: (query: string) => string;
-  /** "{n} templates", announced politely as the result count changes. */
+  /** "{n} templates" ("1 template" singular in English). */
   readonly templateSearchCount: (count: number) => string;
 };
 
@@ -301,10 +305,11 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templateWarnings: 'Cảnh báo mẫu',
       templateReadRequired: 'Tải lại trang để lấy CV mới nhất, rồi thử lại.',
       templateSearchLabel: 'Tìm mẫu',
-      templateSearchPlaceholder: 'Tên, phong cách hoặc vị trí ứng tuyển',
+      templateSearchPlaceholder: 'Tên, phong cách hoặc vị trí',
       templateSearchClear: 'Xóa tìm kiếm',
       templateSearchNoMatch: (query) =>
         `Không có mẫu nào khớp với “${query}”.`,
+      templateSearchNoMatchAnnounced: 'Không có mẫu nào khớp.',
       templateSearchCount: (count) => `${count} mẫu`,
     },
     customization: {
@@ -560,8 +565,10 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templateSearchLabel: 'Search templates',
       templateSearchPlaceholder: 'Name, style, or role',
       templateSearchClear: 'Clear search',
-      templateSearchNoMatch: (query) => `No templates match "${query}".`,
-      templateSearchCount: (count) => `${count} templates`,
+      templateSearchNoMatch: (query) => `No templates match “${query}”.`,
+      templateSearchNoMatchAnnounced: 'No templates match.',
+      templateSearchCount: (count) =>
+        count === 1 ? '1 template' : `${count} templates`,
     },
     customization: {
       'font.family': 'Font',

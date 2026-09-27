@@ -63,7 +63,8 @@ describe('TemplatePanel', () => {
 
     expect(applyTemplate).toHaveBeenCalledOnce();
     expect(applyTemplate).toHaveBeenCalledWith(TEMPLATES[0]);
-    expect(wrapper.get('[role="status"]').text()).toBe('Saving template');
+    expect(wrapper.get('[data-testid="template-status"]').text())
+      .toBe('Saving template');
     expect(wrapper.text()).not.toContain(TEMPLATES[0]!.id);
   });
 
@@ -175,14 +176,16 @@ describe('TemplatePanel', () => {
 
     await wrapper.get(`[data-template="${preset.id}"] button`).trigger('click');
 
-    expect(wrapper.get('[role="status"]').text()).toBe('No changes');
+    expect(wrapper.get('[data-testid="template-status"]').text())
+      .toBe('No changes');
     expect(wrapper.text()).not.toContain('Selected template');
     expect(wrapper.text()).not.toContain('Saved template');
 
     locale.value = 'vi';
     await nextTick();
 
-    expect(wrapper.get('[role="status"]').text()).toBe('Không có thay đổi');
+    expect(wrapper.get('[data-testid="template-status"]').text())
+      .toBe('Không có thay đổi');
     expect(applyTemplate).toHaveBeenCalledOnce();
   });
 
@@ -266,6 +269,14 @@ describe('TemplatePanel', () => {
 });
 
 describe('TemplatePanel search', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('filters the visible templates by name, style, and role, keeping '
     + 'catalog order', async () => {
     const wrapper = mount(TemplatePanel, {
@@ -300,7 +311,7 @@ describe('TemplatePanel search', () => {
       ).toEqual(['international-lang']);
     });
 
-  it('announces the result count politely, following the locale',
+  it('matches every ATS-friendly template through the filter chip label',
     async () => {
       const wrapper = mount(TemplatePanel, {
         props: { actions: actionsFor(vi.fn()) },
@@ -308,23 +319,78 @@ describe('TemplatePanel search', () => {
 
       await wrapper
         .get('[data-testid="template-search-input"]')
-        .setValue('BrSE');
+        .setValue('ats');
       await nextTick();
 
-      expect(wrapper.get('[data-testid="template-search-status"]').text())
-        .toBe('1 templates');
-      expect(wrapper.get('[role="status"]').attributes('data-testid'))
-        .toBe('template-search-status');
-
-      locale.value = 'vi';
-      await nextTick();
-
-      expect(wrapper.get('[data-testid="template-search-status"]').text())
-        .toBe('1 mẫu');
+      expect(
+        wrapper.findAll('[data-template]')
+          .map((template) => template.attributes('data-template')),
+      ).toEqual(expect.arrayContaining([
+        'ats-plain', 'mono-print', 'high-contrast', 'government-formal',
+        'minimal-air', 'classic-serif', 'academic-dense',
+      ]));
     });
 
-  it('names the query in the empty-result message, with a clear action '
-    + 'that restores the list and keeps focus in the field', async () => {
+  it('matches a filter chip label naming a template unreachable by its own '
+    + 'name or purpose', async () => {
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+
+    await wrapper
+      .get('[data-testid="template-search-input"]')
+      .setValue('first job');
+    await nextTick();
+
+    expect(
+      wrapper.findAll('[data-template]')
+        .map((template) => template.attributes('data-template')),
+    ).toContain('graduate-friendly');
+  });
+
+  it('renders an empty status line while the query is blank', () => {
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('');
+  });
+
+  it('announces the result count politely once typing pauses, following '
+    + 'the locale, without repeating the query itself', async () => {
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+
+    await wrapper
+      .get('[data-testid="template-search-input"]')
+      .setValue('BrSE');
+    await nextTick();
+
+    // Not yet announced: typing has not paused for 500 ms.
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('');
+
+    vi.advanceTimersByTime(500);
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('1 template');
+    expect(wrapper.get('[role="status"]').attributes('data-testid'))
+      .toBe('template-search-status');
+
+    locale.value = 'vi';
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('1 mẫu');
+  });
+
+  it('names the query in the immediate, non-live empty-result message, then '
+    + 'announces a stable line with no query once typing pauses, with a '
+    + 'clear action that restores the list and keeps focus in the field',
+  async () => {
     const wrapper = mount(TemplatePanel, {
       attachTo: document.body,
       props: { actions: actionsFor(vi.fn()) },
@@ -335,8 +401,16 @@ describe('TemplatePanel search', () => {
     await nextTick();
 
     expect(wrapper.findAll('[data-template]')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="template-search-message"]').text())
+      .toBe('No templates match “zzz-no-match”.');
     expect(wrapper.get('[data-testid="template-search-status"]').text())
-      .toBe('No templates match "zzz-no-match".');
+      .toBe('');
+
+    vi.advanceTimersByTime(500);
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('No templates match.');
 
     await wrapper.get('[data-testid="template-search-clear"]')
       .trigger('click');
@@ -344,8 +418,10 @@ describe('TemplatePanel search', () => {
 
     expect((input.element as HTMLInputElement).value).toBe('');
     expect(wrapper.findAll('[data-template]')).toHaveLength(TEMPLATES.length);
-    expect(wrapper.find('[data-testid="template-search-status"]').exists())
+    expect(wrapper.find('[data-testid="template-search-message"]').exists())
       .toBe(false);
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('');
     expect(document.activeElement).toBe(input.element);
     wrapper.unmount();
   });

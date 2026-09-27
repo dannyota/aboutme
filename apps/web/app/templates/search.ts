@@ -1,16 +1,29 @@
 import type { SampleLanguage } from '@aboutme/schema/samples';
 import type { Locale } from '../i18n/locale';
 import { galleryCopy } from '../i18n/templates';
-import { ROLE_MEMBERS, ROLES, type GalleryTemplate } from './catalog';
+import {
+  FILTERS,
+  MEMBERS,
+  ROLE_MEMBERS,
+  ROLES,
+  type GalleryFilter,
+  type GalleryTemplate,
+} from './catalog';
 
 /**
  * Search over the template gallery catalog (DESIGN.md, editor Templates
- * panel: the search box finds a template by name, style, or role). A
- * template's display name is a single, unlocalized string, so only its
- * purpose, sample tags, and role chip labels vary by site language; those
- * are matched in both languages regardless of the reader's current UI
- * language, so a query in either language still finds a match.
+ * panel: the search box finds a template by name, style, sample tag, role,
+ * or Library filter chip). A template's display name is a single,
+ * unlocalized string, so only its purpose, sample tags, and chip labels
+ * vary by site language; those are matched in both languages regardless of
+ * the reader's current UI language, so a query in either language still
+ * finds a match.
  */
+
+const FILTER_CHIPS: readonly Exclude<GalleryFilter, 'sample'>[]
+  = FILTERS.filter(
+    (chip): chip is Exclude<GalleryFilter, 'sample'> => chip !== 'sample',
+  );
 
 const LOCALES: readonly Locale[] = ['en', 'vi'];
 
@@ -28,7 +41,7 @@ export function normalizeSearchText(value: string): string {
     .toLowerCase()
     .replace(/đ/g, 'd')
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .trim();
 }
 
@@ -54,6 +67,13 @@ export function templateSearchText(template: TemplateSearchSubject): string {
     if (ROLE_MEMBERS[role].includes(template.id)) {
       for (const locale of LOCALES) {
         parts.push(galleryCopy[locale].roles[role]);
+      }
+    }
+  }
+  for (const filter of FILTER_CHIPS) {
+    if (MEMBERS[filter].includes(template.id)) {
+      for (const locale of LOCALES) {
+        parts.push(galleryCopy[locale].filters[filter]);
       }
     }
   }

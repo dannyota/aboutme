@@ -61,8 +61,10 @@ export const ROLE_MEMBERS: Readonly<Record<GalleryRole, readonly string[]>> = {
 /**
  * Which templates each filter shows, besides "sample", which follows the
  * samples. Membership is an editorial judgment, kept here, not in the schema.
+ * Exported so the editor search box can also match a template's filter chip
+ * labels (`app/templates/search.ts`).
  */
-const MEMBERS: Readonly<
+export const MEMBERS: Readonly<
   Record<Exclude<GalleryFilter, 'sample'>, readonly string[]>
 > = {
   'ats': [
