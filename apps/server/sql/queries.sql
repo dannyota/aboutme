@@ -180,10 +180,12 @@ SELECT * FROM sessions WHERE rotated_from = $1 AND revoked_at IS NULL;
 SELECT * FROM sessions WHERE id = $1;
 
 -- name: CreateOAuthTransaction :one
+-- resume_id is set only for purpose 'view' (docs/design/viewer-analytics/sign-in-to-view.md
+-- "Sign-in flow"; AC-VIEW-004); every other purpose passes it as NULL.
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 ) RETURNING *;
 
 -- name: ConsumeOAuthTransaction :one
@@ -499,6 +501,7 @@ LEFT JOIN resumes AS r
     ON r.slug IS NOT NULL
     AND r.live = true
     AND r.seo_geo_enabled = true
+    AND r.sign_in_to_view = false
 WHERE ps.singleton = true
 GROUP BY ps.discovery_generation;
 
@@ -522,13 +525,22 @@ SELECT * FROM resumes
 WHERE slug = sqlc.arg(slug)::text AND live = true;
 
 -- name: GetPublicRealtimeResume :one
-SELECT id, revision FROM resumes
+SELECT id, revision, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = sqlc.arg(slug)::text AND live = true;
 
 -- name: GetPublicResumeByOwner :one
 SELECT * FROM resumes
 WHERE user_id = sqlc.arg(user_id)::uuid
   AND id = sqlc.arg(id)::uuid;
+
+-- name: GetResumeViewGateState :one
+-- The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
+-- and the pass epoch, by resume ID, with no user scoping since the callback
+-- authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
+-- "Sign-in flow"; AC-VIEW-005).
+SELECT id, slug, live, sign_in_to_view, view_pass_epoch
+FROM resumes
+WHERE id = sqlc.arg(id)::uuid;
 
 -- name: ListEligiblePublicSlugs :many
 -- Discovery bytes contain only eligible slugs in raw byte order. The
@@ -537,6 +549,7 @@ WHERE user_id = sqlc.arg(user_id)::uuid
 SELECT COALESCE(slug, '')::text AS slug
 FROM resumes
 WHERE slug IS NOT NULL AND live = true AND seo_geo_enabled = true
+    AND sign_in_to_view = false
 ORDER BY slug COLLATE "C" ASC;
 
 -- name: LockSlugClaim :exec
@@ -568,6 +581,16 @@ VALUES (
 RETURNING *;
 
 -- name: PublishResumeCAS :one
+-- sign_in_to_view is the caller's already-merged final value (an omitted
+-- publish field keeps the stored value before this query ever runs; see
+-- docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
+-- view_pass_epoch rises exactly when the switch turns on (from false to
+-- true, whatever the live transition) or when it stays on and the resume
+-- becomes live again after not being live, so passes from an earlier
+-- period stop working (design "Gated routes"; AC-VIEW-007). Both
+-- conditions read resume.* as the pre-update row, since a single UPDATE
+-- statement evaluates its FROM/SET expressions against the row as it was
+-- before this statement.
 WITH input AS (
   SELECT
     sqlc.arg(id)::uuid AS id,
@@ -579,6 +602,7 @@ WITH input AS (
     sqlc.arg(seo_geo_enabled)::boolean AS seo_geo_enabled,
     sqlc.narg(public_title)::text AS public_title,
     sqlc.narg(favicon_emoji)::text AS favicon_emoji,
+    sqlc.arg(sign_in_to_view)::boolean AS sign_in_to_view,
     sqlc.arg(updated_at)::timestamptz AS updated_at
 )
 UPDATE resumes AS resume
@@ -588,6 +612,15 @@ SET slug = input.slug,
     seo_geo_enabled = input.seo_geo_enabled,
     public_title = input.public_title,
     favicon_emoji = input.favicon_emoji,
+    sign_in_to_view = input.sign_in_to_view,
+    view_pass_epoch = CASE
+        WHEN input.sign_in_to_view AND NOT resume.sign_in_to_view
+            THEN resume.view_pass_epoch + 1
+        WHEN input.sign_in_to_view AND resume.sign_in_to_view
+            AND input.live AND NOT resume.live
+            THEN resume.view_pass_epoch + 1
+        ELSE resume.view_pass_epoch
+    END,
     revision = resume.revision + 1,
     updated_at = input.updated_at
 FROM input

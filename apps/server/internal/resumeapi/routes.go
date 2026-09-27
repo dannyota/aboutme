@@ -48,6 +48,10 @@ type Options struct {
 	RecoveryPool *store.Pool
 	// PrintQueue performs bounded private rendering after owner authorization.
 	PrintQueue PrintQueue
+	// SignInToViewEnabled lets a publish request turn the sign-in-to-view
+	// switch on (SIGN_IN_TO_VIEW_ENABLED); turning it off is always allowed
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
+	SignInToViewEnabled bool
 }
 
 // Service owns the authenticated resume HTTP surface and its write-safety
@@ -75,6 +79,7 @@ type Service struct {
 	slugAttempts               slugAttemptLimiter
 	transactionOrderHook       func(string)
 	publishPreflightOrderHook  func(string)
+	signInToViewEnabled        bool
 }
 
 type resumeBoundary interface {
@@ -136,6 +141,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		printQueue:                 opts.PrintQueue,
 		pdfAdmission:               newOwnerPDFAdmission(opts),
 		slugAttempts:               limiter,
+		signInToViewEnabled:        opts.SignInToViewEnabled,
 	}
 }
 

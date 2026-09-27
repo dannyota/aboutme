@@ -14,9 +14,12 @@ WHERE user_id = $1
 ORDER BY created_at, id;
 
 -- name: ListAccountExportResumes :many
+-- Carries sign_in_to_view with the other publish settings; the pass epoch
+-- never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
+-- "Setting").
 SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
     schema_version, revision, lng, personal_details, content, customization,
-    created_at, updated_at, public_title, favicon_emoji
+    created_at, updated_at, public_title, favicon_emoji, sign_in_to_view
 FROM resumes
 WHERE user_id = $1
 ORDER BY created_at, id

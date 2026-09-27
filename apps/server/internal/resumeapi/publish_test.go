@@ -36,6 +36,11 @@ func TestPublishDecode(t *testing.T) {
 		{name: "wrong slug type is malformed", body: `{"slug":4,"live":true,"downloadEnabled":true,"seoGeoEnabled":false}`, shape: "slug"},
 		{name: "trailing value is malformed", body: valid + ` {}`, shape: "body"},
 		{name: "body overflow is too large", body: strings.Repeat(" ", maxJSONBodyBytes+1), tooLarge: true},
+		// AC-VIEW-001: signInToView is optional and absent keeps the stored value.
+		{name: "signInToView true is present", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":true}`, want: publishInput{Live: true, DownloadEnabled: true, SignInToView: optionalBool{Present: true, Value: true}}},
+		{name: "signInToView false is present", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":false}`, want: publishInput{Live: true, DownloadEnabled: true, SignInToView: optionalBool{Present: true, Value: false}}},
+		{name: "null signInToView is malformed", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":null}`, shape: "signInToView"},
+		{name: "wrong signInToView type is malformed", body: `{"live":true,"downloadEnabled":true,"seoGeoEnabled":false,"signInToView":"true"}`, shape: "signInToView"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got, err := decodePublish(strings.NewReader(test.body))
@@ -116,6 +121,85 @@ func publishCompleteDocument(t *testing.T) schema.Resume {
 	document.Customization.Layout.Sections.Main = []string{"work"}
 	document.Customization.Layout.Sections.Sidebar = []string{}
 	return document
+}
+
+// AC-VIEW-001, AC-VIEW-007: an omitted signInToView field keeps the stored
+// value, and a flag-gated attempt to turn it on is a closed publish issue
+// while turning it off, or leaving it on, always succeeds.
+func TestMergeSignInToView(t *testing.T) {
+	t.Parallel()
+	stored := currentPublish{SignInToView: true}
+	if merged := mergeSignInToView(stored, publishInput{}); !merged.SignInToView {
+		t.Fatal("absent signInToView must keep the stored true value")
+	}
+	if merged := mergeSignInToView(stored, publishInput{SignInToView: optionalBool{Present: true, Value: false}}); merged.SignInToView {
+		t.Fatal("present signInToView=false must turn the switch off")
+	}
+	off := currentPublish{SignInToView: false}
+	if merged := mergeSignInToView(off, publishInput{SignInToView: optionalBool{Present: true, Value: true}}); !merged.SignInToView {
+		t.Fatal("present signInToView=true must turn the switch on")
+	}
+}
+
+func TestValidateSignInToView(t *testing.T) {
+	t.Parallel()
+	document := publishCompleteDocument(t)
+	slug := "ada-lovelace"
+
+	disabledService := &Service{signInToViewEnabled: false}
+	before := currentPublish{Slug: &slug, SignInToView: false}
+	turnedOn := mergeSignInToView(before, publishInput{Live: true, SignInToView: optionalBool{Present: true, Value: true}})
+	prepared := disabledService.validateSignInToView(before, validatePublish(document, turnedOn, publishInput{Live: true}))
+	found := false
+	for _, issue := range prepared.Issues {
+		if issue.Path == "signInToView" && issue.Code == "disabled" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("issues = %#v, want a signInToView disabled issue when the flag is off", prepared.Issues)
+	}
+
+	enabledService := &Service{signInToViewEnabled: true}
+	prepared = enabledService.validateSignInToView(before, validatePublish(document, turnedOn, publishInput{Live: true}))
+	for _, issue := range prepared.Issues {
+		if issue.Path == "signInToView" {
+			t.Fatalf("issues = %#v, want no signInToView issue when the flag is on", prepared.Issues)
+		}
+	}
+
+	// Turning it off, or leaving it on, is always allowed regardless of the
+	// flag: gating never depends on the flag once a resume is already gated.
+	alreadyOn := currentPublish{Slug: &slug, SignInToView: true}
+	stillOn := mergeSignInToView(alreadyOn, publishInput{})
+	prepared = disabledService.validateSignInToView(alreadyOn, validatePublish(document, stillOn, publishInput{Live: true}))
+	for _, issue := range prepared.Issues {
+		if issue.Path == "signInToView" {
+			t.Fatalf("issues = %#v, want no signInToView issue for an already-on switch left on", prepared.Issues)
+		}
+	}
+	turnedOff := mergeSignInToView(alreadyOn, publishInput{SignInToView: optionalBool{Present: true, Value: false}})
+	prepared = disabledService.validateSignInToView(alreadyOn, validatePublish(document, turnedOff, publishInput{Live: true}))
+	for _, issue := range prepared.Issues {
+		if issue.Path == "signInToView" {
+			t.Fatalf("issues = %#v, want no signInToView issue when turning it off", prepared.Issues)
+		}
+	}
+}
+
+// AC-VIEW-010: the sign-in-to-view switch flipping alone changes aggregate
+// discovery membership, even when live and seoGeoEnabled do not change.
+func TestPublishChangesDiscovery_SignInToViewAlone(t *testing.T) {
+	t.Parallel()
+	before := currentPublish{Live: true, SEOGeoEnabled: true, SignInToView: false}
+	turnedOn := before
+	turnedOn.SignInToView = true
+	if !publishChangesDiscovery(before, turnedOn) {
+		t.Fatal("turning sign in to view on alone must change discovery membership")
+	}
+	if publishChangesDiscovery(before, before) {
+		t.Fatal("an unchanged state must not report a discovery change")
+	}
 }
 
 func TestPublishShapeErrorDoesNotExposeInput(t *testing.T) {

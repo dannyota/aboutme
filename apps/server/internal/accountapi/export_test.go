@@ -301,10 +301,10 @@ func TestProjectExportLanguageReturnsAStringForCurrentNullAndInvalidValues(t *te
 }
 
 func TestValidateExportResumeCountRejectsUnexpectedFourthRow(t *testing.T) {
-	if err := validateExportResumeCount(make([]store.Resume, 3)); err != nil {
+	if err := validateExportResumeCount(make([]store.ListAccountExportResumesRow, 3)); err != nil {
 		t.Fatalf("three resumes error = %v", err)
 	}
-	if err := validateExportResumeCount(make([]store.Resume, 4)); err == nil {
+	if err := validateExportResumeCount(make([]store.ListAccountExportResumesRow, 4)); err == nil {
 		t.Fatal("four resumes error = nil, want bounded export failure")
 	}
 }

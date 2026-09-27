@@ -39,7 +39,12 @@ type Snapshot struct {
 	// only the HTML head, so they stay out of the public JSON.
 	PublicTitle  *string
 	FaviconEmoji *string
-	photoKey     string
+	// SignInToView and ViewPassEpoch are the sign-in-to-view switch and its
+	// pass epoch (docs/design/viewer-analytics/sign-in-to-view.md "Setting",
+	// "Gated routes"). The epoch never leaves this process in any response.
+	SignInToView  bool
+	ViewPassEpoch int32
+	photoKey      string
 }
 
 // ReaderDependencies contains the stores and services needed to read a resume.
@@ -152,8 +157,11 @@ func (r *Reader) snapshot(row store.Resume) (Snapshot, error) {
 		photoKey = doc.PersonalDetails.Photo.Key
 	}
 	return Snapshot{
-		ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled, Public: public, RevisionTime: row.UpdatedAt,
-		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji, photoKey: photoKey,
+		// Effective discovery is forced off while sign in to view is on; the
+		// stored seo_geo_enabled value is unchanged in the row itself
+		// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"; AC-VIEW-010).
+		ResumeID: row.ID, Revision: row.Revision, DiscoveryEnabled: row.SEOGeoEnabled && !row.SignInToView, Public: public, RevisionTime: row.UpdatedAt,
+		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji, SignInToView: row.SignInToView, ViewPassEpoch: row.ViewPassEpoch, photoKey: photoKey,
 	}, nil
 }
 

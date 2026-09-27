@@ -435,7 +435,7 @@ const consumeOAuthTransaction = `-- name: ConsumeOAuthTransaction :one
 UPDATE oauth_transactions
 SET consumed_at = $2
 WHERE handle_hash = $1 AND consumed_at IS NULL AND expires_at > $2
-RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path
+RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id
 `
 
 type ConsumeOAuthTransactionParams struct {
@@ -470,6 +470,7 @@ func (q *Queries) ConsumeOAuthTransaction(ctx context.Context, arg ConsumeOAuthT
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.ReturnPath,
+		&i.ResumeID,
 	)
 	return i, err
 }
@@ -896,10 +897,10 @@ func (q *Queries) CreateOAuthToken(ctx context.Context, arg CreateOAuthTokenPara
 
 const createOAuthTransaction = `-- name: CreateOAuthTransaction :one
 INSERT INTO oauth_transactions (
-    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at
+    handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, return_path, expires_at, resume_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+) RETURNING id, handle_hash, provider, purpose, linking_user_id, state, pkce_verifier, nonce, redirect_uri, created_at, expires_at, consumed_at, return_path, resume_id
 `
 
 type CreateOAuthTransactionParams struct {
@@ -913,8 +914,11 @@ type CreateOAuthTransactionParams struct {
 	RedirectURI   string
 	ReturnPath    string
 	ExpiresAt     time.Time
+	ResumeID      *uuid.UUID
 }
 
+// resume_id is set only for purpose 'view' (docs/design/viewer-analytics/sign-in-to-view.md
+// "Sign-in flow"; AC-VIEW-004); every other purpose passes it as NULL.
 func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTransactionParams) (OAuthTransaction, error) {
 	row := q.db.QueryRow(ctx, createOAuthTransaction,
 		arg.HandleHash,
@@ -927,6 +931,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		arg.RedirectURI,
 		arg.ReturnPath,
 		arg.ExpiresAt,
+		arg.ResumeID,
 	)
 	var i OAuthTransaction
 	err := row.Scan(
@@ -943,6 +948,7 @@ func (q *Queries) CreateOAuthTransaction(ctx context.Context, arg CreateOAuthTra
 		&i.ExpiresAt,
 		&i.ConsumedAt,
 		&i.ReturnPath,
+		&i.ResumeID,
 	)
 	return i, err
 }
@@ -1068,7 +1074,7 @@ func (q *Queries) CreatePendingAuthentication(ctx context.Context, arg CreatePen
 const createResume = `-- name: CreateResume :one
 INSERT INTO resumes (user_id, title, schema_version, lng,
                      personal_details, content, customization)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
 `
 
 type CreateResumeParams struct {
@@ -1110,6 +1116,8 @@ func (q *Queries) CreateResume(ctx context.Context, arg CreateResumeParams) (Res
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
@@ -1693,7 +1701,7 @@ func (q *Queries) DeleteResumeForUser(ctx context.Context, arg DeleteResumeForUs
 const deleteResumeForUserCAS = `-- name: DeleteResumeForUserCAS :one
 DELETE FROM resumes
 WHERE id = $1 AND user_id = $2 AND revision = $3
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
 `
 
 type DeleteResumeForUserCASParams struct {
@@ -1728,6 +1736,8 @@ func (q *Queries) DeleteResumeForUserCAS(ctx context.Context, arg DeleteResumeFo
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
@@ -1737,7 +1747,7 @@ DELETE FROM resumes
 WHERE id = $1::uuid
   AND user_id = $2::uuid
   AND revision = $3::bigint
-RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji
+RETURNING id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch
 `
 
 type DeleteResumePublicCASParams struct {
@@ -1767,6 +1777,8 @@ func (q *Queries) DeleteResumePublicCAS(ctx context.Context, arg DeleteResumePub
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
@@ -2498,6 +2510,7 @@ LEFT JOIN resumes AS r
     ON r.slug IS NOT NULL
     AND r.live = true
     AND r.seo_geo_enabled = true
+    AND r.sign_in_to_view = false
 WHERE ps.singleton = true
 GROUP BY ps.discovery_generation
 `
@@ -2517,24 +2530,31 @@ func (q *Queries) GetPublicDiscoverySnapshot(ctx context.Context) (GetPublicDisc
 }
 
 const getPublicRealtimeResume = `-- name: GetPublicRealtimeResume :one
-SELECT id, revision FROM resumes
+SELECT id, revision, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = $1::text AND live = true
 `
 
 type GetPublicRealtimeResumeRow struct {
-	ID       uuid.UUID
-	Revision int64
+	ID            uuid.UUID
+	Revision      int64
+	SignInToView  bool
+	ViewPassEpoch int32
 }
 
 func (q *Queries) GetPublicRealtimeResume(ctx context.Context, slug string) (GetPublicRealtimeResumeRow, error) {
 	row := q.db.QueryRow(ctx, getPublicRealtimeResume, slug)
 	var i GetPublicRealtimeResumeRow
-	err := row.Scan(&i.ID, &i.Revision)
+	err := row.Scan(
+		&i.ID,
+		&i.Revision,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
+	)
 	return i, err
 }
 
 const getPublicResumeByOwner = `-- name: GetPublicResumeByOwner :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE user_id = $1::uuid
   AND id = $2::uuid
 `
@@ -2565,12 +2585,14 @@ func (q *Queries) GetPublicResumeByOwner(ctx context.Context, arg GetPublicResum
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
 
 const getPublicResumeBySlug = `-- name: GetPublicResumeBySlug :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes
 WHERE slug = $1::text AND live = true
 `
 
@@ -2598,6 +2620,8 @@ func (q *Queries) GetPublicResumeBySlug(ctx context.Context, slug string) (Resum
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
@@ -2616,7 +2640,7 @@ func (q *Queries) GetPublicState(ctx context.Context) (PublicState, error) {
 }
 
 const getResumeByID = `-- name: GetResumeByID :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes WHERE id = $1
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE id = $1
 `
 
 // System-job read for the document-version backfill. It is intentionally
@@ -2642,12 +2666,14 @@ func (q *Queries) GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, erro
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
 
 const getResumeForUser = `-- name: GetResumeForUser :one
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes WHERE id = $1 AND user_id = $2
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE id = $1 AND user_id = $2
 `
 
 type GetResumeForUserParams struct {
@@ -2676,6 +2702,39 @@ func (q *Queries) GetResumeForUser(ctx context.Context, arg GetResumeForUserPara
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
+	)
+	return i, err
+}
+
+const getResumeViewGateState = `-- name: GetResumeViewGateState :one
+SELECT id, slug, live, sign_in_to_view, view_pass_epoch
+FROM resumes
+WHERE id = $1::uuid
+`
+
+type GetResumeViewGateStateRow struct {
+	ID            uuid.UUID
+	Slug          *string
+	Live          bool
+	SignInToView  bool
+	ViewPassEpoch int32
+}
+
+// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
+// and the pass epoch, by resume ID, with no user scoping since the callback
+// authenticates no account (docs/design/viewer-analytics/sign-in-to-view.md
+// "Sign-in flow"; AC-VIEW-005).
+func (q *Queries) GetResumeViewGateState(ctx context.Context, id uuid.UUID) (GetResumeViewGateStateRow, error) {
+	row := q.db.QueryRow(ctx, getResumeViewGateState, id)
+	var i GetResumeViewGateStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Slug,
+		&i.Live,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }
@@ -3085,6 +3144,7 @@ const listEligiblePublicSlugs = `-- name: ListEligiblePublicSlugs :many
 SELECT COALESCE(slug, '')::text AS slug
 FROM resumes
 WHERE slug IS NOT NULL AND live = true AND seo_geo_enabled = true
+    AND sign_in_to_view = false
 ORDER BY slug COLLATE "C" ASC
 `
 
@@ -3395,7 +3455,7 @@ func (q *Queries) ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListR
 }
 
 const listResumesForUser = `-- name: ListResumesForUser :many
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji FROM resumes WHERE user_id = $1 ORDER BY created_at, id
+SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled, schema_version, revision, lng, personal_details, content, customization, created_at, updated_at, public_title, favicon_emoji, sign_in_to_view, view_pass_epoch FROM resumes WHERE user_id = $1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error) {
@@ -3425,6 +3485,8 @@ func (q *Queries) ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]R
 			&i.UpdatedAt,
 			&i.PublicTitle,
 			&i.FaviconEmoji,
+			&i.SignInToView,
+			&i.ViewPassEpoch,
 		); err != nil {
 			return nil, err
 		}
@@ -3596,7 +3658,8 @@ WITH input AS (
     $7::boolean AS seo_geo_enabled,
     $8::text AS public_title,
     $9::text AS favicon_emoji,
-    $10::timestamptz AS updated_at
+    $10::boolean AS sign_in_to_view,
+    $11::timestamptz AS updated_at
 )
 UPDATE resumes AS resume
 SET slug = input.slug,
@@ -3605,13 +3668,22 @@ SET slug = input.slug,
     seo_geo_enabled = input.seo_geo_enabled,
     public_title = input.public_title,
     favicon_emoji = input.favicon_emoji,
+    sign_in_to_view = input.sign_in_to_view,
+    view_pass_epoch = CASE
+        WHEN input.sign_in_to_view AND NOT resume.sign_in_to_view
+            THEN resume.view_pass_epoch + 1
+        WHEN input.sign_in_to_view AND resume.sign_in_to_view
+            AND input.live AND NOT resume.live
+            THEN resume.view_pass_epoch + 1
+        ELSE resume.view_pass_epoch
+    END,
     revision = resume.revision + 1,
     updated_at = input.updated_at
 FROM input
 WHERE resume.id = input.id
   AND resume.user_id = input.user_id
   AND resume.revision = input.expected_revision
-RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at, resume.public_title, resume.favicon_emoji
+RETURNING resume.id, resume.user_id, resume.title, resume.slug, resume.live, resume.download_enabled, resume.seo_geo_enabled, resume.schema_version, resume.revision, resume.lng, resume.personal_details, resume.content, resume.customization, resume.created_at, resume.updated_at, resume.public_title, resume.favicon_emoji, resume.sign_in_to_view, resume.view_pass_epoch
 `
 
 type PublishResumeCASParams struct {
@@ -3624,9 +3696,20 @@ type PublishResumeCASParams struct {
 	SEOGeoEnabled    bool
 	PublicTitle      *string
 	FaviconEmoji     *string
+	SignInToView     bool
 	UpdatedAt        time.Time
 }
 
+// sign_in_to_view is the caller's already-merged final value (an omitted
+// publish field keeps the stored value before this query ever runs; see
+// docs/design/viewer-analytics/sign-in-to-view.md "Setting", AC-VIEW-001).
+// view_pass_epoch rises exactly when the switch turns on (from false to
+// true, whatever the live transition) or when it stays on and the resume
+// becomes live again after not being live, so passes from an earlier
+// period stop working (design "Gated routes"; AC-VIEW-007). Both
+// conditions read resume.* as the pre-update row, since a single UPDATE
+// statement evaluates its FROM/SET expressions against the row as it was
+// before this statement.
 func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASParams) (Resume, error) {
 	row := q.db.QueryRow(ctx, publishResumeCAS,
 		arg.ID,
@@ -3638,6 +3721,7 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 		arg.SEOGeoEnabled,
 		arg.PublicTitle,
 		arg.FaviconEmoji,
+		arg.SignInToView,
 		arg.UpdatedAt,
 	)
 	var i Resume
@@ -3659,6 +3743,8 @@ func (q *Queries) PublishResumeCAS(ctx context.Context, arg PublishResumeCASPara
 		&i.UpdatedAt,
 		&i.PublicTitle,
 		&i.FaviconEmoji,
+		&i.SignInToView,
+		&i.ViewPassEpoch,
 	)
 	return i, err
 }

@@ -150,21 +150,25 @@ type exportProfile struct {
 }
 
 type exportResume struct {
-	ID              uuid.UUID       `json:"id"`
-	Title           string          `json:"title"`
-	Slug            *string         `json:"slug"`
-	Live            bool            `json:"live"`
-	DownloadEnabled bool            `json:"downloadEnabled"`
-	SEOGeoEnabled   bool            `json:"seoGeoEnabled"`
-	PublicTitle     *string         `json:"publicTitle"`
-	FaviconEmoji    *string         `json:"faviconEmoji"`
-	Revision        string          `json:"revision"`
-	SchemaVersion   int32           `json:"schemaVersion"`
-	Lng             string          `json:"lng"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
-	Document        json.RawMessage `json:"document"`
-	Photo           *exportPhoto    `json:"photo"`
+	ID              uuid.UUID `json:"id"`
+	Title           string    `json:"title"`
+	Slug            *string   `json:"slug"`
+	Live            bool      `json:"live"`
+	DownloadEnabled bool      `json:"downloadEnabled"`
+	SEOGeoEnabled   bool      `json:"seoGeoEnabled"`
+	PublicTitle     *string   `json:"publicTitle"`
+	FaviconEmoji    *string   `json:"faviconEmoji"`
+	// SignInToView is the publish switch, carried with the other publish
+	// settings; the pass epoch never leaves the server
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
+	SignInToView  bool            `json:"signInToView"`
+	Revision      string          `json:"revision"`
+	SchemaVersion int32           `json:"schemaVersion"`
+	Lng           string          `json:"lng"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+	Document      json.RawMessage `json:"document"`
+	Photo         *exportPhoto    `json:"photo"`
 }
 
 type exportPhoto struct {
@@ -225,6 +229,7 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 			SEOGeoEnabled:   row.SEOGeoEnabled,
 			PublicTitle:     row.PublicTitle,
 			FaviconEmoji:    row.FaviconEmoji,
+			SignInToView:    row.SignInToView,
 			Revision:        strconv.FormatInt(row.Revision, 10),
 			SchemaVersion:   s.projector.CurrentVersion(),
 			Lng:             projectExportLanguage(row.Lng),
@@ -250,7 +255,7 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 	})
 }
 
-func validateExportResumeCount(rows []store.Resume) error {
+func validateExportResumeCount(rows []store.ListAccountExportResumesRow) error {
 	if len(rows) > 3 {
 		return errors.New("account export resume count exceeds limit")
 	}
@@ -281,7 +286,7 @@ type storedPhotoReference struct {
 	Crop json.RawMessage `json:"crop"`
 }
 
-func (s *Service) exportDocument(row store.Resume) (json.RawMessage, *storedPhotoReference, error) {
+func (s *Service) exportDocument(row store.ListAccountExportResumesRow) (json.RawMessage, *storedPhotoReference, error) {
 	personalDetails, content, customization, err := s.projector.Project(
 		row.PersonalDetails, row.Content, row.Customization, row.SchemaVersion,
 	)
