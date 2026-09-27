@@ -118,10 +118,8 @@ and healthy, so a rollback never gives an older release a value it refuses.
 
 To rotate a value, repeat step 2 with `--overwrite` on `put-parameter`. The
 running app keeps the old value until its task next starts, so deploy after
-rotating.
-
-To turn a provider off, remove it from `provider_login_enabled`, apply, and
-deploy. Leave the parameters in place.
+rotating. To turn a provider off, remove it from `provider_login_enabled`,
+apply, and deploy; leave the parameters in place.
 
 ## Email sign-up
 
@@ -325,6 +323,8 @@ The same fence and lock gate TOTP enrollment at a second, higher floor (numeric
 4007). [The TOTP keys runbook](totp-keys.md) covers the flag-off deploy, floor
 activation, flag enablement, key rotation, the `aboutme-prod-totp-unavailable`
 alarm, and the production proofs for that release.
+[The sign in to view runbook](sign-in-to-view.md) covers the same sequence at a
+third floor (numeric 6022).
 
 The one-time bootstrap, before the first fence-aware deploy: set
 `operator_principal_arn` in the ignored `prod.tfvars` to the owner's `aws login`

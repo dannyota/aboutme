@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Sourced by deploy.sh. Assumes the operator then deploy role and implements
 # the release fence protocol (docs/design/passkey-release-fence.md). Needs
 # $region, $site_alarm_region, $work, $tag, $candidate, $operation_kind,
@@ -14,6 +15,10 @@ fence_epoch=4002
 # docs/design/passkey-release-fence.md, "Authenticator-app key
 # re-encryption".
 fence_epoch_totp=4007
+# v0.6.22's own numeric release: the first tag that can turn
+# SIGN_IN_TO_VIEW_ENABLED on. See docs/design/viewer-analytics/sign-in-to-view.md,
+# "Release and rollback".
+fence_epoch_signin=6022
 
 # 0. The base identity assumes aboutme-prod-operator, which chains to
 # aboutme-prod-deploy for every mutation below. The profile chain is built
@@ -122,7 +127,7 @@ fence_read() {
       { say "--first-deploy but aboutme-prod-app already runs a deployed revision ($running)"; return 1; }
     return 0
   fi
-  enrolled="" totp_enrolled=""
+  enrolled="" totp_enrolled="" signin_enabled=""
   if ((deployed)); then
     def=$(describe_task_def "$running") || { say "could not read the running app task definition"; return 1; }
     enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
@@ -130,6 +135,9 @@ fence_read() {
       { say "could not read the running app task definition"; return 1; }
     totp_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
       | .environment[]? | select(.name == "TOTP_ENROLLMENT_ENABLED") | .value' <<<"$def" 2>/dev/null) ||
+      { say "could not read the running app task definition"; return 1; }
+    signin_enabled=$(jq -r '.containerDefinitions[] | select(.name == "server")
+      | .environment[]? | select(.name == "SIGN_IN_TO_VIEW_ENABLED") | .value' <<<"$def" 2>/dev/null) ||
       { say "could not read the running app task definition"; return 1; }
   fi
   if [[ -z $item_present && -n $enrolled && $enrolled != false ]]; then
@@ -140,12 +148,20 @@ fence_read() {
     say "the release fence is missing and the running app does not prove TOTP enrollment off"
     return 1
   fi
+  if [[ -z $item_present && -n $signin_enabled && $signin_enabled != false ]]; then
+    say "the release fence is missing and the running app does not prove sign in to view off"
+    return 1
+  fi
   if ((fence_min < fence_epoch)) && [[ $enrolled == true ]]; then
     say "the release fence is below v0.4.2 but the running app has passkey enrollment on"
     return 1
   fi
   if ((fence_min < fence_epoch_totp)) && [[ $totp_enrolled == true ]]; then
     say "the release fence is below v0.4.7 but the running app has TOTP enrollment on"
+    return 1
+  fi
+  if ((fence_min < fence_epoch_signin)) && [[ $signin_enabled == true ]]; then
+    say "the release fence is below v0.6.22 but the running app has sign in to view on"
     return 1
   fi
 }
