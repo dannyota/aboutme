@@ -30,7 +30,9 @@ Four sections follow the hero:
 
 1. Three feature cards on blue, indigo, and pink surface tints with the 20 px
    feature radius: Private by default, One link per resume, and Bring your own
-   AI. They sit in three columns from 1024 px.
+   AI. They sit in three columns from 1024 px. The Bring your own AI card ends
+   with a text link, “Xem cách kết nối” or “See how to connect”, to the
+   [MCP guide](../mcp-guide.md) at `/guide/mcp`.
 2. Choose your style: filter chips for ATS-friendly, Technical, First job, and
    Management, each linking to `/templates?filter=…`, and one real template card
    per chip, in two columns and four from 1024 px. A text link opens the full
@@ -41,7 +43,8 @@ Four sections follow the hero:
    repository.
 
 The footer shows `aboutme.vn` and links Terms and Privacy. The
-[verify page spec](../deployment-transparency/visual.md) adds Verify.
+[verify page spec](../deployment-transparency/visual.md) adds Verify, and the
+[MCP guide](../mcp-guide.md) adds “Kết nối AI” or “Connect AI” right after it.
 
 ## Library
 

@@ -1,7 +1,6 @@
 # MCP guide page
 
-Status: approved (2026-09-27), ready to build. The owner approved every numbered
-choice below as written.
+Status: implemented (2026-09-28). `/guide/mcp` is live.
 
 The MCP guide is a public, static page that shows a person how to connect an AI
 assistant they already use to their aboutme.vn resumes through the Model Context
@@ -11,11 +10,14 @@ Protocol (MCP). It covers Claude first, names the one server URL,
 rule, schema, or API. Its full Vietnamese and English text is in
 [MCP guide copy](mcp-guide-copy.md).
 
-The Claude steps are true only once Claude's clients can complete the OAuth flow
-against aboutme.vn. Today the server rejects requests those clients send;
-[MCP client compatibility](mcp-client-compatibility.md) lists the gaps and the
-proposed fixes. The guide ships after that work and after a proof that Claude
-connects.
+The page shipped ahead of the full OAuth compatibility work its Claude steps
+describe. The consent page's return-host line and grant-limit message (items 6
+and 7 of [MCP client compatibility](mcp-client-compatibility.md)) are live, but
+the remaining gaps in that design, resource metadata, registration members, the
+native loopback host, refresh parameters, registration rate, and the
+token-endpoint client lookup, are not built. Until they ship and an owner-run
+proof confirms Claude connects, a visitor who follows the Claude steps cannot
+complete the OAuth flow.
 
 ## Route
 
@@ -92,12 +94,10 @@ Every claim maps to shipped behavior:
 The page never promises a response time, a specific model, or that changes
 appear live in an open editor.
 
-Two lines depend on compatibility choices. Claude step 5 and privacy point 1
-mention where approval returns, which needs the consent host line.
-Troubleshooting pair 3 quotes the grant-limit message. If the owner declines
-either, those lines fall back to the copy file's generic wording: drop “and
-returns to claude.ai” and “where you return”, and start pair 3 with “Approval
-fails and you already have 10 connected agents.”
+Claude step 5 and privacy point 1 name where approval returns, and
+troubleshooting pair 3 quotes the grant-limit message, matching the consent page
+copy that shipped with items 6 and 7 of
+[MCP client compatibility](mcp-client-compatibility.md).
 
 ### Other clients
 
