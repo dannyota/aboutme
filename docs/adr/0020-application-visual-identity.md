@@ -1,7 +1,8 @@
 # 0020: Application visual identity: the seal, the aurora canvas, and a white resume
 
 Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27). The owner chose each
-direction.
+direction. The public page color scheme below is Proposed, pending owner
+approval.
 
 ## Context
 
@@ -84,9 +85,27 @@ language; Vietnamese is the default.
 
 **Renderer isolation.** No chrome token, gradient, radius, shadow, or style
 reaches the resume renderer, the render harness, the print path, or the document
-area of a public page. Chrome tokens apply only under `html[data-ui="app"]`. The
-sheet keeps its 2 px radius, neutral paper shadow, and white ground in both
-themes.
+area of a public page. Chrome tokens apply only under `html[data-ui="app"]`, and
+the public page bar carries its own copy scoped to `.public-toolbar`, as the
+maintenance page does. The sheet keeps its 2 px radius, neutral paper shadow,
+and white ground in both application themes; only the owner's dark scheme below
+changes its ground.
+
+**Public page color scheme (Proposed).** The resume stays white unless its owner
+picks otherwise for the public page on screen.
+
+- The owner picks Light (the default), Dark, or Match device per resume, as the
+  document field `customization.colorScheme` (ADR 0004). Match device follows
+  each viewer's `prefers-color-scheme` through a CSS media query. Viewers get no
+  toggle, and the page runs no script for it.
+- The scheme applies only to the public page on screen and the editor's Web
+  preview. The PDF, browser print, the print path, the link-preview card, the
+  sign-in gate, thumbnails, template pages, and the landing sample stay white.
+- The dark colors come from one pure rule over the resume's own five colors,
+  followed by the unchanged role derivation and its contrast floors. No chrome
+  token enters the document area, and no template has hand-picked dark colors.
+- The page bar takes the light or midnight values of its scoped tokens to match
+  the page's scheme. Its mark is the logo's seal mark in `--seal-text`.
 
 ## Rejected alternatives
 
@@ -101,6 +120,13 @@ themes.
   link-preview card, and red on the domain says nothing about publishing.
 - **The round text-on-a-path stamp.** Its ring cannot hold a 30-character slug
   at a legible size.
+- **A viewer light and dark toggle on the public page.** It overrides the
+  owner's choice, and a remembered choice needs a script before first paint,
+  which the public page's script policy forbids.
+- **Hand-picked dark palettes per template.** Twenty palettes to keep in step
+  with the light ones, and a user's own colors would still need a rule.
+- **A dark PDF.** A PDF is printed and forwarded; a dark ground wastes ink and
+  loses the white paper the seal stands on.
 
 ## Consequences
 
@@ -119,8 +145,12 @@ themes.
   CSP hashes are recomputed from the page at build.
 - Chrome screenshot baselines change with these values. The renderer, its
   tokens, fonts, golden HTML, and document screenshot baselines do not.
+- The public page baselines change with the page bar, and the dark scheme adds
+  its own public page baselines. Paged, print, and template baselines do not
+  change.
 - `PRODUCT.md` and the [UI design pages](../design/ui/identity-and-seal.md) hold
-  the built detail.
+  the built detail; the [public page spec](../design/public-page-theme.md) holds
+  the page bar, the scheme, and the dark palette rule.
 
 ## History
 
@@ -134,3 +164,6 @@ themes.
 - Former ADR 0065 (2026-09-27): Logo B, `AppSeal` v2, `--seal-text`, two blues,
   burnt-orange outline destructive, the type scale, spacing tokens, and brand
   art from tokens.
+- Proposed (2026-09-27, pending owner approval): the owner's public page color
+  scheme and the page bar's scoped token copy. It narrows the white-ground rule
+  to "white unless the owner picks a dark scheme for the public page on screen".

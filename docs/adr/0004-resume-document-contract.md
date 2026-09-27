@@ -1,6 +1,7 @@
 # 0004: Resume document validation, code generation, order, and versions
 
-Status: Accepted (2026-08-01, 2026-08-02, 2026-08-12, 2026-09-19).
+Status: Accepted (2026-08-01, 2026-08-02, 2026-08-12, 2026-09-19). Document v5
+below is Proposed, pending owner approval.
 
 ## Context
 
@@ -99,6 +100,18 @@ An older client write never erases a field it cannot express:
   project entry that survives keeps its stored `subtitle`, matched by entry id;
   an added entry gets none.
 
+### Document v5 (Proposed)
+
+v5 adds one optional leaf, `customization.colorScheme`, an enum of `light`,
+`dark`, and `system`; absent means `light`. ADR 0020 owns what it renders. Once
+approved, the server accepts and emits v1 to v5 and v5 is current.
+
+- Up from v4 adds nothing: a v4 document is a v5 document without the leaf.
+- Emitting v4 drops `customization.colorScheme`. It is v5's one declared loss,
+  and it composes with the older losses in the table above.
+- A v1 to v4 write keeps the stored `colorScheme` unconditionally, because
+  `customization` exists in every version.
+
 ## Consequences
 
 - Absence and `""` stay distinct through Go structs, JSON, and TypeScript types.
@@ -118,7 +131,8 @@ An older client write never erases a field it cannot express:
   which fails closed on that version. Fix forward; the
   [production runbook](../runbooks/production.md#rollback) records this.
 - The [data design](../design/data.md#document-versions) states the version
-  rules; ADR 0013 owns the v3 and v4 fields' rendering.
+  rules; ADR 0013 owns the v3 and v4 fields' rendering, and ADR 0020 owns the
+  proposed v5 field's.
 
 ## History
 
@@ -130,3 +144,5 @@ An older client write never erases a field it cannot express:
   Unchanged.
 - The document v3 and v4 compatibility rules came from former ADRs 0041 and 0044
   (2026-09-19), which released those versions.
+- Proposed (2026-09-27, pending owner approval): document v5 with the optional
+  `customization.colorScheme`, its v4 loss, and its older-client write rule.
