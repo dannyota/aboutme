@@ -61,7 +61,7 @@ function onPointerUp(event: PointerEvent): void {
     :aria-valuemin="panel.minRem"
     :aria-valuenow="panel.widthRem.value"
     :aria-valuetext="`${panel.widthRem.value}rem`"
-    class="editor-panel-resize-handle group relative col-start-4
+    class="editor-panel-resize-handle group relative z-10 col-start-4
       row-start-2 w-2 shrink-0 cursor-col-resize touch-none
       justify-self-start select-none max-[72rem]:hidden"
     data-testid="panel-resize-handle"
