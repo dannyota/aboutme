@@ -9,9 +9,9 @@ the same EC2 host, with no load balancer, under
 move to Vietnam, which replaces this edge with vCDN.
 
 Status: built and serving production. **Owner approval** marks a choice the
-owner makes before the work that depends on it starts. **Verify** marks a fact
-from documentation or community sources that devops confirms on the account
-([facts to verify](#facts-to-verify)).
+owner made before the work that depended on it; the owner approved all of them.
+**Verify** marks a fact from documentation or community sources that devops
+confirms on the account ([facts to verify](#facts-to-verify)).
 
 ## Why
 
