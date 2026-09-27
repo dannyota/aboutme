@@ -25,34 +25,62 @@ const vietnamese = computed(() => props.lng === 'vi');
 const providerHref = (provider: PublicGateProvider): string =>
   `/api/v1/auth/${provider}/start?purpose=view&slug=${props.slug}`;
 
+const PROVIDER_NAME: Record<PublicGateProvider, string> = {
+  google: 'Google',
+  linkedin: 'LinkedIn',
+};
+
 const providerLabel = (provider: PublicGateProvider): string => {
-  const name = provider === 'google' ? 'Google' : 'LinkedIn';
+  const name = PROVIDER_NAME[provider];
   return vietnamese.value ? `Tiếp tục với ${name}` : `Continue with ${name}`;
 };
 
-// docs/design/viewer-analytics/legal.md#sign-in-gate-text
+// docs/design/viewer-analytics/legal.md#sign-in-gate-text: both texts name
+// only the providers the envelope actually offers.
+const providerList = computed(() => (
+  props.providers.map((provider) => PROVIDER_NAME[provider])
+    .join(vietnamese.value ? ' hoặc ' : ' or ')
+));
+
 const gateLead = computed(() => (
   vietnamese.value
     ? 'Đăng nhập để xem CV này.'
     : 'Sign in to view this resume.'
 ));
-const gateRest = computed(() => (
+
+const gateIntro = computed(() => (
   vietnamese.value
     ? ' Chủ CV yêu cầu người xem đăng nhập để chặn bot và công cụ tự động '
-    + 'sao chép nội dung. Nếu bạn tiếp tục, Google hoặc LinkedIn sẽ xác '
-    + 'minh tài khoản của bạn cho aboutme. aboutme không lưu tên hay '
-    + 'email của bạn và không cho chủ CV biết bạn là ai; chúng tôi chỉ '
-    + 'đặt một cookie trên trình duyệt này, cho phép bạn xem CV này '
-    + 'trong 7 ngày. Việc đăng nhập không tạo tài khoản aboutme. Chỉ '
-    + 'tiếp tục nếu bạn từ 16 tuổi trở lên.'
+    + 'sao chép nội dung.'
     : ' The owner asks viewers to sign in, to keep out bots and automated '
-      + 'copying. If you continue, Google or LinkedIn confirms your '
-      + 'account to aboutme. aboutme does not keep your name or email and '
-      + 'does not tell the owner who you are; it only sets a cookie in '
-      + 'this browser that lets you view this resume for 7 days. Signing '
-      + 'in does not create an aboutme account. Continue only if you are '
-      + '16 or older.'
+      + 'copying.'
 ));
+
+// Omitted entirely when no provider is offered; there is then nothing to
+// continue with.
+const gateProviderSentence = computed(() => {
+  if (props.providers.length === 0) return '';
+  return vietnamese.value
+    ? ` Nếu bạn tiếp tục, ${providerList.value} sẽ xác minh tài khoản của `
+    + 'bạn cho aboutme.'
+    : ` If you continue, ${providerList.value} confirms your account to `
+      + 'aboutme.';
+});
+
+const gateOutro = computed(() => (
+  vietnamese.value
+    ? ' aboutme không lưu tên hay email của bạn và không cho chủ CV biết '
+    + 'bạn là ai; chúng tôi chỉ đặt một cookie trên trình duyệt này, cho '
+    + 'phép bạn xem CV này trong 7 ngày. Việc đăng nhập không tạo tài '
+    + 'khoản aboutme. Chỉ tiếp tục nếu bạn từ 16 tuổi trở lên.'
+    : ' aboutme does not keep your name or email and does not tell the '
+      + 'owner who you are; it only sets a cookie in this browser that '
+      + 'lets you view this resume for 7 days. Signing in does not create '
+      + 'an aboutme account. Continue only if you are 16 or older.'
+));
+
+const gateRest = computed(() =>
+  gateIntro.value + gateProviderSentence.value + gateOutro.value);
 
 const messageText = computed(() => {
   if (props.message === 'cancelled') {
