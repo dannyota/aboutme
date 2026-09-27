@@ -583,7 +583,9 @@ jobs:
   # "Enabled-proof sharding"), each first in its group so it starts on a
   # fresh database, and the ci job checks that their evidence together proves
   # every step. Groups are balanced by measured proof time. Uploaded evidence
-  # covers only fictional accounts; the other proofs upload nothing.
+  # covers only fictional accounts, plus the exports proof's redacted
+  # mid-test failure facts (exports.spec.ts); every other proof uploads
+  # nothing.
   dev-https-proofs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
