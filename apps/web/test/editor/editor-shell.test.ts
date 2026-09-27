@@ -496,6 +496,44 @@ describe('EditorShell', () => {
     },
   );
 
+  it(
+    'shows the Edit/Preview switch at every width that stacks the preview',
+    async () => {
+      const wrapper = mountShell();
+      const switcher = wrapper.get('[role="tablist"]');
+      const preview = wrapper.get('[data-responsive-region="preview"]');
+
+      // Up to 72 rem the preview spans the editor area and hides unless it is
+      // the active region (DESIGN.md), so the switch must show there too.
+      expect(preview.classes()).toContain(
+        'max-[72rem]:data-[narrow-active=false]:invisible',
+      );
+      expect(switcher.classes()).toContain('min-[72rem]:hidden');
+      expect(switcher.classes()).not.toContain('min-[42rem]:hidden');
+
+      // The fixed switch must not cover the end of any stacked region.
+      expect(wrapper.get('[data-region="inspector"]').classes())
+        .toContain('max-[72rem]:pb-24');
+      expect(wrapper.get('[data-region="outline"]').classes())
+        .toContain('max-[72rem]:pb-16');
+      expect(preview.classes()).toContain('min-[42rem]:max-[72rem]:pb-16');
+
+      const show = switcher.get('[data-action="show-preview"]');
+      expect(show.attributes('aria-selected')).toBe('false');
+      await show.trigger('click');
+      expect(show.attributes('aria-selected')).toBe('true');
+      expect(show.attributes('aria-pressed')).toBe('true');
+      expect(preview.attributes('data-narrow-active')).toBe('true');
+      expect(wrapper.get('[data-region="inspector"]')
+        .attributes('data-narrow-active')).toBe('false');
+
+      await switcher.get('[data-action="show-editor"]').trigger('click');
+      expect(preview.attributes('data-narrow-active')).toBe('false');
+      expect(wrapper.get('[data-region="inspector"]')
+        .attributes('data-narrow-active')).toBe('true');
+    },
+  );
+
   it('renders a hostile resume title as text', () => {
     const record = editorRecord();
     record.current.metadata.title = '<img src=x onerror=alert(1)>';
