@@ -207,10 +207,11 @@ Four sections follow the hero:
 
 1. Three feature cards on blue, indigo, and pink surface tints with the 20 px
    feature radius: Private by default, One link per resume, and Bring your own
-   AI.
+   AI. They sit in three columns from 1024 px.
 2. Choose your style: filter chips for ATS-friendly, Technical, First job, and
    Management, each linking to `/templates?filter=…`, and one real template card
-   per chip. A text link opens the full Library.
+   per chip, in two columns and four from 1024 px. A text link opens the full
+   Library.
 3. Publishing is three choices: an example settings card with Public resume and
    PDF download on and SEO and GEO off, and the stamp on its top edge.
 4. Free and open source: the AGPL-3.0 link and an outline button to the GitHub
@@ -354,11 +355,10 @@ mode shows each page as its own white sheet with the 2 px radius and
 shows the continuous document on one full-width sheet. The preview area has 24
 px padding, 16 px on phones. It reports loading or unavailable photos without
 rendering a placeholder image, and a render failure says that edits are still
-safe. On tablet and desktop the PDF preview has a zoom card at its bottom-right:
-Zoom out, the current percent (click to reset), Zoom in, and Default size; steps
-run 50% to 200%, Ctrl/Cmd +/−/0 work while focus is in the preview,
-Ctrl/Cmd+wheel zooms around the pointer, the choice is kept per browser, and
-phones and Web mode hide it.
+safe. The active A4 or Letter sheet remains intact and scrollable. Tablet and
+desktop PDF previews have a zoom card (out, percent to reset, in, Default size;
+50 to 200%; Ctrl/Cmd +/−/0 and Ctrl/Cmd+wheel; kept per browser; hidden on
+phones and in Web mode).
 
 The Design panel opens with a Page & PDF group: page size with its dimensions,
 and margins as Narrow, Normal, Wide, or Custom presets, where Custom reveals the
