@@ -149,6 +149,40 @@ test('the login page sends the plain app CSP', async ({ page }) => {
   expect(external).toEqual([]);
 });
 
+// The design leaves open whether the app-page CSP header reaches `/_nuxt/`
+// script responses; a same-origin module worker runs under its own script
+// response's policy, not the page's (docs/design/linkedin-import.md's
+// "Security"). This proves the header is there, not just at the document
+// level, so a worker script served from `/_nuxt/` runs under the same
+// `worker-src 'self'` policy the page sends.
+test('a same-origin /_nuxt/ script response carries the app CSP header too',
+  async ({ page }) => {
+    const probe = await trackCsp(page);
+    const external = await denyExternalRequests(page);
+    await mockSignedOutSession(page);
+
+    const scriptUrls: string[] = [];
+    page.on('response', (response) => {
+      const url = response.url();
+      if (/\/_nuxt\/.*\.m?js(\?|$)/.test(url)) scriptUrls.push(url);
+    });
+
+    const response = await page.goto('/login');
+    expect(response?.status()).toBe(200);
+    expectPlainAppCsp(response!.headers());
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    expect(scriptUrls.length).toBeGreaterThan(0);
+
+    const scriptResponse = await page.request.get(scriptUrls[0]!);
+    expect(scriptResponse.status()).toBe(200);
+    expect(scriptResponse.headers()['content-security-policy']).toBe(
+      APP_CSP,
+    );
+
+    await expectCspClean(probe, [ANONYMOUS_ME_401]);
+    expect(external).toEqual([]);
+  });
+
 test('a 404 page sends the plain app CSP and never x-powered-by', async ({
   page,
 }) => {
