@@ -334,8 +334,8 @@ no canvas glows:
 2. A 16.5 rem resume outline with Personal details, indigo section icons, a
    collapsible list, and Add section actions.
 3. A preview region, at least 32 rem wide, holding the rendered sheet.
-4. A 22 rem inspector for personal details, sections, structure, customization,
-   templates, and photo.
+4. An inspector for details, sections, structure, customization, templates, and
+   photo: 22 rem, or dragged to 48 rem above 72 rem width, kept per browser.
 
 The top bar, rail, outline, and inspector sit on the card color with borders
 between them. Selection is shown by shape as well as color. The selected rail
