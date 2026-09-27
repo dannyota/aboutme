@@ -73,6 +73,8 @@ locals {
     { name = "PASSWORD_REGISTRATION_ENABLED", value = var.password_registration_enabled ? "true" : "false" },
     { name = "PASSKEY_ENROLLMENT_ENABLED", value = var.passkey_enrollment_enabled ? "true" : "false" },
     { name = "TOTP_ENROLLMENT_ENABLED", value = var.totp_enrollment_enabled ? "true" : "false" },
+    { name = "SIGN_IN_TO_VIEW_ENABLED", value = var.sign_in_to_view_enabled ? "true" : "false" },
+    { name = "SIGN_IN_TO_VIEW_LINKEDIN_ENABLED", value = var.sign_in_to_view_linkedin_enabled ? "true" : "false" },
     { name = "PREVIEW_CARD_ENABLED", value = var.preview_card_enabled ? "true" : "false" },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },
@@ -112,6 +114,7 @@ resource "aws_ecs_task_definition" "app" {
         { name = "AUTH_EMAIL_ACTIVE_KEY_ID", valueFrom = "${local.param}/auth-email/active-key-id" },
         { name = "AUTH_EMAIL_ACTIVE_KEY", valueFrom = "${local.param}/auth-email/active-key" },
         { name = "PASSWORD_RATE_HMAC_KEY", valueFrom = "${local.param}/password-rate-hmac-key" },
+        { name = "VIEW_PASS_KEY", valueFrom = "${local.param}/view-pass-key" },
         { name = "TOTP_ACTIVE_KEY", valueFrom = "${local.param}/totp/key-${var.totp_active_key_slot}" },
       ], local.google_secrets, local.linkedin_secrets, local.totp_previous_secret)
       # SYS_ADMIN lets Docker's seccomp profile allow the user namespaces that

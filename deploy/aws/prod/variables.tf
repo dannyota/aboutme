@@ -100,6 +100,24 @@ variable "totp_enrollment_enabled" {
   description = "TOTP_ENROLLMENT_ENABLED for the server"
 }
 
+# Off until a healthy v0.6.22 or later release raises the production
+# minimum-release fence to numeric 6022; see
+# docs/design/passkey-release-fence.md and
+# docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback".
+variable "sign_in_to_view_enabled" {
+  type        = bool
+  default     = false
+  description = "SIGN_IN_TO_VIEW_ENABLED for the server"
+}
+
+# Off until a live check confirms LinkedIn accepts an authorize request with
+# scope openid alone; see docs/design/viewer-analytics/sign-in-to-view.md.
+variable "sign_in_to_view_linkedin_enabled" {
+  type        = bool
+  default     = false
+  description = "SIGN_IN_TO_VIEW_LINKEDIN_ENABLED for the server"
+}
+
 # Chooses which protected totp/key-<slot> SSM parameter is TOTP_ACTIVE_KEY;
 # see docs/design/totp-key-management.md, "Key ring" and "Rotation".
 variable "totp_active_key_slot" {

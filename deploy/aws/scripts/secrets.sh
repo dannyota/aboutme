@@ -100,6 +100,7 @@ totp-key)
   put auth-email/active-key-id String keyid
   put auth-email/active-key SecureString key32
   put password-rate-hmac-key SecureString key32
+  put view-pass-key SecureString key32
   ;;
 *)
   echo "usage: $0 [totp-key <a|b>]" >&2

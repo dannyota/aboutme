@@ -355,20 +355,21 @@ while IFS= read -r ref; do
 done < <(sort -u <<<"$refs")
 ((!missing)) || { say "create the missing secrets, or turn off the setting that needs them, then rerun"; exit 1; }
 
-# Enrollment may only start after --activate has raised the fence, so a
-# revision that turns it on below the fence never reaches ECS.
-new_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
-  | .environment[]? | select(.name == "PASSKEY_ENROLLMENT_ENABLED") | .value' "$work/app.json")
-if ((fence_min < fence_epoch)) && [[ $new_enrolled == true ]]; then
-  say "the new app turns passkey enrollment on while the release fence is below v0.4.2; run --activate first"
-  exit 1
-fi
-new_totp_enrolled=$(jq -r '.containerDefinitions[] | select(.name == "server")
-  | .environment[]? | select(.name == "TOTP_ENROLLMENT_ENABLED") | .value' "$work/app.json")
-if ((fence_min < fence_epoch_totp)) && [[ $new_totp_enrolled == true ]]; then
-  say "the new app turns TOTP enrollment on while the release fence is below v0.4.7; run --activate first"
-  exit 1
-fi
+# A flag may only start on after --activate has raised the fence to its own
+# floor, so a revision that turns one on below its floor never reaches ECS
+# (fence.sh's fence_epoch*).
+check_floor_flag() { # env-var-name fence-epoch human-name floor-tag
+  local val
+  val=$(jq -r --arg n "$1" '.containerDefinitions[] | select(.name == "server")
+    | .environment[]? | select(.name == $n) | .value' "$work/app.json")
+  if ((fence_min < $2)) && [[ $val == true ]]; then
+    say "the new app turns $3 on while the release fence is below $4; run --activate first"
+    exit 1
+  fi
+}
+check_floor_flag PASSKEY_ENROLLMENT_ENABLED "$fence_epoch" "passkey enrollment" v0.4.2
+check_floor_flag TOTP_ENROLLMENT_ENABLED "$fence_epoch_totp" "TOTP enrollment" v0.4.7
+check_floor_flag SIGN_IN_TO_VIEW_ENABLED "$fence_epoch_signin" "sign in to view" v0.6.22
 
 # A release at or above v0.4.7 needs the TOTP key OpenTofu provisions
 # (docs/design/totp-key-management.md, "Bootstrap"); an app revision missing
