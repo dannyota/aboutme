@@ -59,7 +59,7 @@ sed 's#<title>#<!-- https://evil.example --><title>#' "$maintenance_html" >"$wor
 reject "an absolute URL"
 sed '0,/aria-label="aboutme\.vn"/s//aria-label="aboutme.vn" href="logo.svg"/' "$maintenance_html" >"$work/bad.html"
 reject "a non-fragment href"
-sed '0,/fill="url(#lf)"/s//fill="url(logo.png)"/' "$maintenance_html" >"$work/bad.html"
+sed '0,/stroke="currentColor"/s//stroke="url(logo.png)"/' "$maintenance_html" >"$work/bad.html"
 reject "a non-fragment css url()"
 bash "$maintenance_render" "$maintenance_html" >/dev/null ||
   { echo "maintenance-render rejected the real maintenance page" >&2; exit 1; }
