@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  FOP 2.3 configuration for rendering the LinkedIn "Save to PDF" layout
+  fixtures (docs/design/linkedin-import.md, "Tests"; README.md in this
+  directory). Registers one font, Noto Sans Regular, as the single font
+  resource every fixture uses, matching the real export's single embedded
+  font (design, "Save to PDF structure"). FOP's default handling of a
+  configured TrueType font embeds it as a Type0/Identity-H CID font with a
+  ToUnicode map, which is what this fixture set relies on; no
+  encoding-mode is set here to keep that default.
+-->
+<fop version="1.0">
+  <renderers>
+    <renderer mime="application/pdf">
+      <fonts>
+        <font kerning="yes" embed-url="file:///fonts/NotoSans-Regular.ttf"
+              embedding-mode="subset">
+          <font-triplet name="NotoSans" style="normal" weight="normal"/>
+        </font>
+      </fonts>
+    </renderer>
+  </renderers>
+</fop>

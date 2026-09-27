@@ -1,0 +1,41 @@
+# Renders the *.fo sources in this directory to *.pdf with Apache FOP 2.3,
+# for the LinkedIn "Save to PDF" layout fixtures (docs/design/linkedin-import.md,
+# "Tests"; README.md in this directory records the exact command and pins).
+# Build and run with Podman only, never Docker (AGENTS.md, instructions/gotchas.md).
+#
+# Base image pinned by digest: eclipse-temurin:17-jre-jammy.
+FROM docker.io/library/eclipse-temurin@sha256:97137382c6f0c30427d9b7c44ad8b2d55ac823b0768c171d81a643ed219023c5
+
+# Apache FOP 2.3 binary distribution, verified against its published sha512.
+ENV FOP_URL=https://archive.apache.org/dist/xmlgraphics/fop/binaries/fop-2.3-bin.tar.gz
+ENV FOP_SHA512=47858956b193d1b7e3045314eafc6d851750171ae322e601920b4ad4bde182fa8bb2cf17e3e6a592d6a8fc5a3b1e2561f000385ea5e41250745263ccd099a32e
+
+# Noto Sans Regular, hinted static TTF, from the NotoSans-v2.015 GitHub
+# release. Verified against the release zip's sha256, then against the
+# extracted font file's own sha256, so a change to either the archive layout
+# or the font bytes fails the build instead of silently embedding a
+# different font. The font itself is never committed to this repository;
+# only the subset FOP embeds in each generated PDF is (README.md).
+ENV FONT_URL=https://github.com/notofonts/latin-greek-cyrillic/releases/download/NotoSans-v2.015/NotoSans-v2.015.zip
+ENV FONT_ZIP_SHA256=0c34df072a3fa7efbb7cbf34950e1f971a4447cffe365d3a359e2d4089b958f5
+ENV FONT_PATH_IN_ZIP=NotoSans/hinted/ttf/NotoSans-Regular.ttf
+ENV FONT_SHA256=478c558ea716033cd60c03438f628dfa75694dcf6b5f6d505a2f05fd2b4f3823
+
+RUN set -eu; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl unzip; \
+    rm -rf /var/lib/apt/lists/*; \
+    curl -fsSL -o /tmp/fop.tar.gz "$FOP_URL"; \
+    echo "$FOP_SHA512  /tmp/fop.tar.gz" | sha512sum -c -; \
+    mkdir -p /opt/fop; \
+    tar -xzf /tmp/fop.tar.gz -C /opt/fop --strip-components=2 fop-2.3/fop; \
+    rm -f /tmp/fop.tar.gz; \
+    curl -fsSL -o /tmp/font.zip "$FONT_URL"; \
+    echo "$FONT_ZIP_SHA256  /tmp/font.zip" | sha256sum -c -; \
+    mkdir -p /fonts; \
+    unzip -p /tmp/font.zip "$FONT_PATH_IN_ZIP" > /fonts/NotoSans-Regular.ttf; \
+    echo "$FONT_SHA256  /fonts/NotoSans-Regular.ttf" | sha256sum -c -; \
+    rm -f /tmp/font.zip
+
+WORKDIR /work
+ENTRYPOINT ["/opt/fop/fop"]
