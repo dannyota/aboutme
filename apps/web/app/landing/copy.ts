@@ -39,17 +39,18 @@ export const landingCopy: Record<Locale, LandingCopy> = {
   vi: {
     description:
       'Công cụ tạo CV mã nguồn mở. Viết một lần, xem trước đúng bố cục '
-      + 'trang, và đăng từng CV tại một đường dẫn gọn gàng do bạn kiểm soát.',
+      + 'trang, và xuất bản từng CV tại một đường dẫn gọn gàng do bạn kiểm '
+      + 'soát.',
     title: ['CV của bạn.', 'Chia sẻ theo cách của bạn.'],
     titleEmphasis: 'theo cách của bạn.',
     lead:
       'Miễn phí và mã nguồn mở. Viết CV, xem trước đúng từng trang và chỉ '
-      + 'đăng tại đường dẫn riêng khi bạn sẵn sàng.',
+      + 'xuất bản tại đường dẫn riêng khi bạn sẵn sàng.',
     createResume: 'Tạo CV của bạn',
     signIn: 'Đăng nhập',
     openResumes: 'Mở CV của bạn',
     browseTemplates: 'Xem thư viện',
-    sampleLabel: 'CV mẫu đăng tại aboutme.vn/danny',
+    sampleLabel: 'CV mẫu xuất bản tại aboutme.vn/danny',
     sealLabel: 'Công khai tại aboutme.vn/danny',
     heroChips: {
       private: 'Riêng tư theo mặc định',
@@ -60,14 +61,14 @@ export const landingCopy: Record<Locale, LandingCopy> = {
       {
         title: 'Riêng tư theo mặc định',
         text:
-          'CV của bạn luôn riêng tư cho đến khi bạn đăng. Mỗi tài khoản có '
-          + 'tối đa ba CV.',
+          'CV của bạn luôn riêng tư cho đến khi bạn xuất bản. Mỗi tài khoản '
+          + 'có tối đa ba CV.',
       },
       {
         title: 'Mỗi CV một đường dẫn',
         text:
-          'Mỗi CV có đường dẫn aboutme.vn gọn gàng của riêng nó. Đăng, gỡ '
-          + 'đăng và cho phép lập chỉ mục tìm kiếm riêng cho từng CV.',
+          'Mỗi CV có đường dẫn aboutme.vn gọn gàng của riêng nó. Xuất bản, '
+          + 'hủy xuất bản và cho phép lập chỉ mục tìm kiếm riêng cho từng CV.',
       },
       {
         title: 'Dùng trợ lý AI của bạn',
@@ -82,10 +83,10 @@ export const landingCopy: Record<Locale, LandingCopy> = {
       + 'PDF họ tải về.',
     templateCategoriesLabel: 'Nhóm trong thư viện',
     browseAllTemplates: 'Mở thư viện',
-    publishTitle: 'Đăng CV gồm ba lựa chọn',
+    publishTitle: 'Xuất bản CV gồm ba lựa chọn',
     publishLead:
-      'Không gì được công khai cho đến khi bạn đăng. Bạn chọn từng thiết '
-      + 'lập cho từng CV và có thể đổi bất cứ lúc nào.',
+      'Không gì được công khai cho đến khi bạn xuất bản. Bạn chọn từng '
+      + 'thiết lập cho từng CV và có thể đổi bất cứ lúc nào.',
     publishExample: 'Thiết lập ví dụ',
     publishChoices: [
       { title: 'CV công khai', text: 'Có trang công khai hay không.' },

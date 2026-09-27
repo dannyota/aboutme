@@ -112,7 +112,7 @@ never implies tracking.
 
 Vietnamese for the view-counts rows: "Lượt xem CV công khai: chúng tôi đếm lượt
 xem và chỉ lưu tổng số theo ngày. Để phân biệt người với bot, địa chỉ IP và
-thông tin trình duyệt của bạn chỉ được dùng tạm trong bộ nhớ máy chủ và bị xoá
+thông tin trình duyệt của bạn chỉ được dùng tạm trong bộ nhớ máy chủ và bị xóa
 trong ngày; trình duyệt của bạn giải một phép tính nhỏ. Việc đếm lượt xem không
 dùng cookie." and "Không dùng công cụ phân tích hay mã theo dõi quảng cáo của
 bên thứ ba. Chúng tôi chỉ đếm lượt xem CV công khai như mô tả ở trên."

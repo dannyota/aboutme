@@ -50,7 +50,7 @@ describe('AuthLayout', () => {
     const wrapper = await mountSuspended(LoginPage);
     await flushPromises();
     expect(wrapper.get('[data-testid="auth-brand-panel"]').text()).toContain(
-      'CV của bạn luôn riêng tư cho đến khi bạn đăng.',
+      'CV của bạn luôn riêng tư cho đến khi bạn xuất bản.',
     );
   });
 

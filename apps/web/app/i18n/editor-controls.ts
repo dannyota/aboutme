@@ -159,7 +159,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       colorRemove: 'Xóa',
       removeSurfaceTarget: 'Xóa mục tiêu bề mặt',
       cropHint:
-        'Kéo hình vuông để chọn phần hiển thị trên hồ sơ. '
+        'Kéo hình vuông để chọn phần hiển thị trên CV. '
         + 'Bạn cũng có thể dùng phím mũi tên và + hoặc − để thu phóng.',
       cropInvalid: 'Nhập vùng cắt trong phạm vi ảnh.',
       cropPosition: 'Vị trí cắt',
@@ -297,7 +297,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       clearCrop: 'Xóa ảnh cắt',
       zoom: 'Thu phóng',
       exactValues: 'Giá trị chính xác',
-      onResume: 'Trên hồ sơ của bạn',
+      onResume: 'Trên CV của bạn',
       templates: 'Mẫu',
       apply: 'Áp dụng',
       undoTemplate: 'Hoàn tác thay đổi mẫu',
