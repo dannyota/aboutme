@@ -164,15 +164,18 @@ SHA-256 hash. The cookie is
 `__Host-session; Secure; HttpOnly; SameSite=Lax; Path=/` with no `Domain`
 attribute.
 
-| Control           | Rule                                                                                                                                           |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                                                          |
-| Absolute expiry   | 90 days                                                                                                                                        |
-| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                                                  |
-| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it                                 |
-| Recent reauth     | 15 minutes                                                                                                                                     |
-| Sensitive actions | Provider link, password add/change, factor management, account deletion, slug release, session/grant revoke, and consent require recent reauth |
-| Visibility        | Account settings list sessions and permit per-session revoke                                                                                   |
+| Control           | Rule                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Idle expiry       | 30 days; `last_seen_at` updates at most once per hour                                                                    |
+| Absolute expiry   | 90 days                                                                                                                  |
+| Rotation          | After 24 hours; one admitted winner and at most one successor per predecessor                                            |
+| Rotation delivery | Successor use sets the predecessor deadline to `min(existing deadline, now + 60 seconds)`; it never extends it           |
+| Recent reauth     | 15 minutes                                                                                                               |
+| Sensitive actions | Provider link, password add/change, factor management, account deletion, slug release, and consent require recent reauth |
+| Visibility        | Account settings list sessions and permit per-session revoke                                                             |
+
+Session revoke and agent-grant revoke need only a live current-epoch session and
+no recent proof, because ending sessions only reduces access.
 
 Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
 Logout-everywhere revokes all sessions. Password reset revokes every session and

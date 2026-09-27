@@ -1,6 +1,7 @@
 // These adversarial HTTP tests cover session ownership, liveness, revocation,
-// rotation delivery, recent reauthentication, and CSRF. See
-// docs/adr/0015-accounts-passwords-and-sessions.md.
+// rotation delivery, and CSRF. Revoking one session or logging out everywhere
+// needs no recent reauthentication, because ending sessions only reduces
+// access. See docs/adr/0015-accounts-passwords-and-sessions.md.
 package auth_test
 
 import (
@@ -125,10 +126,9 @@ func TestLogout_ClearsSiteDataHeader(t *testing.T) {
 	}
 }
 
-// TestRevokeAll_WithoutRecentReauth_TouchesNothing proves the recent-reauth
-// check runs before any revocation. All three sessions remain live after a
-// rejected request.
-func TestRevokeAll_WithoutRecentReauth_TouchesNothing(t *testing.T) {
+// TestRevokeAll_StaleReauth_Succeeds proves logout-everywhere needs no recent
+// reauthentication: a stale primary proof still revokes all three sessions.
+func TestRevokeAll_StaleReauth_Succeeds(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -140,23 +140,20 @@ func TestRevokeAll_WithoutRecentReauth_TouchesNothing(t *testing.T) {
 	forceReauthenticatedAtStale(t, callerSess.ID)
 
 	resp := doJSON(t, handler, http.MethodDelete, auth.SessionsPath, testPublicOrigin, csrfTokenFor(callerSess), "", sessionRequestCookie(rawCaller)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("DELETE %s (stale reauth) status = %d, want %d", auth.SessionsPath, resp.StatusCode, http.StatusForbidden)
-	}
-	if got := decodeErrorCode(t, resp); got != "reauth_required" {
-		t.Errorf("error.code = %q, want %q", got, "reauth_required")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE %s (stale reauth) status = %d, want %d", auth.SessionsPath, resp.StatusCode, http.StatusNoContent)
 	}
 
 	for _, s := range []store.Session{callerSess, otherSess1, otherSess2} {
-		if got := rowRevokedAt(t, s.ID); got != nil {
-			t.Errorf("session %s revoked_at = %v after a REJECTED revoke-all, want nil (untouched)", s.ID, got)
+		if got := rowRevokedAt(t, s.ID); got == nil {
+			t.Errorf("session %s revoked_at is nil after logout-everywhere with a stale primary proof, want non-nil", s.ID)
 		}
 	}
 
 	for _, raw := range []string{rawCaller, rawOther1, rawOther2} {
 		r := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.
-		if r.StatusCode != http.StatusOK {
-			t.Errorf("GET %s with an untouched session after a rejected revoke-all status = %d, want %d", auth.MePath, r.StatusCode, http.StatusOK)
+		if r.StatusCode != http.StatusUnauthorized {
+			t.Errorf("GET %s with a revoked session after logout-everywhere status = %d, want %d", auth.MePath, r.StatusCode, http.StatusUnauthorized)
 		}
 	}
 }
@@ -250,9 +247,10 @@ func TestDeleteSession_DDC5_IndistinguishableAcrossFailureModes(t *testing.T) {
 	}
 }
 
-// TestDeleteSession_WithoutRecentReauth_TouchesNothing proves per-session
-// revocation checks recent reauthentication before touching the target row.
-func TestDeleteSession_WithoutRecentReauth_TouchesNothing(t *testing.T) {
+// TestDeleteSession_StaleReauth_RevokesTargetSession proves per-session revoke
+// needs no recent reauthentication: a stale caller primary proof still
+// revokes a different named target session.
+func TestDeleteSession_StaleReauth_RevokesTargetSession(t *testing.T) {
 	t.Parallel()
 	handler, q := newSessionAPITestService(t)
 	userID := createTestUser(t, q)
@@ -262,19 +260,16 @@ func TestDeleteSession_WithoutRecentReauth_TouchesNothing(t *testing.T) {
 	forceReauthenticatedAtStale(t, callerSess.ID)
 
 	resp := doJSON(t, handler, http.MethodDelete, sessionIDPath(targetSess.ID), testPublicOrigin, csrfTokenFor(callerSess), "", sessionRequestCookie(rawCaller)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("DELETE %s (stale reauth) status = %d, want %d", sessionIDPath(targetSess.ID), resp.StatusCode, http.StatusForbidden)
-	}
-	if got := decodeErrorCode(t, resp); got != "reauth_required" {
-		t.Errorf("error.code = %q, want %q", got, "reauth_required")
+	if resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE %s (stale reauth) status = %d, want %d", sessionIDPath(targetSess.ID), resp.StatusCode, http.StatusNoContent)
 	}
 
-	if got := rowRevokedAt(t, targetSess.ID); got != nil {
-		t.Errorf("target session revoked_at = %v after a REJECTED per-session revoke, want nil (untouched)", got)
+	if got := rowRevokedAt(t, targetSess.ID); got == nil {
+		t.Error("target session revoked_at is nil after a revoke with a stale primary proof, want non-nil")
 	}
 	r := doJSON(t, handler, http.MethodGet, auth.MePath, "", "", "", sessionRequestCookie(rawTarget)) //nolint:bodyclose // doJSON closes the body itself before returning.
-	if r.StatusCode != http.StatusOK {
-		t.Errorf("GET %s with the untouched target session after a rejected revoke status = %d, want %d", auth.MePath, r.StatusCode, http.StatusOK)
+	if r.StatusCode != http.StatusUnauthorized {
+		t.Errorf("GET %s with the revoked target session status = %d, want %d", auth.MePath, r.StatusCode, http.StatusUnauthorized)
 	}
 }
 
@@ -468,7 +463,6 @@ func TestCSRF_CrossOrigin_RejectsAllThreeMutatingEndpoints(t *testing.T) {
 		t.Run(e.name+"/cross-origin", func(t *testing.T) {
 			t.Parallel()
 			userID := createTestUser(t, q)
-			// Fresh reauthentication isolates this case to the CSRF gate.
 			raw, sess := issueTestSession(t, q, userID)
 
 			resp := doJSON(t, handler, e.method, e.path(sess), "https://evil.example", csrfTokenFor(sess), "", sessionRequestCookie(raw)) //nolint:bodyclose // doJSON closes the body itself before returning.

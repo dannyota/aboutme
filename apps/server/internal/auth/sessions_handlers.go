@@ -2,8 +2,9 @@ package auth
 
 // Every handler assumes sessionChain has authenticated the request and checked
 // CSRF where required. Targeted and global revocation recheck the caller's
-// session, epoch, and recent proofs under the user lock before any write.
-// Targeted revocation also revokes exact rotation partners. See
+// session and epoch under the user lock before any write; ending sessions
+// only reduces access, so neither route needs a recent proof. Targeted
+// revocation also revokes exact rotation partners. See
 // docs/design/security.md, docs/design/second-factor-authentication.md, and
 // docs/adr/0015-accounts-passwords-and-sessions.md.
 
@@ -154,9 +155,9 @@ func (s *Service) handleSessionsList(w http.ResponseWriter, r *http.Request) {
 
 // handleRevokeAllSessions implements DELETE /api/v1/sessions:
 // logout-everywhere. One transaction takes the user lock, locks and rechecks
-// the caller's session and factor proofs, then revokes every session. Session
-// issuers, rotation successors, and epoch-change replacements take the same
-// user lock, so none can commit a session that this revocation misses. See
+// the caller's session, then revokes every session. Session issuers, rotation
+// successors, and epoch-change replacements take the same user lock, so none
+// can commit a session that this revocation misses. See
 // docs/design/second-factor-authentication.md.
 func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -173,7 +174,7 @@ func (s *Service) handleRevokeAllSessions(w http.ResponseWriter, r *http.Request
 		if lockErr != nil {
 			return lockErr
 		}
-		if _, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
+		if _, gateErr := lockCallerSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
 			return gateErr
 		}
 		if _, revokeErr := qtx.RevokeAllSessions(ctx, store.RevokeAllSessionsParams{UserID: user.ID, RevokedAt: &now}); revokeErr != nil {
@@ -199,12 +200,11 @@ const notFoundCode = "not_found"
 // errSessionTargetNotFound collapses absent, foreign, and dead revoke targets.
 var errSessionTargetNotFound = errors.New("auth: session target not found")
 
-// handleRevokeSession requires ownership and recent reauth before revoking the
-// target and its rotation partners. One transaction takes the user lock, locks
-// and rechecks the caller's session and factor proofs, revokes the target, and
-// sweeps its exact rotation partners, so a concurrent rotation successor or
-// epoch-change replacement cannot survive. It clears client state whenever the
-// current session dies.
+// handleRevokeSession requires ownership before revoking the target and its
+// rotation partners. One transaction takes the user lock, locks and rechecks
+// the caller's session, revokes the target, and sweeps its exact rotation
+// partners, so a concurrent rotation successor or epoch-change replacement
+// cannot survive. It clears client state whenever the current session dies.
 func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sess, ok := SessionFromContext(ctx)
@@ -214,12 +214,6 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := s.sessionMgr.now()
-	// This precheck avoids a transaction for a stale primary proof. The
-	// locked recheck below is authoritative.
-	if err := RequireRecentReauth(sess, now); err != nil {
-		api.WriteError(w, http.StatusForbidden, reauthRequiredCode, "recent reauthentication is required")
-		return
-	}
 
 	targetID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -235,7 +229,7 @@ func (s *Service) handleRevokeSession(w http.ResponseWriter, r *http.Request) {
 		if lockErr != nil {
 			return lockErr
 		}
-		if _, gateErr := lockSensitiveSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
+		if _, gateErr := lockCallerSession(ctx, qtx, user, sess.ID, now); gateErr != nil {
 			return gateErr
 		}
 		n, revokeErr := qtx.RevokeSessionForUser(ctx, store.RevokeSessionForUserParams{
