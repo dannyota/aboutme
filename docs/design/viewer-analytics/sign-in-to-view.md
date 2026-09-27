@@ -13,6 +13,12 @@ sign-in ([ADR 0016](../../adr/0016-sign-in-providers.md#enablement)). GitHub
 never appears on the gate, even where it is enabled, because the gate text and
 the privacy notice name only Google and LinkedIn.
 
+LinkedIn also needs `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` (default false) until a
+live check confirms LinkedIn accepts an authorize request with scope `openid`
+alone. While it is false, the gate offers no LinkedIn button, and
+`GET /api/v1/auth/linkedin/start?purpose=view` redirects to `/{slug}` and
+creates no transaction.
+
 ## Setting
 
 Each resume gains one switch, `signInToView`, in the publish dialog, off by
