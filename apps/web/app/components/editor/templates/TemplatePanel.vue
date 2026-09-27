@@ -269,8 +269,11 @@ function assertNever(value: never): never {
     >
       {{ searchMessage }}
     </p>
+    <!-- Screen readers get the count from the status line below, after the
+      typing pause; hiding this copy stops browse mode reading it twice. -->
     <p
       v-if="searchCount !== ''"
+      aria-hidden="true"
       class="text-sm text-muted-foreground"
       data-testid="template-search-count"
     >

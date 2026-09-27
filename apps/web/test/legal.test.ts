@@ -58,7 +58,7 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'dịch vụ đó sẽ lấy tiêu đề trang, phần tóm tắt và ảnh xem trước của '
       + 'trang (họ tên, tiêu đề và ảnh của bạn), và có thể giữ bản sao riêng '
-      + 'của họ sau khi bạn ngừng công khai.',
+      + 'của họ sau khi bạn hủy xuất bản.',
     );
     expect(wrapper.text()).toContain('Amazon Route 53 cung cấp dịch vụ DNS.');
     expect(wrapper.text()).toContain(

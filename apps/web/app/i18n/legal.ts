@@ -147,7 +147,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'CV ở chế độ riêng tư cho đến khi bạn xuất bản. Mỗi CV có đường '
             + 'dẫn riêng. Việc lập chỉ mục cho công cụ tìm kiếm và AI mặc '
-            + 'định tắt cho đến khi bạn bật. Khi bạn ngừng công khai, đường '
+            + 'định tắt cho đến khi bạn bật. Khi bạn hủy xuất bản, đường '
             + 'dẫn công khai ngừng hoạt động ngay lập tức. Khi bạn xóa hoặc '
             + 'đổi đường dẫn của một CV, chúng tôi giữ chỗ đường dẫn cũ '
             + 'trong 180 ngày để không ai khác chiếm được đường dẫn đó. '
@@ -164,7 +164,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'dụng nhắn tin hoặc mạng xã hội, dịch vụ đó sẽ lấy tiêu đề '
             + 'trang, phần tóm tắt và ảnh xem trước của trang (họ tên, tiêu '
             + 'đề và ảnh của bạn), và có thể giữ bản sao riêng của họ sau khi '
-            + 'bạn ngừng công khai.',
+            + 'bạn hủy xuất bản.',
           ],
         },
         {
@@ -191,7 +191,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           paragraphs: [
             'Trợ lý AI bạn kết nối chỉ làm được những gì bạn cho phép: đọc '
             + 'CV, và nếu bạn cấp quyền ghi, tạo, sửa hoặc xóa CV và ảnh. '
-            + 'Trợ lý không thể công khai hay ngừng công khai CV, nhưng nếu '
+            + 'Trợ lý không thể xuất bản hay hủy xuất bản CV, nhưng nếu '
             + 'xóa một CV đang công khai thì đường dẫn của CV đó ngừng hoạt '
             + 'động. Nội dung trợ lý đọc được sẽ đến dịch vụ AI mà bạn chọn. '
             + 'Bạn có thể thu hồi quyền bất cứ lúc nào trong Settings.',
@@ -271,7 +271,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'và hiển thị nội dung đó theo cách bạn chọn, ví dụ khi bạn '
             + 'xuất bản CV. Quyền này chấm dứt khi bạn xóa nội dung, trừ các '
             + 'bản sao lưu cho đến khi chúng hết hạn.',
-            'Bạn chịu trách nhiệm về nội dung bạn công khai, kể cả tính '
+            'Bạn chịu trách nhiệm về nội dung bạn xuất bản, kể cả tính '
             + 'chính xác và quyền chia sẻ thông tin hoặc hình ảnh của người '
             + 'khác.',
           ],

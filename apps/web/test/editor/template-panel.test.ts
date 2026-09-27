@@ -376,6 +376,11 @@ describe('TemplatePanel search', () => {
     // The visible count tracks the list with no delay.
     expect(wrapper.get('[data-testid="template-search-count"]').text())
       .toBe('1 template');
+    // Screen readers read the count once, from the status line, not twice.
+    expect(
+      wrapper.get('[data-testid="template-search-count"]')
+        .attributes('aria-hidden'),
+    ).toBe('true');
     // The screen-reader-only live region waits for typing to pause.
     expect(wrapper.get('[data-testid="template-search-status"]').text())
       .toBe('');
