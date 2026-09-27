@@ -34,7 +34,6 @@ WAL to a second vStorage bucket. Agents send logs and metrics to vMonitor.
 | Logs and alarms    | CloudWatch, SNS, Route 53 health check      | vMonitor logs, metrics, alarms, synthetic HTTP checks       |
 | Transactional mail | SES `ap-southeast-1`                        | Bizfly Email Transaction over SMTP                          |
 | Support mailbox    | Google Workspace                            | Bizfly Business Email                                       |
-| Google sign-in     | On                                          | Off (`PROVIDER_LOGIN_ENABLED=false`)                        |
 | Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS       | OpenTofu `deploy/vn/`, vStorage state, passphrase           |
 
 All GreenNode resources live in one region. **Owner approval:** HCM03 (Ho Chi
@@ -341,13 +340,7 @@ Each ships alone on AWS before cutover:
 3. Caddy edge selection: the `EDGES` list gains `vcdn`, a listener with its own
    trust and client address rule, and the site host comes from the environment
    so a rehearsal hostname works.
-4. A notice asking accounts with a Google identity and no password to add one
-   while Google sign-in still works. Password reset is a no-op for such an
-   account today, so one that misses the notice cannot sign in after cutover;
-   its data stays. **Owner approval:** let reset create the first password for
-   an account with none, since the reset email proves the same control as
-   registration.
-5. Privacy notice and terms naming GreenNode and Bizfly in Vietnam. The text is
+4. Privacy notice and terms naming GreenNode and Bizfly in Vietnam. The text is
    true only after cutover, so its first deploy is the cutover deploy.
 
 ### 3. Build infrastructure

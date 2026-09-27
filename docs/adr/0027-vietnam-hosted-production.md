@@ -25,8 +25,6 @@ Production moves to providers that store and process data in Vietnam:
   (vCDN, all PoPs in Vietnam), DNS (vDNS), and monitoring (vMonitor).
 - Bizfly Email Transaction for authentication mail, and Bizfly Business Email
   for the support mailbox.
-- Google sign-in is off in production (`PROVIDER_LOGIN_ENABLED=false`), because
-  it sends identity data to Google.
 - PostgreSQL 18 runs self-hosted on the vServer with pgBackRest to vStorage,
   because the managed database offers at most PostgreSQL 17 and no point-in-time
   recovery.
@@ -43,6 +41,10 @@ These stay outside the move:
 
 - Have I Been Pwned receives only a five-character hash prefix, which does not
   identify a person. The DPIA records it.
+- Google and LinkedIn sign-in stay on. The person signs in at the provider;
+  aboutme sends only the one-time authorization code and its own client
+  credentials, and receives the name, email, and account ID. No stored personal
+  data leaves Vietnam.
 - MCP clients that a user connects may run abroad. The user starts that
   transfer, and the privacy notice says so.
 - GitHub holds code and public images with no personal data.
@@ -68,8 +70,6 @@ private media authorization, and every data invariant are unchanged.
 - vCDN has no authenticated origin pulls. An IP allowlist and a secret header
   replace them.
 - Release images must also build for `linux/amd64`.
-- Accounts that sign in only with Google lose sign-in unless they add a password
-  before cutover or password reset can create one.
 - The cutover replaces CloudFront with vCDN and moves the name servers and DS
   record from Route 53 to vDNS.
 - Cutover needs a maintenance window. Moving data back after Vietnam accepts
