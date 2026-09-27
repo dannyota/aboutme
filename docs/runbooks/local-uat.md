@@ -35,6 +35,7 @@ make dev-https-exports-check
 make dev-https-sample-start-check
 make dev-https-privacy-check
 make dev-https-linkedin-check
+make dev-https-linkedin-import-check
 make dev-https-down
 make dev-native
 ```

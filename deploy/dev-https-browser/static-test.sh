@@ -28,6 +28,8 @@ readonly -a SPEC_FILES=(
   privacy.spec.ts
   sample-start.spec.ts
   linkedin.spec.ts
+  linkedin-import.spec.ts
+  linkedin-import-fixtures.ts
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts
@@ -182,7 +184,7 @@ run)
     before_index=$(($# - 2))
     [ "${!previous_index}" = mcp-sdk ] && [ "${!before_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
-  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | second-factor | second-factor-disabled | mcp-sdk)
+  transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | linkedin-import | second-factor | second-factor-disabled | mcp-sdk)
     previous_index=$(($# - 1))
     [ "${!previous_index}" = "$FAKE_EXPECTED_IMAGE_ID" ]
     ;;
@@ -520,7 +522,7 @@ if output=$(FAKE_INSPECT_MODE=good "$CONTEXT/run.sh" \
   "$IMAGE_ID" "$INPUT" "$SPEC_INPUT" "$INVALID_MODE_EVIDENCE" invalid 2>&1); then
   fail 'invalid host mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' <<<"$output" ||
   fail 'invalid host mode returned the wrong diagnostic'
 [ ! -s "$CALL_LOG" ] || fail 'invalid host mode reached Podman'
 
@@ -1507,7 +1509,7 @@ if output=$(FAKE_BROWSER_MODE=good PATH="$INSIDE_BIN:$PATH" \
   "$INSIDE_RUN" --inside invalid 2>&1); then
   fail 'invalid inside mode was accepted'
 fi
-grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' <<<"$output" ||
+grep -Fq 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' <<<"$output" ||
   fail 'invalid inside mode returned the wrong diagnostic'
 [ ! -s "$BROWSER_LOG" ] || fail 'invalid inside mode reached the browser'
 

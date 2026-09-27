@@ -612,7 +612,7 @@ jobs:
           - group: editor
             proofs: editor exports
           - group: entry
-            proofs: entry publish
+            proofs: entry publish linkedin-import
           - group: account
             proofs: password privacy transport
           - group: mcp

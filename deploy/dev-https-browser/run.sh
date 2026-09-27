@@ -24,6 +24,8 @@ readonly -a SPEC_SOURCES=(
   privacy.spec.ts
   sample-start.spec.ts
   linkedin.spec.ts
+  linkedin-import.spec.ts
+  linkedin-import-fixtures.ts
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts
@@ -209,8 +211,8 @@ mount_has_option() {
 
 require_valid_mode() {
   case $1 in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | linkedin-import | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
   esac
 }
 
@@ -360,6 +362,7 @@ inside_container() {
   privacy) evidence_name=privacy-proof.json evidence_limit=8192 proof_name='account privacy' spec=privacy.spec.ts ;;
   sample-start) evidence_name=sample-start-proof.json evidence_limit=4096 proof_name='register and start a resume from a sample' spec=sample-start.spec.ts ;;
   linkedin) evidence_name=linkedin-proof.json evidence_limit=8192 proof_name='LinkedIn sign-in' spec=linkedin.spec.ts ;;
+  linkedin-import) evidence_name=linkedin-import-proof.json evidence_limit=8192 proof_name='LinkedIn import' spec=linkedin-import.spec.ts ;;
   second-factor) evidence_name=passkey-second-factor-proof.json evidence_limit=8192 proof_name='passkey second factor' spec=second-factor.spec.ts ;;
   second-factor-disabled) evidence_name=passkey-enrollment-disabled-proof.json evidence_limit=8192 proof_name='disabled passkey enrollment' spec=second-factor.spec.ts ;;
   totp) evidence_name=totp-second-factor-proof.json evidence_limit=8192 evidence_extra_name=totp-timing.json evidence_extra_limit=4096 proof_name='authenticator-app second factor' spec=totp.spec.ts ;;

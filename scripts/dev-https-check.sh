@@ -44,6 +44,8 @@ readonly -a SPEC_SOURCES=(
   privacy.spec.ts
   sample-start.spec.ts
   linkedin.spec.ts
+  linkedin-import.spec.ts
+  linkedin-import-fixtures.ts
   second-factor.spec.ts
   totp.spec.ts
   totp-fixture.ts
@@ -83,6 +85,7 @@ exports) evidence_prefix=exports ;;
 privacy) evidence_prefix=privacy ;;
 sample-start) evidence_prefix=sample-start ;;
 linkedin) evidence_prefix=linkedin ;;
+linkedin-import) evidence_prefix=linkedin-import ;;
 passkey)
   # Two bounded phases, one per server enrollment flag. Both evidence
   # directories start with "passkey-" so the hosted job uploads exactly them.
@@ -97,7 +100,7 @@ totp)
   ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|linkedin|passkey|totp'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|linkedin|linkedin-import|passkey|totp'
   ;;
 esac
 
