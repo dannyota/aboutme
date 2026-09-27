@@ -20,7 +20,8 @@ useHead({ title: computed(() => workspaceTitles[locale.value].authorize) });
 const route = useRoute();
 const consent = useOAuthConsent();
 
-type PageState = 'loading' | 'ready' | 'invalid' | 'unavailable';
+type PageState
+  = 'loading' | 'ready' | 'invalid' | 'unavailable' | 'agent-limit';
 
 const state = ref<PageState>('loading');
 const view = ref<{
@@ -33,6 +34,34 @@ const pending = ref(false);
 function queryString(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
+
+// The loopback hosts a native client redirects to on this computer
+// (docs/design/mcp-client-compatibility.md, rule 6).
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/**
+ * The line naming where approval returns, from the page's own `redirect_uri`
+ * query value. Shown only once the consent view has loaded. An `https`
+ * redirect names its host; a loopback `http` redirect says it returns to an
+ * app on this computer (docs/design/mcp-client-compatibility.md, rule 6).
+ * Anything else, or a value `new URL` cannot parse, shows no line.
+ */
+const returnToLine = computed(() => {
+  if (view.value === null) return null;
+  const redirectURI = queryString(route.query.redirect_uri);
+  if (redirectURI === null) return null;
+  let url: URL;
+  try {
+    url = new URL(redirectURI);
+  } catch {
+    return null;
+  }
+  if (url.protocol === 'https:') return copy.value.returnToHost(url.host);
+  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) {
+    return copy.value.returnToLoopback;
+  }
+  return null;
+});
 
 function parseQuery(): OAuthConsentRequest | null {
   const values = route.query;
@@ -105,6 +134,16 @@ async function load(): Promise<void> {
   }
 }
 
+/**
+ * Rule 7: the ten-grant limit gets its own state; every other kind is
+ * unavailable.
+ */
+function failureState(kind: OAuthConsentFailure['kind']): PageState {
+  if (kind === 'invalid-request') return 'invalid';
+  if (kind === 'agent-limit') return 'agent-limit';
+  return 'unavailable';
+}
+
 async function submit(decision: OAuthConsentDecision): Promise<void> {
   if (pending.value || authorizeQuery === null) return;
   pending.value = true;
@@ -120,11 +159,9 @@ async function submit(decision: OAuthConsentDecision): Promise<void> {
       loginForSession();
       return;
     }
-    state.value
-      = failure instanceof OAuthConsentFailure
-        && failure.kind === 'invalid-request'
-        ? 'invalid'
-        : 'unavailable';
+    state.value = failure instanceof OAuthConsentFailure
+      ? failureState(failure.kind)
+      : 'unavailable';
     await focusError();
   } finally {
     pending.value = false;
@@ -155,20 +192,43 @@ onMounted(() => {
       {{ copy.clientRequest }}
     </p>
     <p
+      v-if="returnToLine"
+      class="mt-1 text-base text-muted-foreground"
+      data-testid="consent-return-to"
+    >
+      {{ returnToLine }}
+    </p>
+    <p
       v-if="state === 'loading'"
       class="mt-8 text-base text-muted-foreground"
     >
       {{ copy.loading }}
     </p>
     <StatusBanner
-      v-else-if="state === 'invalid' || state === 'unavailable'"
+      v-else-if="
+        state === 'invalid' || state === 'unavailable'
+          || state === 'agent-limit'
+      "
       ref="errorSummary"
       :focus-on-mount="true"
       class="mt-6"
       kind="error"
       testid="consent-error"
     >
-      {{ state === 'invalid' ? copy.invalid : copy.unavailable }}
+      <template v-if="state === 'invalid'">
+        {{ copy.invalid }}
+      </template>
+      <template v-else-if="state === 'agent-limit'">
+        {{ copy.agentLimit.before
+        }}<NuxtLink
+          data-testid="consent-settings-link"
+          to="/app/settings/sessions"
+        >{{ copy.agentLimit.settingsLabel
+        }}</NuxtLink>{{ copy.agentLimit.after }}
+      </template>
+      <template v-else>
+        {{ copy.unavailable }}
+      </template>
     </StatusBanner>
     <form
       v-else-if="view"
