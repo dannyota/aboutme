@@ -86,8 +86,15 @@ describe("openapi contract", () => {
 
   it("pins login GET and privileged POST OAuth start contracts", () => {
     const authPurpose = doc.components.parameters.AuthPurpose;
-    expect(authPurpose.schema.enum).toEqual(["login"]);
+    expect(authPurpose.schema.enum).toEqual(["login", "view"]);
     expect(authPurpose.description).toContain("not served by `GET`");
+    expect(authPurpose.description).toContain("sign-in-to-view");
+
+    const authViewSlug = doc.components.parameters.AuthViewSlug;
+    expect(authViewSlug.name).toBe("slug");
+    expect(authViewSlug.in).toBe("query");
+    expect(authViewSlug.required).toBe(false);
+    expect(authViewSlug.schema.type).toBe("string");
 
     const authReturnPath = doc.components.parameters.AuthReturnPath;
     expect(authReturnPath.in).toBe("query");

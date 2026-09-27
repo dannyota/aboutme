@@ -23,6 +23,7 @@ describe("GET /capabilities", () => {
       "passwordRegistration",
       "providerLogin",
       "providers",
+      "signInToView",
       "totpEnrollment",
     ]);
     expect(schema.properties.passwordRegistration.type).toBe("boolean");
@@ -30,6 +31,7 @@ describe("GET /capabilities", () => {
     expect(schema.properties.agentAccess.type).toBe("boolean");
     expect(schema.properties.passkeyEnrollment.type).toBe("boolean");
     expect(schema.properties.totpEnrollment.type).toBe("boolean");
+    expect(schema.properties.signInToView.type).toBe("boolean");
     expect(schema.properties.providers.type).toBe("array");
     expect(schema.properties.providers.uniqueItems).toBe(true);
     expect(schema.properties.providers.items.enum).toEqual([

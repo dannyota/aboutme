@@ -73,7 +73,9 @@ func TestPublishResumeCASRaisesViewPassEpochOnTurnOn(t *testing.T) {
 func TestDiscoveryQueriesExcludeSignInToView(t *testing.T) {
 	ctx, _, tx, queries := newPublicStoreTx(t)
 	userID := createPublicStoreUser(ctx, t, tx)
-	slug := "sign-in-to-view-excluded-" + uuid.NewString()[:8]
+	// resumes_slug_format_check bounds a slug to 4-30 characters, so the
+	// fixed prefix must stay short even with the uniquifying suffix.
+	slug := "sitv-excl-" + uuid.NewString()[:8]
 	resumeID := createPublicStoreResume(ctx, t, tx, userID, &slug, true, true)
 	if _, err := tx.Exec(ctx, `UPDATE resumes SET sign_in_to_view = true WHERE id = $1`, resumeID); err != nil {
 		t.Fatalf("set sign_in_to_view: %v", err)
