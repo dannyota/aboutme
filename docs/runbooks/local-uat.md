@@ -64,9 +64,9 @@ updating a selector:
   `Draft` or the canonical `aboutme.vn/<slug>` link in English. Vietnamese uses
   `Thao tác khác cho <title>`, `Đổi tên`, and `Xóa` for those actions.
 - Editor: the page-count mark is `1 page` or `{n} pages` under the sheet and is
-  selected with `[data-testid="page-count"]`; at 390 px use the fixed `Edit` /
-  `Preview` switch and the `show-editor` / `show-preview` actions. Vietnamese
-  uses `{n} trang`, `Chỉnh sửa`, and `Xem trước`.
+  selected with `[data-testid="page-count"]`; at 390 px and tablet widths use
+  the fixed `Edit` / `Preview` switch and the `show-editor` / `show-preview`
+  actions. Vietnamese uses `{n} trang`, `Chỉnh sửa`, and `Xem trước`.
 - Publish: the success state shows the canonical stamp and `Copy link` on
   `[data-action="copy-link"]`; the only seal-colored control is `Publish`.
   Vietnamese uses `Sao chép liên kết` and `Xuất bản`.
