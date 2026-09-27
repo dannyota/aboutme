@@ -150,7 +150,7 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     // Labels for PreviewZoomControls.vue.
     zoomOut: 'Thu nhỏ',
     zoomIn: 'Phóng to',
-    zoomFit: 'Vừa khung',
+    zoomFit: 'Vừa chiều rộng',
     zoomPercent: (percent) => `Thu phóng ${percent}%`,
   },
   en: {
