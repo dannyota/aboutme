@@ -22,9 +22,7 @@ const escapeForTest = (text: string): string =>
   text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+    .replace(/>/g, '&gt;');
 
 describe('linesToRichText paragraphs', () => {
   it('returns an empty result for no lines', () => {
@@ -163,12 +161,12 @@ describe('linesToRichText lists', () => {
 });
 
 describe('linesToRichText escaping', () => {
-  it('escapes HTML special characters in text nodes', () => {
+  it('escapes &, <, and > in text nodes and keeps quotes', () => {
     const lines: TextLine[] = [
       { text: `Tom & Jerry <b>"quoted"</b> it's`, gap: null },
     ];
     expect(linesToRichText(lines).html).toBe(
-      '<p>Tom &amp; Jerry &lt;b&gt;&quot;quoted&quot;&lt;/b&gt; it&#39;s</p>',
+      '<p>Tom &amp; Jerry &lt;b&gt;"quoted"&lt;/b&gt; it\'s</p>',
     );
   });
 

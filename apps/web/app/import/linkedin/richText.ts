@@ -106,16 +106,17 @@ function buildBlocks(lines: readonly TextLine[]): Block[] {
   return blocks;
 }
 
-const ESCAPE_RE = /[&<>"']/g;
+// Only these three need escaping in a text node. Quotes stay literal, as the
+// sanitizer's own serialization writes them, so the output is already in
+// the form the sanitizer returns.
+const ESCAPE_RE = /[&<>]/g;
 const ESCAPES: Readonly<Record<string, string>> = Object.freeze({
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
-  '"': '&quot;',
-  '\'': '&#39;',
 });
 
-/** Escapes `&`, `<`, `>`, `"`, `'` so text is safe as an HTML text node. */
+/** Escapes `&`, `<`, and `>` so text is safe as an HTML text node. */
 function escapeHtml(text: string): string {
   return text.replace(ESCAPE_RE, (character) => ESCAPES[character]!);
 }
