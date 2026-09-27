@@ -113,9 +113,14 @@ const zoomPercent = computed(() => (
   previewZoomPercent(currentZoom.value, fitPercent.value)
 ));
 const isFit = computed(() => currentZoom.value === 'fit');
-const showZoomControls = computed(() => !isPhoneLayout.value);
-const zoomOutDisabled = computed(() => currentZoom.value === 'fit');
+// The zoom card and its shortcuts are a paged-preview affordance: Web mode
+// has no fixed page to zoom, so it keeps the browser's own zoom and scroll.
+const showZoomControls = computed(() => (
+  previewMode.value === 'pdf' && !isPhoneLayout.value
+));
+const zoomOutDisabled = computed(() => currentZoom.value === 50);
 const zoomInDisabled = computed(() => currentZoom.value === 200);
+const zoomAnnouncement = ref('');
 
 const sheetZoom = computed(() => {
   const breakpointWidth = windowWidth.value;
@@ -152,9 +157,11 @@ function applyZoom(
   next: PreviewZoomStep,
   pivotClient?: { x: number; y: number },
 ): void {
+  const changed = next !== currentZoom.value;
   const root = previewRoot.value;
   if (root === null) {
     currentZoom.value = next;
+    if (changed) announceZoom(next);
     return;
   }
   const rect = root.getBoundingClientRect();
@@ -168,6 +175,7 @@ function applyZoom(
   const ratioY = (root.scrollTop + offsetY) / beforeHeight;
 
   currentZoom.value = next;
+  if (changed) announceZoom(next);
 
   void nextTick(() => {
     const afterRoot = previewRoot.value;
@@ -177,32 +185,77 @@ function applyZoom(
   });
 }
 
-// Ctrl/Cmd zooms the preview only while focus is inside this region, so the
-// same keys keep their usual meaning in form fields elsewhere in the editor.
+/** Feeds the zoom card's polite live region, only for a value a user
+ * action actually set (never the initial mount or a same-value no-op),
+ * so a screen reader hears the new level without watching the control. */
+function announceZoom(step: PreviewZoomStep): void {
+  zoomAnnouncement.value = copy.value.zoomAnnounce(
+    previewZoomPercent(step, fitPercent.value),
+  );
+}
+
+// Ctrl/Cmd zooms the paged preview only while focus is inside this region
+// and only in PDF mode, so the same keys keep their usual meaning in form
+// fields and in the unpaged Web mode.
 function onPreviewKeydown(event: KeyboardEvent): void {
-  if (isPhoneLayout.value || !(event.ctrlKey || event.metaKey)) return;
+  if (
+    previewMode.value !== 'pdf'
+    || isPhoneLayout.value
+    || !(event.ctrlKey || event.metaKey)
+  ) return;
   if (event.key === '0') {
     event.preventDefault();
     applyZoom('fit');
   } else if (event.key === '+' || event.key === '=') {
     event.preventDefault();
-    applyZoom(stepPreviewZoom(currentZoom.value, 1));
+    applyZoom(stepPreviewZoom(currentZoom.value, 1, fitPercent.value));
   } else if (event.key === '-' || event.key === '_') {
     event.preventDefault();
-    applyZoom(stepPreviewZoom(currentZoom.value, -1));
+    applyZoom(stepPreviewZoom(currentZoom.value, -1, fitPercent.value));
   }
+}
+
+// A pinch gesture reaches here as a stream of small Ctrl/Cmd + wheel
+// events; stepping on every one would race far past the fingers' actual
+// travel, so their deltaY accumulates and one step fires per 50px banked
+// in a single direction. A direction reversal or a 300ms pause without a
+// wheel event starts the bank over instead of carrying it across.
+const WHEEL_ZOOM_STEP_PX = 50;
+const WHEEL_ZOOM_IDLE_MS = 300;
+let wheelAccumulatedPx = 0;
+let wheelDirection: 1 | -1 | null = null;
+let wheelIdleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function resetWheelAccumulator(): void {
+  wheelAccumulatedPx = 0;
+  wheelDirection = null;
 }
 
 // A plain wheel keeps scrolling the pane; only Ctrl/Cmd + wheel zooms, and
 // then around the pointer so the page under the cursor stays in view.
 function onPreviewWheel(event: WheelEvent): void {
-  if (isPhoneLayout.value || !(event.ctrlKey || event.metaKey)) return;
+  if (
+    previewMode.value !== 'pdf'
+    || isPhoneLayout.value
+    || !(event.ctrlKey || event.metaKey)
+  ) return;
   event.preventDefault();
   const direction: 1 | -1 = event.deltaY < 0 ? 1 : -1;
-  applyZoom(
-    stepPreviewZoom(currentZoom.value, direction),
-    { x: event.clientX, y: event.clientY },
-  );
+  if (direction !== wheelDirection) {
+    wheelAccumulatedPx = 0;
+    wheelDirection = direction;
+  }
+  clearTimeout(wheelIdleTimer);
+  wheelIdleTimer = setTimeout(resetWheelAccumulator, WHEEL_ZOOM_IDLE_MS);
+  wheelAccumulatedPx += Math.abs(event.deltaY);
+
+  let next = currentZoom.value;
+  while (wheelAccumulatedPx >= WHEEL_ZOOM_STEP_PX) {
+    wheelAccumulatedPx -= WHEEL_ZOOM_STEP_PX;
+    next = stepPreviewZoom(next, direction, fitPercent.value);
+  }
+  if (next === currentZoom.value) return;
+  applyZoom(next, { x: event.clientX, y: event.clientY });
 }
 
 function startPageCountObservation(): void {
@@ -259,6 +312,7 @@ onBeforeUnmount(() => {
   stopObserving?.();
   resizeObserver?.disconnect();
   window.removeEventListener('resize', updateWindowWidth);
+  clearTimeout(wheelIdleTimer);
 });
 </script>
 
@@ -306,6 +360,7 @@ onBeforeUnmount(() => {
     <div
       ref="previewRoot"
       class="overflow-auto bg-editor-canvas p-6 max-[42rem]:p-4"
+      :class="showZoomControls ? 'pb-18' : undefined"
       data-testid="preview-scroll"
       tabindex="0"
       @wheel="onPreviewWheel"
@@ -385,18 +440,19 @@ onBeforeUnmount(() => {
     </div>
     <PreviewZoomControls
       v-if="showZoomControls"
+      :announcement="zoomAnnouncement"
       class="absolute bottom-4 right-4 z-10"
       :fit-label="copy.zoomFit"
       :is-fit="isFit"
       :percent="zoomPercent"
-      :percent-label="copy.zoomPercent(zoomPercent)"
+      :percent-label="copy.zoomReset(zoomPercent)"
       :zoom-in-disabled="zoomInDisabled"
       :zoom-in-label="copy.zoomIn"
       :zoom-out-disabled="zoomOutDisabled"
       :zoom-out-label="copy.zoomOut"
       @set-fit="applyZoom('fit')"
-      @zoom-in="applyZoom(stepPreviewZoom(currentZoom, 1))"
-      @zoom-out="applyZoom(stepPreviewZoom(currentZoom, -1))"
+      @zoom-in="applyZoom(stepPreviewZoom(currentZoom, 1, fitPercent))"
+      @zoom-out="applyZoom(stepPreviewZoom(currentZoom, -1, fitPercent))"
     />
   </section>
 </template>

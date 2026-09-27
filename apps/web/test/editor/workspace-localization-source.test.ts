@@ -140,6 +140,8 @@ const functionFixtures: Readonly<Record<string, readonly unknown[]>> = {
   'editor-shell.conflictControl': ['apply-field'],
   'editor-shell.pageCount': [1],
   'editor-shell.issueFor': ['required'],
+  'editor-shell.zoomReset': [84],
+  'editor-shell.zoomAnnounce': [84],
   'pdf.ariaDownload': ['A4'],
   'publish.page.titleHint': [1, 2],
   'publish.page.useIcon': ['✓'],

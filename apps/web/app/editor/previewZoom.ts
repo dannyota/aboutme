@@ -11,6 +11,12 @@ export const PREVIEW_ZOOM_STEPS = [
 
 export type PreviewZoomStep = (typeof PREVIEW_ZOOM_STEPS)[number];
 
+/** The fixed percents a step ever lands on; Fit is a starting point, never
+ * a stepped-to destination once the panel shows one of these. */
+const FIXED_ZOOM_STEPS = PREVIEW_ZOOM_STEPS.filter(
+  (step): step is Exclude<PreviewZoomStep, 'fit'> => step !== 'fit',
+);
+
 export const PREVIEW_ZOOM_STORAGE_KEY = 'aboutme-editor-preview-zoom';
 
 export function isPreviewZoomStep(value: unknown): value is PreviewZoomStep {
@@ -44,19 +50,33 @@ export function writeStoredPreviewZoom(step: PreviewZoomStep): void {
 }
 
 /**
- * Moves one step toward a larger (`1`) or smaller (`-1`) zoom, clamped at
- * the ends of `PREVIEW_ZOOM_STEPS` instead of wrapping.
+ * Moves one step toward a larger (`1`) or smaller (`-1`) fixed zoom
+ * percent. From Fit, the first step lands on the nearest fixed step past
+ * the live `fitPercent` in that direction: at the wide 84% fit, zooming in
+ * goes to 90% and zooming out goes to 75%. Off Fit, it walks
+ * `FIXED_ZOOM_STEPS` in order, clamped at 50% and 200% instead of
+ * wrapping back to Fit or past the ends.
  */
 export function stepPreviewZoom(
   current: PreviewZoomStep,
   direction: 1 | -1,
+  fitPercent: number,
 ): PreviewZoomStep {
-  const index = PREVIEW_ZOOM_STEPS.indexOf(current);
+  if (current === 'fit') {
+    const beyond = direction === 1
+      ? FIXED_ZOOM_STEPS.find((step) => step > fitPercent)
+      : [...FIXED_ZOOM_STEPS].reverse().find((step) => step < fitPercent);
+    const end = direction === 1
+      ? FIXED_ZOOM_STEPS[FIXED_ZOOM_STEPS.length - 1]
+      : FIXED_ZOOM_STEPS[0];
+    return beyond ?? end ?? current;
+  }
+  const index = FIXED_ZOOM_STEPS.indexOf(current);
   const nextIndex = Math.min(
-    PREVIEW_ZOOM_STEPS.length - 1,
+    FIXED_ZOOM_STEPS.length - 1,
     Math.max(0, index + direction),
   );
-  return PREVIEW_ZOOM_STEPS[nextIndex] ?? current;
+  return FIXED_ZOOM_STEPS[nextIndex] ?? current;
 }
 
 /** The percent the controls display: the step itself, or Fit's live scale. */

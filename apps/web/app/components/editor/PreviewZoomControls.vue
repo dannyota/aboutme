@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { Maximize, ZoomIn, ZoomOut } from '@lucide/vue';
+import { Scan, ZoomIn, ZoomOut } from '@lucide/vue';
 import { Button } from '../ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../ui/tooltip';
 import IconButton from '../app/IconButton.vue';
 
 defineProps<{
@@ -12,6 +18,9 @@ defineProps<{
   readonly zoomInLabel: string;
   readonly fitLabel: string;
   readonly percentLabel: string;
+  /** The polite live-region text announcing the zoom level a user action
+   * just set (EditorPreview.vue's `applyZoom`); empty until the first one. */
+  readonly announcement: string;
 }>();
 
 defineEmits<{
@@ -39,18 +48,26 @@ defineEmits<{
         class="size-4"
       />
     </IconButton>
-    <Button
-      :aria-label="percentLabel"
-      :aria-pressed="isFit"
-      class="h-8 min-w-14 px-2 text-xs tabular-nums"
-      data-testid="zoom-percent"
-      size="sm"
-      type="button"
-      variant="ghost"
-      @click="$emit('setFit')"
-    >
-      {{ percent }}%
-    </Button>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger as-child>
+          <Button
+            :aria-label="percentLabel"
+            class="h-8 min-w-14 px-2 text-xs tabular-nums"
+            data-testid="zoom-percent"
+            size="sm"
+            type="button"
+            variant="ghost"
+            @click="$emit('setFit')"
+          >
+            {{ percent }}%
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          {{ percentLabel }}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
     <IconButton
       data-testid="zoom-in"
       :disabled="zoomInDisabled"
@@ -71,10 +88,16 @@ defineEmits<{
       :variant="isFit ? 'default' : 'ghost'"
       @click="$emit('setFit')"
     >
-      <Maximize
+      <Scan
         aria-hidden="true"
         class="size-4"
       />
     </IconButton>
+    <span
+      aria-live="polite"
+      class="sr-only"
+      data-testid="zoom-announcement"
+      role="status"
+    >{{ announcement }}</span>
   </div>
 </template>

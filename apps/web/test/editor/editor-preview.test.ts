@@ -66,6 +66,7 @@ afterEach(() => {
     value: initialWindowWidth,
   });
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   window.localStorage.clear();
 });
 
@@ -529,7 +530,7 @@ describe('EditorPreview zoom controls', () => {
       .toBe(editorShellCopy.en.zoomFit);
     expect(
       wrapper.get('[data-testid="zoom-percent"]').attributes('aria-label'),
-    ).toBe(editorShellCopy.en.zoomPercent(84));
+    ).toBe(editorShellCopy.en.zoomReset(84));
     wrapper.unmount();
   });
 
@@ -545,24 +546,29 @@ describe('EditorPreview zoom controls', () => {
       .toBe(editorShellCopy.vi.zoomFit);
     expect(
       wrapper.get('[data-testid="zoom-percent"]').attributes('aria-label'),
-    ).toBe(editorShellCopy.vi.zoomPercent(84));
+    ).toBe(editorShellCopy.vi.zoomReset(84));
     wrapper.unmount();
   });
 
-  it('starts at Fit: zoom-out disabled, Fit and percent pressed', async () => {
-    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+  it(
+    'starts at Fit: zoom in and out both enabled, only Fit pressed',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
 
-    expect(wrapper.get('[data-testid="zoom-out"]').attributes('disabled'))
-      .toBeDefined();
-    expect(wrapper.get('[data-testid="zoom-in"]').attributes('disabled'))
-      .toBeUndefined();
-    expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-pressed'))
-      .toBe('true');
-    expect(
-      wrapper.get('[data-testid="zoom-percent"]').attributes('aria-pressed'),
-    ).toBe('true');
-    wrapper.unmount();
-  });
+      // Fit's live 84% sits well inside 50-200%, so neither direction is
+      // disabled: only landing exactly on 50% or 200% disables a button.
+      expect(wrapper.get('[data-testid="zoom-out"]').attributes('disabled'))
+        .toBeUndefined();
+      expect(wrapper.get('[data-testid="zoom-in"]').attributes('disabled'))
+        .toBeUndefined();
+      expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-pressed'))
+        .toBe('true');
+      expect(
+        wrapper.get('[data-testid="zoom-percent"]').attributes('aria-pressed'),
+      ).toBeUndefined();
+      wrapper.unmount();
+    },
+  );
 
   it('disables zoom-in at 200% and clears aria-pressed once off Fit',
     async () => {
@@ -582,13 +588,30 @@ describe('EditorPreview zoom controls', () => {
       wrapper.unmount();
     });
 
+  it('disables zoom-out at 50% after zooming down from Fit', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    const zoomOut = wrapper.get('[data-testid="zoom-out"]');
+    for (let step = 0; step < 10; step += 1) {
+      await zoomOut.trigger('click');
+    }
+
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+    expect(wrapper.get('[data-testid="zoom-out"]').attributes('disabled'))
+      .toBeDefined();
+    expect(wrapper.get('[data-testid="zoom-in"]').attributes('disabled'))
+      .toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('reflects a manually chosen zoom in data-sheet-zoom', async () => {
     const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
     await wrapper.get('[data-testid="zoom-in"]').trigger('click');
 
-    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+    // Zooming in from the wide 84% Fit lands on the next fixed step above
+    // it, 90%, not the smallest fixed step.
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('90%');
     const sheet = wrapper.get('[data-testid="preview-sheet"]');
-    expect(sheet.attributes('data-sheet-zoom')).toBe('0.5000');
+    expect(sheet.attributes('data-sheet-zoom')).toBe('0.9000');
     wrapper.unmount();
   });
 
@@ -615,7 +638,7 @@ describe('EditorPreview zoom controls', () => {
         bubbles: true, cancelable: true, ctrlKey: true, key: '=',
       }));
       await nextTick();
-      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('90%');
 
       root.dispatchEvent(new KeyboardEvent('keydown', {
         bubbles: true, cancelable: true, ctrlKey: true, key: '0',
@@ -651,19 +674,114 @@ describe('EditorPreview zoom controls', () => {
     wrapper.unmount();
   });
 
-  it('zooms on Ctrl/Cmd + wheel over the preview and prevents the default',
+  it(
+    'zooms on Ctrl/Cmd + wheel once 50px of delta accumulates, and '
+    + 'prevents the default',
     async () => {
       const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
       const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
-      const zoomInEvent = ctrlWheelEvent(-100, { x: 20, y: 20 });
+      const zoomInEvent = ctrlWheelEvent(-50, { x: 20, y: 20 });
 
       scroll.dispatchEvent(zoomInEvent);
       await nextTick();
 
       expect(zoomInEvent.defaultPrevented).toBe(true);
-      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('90%');
+      wrapper.unmount();
+    },
+  );
+
+  it('does not step before 50px of accumulated Ctrl/Cmd wheel delta',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+
+      scroll.dispatchEvent(ctrlWheelEvent(-49, { x: 20, y: 20 }));
+      await nextTick();
+
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
       wrapper.unmount();
     });
+
+  it('banks Ctrl/Cmd wheel delta across events until it reaches 50px',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+
+      scroll.dispatchEvent(ctrlWheelEvent(-20, { x: 20, y: 20 }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+
+      scroll.dispatchEvent(ctrlWheelEvent(-30, { x: 20, y: 20 }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('90%');
+      wrapper.unmount();
+    });
+
+  it('resets the accumulated wheel delta when its direction reverses',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+
+      scroll.dispatchEvent(ctrlWheelEvent(-40, { x: 20, y: 20 }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+
+      // Without a reset, 40px zooming in plus 40px zooming out would total
+      // 80px and step immediately; a reversal must bank only the 40px this
+      // event carries.
+      scroll.dispatchEvent(ctrlWheelEvent(40, { x: 20, y: 20 }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+      wrapper.unmount();
+    });
+
+  it('resets the accumulated wheel delta after a 300ms idle gap',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      vi.useFakeTimers();
+      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+
+      scroll.dispatchEvent(ctrlWheelEvent(-40, { x: 20, y: 20 }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+
+      vi.advanceTimersByTime(301);
+      // Without the idle reset, this 40px would combine with the 40px
+      // already banked and step immediately.
+      scroll.dispatchEvent(ctrlWheelEvent(-40, { x: 20, y: 20 }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+      wrapper.unmount();
+    });
+
+  it(
+    'ignores the Ctrl/Cmd zoom keyboard shortcut and wheel in Web mode',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      await wrapper.get('[data-mode="web"]').trigger('click');
+
+      expect(
+        wrapper.find('[data-testid="preview-zoom-controls"]').exists(),
+      ).toBe(false);
+
+      wrapper.element.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true, ctrlKey: true, key: '=',
+      }));
+      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+      const wheelEvent = ctrlWheelEvent(-100, { x: 20, y: 20 });
+      scroll.dispatchEvent(wheelEvent);
+      await nextTick();
+
+      expect(wheelEvent.defaultPrevented).toBe(false);
+
+      // Switching back to PDF proves the attempts above were true no-ops,
+      // not just an unmounted control: the zoom is still exactly at Fit.
+      await wrapper.get('[data-mode="pdf"]').trigger('click');
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+      wrapper.unmount();
+    },
+  );
 
   it('leaves a plain wheel alone so the pane scrolls instead', async () => {
     const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
@@ -685,11 +803,11 @@ describe('EditorPreview zoom controls', () => {
       const first = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
       await first.get('[data-testid="zoom-in"]').trigger('click');
       expect(window.localStorage.getItem(PREVIEW_ZOOM_STORAGE_KEY))
-        .toBe('50');
+        .toBe('90');
       first.unmount();
 
       const second = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
-      expect(second.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+      expect(second.get('[data-testid="zoom-percent"]').text()).toBe('90%');
       second.unmount();
     });
 
@@ -702,6 +820,60 @@ describe('EditorPreview zoom controls', () => {
       .toBe('true');
     wrapper.unmount();
   });
+
+  it('pads the bottom of the PDF scroll pane to clear the zoom card',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      expect(wrapper.get('[data-testid="preview-scroll"]').classes())
+        .toContain('pb-18');
+
+      await wrapper.get('[data-mode="web"]').trigger('click');
+      expect(wrapper.get('[data-testid="preview-scroll"]').classes())
+        .not.toContain('pb-18');
+      wrapper.unmount();
+    });
+
+  it('reports no zoom announcement until a user action changes it',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const announcement = wrapper.get('[data-testid="zoom-announcement"]');
+
+      expect(announcement.attributes('aria-live')).toBe('polite');
+      expect(announcement.text()).toBe('');
+      wrapper.unmount();
+    });
+
+  it('announces the new zoom level in the polite live region', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    await wrapper.get('[data-testid="zoom-in"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="zoom-announcement"]').text()).toBe(
+      editorShellCopy.en.zoomAnnounce(90),
+    );
+    wrapper.unmount();
+  });
+
+  it('announces the zoom level in Vietnamese too', async () => {
+    setSiteLocale('vi');
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    await wrapper.get('[data-testid="zoom-in"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="zoom-announcement"]').text()).toBe(
+      editorShellCopy.vi.zoomAnnounce(90),
+    );
+    wrapper.unmount();
+  });
+
+  it('does not announce a zoom action that does not change the value',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      // Already at Fit: resetting to Fit again changes nothing.
+      await wrapper.get('[data-testid="zoom-fit"]').trigger('click');
+
+      expect(wrapper.get('[data-testid="zoom-announcement"]').text())
+        .toBe('');
+      wrapper.unmount();
+    });
 });
 
 async function animationFrames(count: number): Promise<void> {

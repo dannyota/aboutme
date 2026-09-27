@@ -24,7 +24,13 @@ const props = withDefaults(
     /** An icon button never submits a form unless asked to. */
     readonly type?: 'button' | 'submit' | 'reset';
   }>(),
-  { variant: 'ghost', size: 'icon', tooltipSide: 'top', type: 'button' },
+  {
+    variant: 'ghost',
+    size: 'icon',
+    tooltipSide: 'top',
+    type: 'button',
+    pressed: undefined,
+  },
 );
 </script>
 

@@ -65,7 +65,8 @@ export type EditorShellCopy = {
   readonly zoomOut: string;
   readonly zoomIn: string;
   readonly zoomFit: string;
-  readonly zoomPercent: (percent: number) => string;
+  readonly zoomReset: (percent: number) => string;
+  readonly zoomAnnounce: (percent: number) => string;
 };
 
 export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
@@ -150,8 +151,9 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     // Labels for PreviewZoomControls.vue.
     zoomOut: 'Thu nhỏ',
     zoomIn: 'Phóng to',
-    zoomFit: 'Vừa chiều rộng',
-    zoomPercent: (percent) => `Thu phóng ${percent}%`,
+    zoomFit: 'Cỡ mặc định',
+    zoomReset: (percent) => `Đặt lại thu phóng (${percent}%)`,
+    zoomAnnounce: (percent) => `Thu phóng ${percent}%`,
   },
   en: {
     localeLabel: 'Language',
@@ -231,7 +233,8 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
     // Labels for PreviewZoomControls.vue.
     zoomOut: 'Zoom out',
     zoomIn: 'Zoom in',
-    zoomFit: 'Fit to width',
-    zoomPercent: (percent) => `Zoom ${percent}%`,
+    zoomFit: 'Default size',
+    zoomReset: (percent) => `Reset zoom (${percent}%)`,
+    zoomAnnounce: (percent) => `Zoom ${percent}%`,
   },
 };

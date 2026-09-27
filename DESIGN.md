@@ -198,20 +198,19 @@ columns with a sidebar and a photo, on A4 page metadata rather than a Library
 preset. It sits on a whole white sheet, 210 mm by at least 297 mm with
 `--shadow-paper`, in front of a translucent ghost sheet and a
 `--gradient-hero-glow`. From 42 rem the ghost sheet is offset and rotated 2
-degrees. The sheet carries no seal. The sheet zooms 0.39 on phones, 0.5 from 28
-rem, 0.6 from 42 rem, and 0.64 from 80 rem. Three decorative chips, Private by
-default, PDF, and the link, float at the sheet edges from 42 rem and wrap in a
-centered row under it below that. Screen readers skip them.
+degrees. The sheet zooms 0.39 on phones, 0.5 from 28 rem, 0.6 from 42 rem, and
+0.64 from 80 rem. Three decorative chips, Private by default, PDF, and the link,
+float at the sheet edges from 42 rem and wrap in a centered row under it below
+that. Screen readers skip them.
 
 Four sections follow the hero:
 
 1. Three feature cards on blue, indigo, and pink surface tints with the 20 px
    feature radius: Private by default, One link per resume, and Bring your own
-   AI. They sit in three columns from 1024 px.
+   AI.
 2. Choose your style: filter chips for ATS-friendly, Technical, First job, and
    Management, each linking to `/templates?filter=…`, and one real template card
-   per chip, in two columns and four from 1024 px. Cards lift 4 px on hover
-   unless reduced motion is set. A text link opens the full Library.
+   per chip. A text link opens the full Library.
 3. Publishing is three choices: an example settings card with Public resume and
    PDF download on and SEO and GEO off, and the stamp on its top edge.
 4. Free and open source: the AGPL-3.0 link and an outline button to the GitHub
@@ -355,7 +354,11 @@ mode shows each page as its own white sheet with the 2 px radius and
 shows the continuous document on one full-width sheet. The preview area has 24
 px padding, 16 px on phones. It reports loading or unavailable photos without
 rendering a placeholder image, and a render failure says that edits are still
-safe.
+safe. On tablet and desktop the PDF preview has a zoom card at its bottom-right:
+Zoom out, the current percent (click to reset), Zoom in, and Default size; steps
+run 50% to 200%, Ctrl/Cmd +/−/0 work while focus is in the preview,
+Ctrl/Cmd+wheel zooms around the pointer, the choice is kept per browser, and
+phones and Web mode hide it.
 
 The Design panel opens with a Page & PDF group: page size with its dimensions,
 and margins as Narrow, Normal, Wide, or Custom presets, where Custom reveals the
@@ -394,7 +397,6 @@ Publish, and the account menu. The bottom Edit and Preview tabs mark the active
 tab with the secondary fill and semibold `--link` text. The preview uses a fit
 zoom calculated from the available width minus 32 px on phone screens; larger
 narrow layouts use 0.72 and wide layouts use 0.84 unless full zoom is requested.
-The active A4 or Letter sheet remains intact and scrollable.
 
 ## Interaction and motion
 
@@ -445,6 +447,3 @@ The app reset and focus styles apply under `data-ui="app"` only and skip
   changing components. Tests query roles, labels, and those hooks.
 - Keep the renderer pure and outside application chrome styling. Do not add
   page-specific values that bypass the semantic tokens.
-- Keep the single-meaning color rules: seal red is for public state and Publish,
-  blue is for actions, links, focus, and the verify page's verified state, and
-  draft/saved states remain pencil marks rather than colored chips.
