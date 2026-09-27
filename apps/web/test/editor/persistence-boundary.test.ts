@@ -7,6 +7,9 @@ import type {
   ResumeEditorActions,
 } from '../../app/composables/useResumeEditor';
 import {
+  EDITOR_PANEL_STORAGE_KEY,
+} from '../../app/composables/useResizablePanel';
+import {
   shouldRetainEditorOnSessionLoss,
 } from '../../app/composables/useUnsavedNavigationGuard';
 import type { PdfDownloadController } from '../../app/editor/pdfDownload';
@@ -48,9 +51,14 @@ describe('editor persistence boundary', () => {
         expect(
           document.body.querySelector('[data-action="resume-after-auth"]'),
         ).not.toBeNull();
-        expect(storage.every((probe) => probe.mock.calls.length === 0)).toBe(
-          true,
-        );
+        // The one allowed call is reading the inspector width, a per-browser
+        // layout preference (DESIGN.md, editor workspace). Retained resume
+        // work never reaches browser storage, history, or the network.
+        expect(
+          storage.flatMap((probe) =>
+            probe.mock.calls.map((args) => [probe.getMockName(), ...args]),
+          ),
+        ).toEqual([['localStorage.getItem', EDITOR_PANEL_STORAGE_KEY]]);
         expect(currentURL()).toEqual(before);
       } finally {
         wrapper.unmount();
@@ -73,22 +81,25 @@ function currentURL() {
   };
 }
 
+// Each probe carries its object's name, so a call on the wrong store or API
+// shows up in the recorded call list.
 function persistenceProbes() {
-  const local = ['getItem', 'setItem', 'removeItem', 'clear'].map((name) =>
-    vi.spyOn(window.localStorage, name as 'clear'),
+  const methods = ['getItem', 'setItem', 'removeItem', 'clear'] as const;
+  const local = methods.map((name) =>
+    vi.spyOn(window.localStorage, name).mockName(`localStorage.${name}`),
   );
-  const session = ['getItem', 'setItem', 'removeItem', 'clear'].map((name) =>
-    vi.spyOn(window.sessionStorage, name as 'clear'),
+  const session = methods.map((name) =>
+    vi.spyOn(window.sessionStorage, name).mockName(`sessionStorage.${name}`),
   );
   const history = [
-    vi.spyOn(window.history, 'pushState'),
-    vi.spyOn(window.history, 'replaceState'),
+    vi.spyOn(window.history, 'pushState').mockName('history.pushState'),
+    vi.spyOn(window.history, 'replaceState').mockName('history.replaceState'),
   ];
   const indexedDB = {
-    open: vi.fn(),
-    deleteDatabase: vi.fn(),
+    open: vi.fn().mockName('indexedDB.open'),
+    deleteDatabase: vi.fn().mockName('indexedDB.deleteDatabase'),
   };
-  const sendBeacon = vi.fn();
+  const sendBeacon = vi.fn().mockName('navigator.sendBeacon');
   vi.stubGlobal('indexedDB', indexedDB);
   vi.stubGlobal('navigator', { ...window.navigator, sendBeacon });
   return [
