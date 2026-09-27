@@ -3,8 +3,8 @@
 This is the visual spec for `/verify`, "Kiểm chứng phiên bản đang chạy" /
 "Verify what's running". [page.md](page.md) owns the behavior, the state order,
 and the data; this page owns how it looks. It uses the Aurora tokens and
-primitives in [DESIGN.md](../../../DESIGN.md) and adds no theme value except
-`--surface-destructive`.
+primitives in [Typography and tokens](../ui/typography-and-tokens.md) and adds
+no theme value except `--surface-destructive`.
 
 ## Frame
 
