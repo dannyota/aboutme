@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { galleryTemplate } from '../../app/templates/catalog';
+import { galleryTemplate, MEMBERS } from '../../app/templates/catalog';
 import {
   matchesTemplateSearch,
   normalizeSearchText,
@@ -9,10 +9,10 @@ import {
 } from '../../app/templates/search';
 
 // The editor's template panel search box matches a template's name, its
-// purpose and sample tags in both site languages, and the labels of any role
-// chip it is the sample for, case- and diacritic-insensitively, with every
-// whitespace-separated query term required (DESIGN.md, editor Templates
-// panel).
+// purpose, sample tags, and the labels of any role or Library filter chip it
+// belongs to, in both site languages, case- and diacritic-insensitively, with
+// every whitespace-separated query term required (DESIGN.md, editor
+// Templates panel).
 
 // role: backend
 const onePageTight = galleryTemplate('one-page-tight')!;
@@ -26,8 +26,10 @@ const minimalAir = galleryTemplate('minimal-air')!;
 const internationalLang = galleryTemplate('international-lang')!;
 // role: security
 const consultingFormal = galleryTemplate('consulting-formal')!;
-// no role, no sample
+// no role, no sample, but an ATS filter chip member
 const classicSerif = galleryTemplate('classic-serif')!;
+// no role, but a first-job filter chip member
+const graduateFriendly = galleryTemplate('graduate-friendly')!;
 
 describe('normalizeSearchText', () => {
   it('lowercases', () => {
@@ -64,6 +66,18 @@ describe('templateSearchText', () => {
   it('never includes a role label for a role the template is not the '
     + 'sample for', () => {
     expect(templateSearchText(engineerCompact)).not.toContain('backend');
+  });
+
+  it('includes the Library filter chip labels a template belongs to, in '
+    + 'both languages', () => {
+    const text = templateSearchText(classicSerif);
+    expect(text).toContain('ats-friendly');
+    expect(text).toContain('chuan ats');
+  });
+
+  it('never includes a filter chip label for a filter the template is not '
+    + 'a member of', () => {
+    expect(templateSearchText(classicSerif)).not.toContain('one page');
   });
 
   it('handles a template with no sample tags', () => {
@@ -121,5 +135,28 @@ describe('matchesTemplateSearch', () => {
   it('matches purpose text in either site language', () => {
     expect(matchesTemplateSearch(classicSerif, 'banking')).toBe(true);
     expect(matchesTemplateSearch(classicSerif, 'ngan hang')).toBe(true);
+  });
+
+  it('returns every ATS-friendly template for an "ats" query', () => {
+    for (const id of MEMBERS.ats) {
+      expect(matchesTemplateSearch(galleryTemplate(id)!, 'ats')).toBe(true);
+    }
+  });
+
+  it('matches a filter chip label naming a template unreachable by its own '
+    + 'name or purpose', () => {
+    expect(matchesTemplateSearch(graduateFriendly, 'first job')).toBe(true);
+  });
+
+  it('does not match a filter chip label for a filter the template is not '
+    + 'a member of', () => {
+    expect(matchesTemplateSearch(classicSerif, 'one-page')).toBe(false);
+  });
+
+  it('matches a Vietnamese filter chip label without diacritics, in the '
+    + 'style of a short, informal query', () => {
+    // "Kỹ thuật" (technical) names the filter chip; a job seeker types it
+    // without diacritics as "ky thuat".
+    expect(matchesTemplateSearch(engineerCompact, 'ky thuat')).toBe(true);
   });
 });

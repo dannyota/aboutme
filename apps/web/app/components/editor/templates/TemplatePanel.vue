@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { TEMPLATES, type TemplatePreset } from '@aboutme/schema/templates';
 import { Search, X } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
 import IconButton from '@/components/app/IconButton.vue';
 import FormField from '@/components/app/FormField.vue';
 import { Button } from '@/components/ui/button';
@@ -43,8 +43,9 @@ const copy = computed(() => editorControlsCopy[locale.value].controls);
 const notice = ref(false);
 const moved = ref({ main: [] as string[], sidebar: [] as string[] });
 
-// The panel's search box: filters the preset list by name, style, and role
-// chip, in either site language (DESIGN.md, editor Templates panel).
+// The panel's search box: filters the preset list by name, style, sample
+// tag, role, and filter chip, in either site language (DESIGN.md, editor
+// Templates panel).
 const search = ref('');
 const searchInput = ref<{ $el?: HTMLElement } | null>(null);
 const visibleTemplates = computed(() => TEMPLATES.filter((preset) => {
@@ -60,6 +61,45 @@ function onSearchKeydown(event: KeyboardEvent): void {
     search.value = '';
   }
 }
+
+// The visible message updates immediately and may quote the query; the
+// role="status" line is announced to screen readers only once typing
+// pauses, with stable wording that never repeats the query back.
+const SEARCH_ANNOUNCE_DELAY_MS = 500;
+const announcedCount = ref<number | null>(null);
+let announceTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearAnnounceTimer(): void {
+  if (announceTimer === undefined) return;
+  clearTimeout(announceTimer);
+  announceTimer = undefined;
+}
+
+watch(search, (value) => {
+  clearAnnounceTimer();
+  if (value.trim() === '') {
+    announcedCount.value = null;
+    return;
+  }
+  announceTimer = setTimeout(() => {
+    announcedCount.value = visibleTemplates.value.length;
+    announceTimer = undefined;
+  }, SEARCH_ANNOUNCE_DELAY_MS);
+});
+onScopeDispose(clearAnnounceTimer, true);
+
+const searchMessage = computed(() => {
+  if (search.value.trim() === '' || visibleTemplates.value.length > 0) {
+    return '';
+  }
+  return copy.value.templateSearchNoMatch(search.value);
+});
+const searchStatus = computed(() => {
+  if (search.value.trim() === '' || announcedCount.value === null) return '';
+  return announcedCount.value === 0
+    ? copy.value.templateSearchNoMatchAnnounced
+    : copy.value.templateSearchCount(announcedCount.value);
+});
 
 const movedText = computed(() => [
   moved.value.sidebar.length > 0
@@ -202,10 +242,10 @@ function assertNever(value: never): never {
         />
         <IconButton
           v-if="search !== ''"
-          class="absolute right-0 top-1/2 -translate-y-1/2"
+          class="absolute right-1 top-1/2 -translate-y-1/2"
           data-testid="template-search-clear"
           :label="copy.templateSearchClear"
-          size="icon"
+          size="icon-sm"
           variant="ghost"
           @click="clearSearch"
         >
@@ -214,18 +254,23 @@ function assertNever(value: never): never {
       </div>
     </FormField>
     <p
-      v-if="search.trim() !== ''"
+      v-if="searchMessage !== ''"
       class="text-sm"
+      data-testid="template-search-message"
+    >
+      {{ searchMessage }}
+    </p>
+    <p
+      class="text-sm text-muted-foreground"
       data-testid="template-search-status"
       role="status"
     >
-      {{ visibleTemplates.length === 0
-        ? copy.templateSearchNoMatch(search)
-        : copy.templateSearchCount(visibleTemplates.length) }}
+      {{ searchStatus }}
     </p>
     <StatusBanner
       v-if="status() !== ''"
       kind="info"
+      testid="template-status"
     >
       {{ status() }}
     </StatusBanner>

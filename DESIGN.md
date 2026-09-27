@@ -152,10 +152,8 @@ Buttons use the button primitive's variants. `default` fills with `--primary`,
 darkens to `--primary-hover` on hover, and carries `--shadow-primary`, a soft
 blue lift in light theme and a plain dark shadow in dark theme. `link` is
 `--link` text with an underline on hover. `seal` fills with `--seal` for
-Publish. `outline`, `secondary`, `ghost`, and `destructive` keep the generated
-classes. These three edits to a generated primitive are the exception that
-[ADR 0052](docs/adr/0052-guarded-token-edits-to-generated-primitives.md)
-records.
+Publish; these three are the guarded exception below. `outline`, `secondary`,
+`ghost`, and `destructive` keep the generated classes.
 
 Dialogs share one rhythm: 24 px between the header, the body, and the actions; 6
 px from title to description; and 16 px between fields, with hints 6 px under
@@ -316,16 +314,15 @@ or Letter), and a decorative white sheet tilted 3 degrees over the hero glow.
 
 The resume list is a desk of up to three paper cards: one column, three from 768
 px, with 24 px gaps and 32 px from 768 px. Each card is a `.paper-surface` sheet
-at least 160 px high with the 2 px sheet radius and `--shadow-paper`, so it
-stays white with neutral ink in dark theme. It lifts 4 px over 200 ms on hover
-unless reduced motion is set. The whole card opens the editor. It shows the
-title, the relative updated time in paper-muted text, and a public seal and link
-or the Draft mark at the bottom. An overflow menu at the top right offers Rename
-and Delete. Create resume, a large primary button with a plus icon in the page
-header, is the one create control; it is disabled at three resumes. Remaining
-slots are 2 px dashed outlines with the sheet radius on a half-opaque card fill,
-reading Empty slot. For an empty list, the first slot says “No resumes yet.” and
-how to start, and that three are allowed.
+at least 160 px high, so it stays white with neutral ink in dark theme. It lifts
+4 px over 200 ms on hover unless reduced motion is set. The whole card opens the
+editor. It shows the title, the relative updated time in paper-muted text, and a
+public seal and link or the Draft mark at the bottom. An overflow menu at the
+top right offers Rename and Delete. Create resume, a large primary button with a
+plus icon in the page header, is the one create control; it is disabled at three
+resumes. Remaining slots are 2 px dashed outlines with the sheet radius on a
+half-opaque card fill, reading Empty slot. For an empty list, the first slot
+says “No resumes yet.” and how to start, and that three are allowed.
 
 The editor is a four-region workspace on the flat `--editor-canvas` fill, with
 no canvas glows:
@@ -350,15 +347,14 @@ account menu. Publish is the seal button.
 
 The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
 active mode uses the default button variant and the choice is remembered. PDF
-mode shows each page as its own white sheet with the 2 px radius and
-`--shadow-paper`, then an estimated page count beside a pencil glyph. Web mode
-shows the continuous document on one full-width sheet. The preview area has 24
-px padding, 16 px on phones. It reports loading or unavailable photos without
-rendering a placeholder image, and a render failure says that edits are still
-safe. The active A4 or Letter sheet remains intact and scrollable. Tablet and
-desktop PDF previews have a zoom card (out, percent to reset, in, Default size;
-50 to 200%; Ctrl/Cmd +/−/0 and Ctrl/Cmd+wheel; kept per browser; hidden on
-phones and in Web mode).
+mode shows each page as its own sheet, then an estimated page count beside a
+pencil glyph. Web mode shows the continuous document on one full-width sheet.
+The preview area has 24 px padding, 16 px on phones. It reports loading or
+unavailable photos without rendering a placeholder image, and a render failure
+says that edits are still safe. The active A4 or Letter sheet remains intact and
+scrollable. Tablet and desktop PDF previews have a zoom card (out, percent to
+reset, in, Default size; 50 to 200%; Ctrl/Cmd +/−/0 and Ctrl/Cmd+wheel; kept per
+browser; hidden on phones and in Web mode).
 
 The Design panel opens with a Page & PDF group: page size with its dimensions,
 and margins as Narrow, Normal, Wide, or Custom presets, where Custom reveals the
@@ -367,7 +363,11 @@ the settings apply to the PDF and printing, not the web page.
 
 Each template card in the inspector shows the sample resume rendered with that
 template at 0.18 scale. A thumbnail renders only while its card is near the
-viewport, and applying a template names any sections it moved between columns.
+viewport, and applying a template names any sections it moved between columns. A
+search box above the cards filters them as typed by name, purpose, sample tag,
+role, and filter chip in both languages, ignoring case and diacritics; every
+word must match, Escape or the clear button empties it, and a polite status line
+gives the count or a no-match message.
 
 The publish dialog is a scrollable modal with the `aboutme.vn/` slug prefix. It
 presents optional fields for the browser-tab title and emoji icon, followed by
