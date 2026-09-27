@@ -47,7 +47,7 @@ import {
   OTHER_PDF_BASE64,
   slowContentPdf,
 } from './linkedin-import-fixtures';
-import { ALLOWED_ORIGIN } from './network-policy';
+import { ALLOWED_ORIGIN, isExpectedAnonymousMeConsole } from './network-policy';
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/linkedin-import-proof.json';
@@ -137,6 +137,23 @@ function watchForFileBytes(page: Page, violations: string[]): void {
   });
 }
 
+/** WebKit-only: true for a page error that is the browser's own report of a
+ * fetch or worker module import a same-page navigation interrupted mid
+ * flight (Nuxt's dev-server build-meta poll and the app's own capabilities
+ * read, and pdf.js's per-pick worker churn). Chromium reports the same
+ * interruption as a silently dropped abort; WebKit raises it as an uncaught
+ * page error instead, on every engine this proof runs, not a LinkedIn import
+ * defect. */
+function isExpectedWebKitInterruptedFetch(
+  engine: 'chromium' | 'webkit',
+  error: Error,
+): boolean {
+  return engine === 'webkit' && (
+    error.message === 'TypeError: Importing a module script failed.'
+    || / due to access control checks\.$/u.test(error.message)
+  );
+}
+
 interface WindowRequest {
   readonly method: string;
   readonly pathname: string;
@@ -205,7 +222,13 @@ test('entry link, review, and create land the imported content in the editor', a
   await pinEnglish(context);
   await installExternalRequestFirewall(context, counters);
   await installExternalWebSocketFirewall(context, counters);
-  pageDiagnosticsAttacher(counters)(page);
+  // Every test here starts signed out, like entry.spec.ts: the one expected
+  // console failure is the anonymous /api/v1/me read loginAsDevelopmentUser
+  // triggers before sign-in completes.
+  pageDiagnosticsAttacher(counters, {
+    countConsoleError: (message) =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+  })(page);
   watchForFileBytes(page, fileByteViolations);
 
   const steps = {
@@ -222,12 +245,12 @@ test('entry link, review, and create land the imported content in the editor', a
   let stopRecording: (() => WindowRequest[]) | undefined;
 
   try {
-    stage('sign-in');
+    stage('create-sign-in');
     await loginAsDevelopmentUser(page);
     await page.setViewportSize({ width: 1280, height: 800 });
     await expect(page.getByRole('heading', { name: 'Resumes' })).toBeVisible();
 
-    stage('entry-link');
+    stage('create-entry-link');
     await page.getByTestId('create-resume').click();
     const dialog = page.getByRole('dialog', { name: 'Create resume' });
     await expect(dialog).toBeVisible();
@@ -240,7 +263,7 @@ test('entry link, review, and create land the imported content in the editor', a
     expect(importResponse.status()).toBe(200);
     steps.entryLink = true;
 
-    stage('csp');
+    stage('create-csp');
     // ADR 0064 decision 4; docs/design/linkedin-import.md "Security": the
     // app page policy is the only one carrying worker-src 'self'.
     expect(importResponse.headers()['content-security-policy'])
@@ -252,7 +275,7 @@ test('entry link, review, and create land the imported content in the editor', a
       page.getByRole('heading', { name: 'Import from LinkedIn' }),
     ).toBeVisible();
 
-    stage('pick-window-start');
+    stage('create-pick-window-start');
     // Picked while the interface is still English, so the review's default
     // title (set once, at the pick, from the active locale's copy) is the
     // English string the create assertion below expects; the locale switch
@@ -262,14 +285,14 @@ test('entry link, review, and create land the imported content in the editor', a
     stopRecording = recordSameOriginRequests(page);
     await pickFile(page, 'basic-en.pdf', pdfBuffer(BASIC_EN_PDF_BASE64));
 
-    stage('review-en');
+    stage('create-review-en');
     const reviewHeadingEn = page.getByRole('heading', {
       name: 'Check your import',
     });
     await expect(reviewHeadingEn).toBeVisible();
     await expect(reviewHeadingEn).toBeFocused();
 
-    stage('contact-defaults');
+    stage('create-contact-defaults');
     // Email and phone start unchecked; the LinkedIn URL and the website
     // start checked (docs/design/linkedin-import.md, Owner approval I5).
     await expect(
@@ -290,7 +313,7 @@ test('entry link, review, and create land the imported content in the editor', a
     ).toBeChecked();
     steps.contactDefaults = true;
 
-    stage('locale-vi-mid-review');
+    stage('create-locale-vi-mid-review');
     await page.getByTestId('landing-locale-vi').click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
     const reviewHeadingVi = page.getByRole('heading', {
@@ -306,13 +329,13 @@ test('entry link, review, and create land the imported content in the editor', a
     ).not.toBeChecked();
     steps.localePersists = true;
 
-    stage('locale-en-for-create');
+    stage('create-locale-en-for-create');
     await page.getByTestId('landing-locale-en').click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(reviewHeadingEn).toBeVisible();
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    stage('deselect-certifications');
+    stage('create-deselect-certifications');
     const certificatesGroup = page.getByRole('checkbox', {
       name: 'Import all of Certifications',
     });
@@ -321,7 +344,7 @@ test('entry link, review, and create land the imported content in the editor', a
     await expect(certificatesGroup).not.toBeChecked();
     steps.deselectSection = true;
 
-    stage('create');
+    stage('create-submit');
     const createRequest = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return response.request().method() === 'POST'
@@ -352,20 +375,28 @@ test('entry link, review, and create land the imported content in the editor', a
     expect(Object.hasOwn(requestBody.document.content, 'work')).toBe(true);
     steps.created = true;
 
-    stage('window-check');
+    stage('create-window-check');
     const windowRequests = stopRecording();
     stopRecording = undefined;
     // No worker rearms during a successful pick (linkedin.vue's pick(): the
     // worker already armed on page load is consumed, and a fresh one is
     // only armed after a failed pick or Choose another PDF, neither of
-    // which happens on this path), so the only same-origin request in this
-    // whole window is the one create request.
-    expect(windowRequests).toEqual([
+    // which happens on this path), so the create request is the only data
+    // request in this whole window (docs/design/linkedin-import.md, "Reading
+    // the file": no request happens between a pick that reaches the review
+    // and Create). The editor page's own module fetches can start landing in
+    // this same window once the browser's post-create navigation begins;
+    // `/_nuxt/` is asset traffic the dev server serves on demand, the same
+    // classification second-factor.spec.ts already gives that path prefix,
+    // not a second data request.
+    const dataRequests = windowRequests.filter((request) =>
+      !request.pathname.startsWith('/_nuxt/'));
+    expect(dataRequests).toEqual([
       { method: 'POST', pathname: '/api/v1/resumes' },
     ]);
     steps.requestWindowClean = true;
 
-    stage('editor-lands');
+    stage('create-editor-lands');
     await page.waitForURL((url) =>
       url.origin === ORIGIN && url.pathname === `/app/resumes/${createdID}`);
     await waitForHydration(page);
@@ -380,11 +411,19 @@ test('entry link, review, and create land the imported content in the editor', a
     await expect(preview).toContainText('Product Management');
     await expect(preview).not.toContainText('Example Certified Professional');
     steps.editorContent = true;
-    stage('done');
+    stage('create-done');
   } catch (error) {
     stopRecording?.();
+    // The evidence keeps the named stage; the console gets the exact source
+    // line too (exports.spec.ts), so this test's own failure is never lost
+    // behind a later test's stage line in the shared console log.
+    const stageAtFailure = lastStage;
+    const sourceLine = error instanceof Error
+      ? /linkedin-import\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]
+      : undefined;
+    if (sourceLine !== undefined) stage(`create-failure-at-line-${sourceLine}`);
     try {
-      await writeFailureEvidence(FAILURE_EVIDENCE_PATH, lastStage);
+      await writeFailureEvidence(FAILURE_EVIDENCE_PATH, stageAtFailure);
     } catch {
       stage('failure-evidence-write-failed');
     }
@@ -428,23 +467,36 @@ for (const engine of ['chromium', 'webkit'] as const) {
     if (source === undefined) throw new Error(`${engine} did not launch`);
     const counters = newDiagnosticCounters();
     const fileByteViolations: string[] = [];
+    const unexpectedPageErrors: string[] = [];
     // The chromium fixture's own browser carries the config's baseURL to any
-    // context it creates, and this harness's container trusts the exported
-    // CA through an NSS import run.sh does for Chromium specifically
-    // (inside_container's certutil step). A directly launched WebKit browser
-    // has neither: it needs both set explicitly, which is safe here because
-    // this proof is about the LinkedIn import flow, not TLS validation
-    // itself (the public, print, and harness surfaces keep their own CSP and
-    // certificate posture unchanged).
+    // context it creates. A directly launched WebKit browser has no baseURL,
+    // so it needs one explicitly; it needs no certificate bypass, because
+    // run.sh overlays the image's system trust bundle with the harness's
+    // exported root read-only for this mode (WebKit validates against that
+    // bundle, not the NSS database the certutil import prepares for
+    // Chromium), so WebKit trusts the same root Chromium does.
     const context = await source.newContext(
-      engine === 'webkit' ? { baseURL: ORIGIN, ignoreHTTPSErrors: true } : {},
+      engine === 'webkit' ? { baseURL: ORIGIN } : {},
     );
     try {
       await pinEnglish(context);
       await installExternalRequestFirewall(context, counters);
       await installExternalWebSocketFirewall(context, counters);
       const page = await context.newPage();
-      pageDiagnosticsAttacher(counters)(page);
+      // Same reasoning as the create-flow test above: filter the expected
+      // anonymous /api/v1/me read at sign-in. Page errors keep the shared
+      // counter (other proofs read it the same way) but this proof checks
+      // its own filtered list, so a WebKit-only interrupted-fetch report
+      // never fails the check.
+      pageDiagnosticsAttacher(counters, {
+        countConsoleError: (message) =>
+          !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+        onPageError: (error) => {
+          if (!isExpectedWebKitInterruptedFetch(engine, error)) {
+            unexpectedPageErrors.push(error.message);
+          }
+        },
+      })(page);
       watchForFileBytes(page, fileByteViolations);
 
       stage(`${engine}-sign-in`);
@@ -504,9 +556,18 @@ for (const engine of ['chromium', 'webkit'] as const) {
 
       stage(`${engine}-done`);
     } catch (error) {
+      // Same reasoning as the create-flow test's catch block: keep the named
+      // stage in the evidence and add the exact source line to the console.
+      const stageAtFailure = lastStage;
+      const sourceLine = error instanceof Error
+        ? /linkedin-import\.spec\.ts:([0-9]{1,4}):/u.exec(error.stack ?? '')?.[1]
+        : undefined;
+      if (sourceLine !== undefined) {
+        stage(`${engine}-failure-at-line-${sourceLine}`);
+      }
       try {
         await writeFailureEvidence(
-          `/evidence/linkedin-import-failure-${engine}.json`, lastStage,
+          `/evidence/linkedin-import-failure-${engine}.json`, stageAtFailure,
         );
       } catch {
         stage('failure-evidence-write-failed');
@@ -519,6 +580,6 @@ for (const engine of ['chromium', 'webkit'] as const) {
     expect(fileByteViolations).toEqual([]);
     expect(counters.certificateErrors).toBe(0);
     expect(counters.externalRequests).toBe(0);
-    expect(counters.pageErrors).toBe(0);
+    expect(unexpectedPageErrors).toEqual([]);
   });
 }

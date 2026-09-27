@@ -595,6 +595,17 @@ host_run() {
   )
   [ "$production_sdk" -eq 1 ] ||
     mount_args+=("--mount=type=bind,src=$input,dst=/uat-input,ro=true")
+  if [ "$mode" = linkedin-import ]; then
+    # WebKit does not read the NSS database certutil imports below for
+    # Chromium; it validates against the image's own system trust bundle at
+    # this fixed path. Overlaying that one file with the harness's exported
+    # root, read-only, makes WebKit trust it the same honest way Chromium
+    # does, without ignoring certificate errors, running as root, or a
+    # writable root filesystem (linkedin-import.spec.ts, the WebKit case).
+    mount_args+=(
+      "--mount=type=bind,src=$input/caddy-root.crt,dst=/etc/ssl/certs/ca-certificates.crt,ro=true"
+    )
+  fi
   if [ "$mode" = mcp-sdk ]; then
     mount_args+=(
       "--mount=type=bind,src=$credential,dst=/mcp-credentials/login.env,ro=true"

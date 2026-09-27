@@ -13,11 +13,14 @@
 # parallel tests against one harness (totp.spec.ts "Enabled-proof
 # sharding"). Each shard's evidence moves to
 # .dev/proof-evidence/KIND-browser-proof-evidence-SHARD/, the directory name
-# the shard coverage checks read the shard from. The exports proof is not
-# sharded and needs no coverage check, but it writes redacted evidence on a
-# mid-test failure (exports.spec.ts), so its evidence moves too, to
-# .dev/proof-evidence/exports-browser-proof-evidence/. Every other proof's
-# evidence is never moved out of the evidence root and so is never uploaded.
+# the shard coverage checks read the shard from. The exports and
+# linkedin-import proofs are not sharded and need no coverage check, but each
+# writes redacted evidence on a mid-test failure (exports.spec.ts,
+# linkedin-import.spec.ts), so their evidence moves too, to
+# .dev/proof-evidence/exports-browser-proof-evidence/ and
+# .dev/proof-evidence/linkedin-import-browser-proof-evidence/. Every other
+# proof's evidence is never moved out of the evidence root and so is never
+# uploaded.
 #
 # Every request the proofs send reaches the server from one client IP, so
 # the job summary and log also list each proof's peak server requests in any
@@ -67,6 +70,18 @@ move_exports_evidence() {
   local dest=$staging/exports-browser-proof-evidence dir
   install -d -m 0700 "$staging" "$dest"
   for dir in "$evidence_root"/exports.*; do
+    [ -d "$dir" ] || continue
+    mv -- "$dir" "$dest/"
+  done
+}
+
+# move_linkedin_import_evidence does the same for the linkedin-import proof's
+# NAME.* evidence directory (linkedin-import.spec.ts writes redacted failure
+# evidence on a mid-test failure, the same as exports.spec.ts).
+move_linkedin_import_evidence() {
+  local dest=$staging/linkedin-import-browser-proof-evidence dir
+  install -d -m 0700 "$staging" "$dest"
+  for dir in "$evidence_root"/linkedin-import.*; do
     [ -d "$dir" ] || continue
     mv -- "$dir" "$dest/"
   done
@@ -154,6 +169,7 @@ for proof in "$@"; do
   passkey) move_shard_evidence "$kind" "$shard" || status=1 ;;
   esac
   [ "$proof" != exports ] || move_exports_evidence || status=1
+  [ "$proof" != linkedin-import ] || move_linkedin_import_evidence || status=1
   echo "::endgroup::"
   if [ "$status" -eq 0 ]; then
     result=passed
