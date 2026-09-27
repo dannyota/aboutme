@@ -27,29 +27,31 @@ module "identity" {
 }
 
 module "tasks" {
-  source                        = "../modules/tasks"
-  name                          = local.name
-  account_id                    = var.account_id
-  db_endpoint                   = module.data.db_endpoint
-  db_master_secret_arn          = module.data.db_master_secret_arn
-  media_bucket_name             = module.data.media_bucket_name
-  ses_from_address              = var.ses_from_address
-  ses_from_name                 = var.ses_from_name
-  ses_configuration_set         = var.ses_configuration_set
-  provider_login_enabled        = var.provider_login_enabled
-  password_registration_enabled = var.password_registration_enabled
-  passkey_enrollment_enabled    = var.passkey_enrollment_enabled
-  totp_enrollment_enabled       = var.totp_enrollment_enabled
-  preview_card_enabled          = var.preview_card_enabled
-  totp_active_key_slot          = var.totp_active_key_slot
-  totp_previous_key_slot        = var.totp_previous_key_slot
-  exec_role_arns                = module.identity.exec_role_arns
-  app_task_role_arn             = module.identity.app_task_role_arn
-  jobs_task_role_arn            = module.identity.jobs_task_role_arn
-  log_group_name                = module.identity.log_group_name
-  image_server                  = var.image_server
-  image_web                     = var.image_web
-  image_caddy                   = var.image_caddy
+  source                           = "../modules/tasks"
+  name                             = local.name
+  account_id                       = var.account_id
+  db_endpoint                      = module.data.db_endpoint
+  db_master_secret_arn             = module.data.db_master_secret_arn
+  media_bucket_name                = module.data.media_bucket_name
+  ses_from_address                 = var.ses_from_address
+  ses_from_name                    = var.ses_from_name
+  ses_configuration_set            = var.ses_configuration_set
+  provider_login_enabled           = var.provider_login_enabled
+  password_registration_enabled    = var.password_registration_enabled
+  passkey_enrollment_enabled       = var.passkey_enrollment_enabled
+  totp_enrollment_enabled          = var.totp_enrollment_enabled
+  sign_in_to_view_enabled          = var.sign_in_to_view_enabled
+  sign_in_to_view_linkedin_enabled = var.sign_in_to_view_linkedin_enabled
+  preview_card_enabled             = var.preview_card_enabled
+  totp_active_key_slot             = var.totp_active_key_slot
+  totp_previous_key_slot           = var.totp_previous_key_slot
+  exec_role_arns                   = module.identity.exec_role_arns
+  app_task_role_arn                = module.identity.app_task_role_arn
+  jobs_task_role_arn               = module.identity.jobs_task_role_arn
+  log_group_name                   = module.identity.log_group_name
+  image_server                     = var.image_server
+  image_web                        = var.image_web
+  image_caddy                      = var.image_caddy
 }
 
 module "host" {
