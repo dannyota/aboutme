@@ -64,6 +64,7 @@ const copy = computed(() => workspaceCopy[locale.value]);
       <AppSeal
         :link="publicLink"
         :label="copy.publicAt(publicLink)"
+        :locale="locale"
         size="mark"
       />
       <a

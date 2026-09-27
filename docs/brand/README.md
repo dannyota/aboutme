@@ -23,6 +23,8 @@ here are for everywhere else.
 The site icons live in `apps/web/public/` with versioned names: `favicon-v3.svg`
 (dark-scheme aware), `icon-32-v3.png`, `apple-touch-icon-v3.png`,
 `icon-192-v3.png`, `icon-512-v3.png`, `site-v3.webmanifest`, and `favicon.ico`.
+The `-v2` icons and `og-image-v3.jpg` stay there, unlinked, for one release so
+cached URLs keep working; delete them in the release after ADR 0065 ships.
 
 ## Rules
 
@@ -36,10 +38,12 @@ The site icons live in `apps/web/public/` with versioned names: `favicon-v3.svg`
 
 ## Changing the art
 
-The banners, the social preview, and the Open Graph images are HTML sources in
-`src/`, set in the vendored Be Vietnam Pro with the product's token values. Each
-source names its size and output in a `brand-render` meta tag. Edit a source,
-then render from `apps/web`:
+The banners, the social preview, the Open Graph images, the site icons, the app
+icon, and the wordmark are HTML sources in `src/`, set in the vendored Be
+Vietnam Pro with the product's token values. The SVGs here and `favicon-v3.svg`
+are hand-kept copies of the `AppLogo` and `AppSeal` geometry. Each source names
+its size and output in a `brand-render` meta tag. Edit a source, then render
+from `apps/web`:
 
 ```sh
 node scripts/render-brand.mjs                 # every source
@@ -49,4 +53,11 @@ node scripts/render-brand.mjs og-image-vi     # one source
 The script uses the Playwright Chromium the e2e suite installs; set
 `BRAND_CHROMIUM` to another Chromium binary if needed. When an Open Graph image
 changes, bump its version in the file name and in `apps/web/app/i18n/meta.ts`,
-because crawlers cache the old URL.
+because crawlers cache the old URL. The same goes for the icons.
+
+`favicon.ico` is not rendered by the script. Pack it from 16, 32, and 48 px
+renders of the mark without the inner ring, for example with ImageMagick:
+`magick icon-16.png icon-32-v3.png icon-48.png favicon.ico`.
+
+The stamp SVGs set their words in live text, so they need Be Vietnam Pro
+installed to look right in design tools.

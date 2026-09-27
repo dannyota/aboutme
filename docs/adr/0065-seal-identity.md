@@ -35,15 +35,19 @@ A design review found five smaller problems:
   inner ring, and a single-story "a", tilted −8° like the public stamp, in seal
   red. The wordmark keeps its stroked lowercase `aboutme.vn` in the text color,
   and only the dot before "vn" is seal red. The logo has no gradient, mask, or
-  id. At 16 to 32 px the inner ring drops out.
+  id. At 24 px and in the favicon, where it would render under a pixel, the
+  hairline inner ring drops out.
 - **The seal extends to the logo.** Red still has one meaning, public, and the
   logo carries the same promise. `AppLogo` joins `AppSeal` and the Publish
   button as the only direct consumers of the seal tokens.
-- **`AppSeal` v2.** The stamp is a rounded ticket: the logo's seal mark and the
-  word PUBLIC (CÔNG KHAI in Vietnamese) on top, a hairline, then the public
-  link. It is rotated −6°. It grows with the link from 156 to 260 px, and past
-  that it squeezes the link to fit, so a slug never overlaps itself. The mark is
-  a 20 px seal tile with a check.
+- **`AppSeal` v2.** The stamp is a rounded ticket: the logo's seal mark (its
+  outer ring and "a") and the word PUBLIC (CÔNG KHAI in Vietnamese) on top, a
+  hairline, then the public link. It is rotated −6°. Its width comes from
+  measured Be Vietnam Pro advances for the word and for each slug character
+  (`sealLayout.ts`): at least 156 px, growing with the link to 260 px, and past
+  that it squeezes the link to fit, so a slug never overlaps itself. The word
+  follows the page language, so `locale` is a required prop. The mark is a 20 px
+  seal tile with a check.
 - **`--seal-text`.** Seal red for words and thin strokes: `#CC2649` in light
   theme, `#FF6B8A` in dark theme (6.9:1 on `#071126`). Fills keep `--seal`.
 - **Two blues.** `--primary` fills and `--link` colors blue text. `--brand-blue`
@@ -80,10 +84,18 @@ A design review found five smaller problems:
 - Icons move to `-v3` names (`favicon-v3.svg`, `icon-32-v3.png`,
   `apple-touch-icon-v3.png`, `icon-192-v3.png`, `icon-512-v3.png`,
   `site-v3.webmanifest`) and `favicon.ico` is redrawn. The Open Graph image
-  moves to `og-image-v4.jpg` and `og-image-v4-en.jpg`.
+  moves to `og-image-v4.jpg` and `og-image-v4-en.jpg`. The `-v2` icons and
+  `og-image-v3.jpg` stay in `public/` for one release, unlinked, so caches,
+  shared links, and crawlers that hold the old URLs get no 404; remove them in
+  the release after this one.
 - Chrome screenshot baselines change: the body and control sizes, the logo, the
   seal, and the destructive buttons all move. The renderer, its tokens, golden
   HTML, and document screenshot baselines do not change.
-- The stored link-preview card (ADR 0055) draws `AppLogo` mark-only, so new
-  cards show the seal mark. Stored cards keep their old mark until they are
-  re-rendered.
+- The stored link-preview card (ADR 0055) draws `AppLogo` mark-only, so the card
+  layout version rises from 1 to 2 on the web and in Go, and every live card
+  gets a new URL. The card stylesheet pins the mark to `#CC2649`, because the
+  print stylesheet has no Tailwind utilities and the white card needs the light
+  seal red in both themes.
+- The production maintenance page (`deploy/caddy/production/maintenance.html`)
+  still draws the old logo inline, with its own test; it follows in a separate
+  change.

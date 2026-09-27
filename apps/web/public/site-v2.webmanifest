@@ -1,0 +1,22 @@
+{
+  "name": "aboutme.vn",
+  "short_name": "aboutme.vn",
+  "icons": [
+    {
+      "src": "/icon-192-v2.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-512-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "theme_color": "#1a5ceb",
+  "background_color": "#f5f8ff",
+  "display": "browser",
+  "start_url": "/"
+}

@@ -5,7 +5,8 @@ import { computed } from 'vue';
 // single-story "a" tilted -8 degrees like the public stamp, then the
 // lowercase wordmark in the text color with only the dot of ".vn" in seal
 // red. Letters are stroked paths, so no font is needed, and nothing uses a
-// gradient or an id, so any number of logos can share a page.
+// gradient or an id, so any number of logos can share a page. At 24 px the
+// hairline inner ring would render under a pixel, so it drops out.
 const props = withDefaults(
   defineProps<{ size?: 'sm' | 'md' | 'lg'; markOnly?: boolean }>(),
   { size: 'md', markOnly: false },
@@ -54,6 +55,7 @@ const sizeClass = computed(
         stroke-width="2.6"
       />
       <circle
+        v-if="size !== 'sm'"
         cx="15"
         cy="16"
         data-logo-ring="inner"

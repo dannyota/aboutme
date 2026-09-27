@@ -40,6 +40,16 @@ body.preview-card-print main {
   display: block;
 }
 
+/*
+ * The footer's seal mark stays seal red on the white card. The print
+ * stylesheet carries no Tailwind utilities, and in the app the dark theme's
+ * lighter seal text would fail on white (ADR 0065).
+ */
+.preview-card [data-logo-part='mark'],
+.preview-card [data-logo-part='dot'] {
+  color: #cc2649;
+}
+
 .preview-card-band {
   position: absolute;
   top: 0;
