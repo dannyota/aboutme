@@ -21,9 +21,10 @@ import (
 var registerTestNow = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
 // TestNativeLoopbackRedirect needs no database: nativeLoopbackRedirect is a
-// pure function. RFC 8252 section 8.3 requires the loopback IP literal for a
-// native redirect; "localhost" is excluded because its resolution can be
-// hijacked to a listener the caller does not control.
+// pure function. The general redirect grammar already admits "localhost" for
+// a client that omits application_type, so native accepts it too; see
+// docs/design/mcp-client-compatibility.md rule 3. A lookalike host such as
+// "localhost.evil.example" is a different hostname and never matches.
 func TestNativeLoopbackRedirect(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -33,8 +34,8 @@ func TestNativeLoopbackRedirect(t *testing.T) {
 		{"IPv4 loopback", "http://127.0.0.1:20090/callback", true},
 		{"IPv6 loopback", "http://[::1]:20090/callback", true},
 		{"loopback with path only", "http://127.0.0.1/callback", true},
-		{"localhost", "http://localhost:20090/callback", false},
-		{"localhost no port", "http://localhost/callback", false},
+		{"localhost", "http://localhost:20090/callback", true},
+		{"localhost no port", "http://localhost/callback", true},
 		{"loopback-looking prefix", "http://localhost.evil.example/callback", false},
 		{"https loopback", "https://127.0.0.1:20090/callback", false},
 		{"non-loopback host", "http://agent.example/callback", false},
@@ -163,6 +164,16 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 	const legacy = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"token_endpoint_auth_method":"none"}`
 	const native = `{"client_name":"aboutme MCP owner workflow","redirect_uris":["http://127.0.0.1:20090/callback"],"token_endpoint_auth_method":"none","application_type":"native"}`
 	const nativeIPv6 = `{"client_name":"Agent","redirect_uris":["http://[::1]:20090/callback"],"application_type":"native"}`
+	// Claude Code registers a loopback redirect naming "localhost", not an IP
+	// literal; the general grammar already admits it, so native does too. See
+	// docs/design/mcp-client-compatibility.md rule 3.
+	const nativeLocalhost = `{"client_name":"Agent","redirect_uris":["http://localhost:33418/callback"],"application_type":"native"}`
+	// Unknown registration members are ignored, never stored or echoed. See
+	// docs/design/mcp-client-compatibility.md rule 2.
+	const nativeWithUnknownMembers = `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"native","client_uri":"https://agent.example"}`
+	// Claude on the web derives application_type web for its https redirect;
+	// see docs/design/mcp-client-compatibility.md rule 2.
+	const web = `{"client_name":"Claude","redirect_uris":["https://claude.ai/api/mcp/auth_callback"],"application_type":"web"}`
 
 	for _, tc := range []struct {
 		name string
@@ -172,6 +183,9 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 		{"legacy request", legacy, `"token_endpoint_auth_method":"none"}`},
 		{"SDK native loopback request", native, `"application_type":"native"`},
 		{"native IPv6 loopback request", nativeIPv6, `"application_type":"native"`},
+		{"native localhost loopback request", nativeLocalhost, `"application_type":"native"`},
+		{"native request with unknown members", nativeWithUnknownMembers, `"application_type":"native"`},
+		{"Claude web https redirect", web, `"application_type":"web"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			q := &registrationQueries{id: uuid.New()}
@@ -184,6 +198,9 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 			if len(q.created) != 1 {
 				t.Fatalf("created = %d, want 1", len(q.created))
 			}
+			if strings.Contains(rec.Body.String(), "client_uri") {
+				t.Errorf("response echoed an unknown member: %q", rec.Body.String())
+			}
 		})
 	}
 
@@ -194,16 +211,12 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 		{"non-string", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":true}`},
 		{"empty", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":""}`},
 		{"duplicate", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"native","application_type":"native"}`},
-		{"other type", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"web"}`},
-		{"unsupported SDK metadata", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"native","client_uri":"https://agent.example"}`},
+		{"unknown application_type", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"other"}`},
+		{"web with http loopback redirect", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback"],"application_type":"web"}`},
 		{"empty redirect", `{"client_name":"Agent","redirect_uris":[""],"application_type":"native"}`},
 		{"non-loopback redirect", `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"application_type":"native"}`},
 		{"mixed redirects", `{"client_name":"Agent","redirect_uris":["http://127.0.0.1/callback","https://agent.example/callback"],"application_type":"native"}`},
-		// RFC 8252 section 8.3: a native redirect names the loopback IP
-		// literal, never "localhost", which resolution can be hijacked
-		// (for example a poisoned hosts file) to a listener the caller does
-		// not control.
-		{"native localhost redirect", `{"client_name":"Agent","redirect_uris":["http://localhost/callback"],"application_type":"native"}`},
+		{"native custom scheme redirect", `{"client_name":"Agent","redirect_uris":["com.example.app:/cb"],"application_type":"native"}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			q := &registrationQueries{id: uuid.New()}
@@ -214,6 +227,175 @@ func TestRegister_ApplicationTypeCompatibility(t *testing.T) {
 				t.Fatalf("response = %d created = %d", rec.Code, len(q.created))
 			}
 		})
+	}
+}
+
+// TestRegister_TypeScriptSDKDefaultShapeIgnoresUnknownMembers registers with
+// the shape the official TypeScript SDK sends: the four known optional
+// members plus several members the SDK also sends that this server does not
+// define. See docs/design/mcp-client-compatibility.md rule 2.
+func TestRegister_TypeScriptSDKDefaultShapeIgnoresUnknownMembers(t *testing.T) {
+	q := &registrationQueries{id: uuid.New()}
+	s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+	body := `{"client_name":"Claude Code","redirect_uris":["http://localhost:33418/callback"],` +
+		`"grant_types":["authorization_code","refresh_token"],"response_types":["code"],` +
+		`"token_endpoint_auth_method":"none","application_type":"native",` +
+		`"scope":"resumes:read resumes:write",` +
+		`"client_uri":"https://agent.example","logo_uri":"https://agent.example/logo.png",` +
+		`"software_id":"claude-code","software_version":"1.0.0",` +
+		`"contacts":["team@agent.example"],"nested":{"a":1,"b":[1,2,3]}}`
+
+	rec := httptest.NewRecorder()
+	s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", body))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", rec.Code, rec.Body.String())
+	}
+	if len(q.created) != 1 {
+		t.Fatalf("created = %d, want 1", len(q.created))
+	}
+	for _, unknown := range []string{"client_uri", "logo_uri", "software_id", "software_version", "contacts", "nested"} {
+		if strings.Contains(rec.Body.String(), unknown) {
+			t.Errorf("response echoed unknown member %q: %s", unknown, rec.Body.String())
+		}
+	}
+	want := `{"client_id":"` + q.id.String() + `","client_name":"Claude Code","redirect_uris":["http://localhost:33418/callback"],"token_endpoint_auth_method":"none","application_type":"native"}`
+	if got := rec.Body.String(); got != want {
+		t.Errorf("body = %q, want %q", got, want)
+	}
+}
+
+// TestRegister_GrantTypesResponseTypesAndScope covers rule 2's three
+// remaining known members and their rejected neighbors.
+func TestRegister_GrantTypesResponseTypesAndScope(t *testing.T) {
+	const base = `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"]`
+
+	accepted := []struct {
+		name string
+		body string
+	}{
+		{"grant_types both", base + `,"grant_types":["authorization_code","refresh_token"]}`},
+		{"grant_types authorization_code only", base + `,"grant_types":["authorization_code"]}`},
+		{"response_types code", base + `,"response_types":["code"]}`},
+		{"scope read", base + `,"scope":"resumes:read"}`},
+		{"scope write", base + `,"scope":"resumes:write"}`},
+		{"scope both", base + `,"scope":"resumes:read resumes:write"}`},
+	}
+	for _, tc := range accepted {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &registrationQueries{id: uuid.New()}
+			s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+			rec := httptest.NewRecorder()
+			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", tc.body))
+			if rec.Code != http.StatusCreated {
+				t.Fatalf("response = %d %q", rec.Code, rec.Body.String())
+			}
+			if len(q.created) != 1 {
+				t.Fatalf("created = %d, want 1", len(q.created))
+			}
+			if strings.Contains(rec.Body.String(), "scope") || strings.Contains(rec.Body.String(), "grant_type") || strings.Contains(rec.Body.String(), "response_type") {
+				t.Errorf("response echoed a registration-only member: %q", rec.Body.String())
+			}
+		})
+	}
+
+	rejected := []struct {
+		name string
+		body string
+	}{
+		{"grant_types client_credentials", base + `,"grant_types":["client_credentials"]}`},
+		{"grant_types implicit", base + `,"grant_types":["implicit"]}`},
+		{"grant_types empty array", base + `,"grant_types":[]}`},
+		{"grant_types string", base + `,"grant_types":"authorization_code"}`},
+		{"grant_types duplicate member", base + `,"grant_types":["authorization_code","authorization_code"]}`},
+		{"response_types token", base + `,"response_types":["token"]}`},
+		{"response_types code and token", base + `,"response_types":["code","token"]}`},
+		{"response_types empty array", base + `,"response_types":[]}`},
+		{"scope resumes:admin", base + `,"scope":"resumes:admin"}`},
+		{"scope openid", base + `,"scope":"openid"}`},
+		{"scope empty string", base + `,"scope":""}`},
+		{"scope double space", base + `,"scope":"resumes:read  resumes:write"}`},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &registrationQueries{id: uuid.New()}
+			s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+			rec := httptest.NewRecorder()
+			s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", tc.body))
+			if rec.Code != http.StatusBadRequest || len(q.created) != 0 {
+				t.Fatalf("response = %d created = %d", rec.Code, len(q.created))
+			}
+		})
+	}
+}
+
+// TestRegister_DuplicateUnknownMemberRejects confirms the duplicate-member
+// check still applies to a member outside the closed set, even though a
+// single occurrence of it is ignored.
+func TestRegister_DuplicateUnknownMemberRejects(t *testing.T) {
+	q := &registrationQueries{id: uuid.New()}
+	s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+	body := `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"client_uri":"https://agent.example","client_uri":"https://other.example"}`
+	rec := httptest.NewRecorder()
+	s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", body))
+	if rec.Code != http.StatusBadRequest || len(q.created) != 0 {
+		t.Fatalf("response = %d created = %d", rec.Code, len(q.created))
+	}
+}
+
+// TestRegister_OverLimitBodyWithUnknownMembersRejects confirms the
+// 4,096-byte cap is enforced before unknown members are ignored, so padding
+// a body with unknown metadata cannot bypass it.
+func TestRegister_OverLimitBodyWithUnknownMembersRejects(t *testing.T) {
+	valid := `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"client_uri":"https://agent.example"}`
+	overLimit := valid[:len(valid)-1] + strings.Repeat(" ", 4096-len(valid)+2) + valid[len(valid)-1:]
+
+	q := &registrationQueries{id: uuid.New()}
+	s := newRegistrationService(t, q, &registrationAdmissionFake{allowed: true})
+	rec := httptest.NewRecorder()
+	s.HandleRegister(rec, registerRequest(http.MethodPost, "application/json", overLimit))
+	if rec.Code != http.StatusRequestEntityTooLarge || len(q.created) != 0 {
+		t.Fatalf("response = %d created = %d", rec.Code, len(q.created))
+	}
+}
+
+// TestRegisteredRedirect_LocalhostMatchesOnlyItsExactRegisteredValue confirms
+// that adding "localhost" to nativeLoopbackHosts does not widen what a
+// registered client may authorize to: registeredRedirect still requires a
+// byte-for-byte match, port included. See
+// docs/design/mcp-client-compatibility.md rule 3.
+func TestRegisteredRedirect_LocalhostMatchesOnlyItsExactRegisteredValue(t *testing.T) {
+	client := store.OAuthClient{RedirectURIs: []byte(`["http://localhost:33418/callback"]`)}
+	for _, tc := range []struct {
+		name     string
+		redirect string
+		want     bool
+	}{
+		{"registered value", "http://localhost:33418/callback", true},
+		{"different port", "http://localhost:33419/callback", false},
+		{"IP literal instead of localhost", "http://127.0.0.1:33418/callback", false},
+		{"extra path segment", "http://localhost:33418/callback/x", false},
+		{"lookalike host", "http://localhost.evil.example:33418/callback", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := registeredRedirect(client, tc.redirect); got != tc.want {
+				t.Errorf("registeredRedirect(%q) = %v, want %v", tc.redirect, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestValidateRedirectURI_RejectsLocalhostLookalikes confirms that widening
+// native registration to "localhost" does not touch the general redirect
+// grammar's userinfo and hostname rules: a client cannot register a redirect
+// that only resembles "localhost".
+func TestValidateRedirectURI_RejectsLocalhostLookalikes(t *testing.T) {
+	for _, raw := range []string{
+		"http://localhost.evil.example/cb",
+		"http://localhost@evil.example/cb",
+	} {
+		if err := ValidateRedirectURI(raw); err == nil {
+			t.Errorf("ValidateRedirectURI(%q) = nil, want error", raw)
+		}
 	}
 }
 
@@ -232,7 +414,6 @@ func TestRegister_RejectsRouteAndJSONMatrixWithClosedBody(t *testing.T) {
 		{"media type", http.MethodPost, "application/json; charset=utf-8", valid, http.StatusUnsupportedMediaType},
 		{"too large", http.MethodPost, "application/json", overLimit, http.StatusRequestEntityTooLarge},
 		{"duplicate field", http.MethodPost, "application/json", `{"client_name":"Agent","client_name":"Other","redirect_uris":["https://agent.example/callback"]}`, http.StatusBadRequest},
-		{"unknown field", http.MethodPost, "application/json", `{"client_name":"Agent","redirect_uris":["https://agent.example/callback"],"logo_uri":"https://agent.example/logo"}`, http.StatusBadRequest},
 		{"wrong name scalar", http.MethodPost, "application/json", `{"client_name":1,"redirect_uris":["https://agent.example/callback"]}`, http.StatusBadRequest},
 		{"wrong redirect scalar", http.MethodPost, "application/json", `{"client_name":"Agent","redirect_uris":"https://agent.example/callback"}`, http.StatusBadRequest},
 		{"empty name", http.MethodPost, "application/json", `{"client_name":"","redirect_uris":["https://agent.example/callback"]}`, http.StatusBadRequest},

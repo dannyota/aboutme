@@ -157,7 +157,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
   it("uses the shared closed error envelope for documented failures", () => {
     const expected: Record<string, string[]> = {
       getOAuthConsent: ["400", "401", "404"],
-      postOAuthConsentDecision: ["400", "401", "403", "404", "415"],
+      postOAuthConsentDecision: ["400", "401", "403", "404", "409", "415"],
       listAgentGrants: ["401"],
       revokeAgentGrant: ["401", "403", "404"],
     };
@@ -182,6 +182,7 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
         "401",
         "403",
         "404",
+        "409",
         "413",
         "415",
       ],
@@ -194,5 +195,18 @@ describe("OAuth consent and agent grant OpenAPI contract", () => {
         [...statuses].sort(),
       );
     }
+  });
+
+  it("names the ten-agent limit its own closed code, distinct from a malformed request", () => {
+    const conflict = operation("postOAuthConsentDecision").responses["409"];
+    expect(response(conflict).content["application/json"].schema.$ref).toBe(
+      "#/components/schemas/Error",
+    );
+    expect(response(conflict).content["application/json"].example).toEqual({
+      error: {
+        code: "agent_limit_reached",
+        message: "you already have 10 connected agents",
+      },
+    });
   });
 });

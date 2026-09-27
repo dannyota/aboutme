@@ -213,15 +213,38 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if registration.ApplicationTypeSet {
-		if registration.ApplicationType != "native" {
+		switch registration.ApplicationType {
+		case "native":
+			for _, redirectURI := range registration.RedirectURIs {
+				if !nativeLoopbackRedirect(redirectURI) {
+					writeOAuthError(w, http.StatusBadRequest)
+					return
+				}
+			}
+		case "web":
+			for _, redirectURI := range registration.RedirectURIs {
+				if !webRedirect(redirectURI) {
+					writeOAuthError(w, http.StatusBadRequest)
+					return
+				}
+			}
+		default:
 			writeOAuthError(w, http.StatusBadRequest)
 			return
 		}
-		for _, redirectURI := range registration.RedirectURIs {
-			if !nativeLoopbackRedirect(redirectURI) {
-				writeOAuthError(w, http.StatusBadRequest)
-				return
-			}
+	}
+	if registration.GrantTypesSet && !validGrantTypesSet(registration.GrantTypes) {
+		writeOAuthError(w, http.StatusBadRequest)
+		return
+	}
+	if registration.ResponseTypesSet && !validResponseTypesSet(registration.ResponseTypes) {
+		writeOAuthError(w, http.StatusBadRequest)
+		return
+	}
+	if registration.ScopeSet {
+		if _, scopeErr := ParseScopes(registration.Scope); scopeErr != nil {
+			writeOAuthError(w, http.StatusBadRequest)
+			return
 		}
 	}
 	if registration.TokenEndpointAuthMethod != "" && registration.TokenEndpointAuthMethod != "none" {
@@ -255,7 +278,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		TokenEndpointAuthMethod: "none",
 	}
 	if registration.ApplicationTypeSet {
-		response.ApplicationType = "native"
+		response.ApplicationType = registration.ApplicationType
 	}
 	responseJSON, err := json.Marshal(response)
 	if err != nil {
@@ -275,6 +298,12 @@ type registrationInput struct {
 	TokenEndpointAuthMethod string
 	ApplicationType         string
 	ApplicationTypeSet      bool
+	GrantTypes              []string
+	GrantTypesSet           bool
+	ResponseTypes           []string
+	ResponseTypesSet        bool
+	Scope                   string
+	ScopeSet                bool
 }
 
 type registerResponse struct {
@@ -285,20 +314,59 @@ type registerResponse struct {
 	ApplicationType         string   `json:"application_type,omitempty"`
 }
 
-// nativeLoopbackHosts is the closed set application_type native redirects may
-// use, narrower than the general M1 loopbackRedirectHosts. RFC 8252 section
-// 8.3 requires an IP literal, not "localhost": an attacker who controls the
-// resolver or the loopback interface's own name resolution (for example a
-// poisoned hosts file) can bind "localhost" to a listener of their own, which
-// an IP literal is not exposed to.
+// nativeLoopbackHosts is the set of loopback hosts an application_type
+// native redirect may use. The general redirect grammar
+// (loopbackRedirectHosts in redirect.go) already admits "localhost" for a
+// client that omits application_type, so a narrower native rule protected
+// nothing and rejected Claude Code's own loopback registration; see
+// docs/design/mcp-client-compatibility.md rule 3. A redirect must still
+// match the client's registered value exactly, port included.
 var nativeLoopbackHosts = map[string]bool{
 	"127.0.0.1": true,
+	"localhost": true,
 	"::1":       true,
 }
 
 func nativeLoopbackRedirect(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && u.Scheme == "http" && nativeLoopbackHosts[strings.ToLower(u.Hostname())]
+}
+
+// webRedirect reports whether raw is an https redirect, the application_type
+// web requirement of docs/design/mcp-client-compatibility.md rule 2.
+func webRedirect(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && u.Scheme == "https"
+}
+
+// validGrantTypesForRegistration is the closed set a registration's
+// grant_types member may name, per
+// docs/design/mcp-client-compatibility.md rule 2.
+var validGrantTypesForRegistration = map[string]bool{
+	"authorization_code": true,
+	"refresh_token":      true,
+}
+
+// validGrantTypesSet reports whether values is a non-empty, duplicate-free
+// subset of validGrantTypesForRegistration.
+func validGrantTypesSet(values []string) bool {
+	if len(values) == 0 {
+		return false
+	}
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		if !validGrantTypesForRegistration[value] || seen[value] {
+			return false
+		}
+		seen[value] = true
+	}
+	return true
+}
+
+// validResponseTypesSet reports whether values is exactly ["code"], the only
+// response_types a registration may name.
+func validResponseTypesSet(values []string) bool {
+	return len(values) == 1 && values[0] == "code"
 }
 
 func exactJSONContentType(header http.Header) bool {
@@ -322,7 +390,8 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 	if delimiter, ok := token.(json.Delim); !ok || delimiter != '{' {
 		return registrationInput{}, errRegisterRequestInvalid
 	}
-	fields := make(map[string]json.RawMessage, 4)
+	seen := make(map[string]bool, 8)
+	fields := make(map[string]json.RawMessage, 8)
 	for decoder.More() {
 		token, err := decoder.Token()
 		if err != nil {
@@ -332,19 +401,23 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 		if !ok {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
-		if _, exists := fields[name]; exists {
+		if seen[name] {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
-		switch name {
-		case "client_name", "redirect_uris", "token_endpoint_auth_method", "application_type":
-		default:
-			return registrationInput{}, errRegisterRequestInvalid
-		}
+		seen[name] = true
 		var value json.RawMessage
 		if err := decoder.Decode(&value); err != nil {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
-		fields[name] = value
+		// A member name outside this set is ignored, per RFC 7591 section 2
+		// and docs/design/mcp-client-compatibility.md rule 2: it is never
+		// stored, logged, or echoed. The duplicate-member check above still
+		// applies to it.
+		switch name {
+		case "client_name", "redirect_uris", "token_endpoint_auth_method", "application_type",
+			"grant_types", "response_types", "scope":
+			fields[name] = value
+		}
 	}
 	if token, err := decoder.Token(); err != nil || token != json.Delim('}') {
 		return registrationInput{}, errRegisterRequestInvalid
@@ -375,6 +448,24 @@ func decodeRegistration(body io.Reader) (registrationInput, error) {
 			return registrationInput{}, errRegisterRequestInvalid
 		}
 		registration.ApplicationTypeSet = true
+	}
+	if grantTypes, ok := fields["grant_types"]; ok {
+		if err := json.Unmarshal(grantTypes, &registration.GrantTypes); err != nil {
+			return registrationInput{}, errRegisterRequestInvalid
+		}
+		registration.GrantTypesSet = true
+	}
+	if responseTypes, ok := fields["response_types"]; ok {
+		if err := json.Unmarshal(responseTypes, &registration.ResponseTypes); err != nil {
+			return registrationInput{}, errRegisterRequestInvalid
+		}
+		registration.ResponseTypesSet = true
+	}
+	if scope, ok := fields["scope"]; ok {
+		if err := json.Unmarshal(scope, &registration.Scope); err != nil {
+			return registrationInput{}, errRegisterRequestInvalid
+		}
+		registration.ScopeSet = true
 	}
 	return registration, nil
 }
