@@ -62,6 +62,7 @@ locals {
     { name = "PUBLIC_RENDER_ORIGIN", value = "http://127.0.0.1:3000" },
     { name = "PRINT_LISTEN_ADDR", value = "172.17.0.1:8081" },
     { name = "MCP_ENABLED", value = "true" },
+    { name = "OAUTH_REGISTER_EGRESS_CIDRS", value = "160.79.104.0/21" },
     { name = "DATABASE_URL", value = format(local.db_url, "aboutme_app", "aboutme") },
     { name = "AUTH_EMAIL_MODE", value = "ses" },
     { name = "AWS_REGION", value = "ap-southeast-1" },
