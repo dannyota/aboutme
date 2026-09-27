@@ -79,14 +79,15 @@ any route may claim it, and drift between the registry, OpenAPI root paths, the
 Nuxt page manifest, or generated dispatch fails the build.
 
 The registry keys one row per literal top-level segment; finer paths dispatch
-inside the owning router. `packages/publicroots/public-roots.v9.json` holds the
+inside the owning router. `packages/publicroots/public-roots.v10.json` holds the
 exact roots. `admin`, `people`, and `u` are reserved for future use with no
 handler ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
-The dotted and underscore-prefixed roots cannot pass the slug grammar but stay
-in the registry so dispatch and reservation parity remain exhaustive. Dynamic
-`/{slug}` and `/{slug}.md` routes add no rows. Framework-generated paths that
-are not fixed product or infrastructure routes fall through to Nuxt outside the
-registry.
+`guide` is reserved for the [MCP guide](mcp-guide.md) at `/guide/mcp` and any
+later page under `/guide/`. The dotted and underscore-prefixed roots cannot pass
+the slug grammar but stay in the registry so dispatch and reservation parity
+remain exhaustive. Dynamic `/{slug}` and `/{slug}.md` routes add no rows.
+Framework-generated paths that are not fixed product or infrastructure routes
+fall through to Nuxt outside the registry.
 
 `/authorize` is the Nuxt consent page and `/oauth/authorize` is the Go endpoint
 that validates a request before redirecting to it. They are different roots, so
