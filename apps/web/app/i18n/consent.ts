@@ -8,6 +8,16 @@ type ConsentCopy = {
   readonly loading: string;
   readonly invalid: string;
   readonly unavailable: string;
+  /** Rule 6: where approval returns, for an `https` redirect. */
+  readonly returnToHost: (host: string) => string;
+  /** Rule 6: where approval returns, for a loopback redirect. */
+  readonly returnToLoopback: string;
+  /** Rule 7: the ten-grant limit banner, split around the settings link. */
+  readonly agentLimit: {
+    readonly before: string;
+    readonly settingsLabel: string;
+    readonly after: string;
+  };
   readonly requestedPermissions: string;
   readonly scopes: Record<
     OAuthConsentScope,
@@ -26,6 +36,14 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
     loading: 'Đang tải yêu cầu cấp quyền…',
     invalid: 'Yêu cầu cấp quyền này không hợp lệ.',
     unavailable: 'Không thể tải yêu cầu cấp quyền. Hãy thử lại.',
+    returnToHost: (host) => `Sau khi cho phép, bạn sẽ quay lại ${host}.`,
+    returnToLoopback:
+      'Sau khi cho phép, bạn quay lại một ứng dụng trên máy tính này.',
+    agentLimit: {
+      before: 'Bạn đã có 10 trợ lý được kết nối. Thu hồi một trợ lý trong ',
+      settingsLabel: 'Cài đặt',
+      after: ' rồi thử lại.',
+    },
     requestedPermissions: 'Quyền được yêu cầu',
     scopes: {
       'resumes:read': {
@@ -48,6 +66,14 @@ export const consentCopy: WorkspaceCopy<ConsentCopy> = {
     loading: 'Loading authorization…',
     invalid: 'This authorization request is invalid.',
     unavailable: 'Unable to load authorization. Please try again.',
+    returnToHost: (host) => `After you approve, you return to ${host}.`,
+    returnToLoopback:
+      'After you approve, you return to an app on this computer.',
+    agentLimit: {
+      before: 'You already have 10 connected agents. Revoke one in ',
+      settingsLabel: 'Settings',
+      after: ', then try again.',
+    },
     requestedPermissions: 'Requested permissions',
     scopes: {
       'resumes:read': {
