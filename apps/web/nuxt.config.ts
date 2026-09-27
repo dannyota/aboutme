@@ -306,6 +306,9 @@ export default defineNuxtConfig({
     // without head tags; this header keeps them out of search engines.
     '/app/**': { headers: { 'X-Robots-Tag': 'noindex' } },
     '/app/resumes/**': { ssr: false },
+    // The LinkedIn import page loads pdf.js only in the browser
+    // (docs/design/linkedin-import.md).
+    '/app/import/**': { ssr: false },
     ...(harnessEnabled
       ? {
           '/_harness/**': {

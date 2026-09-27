@@ -44,6 +44,7 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/verify',
   '/app/settings/sessions',
   '/authorize',
+  '/app/import/linkedin',
 ]);
 
 /** The Library, /templates, and its template pages. */

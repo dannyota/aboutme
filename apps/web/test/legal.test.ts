@@ -65,6 +65,11 @@ describe('privacy and terms pages', () => {
       'Nếu bạn đăng nhập bằng LinkedIn, LinkedIn (Hoa Kỳ) xác thực tài '
       + 'khoản của bạn.',
     );
+    expect(wrapper.text()).toContain(
+      'Nhập từ LinkedIn: trình duyệt của bạn đọc tệp PDF hồ sơ LinkedIn bạn '
+      + 'chọn. Chúng tôi không nhận tệp này; chúng tôi chỉ lưu CV bạn tạo từ '
+      + 'nó.',
+    );
     expect(wrapper.text()).not.toContain('Cloudflare');
     expect(wrapper.text()).toContain(
       'Lượt xem CV công khai: chúng tôi đếm lượt xem và chỉ lưu tổng số '
@@ -127,6 +132,11 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'If you sign in with LinkedIn, LinkedIn (United States) verifies '
       + 'your account.',
+    );
+    expect(wrapper.text()).toContain(
+      'LinkedIn import: your browser reads the LinkedIn profile PDF you '
+      + 'pick. We never receive the file; we store only the resume you '
+      + 'create from it.',
     );
     expect(wrapper.text()).not.toContain('Cloudflare');
     expect(wrapper.text()).toContain(
