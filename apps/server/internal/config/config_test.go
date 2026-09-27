@@ -4,6 +4,7 @@ package config_test
 
 import (
 	"net/netip"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -123,23 +124,25 @@ func TestLoad_MCPEnableFlagAndFrozenBudgets(t *testing.T) {
 				t.Fatalf("AgentAccess.Enabled = %t, want %t", got.AgentAccess.Enabled, tc.enabled)
 			}
 			want := config.AgentAccessConfig{
-				Enabled:                tc.enabled,
-				OAuthRegisterRequests:  5,
-				OAuthRegisterWindow:    time.Hour,
-				OAuthTokenRequests:     30,
-				OAuthTokenWindow:       time.Minute,
-				OAuthFailedGrantLimit:  10,
-				OAuthFailedGrantWindow: 15 * time.Minute,
-				MCPTokenRequests:       120,
-				MCPTokenWindow:         time.Minute,
-				MCPUserRequests:        240,
-				MCPUserWindow:          time.Minute,
-				MCPConcurrentPerUser:   4,
-				OAuthLiveGrantLimit:    10,
-				MCPBodyLimitBytes:      4_194_304,
-				MaxRateKeys:            10_000,
+				Enabled:                     tc.enabled,
+				OAuthRegisterRequests:       5,
+				OAuthRegisterRangeRequests:  120,
+				OAuthRegisterGlobalRequests: 600,
+				OAuthRegisterWindow:         time.Hour,
+				OAuthTokenRequests:          30,
+				OAuthTokenWindow:            time.Minute,
+				OAuthFailedGrantLimit:       10,
+				OAuthFailedGrantWindow:      15 * time.Minute,
+				MCPTokenRequests:            120,
+				MCPTokenWindow:              time.Minute,
+				MCPUserRequests:             240,
+				MCPUserWindow:               time.Minute,
+				MCPConcurrentPerUser:        4,
+				OAuthLiveGrantLimit:         10,
+				MCPBodyLimitBytes:           4_194_304,
+				MaxRateKeys:                 10_000,
 			}
-			if got.AgentAccess != want {
+			if !reflect.DeepEqual(got.AgentAccess, want) {
 				t.Fatalf("AgentAccess = %#v, want %#v", got.AgentAccess, want)
 			}
 		})

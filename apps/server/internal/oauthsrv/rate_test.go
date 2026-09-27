@@ -16,14 +16,16 @@ import (
 
 func testOAuthRateConfig() RateConfig {
 	return RateConfig{
-		TrustedProxies:    api.TrustedProxies{netip.MustParsePrefix("127.0.0.1/32")},
-		RegisterRequests:  5,
-		RegisterWindow:    time.Hour,
-		TokenRequests:     30,
-		TokenWindow:       time.Minute,
-		FailedGrantLimit:  10,
-		FailedGrantWindow: 15 * time.Minute,
-		MaxKeys:           10_000,
+		TrustedProxies:         api.TrustedProxies{netip.MustParsePrefix("127.0.0.1/32")},
+		RegisterRequests:       5,
+		RegisterRangeRequests:  120,
+		RegisterGlobalRequests: 600,
+		RegisterWindow:         time.Hour,
+		TokenRequests:          30,
+		TokenWindow:            time.Minute,
+		FailedGrantLimit:       10,
+		FailedGrantWindow:      15 * time.Minute,
+		MaxKeys:                10_000,
 	}
 }
 
@@ -244,4 +246,251 @@ func TestHandleToken_FailedGrantBudgetIsClearedBySuccess(t *testing.T) {
 	if limited.Code != http.StatusTooManyRequests || limited.Header().Get("Retry-After") != "900" {
 		t.Fatalf("post-reset limit+1 = %d Retry-After %q", limited.Code, limited.Header().Get("Retry-After"))
 	}
+}
+
+// testEgressRange is a published client egress range used only by these
+// tests; production takes its list from OAUTH_REGISTER_EGRESS_CIDRS.
+var testEgressRange = netip.MustParsePrefix("160.79.104.0/21")
+
+func testEgressRatePolicies(t *testing.T) *RatePolicies {
+	t.Helper()
+	cfg := testOAuthRateConfig()
+	cfg.RegisterEgressRanges = []netip.Prefix{testEgressRange}
+	policies, err := NewRatePolicies(cfg)
+	if err != nil {
+		t.Fatalf("NewRatePolicies: %v", err)
+	}
+	return policies
+}
+
+// peerRequest is a registration request straight from an untrusted socket
+// peer, so its own address is the client address.
+func peerRequest(remoteAddr string) *http.Request {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/register", strings.NewReader(`{}`))
+	req.RemoteAddr = remoteAddr
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func registerFrom(p *RatePolicies, now time.Time, ip string) (bool, int) {
+	return p.AdmitRegister(now, rateRequest("/oauth/register", "application/json", `{}`, ip))
+}
+
+func TestNewRatePolicies_RejectsInvalidRegisterRangeAndGlobalBudgets(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*RateConfig)
+	}{
+		{"zero range budget", func(c *RateConfig) { c.RegisterRangeRequests = 0 }},
+		{"zero global budget", func(c *RateConfig) { c.RegisterGlobalRequests = 0 }},
+		{"invalid prefix", func(c *RateConfig) { c.RegisterEgressRanges = []netip.Prefix{{}} }},
+		{"non-canonical prefix", func(c *RateConfig) {
+			c.RegisterEgressRanges = []netip.Prefix{netip.MustParsePrefix("160.79.104.1/21")}
+		}},
+		{"mapped prefix", func(c *RateConfig) {
+			c.RegisterEgressRanges = []netip.Prefix{netip.MustParsePrefix("::ffff:160.79.104.0/117")}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := testOAuthRateConfig()
+			tc.mutate(&cfg)
+			if _, err := NewRatePolicies(cfg); err == nil {
+				t.Fatal("NewRatePolicies error = nil")
+			}
+		})
+	}
+}
+
+// A header naming an address inside a configured range is honored only
+// through the trust boundary: from a trusted proxy, as exactly one X-Real-IP.
+func TestRatePolicies_RegisterRangeCannotBeSpoofedByHeaders(t *testing.T) {
+	now := time.Date(2026, 9, 27, 10, 0, 0, 0, time.UTC)
+
+	t.Run("untrusted peer keeps its own five an hour", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		for i := 1; i <= 6; i++ {
+			req := peerRequest("203.0.113.7:5555")
+			req.Header.Set(api.TrustedClientIPHeader, "160.79.104.10")
+			req.Header.Set("X-Forwarded-For", "160.79.104.10")
+			allowed, retry := policies.AdmitRegister(now, req)
+			if i <= 5 && !allowed {
+				t.Fatalf("spoofing request %d denied within the per-address budget", i)
+			}
+			if i == 6 && (allowed || retry < 1) {
+				t.Fatalf("spoofing request 6 = (%t,%d), want the per-address refusal", allowed, retry)
+			}
+		}
+		// The range bucket was never touched by the spoofing peer.
+		for i := 1; i <= 120; i++ {
+			if allowed, _ := registerFrom(policies, now, "160.79.104.10"); !allowed {
+				t.Fatalf("range registration %d denied after a spoofing peer", i)
+			}
+		}
+	})
+
+	t.Run("trusted proxy with only X-Forwarded-For fails closed", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		req := peerRequest("127.0.0.1:443")
+		req.Header.Set("X-Forwarded-For", "160.79.104.10")
+		if allowed, retry := policies.AdmitRegister(now, req); allowed || retry != 1 {
+			t.Fatalf("X-Forwarded-For only = (%t,%d), want (false,1)", allowed, retry)
+		}
+	})
+
+	t.Run("repeated X-Real-IP fails closed", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		req := peerRequest("127.0.0.1:443")
+		req.Header.Add(api.TrustedClientIPHeader, "160.79.104.10")
+		req.Header.Add(api.TrustedClientIPHeader, "160.79.104.11")
+		if allowed, retry := policies.AdmitRegister(now, req); allowed || retry != 1 {
+			t.Fatalf("repeated X-Real-IP = (%t,%d), want (false,1)", allowed, retry)
+		}
+	})
+
+	t.Run("trusted proxy with one in-range X-Real-IP uses the range bucket", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		for i := 1; i <= 6; i++ {
+			if allowed, _ := registerFrom(policies, now, "160.79.104.10"); !allowed {
+				t.Fatalf("in-range registration %d denied by a per-address budget", i)
+			}
+		}
+	})
+}
+
+func TestRatePolicies_RegisterRangeSharesOneBucketAndRefills(t *testing.T) {
+	now := time.Date(2026, 9, 27, 11, 0, 0, 0, time.UTC)
+	policies := testEgressRatePolicies(t)
+
+	first := netip.MustParseAddr("160.79.104.0")
+	addr := first
+	for i := 1; i <= 120; i++ {
+		if allowed, _ := registerFrom(policies, now, addr.String()); !allowed {
+			t.Fatalf("range registration %d from %s denied within 120 an hour", i, addr)
+		}
+		addr = addr.Next()
+	}
+	for _, ip := range []string{"160.79.111.255", "160.79.104.0", addr.String()} {
+		allowed, retry := registerFrom(policies, now, ip)
+		if allowed || retry < 1 {
+			t.Fatalf("range registration 121 from %s = (%t,%d), want a refusal with Retry-After", ip, allowed, retry)
+		}
+	}
+
+	// Neighbors just outside the range keep the per-address five an hour.
+	for _, ip := range []string{"160.79.112.0", "160.79.103.255"} {
+		for i := 1; i <= 6; i++ {
+			allowed, retry := registerFrom(policies, now, ip)
+			if i <= 5 && !allowed {
+				t.Fatalf("%s registration %d denied within five an hour", ip, i)
+			}
+			if i == 6 && (allowed || retry < 1) {
+				t.Fatalf("%s registration 6 = (%t,%d), want the per-address refusal", ip, allowed, retry)
+			}
+		}
+	}
+
+	// The bucket refills continuously; one window plus a second is past any
+	// rounding of the refill rate.
+	later := now.Add(time.Hour + time.Second)
+	for i := 1; i <= 120; i++ {
+		if allowed, _ := registerFrom(policies, later, "160.79.105.1"); !allowed {
+			t.Fatalf("range registration %d after the window denied", i)
+		}
+	}
+	if allowed, _ := registerFrom(policies, later, "160.79.105.1"); allowed {
+		t.Fatal("range registration 121 after the refill was admitted")
+	}
+}
+
+func TestRatePolicies_RegisterRangeMatchesIPv4MappedAddresses(t *testing.T) {
+	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+
+	t.Run("trusted proxy header", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		for i := 1; i <= 120; i++ {
+			if allowed, _ := registerFrom(policies, now, "::ffff:160.79.104.9"); !allowed {
+				t.Fatalf("mapped header registration %d denied within the range budget", i)
+			}
+		}
+		if allowed, _ := registerFrom(policies, now, "160.79.104.10"); allowed {
+			t.Fatal("mapped header addresses did not share the range bucket")
+		}
+	})
+
+	t.Run("socket peer", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		for i := 1; i <= 120; i++ {
+			if allowed, _ := policies.AdmitRegister(now, peerRequest("[::ffff:160.79.104.9]:443")); !allowed {
+				t.Fatalf("mapped peer registration %d denied within the range budget", i)
+			}
+		}
+		if allowed, _ := registerFrom(policies, now, "160.79.104.10"); allowed {
+			t.Fatal("mapped peer did not share the range bucket")
+		}
+	})
+}
+
+func TestRatePolicies_RegisterGlobalCeiling(t *testing.T) {
+	now := time.Date(2026, 9, 27, 13, 0, 0, 0, time.UTC)
+
+	t.Run("601st distinct address is refused", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		addr := netip.MustParseAddr("10.0.0.1")
+		for i := 1; i <= 600; i++ {
+			if allowed, _ := registerFrom(policies, now, addr.String()); !allowed {
+				t.Fatalf("registration %d from %s denied under the global ceiling", i, addr)
+			}
+			addr = addr.Next()
+		}
+		allowed, retry := registerFrom(policies, now, addr.String())
+		if allowed || retry < 1 {
+			t.Fatalf("registration 601 = (%t,%d), want a global refusal with Retry-After", allowed, retry)
+		}
+		if allowed, _ := registerFrom(policies, now, "160.79.104.10"); allowed {
+			t.Fatal("the global ceiling did not bound the range bucket")
+		}
+	})
+
+	t.Run("per-address refusals do not consume the ceiling", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		admitted := 0
+		for i := 0; i < 1000; i++ {
+			if allowed, _ := registerFrom(policies, now, "198.51.100.77"); allowed {
+				admitted++
+			}
+		}
+		if admitted != 5 {
+			t.Fatalf("one address admitted %d of 1,000 attempts, want 5", admitted)
+		}
+		addr := netip.MustParseAddr("10.1.0.1")
+		for i := 1; i <= 595; i++ {
+			if allowed, _ := registerFrom(policies, now, addr.String()); !allowed {
+				t.Fatalf("registration %d from another address denied; the ceiling was drained", i)
+			}
+			addr = addr.Next()
+		}
+		if allowed, _ := registerFrom(policies, now, addr.String()); allowed {
+			t.Fatal("registration beyond the 600 ceiling was admitted")
+		}
+	})
+
+	t.Run("range refusals do not consume the ceiling", func(t *testing.T) {
+		policies := testEgressRatePolicies(t)
+		admitted := 0
+		for i := 0; i < 1000; i++ {
+			if allowed, _ := registerFrom(policies, now, "160.79.104.10"); allowed {
+				admitted++
+			}
+		}
+		if admitted != 120 {
+			t.Fatalf("the range admitted %d of 1,000 attempts, want 120", admitted)
+		}
+		addr := netip.MustParseAddr("10.2.0.1")
+		for i := 1; i <= 480; i++ {
+			if allowed, _ := registerFrom(policies, now, addr.String()); !allowed {
+				t.Fatalf("registration %d from another address denied; the ceiling was drained", i)
+			}
+			addr = addr.Next()
+		}
+	})
 }

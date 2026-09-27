@@ -381,11 +381,17 @@ func newAgentAccessRoutes(ctx context.Context, cfg config.Config, pool *store.Po
 	}
 	a := cfg.AgentAccess
 	oauthRates, err := oauthsrv.NewRatePolicies(oauthsrv.RateConfig{
-		TrustedProxies:   api.TrustedProxies(cfg.TrustedProxyCIDRs),
-		RegisterRequests: a.OAuthRegisterRequests, RegisterWindow: a.OAuthRegisterWindow,
-		TokenRequests: a.OAuthTokenRequests, TokenWindow: a.OAuthTokenWindow,
-		FailedGrantLimit: a.OAuthFailedGrantLimit, FailedGrantWindow: a.OAuthFailedGrantWindow,
-		MaxKeys: a.MaxRateKeys,
+		TrustedProxies:         api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		RegisterRequests:       a.OAuthRegisterRequests,
+		RegisterEgressRanges:   a.OAuthRegisterEgressRanges,
+		RegisterRangeRequests:  a.OAuthRegisterRangeRequests,
+		RegisterGlobalRequests: a.OAuthRegisterGlobalRequests,
+		RegisterWindow:         a.OAuthRegisterWindow,
+		TokenRequests:          a.OAuthTokenRequests,
+		TokenWindow:            a.OAuthTokenWindow,
+		FailedGrantLimit:       a.OAuthFailedGrantLimit,
+		FailedGrantWindow:      a.OAuthFailedGrantWindow,
+		MaxKeys:                a.MaxRateKeys,
 	})
 	if err != nil {
 		return nil, err
