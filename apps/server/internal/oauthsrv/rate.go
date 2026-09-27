@@ -84,8 +84,9 @@ func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
 // range's shared bucket, any other address against its own bucket. Only a
 // request its own bucket admits is then charged to the global ceiling, so one
 // address or range cannot drain the ceiling with refused requests. The
-// Retry-After is that of the bucket that refused. An unresolvable address
-// fails closed.
+// reverse trade-off is accepted: while the ceiling refuses, a retry still
+// spends one token of its own bucket. The Retry-After is that of the bucket
+// that refused. An unresolvable address fails closed.
 func (p *RatePolicies) AdmitRegister(now time.Time, r *http.Request) (bool, int) {
 	raw, ok := api.ClientIP(r, p.trusted)
 	if !ok {
@@ -96,7 +97,7 @@ func (p *RatePolicies) AdmitRegister(now time.Time, r *http.Request) (bool, int)
 		return false, 1
 	}
 	addr = addr.Unmap()
-	limiter, key := p.register, "ip:"+addr.String()
+	limiter, key := p.register, registerAddressKey(addr)
 	for _, prefix := range p.egressRanges {
 		if prefix.Contains(addr) {
 			limiter, key = p.registerRange, "range:"+prefix.String()
@@ -107,6 +108,19 @@ func (p *RatePolicies) AdmitRegister(now time.Time, r *http.Request) (bool, int)
 		return false, retry
 	}
 	return p.registerGlobal.Admit(now, registerGlobalKey)
+}
+
+// registerAddressKey is the per-address registration key. An IPv6 address is
+// keyed on its /64, since one host usually controls a whole /64 and could
+// otherwise spread registrations across it to drain the global ceiling. An
+// IPv4 address keeps its own key.
+func registerAddressKey(addr netip.Addr) string {
+	if addr.Is6() {
+		if prefix, err := addr.Prefix(64); err == nil {
+			return "ip6:" + prefix.String()
+		}
+	}
+	return "ip:" + addr.String()
 }
 
 // AdmitToken enforces the token-endpoint budget against the canonical client

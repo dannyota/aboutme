@@ -40,16 +40,16 @@ function queryString(value: unknown): string | null {
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /**
- * The line naming where approval returns, from the page's own `redirect_uri`
- * query value. Shown only once the consent view has loaded. An `https`
- * redirect names its host; a loopback `http` redirect says it returns to an
- * app on this computer (docs/design/mcp-client-compatibility.md, rule 6).
- * Anything else, or a value `new URL` cannot parse, shows no line.
+ * The line naming where approval returns, from the validated request's
+ * `redirect_uri`, the same value the decision submits. Shown only once the
+ * consent view has loaded. An `https` redirect names its host; a loopback
+ * `http` redirect says it returns to an app on this computer
+ * (docs/design/mcp-client-compatibility.md, rule 6). Anything else, or a
+ * value `new URL` cannot parse, shows no line.
  */
 const returnToLine = computed(() => {
-  if (view.value === null) return null;
-  const redirectURI = queryString(route.query.redirect_uri);
-  if (redirectURI === null) return null;
+  if (view.value === null || authorizeQuery === null) return null;
+  const redirectURI = authorizeQuery.redirect_uri;
   let url: URL;
   try {
     url = new URL(redirectURI);
