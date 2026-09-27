@@ -1,16 +1,18 @@
 # Public page bar and color scheme
 
 This page specifies two changes to the public resume page at `/{slug}`: a
-compact page bar in the Aurora identity, and an owner-chosen color scheme that
-can show the resume on a dark ground. The PDF, print, and the link-preview card
-stay light in every case.
+compact page bar in the application identity, and an owner-chosen color scheme
+that can show the resume on a dark ground. The PDF, print, and the link-preview
+card stay light in every case.
 
 Status: proposed. The owner approved the direction: light by default, the owner
 chooses the scheme per resume, and viewers see the owner's choice. The dark
-scheme contradicts the white-sheet rule of
-[ADR 0020](../adr/0020-application-visual-identity.md), so it needs an ADR that
-amends that rule for the public page on screen before it is built. The page bar
-needs no contract change.
+scheme changes the white-sheet rule of
+[ADR 0020](../adr/0020-application-visual-identity.md) and adds document v5 to
+[ADR 0004](../adr/0004-resume-document-contract.md). Both records carry the
+change as a proposed edit; the color scheme is not built before the owner
+approves them and the [open decisions](#open-decisions). The page bar needs no
+contract change.
 
 ## Owner decisions
 
@@ -21,11 +23,37 @@ needs no contract change.
   [No viewer toggle](#no-viewer-toggle)).
 - The PDF, browser print, and the link-preview card are always light.
 
+## Open decisions
+
+Each item names the recommendation this page is written to.
+
+1. **Where the setting lives.** Recommended: a document field,
+   `customization.colorScheme`, in document v5. The dark rule derives from the
+   document's own colors, the Design panel and its preview already edit document
+   fields, and agents can set it like any other leaf. The alternative is a
+   publication setting on the resumes row, as the page title and favicon are
+   ([ADR 0014](../adr/0014-public-page-head-and-link-preview.md)): no document
+   version and no loss rule, but a migration, a publish request field, an
+   OpenAPI change, and no agent access. Both block a rollback across the
+   release.
+2. **Two releases.** Recommended: the page bar ships as its own release, then
+   the color scheme, one feature per release.
+3. **The bar's mark in seal red.** Recommended: yes. The mark is the logo, which
+   ADR 0020 already allows in seal red, and the page it sits on is public.
+4. **Sign-in gate.** Recommended: the gate page stays light in both schemes. It
+   is aboutme chrome shown before the resume, and its closed envelope stays
+   unchanged.
+5. **Join invite.** Recommended: the invite on a sign-in resume follows the
+   page's scheme with the bar's tokens, so a light card never sits on a dark
+   page.
+6. **Editor copy and preview.** Recommended: the field copy below, and a Web
+   preview that follows the editing device for Match device.
+
 ## Page bar
 
-The bar is aboutme chrome, not part of the resume. It uses Aurora tokens and the
-chrome typeface, and it stays quiet next to the resume: a pale strip, muted
-credit text, and one small outlined button.
+The bar is aboutme chrome, not part of the resume. It uses the application
+tokens and the chrome typeface, and it stays quiet next to the resume: a pale
+strip, muted credit text, and one small outlined button.
 
 ### Structure
 
@@ -38,7 +66,7 @@ resume text.
   <div class="public-toolbar-inner">
     <span class="public-brand">
       <svg class="public-mark" aria-hidden="true" focusable="false">…</svg>
-      <a class="public-credit" href="https://aboutme.vn/"
+      <a class="public-credit" href="{canonical origin}/"
         >Built with aboutme.vn</a
       >
     </span>
@@ -54,9 +82,14 @@ resume text.
   so the server's HTML validator and the existing tests keep their hooks.
 - The credit anchor keeps exactly `class` and `href` and one text child, as the
   validator requires. The mark therefore sits beside the anchor, not inside it.
-- The mark is the `AppLogo` mark alone (the gradient document with the `a` cut
-  out), drawn as plain SVG with per-instance gradient and mask IDs. The public
-  page loads no Tailwind, so it takes plain CSS classes.
+  The validator accepts the download anchor's icon and label as they are, so Go
+  needs no change.
+- The mark is the logo's seal mark alone: the outer ring and the single-story
+  `a`, tilted −8°, without the hairline inner ring, as at 24 px
+  ([Logo](ui/identity-and-seal.md#logo)). It is plain SVG with no gradient, id,
+  or style element. The public page loads no Tailwind, so `AppLogo` cannot
+  render it; the mark geometry moves into a module that `AppLogo` and the public
+  mark both import, so a logo change reaches both.
 - The download icon is Lucide `download` at 16 px with `currentColor` stroke.
 - The download anchor's accessible name is its visible label.
 
@@ -71,15 +104,18 @@ The bar follows the resume language, as today.
 
 ### Tokens
 
-The bar takes the Aurora values from
+The bar takes the values from
 [Typography and tokens](ui/typography-and-tokens.md). The public page does not
-load the application theme, so `print.css` declares these as custom properties
-scoped to `.public-toolbar`.
+load the application theme, so the public page block of `ResumeDocument.vue`,
+which builds into `print.css`, declares them as custom properties scoped to
+`.public-toolbar`. The bar takes the dark column when the page's scheme is dark,
+and under Match device when the viewer prefers dark.
 
-| Role                  | Light                              | Dark                        | Aurora source    |
+| Role                  | Light                              | Dark                        | Source           |
 | --------------------- | ---------------------------------- | --------------------------- | ---------------- |
 | Bar ground            | `#F5F8FF`                          | `#071126`                   | Page background  |
 | Bar bottom rule       | `#DCE5F5`                          | `rgba(180, 200, 255, 0.16)` | Border           |
+| Mark                  | `#CC2649`                          | `#FF6B8A`                   | Seal text        |
 | Credit text           | `#56648C`                          | `#9EACCA`                   | Muted foreground |
 | Credit hover          | `#123EDB`                          | `#8FB3FF`                   | Link             |
 | Button fill           | `#FFFFFF`                          | `#0D1935`                   | Card             |
@@ -89,9 +125,9 @@ scoped to `.public-toolbar`.
 | Focus ring            | `#1A5CEB`                          | `#72A0FF`                   | Ring             |
 | Button shadow         | `0 1px 2px rgba(16, 27, 63, 0.06)` | none                        | Shadow xs        |
 
-Measured contrast: credit text 5.5:1 light and 8.2:1 dark; button label 7.7:1 on
-white, 6.8:1 on the hover fill, 8.3:1 dark, and 6.7:1 on the dark hover fill.
-The mark keeps its gradient in both schemes.
+Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.5:1 and
+8.2:1; the button label 7.7:1 on white, 6.8:1 on the hover fill, 8.3:1 dark, and
+6.7:1 on the dark hover fill.
 
 ### Size and placement
 
@@ -103,7 +139,7 @@ The mark keeps its gradient in both schemes.
 | Row layout             | brand left, download right; 16 px gap, 12 px on phones  |
 | Wrap                   | the row wraps with an 8 px row gap; download goes last  |
 | Credit type            | Be Vietnam Pro 500, 13 px on 20 px                      |
-| Mark                   | 18 by 20 px, 8 px before the credit text                |
+| Mark                   | 20 px high, 19 px wide, 8 px before the credit text     |
 | Button                 | 32 px high, 10 px radius, 1 px border                   |
 | Button padding         | 10 px left, 12 px right                                 |
 | Button type            | Be Vietnam Pro 500, 14 px on 20 px; icon 16 px, gap 6px |
@@ -111,8 +147,8 @@ The mark keeps its gradient in both schemes.
 | Credit hover           | link color and underline with a 3 px offset             |
 | Focus                  | 2 px ring, 2 px offset, on the credit and the button    |
 
-The button matches the Aurora `outline` button at size `sm`. It replaces today's
-filled button, 2.75em high (about 35 px) in the template's link color.
+The button matches the application `outline` button at size `sm`. It replaces
+today's filled button, 2.75em high (about 35 px) in the template's link color.
 
 At 1440 px the brand sits on the resume's left text edge and the button's right
 edge on the resume's right text edge. On a phone the bar keeps a 16 px gutter.
@@ -128,8 +164,10 @@ row wraps and the button sits under the credit; the Vietnamese row still fits.
 - When the owner turned PDF download off, the bar holds the brand alone on the
   left, at the same height.
 - Print hides the bar, as today.
-- Under `forced-colors: active`, the mark fills with `CanvasText` and the button
+- Under `forced-colors: active`, the mark strokes in `CanvasText` and the button
   shows a `ButtonBorder` border.
+- On a sign-in resume the join invite sits at the bottom edge and the bar at the
+  top, so they never overlap.
 
 ## Color scheme setting
 
@@ -137,18 +175,59 @@ row wraps and the button sits under the credit; the Vietnamese row still fits.
 
 The scheme is a presentation leaf of the resume document:
 `customization.colorScheme`, an optional enum of `light`, `dark`, and `system`.
-Absent means `light`, so every existing resume stays light without a migration.
+Absent means `light`, so every existing resume stays light without a data
+migration.
 
 - A preset never sets it. Applying a template keeps the owner's value, or its
   absence, as it keeps `font.textAlign` and `header.photoPosition`.
 - The column toggle does not touch it.
 - It changes no content, order, or visibility.
-- Agents can set it through the same customization path as any other leaf.
+- Agents set and unset it through the same customization path as any other
+  optional leaf.
+
+The document then has 28 customization leaves: 26 author-controlled, of which 11
+are optional.
+
+### Versions and compatibility
+
+The field needs document v5 ([ADR 0004](../adr/0004-resume-document-contract.md)
+and [data](data.md#document-versions)).
+
+- **Up from v4.** The converter adds nothing: a v4 document is a v5 document
+  with the field absent. No stored row is rewritten; reads project in memory.
+- **Down to v4 and older.** Emitting v4 drops `customization.colorScheme`. It is
+  the one v5 loss, and it composes with the older declared losses.
+- **Older-client writes.** A v1 to v4 write keeps the stored `colorScheme`
+  unconditionally: the field sits directly under `customization`, which every
+  version requires, so no parent can disappear.
+- **Public JSON.** `PublicCustomization` in OpenAPI gains the optional enum, and
+  the public projection copies it, so the hydrated page and its live refresh see
+  the same value as the server render.
+- **Print snapshot.** The frozen print document drops the field, so the print
+  worker never receives a scheme. The paged renderer ignores it as well.
+- **Link-preview card.** The card envelope carries only the clamped accent, so
+  the scheme cannot reach the card, and the card version does not change.
+- **Rollback.** Once a write stores v5, a release before it fails closed on that
+  resume, as for every document version; fix forward
+  ([production runbook](../runbooks/production.md#rollback)).
+
+### Security, privacy, and size
+
+- The field is a closed enum; the server and the editor reject anything else. No
+  value from it is written into CSS. The dark colors are computed from the
+  already validated `#rrggbb` colors and written as `#rrggbb` custom property
+  values in the inline style, which the public HTML validator already checks.
+- The page adds no script and no request. Match device is a CSS media query
+  evaluated in the viewer's browser; nothing about the viewer's preference
+  reaches aboutme ([ADR 0022](../adr/0022-viewer-privacy-and-counting.md)).
+- The field adds at most 23 bytes to a document. A dark or Match device page
+  adds about 1.5 KB of inline custom properties: 13 roles at up to three scopes.
 
 ### Editor placement and copy
 
 The field is the first item of the Design panel's Colors group, above the five
-colors. It uses the same select control as the panel's other enum fields.
+colors. It uses the same select control as the panel's other enum fields, and it
+shows and clears an absent value as `font.textAlign` does.
 
 | Item         | Vietnamese                                                                    | English                                                               |
 | ------------ | ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -222,18 +301,19 @@ Other rules:
 
 ### How it reaches the page
 
-- `resolveRenderModel` computes the dark role set only when the render context
-  is the public page or the editor's Web preview and the scheme is `dark` or
-  `system`. It writes each dark role next to its light role at every scope that
-  carries roles (the article, a tinted header band, a tinted sidebar), as
-  `--dark-color-<role>`.
+- `RenderContext` gains an optional `colorScheme` of `dark` or `system`. Only
+  the public page and the editor's Web preview pass it; paged mode ignores it.
+  `resolveRenderModel` then computes the dark role set and writes each dark role
+  next to its light role at every scope that carries roles (the article, a
+  tinted header band, a tinted sidebar), as `--dark-color-<role>`.
 - `.public-resume-page`, and the editor's Web preview sheet, carry
   `data-color-scheme="dark"` or `"system"`; light carries no attribute.
-- A screen-only rule in `print.css` points each `--color-<role>` at its
-  `--dark-color-<role>` under `dark`, and under `system` inside
-  `@media (prefers-color-scheme: dark)`. The rule also sets `color-scheme: dark`
-  on the root so scrollbars and overscroll match. It needs no script, so the
-  first paint is already correct.
+- A screen-only rule in the public page block of `ResumeDocument.vue` points
+  each `--color-<role>` at its `--dark-color-<role>` under `dark`, and under
+  `system` inside `@media (prefers-color-scheme: dark)`. On the public page the
+  rule also sets `color-scheme: dark` and the dark ground on the root through
+  `:root:has(.public-resume-page[data-color-scheme])`, so scrollbars and
+  overscroll match. It needs no script, so the first paint is already correct.
 - `light-dark()` is not used: Safari before 17.5 drops it, which would leave
   text black on the dark ground.
 - The page adds no `theme-color` meta; the HTML validator rejects it.
@@ -284,9 +364,10 @@ cases:
 
 | Output                                      | Why it stays light                                          |
 | ------------------------------------------- | ----------------------------------------------------------- |
-| PDF download and the owner's PDF            | Paged print context never computes the dark set             |
+| PDF download and the owner's PDF            | The print snapshot drops the field; paged mode ignores it   |
 | Browser print of the public page            | The dark rule is screen-only; print uses the light roles    |
-| Link-preview card                           | The card renderer ignores `colorScheme`                     |
+| Link-preview card                           | The card envelope carries no scheme                         |
+| Sign-in gate page                           | aboutme chrome before the resume; its envelope is unchanged |
 | Library, template pages, thumbnails, sample | Their render context carries no scheme                      |
 | "What an ATS reads" tab                     | A sample's text on a `.paper-surface` panel, unchanged      |
 | `/{slug}.md` and the PDF text layer         | Text only; the scheme changes no content, order, or wording |
@@ -315,7 +396,13 @@ Tests to add or change:
 - The public page geometry test keeps its checks and adds: the bar spans the
   viewport, the download button is at most 32 px high on a fine pointer, and the
   bar is hidden in print.
+- The Go validator tests pass the new bar markup in Vietnamese and English, with
+  download on and off.
 - A unit test runs the dark rule over all twenty presets and both columns and
   asserts every floor above on every surface.
 - A dark public page under print media computes the light surface color.
 - The render and hydration tests cover `data-color-scheme` and the bar markup.
+- Go tests cover the v4 and v5 converters in both directions, the declared v4
+  loss, a v1 to v4 write keeping the stored scheme, the customization allowlist
+  set and unset paths, the public projection copying it, and the print snapshot
+  dropping it.
