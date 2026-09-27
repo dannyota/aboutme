@@ -3,7 +3,6 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
-  watch,
   watchEffect,
   type ComputedRef,
   type Ref,
@@ -23,6 +22,8 @@ export const EDITOR_PANEL_MIN_REM = 22;
 export const EDITOR_PANEL_MAX_REM = 48;
 export const EDITOR_PANEL_STEP_REM = 1;
 export const EDITOR_PANEL_LARGE_STEP_REM = 4;
+/** A committed width snaps to this grid; keyboard steps already land on it. */
+const EDITOR_PANEL_SNAP_REM = 0.25;
 
 /** The 4rem rail plus the 16.5rem outline (DESIGN.md's fixed columns). */
 const FIXED_COLUMNS_REM = 4 + 16.5;
@@ -46,6 +47,11 @@ export function clampPanelWidthRem(
   if (!Number.isFinite(value)) return EDITOR_PANEL_DEFAULT_REM;
   const max = maxPanelWidthRem(viewportRem);
   return Math.min(max, Math.max(EDITOR_PANEL_MIN_REM, value));
+}
+
+/** Snaps a width a person committed to onto the quarter-rem grid. */
+function snapToGridRem(value: number): number {
+  return Math.round(value / EDITOR_PANEL_SNAP_REM) * EDITOR_PANEL_SNAP_REM;
 }
 
 /**
@@ -76,6 +82,7 @@ export interface ResizablePanelController {
   reset(): void;
   goToMin(): void;
   goToMax(): void;
+  commit(): void;
   handleKeyDown(event: KeyboardEvent): void;
   pxToRem(px: number): number;
 }
@@ -91,27 +98,40 @@ function rootFontSizePx(): number {
 /**
  * The DOM-free state and keyboard rules, kept separate from browser wiring
  * (`useResizablePanel` below) so they are testable without mounting.
+ *
+ * `onCommit`, when given, fires with the snapped width for a discrete choice
+ * a person made (a keyboard step, Home/End, reset, or a finished drag) so the
+ * caller can persist it. A live drag's continuous `setWidthRem` calls do not
+ * fire it; only the drag's end, through `commit()`, does.
  */
 export function createResizablePanelController(
   widthRem: Ref<number>,
   viewportRem: Readonly<Ref<number>>,
+  onCommit?: (value: number) => void,
 ): ResizablePanelController {
   const maxRem = computed(() => maxPanelWidthRem(viewportRem.value));
 
   function setWidthRem(value: number): void {
     widthRem.value = clampPanelWidthRem(value, viewportRem.value);
   }
+  function commitTo(value: number): void {
+    setWidthRem(snapToGridRem(value));
+    onCommit?.(widthRem.value);
+  }
+  function commit(): void {
+    commitTo(widthRem.value);
+  }
   function stepBy(deltaRem: number): void {
-    setWidthRem(widthRem.value + deltaRem);
+    commitTo(widthRem.value + deltaRem);
   }
   function reset(): void {
-    setWidthRem(EDITOR_PANEL_DEFAULT_REM);
+    commitTo(EDITOR_PANEL_DEFAULT_REM);
   }
   function goToMin(): void {
-    setWidthRem(EDITOR_PANEL_MIN_REM);
+    commitTo(EDITOR_PANEL_MIN_REM);
   }
   function goToMax(): void {
-    setWidthRem(maxRem.value);
+    commitTo(maxRem.value);
   }
 
   // The panel sits to the right of the preview, so moving the pointer or
@@ -155,35 +175,40 @@ export function createResizablePanelController(
     reset,
     goToMin,
     goToMax,
+    commit,
     handleKeyDown,
     pxToRem: (px) => px / rootFontSizePx(),
   };
 }
 
 function readViewportRem(): number {
-  if (typeof window === 'undefined') {
+  if (typeof document === 'undefined') {
     // No layout depends on this before hydration; a generous sentinel keeps
     // the default bounds from clamping unnecessarily.
     return EDITOR_PANEL_MAX_REM + FIXED_COLUMNS_REM + PREVIEW_MIN_REM;
   }
-  return window.innerWidth / rootFontSizePx();
+  // clientWidth excludes the page scrollbar that innerWidth counts, so the
+  // panel's computed max never reserves room for a scrollbar that isn't
+  // actually there.
+  return document.documentElement.clientWidth / rootFontSizePx();
 }
 
 /**
  * Wires the pure controller to the browser: restores and persists the width
- * in `localStorage` (no server storage for this per-viewer preference), and
- * re-clamps on window resize so the preview keeps its floor.
+ * in `localStorage` (no server storage for this per-viewer preference).
+ *
+ * A window resize only re-clamps the displayed width against the new
+ * viewport; it never persists, so a preference chosen on a wide screen
+ * survives a temporary narrower one (a shrunk browser, a rotated tablet)
+ * instead of being overwritten by the narrower screen's clamp.
  */
 export function useResizablePanel(): ResizablePanelController {
   const widthRem = ref(EDITOR_PANEL_DEFAULT_REM);
   const viewportRem = ref(readViewportRem());
-  const controller = createResizablePanelController(widthRem, viewportRem);
+  // The width a person actually chose, independent of the displayed value a
+  // narrow viewport may currently be clamping it to.
+  let preferredWidthRem = EDITOR_PANEL_DEFAULT_REM;
   let hydrated = false;
-
-  function handleResize(): void {
-    viewportRem.value = readViewportRem();
-    controller.setWidthRem(widthRem.value);
-  }
 
   function readStoredRaw(): string | null {
     try {
@@ -193,12 +218,39 @@ export function useResizablePanel(): ResizablePanelController {
     }
   }
 
+  function persist(value: number): void {
+    preferredWidthRem = value;
+    // Skip the write before the stored value has been read, so an unread
+    // default never overwrites a real preference.
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(EDITOR_PANEL_STORAGE_KEY, String(value));
+    } catch {
+      // A blocked or full store keeps today's in-memory width for this tab.
+    }
+  }
+
+  const controller = createResizablePanelController(
+    widthRem,
+    viewportRem,
+    persist,
+  );
+
+  function handleResize(): void {
+    viewportRem.value = readViewportRem();
+    // Re-clamp the preferred width for display only: setWidthRem never
+    // commits, so this can never overwrite the stored preference.
+    controller.setWidthRem(preferredWidthRem);
+  }
+
   onMounted(() => {
     viewportRem.value = readViewportRem();
-    widthRem.value = parseStoredPanelWidthRem(
+    const restored = parseStoredPanelWidthRem(
       readStoredRaw(),
       viewportRem.value,
     );
+    preferredWidthRem = restored;
+    widthRem.value = restored;
     hydrated = true;
     window.addEventListener('resize', handleResize);
   });
@@ -218,17 +270,6 @@ export function useResizablePanel(): ResizablePanelController {
       EDITOR_PANEL_CSS_VAR,
       `${widthRem.value}rem`,
     );
-  });
-
-  watch(widthRem, (value) => {
-    // Skip the write before the stored value has been read, so an unread
-    // default never overwrites a real preference.
-    if (!hydrated) return;
-    try {
-      window.localStorage.setItem(EDITOR_PANEL_STORAGE_KEY, String(value));
-    } catch {
-      // A blocked or full store keeps today's in-memory width for this tab.
-    }
   });
 
   return controller;

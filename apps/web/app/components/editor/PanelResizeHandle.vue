@@ -50,7 +50,15 @@ function onPointerUp(event: PointerEvent): void {
     target.releasePointerCapture(event.pointerId);
   }
   endDragStyles();
+  // The drag is over: snap the dragged width to the quarter-rem grid and
+  // persist it, the same commit a keyboard step or reset makes (DESIGN.md
+  // "Authenticated chrome and editor").
+  panel.commit();
 }
+
+// Screen readers announce a whole rem; the committed (stored) width still
+// snaps to the finer quarter-rem grid in useResizablePanel's commit.
+const announcedWidthRem = computed(() => Math.round(panel.widthRem.value));
 </script>
 
 <template>
@@ -59,11 +67,12 @@ function onPointerUp(event: PointerEvent): void {
     :aria-label="copy.resizePanel"
     :aria-valuemax="panel.maxRem.value"
     :aria-valuemin="panel.minRem"
-    :aria-valuenow="panel.widthRem.value"
-    :aria-valuetext="`${panel.widthRem.value}rem`"
+    :aria-valuenow="announcedWidthRem"
+    :aria-valuetext="`${announcedWidthRem}rem`"
     class="editor-panel-resize-handle group relative z-10 col-start-4
       row-start-2 w-2 shrink-0 cursor-col-resize touch-none
-      justify-self-start select-none max-[72rem]:hidden"
+      justify-self-start select-none max-[72rem]:hidden
+      focus-visible:-outline-offset-2"
     data-testid="panel-resize-handle"
     role="separator"
     tabindex="0"
@@ -77,8 +86,9 @@ function onPointerUp(event: PointerEvent): void {
     <span
       aria-hidden="true"
       class="absolute inset-y-0 left-0 w-px bg-border
-        group-hover:bg-primary group-active:bg-primary
-        group-focus-visible:bg-primary"
+        group-hover:w-[3px] group-hover:bg-primary
+        group-active:w-[3px] group-active:bg-primary
+        group-focus-visible:w-[3px] group-focus-visible:bg-primary"
     />
   </div>
 </template>
