@@ -33,13 +33,15 @@ function stripBulletMarker(text: string): string | null {
     return text.slice(1).replace(/^\s+/, '');
   }
   const match = BULLET_DASH_RE.exec(text);
-  return match === null ? null : match[1];
+  // The single group in BULLET_DASH_RE is mandatory, so it exists on a match.
+  return match === null ? null : match[1]!;
 }
 
 /** The most common value in a non-empty list of numbers. */
 function mode(values: readonly number[]): number {
   const counts = new Map<number, number>();
-  let best = values[0];
+  // Callers only call mode() with a non-empty list.
+  let best = values[0]!;
   let bestCount = 0;
   for (const value of values) {
     const count = (counts.get(value) ?? 0) + 1;

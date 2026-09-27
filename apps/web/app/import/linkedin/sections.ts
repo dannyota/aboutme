@@ -72,8 +72,9 @@ export function parseIntro(
 ): ProfileDraft {
   const fullName = name.text;
   if (intro.length === 0) return { fullName, headline: '' };
-  if (intro.length === 1) return { fullName, headline: intro[0].text };
-  const location = intro[intro.length - 1].text;
+  if (intro.length === 1) return { fullName, headline: intro[0]!.text };
+  // intro.length is at least 2 here, so the last index is in range.
+  const location = intro[intro.length - 1]!.text;
   const headline = intro
     .slice(0, -1)
     .map((line) => line.text)
@@ -230,7 +231,8 @@ function proficiencyLevel(text: string): number | undefined {
 function parseLanguageEntry(text: string): LanguageDraft {
   const match = /^(.*)\(([^()]*)\)\s*$/.exec(text.trim());
   if (match === null) return { name: text.trim(), level: undefined };
-  return { name: match[1].trim(), level: proficiencyLevel(match[2]) };
+  // Both groups above are mandatory, so they exist on a match.
+  return { name: match[1]!.trim(), level: proficiencyLevel(match[2]!) };
 }
 
 /** Languages: lines join with spaces until the parentheses close. */
@@ -272,7 +274,7 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
   const maxSize = Math.max(...lines.map((line) => line.size));
   const dateIndices: number[] = [];
   for (let i = 0; i < lines.length; i++) {
-    if (matchDateLine(lines[i].text) !== undefined) dateIndices.push(i);
+    if (matchDateLine(lines[i]!.text) !== undefined) dateIndices.push(i);
   }
 
   const entries: ExperienceEntry[] = [];
@@ -281,7 +283,8 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
   for (const dateIndex of dateIndices) {
     const titleSize = lines[dateIndex - 1]?.size;
     let titleStart = dateIndex - 1;
-    while (titleStart > 0 && lines[titleStart - 1].size === titleSize) {
+    // titleStart > 0 was just checked, so titleStart - 1 is in range.
+    while (titleStart > 0 && lines[titleStart - 1]!.size === titleSize) {
       titleStart--;
     }
     const jobTitle = lines
@@ -293,17 +296,21 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
     let employer = groupEmployer;
     let entryStart = titleStart;
     if (beforeTitleIndex >= 0) {
-      const candidate = lines[beforeTitleIndex];
+      // beforeTitleIndex >= 0 and < titleStart <= lines.length here.
+      const candidate = lines[beforeTitleIndex]!;
       if (candidate.size === maxSize) {
         employer = candidate.text;
         entryStart = beforeTitleIndex;
         groupEmployer = employer;
       } else if (isDurationLine(candidate.text)) {
         const employerIndex = beforeTitleIndex - 1;
-        if (employerIndex >= 0 && lines[employerIndex].size === maxSize) {
-          employer = lines[employerIndex].text;
-          entryStart = employerIndex;
-          groupEmployer = employer;
+        if (employerIndex >= 0) {
+          const employerLine = lines[employerIndex]!;
+          if (employerLine.size === maxSize) {
+            employer = employerLine.text;
+            entryStart = employerIndex;
+            groupEmployer = employer;
+          }
         }
       }
     }
@@ -312,9 +319,11 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
     let location: string | undefined;
     let descStart = afterDateIndex;
     if (afterDateIndex < lines.length) {
-      const candidate = lines[afterDateIndex];
+      // afterDateIndex is in range by the check above; dateIndex came from
+      // dateIndices, always a valid index into lines.
+      const candidate = lines[afterDateIndex]!;
       const isLocation
-        = candidate.size === lines[dateIndex].size
+        = candidate.size === lines[dateIndex]!.size
           && matchDateLine(candidate.text) === undefined
           && candidate.gap !== null
           && candidate.gap <= LOCATION_GAP_FACTOR * candidate.size;
@@ -336,15 +345,17 @@ export function parseExperience(lines: readonly ColumnLine[]): WorkDraft[] {
 
   const work: WorkDraft[] = [];
   for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
+    const entry = entries[i]!;
+    // i + 1 < entries.length was just checked, so it is in range too.
     const descEnd
-      = i + 1 < entries.length ? entries[i + 1].entryStart : lines.length;
+      = i + 1 < entries.length ? entries[i + 1]!.entryStart : lines.length;
     const descriptionLines = lines
       .slice(entry.descStart, descEnd)
       .map((line) => ({ text: line.text, gap: line.gap }));
     const richText = linesToRichText(descriptionLines);
 
-    const dateLine = matchDateLine(lines[entry.dateIndex].text);
+    // entry.dateIndex came from dateIndices, always a valid index.
+    const dateLine = matchDateLine(lines[entry.dateIndex]!.text);
     const parsedDate = parseDateRange(dateLine?.datesText ?? '');
     const { dates, notice } = workDates(parsedDate);
     const splitLoc
@@ -376,19 +387,20 @@ export function parseEducation(lines: readonly ColumnLine[]): EducationDraft[] {
   const educations: EducationDraft[] = [];
   let i = 0;
   while (i < lines.length) {
-    if (lines[i].size !== maxSize) {
+    // i is in range by the enclosing while condition in each loop below.
+    if (lines[i]!.size !== maxSize) {
       i++;
       continue;
     }
     const schoolLines: string[] = [];
-    while (i < lines.length && lines[i].size === maxSize) {
-      schoolLines.push(lines[i].text);
+    while (i < lines.length && lines[i]!.size === maxSize) {
+      schoolLines.push(lines[i]!.text);
       i++;
     }
     const school = schoolLines.join(' ');
     const bodyLines: string[] = [];
-    while (i < lines.length && lines[i].size !== maxSize) {
-      bodyLines.push(lines[i].text);
+    while (i < lines.length && lines[i]!.size !== maxSize) {
+      bodyLines.push(lines[i]!.text);
       i++;
     }
     educations.push(parseEducationBody(school, bodyLines.join(' ')));
