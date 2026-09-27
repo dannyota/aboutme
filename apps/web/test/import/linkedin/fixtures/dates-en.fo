@@ -31,13 +31,16 @@
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="4.000pt">Remote</fo:block>
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="26.860pt">Example Co. D</fo:block>
       <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="4.380pt">Analyst</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="3.760pt">Someday 2019 - Another Day 2020</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="3.760pt">Someday 2019 - Later 2020 (1 year)</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="4.000pt">Remote</fo:block>
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="26.860pt">Example Co. E</fo:block>
-      <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="4.380pt">Analyst</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="5.760pt">less than a year</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="5.640pt">less than a year</fo:block>
       <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="10.240pt">Junior Analyst</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="3.760pt">June 2022 - August 2022 (less than a year)</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="4.000pt">Remote</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="26.860pt">Example Co. F</fo:block>
+      <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="4.380pt">Analyst</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="3.760pt">Jan 2016 – Sept 2017 (1 year 9 months)</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="4.000pt">Remote</fo:block>
     </fo:block-container>
     <fo:block-container position="absolute" top="771.259pt" left="223.6pt" width="364.4pt" overflow="visible">
