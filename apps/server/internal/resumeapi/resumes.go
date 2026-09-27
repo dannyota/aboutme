@@ -47,9 +47,13 @@ type resumeSummaryJSON struct {
 	SEOGeoEnabled   bool      `json:"seoGeoEnabled"`
 	PublicTitle     *string   `json:"publicTitle"`
 	FaviconEmoji    *string   `json:"faviconEmoji"`
-	SchemaVersion   int32     `json:"schemaVersion"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	// SignInToView is the sign-in-to-view publish switch
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"). The pass
+	// epoch never leaves the server.
+	SignInToView  bool      `json:"signInToView"`
+	SchemaVersion int32     `json:"schemaVersion"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type resumeJSON struct {
@@ -141,6 +145,7 @@ func makeResumeSummary(row resume.Resume, version int32) resumeSummaryJSON {
 		Revision: strconv.FormatInt(row.Revision, 10), Live: row.Live, Slug: row.Slug,
 		DownloadEnabled: row.DownloadEnabled, SEOGeoEnabled: row.SEOGeoEnabled,
 		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji,
+		SignInToView:  row.SignInToView,
 		SchemaVersion: version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }

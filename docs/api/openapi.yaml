@@ -372,21 +372,38 @@ paths:
 
         A `HEAD` request is rejected with `405`, not treated as a bodyless
         `GET`, because a successful request creates a database-backed
-        transaction. `GET` accepts only the login purpose. A `link` or
+        transaction. `GET` accepts the login and view purposes. A `link` or
         `reauth` purpose returns `405` with `Allow: POST` before a session
-        lookup, database write, or cookie is set.
+        lookup, database write, or cookie is set. `purpose=view` requires
+        `slug` and requests scope `openid` only, so Google returns no name
+        or email (see `AuthPurpose`, `AuthViewSlug`).
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
+        - $ref: "#/components/parameters/AuthViewSlug"
       responses:
         "302":
-          description: Success — a redirect to Google's own authorize endpoint.
+          description: >-
+            Success — a redirect to Google's own authorize endpoint, or,
+            for `purpose=view` naming a slug that is not currently a live
+            resume with the sign-in-to-view switch on, a redirect back to
+            `/{slug}` with no transaction created.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
               example: https://accounts.google.com/o/oauth2/v2/auth?...
+        "400":
+          description: "`purpose=view` with a malformed `slug`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: bad_request
+                  message: slug is malformed
         "405":
           description: >-
             Either an unsupported method, including `HEAD`, or a `GET`
@@ -611,10 +628,13 @@ paths:
         transaction handle, 10-minute TTL) that the matching `GET
         /auth/github/callback` consumes. `HEAD` is rejected with `405`.
         `GET` accepts only login; `link` and `reauth` return `405` with
-        `Allow: POST` before any transaction is created.
+        `Allow: POST` before any transaction is created. `purpose=view`
+        returns `400 bad_request`: GitHub never appears on the
+        sign-in-to-view gate (see `AuthPurpose`).
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
+        - $ref: "#/components/parameters/AuthViewSlug"
       responses:
         "302":
           description: Success — a redirect to GitHub's own authorize endpoint.
@@ -624,6 +644,16 @@ paths:
                 type: string
                 format: uri
               example: https://github.com/login/oauth/authorize?...
+        "400":
+          description: "`purpose=view`, which GitHub never serves."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: bad_request
+                  message: GitHub does not serve sign-in-to-view
         "405":
           description: >-
             Either an unsupported method, including `HEAD`, or a `GET`
@@ -798,20 +828,39 @@ paths:
         endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction
         handle, 10-minute TTL) that the matching `GET
         /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`.
-        `GET` accepts only login; `link` and `reauth` return `405` with
-        `Allow: POST` before any transaction is created.
+        `GET` accepts the login and view purposes. `link` and `reauth`
+        return `405` with `Allow: POST` before any transaction is created.
+        `purpose=view` requires `slug`, requests scope `openid` only, and
+        offers LinkedIn on the gate only while both LinkedIn account
+        login and `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` are on (see
+        `AuthPurpose`, `AuthViewSlug`).
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
+        - $ref: "#/components/parameters/AuthViewSlug"
       responses:
         "302":
-          description: Success — a redirect to LinkedIn's own authorize endpoint.
+          description: >-
+            Success — a redirect to LinkedIn's own authorize endpoint, or,
+            for `purpose=view` naming a slug that is not currently a live
+            resume with the sign-in-to-view switch on, a redirect back to
+            `/{slug}` with no transaction created.
           headers:
             Location:
               schema:
                 type: string
                 format: uri
               example: https://www.linkedin.com/oauth/v2/authorization?...
+        "400":
+          description: "`purpose=view` with a malformed `slug`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: bad_request
+                  message: slug is malformed
         "405":
           description: >-
             Either an unsupported method, including `HEAD`, or a `GET`
@@ -1393,6 +1442,7 @@ paths:
                   passwordRegistration: true
                   passkeyEnrollment: false
                   totpEnrollment: false
+                  signInToView: false
   /auth/logout:
     post:
       operationId: postAuthLogout
@@ -1947,6 +1997,7 @@ paths:
                     seoGeoEnabled: true
                     publicTitle: Danny from aboutme.vn
                     faviconEmoji: "\U0001F680"
+                    signInToView: false
                     schemaVersion: 4
                     createdAt: 2026-08-01T09:00:00Z
                     updatedAt: 2026-08-11T18:20:00Z
@@ -2055,6 +2106,7 @@ paths:
                   seoGeoEnabled: false
                   publicTitle: null
                   faviconEmoji: null
+                  signInToView: false
                   schemaVersion: 4
                   createdAt: 2026-08-12T09:00:00Z
                   updatedAt: 2026-08-12T09:00:00Z
@@ -3331,6 +3383,7 @@ paths:
               example:
                 data:
                   owner: false
+                  signedIn: false
                   token: 3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
                   challenge:
                     parameters:
@@ -4655,6 +4708,7 @@ components:
               seoGeoEnabled: true
               publicTitle: Danny from aboutme.vn
               faviconEmoji: "\U0001F680"
+              signInToView: false
               schemaVersion: 4
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-11T18:20:00Z
@@ -4688,6 +4742,7 @@ components:
               seoGeoEnabled: true
               publicTitle: Danny from aboutme.vn
               faviconEmoji: "\U0001F680"
+              signInToView: false
               schemaVersion: 4
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-12T09:05:00Z
@@ -6319,13 +6374,21 @@ components:
         data:
           type: object
           additionalProperties: false
-          required: [owner]
+          required: [owner, signedIn]
           properties:
             owner:
               type: boolean
               description: >-
                 True only when the request carries the resume owner's own
                 session. Then `token` and `challenge` are absent.
+            signedIn:
+              type: boolean
+              description: >-
+                True when the request carries any valid account session,
+                owner or not. Authorizes nothing by itself; the
+                sign-in-to-view join invite uses it, together with
+                `owner`, to decide whether to show the invite (see
+                `docs/design/viewer-analytics/sign-in-to-view.md#join-invite`).
             token:
               type: string
               description: Opaque one-time view token.
@@ -6633,6 +6696,7 @@ components:
           passwordRegistration,
           passkeyEnrollment,
           totpEnrollment,
+          signInToView,
         ]
       properties:
         providerLogin:
@@ -6675,6 +6739,13 @@ components:
             this flag. Never derived from any account's own state — this is
             a deployment-wide switch. See
             `docs/design/totp-second-factor-contract.md`.
+        signInToView:
+          type: boolean
+          description: >-
+            Owners may turn the per-resume sign-in-to-view switch on
+            (`SIGN_IN_TO_VIEW_ENABLED`). Never derived from any account's
+            own state, and never lifts a gate already set on a resume. See
+            `docs/design/viewer-analytics/sign-in-to-view.md`.
     Identity:
       type: object
       description: One linked OAuth provider identity. `GET /me` exposes the
@@ -6851,6 +6922,17 @@ components:
             Extended_Pictographic base with only modifiers, variation selectors,
             ZWJ, and tags after it, or one Regional Indicator flag
             (`invalid_emoji`).
+        signInToView:
+          type: boolean
+          description: >-
+            Require sign-in to view. Omitted keeps the stored value. Turning
+            it on is a `disabled` publish issue while
+            `SIGN_IN_TO_VIEW_ENABLED` is false; turning it off always works.
+            Turning it on for an already-live resume revokes the old public
+            state through the existing revocation fence and raises the
+            resume's pass epoch, ending every earlier pass. Forces effective
+            discovery off while on; the stored `seoGeoEnabled` value is kept.
+            See `docs/design/viewer-analytics/sign-in-to-view.md`.
     PublishValidationIssue:
       type: object
       description: One deterministic semantic publish-policy issue.
@@ -6871,6 +6953,7 @@ components:
             - too_long
             - invalid_characters
             - invalid_emoji
+            - disabled
         message:
           type: string
     PublishError:
@@ -7741,6 +7824,7 @@ components:
         - seoGeoEnabled
         - publicTitle
         - faviconEmoji
+        - signInToView
         - schemaVersion
         - createdAt
         - updatedAt
@@ -7785,6 +7869,13 @@ components:
           description: >-
             One emoji shown as the public page's icon, or null for none.
             Public, like the slug.
+        signInToView:
+          type: boolean
+          description: >-
+            Whether viewers must sign in with Google or LinkedIn before this
+            resume shows. Never part of the document and never changes the
+            rendered resume. See
+            `docs/design/viewer-analytics/sign-in-to-view.md`.
         schemaVersion:
           type: integer
           minimum: 1
@@ -7807,6 +7898,7 @@ components:
         seoGeoEnabled: true
         publicTitle: Danny from aboutme.vn
         faviconEmoji: "\U0001F680"
+        signInToView: false
         schemaVersion: 4
         createdAt: 2026-08-01T09:00:00Z
         updatedAt: 2026-08-11T18:20:00Z
@@ -8835,9 +8927,9 @@ components:
       in: query
       required: false
       description: >-
-        Why this OAuth transaction is being started. `GET` serves only
-        `login`, which is also the default. An absent or unrecognized value
-        is treated as `login`; `link` and `reauth` are the only exceptions
+        Why this OAuth transaction is being started. `GET` serves `login`
+        (the default) and `view`. An absent or unrecognized value is
+        treated as `login`; `link` and `reauth` are the only exceptions
         and return `405` with `Allow: POST`.
 
 
@@ -8845,6 +8937,14 @@ components:
           registration attempt. Reachable from anywhere — a bookmarked or
           shared link, another site's "continue with aboutme" button —
           with no session, CSRF, or same-site requirement at all.
+
+        - `view`: an unauthenticated sign-in-to-view start, bound to
+          `slug` (required with this purpose; see `AuthViewSlug`). Shares
+          the anonymous login start's rate limit. Never on `/auth/github/start`,
+          which returns `400 bad_request` for `purpose=view`: GitHub never
+          appears on the sign-in-to-view gate, so a `view` start naming it
+          would authenticate a provider the viewer was never offered. See
+          `docs/design/viewer-analytics/sign-in-to-view.md`.
 
         - `link` / `reauth`: **not served by `GET`**. Both
           are `405` here, with `Allow: POST`, before any session read,
@@ -8857,9 +8957,29 @@ components:
         starts use the CSRF-protected `POST` operation instead.
       schema:
         type: string
-        enum: [login]
+        enum: [login, view]
         default: login
       example: login
+    AuthViewSlug:
+      name: slug
+      in: query
+      required: false
+      description: >-
+        The resume slug this sign-in-to-view start is bound to. Required
+        exactly when `purpose=view`; absent or present with any other
+        purpose is ignored. A malformed slug returns `400 bad_request`
+        before any transaction is created. A well-formed slug that does
+        not currently name a live resume with the sign-in-to-view switch
+        on redirects `302` to `/{slug}` and creates no transaction — the
+        gate's own re-check, not an existence oracle this parameter could
+        otherwise become. See
+        `docs/design/viewer-analytics/sign-in-to-view.md`.
+      schema:
+        type: string
+        minLength: 4
+        maxLength: 30
+        pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+      example: ada-lovelace
     AuthReturnPath:
       name: next
       in: query
