@@ -28,6 +28,7 @@ const emit = defineEmits<{
 
 const input = useTemplateRef<HTMLInputElement>('input');
 const chooseButton = useTemplateRef<{ $el?: HTMLElement }>('chooseButton');
+const stopButton = useTemplateRef<{ $el?: HTMLElement }>('stopButton');
 const dragOver = ref(false);
 
 const errorText = computed(() => {
@@ -74,6 +75,7 @@ function onDropFiles(event: DragEvent): void {
 
 defineExpose({
   focusChoose: (): void => chooseButton.value?.$el?.focus(),
+  focusStop: (): void => stopButton.value?.$el?.focus(),
 });
 </script>
 
@@ -211,6 +213,7 @@ defineExpose({
           {{ copy.readingNote }}
         </p>
         <Button
+          ref="stopButton"
           :aria-label="copy.stopLabel"
           class="justify-self-start"
           data-action="import-stop"
