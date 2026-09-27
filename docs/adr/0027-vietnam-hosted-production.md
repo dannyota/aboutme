@@ -22,7 +22,9 @@ impact assessment (DPIA) stays required either way.
 Production moves to providers that store and process data in Vietnam:
 
 - GreenNode (VNG Cloud) for compute (vServer), object storage (vStorage), CDN
-  (vCDN, all PoPs in Vietnam), DNS (vDNS), and monitoring (vMonitor).
+  (vCDN, all PoPs in Vietnam), and monitoring (vMonitor).
+- P.A Vietnam, the domain registrar, for public DNS (DNS Pro, with DNSSEC).
+  GreenNode vDNS is private DNS inside a VPC, not a public zone host.
 - Bizfly Email Transaction for authentication mail, and Bizfly Business Email
   for the support mailbox.
 - PostgreSQL 18 runs self-hosted on the vServer with pgBackRest to vStorage,
@@ -33,7 +35,7 @@ Production moves to providers that store and process data in Vietnam:
 
 The AWS stack stays as a test environment that holds fictional data only, with
 no domain of its own. Once the cutover is verified, every copy of real data in
-AWS, Cloudflare, and Google Workspace is deleted. The
+AWS and Google Workspace is deleted. The
 [Vietnam production design](../design/vietnam-production.md) states the rules
 and the migration order.
 
@@ -65,13 +67,13 @@ private media authorization, and every data invariant are unchanged.
 - There is no instance role or parameter store. Static keys and secret files on
   the host replace them, so host compromise exposes every runtime secret, as it
   would on AWS through the task roles.
-- GreenNode lacks OpenTofu coverage for buckets, vCDN, vDNS, and vMonitor. Those
-  settings live in scripts and runbook steps.
+- GreenNode lacks OpenTofu coverage for buckets, vCDN, and vMonitor, and P.A
+  Vietnam DNS has none. Those settings live in scripts and runbook steps.
 - vCDN has no authenticated origin pulls. An IP allowlist and a secret header
   replace them.
 - Release images must also build for `linux/amd64`.
 - The cutover replaces CloudFront with vCDN and moves the name servers and DS
-  record from Route 53 to vDNS.
+  record from Route 53 to P.A Vietnam.
 - Cutover needs a maintenance window. Moving data back after Vietnam accepts
   writes would be a new transfer abroad, so recovery after that is forward only.
 - AWS test costs continue beside the new production costs.
@@ -80,5 +82,5 @@ private media authorization, and every data invariant are unchanged.
 
 Former ADR 0051 (2026-09-24), unchanged in substance. Later records it did not
 foresee: former ADR 0054 put CloudFront in front of AWS production as an interim
-edge, and former ADR 0056 moved DNS to Route 53, making the vDNS cutover a
-second name-server move.
+edge, and former ADR 0056 moved DNS to Route 53, making the move to P.A Vietnam
+DNS a second name-server move.
