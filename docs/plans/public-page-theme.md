@@ -1,6 +1,6 @@
-# Public page bar and light/dark theme (0.6.9)
+# Public page bar and light/dark theme (0.6.10)
 
-Status: planned. Design: [public page bar and theme](../design/public-page-theme.md). The owner numbered both parts as one release, 0.6.9. The page bar lands first with no contract change; the color scheme needs an ADR and a schema version, so it lands second. Both deploy once under 0.6.9. Mockups: `.dev/design/public-theme/` in the main checkout (ignored), rendered from production template pages by a scratch script.
+Status: planned. Design: [public page bar and theme](../design/public-page-theme.md). The owner numbered both parts as one release, 0.6.10. The page bar lands first with no contract change; the color scheme needs an ADR and a schema version, so it lands second. Both deploy once under 0.6.10. Mockups: `.dev/design/public-theme/` in the main checkout (ignored), rendered from production template pages by a scratch script.
 
 |Part|Outcome|Risk|
 |-|-|-|
