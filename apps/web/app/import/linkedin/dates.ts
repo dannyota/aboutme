@@ -93,15 +93,16 @@ export function parseDateRange(text: string): LinkedInDates {
     return { kind: 'startOnly', start };
   }
 
+  // Both groups in RANGE_SPLIT_RE are mandatory, so they exist on any match.
   const [, startText, endText] = rangeMatch;
-  const start = parseLinkedInDate(startText);
+  const start = parseLinkedInDate(startText!);
   if (start === undefined) return { kind: 'unreadable' };
 
-  if (PRESENT_RE.test(endText.trim())) {
+  if (PRESENT_RE.test(endText!.trim())) {
     return { kind: 'range', dates: { start, end: null, present: true } };
   }
 
-  const end = parseLinkedInDate(endText);
+  const end = parseLinkedInDate(endText!);
   if (end === undefined) return { kind: 'unreadable' };
   if (compareYearMonth(start, end) > 0) return { kind: 'unreadable' };
 

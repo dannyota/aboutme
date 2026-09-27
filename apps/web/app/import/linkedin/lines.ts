@@ -43,11 +43,12 @@ function toPositionedItems(items: readonly TextItemLike[]): PositionedItem[] {
   for (const item of items) {
     if (item.str.trim() === '') continue;
     const t = item.transform;
+    // A pdf.js transform is always the 6-number matrix [a, b, c, d, e, f].
     positioned.push({
       str: item.str,
-      x: t[4],
-      y: t[5],
-      size: Math.hypot(t[2], t[3]),
+      x: t[4]!,
+      y: t[5]!,
+      size: Math.hypot(t[2]!, t[3]!),
       width: item.width,
     });
   }
@@ -64,7 +65,8 @@ function groupIntoLines(items: readonly PositionedItem[]): Group[] {
   const groups: Group[] = [];
   for (const item of items) {
     const group = groups.find((g) => {
-      const tolerance = 0.4 * Math.max(g.items[0].size, item.size);
+      // Each group starts with one item and only grows, so items[0] exists.
+      const tolerance = 0.4 * Math.max(g.items[0]!.size, item.size);
       return Math.abs(g.baseline - item.y) <= tolerance;
     });
     if (group) {
@@ -81,12 +83,12 @@ function joinText(items: readonly PositionedItem[]): string {
   const ordered = [...items].sort((a, b) => a.x - b.x);
   let text = '';
   for (let i = 0; i < ordered.length; i++) {
-    const current = ordered[i];
+    const current = ordered[i]!;
     if (i === 0) {
       text = current.str;
       continue;
     }
-    const previous = ordered[i - 1];
+    const previous = ordered[i - 1]!;
     const gap = current.x - (previous.x + previous.width);
     const threshold = 0.25 * Math.max(previous.size, current.size);
     const previousEndsWithSpace = /\s$/.test(text);
@@ -143,7 +145,8 @@ export function buildPageLines(
     return {
       page,
       x: roundHalf(minX),
-      y: roundHalf(group.items[0].y),
+      // Every group has at least one item (see groupIntoLines).
+      y: roundHalf(group.items[0]!.y),
       size: roundHalf(maxSize),
       text,
     };
@@ -165,10 +168,12 @@ export function stripFooter(
     (line) => line.y <= FOOTER_MAX_Y && FOOTER_PATTERN.test(line.text),
   );
   if (footers.length !== 1) return undefined;
-  const match = FOOTER_PATTERN.exec(footers[0].text);
+  // footers.length === 1 was just checked, so footers[0] exists.
+  const footer = footers[0]!;
+  const match = FOOTER_PATTERN.exec(footer.text);
   if (!match) return undefined;
   const n = Number(match[1]);
   const m = Number(match[2]);
   if (n !== page || m !== numPages) return undefined;
-  return lines.filter((line) => line !== footers[0]);
+  return lines.filter((line) => line !== footer);
 }

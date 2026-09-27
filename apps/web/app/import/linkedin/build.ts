@@ -347,6 +347,7 @@ export function buildReview(
   }
 
   const template = GALLERY[0];
+  if (template === undefined) throw new Error('gallery has no templates');
   return {
     fullName,
     headline,

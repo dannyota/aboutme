@@ -56,9 +56,11 @@ export type LayoutResult
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
+  // values is always non-empty (allSizes below has at least page1's lines),
+  // so mid, and mid - 1 when the length is even, are in bounds.
   return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
+    ? (sorted[mid - 1]! + sorted[mid]!) / 2
+    : sorted[mid]!;
 }
 
 /**
@@ -133,13 +135,16 @@ export function analyzeLayout(
 
   const stripped: Line[][] = [];
   for (let i = 0; i < pages.length; i++) {
-    const page = stripFooter(pages[i], i + 1, pages.length);
+    const page = stripFooter(pages[i]!, i + 1, pages.length);
     if (page === undefined) return { kind: 'notLinkedIn' };
     stripped.push(page);
   }
 
+  // pages.length > 0 was checked above, so stripped has the same length.
   const page1 = stripped[0];
-  if (page1.length === 0) return { kind: 'notLinkedIn' };
+  if (page1 === undefined || page1.length === 0) {
+    return { kind: 'notLinkedIn' };
+  }
 
   const name = page1.reduce((best, line) =>
     line.size > best.size || (line.size === best.size && line.y > best.y)
@@ -200,7 +205,9 @@ export function analyzeLayout(
   ).length;
   if (markerCount < 2) return { kind: 'notEnglish' };
 
+  // nameIndex, when not -1, came from mainStream.findIndex, so it is in
+  // bounds.
   const nameColumnLine: ColumnLine
-    = nameIndex === -1 ? { ...name, gap: null } : mainStream[nameIndex];
+    = nameIndex === -1 ? { ...name, gap: null } : mainStream[nameIndex]!;
   return { kind: 'ok', layout: { name: nameColumnLine, intro, sidebar, main } };
 }
