@@ -27,8 +27,11 @@ var (
 	// miss. It remains an ErrConsentInvalid for protocol callers that need one
 	// closed authorization failure.
 	ErrConsentNotFound = fmt.Errorf("%w: authorization client not found", ErrConsentInvalid)
-	// ErrGrantLimit is the closed M5 failure when a user would receive an
-	// eleventh live agent grant.
+	// ErrGrantLimit is the closed failure when a user would receive an
+	// eleventh live agent grant. The consent HTTP handler reports it as its
+	// own closed code, HTTP 409 agent_limit_reached, rather than the generic
+	// invalid-request response; see
+	// docs/design/mcp-client-compatibility.md rule 7.
 	ErrGrantLimit = errors.New("oauth live grant limit")
 )
 
