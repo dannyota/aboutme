@@ -108,3 +108,5 @@ so a device action cannot leave the paired credential active.
 - Former ADR 0025 (2026-08-16): password authentication and provider identity
   linking. Unchanged; its migration and mail-activation notes were one-off
   launch steps.
+- 2026-09-27: session revoke and log out everywhere need only a live session;
+  the owner dropped the recent-reauth gate for them.

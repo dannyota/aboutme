@@ -1486,13 +1486,9 @@ paths:
       description: >-
         Revokes every one of the caller's own live sessions, clears the
         current `__Host-session` cookie, and sets `Clear-Site-Data:
-        "cookies", "storage"`.
-
-
-        Requires a RECENT reauthentication — the session's last full
-        OAuth login within the last 15 minutes — rejected with `403
-        reauth_required` otherwise, checked BEFORE any session row is
-        touched.
+        "cookies", "storage"`. Needs only a live current-epoch session
+        and no recent reauthentication, because ending sessions only
+        reduces access.
       responses:
         "204":
           description: Logged out everywhere. No response body.
@@ -1508,25 +1504,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "403":
-          description: CSRF validation failed, OR the session's last
-            reauthentication is stale — two distinct codes under the
-            same status (`csrf_rejected`, `reauth_required`); the CSRF
-            check always runs first.
+          description: CSRF validation failed.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-              examples:
-                csrf_rejected:
-                  value:
-                    error:
-                      code: csrf_rejected
-                      message: CSRF validation failed
-                reauth_required:
-                  value:
-                    error:
-                      code: reauth_required
-                      message: recent reauthentication is required
+              example:
+                error:
+                  code: csrf_rejected
+                  message: CSRF validation failed
   /sessions/{id}:
     parameters:
       - $ref: "#/components/parameters/SessionID"
@@ -1541,8 +1527,9 @@ paths:
         Revokes exactly one session, which must belong to the caller AND
         be LIVE by the same rule `GET /sessions` excludes by (not
         revoked, not idle/absolute-expired, not a grace-dead rotation
-        predecessor). Requires a RECENT reauthentication (see `DELETE
-        /sessions`), checked BEFORE any row is touched.
+        predecessor). Needs only a live current-epoch session and no
+        recent reauthentication, because ending sessions only reduces
+        access.
 
 
         Also revokes the target's own rotation LINEAGE partner(s), if
@@ -1588,23 +1575,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "403":
-          description: CSRF validation failed, or recent reauthentication is
-            required.
+          description: CSRF validation failed.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-              examples:
-                csrf_rejected:
-                  value:
-                    error:
-                      code: csrf_rejected
-                      message: CSRF validation failed
-                reauth_required:
-                  value:
-                    error:
-                      code: reauth_required
-                      message: recent reauthentication is required
+              example:
+                error:
+                  code: csrf_rejected
+                  message: CSRF validation failed
         "404":
           description: No live session with this id belongs to the caller
             (unknown id, already revoked, or belongs to someone else —
