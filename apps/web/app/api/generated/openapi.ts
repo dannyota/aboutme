@@ -6128,6 +6128,23 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description Approval was refused because the account already holds ten live agent grants. Revoking a grant at `/me/agents` allows a later approval to succeed. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "agent_limit_reached",
+                     *         "message": "you already have 10 connected agents"
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Request body exceeds 4,096 bytes. */
             413: {
                 headers: {

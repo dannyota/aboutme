@@ -327,7 +327,9 @@ func writeConsentSessionError(w http.ResponseWriter, err error) {
 		writeSessionRequired(w)
 	case errors.Is(err, auth.ErrReauthRequired):
 		api.WriteError(w, http.StatusForbidden, reauthRequiredCode, "recent reauthentication is required")
-	case errors.Is(err, ErrConsentInvalid), errors.Is(err, ErrScopeInvalid), errors.Is(err, ErrGrantLimit):
+	case errors.Is(err, ErrGrantLimit):
+		writeAgentLimitReached(w)
+	case errors.Is(err, ErrConsentInvalid), errors.Is(err, ErrScopeInvalid):
 		writeConsentInvalid(w)
 	default:
 		writeSessionInternalError(w)
@@ -336,6 +338,13 @@ func writeConsentSessionError(w http.ResponseWriter, err error) {
 
 func writeConsentInvalid(w http.ResponseWriter) {
 	api.WriteError(w, http.StatusBadRequest, "request_invalid", "authorization request is invalid")
+}
+
+// writeAgentLimitReached reports the ten-live-grant ceiling as its own
+// closed code, distinct from a malformed request, so a client can tell the
+// two apart; see docs/design/mcp-client-compatibility.md rule 7.
+func writeAgentLimitReached(w http.ResponseWriter) {
+	api.WriteError(w, http.StatusConflict, "agent_limit_reached", "you already have 10 connected agents")
 }
 
 func writeSessionRequired(w http.ResponseWriter) {

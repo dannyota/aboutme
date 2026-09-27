@@ -1811,6 +1811,19 @@ paths:
                 error:
                   code: not_found
                   message: no such authorization client
+        "409":
+          description: >-
+            Approval was refused because the account already holds ten live
+            agent grants. Revoking a grant at `/me/agents` allows a later
+            approval to succeed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error:
+                  code: agent_limit_reached
+                  message: you already have 10 connected agents
         "413":
           description: Request body exceeds 4,096 bytes.
           content:

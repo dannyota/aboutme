@@ -218,6 +218,71 @@ func TestSessionConsentHTTPHandler_RequiresSecondFactorProofForEnrolledAccount(t
 	}
 }
 
+// TestSessionConsentHTTPHandler_ReportsAgentLimitAsClosedConflict confirms the
+// ten-live-grant ceiling reports its own closed HTTP 409 agent_limit_reached
+// response rather than the generic invalid-request response, that the tenth
+// approval still succeeds, and that re-approving an already-granted client at
+// the limit still succeeds. See docs/design/mcp-client-compatibility.md
+// rule 7.
+func TestSessionConsentHTTPHandler_ReportsAgentLimitAsClosedConflict(t *testing.T) {
+	h := newOAuthSessionHTTPHarness(t)
+	ctx := context.Background()
+	for i := 0; i < 9; i++ {
+		other, err := h.queries.CreateOAuthClient(ctx, store.CreateOAuthClientParams{
+			ClientName: "Other " + uuid.NewString(), RedirectURIs: h.client.RedirectURIs, CreatedAt: h.service.clock(),
+		})
+		if err != nil {
+			t.Fatalf("CreateOAuthClient(%d): %v", i, err)
+		}
+		t.Cleanup(func() {
+			if _, cleanupErr := h.queries.DeleteOAuthClient(context.Background(), other.ID); cleanupErr != nil {
+				t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+			}
+		})
+		if _, err := h.queries.UpsertOAuthGrant(ctx, store.UpsertOAuthGrantParams{
+			UserID: h.user.ID, ClientID: other.ID, Scopes: "resumes:read", CreatedAt: h.service.clock(),
+		}); err != nil {
+			t.Fatalf("UpsertOAuthGrant(%d): %v", i, err)
+		}
+	}
+
+	handler := h.service.ConsentHTTPHandler(h.sessions)
+
+	// The nine prior grants plus this approval reach the ten-grant limit: the
+	// tenth approval still succeeds.
+	tenth := httptest.NewRecorder()
+	handler.ServeHTTP(tenth, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", consentDecisionBody(h.client.ID, "approve"), true, true))
+	if tenth.Code != http.StatusOK {
+		t.Fatalf("tenth approval = %d %q", tenth.Code, tenth.Body.String())
+	}
+
+	// Re-approving the same, already-granted client at the limit narrows the
+	// existing grant rather than minting an eleventh one, so it still
+	// succeeds.
+	reapprove := httptest.NewRecorder()
+	handler.ServeHTTP(reapprove, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", consentDecisionBody(h.client.ID, "approve"), true, true))
+	if reapprove.Code != http.StatusOK {
+		t.Fatalf("reapproval at the limit = %d %q", reapprove.Code, reapprove.Body.String())
+	}
+
+	eleventhClient, err := h.queries.CreateOAuthClient(ctx, store.CreateOAuthClientParams{
+		ClientName: "Eleventh", RedirectURIs: h.client.RedirectURIs, CreatedAt: h.service.clock(),
+	})
+	if err != nil {
+		t.Fatalf("CreateOAuthClient(eleventh): %v", err)
+	}
+	t.Cleanup(func() {
+		if _, cleanupErr := h.queries.DeleteOAuthClient(context.Background(), eleventhClient.ID); cleanupErr != nil {
+			t.Errorf("DeleteOAuthClient cleanup: %v", cleanupErr)
+		}
+	})
+	eleventh := httptest.NewRecorder()
+	handler.ServeHTTP(eleventh, h.request(http.MethodPost, "https://aboutme.example/api/v1/oauth/consent", consentDecisionBody(eleventhClient.ID, "approve"), true, true))
+	if eleventh.Code != http.StatusConflict || responseErrorCode(t, eleventh) != "agent_limit_reached" {
+		t.Fatalf("eleventh approval = %d %q, want 409 agent_limit_reached", eleventh.Code, eleventh.Body.String())
+	}
+}
+
 func TestSessionAgentGrantHTTPHandlers_ListAndOwnerScopedRevoke(t *testing.T) {
 	h := newOAuthSessionHTTPHarness(t)
 	ctx := context.Background()
