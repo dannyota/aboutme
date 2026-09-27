@@ -12,8 +12,16 @@ import {
 } from 'vue';
 
 import { observeSettledVisiblePageCount } from '../../editor/pageCountObserver';
+import {
+  type PreviewZoomStep,
+  previewZoomPercent,
+  readStoredPreviewZoom,
+  stepPreviewZoom,
+  writeStoredPreviewZoom,
+} from '../../editor/previewZoom';
 import type { PhotoReadState } from '../../stores/resumes';
 import { Button } from '../ui/button';
+import PreviewZoomControls from './PreviewZoomControls.vue';
 import ResumeDocument from '../resume/ResumeDocument.vue';
 import ScaledSheet from '../resume/ScaledSheet.vue';
 import { previewProjection } from './previewProjection';
@@ -85,16 +93,37 @@ let resizeObserver: ResizeObserver | undefined;
 const A4_WIDTH_PX = 210 / 25.4 * 96;
 const PHONE_BREAKPOINT_PX = 42 * 16;
 const NARROW_BREAKPOINT_PX = 72 * 16;
+
+// The owner's manual zoom choice for the paged preview. The `zoom` prop only
+// seeds the first render (today's fixed Fit/Full split); afterward this
+// state, and its per-browser storage below, own the value.
+const currentZoom = ref<PreviewZoomStep>(props.zoom === 'full' ? 100 : 'fit');
+const isPhoneLayout = computed(() => (
+  windowWidth.value !== null && windowWidth.value <= PHONE_BREAKPOINT_PX
+));
+// DESIGN.md's editor "Responsive behavior": narrow layouts fit at 0.72,
+// wide layouts at 0.84. Fit keeps exactly that split; the percent is only
+// how the zoom controls display and step around it.
+const fitPercent = computed(() => (
+  windowWidth.value !== null && windowWidth.value <= NARROW_BREAKPOINT_PX
+    ? 72
+    : 84
+));
+const zoomPercent = computed(() => (
+  previewZoomPercent(currentZoom.value, fitPercent.value)
+));
+const isFit = computed(() => currentZoom.value === 'fit');
+const showZoomControls = computed(() => !isPhoneLayout.value);
+const zoomOutDisabled = computed(() => currentZoom.value === 'fit');
+const zoomInDisabled = computed(() => currentZoom.value === 200);
+
 const sheetZoom = computed(() => {
   const breakpointWidth = windowWidth.value;
   if (breakpointWidth !== null && breakpointWidth <= PHONE_BREAKPOINT_PX) {
     const availableWidth = viewportWidth.value ?? breakpointWidth;
     return Math.min(1, Math.max(0, availableWidth - 32) / A4_WIDTH_PX);
   }
-  if (props.zoom === 'full') return 1;
-  return breakpointWidth !== null && breakpointWidth <= NARROW_BREAKPOINT_PX
-    ? 0.72
-    : 0.84;
+  return zoomPercent.value / 100;
 });
 const scaledWidth = computed(() => A4_WIDTH_PX * sheetZoom.value);
 const pageCountText = computed(() => {
@@ -112,6 +141,69 @@ const photoStatus = computed(() => {
 const updateWindowWidth = (): void => {
   windowWidth.value = window.innerWidth;
 };
+
+/**
+ * Sets the zoom level, keeping the point under `pivotClient` (or the
+ * viewport center, when zooming from a keyboard or button) in view. The
+ * ratio is measured against the scrollable content's size before the
+ * change and re-applied after Vue updates the scaled sheet's width.
+ */
+function applyZoom(
+  next: PreviewZoomStep,
+  pivotClient?: { x: number; y: number },
+): void {
+  const root = previewRoot.value;
+  if (root === null) {
+    currentZoom.value = next;
+    return;
+  }
+  const rect = root.getBoundingClientRect();
+  const pivotX = pivotClient?.x ?? rect.left + root.clientWidth / 2;
+  const pivotY = pivotClient?.y ?? rect.top + root.clientHeight / 2;
+  const offsetX = pivotX - rect.left;
+  const offsetY = pivotY - rect.top;
+  const beforeWidth = root.scrollWidth || 1;
+  const beforeHeight = root.scrollHeight || 1;
+  const ratioX = (root.scrollLeft + offsetX) / beforeWidth;
+  const ratioY = (root.scrollTop + offsetY) / beforeHeight;
+
+  currentZoom.value = next;
+
+  void nextTick(() => {
+    const afterRoot = previewRoot.value;
+    if (afterRoot === null) return;
+    afterRoot.scrollLeft = ratioX * afterRoot.scrollWidth - offsetX;
+    afterRoot.scrollTop = ratioY * afterRoot.scrollHeight - offsetY;
+  });
+}
+
+// Ctrl/Cmd zooms the preview only while focus is inside this region, so the
+// same keys keep their usual meaning in form fields elsewhere in the editor.
+function onPreviewKeydown(event: KeyboardEvent): void {
+  if (isPhoneLayout.value || !(event.ctrlKey || event.metaKey)) return;
+  if (event.key === '0') {
+    event.preventDefault();
+    applyZoom('fit');
+  } else if (event.key === '+' || event.key === '=') {
+    event.preventDefault();
+    applyZoom(stepPreviewZoom(currentZoom.value, 1));
+  } else if (event.key === '-' || event.key === '_') {
+    event.preventDefault();
+    applyZoom(stepPreviewZoom(currentZoom.value, -1));
+  }
+}
+
+// A plain wheel keeps scrolling the pane; only Ctrl/Cmd + wheel zooms, and
+// then around the pointer so the page under the cursor stays in view.
+function onPreviewWheel(event: WheelEvent): void {
+  if (isPhoneLayout.value || !(event.ctrlKey || event.metaKey)) return;
+  event.preventDefault();
+  const direction: 1 | -1 = event.deltaY < 0 ? 1 : -1;
+  applyZoom(
+    stepPreviewZoom(currentZoom.value, direction),
+    { x: event.clientX, y: event.clientY },
+  );
+}
 
 function startPageCountObservation(): void {
   stopObserving?.();
@@ -132,12 +224,16 @@ watch(previewMode, (mode) => {
   if (mode === 'web') estimatedPages.value = null;
 });
 
+watch(currentZoom, (step) => writeStoredPreviewZoom(step));
+
 onErrorCaptured(() => {
   renderFailed.value = true;
   return false;
 });
 
 onMounted(async () => {
+  const stored = readStoredPreviewZoom();
+  if (stored !== undefined) currentZoom.value = stored;
   await nextTick();
   updateWindowWidth();
   window.addEventListener('resize', updateWindowWidth);
@@ -169,7 +265,8 @@ onBeforeUnmount(() => {
 <template>
   <section
     :aria-label="copy.previewLabel"
-    class="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]"
+    class="relative grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]"
+    @keydown="onPreviewKeydown"
   >
     <div
       class="flex items-center justify-end border-b border-border bg-card
@@ -209,7 +306,9 @@ onBeforeUnmount(() => {
     <div
       ref="previewRoot"
       class="overflow-auto bg-editor-canvas p-6 max-[42rem]:p-4"
+      data-testid="preview-scroll"
       tabindex="0"
+      @wheel="onPreviewWheel"
     >
       <p
         v-if="renderFailed"
@@ -284,6 +383,21 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+    <PreviewZoomControls
+      v-if="showZoomControls"
+      class="absolute bottom-4 right-4 z-10"
+      :fit-label="copy.zoomFit"
+      :is-fit="isFit"
+      :percent="zoomPercent"
+      :percent-label="copy.zoomPercent(zoomPercent)"
+      :zoom-in-disabled="zoomInDisabled"
+      :zoom-in-label="copy.zoomIn"
+      :zoom-out-disabled="zoomOutDisabled"
+      :zoom-out-label="copy.zoomOut"
+      @set-fit="applyZoom('fit')"
+      @zoom-in="applyZoom(stepPreviewZoom(currentZoom, 1))"
+      @zoom-out="applyZoom(stepPreviewZoom(currentZoom, -1))"
+    />
   </section>
 </template>
 
