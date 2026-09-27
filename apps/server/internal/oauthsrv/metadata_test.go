@@ -26,7 +26,7 @@ func TestMetadata_StableConfiguredDocuments(t *testing.T) {
 			name:    "protected resource",
 			handler: s.HandleProtectedResourceMetadata,
 			path:    "/.well-known/oauth-protected-resource",
-			want:    `{"resource":"https://aboutme.example","authorization_servers":["https://aboutme.example"],"scopes_supported":["resumes:read","resumes:write"],"bearer_methods_supported":["header"]}`,
+			want:    `{"resource":"https://aboutme.example/mcp","authorization_servers":["https://aboutme.example"],"scopes_supported":["resumes:read","resumes:write"],"bearer_methods_supported":["header"]}`,
 		},
 	}
 	for _, tc := range tests {

@@ -138,7 +138,12 @@ func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer 
 	if scope != scopeReadWrite && scope != scopeWriteRead {
 		return "", "", errAuthorizationScope
 	}
-	if values.Get("resource") != issuer || !canonicalResourceParameter(authorizationURL.RawQuery, issuer) {
+	// The pinned SDK checks the challenge's protected-resource metadata
+	// against the MCP endpoint URL and sends that metadata resource, so it
+	// must be exactly the MCP endpoint (rule 1 of
+	// docs/design/mcp-client-compatibility.md).
+	resource := issuer + mcpEndpointPath
+	if values.Get("resource") != resource || !canonicalResourceParameter(authorizationURL.RawQuery, resource) {
 		return "", "", errAuthorizationResource
 	}
 	state := values.Get("state")
@@ -153,8 +158,8 @@ func validateAuthorizationURL(args *auth.AuthorizationArgs, redirectURI, issuer 
 	return authorizationURL.String(), state, nil
 }
 
-func canonicalResourceParameter(rawQuery, issuer string) bool {
-	want := "resource=" + url.QueryEscape(issuer)
+func canonicalResourceParameter(rawQuery, resource string) bool {
+	want := "resource=" + url.QueryEscape(resource)
 	for _, field := range strings.Split(rawQuery, "&") {
 		if strings.HasPrefix(field, "resource=") {
 			return field == want

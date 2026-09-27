@@ -2,6 +2,10 @@ package oauthsrv
 
 import "net/http"
 
+// mcpResourcePath is the MCP endpoint path. Origin plus this path is the
+// protected resource identifier a person enters in an MCP client.
+const mcpResourcePath = "/mcp"
+
 // HandleMetadata serves the configured RFC 8414 authorization-server document.
 // Its bytes depend only on the validated canonical public origin.
 func (s *Service) HandleMetadata(w http.ResponseWriter, r *http.Request) {
@@ -18,7 +22,10 @@ func (s *Service) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleProtectedResourceMetadata serves the configured RFC 9728 document.
-// Its bytes depend only on the validated canonical public origin.
+// Its bytes depend only on the validated canonical public origin. The resource
+// is the MCP endpoint URL, which RFC 9728 section 3.3 requires a client to
+// match against the URL it called; the authorization server is the origin.
+// See docs/design/mcp-client-compatibility.md.
 func (s *Service) HandleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -27,7 +34,7 @@ func (s *Service) HandleProtectedResourceMetadata(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte(`{"resource":"` + s.publicOrigin + `","authorization_servers":["` + s.publicOrigin + `"],"scopes_supported":["resumes:read","resumes:write"],"bearer_methods_supported":["header"]}`)); err != nil {
+	if _, err := w.Write([]byte(`{"resource":"` + s.publicOrigin + mcpResourcePath + `","authorization_servers":["` + s.publicOrigin + `"],"scopes_supported":["resumes:read","resumes:write"],"bearer_methods_supported":["header"]}`)); err != nil {
 		return
 	}
 }
