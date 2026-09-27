@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -13,66 +15,108 @@ import (
 )
 
 // RateConfig carries the frozen OAuth endpoint budgets from process config.
+//
+// Registration follows docs/design/mcp-client-compatibility.md, "Registration
+// rate from shared egress": an address inside one of RegisterEgressRanges
+// shares that range's RegisterRangeRequests budget, every other address keeps
+// its own RegisterRequests budget, and RegisterGlobalRequests caps every
+// admitted registration together. All three share RegisterWindow.
 type RateConfig struct {
-	TrustedProxies    api.TrustedProxies
-	RegisterRequests  int
-	RegisterWindow    time.Duration
-	TokenRequests     int
-	TokenWindow       time.Duration
-	FailedGrantLimit  int
-	FailedGrantWindow time.Duration
-	MaxKeys           int
+	TrustedProxies         api.TrustedProxies
+	RegisterRequests       int
+	RegisterEgressRanges   []netip.Prefix
+	RegisterRangeRequests  int
+	RegisterGlobalRequests int
+	RegisterWindow         time.Duration
+	TokenRequests          int
+	TokenWindow            time.Duration
+	FailedGrantLimit       int
+	FailedGrantWindow      time.Duration
+	MaxKeys                int
 }
+
+// registerGlobalKey is the one key of the global registration ceiling.
+const registerGlobalKey = "global"
 
 // RatePolicies composes OAuth endpoint admission over the ADR 0007 bounded
 // limiter and one bounded fixed-window failed-grant store.
 type RatePolicies struct {
-	trusted  api.TrustedProxies
-	register *api.BoundedRateLimiter
-	token    *api.BoundedRateLimiter
-	grants   *failedGrantLimiter
+	trusted        api.TrustedProxies
+	egressRanges   []netip.Prefix
+	register       *api.BoundedRateLimiter
+	registerRange  *api.BoundedRateLimiter
+	registerGlobal *api.BoundedRateLimiter
+	token          *api.BoundedRateLimiter
+	grants         *failedGrantLimiter
 }
 
 // NewRatePolicies validates and constructs one process-wide policy set.
 func NewRatePolicies(cfg RateConfig) (*RatePolicies, error) {
-	if cfg.RegisterRequests <= 0 || cfg.RegisterWindow <= 0 || cfg.TokenRequests <= 0 || cfg.TokenWindow <= 0 ||
+	if cfg.RegisterRequests <= 0 || cfg.RegisterRangeRequests <= 0 || cfg.RegisterGlobalRequests <= 0 ||
+		cfg.RegisterWindow <= 0 || cfg.TokenRequests <= 0 || cfg.TokenWindow <= 0 ||
 		cfg.FailedGrantLimit <= 0 || cfg.FailedGrantWindow <= 0 || cfg.MaxKeys <= 0 {
 		return nil, errors.New("oauth rate policies: invalid configuration")
 	}
+	for _, prefix := range cfg.RegisterEgressRanges {
+		// Client addresses are unmapped before matching, so a mapped or
+		// non-canonical prefix would not mean what it says.
+		if !prefix.IsValid() || prefix != prefix.Masked() || prefix.Addr().Is4In6() {
+			return nil, errors.New("oauth rate policies: invalid registration egress range")
+		}
+	}
+	bucket := func(requests int, window time.Duration) *api.BoundedRateLimiter {
+		return api.NewBoundedRateLimiter(api.RateLimiterConfig{Requests: requests, Window: window, MaxKeys: cfg.MaxKeys})
+	}
 	return &RatePolicies{
-		trusted: cfg.TrustedProxies,
-		register: api.NewBoundedRateLimiter(api.RateLimiterConfig{
-			Requests: cfg.RegisterRequests,
-			Window:   cfg.RegisterWindow,
-			MaxKeys:  cfg.MaxKeys,
-		}),
-		token: api.NewBoundedRateLimiter(api.RateLimiterConfig{
-			Requests: cfg.TokenRequests,
-			Window:   cfg.TokenWindow,
-			MaxKeys:  cfg.MaxKeys,
-		}),
-		grants: newFailedGrantLimiter(cfg.FailedGrantLimit, cfg.FailedGrantWindow, cfg.MaxKeys),
+		trusted:        cfg.TrustedProxies,
+		egressRanges:   slices.Clone(cfg.RegisterEgressRanges),
+		register:       bucket(cfg.RegisterRequests, cfg.RegisterWindow),
+		registerRange:  bucket(cfg.RegisterRangeRequests, cfg.RegisterWindow),
+		registerGlobal: bucket(cfg.RegisterGlobalRequests, cfg.RegisterWindow),
+		token:          bucket(cfg.TokenRequests, cfg.TokenWindow),
+		grants:         newFailedGrantLimiter(cfg.FailedGrantLimit, cfg.FailedGrantWindow, cfg.MaxKeys),
 	}, nil
 }
 
-// AdmitRegister enforces the registration budget against the canonical client
-// address accepted from the configured Caddy proxy boundary.
+// AdmitRegister enforces the registration budgets against the client address
+// resolved once through the configured trust boundary; no other header is
+// read. An address inside a configured egress range is admitted against that
+// range's shared bucket, any other address against its own bucket. Only a
+// request its own bucket admits is then charged to the global ceiling, so one
+// address or range cannot drain the ceiling with refused requests. The
+// Retry-After is that of the bucket that refused. An unresolvable address
+// fails closed.
 func (p *RatePolicies) AdmitRegister(now time.Time, r *http.Request) (bool, int) {
-	return p.admitIP(p.register, now, r)
+	raw, ok := api.ClientIP(r, p.trusted)
+	if !ok {
+		return false, 1
+	}
+	addr, err := netip.ParseAddr(raw)
+	if err != nil {
+		return false, 1
+	}
+	addr = addr.Unmap()
+	limiter, key := p.register, "ip:"+addr.String()
+	for _, prefix := range p.egressRanges {
+		if prefix.Contains(addr) {
+			limiter, key = p.registerRange, "range:"+prefix.String()
+			break
+		}
+	}
+	if allowed, retry := limiter.Admit(now, key); !allowed {
+		return false, retry
+	}
+	return p.registerGlobal.Admit(now, registerGlobalKey)
 }
 
-// AdmitToken enforces the token-endpoint budget against the same canonical
-// client address.
+// AdmitToken enforces the token-endpoint budget against the canonical client
+// address accepted from the configured Caddy proxy boundary.
 func (p *RatePolicies) AdmitToken(now time.Time, r *http.Request) (bool, int) {
-	return p.admitIP(p.token, now, r)
-}
-
-func (p *RatePolicies) admitIP(limiter *api.BoundedRateLimiter, now time.Time, r *http.Request) (bool, int) {
 	key, ok := api.IPKeyFunc(r, p.trusted)
 	if !ok {
 		return false, 1
 	}
-	return limiter.Admit(now, key)
+	return p.token.Admit(now, key)
 }
 
 // AdmitGrant reserves one failed-grant budget slot before token processing, so

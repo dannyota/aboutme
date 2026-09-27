@@ -280,7 +280,7 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	agentAccess, err := loadAgentAccessConfig(getenv("MCP_ENABLED"))
+	agentAccess, err := loadAgentAccessConfig(getenv("MCP_ENABLED"), getenv("OAUTH_REGISTER_EGRESS_CIDRS"))
 	if err != nil {
 		return Config{}, err
 	}
