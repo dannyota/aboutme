@@ -1167,7 +1167,11 @@ describe('PublishDialog browser tab fields', () => {
 
     it('omits signInToView from the command when left unchanged', async () => {
       signInToViewCapability.value = true;
-      const record = editorRecord({ live: true, seoGeoEnabled: true });
+      const record = editorRecord({
+        live: true,
+        seoGeoEnabled: true,
+        slug: 'ada-lovelace',
+      });
       const { actions } = actionsFor(record);
       const wrapper = await mountDialog(record, actions);
       await wrapper.get('[data-action="publish-submit"]').trigger('click');
@@ -1178,7 +1182,7 @@ describe('PublishDialog browser tab fields', () => {
 
     it('sends signInToView only when the owner turns it on', async () => {
       signInToViewCapability.value = true;
-      const record = editorRecord({ live: true });
+      const record = editorRecord({ live: true, slug: 'ada-lovelace' });
       const { actions } = actionsFor(record);
       const wrapper = await mountDialog(record, actions);
       await wrapper.get('[data-action="publish-sign-in-to-view"]')
