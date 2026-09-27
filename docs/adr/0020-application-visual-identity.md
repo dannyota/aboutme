@@ -110,7 +110,7 @@ themes.
 - The button primitive's guarded edits (ADR 0019) follow these tokens.
 - Icons use versioned file names (`favicon-v3.svg`, `icon-*-v3.png`,
   `apple-touch-icon-v3.png`, `site-v3.webmanifest`) and the Open Graph image is
-  `og-image-v4.jpg` and `og-image-v4-en.jpg`. A replaced icon or image set stays
+  `og-image-v5.jpg` and `og-image-v4-en.jpg`. A replaced icon or image set stays
   in `public/`, unlinked, for one release so caches and crawlers get no 404.
 - The stored link-preview card (ADR 0014) draws `AppLogo` mark-only and pins it
   to `#CC2649` in both themes; a logo change raises the card layout version.
