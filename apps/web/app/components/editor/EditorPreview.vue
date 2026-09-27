@@ -249,11 +249,11 @@ function onPreviewWheel(event: WheelEvent): void {
   wheelIdleTimer = setTimeout(resetWheelAccumulator, WHEEL_ZOOM_IDLE_MS);
   wheelAccumulatedPx += Math.abs(event.deltaY);
 
-  let next = currentZoom.value;
-  while (wheelAccumulatedPx >= WHEEL_ZOOM_STEP_PX) {
-    wheelAccumulatedPx -= WHEEL_ZOOM_STEP_PX;
-    next = stepPreviewZoom(next, direction, fitPercent.value);
-  }
+  // At most one step per event: a mouse notch reports 100px or more at once
+  // and must move one step, not skip over one.
+  if (wheelAccumulatedPx < WHEEL_ZOOM_STEP_PX) return;
+  wheelAccumulatedPx = 0;
+  const next = stepPreviewZoom(currentZoom.value, direction, fitPercent.value);
   if (next === currentZoom.value) return;
   applyZoom(next, { x: event.clientX, y: event.clientY });
 }

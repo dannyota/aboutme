@@ -783,6 +783,37 @@ describe('EditorPreview zoom controls', () => {
     },
   );
 
+  it('moves one step for one coarse mouse-wheel notch', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+
+    scroll.dispatchEvent(ctrlWheelEvent(-120, { x: 20, y: 20 }));
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('90%');
+    wrapper.unmount();
+  });
+
+  it('keeps focus in the card when a step button disables', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    document.body.append(wrapper.element);
+    const zoomOut = wrapper.get('[data-testid="zoom-out"]');
+
+    for (let i = 0; i < 6; i += 1) {
+      (zoomOut.element as HTMLElement).focus();
+      await zoomOut.trigger('click');
+      await nextTick();
+    }
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="zoom-percent"]').element,
+    );
+    wrapper.unmount();
+    wrapper.element.remove();
+  });
+
   it('leaves a plain wheel alone so the pane scrolls instead', async () => {
     const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
     const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
