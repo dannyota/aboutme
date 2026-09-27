@@ -157,30 +157,29 @@ export async function readLinkedInPdf(
     for (let number = 1; number <= pageCount; number += 1) {
       const page = await guard(doc.getPage(number));
       const [left, bottom] = page.view;
+      // Over a limit, the read throws out of this loop and the finally
+      // below ends the worker and the task, which ends this stream too.
+      // Cancelling the reader here instead races pdf.js's own close message.
       const reader = page.streamTextContent().getReader();
       const pageItems: TextItemLike[] = [];
-      try {
-        for (;;) {
-          const chunk = await guard(reader.read());
-          if (chunk.done) break;
-          for (const item of chunk.value.items as unknown[]) {
-            items += 1;
-            if (items > MAX_TEXT_ITEMS) throw new ReadStop('tooLarge');
-            if (!isTextItem(item)) continue;
-            chars += [...item.str].length;
-            if (chars > MAX_TEXT_CHARS) throw new ReadStop('tooLarge');
-            const [a, b, c, d, x, y] = item.transform;
-            pageItems.push({
-              str: item.str,
-              transform: [a!, b!, c!, d!, x! - left!, y! - bottom!],
-              width: item.width,
-              height: item.height,
-            });
-            texts.push(item.str);
-          }
+      for (;;) {
+        const chunk = await guard(reader.read());
+        if (chunk.done) break;
+        for (const item of chunk.value.items as unknown[]) {
+          items += 1;
+          if (items > MAX_TEXT_ITEMS) throw new ReadStop('tooLarge');
+          if (!isTextItem(item)) continue;
+          chars += [...item.str].length;
+          if (chars > MAX_TEXT_CHARS) throw new ReadStop('tooLarge');
+          const [a, b, c, d, x, y] = item.transform;
+          pageItems.push({
+            str: item.str,
+            transform: [a!, b!, c!, d!, x! - left!, y! - bottom!],
+            width: item.width,
+            height: item.height,
+          });
+          texts.push(item.str);
         }
-      } finally {
-        reader.cancel().catch(() => {});
       }
       pages.push(pageItems);
       onProgress?.(number, pageCount);
