@@ -42,7 +42,7 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain('Mục đích và cơ sở xử lý');
     expect(wrapper.text()).toContain('Quyền của bạn');
     expect(wrapper.text()).toContain(
-      'Bản ghi về việc xoá tài khoản và gỡ liên kết nhà cung cấp',
+      'Bản ghi về việc xóa tài khoản và gỡ liên kết nhà cung cấp',
     );
     expect(wrapper.text()).toContain(
       'Việc duy trì phiên đăng nhập không kéo dài thời hạn này.',

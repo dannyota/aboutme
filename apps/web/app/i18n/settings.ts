@@ -61,7 +61,7 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     addProvider: 'Thêm phương thức đăng nhập khác',
     linkProvider: (provider) => `Liên kết ${provider}`,
     secondFactorEndsOtherSessions:
-      'Thêm, thay, hoặc xoá passkey hay ứng dụng xác thực, hoặc tạo lại mã '
+      'Thêm, thay, hoặc xóa passkey hay ứng dụng xác thực, hoặc tạo lại mã '
       + 'khôi phục, sẽ đăng xuất mọi thiết bị và tác nhân đã kết nối khác. '
       + 'Thiết bị này vẫn giữ đăng nhập.',
   },

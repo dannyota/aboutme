@@ -67,20 +67,20 @@ export const secondFactorSettingsCopy: WorkspaceCopy<
     created: 'Đã tạo ngày',
     lastUsed: 'Dùng lần cuối vào',
     neverUsed: 'Chưa từng dùng',
-    removePasskey: 'Xoá',
-    removeTitle: 'Xoá passkey',
+    removePasskey: 'Xóa',
+    removeTitle: 'Xóa passkey',
     removeDescription:
-      'Xoá passkey này? Mọi thiết bị và tác nhân đã kết nối khác sẽ bị đăng '
+      'Xóa passkey này? Mọi thiết bị và tác nhân đã kết nối khác sẽ bị đăng '
       + 'xuất.',
     removeDescriptionFinal:
-      'Đây là passkey cuối cùng của bạn. Xoá nó sẽ tắt xác thực hai lớp và '
-      + 'xoá các mã khôi phục. Mọi thiết bị và tác nhân đã kết nối khác sẽ '
+      'Đây là passkey cuối cùng của bạn. Xóa nó sẽ tắt xác thực hai lớp và '
+      + 'xóa các mã khôi phục. Mọi thiết bị và tác nhân đã kết nối khác sẽ '
       + 'bị đăng xuất.',
-    removeConfirm: 'Xoá passkey',
+    removeConfirm: 'Xóa passkey',
     cancel: 'Hủy',
     close: 'Đóng',
     passkeyAdded: 'Đã thêm passkey.',
-    passkeyRemoved: 'Đã xoá passkey.',
+    passkeyRemoved: 'Đã xóa passkey.',
     recoveryTitle: 'Mã khôi phục',
     recoveryRemaining: (count) => `Còn lại ${count} mã khôi phục.`,
     regenerate: 'Tạo lại mã khôi phục',
@@ -235,7 +235,7 @@ export const totpSettingsCopy: WorkspaceCopy<TotpSettingsCopy> = {
     statusEnabled: 'Đã bật.',
     setUpButton: 'Thiết lập ứng dụng xác thực',
     replaceButton: 'Thay ứng dụng xác thực',
-    removeButton: 'Xoá',
+    removeButton: 'Xóa',
     starting: 'Đang bắt đầu…',
     setupTitleNew: 'Thiết lập ứng dụng xác thực',
     setupTitleReplace: 'Thay ứng dụng xác thực',
@@ -257,16 +257,16 @@ export const totpSettingsCopy: WorkspaceCopy<TotpSettingsCopy> = {
     close: 'Đóng',
     addedNotice: 'Đã thêm ứng dụng xác thực.',
     replacedNotice: 'Đã thay ứng dụng xác thực.',
-    removedNotice: 'Đã xoá ứng dụng xác thực.',
-    removeTitle: 'Xoá ứng dụng xác thực',
+    removedNotice: 'Đã xóa ứng dụng xác thực.',
+    removeTitle: 'Xóa ứng dụng xác thực',
     removeDescription:
-      'Xoá ứng dụng xác thực này? Mọi thiết bị và tác nhân đã kết nối khác '
+      'Xóa ứng dụng xác thực này? Mọi thiết bị và tác nhân đã kết nối khác '
       + 'sẽ bị đăng xuất.',
     removeDescriptionFinal:
-      'Đây là phương thức xác thực hai lớp cuối cùng của bạn. Xoá nó sẽ '
-      + 'tắt xác thực hai lớp và xoá các mã khôi phục. Mọi thiết bị và tác '
+      'Đây là phương thức xác thực hai lớp cuối cùng của bạn. Xóa nó sẽ '
+      + 'tắt xác thực hai lớp và xóa các mã khôi phục. Mọi thiết bị và tác '
       + 'nhân đã kết nối khác sẽ bị đăng xuất.',
-    removeConfirm: 'Xoá',
+    removeConfirm: 'Xóa',
     errors: {
       'reauth-required':
         'Đăng nhập lại để xác nhận danh tính trước khi tiếp tục.',

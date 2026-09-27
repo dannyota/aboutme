@@ -93,7 +93,7 @@ export type AuthCopy = {
 export const authCopy: Record<Locale, AuthCopy> = {
   vi: {
     brandPanel: {
-      statement: 'CV của bạn luôn riêng tư cho đến khi bạn đăng.',
+      statement: 'CV của bạn luôn riêng tư cho đến khi bạn xuất bản.',
       points: [
         'Miễn phí và mã nguồn mở',
         'Mỗi CV một đường dẫn',
@@ -156,7 +156,7 @@ export const authCopy: Record<Locale, AuthCopy> = {
       forgotPassword: 'Quên mật khẩu?',
     },
     register: {
-      lead: 'Tạo tài khoản để viết và đăng CV của bạn.',
+      lead: 'Tạo tài khoản để viết và xuất bản CV của bạn.',
       pending: 'Đang tạo tài khoản…',
       success: 'Hãy kiểm tra email để xác minh địa chỉ của bạn.',
       afterVerify: 'sau khi bạn xác minh email.',

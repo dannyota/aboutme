@@ -82,7 +82,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'thị khi đường dẫn được chia sẻ.',
             'Phiên đăng nhập: thông tin trình duyệt (user-agent) và địa chỉ '
             + 'IP của từng phiên, dùng cho bảo mật. Settings → Sessions liệt '
-            + 'kê các thiết bị đang đăng nhập. Chúng tôi xoá địa chỉ IP và '
+            + 'kê các thiết bị đang đăng nhập. Chúng tôi xóa địa chỉ IP và '
             + 'thông tin trình duyệt ghi nhận cho một lần đăng nhập trong '
             + 'vòng 90 ngày kể từ lần đăng nhập đó. Việc duy trì phiên đăng '
             + 'nhập không kéo dài thời hạn này.',
@@ -106,7 +106,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Lượt xem CV công khai: chúng tôi đếm lượt xem và chỉ lưu tổng '
             + 'số theo ngày. Để phân biệt người với bot, địa chỉ IP và '
             + 'thông tin trình duyệt của bạn chỉ được dùng tạm trong bộ nhớ '
-            + 'máy chủ và bị xoá trong ngày; trình duyệt của bạn giải một '
+            + 'máy chủ và bị xóa trong ngày; trình duyệt của bạn giải một '
             + 'phép tính nhỏ. Việc đếm lượt xem không dùng cookie.',
           ],
         },
@@ -116,11 +116,11 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Chúng tôi xử lý dữ liệu cá nhân của bạn để thực hiện thỏa '
             + 'thuận giữa bạn và aboutme.vn theo Điều khoản sử dụng: cung cấp '
             + 'tài khoản và các CV bạn tạo, giữ an toàn cho dịch vụ, và gửi '
-            + 'email về tài khoản. Các tính năng tuỳ chọn (đăng CV công '
+            + 'email về tài khoản. Các tính năng tùy chọn (xuất bản CV công '
             + 'khai, cho phép lập chỉ mục, kết nối trợ lý AI, đăng nhập bằng '
             + 'Google hoặc LinkedIn) chỉ chạy khi bạn tự bật, và bạn có thể '
             + 'tắt bất cứ lúc nào. Bạn có thể chấm dứt thỏa thuận bằng cách '
-            + 'xoá tài khoản.',
+            + 'xóa tài khoản.',
           ],
         },
         {
@@ -145,20 +145,20 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Chỉ công khai khi bạn chọn',
           paragraphs: [
-            'CV ở chế độ riêng tư cho đến khi bạn đăng. Mỗi CV có đường dẫn '
-            + 'riêng. Việc lập chỉ mục cho công cụ tìm kiếm và AI mặc định '
-            + 'tắt cho đến khi bạn bật. Khi bạn ngừng công khai, đường dẫn '
-            + 'công khai ngừng hoạt động ngay lập tức. Khi bạn xoá hoặc đổi '
-            + 'đường dẫn của một CV, chúng tôi giữ chỗ đường dẫn cũ trong '
-            + '180 ngày để không ai khác chiếm được đường dẫn đó. Việc giữ '
-            + 'chỗ này không gắn với tài khoản của bạn, và sẽ bị xoá sau '
-            + '180 ngày.',
+            'CV ở chế độ riêng tư cho đến khi bạn xuất bản. Mỗi CV có đường '
+            + 'dẫn riêng. Việc lập chỉ mục cho công cụ tìm kiếm và AI mặc '
+            + 'định tắt cho đến khi bạn bật. Khi bạn ngừng công khai, đường '
+            + 'dẫn công khai ngừng hoạt động ngay lập tức. Khi bạn xóa hoặc '
+            + 'đổi đường dẫn của một CV, chúng tôi giữ chỗ đường dẫn cũ '
+            + 'trong 180 ngày để không ai khác chiếm được đường dẫn đó. '
+            + 'Việc giữ chỗ này không gắn với tài khoản của bạn, và sẽ bị '
+            + 'xóa sau 180 ngày.',
             'Trang công khai được phân phối qua mạng CDN toàn cầu '
             + '(Amazon CloudFront) nhưng không được lưu lại trên CDN. '
             + 'Khi CV đang công khai, bất kỳ ai xem được cũng có thể lưu '
             + 'hoặc chụp lại trang. Theo mặc định, người xem cũng có thể '
             + 'tải về bản PDF của CV; bạn có thể tắt tính năng này. Đừng '
-            + 'đưa dữ liệu cá nhân nhạy cảm, như số giấy tờ tuỳ thân, tình '
+            + 'đưa dữ liệu cá nhân nhạy cảm, như số giấy tờ tùy thân, tình '
             + 'trạng sức khoẻ, hoặc tôn giáo, vào một CV công khai.',
             'Khi bất kỳ ai chia sẻ đường dẫn công khai của bạn trong một ứng '
             + 'dụng nhắn tin hoặc mạng xã hội, dịch vụ đó sẽ lấy tiêu đề '
@@ -190,9 +190,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
           heading: 'Trợ lý AI được kết nối',
           paragraphs: [
             'Trợ lý AI bạn kết nối chỉ làm được những gì bạn cho phép: đọc '
-            + 'CV, và nếu bạn cấp quyền ghi, tạo, sửa hoặc xoá CV và ảnh. '
-            + 'Trợ lý không thể đăng hay ngừng công khai CV, nhưng nếu xoá '
-            + 'một CV đang công khai thì đường dẫn của CV đó ngừng hoạt '
+            + 'CV, và nếu bạn cấp quyền ghi, tạo, sửa hoặc xóa CV và ảnh. '
+            + 'Trợ lý không thể công khai hay ngừng công khai CV, nhưng nếu '
+            + 'xóa một CV đang công khai thì đường dẫn của CV đó ngừng hoạt '
             + 'động. Nội dung trợ lý đọc được sẽ đến dịch vụ AI mà bạn chọn. '
             + 'Bạn có thể thu hồi quyền bất cứ lúc nào trong Settings.',
           ],
@@ -200,17 +200,17 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Quyền kiểm soát của bạn',
           paragraphs: [
-            'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xoá CV, và xoá tài '
+            'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xóa CV, và xóa tài '
             + 'khoản. Bản xuất gồm hồ sơ và nội dung CV của bạn; ảnh và '
             + 'lịch sử phiên đăng nhập xin liên hệ qua email.',
-            'Khi bạn xoá tài khoản:',
+            'Khi bạn xóa tài khoản:',
           ],
           items: [
             'Quyền truy cập bị thu hồi ngay lập tức.',
-            'Ảnh đã tải lên được xoá, thường trong vòng 24 giờ.',
+            'Ảnh đã tải lên được xóa, thường trong vòng 24 giờ.',
             'Bản sao lưu cơ sở dữ liệu giữ các bản cũ trong tối đa 30 ngày '
             + 'sau đó, và chỉ dùng để khôi phục sau sự cố.',
-            'Bản ghi về việc xoá tài khoản và gỡ liên kết nhà cung cấp (chỉ '
+            'Bản ghi về việc xóa tài khoản và gỡ liên kết nhà cung cấp (chỉ '
             + 'gồm loại sự kiện và thời điểm) được giữ tối đa 180 ngày.',
           ],
         },
@@ -226,7 +226,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Quyền của bạn',
           paragraphs: [
-            'Bạn có quyền được biết, truy cập, chỉnh sửa, xoá dữ liệu cá '
+            'Bạn có quyền được biết, truy cập, chỉnh sửa, xóa dữ liệu cá '
             + 'nhân của mình, phản đối hoặc yêu cầu hạn chế xử lý, khiếu '
             + 'nại, tố cáo, khởi kiện, và yêu cầu bồi thường thiệt hại theo '
             + 'quy định của pháp luật. Phần lớn các quyền này bạn tự thực '
@@ -269,7 +269,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Bạn sở hữu nội dung bạn tạo. Bạn cho phép aboutme.vn lưu trữ, sao '
             + 'lưu, kết xuất thành PDF, gửi đến các trợ lý AI bạn kết nối, '
             + 'và hiển thị nội dung đó theo cách bạn chọn, ví dụ khi bạn '
-            + 'đăng CV. Quyền này chấm dứt khi bạn xoá nội dung, trừ các '
+            + 'xuất bản CV. Quyền này chấm dứt khi bạn xóa nội dung, trừ các '
             + 'bản sao lưu cho đến khi chúng hết hạn.',
             'Bạn chịu trách nhiệm về nội dung bạn công khai, kể cả tính '
             + 'chính xác và quyền chia sẻ thông tin hoặc hình ảnh của người '
@@ -282,14 +282,15 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Không dùng aboutme.vn để:',
           ],
           items: [
-            'đăng nội dung vi phạm pháp luật;',
+            'công khai nội dung vi phạm pháp luật;',
             'mạo danh người khác;',
-            'đăng dữ liệu cá nhân của người khác khi chưa được họ cho phép;',
+            'công khai dữ liệu cá nhân của người khác khi chưa được họ cho '
+            + 'phép;',
             'gửi thư rác, phát tán phần mềm độc hại, hoặc lạm dụng dịch vụ '
             + 'hay người khác.',
           ],
           after: [
-            'Chúng tôi có thể gỡ nội dung hoặc xoá tài khoản vi phạm các quy '
+            'Chúng tôi có thể gỡ nội dung hoặc xóa tài khoản vi phạm các quy '
             + 'tắc này.',
           ],
         },
@@ -301,7 +302,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'Mỗi tài khoản có tối đa ba CV.',
             'Bạn phải từ 16 tuổi trở lên.',
             'Nếu biết một tài khoản thuộc về người dưới 16 tuổi, chúng tôi '
-            + 'sẽ xoá tài khoản đó.',
+            + 'sẽ xóa tài khoản đó.',
             'Bạn chịu trách nhiệm về hành động của các trợ lý AI bạn kết '
             + 'nối với tài khoản.',
           ],
@@ -309,7 +310,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
         {
           heading: 'Chấm dứt',
           paragraphs: [
-            'Bạn có thể xoá tài khoản bất cứ lúc nào. Nếu chúng tôi gỡ nội '
+            'Bạn có thể xóa tài khoản bất cứ lúc nào. Nếu chúng tôi gỡ nội '
             + 'dung hoặc tạm ngưng tài khoản do vi phạm, chúng tôi sẽ gửi '
             + 'email và cho bạn thời gian hợp lý để xuất dữ liệu, trừ khi '
             + 'vi phạm nghiêm trọng hoặc pháp luật yêu cầu khác.',

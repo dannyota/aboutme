@@ -280,7 +280,7 @@ describe('index.vue language', () => {
       'Mỗi CV một đường dẫn',
       'Dùng trợ lý AI của bạn',
     ]);
-    expect(wrapper.text()).toContain('Đăng CV gồm ba lựa chọn');
+    expect(wrapper.text()).toContain('Xuất bản CV gồm ba lựa chọn');
     expect(wrapper.text()).not.toContain('Create account');
   });
 
