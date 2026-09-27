@@ -1,77 +1,40 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-supersession record; these pages state the resulting design. ADRs 0001–0052,
-0054–0056, 0058, and 0060–0065 are accepted; ADR 0053 is rejected; ADRs 0057 and
-0059 are proposed.
+history; these pages state the resulting design. ADRs 0001 to 0027 are accepted
+and ADR 0028 is proposed. The [ADR index](../adr/README.md) maps every former
+ADR number to its current record.
 
-| ADR                                                                       | Status   | Integrated outcome                                                                                                     |
-| ------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [0001](../adr/0001-agpl-3.0-license.md)                                   | Accepted | Repository and hosted service use AGPL-3.0                                                                             |
-| [0002](../adr/0002-go-api-nuxt-ssr-split.md)                              | Accepted | Go API and one shared Nuxt/Vue renderer                                                                                |
-| [0003](../adr/0003-sse-over-websocket.md)                                 | Accepted | HTTP autosave and SSE invalidation                                                                                     |
-| [0004](../adr/0004-resume-slug-only-urls.md)                              | Accepted | Globally unique resume slugs; users are not public                                                                     |
-| [0005](../adr/0005-draft-permissive-documents.md)                         | Accepted | Draft-permissive storage and publish-strict completeness                                                               |
-| [0006](../adr/0006-schema-derived-codegen.md)                             | Accepted | Schema-derived code generation and cross-language conformance                                                          |
-| [0007](../adr/0007-unversioned-health-endpoints.md)                       | Accepted | Root health and readiness routes                                                                                       |
-| [0008](../adr/0008-template-apply-semantics.md)                           | Accepted | Presets compute placement against current section keys                                                                 |
-| [0009](../adr/0009-section-order-authority.md)                            | Accepted | Layout arrays own section order                                                                                        |
-| [0010](../adr/0010-goose-only-migrations.md)                              | Accepted | Goose migrations are the relational schema source                                                                      |
-| [0011](../adr/0011-risk-tiered-delivery-gates.md)                         | Accepted | Author discipline and early browser checks remain; local full-gate and review clauses superseded by 0046               |
-| [0012](../adr/0012-ssr-sanitizer-authority.md)                            | Accepted | Go owns SSR sanitizing; DOMPurify is client-only                                                                       |
-| [0013](../adr/0013-contact-detail-rendering.md)                           | Accepted | Array-ordered contacts and custom labels; link and icon-label rules amended by 0040, 0041, and 0043                    |
-| [0014](../adr/0014-oauth-start-methods.md)                                | Accepted | GET login start; CSRF-protected POST link and reauth start                                                             |
-| [0015](../adr/0015-session-rotation-delivery.md)                          | Accepted | One successor with bounded predecessor fallback until delivery                                                         |
-| [0016](../adr/0016-transactional-idempotency.md)                          | Accepted | Mutation and replay record commit together                                                                             |
-| [0017](../adr/0017-resume-document-versioning.md)                         | Accepted | Pure read projection, CAS persistence, explicit converters                                                             |
-| [0018](../adr/0018-bounded-rate-limiter.md)                               | Accepted | No active-bucket eviction under key churn                                                                              |
-| [0019](../adr/0019-private-media-delivery.md)                             | Accepted | Private object storage behind live-gated Go reads                                                                      |
-| [0020](../adr/0020-uat-migration-baseline.md)                             | Accepted | A committed marker freezes migration history                                                                           |
-| [0021](../adr/0021-template-placement-order.md)                           | Accepted | Validate exact placement; order by selector then current position                                                      |
-| [0022](../adr/0022-public-artifact-revocation.md)                         | Accepted | Revalidate every public reuse; fence and drain generation leases                                                       |
-| [0023](../adr/0023-private-print-capability.md)                           | Accepted | One-use 256-bit, 60-second capability bound to snapshot and job                                                        |
-| [0024](../adr/0024-single-pass-delivery-gates.md)                         | Accepted | One author pass per change remains; full-gate and review clauses superseded by 0046                                    |
-| [0025](../adr/0025-password-authentication-and-identity-linking.md)       | Accepted | Email/password credential alongside providers; email is never an identity key                                          |
-| [0026](../adr/0026-mcp-agent-access.md)                                   | Accepted | Remote MCP endpoint and first-party OAuth 2.1 server; editor parity minus publish                                      |
-| [0027](../adr/0027-provider-login-flag.md)                                | Accepted | Provider login behind `PROVIDER_LOGIN_ENABLED`; web reads capabilities; provider selection amended by 0039             |
-| [0028](../adr/0028-no-operator-surface.md)                                | Accepted | No platform-admin page, privileged role, or operator route in the public app                                           |
-| [0029](../adr/0029-application-ui-toolkit.md)                             | Accepted | Tailwind v4 and shadcn-vue chrome without Preflight; renderer stays isolated; primitive rule amended by 0052           |
-| [0030](../adr/0030-stamped-document-visual-identity.md)                   | Accepted | Stamped-document identity: seal red only for public state, Be Vietnam Pro chrome; palette superseded by 0050           |
-| [0031](../adr/0031-aws-cost-research-and-hosted-uat.md)                   | Accepted | AWS cost research, OpenTofu, managed AWS services; hosted UAT superseded by 0037                                       |
-| [0032](../adr/0032-public-share-image.md)                                 | Accepted | One live-gated public PNG share image from the continuous resume renderer; superseded by 0055                          |
-| [0033](../adr/0033-public-image-builds-private-deployment.md)             | Accepted | Public ARM64 build/smoke; ECR publication superseded by 0037                                                           |
-| [0034](../adr/0034-scheduled-uat-and-production-autoscaling.md)           | Accepted | Scheduled UAT and autoscaling; superseded by 0036 and 0037                                                             |
-| [0035](../adr/0035-replica-coordination-and-uat-lifecycle.md)             | Accepted | Fleet coordination contract retained for a later second replica; runtime and hosted UAT superseded by 0037 and 0038    |
-| [0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)      | Accepted | One serving replica for the first release; migrations run as a deployment step; wake implementation retired            |
-| [0037](../adr/0037-single-host-production-without-hosted-uat.md)          | Accepted | First release deploys to single-host production, no hosted UAT until about 500 users; edge superseded by 0054          |
-| [0038](../adr/0038-single-baseline-and-plain-migrator.md)                 | Accepted | One baseline migration with explicit app grants; plain goose migrator; replica runtime removed until a second replica  |
-| [0039](../adr/0039-per-provider-login-enablement.md)                      | Accepted | `PROVIDER_LOGIN_ENABLED` enables providers one at a time; production can enable Google and, per 0058, LinkedIn         |
-| [0040](../adr/0040-contact-labels-beside-icons.md)                        | Accepted | Icons replace default contact labels; linked addresses display without scheme or trailing slash                        |
-| [0041](../adr/0041-contact-link-display-and-body-justify.md)              | Accepted | Document v3: custom https links, per-detail link display, justified body text; GitHub and X brand marks                |
-| [0042](../adr/0042-public-page-title-and-favicon.md)                      | Accepted | Owner-set public page title and one-emoji favicon as publication settings; exact server-computed head values           |
-| [0043](../adr/0043-email-and-phone-links.md)                              | Accepted | Email and phone details link as `mailto:` and `tel:` only after a strict renderer check                                |
-| [0044](../adr/0044-header-photo-position-and-project-subtitle.md)         | Accepted | Document v4: header photo on top, left, or right; optional project entry subtitle                                      |
-| [0045](../adr/0045-pdf-download-name-and-metadata.md)                     | Accepted | PDFs download as `<Full-Name>-Resume.pdf` with an RFC 5987 UTF-8 name; PDF Title and dates come from the revision      |
-| [0046](../adr/0046-github-ci-delivery-gate.md)                            | Accepted | Narrow local checks and per-commit gitleaks; one fresh review before push; exact green GitHub CI commit before release |
-| [0047](../adr/0047-bilingual-resume-workspace.md)                         | Accepted | Vietnamese and English resume workspace; interface toggles never change resume data or resume language                 |
-| [0048](../adr/0048-passkey-second-factor-authentication.md)               | Accepted | Optional passkey second factor, recovery codes, authority epoch, exact wire contract, and release fence                |
-| [0049](../adr/0049-totp-second-factor-authentication.md)                  | Accepted | Optional authenticator-app second factor, sealed secrets with a derived-ID key ring, shared recovery, and floor v0.4.7 |
-| [0050](../adr/0050-aurora-application-identity.md)                        | Accepted | Aurora chrome: blue-led palette, canvas glows, logo mark; renderer stays white and isolated                            |
-| [0051](../adr/0051-vietnam-hosted-production.md)                          | Accepted | Vietnam-hosted production: GreenNode compute, storage, CDN, DNS; Bizfly mail; AWS becomes test only                    |
-| [0052](../adr/0052-guarded-token-edits-to-generated-primitives.md)        | Accepted | Generated primitives take token-colored variant edits only with a guard test, re-applied after regeneration            |
-| [0053](../adr/0053-public-pdf-tab-renders-the-download-in-the-browser.md) | Rejected | Public PDF tab draws the gated PDF download with pdf.js in the browser; no new route or server raster                  |
-| [0054](../adr/0054-cloudfront-edge-for-single-host-production.md)         | Accepted | Interim CloudFront edge with origin mTLS; DNS superseded by 0056; ADR 0051 still governs the Vietnam move              |
-| [0055](../adr/0055-stored-link-preview-card.md)                           | Accepted | Stored, versioned link-preview card replaces the top-crop share image; supersedes 0032                                 |
-| [0056](../adr/0056-route-53-production-dns.md)                            | Accepted | Route 53 alias records serve production DNS, so CloudFront picks edges near the viewer                                 |
-| [0057](../adr/0057-deployment-transparency-observer.md)                   | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                 |
-| [0058](../adr/0058-linkedin-sign-in-in-production.md)                     | Accepted | Production may enable LinkedIn sign-in; LinkedIn uses its documented flow with a nonce and no PKCE                     |
-| [0059](../adr/0059-linkedin-import-in-the-browser.md)                     | Proposed | Import parses in the browser and never uploads the file; its data download source superseded in part by 0064           |
-| [0060](../adr/0060-viewer-data-controller-and-consent.md)                 | Accepted | aboutme controls viewer counting and keeps no viewer data; consented tracking dropped                                  |
-| [0061](../adr/0061-layered-human-view-counting.md)                        | Accepted | Seven-layer human-view counting with label-only WAF and proof of work, no fingerprinting                               |
-| [0062](../adr/0062-sign-in-to-view-without-an-account.md)                 | Accepted | Sign in to view with a signed pass cookie, no account, nothing kept about the viewer                                   |
-| [0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md)             | Accepted | LinkedIn returns no nonce claim; its callback checks the nonce only when present, with the code-injection risk named   |
-| [0064](../adr/0064-linkedin-import-from-save-to-pdf.md)                   | Accepted | LinkedIn import reads the English Save to PDF with pdf.js in a worker; app pages allow same-origin workers             |
-| [0065](../adr/0065-seal-identity.md)                                      | Accepted | Seal logo and ticket stamp; two blues, burnt-orange outline destructive, 15 px chrome body, per-language OG image      |
+| ADR                                                             | Status   | Outcome                                                                                                                             | Design                                                                                      |
+| --------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [0001](../adr/0001-agpl-3.0-license.md)                         | Accepted | Repository and hosted service use AGPL-3.0-only                                                                                     | [Repository](repository.md)                                                                 |
+| [0002](../adr/0002-system-architecture.md)                      | Accepted | Go API and one shared Vue renderer; HTTP autosave and SSE invalidation; root health routes                                          | [System](system.md), [realtime](realtime.md), [API](api.md)                                 |
+| [0003](../adr/0003-public-namespace-and-no-operator-surface.md) | Accepted | Globally unique resume slugs; users are not public; no operator surface                                                             | [Product](product.md), [security](security.md)                                              |
+| [0004](../adr/0004-resume-document-contract.md)                 | Accepted | Draft-permissive storage, schema-derived codegen, layout arrays own order, adjacent converters with declared losses                 | [Data](data.md)                                                                             |
+| [0005](../adr/0005-database-migrations.md)                      | Accepted | Goose migrations are the schema source; one baseline with explicit grants; plain migrator as a deploy step                          | [Data](data.md), [deployment](deployment.md)                                                |
+| [0006](../adr/0006-transactional-idempotency.md)                | Accepted | Mutation and replay record commit together                                                                                          | [API](api.md)                                                                               |
+| [0007](../adr/0007-bounded-rate-limiter.md)                     | Accepted | No active-bucket eviction under key churn; shared overflow bucket                                                                   | [Security](security.md), [budgets](budgets.md)                                              |
+| [0008](../adr/0008-ssr-sanitizer-authority.md)                  | Accepted | Go owns SSR sanitizing; DOMPurify is client-only                                                                                    | [Web](web.md#rich-text)                                                                     |
+| [0009](../adr/0009-private-media-delivery.md)                   | Accepted | Private object storage behind live-gated Go reads; durable exact-key deletion                                                       | [API](api.md), [operations](operations.md)                                                  |
+| [0010](../adr/0010-public-artifact-revocation.md)               | Accepted | Revalidate every public reuse; fence and drain generation leases                                                                    | [System](system.md), [operations](operations.md)                                            |
+| [0011](../adr/0011-print-capability-and-pdf-output.md)          | Accepted | One-use 60-second print capability; `<Full-Name>-Resume.pdf`, title, and revision dates                                             | [Web](web.md), [print](templates/print.md)                                                  |
+| [0012](../adr/0012-template-placement.md)                       | Accepted | Presets carry a placement rule; one deterministic total order                                                                       | [Template contract](templates/contract.md)                                                  |
+| [0013](../adr/0013-resume-header-and-contacts.md)               | Accepted | Array-ordered contacts, icon labels, checked `https`, `mailto:`, and `tel:` links, photo position, project subtitle, justified text | [Template contract](templates/contract.md), [tokens](templates/tokens.md)                   |
+| [0014](../adr/0014-public-page-head-and-link-preview.md)        | Accepted | Owner-set page title and emoji favicon; stored, versioned link-preview card                                                         | [Link previews](link-previews.md)                                                           |
+| [0015](../adr/0015-accounts-passwords-and-sessions.md)          | Accepted | Password beside providers; email is never an identity key; bounded session rotation                                                 | [Security](security.md)                                                                     |
+| [0016](../adr/0016-sign-in-providers.md)                        | Accepted | POST for privileged starts; per-provider enablement; LinkedIn without PKCE or a returned nonce, risk accepted                       | [Security](security.md), [LinkedIn sign-in](linkedin-sign-in.md)                            |
+| [0017](../adr/0017-second-factor-authentication.md)             | Accepted | Optional passkeys and TOTP, recovery codes, authentication epoch, release fence                                                     | [Second factor](second-factor-authentication.md), [release fence](passkey-release-fence.md) |
+| [0018](../adr/0018-mcp-agent-access.md)                         | Accepted | Remote MCP endpoint and first-party OAuth 2.1 server; editor parity minus publish                                                   | [Security](security.md), [MCP workflow](mcp-owner-workflow.md)                              |
+| [0019](../adr/0019-application-ui-toolkit.md)                   | Accepted | Tailwind v4 and shadcn-vue without Preflight; renderer isolated; guarded token edits                                                | [Web](web.md), [UI tokens](ui/typography-and-tokens.md)                                     |
+| [0020](../adr/0020-application-visual-identity.md)              | Accepted | Seal logo and stamp, aurora canvas, two blues, burnt-orange destructive, white resume                                               | [UI identity](ui/identity-and-seal.md), [UI tokens](ui/typography-and-tokens.md)            |
+| [0021](../adr/0021-bilingual-resume-workspace.md)               | Accepted | Vietnamese and English workspace; interface toggles never change resume data                                                        | [Localization](localization.md)                                                             |
+| [0022](../adr/0022-viewer-privacy-and-counting.md)              | Accepted | No viewer data kept; seven-layer anonymous counts; sign in to view with a signed pass                                               | [Viewer analytics](viewer-analytics/README.md)                                              |
+| [0023](../adr/0023-linkedin-import.md)                          | Accepted | Import reads the English Save to PDF with pdf.js in a worker; the file never leaves the browser                                     | [LinkedIn import](linkedin-import.md)                                                       |
+| [0024](../adr/0024-delivery-gates.md)                           | Accepted | Failing test first, one fresh review, exact green GitHub CI commit before tag and deploy                                            | [`AGENTS.md`](../../AGENTS.md)                                                              |
+| [0025](../adr/0025-single-host-production.md)                   | Accepted | One AWS Singapore host, no hosted UAT until about 500 users, CloudFront edge, Route 53 DNS                                          | [Single-host production](single-host-production.md), [CloudFront edge](cloudfront-edge.md)  |
+| [0026](../adr/0026-replica-scaling.md)                          | Accepted | One serving replica; the scaling design returns before a second                                                                     | [Scaling](scaling/README.md)                                                                |
+| [0027](../adr/0027-vietnam-hosted-production.md)                | Accepted | Vietnam-hosted production on GreenNode and Bizfly; AWS becomes test only                                                            | [Vietnam production](vietnam-production.md)                                                 |
+| [0028](../adr/0028-deployment-transparency-observer.md)         | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                              | [Deployment transparency](deployment-transparency/README.md)                                |
 
 ## Remaining gates
 
@@ -81,12 +44,12 @@ supersession record; these pages state the resulting design. ADRs 0001–0052,
 | Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes.
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md) is the
-production approval; hosting cost, topology, and the release path follow it.
+[ADR 0025](../adr/0025-single-host-production.md) is the production approval;
+hosting cost, topology, and the release path follow it.
 
 Known document limits, such as no template identity or section visibility, are
 listed in [template limits](templates/limitations.md). A later document version
-may lift one through [ADR 0017](../adr/0017-resume-document-versioning.md); the
+may lift one through [ADR 0004](../adr/0004-resume-document-contract.md); the
 renderer never invents an out-of-contract field.
 
 ## Change process
