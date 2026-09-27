@@ -9,8 +9,8 @@ of the PDF, and [ADR 0059](../adr/0059-linkedin-import-in-the-browser.md) the
 rule that parsing stays in the browser.
 
 Status: accepted; the owner approved I1 to I10 on 2026-09-27. Facts were checked
-on 2026-09-26 and 2026-09-27. **Verify** marks a fact the build must confirm
-first, in [Facts to confirm](#facts-to-confirm-before-the-build).
+on 2026-09-26 and 2026-09-27. **Verify** marks a fact one profile could not
+settle, as listed in [Facts to confirm](#facts-to-confirm-before-the-build).
 
 ## Sources a normal app can use
 
@@ -23,29 +23,55 @@ first, in [Facts to confirm](#facts-to-confirm-before-the-build).
 
 ## Save to PDF structure
 
-One real English-profile PDF, inspected locally on 2026-09-26 and never
-committed, shows this structure:
+One English-profile PDF inspected locally on 2026-09-26 and the owner's masked
+shape report, neither committed, show this structure:
 
-- US Letter pages (612 × 792 pt), PDF 1.4, tagged, produced by Apache FOP 2.3,
-  with one embedded subset font (Arial Unicode MS, CID TrueType, Identity-H)
-  that has a Unicode map. Text extracts cleanly.
-- Page 1 has two columns. The left column (the sidebar) holds "Contact" (phone
-  with a type label, email, profile URL with "(LinkedIn)", other sites with a
-  type label), "Top Skills" (three skills), and "Publications". The right column
-  holds the name, the headline, the location, and "Summary". Later pages use one
-  column. Every page ends with "Page N of M".
-- "Experience" lists, per role: company, title, `Month YYYY - Month YYYY`
-  followed by a duration such as `(1 year 2 months)`, location, then the
-  description. Several roles at one company share one company line, followed by
-  a total duration line.
+- US Letter pages (612 × 792 pt), PDF 1.4, tagged (PDF/UA), not encrypted,
+  produced by Apache FOP 2.3, with one embedded subset font (Arial Unicode MS,
+  CID TrueType, Identity-H) that has a Unicode map. Text extracts cleanly. Every
+  line uses the same font resource, so the parser cannot tell bold from normal
+  and relies on size, position, and gaps only.
+- Page 1 has two columns: the sidebar at x = 21.6 pt and the main column at x =
+  223.6 pt. The sidebar holds "Contact", "Top Skills", and "Publications"; the
+  main column holds the name, the headline, the location, "Summary",
+  "Experience", and "Education", in that order. Later pages print main lines at
+  the same left edge; the sidebar ends on page 1. Every page ends with "Page N
+  of M" at 9 pt.
+- "Contact" prints a phone with its label on the same line
+  (`0900000000 (Home)`), then the email alone with no label, then the profile
+  URL without a scheme followed by `(LinkedIn)` on its own line, then each other
+  site followed by its label on its own line.
+- "Experience" lists, per role: company, title,
+  `Month YYYY - Month YYYY (1 year 2 months)`, location, then the description.
+  Several roles at one company share one company line followed by a total
+  duration line without parentheses, such as `2 years 1 month`; each role in the
+  group starts at its title. A role can continue on the next page.
 - "Education" lists the school, then `Degree, Field · (Month YYYY - Month YYYY)`
-  or `· (YYYY - YYYY)`. The line can wrap inside the date.
+  or `Degree, Field · (YYYY - YYYY)`. The line can wrap inside the date.
 - Reading order puts the whole left column before the right one, so the parser
   splits columns by position, not by text order.
 
+Measured sizes and baseline gaps, in points. The parser uses relative rules;
+fixtures reproduce these values.
+
+| Lines                             | Size      | Gap before the line                                         |
+| --------------------------------- | --------- | ----------------------------------------------------------- |
+| Name                              | 26        | none; first main line                                       |
+| Headline, then location           | 12        | 21 after the name, 15.5 between them                        |
+| Sidebar / main heading            | 13 / 16   | 34.5 to 54 after the previous section                       |
+| First line under a heading        | any       | 19.5 in the sidebar, 25.5 to 30.5 in main                   |
+| Summary body                      | 12        | 18 per line                                                 |
+| Employer, school                  | 12        | 38.5 after the previous role, 33.5 after a school           |
+| Group duration line               | 10.5      | 16.5 after the employer                                     |
+| Job title                         | 11.5      | 16 after the employer, 35 after a grouped role              |
+| Date, then role location          | 10.5      | 14.5 each                                                   |
+| Description, degree line          | 10.5      | 21.5 after the location, 17.5 after the school, 18 per line |
+| Skill, publication                | 10.5      | 12.5 for a wrapped line, 17.5 for a new entry               |
+| Contact phone, email / URL, label | 10.5 / 11 | 12.5 to 24.5, not tied to entries                           |
+
 Third-party parsers also name "Languages", "Certifications", and "Honors-Awards"
-in the sidebar [6], and PDF metadata with author "LinkedIn" and subject "Resume
-generated from profile" [7] (**Verify** both).
+in the sidebar [6] (**Verify**), and metadata with author "LinkedIn" and subject
+"Resume generated from profile" [7]; the report confirms the author only.
 
 ## Flow
 
@@ -114,18 +140,24 @@ pt.
   `numPages`. The footer is then dropped.
 - **Columns.** On page 1, the name is the line with the largest font size; its
   left edge minus 12 pt is the column boundary B. Lines left of B are sidebar,
-  the rest are main. Later pages apply the same B (**Verify** that the sidebar
-  can continue to page 2).
-- **Headings.** A line is a heading when its whole text equals a known heading
-  and its font size is larger than the median line size of the file. A line in
-  the font size of the known headings found, that is not one of them, is an
-  unknown heading: it ends the section before it, and its section is dropped.
+  the rest are main. Later pages apply the same B; their main lines keep the
+  page-1 main edge. A sidebar that continues on page 2 is read the same way
+  (**Verify**; not yet seen).
+- **Headings.** Sidebar and main headings differ in size. A line is a heading
+  when its whole text equals a known heading of its column and its font size is
+  larger than the median line size of the file. The largest such size in a
+  column is that column's heading size; a known heading text at a smaller size,
+  such as an employer named "Experience" at the employer size, is ordinary text.
+  A line at the column's heading size that is not a known heading is an unknown
+  heading: it ends the section before it, and its section is dropped.
 
 Known headings: sidebar "Contact", "Top Skills", "Languages", "Certifications",
 "Honors-Awards", "Publications", "Patents"; main "Summary", "Experience",
-"Education", "Volunteer Experience", "Projects" (**Verify** the list). Sidebar
-and main lines each join across pages in order, and each section holds the lines
-up to the next heading of its column.
+"Education", "Volunteer Experience", "Projects" (**Verify** those the report did
+not show). Sidebar and main lines each join across pages in order, and each
+section holds the lines up to the next heading of its column. The first line of
+a later page has no gap: in the main column it continues the paragraph before
+it, and in the sidebar it starts a new entry.
 
 ### Is it an English LinkedIn PDF?
 
@@ -144,47 +176,66 @@ can appear in an English profile. LinkedIn does not promise they render
 
 ## Mapping
 
-| PDF part       | Rule                                                                                                                                                                          | Resume target                                                                                                                     |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Name           | The largest line on page 1                                                                                                                                                    | `personalDetails.fullName`, as printed                                                                                            |
-| Headline       | Main lines after the name, up to the location line or the first heading, joined with spaces                                                                                   | `personalDetails.headline`                                                                                                        |
-| Location       | The last main line before the first heading, when its font size is smaller than the headline's (**Verify**)                                                                   | A `location` detail                                                                                                               |
-| Contact        | Lines join until one ends with `(Label)`. A value with `@` is an email, digits and `+ ( ) -` a phone, `(LinkedIn)` the profile URL, other labels websites (**Verify** labels) | `email`, `phone`, `linkedin`, and `website` details; a URL gets `https://` and must pass the link rule                            |
-| Top Skills     | One skill per entry                                                                                                                                                           | `skill`: `name`, no level                                                                                                         |
-| Languages      | `Name (Proficiency)`; lines join until the parentheses close                                                                                                                  | `language`: `name`, `level` 1 to 5 from Elementary, Limited Working, Professional Working, Full Professional, Native or Bilingual |
-| Certifications | One title per entry                                                                                                                                                           | `certificate`: `title`                                                                                                            |
-| Summary        | Paragraphs and bullets, below                                                                                                                                                 | A `profile` section with one entry                                                                                                |
-| Experience     | Entries, below                                                                                                                                                                | `work`: `employer`, `jobTitle`, `dates`, `city` and `country`, `description`                                                      |
-| Education      | Entries, below                                                                                                                                                                | `education`: `school`, `degree`, `dates`                                                                                          |
+| PDF part       | Rule                                                                                                             | Resume target                                                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Name           | The largest line on page 1                                                                                       | `personalDetails.fullName`, as printed                                                                                            |
+| Headline       | Main lines after the name, up to the location line or the first heading, joined with spaces                      | `personalDetails.headline`                                                                                                        |
+| Location       | The last main line before the first heading, when two or more lines lie between the name and that heading; below | A `location` detail                                                                                                               |
+| Contact        | Entries, below                                                                                                   | `email`, `phone`, `linkedin`, and `website` details; a URL gets `https://` and must pass the link rule                            |
+| Top Skills     | One skill per entry                                                                                              | `skill`: `name`, no level                                                                                                         |
+| Languages      | `Name (Proficiency)`; lines join until the parentheses close                                                     | `language`: `name`, `level` 1 to 5 from Elementary, Limited Working, Professional Working, Full Professional, Native or Bilingual |
+| Certifications | One title per entry                                                                                              | `certificate`: `title`                                                                                                            |
+| Summary        | Paragraphs and bullets, below                                                                                    | A `profile` section with one entry                                                                                                |
+| Experience     | Entries, below                                                                                                   | `work`: `employer`, `jobTitle`, `dates`, `city` and `country`, `description`                                                      |
+| Education      | Entries, below                                                                                                   | `education`: `school`, `degree`, `dates`                                                                                          |
 
-In the sidebar lists, a gap between lines larger than 1.3 times the font size
-starts a new entry, so a wrapped skill or certificate stays one entry
-(**Verify**).
+**Location.** The headline and the location share one size and line gap, so a
+wrapped headline without a location would give its last line as the location
+(**Verify** that LinkedIn always prints one). The person can deselect it.
+
+**Contact.** A line with `@` and no label is an email entry on its own. Other
+lines join without spaces until a line ends with `(Label)` or is only `(Label)`;
+the text before the label is the value. A value of only digits, spaces, and
+`+ ( ) -` is a phone, whatever its label. `(LinkedIn)` marks the profile URL;
+any other label marks a website. Gaps do not separate contact entries. The
+report shows `(Home)`, `(LinkedIn)`, and one website label (**Verify** other
+labels, and that a long URL wraps onto a second line).
+
+In the other sidebar lists, a gap between lines larger than 1.4 times the font
+size starts a new entry, so a wrapped skill or certificate stays one entry; 1.4
+is the midpoint of the measured wrap and entry gaps (1.19 and 1.67 times).
 
 **Experience.** A date line matches the date range below, optionally followed by
-a duration in parentheses. A duration line holds only a duration, such as
-`3 years 4 months` or `less than a year` (**Verify** forms). For each date line:
+a duration in parentheses: `(1 year 2 months)`, `(1 year)`, or `(9 months)`. A
+duration line holds only a duration without parentheses, such as
+`2 years 1 month`; each unit comes singular or plural. `less than a year` is
+accepted in both places (**Verify**; the report has none). For each date line:
 
-- The line before it is the job title.
+- The job title is the run of lines just before it that share the size of the
+  line right before it (11.5 pt in the report), joined with spaces (**Verify**
+  that a long title wraps into such a run).
 - The line before the title is the employer when its font size is the largest in
   the section. When it is a duration line, the line before that is the employer
   of a group, and later roles without their own employer line take the group's
   employer. The group's duration is dropped.
 - The line after the date line is the location when its font size equals the
-  date line's and it is not a date line (**Verify** sizes); otherwise there is
-  no location.
+  date line's, it is not a date line, and its gap is at most 1.6 times its size.
+  Otherwise there is no location (**Verify** the gap when a role has none).
 - The description is every line after that, up to the next entry's first line.
 
-**Education.** A school line has the section's largest font size. The lines
-after it, up to the next school, join with spaces. The text after the last `·`
-is the date part in parentheses; the text before it is the degree, kept as
-LinkedIn writes it ("Degree, Field").
+**Education.** A school line has the section's largest font size; consecutive
+school-size lines join as one school. The lines after it, up to the next school,
+join with spaces. The text after the last `·` is the date part in parentheses;
+the text before it is the degree, kept as LinkedIn writes it ("Degree, Field").
 
-**Rich text.** Lines join into paragraphs; a vertical gap larger than 1.5 times
-the line height starts a new paragraph. A line starting with `•`, `-`, `*`, or
-`–` starts a list item, and a run of them becomes one `ul`. HTML special
-characters are escaped. Output uses only `p`, `ul`, and `li` from the sanitizer
-allowlist and stays under 16 KiB.
+**Rich text.** Lines join into paragraphs with one space. A gap larger than 1.3
+times the section's most common line gap starts a new paragraph. The report
+shows no such gap, and one sentence end runs into the next capital with no
+space, so the PDF likely drops the profile's own line breaks (assumption); the
+import keeps the text as extracted. A line starting with `•`, `-`, `*`, or `–`
+starts a list item, and a run of them becomes one `ul` (**Verify**; the report
+has no bullet line). HTML special characters are escaped. Output uses only `p`,
+`ul`, and `li` from the sanitizer allowlist and stays under 16 KiB.
 
 **Locations** split at the last comma: the right part is the country, the left
 the city. Without a comma it is the city.
@@ -206,8 +257,10 @@ import never translates.
 
 `parseLinkedInDate` returns `{y, m?}` or nothing. It accepts `2020`, `Jan 2020`,
 and `January 2020` (English month names, any case). A range is `start - end`,
-with a hyphen or an en dash and spaces (**Verify**), where `end` may be
-`Present`. Years must fall in 1900 to 2100, the schema range.
+with a hyphen or an en dash and spaces, where `end` may be `Present`. The report
+shows only a spaced hyphen and full month names; the en dash and short names
+stay accepted (**Verify** `Present`; every role in the report has ended). Years
+must fall in 1900 to 2100, the schema range.
 
 - Start and end: `{start, end, present: false}`.
 - Start and `Present`: `{start, end: null, present: true}`.
@@ -300,21 +353,21 @@ repository.
 
 Layout fixtures under `apps/web/test/import/linkedin/fixtures/` are generated,
 not copied. Each has a committed XSL-FO source (`*.fo`) that reproduces the
-structure above with invented data, rendered once by Apache FOP 2.3 in a pinned
-container with a free font (Noto Sans) and a Unicode map. `fixtures/README.md`
-records the command, and the generated PDFs are committed.
+structure, sizes, and gaps above with invented data, rendered once by Apache FOP
+2.3 in a pinned container with a free font (Noto Sans) and a Unicode map.
+`fixtures/README.md` records the command, and the generated PDFs are committed.
 
-| Fixture                  | Contents                                                                                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `basic-en.pdf`           | 3 pages; sidebar with all contact kinds, three skills, two languages, two certificates; summary with bullets; four roles, two at one company; two schools |
-| `wraps-en.pdf`           | A wrapped headline, profile URL, language, certificate, and education date line; an entry split across a page break; a sidebar continuing on page 2       |
-| `dates-en.pdf`           | Every accepted date form, `Present`, year only, an unreadable date, a start after the end, `less than a year`                                             |
-| `dropped-en.pdf`         | Honors-Awards, Publications, Patents, Volunteer Experience, and Projects sections                                                                         |
-| `vietnamese-letters.pdf` | An English profile whose name and one employer carry Vietnamese letters                                                                                   |
-| `localized-vi.pdf`       | The same layout with Vietnamese headings: the English-only message                                                                                        |
-| `limits-en.pdf`          | 20 pages; a 220-character headline; 80 roles; a description over 16 KiB                                                                                   |
-| `injection-en.pdf`       | `<script>`, `<img onerror>`, and `javascript:` text in every mapped field and contact line                                                                |
-| `other.pdf`              | A two-page document without LinkedIn footers: the not-LinkedIn message                                                                                    |
+| Fixture                  | Contents                                                                                                                                                                                                                                                                                                          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `basic-en.pdf`           | 3 pages; sidebar with a labeled phone, an unlabeled email, a profile URL and a website each labeled on the next line, three skills, two languages, two certificates; summary with bullets; four roles, two at one company under a duration line, one continuing on page 2; two schools, one with its date wrapped |
+| `wraps-en.pdf`           | A wrapped headline with a location; a wrapped profile URL, skill, language, certificate, and job title; a sidebar continuing on page 2                                                                                                                                                                            |
+| `dates-en.pdf`           | Every accepted date form, `Present`, year only, an unreadable date, a start after the end, `less than a year` as a date duration and as a group duration                                                                                                                                                          |
+| `dropped-en.pdf`         | Honors-Awards, Publications, Patents, Volunteer Experience, and Projects sections                                                                                                                                                                                                                                 |
+| `vietnamese-letters.pdf` | An English profile whose name and one employer carry Vietnamese letters                                                                                                                                                                                                                                           |
+| `localized-vi.pdf`       | The same layout with Vietnamese headings: the English-only message                                                                                                                                                                                                                                                |
+| `limits-en.pdf`          | 20 pages; a 220-character headline; 80 roles; a description over 16 KiB                                                                                                                                                                                                                                           |
+| `injection-en.pdf`       | `<script>`, `<img onerror>`, and `javascript:` text in every mapped field and contact line                                                                                                                                                                                                                        |
+| `other.pdf`              | A two-page document without LinkedIn footers: the not-LinkedIn message                                                                                                                                                                                                                                            |
 
 Hostile files are built in test code, not committed: 4 MiB + 1 byte, no `%PDF-`
 header, a truncated file, an encrypted file, 21 pages, text past 100,000
@@ -329,7 +382,8 @@ stream that inflates past 1 GiB, and deeply nested objects.
   options; and a scan of the pinned pdf.js files for `eval` and `Function`
   calls.
 - A mapping test over line arrays (JSON, synthetic) covers layouts the FOP
-  fixtures cannot, such as missing locations and unknown headings.
+  fixtures cannot, such as a wrapped headline without a location, a role without
+  a location, and unknown headings.
 - CSP tests: `apps/web/test/csp.test.ts` and `apps/web/e2e/normal-csp.spec.ts`
   assert the new app policy; the public, print, and harness policies stay
   unchanged.
@@ -345,27 +399,24 @@ stream that inflates past 1 GiB, and deeply nested objects.
 
 ## Facts to confirm before the build
 
-The frontend first adds `apps/web/scripts/linkedin-pdf-shape.mjs`. It reads a
-PDF with the same pdf.js options and prints only its shape: page count, metadata
-producer, author, and subject, and per line the page, column, left edge, font
-size, and either the heading text, `DATE`, `DURATION`, `FOOTER`, or `TEXT(n)`,
-with letters replaced by `a` and digits by `9`. It prints no value from the
-profile. The owner runs it on his own English Save to PDF and sends the output.
-It settles:
+The owner ran `apps/web/scripts/linkedin-pdf-shape.mjs` on his English Save to
+PDF on 2026-09-27. It prints only masked layout (letters as `a`, digits as `9`,
+keeping heading, date, footer, and label words); the report is not committed.
 
-1. The heading list, their order, and the sidebar and main split.
-2. Font sizes for name, headline, location, heading, employer, title, date,
-   location, and body lines.
-3. Whether the sidebar continues on later pages, and the column boundary.
-4. Date separators, month name forms, `Present`, and duration forms.
-5. Contact type labels, and whether long URLs wrap.
-6. Metadata, and that the file has no encryption.
-7. Whether a long sidebar entry wraps with a smaller gap than between entries.
+| Fact                                  | Status                                                                                                                                                                                                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Headings, order, column split      | Confirmed for the six headings found. Differs: sidebar and main headings have different sizes. Not settled: the six headings absent from this profile.                                                      |
+| 2. Font sizes per line type           | Confirmed: name largest, employer largest in Experience, school largest in Education, location equal to the date size. Differs: headline and location share one size.                                       |
+| 3. Sidebar on later pages; boundary B | Boundary confirmed: later pages keep the page-1 main edge. Not settled: a sidebar that continues; this one ends on page 1.                                                                                  |
+| 4. Dates and durations                | Confirmed: a spaced hyphen, full month names, year-only education ranges, duration forms. Differs: group duration lines have no parentheses. Not settled: `Present`, short month names, `less than a year`. |
+| 5. Contact labels, URL wrap           | Differs: the email has no label; the phone's label shares its line; URL labels sit on the next line. Not settled: other labels, long URL wraps.                                                             |
+| 6. Metadata, encryption               | Confirmed: not encrypted, Apache FOP 2.3, Author names LinkedIn. Not settled: the Subject value. The parser does not use metadata.                                                                          |
+| 7. Sidebar wrap gap and entry gap     | Confirmed: 12.5 against 17.5 pt at 10.5 pt; the threshold is their midpoint, 1.4 times. Contact gaps do not follow it.                                                                                      |
 
-If a fact differs from this design, the architect updates it before the mapping
-code starts. Two facts stay open after that: whether Vietnamese letters in an
-English profile extract cleanly (the owner's profile has none), and whether
-Nuxt's route header reaches `/_nuxt/` files, which the CSP test checks.
+Two more facts stay open: whether Vietnamese letters in an English profile
+extract cleanly (the owner's has none), and whether Nuxt's route header reaches
+`/_nuxt/` files (the CSP test checks). For an open fact the parser follows the
+rule above, and the review lets the person fix the result.
 
 ## Owner approval
 
