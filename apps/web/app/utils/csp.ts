@@ -62,10 +62,17 @@ export const HTML_CSP
  * start`, which redirects the browser to Google server-side
  * (app/components/auth/ProviderButtons.vue), so `connect-src` and
  * `script-src` never need to name Google at all.
+ *
+ * `worker-src 'self'` lets the LinkedIn import page start a same-origin
+ * module Web Worker that runs pdf.js (docs/design/linkedin-import.md's
+ * "Reading the file"; ADR 0064 decision 4). `script-src 'self'` already
+ * lets same-origin code run, so this adds no new code source; `blob:` and
+ * `data:` workers stay blocked. Public resume HTML, the print route, and
+ * the harness keep `worker-src 'none'` (`HTML_CSP` above).
  */
 export const APP_CSP
   = 'default-src \'self\'; base-uri \'self\'; object-src \'none\'; '
     + 'frame-ancestors \'none\'; form-action \'self\'; script-src \'self\'; '
     + 'style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; '
     + 'font-src \'self\'; connect-src \'self\'; manifest-src \'self\'; '
-    + 'media-src \'none\'; worker-src \'none\'';
+    + 'media-src \'none\'; worker-src \'self\'';

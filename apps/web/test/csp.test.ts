@@ -18,6 +18,11 @@ describe('HTML_CSP (public resume HTML and the harness)', () => {
       + 'media-src \'none\'; worker-src \'none\'',
     );
   });
+
+  it('keeps worker-src \'none\' for public HTML, print, and the harness '
+    + '(docs/design/linkedin-import.md, ADR 0064 decision 4)', () => {
+    expect(HTML_CSP).toContain('worker-src \'none\'');
+  });
 });
 
 describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
@@ -27,8 +32,34 @@ describe('APP_CSP (app pages: /, /login, /templates, /app/**)', () => {
       + 'frame-ancestors \'none\'; form-action \'self\'; script-src \'self\'; '
       + 'style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; '
       + 'font-src \'self\'; connect-src \'self\'; manifest-src \'self\'; '
-      + 'media-src \'none\'; worker-src \'none\'',
+      + 'media-src \'none\'; worker-src \'self\'',
     );
+  });
+
+  it('allows only a same-origin worker, per docs/design/linkedin-import.md '
+    + 'and ADR 0064, with every other directive unchanged', () => {
+    // The LinkedIn import page starts a same-origin module worker for
+    // pdf.js (docs/design/linkedin-import.md's "Reading the file", ADR
+    // 0064 decision 4). worker-src 'self' adds no new code source, since
+    // script-src 'self' already lets same-origin code run; blob: and
+    // data: workers must stay blocked.
+    const workerSrc = APP_CSP.split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith('worker-src'));
+    expect(workerSrc).toBe('worker-src \'self\'');
+
+    // Every other directive must be byte-for-byte the same as HTML_CSP's,
+    // which never changes: only worker-src, default-src, base-uri, and
+    // form-action legitimately differ between the two policies.
+    const otherDirectives = (policy: string): string[] =>
+      policy.split(';')
+        .map((part) => part.trim())
+        .filter((part) => !part.startsWith('worker-src'))
+        .filter((part) =>
+          !part.startsWith('default-src')
+          && !part.startsWith('base-uri')
+          && !part.startsWith('form-action'));
+    expect(otherDirectives(APP_CSP)).toEqual(otherDirectives(HTML_CSP));
   });
 
   it('scopes to the app\'s own origin, unlike HTML_CSP\'s no origin', () => {
