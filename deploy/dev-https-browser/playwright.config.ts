@@ -20,6 +20,7 @@ const browserModes = [
   'totp',
   'totp-disabled',
   'mcp-sdk',
+  'mcp-ts-sdk',
 ] as const;
 type BrowserMode = typeof browserModes[number];
 const requestedMode = process.env.ABOUTME_BROWSER_MODE ?? 'auth';
@@ -56,7 +57,7 @@ const timeout = mode === 'totp'
       : mode === 'linkedin-import'
         ? 180_000
         : mode === 'editor' || mode === 'public' || mode === 'password-auth'
-          || mode === 'mcp' || mode === 'publish' || mode === 'exports'
+          || mode === 'mcp' || mode === 'mcp-ts-sdk' || mode === 'publish' || mode === 'exports'
           || mode === 'privacy' || mode === 'sample-start' || mode === 'entry'
           || mode === 'linkedin'
           ? 120_000 : 30_000;
