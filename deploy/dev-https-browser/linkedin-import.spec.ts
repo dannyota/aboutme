@@ -137,21 +137,40 @@ function watchForFileBytes(page: Page, violations: string[]): void {
   });
 }
 
-/** WebKit-only: true for a page error that is the browser's own report of a
- * fetch or worker module import a same-page navigation interrupted mid
- * flight (Nuxt's dev-server build-meta poll and the app's own capabilities
- * read, and pdf.js's per-pick worker churn). Chromium reports the same
- * interruption as a silently dropped abort; WebKit raises it as an uncaught
- * page error instead, on every engine this proof runs, not a LinkedIn import
- * defect. */
+// The two same-origin polls the app itself starts unprompted, and the only
+// ones a same-page navigation is expected to interrupt mid flight (see
+// isExpectedWebKitInterruptedFetch below): Nuxt's dev-server build-meta poll
+// (buildAssetsURL('builds/meta/<id>.json')) and the app's own capabilities
+// read.
+function isKnownInterruptedFetchURL(url: string): boolean {
+  let pathname: string;
+  try {
+    ({ pathname } = new URL(url));
+  } catch {
+    return false;
+  }
+  return pathname.startsWith('/_nuxt/builds/meta/')
+    || pathname === '/api/v1/capabilities';
+}
+
+const INTERRUPTED_FETCH_URL = /(\S+) due to access control checks\.$/u;
+
+/** WebKit-only: true for a page error or console error that is the
+ * browser's own report of a fetch or worker module import a same-page
+ * navigation interrupted mid flight (one of the two known polls above, and
+ * pdf.js's per-pick worker churn). Chromium reports the same interruption
+ * as a silently dropped abort; WebKit raises it as an uncaught page error
+ * (sometimes echoed to the console too) instead, on every engine this proof
+ * runs, not a LinkedIn import defect. Narrowed to the known polls' URLs so
+ * an unrelated blocked request is never mistaken for this noise. */
 function isExpectedWebKitInterruptedFetch(
   engine: 'chromium' | 'webkit',
-  error: Error,
+  text: string,
 ): boolean {
-  return engine === 'webkit' && (
-    error.message === 'TypeError: Importing a module script failed.'
-    || / due to access control checks\.$/u.test(error.message)
-  );
+  if (engine !== 'webkit') return false;
+  if (text === 'TypeError: Importing a module script failed.') return true;
+  const match = INTERRUPTED_FETCH_URL.exec(text);
+  return match !== null && isKnownInterruptedFetchURL(match[1]!);
 }
 
 interface WindowRequest {
@@ -388,9 +407,15 @@ test('entry link, review, and create land the imported content in the editor', a
     // this same window once the browser's post-create navigation begins;
     // `/_nuxt/` is asset traffic the dev server serves on demand, the same
     // classification second-factor.spec.ts already gives that path prefix,
-    // not a second data request.
+    // not a second data request. Only a GET is ever asset traffic, so the
+    // drop is scoped to GET and every dropped request is proven to be one.
+    const droppedNuxtAssetRequests = windowRequests.filter((request) =>
+      request.pathname.startsWith('/_nuxt/'));
+    expect(droppedNuxtAssetRequests.every(
+      (request) => request.method === 'GET',
+    )).toBe(true);
     const dataRequests = windowRequests.filter((request) =>
-      !request.pathname.startsWith('/_nuxt/'));
+      !(request.method === 'GET' && request.pathname.startsWith('/_nuxt/')));
     expect(dataRequests).toEqual([
       { method: 'POST', pathname: '/api/v1/resumes' },
     ]);
@@ -490,9 +515,10 @@ for (const engine of ['chromium', 'webkit'] as const) {
       // never fails the check.
       pageDiagnosticsAttacher(counters, {
         countConsoleError: (message) =>
-          !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+          !isExpectedAnonymousMeConsole(message.text(), message.location().url)
+          && !isExpectedWebKitInterruptedFetch(engine, message.text()),
         onPageError: (error) => {
-          if (!isExpectedWebKitInterruptedFetch(engine, error)) {
+          if (!isExpectedWebKitInterruptedFetch(engine, error.message)) {
             unexpectedPageErrors.push(error.message);
           }
         },
@@ -580,6 +606,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
     expect(fileByteViolations).toEqual([]);
     expect(counters.certificateErrors).toBe(0);
     expect(counters.externalRequests).toBe(0);
+    expect(counters.consoleErrors).toBe(0);
     expect(unexpectedPageErrors).toEqual([]);
   });
 }
