@@ -30,8 +30,8 @@ describe('print card envelope', () => {
   });
 
   it('matches the server layout version', () => {
-    expect(CARD_LAYOUT_VERSION).toBe(1);
-    for (const layoutVersion of [0, 2, '1', null, 1.5]) {
+    expect(CARD_LAYOUT_VERSION).toBe(2);
+    for (const layoutVersion of [0, 1, 3, '2', null, 1.5]) {
       rejected(withCard({ layoutVersion }));
     }
   });

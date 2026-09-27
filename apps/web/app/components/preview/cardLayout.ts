@@ -7,7 +7,7 @@
  * markup and CSS to it, so a layout change raises it on both sides and every
  * live card gets a new URL.
  */
-export const CARD_LAYOUT_VERSION = 1;
+export const CARD_LAYOUT_VERSION = 2;
 
 export const CARD_WIDTH = 1200;
 export const CARD_HEIGHT = 630;

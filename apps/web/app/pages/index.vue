@@ -433,6 +433,7 @@ useHead(computed(() => ({
         <AppSeal
           :label="copy.sealLabel"
           :link="sampleLink"
+          :locale="locale"
           class="absolute -top-12 right-4 min-[42rem]:-right-6"
           data-testid="landing-publish-seal"
           size="stamp"

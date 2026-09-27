@@ -30,7 +30,7 @@ export const cardEnvelope = (): PrintCardEnvelope => ({
   kind: 'card',
   resumeId: RESUME_ID,
   card: {
-    layoutVersion: 1,
+    layoutVersion: 2,
     lng: 'vi',
     slug: 'nguyen-an',
     name: 'Nguyễn Văn An',

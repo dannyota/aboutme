@@ -414,7 +414,7 @@ describe('EditorShell', () => {
       .toBe('/app/resumes');
     const logos = brand.findAll('svg[role="img"][aria-label="aboutme.vn"]');
     expect(logos).toHaveLength(2);
-    expect(logos.some((logo) => logo.attributes('viewBox') === '0 0 29 32'))
+    expect(logos.some((logo) => logo.attributes('viewBox') === '0 0 30 32'))
       .toBe(true);
     expect(wrapper.get('.editor-shell').classes()).toContain(
       'bg-editor-canvas',

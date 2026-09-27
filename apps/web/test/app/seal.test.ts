@@ -3,36 +3,58 @@ import { describe, expect, it } from 'vitest';
 
 import AppSeal from '../../app/components/app/AppSeal.vue';
 
+// AppSeal v2 (ADR 0065): a rounded ticket stamp carrying the logo's seal, the
+// word PUBLIC or CÔNG KHAI, and the public link; and a 20 px seal tile mark.
 describe('AppSeal', () => {
-  it('renders the public link in the stamp ring and accessible name', () => {
-    const wrapper = mount(AppSeal, { props: { link: '/ada-lovelace' } });
+  it('renders the word, the logo seal, and the public link in the stamp',
+    () => {
+      const wrapper = mount(AppSeal, { props: { link: '/ada-lovelace' } });
 
-    expect(wrapper.get('[role="img"]').attributes('aria-label')).toBe(
-      'Public at aboutme.vn/ada-lovelace',
-    );
-    expect(wrapper.get('[data-seal-ring-text]').element.textContent).toBe(
-      'PUBLIC RESUME · ABOUTME.VN/ADA-LOVELACE · ',
-    );
-    expect(wrapper.get('[data-seal-ring-label]').attributes('font-size')).toBe(
-      '9',
-    );
-    expect(
-      wrapper.get('[data-seal-ring-label]').attributes('letter-spacing'),
-    ).toBe('0.08em');
-    expect(wrapper.get('[data-seal-ring="outer"]').attributes()).toMatchObject({
-      'r': '45',
-      'stroke-width': '2',
+      expect(wrapper.get('[role="img"]').attributes('aria-label')).toBe(
+        'Public at aboutme.vn/ada-lovelace',
+      );
+      expect(wrapper.get('[data-seal-word]').text()).toBe('PUBLIC');
+      expect(wrapper.get('[data-seal-word]').attributes()).toMatchObject({
+        'font-size': '20',
+        'font-weight': '800',
+      });
+      expect(wrapper.get('[data-seal-link]').text()).toBe(
+        'aboutme.vn/ada-lovelace',
+      );
+      expect(wrapper.find('[data-seal-logo]').exists()).toBe(true);
+      expect(wrapper.get('[data-seal-ticket]').attributes()).toMatchObject({
+        'rx': '14',
+        'stroke-width': '2.5',
+      });
+      expect(wrapper.attributes('class')).toContain('text-seal-text');
     });
-    expect(wrapper.get('[data-seal-ring="inner"]').attributes()).toMatchObject({
-      'r': '39',
-      'stroke-width': '1',
+
+  it('says CÔNG KHAI for a Vietnamese stamp', () => {
+    const wrapper = mount(AppSeal, {
+      props: { link: '/ada-lovelace', locale: 'vi' },
     });
-    expect(wrapper.get('[data-seal-center]').text()).toBe('aboutme');
-    expect(wrapper.get('[data-seal-center]').attributes()).toMatchObject({
-      'font-size': '14',
-      'font-weight': '600',
+
+    expect(wrapper.get('[data-seal-word]').text()).toBe('CÔNG KHAI');
+  });
+
+  it('grows with the link and never lets a long slug overflow', () => {
+    const short = mount(AppSeal, { props: { link: '/ada' } });
+    const long = mount(AppSeal, {
+      props: { link: '/nguyen-van-an-backend-engineer' },
     });
-    expect(wrapper.attributes('style')).toBe('color: var(--seal);');
+    const longest = mount(AppSeal, { props: { link: `/${'a'.repeat(30)}` } });
+    const width = (w: ReturnType<typeof mount>) =>
+      Number(w.get('[data-seal-ticket]').attributes('width'));
+
+    expect(width(short)).toBeLessThan(width(long));
+    expect(width(longest)).toBeLessThanOrEqual(260);
+    expect(short.get('[data-seal-link]').attributes('textLength'))
+      .toBeUndefined();
+    const squeezed = Number(
+      longest.get('[data-seal-link]').attributes('textLength'),
+    );
+    expect(squeezed).toBeGreaterThan(0);
+    expect(squeezed).toBeLessThanOrEqual(width(longest) - 40 + 2.5);
   });
 
   it('renders a text-free accessible mark', () => {
@@ -44,8 +66,9 @@ describe('AppSeal', () => {
       'Public at aboutme.vn/ada-lovelace',
     );
     expect(wrapper.get('[data-app-seal="mark"]').text()).toBe('');
-    expect(wrapper.find('[data-seal-ring-text]').exists()).toBe(false);
+    expect(wrapper.find('[data-seal-word]').exists()).toBe(false);
     expect(wrapper.get('[data-seal-check]').exists()).toBe(true);
+    expect(wrapper.get('rect').attributes('rx')).toBe('6');
   });
 
   it('uses a caller-supplied accessible label', () => {
@@ -61,11 +84,13 @@ describe('AppSeal', () => {
     );
   });
 
-  it('defaults stamp rotation to minus eight degrees', () => {
+  it('defaults stamp rotation to minus six degrees about its center', () => {
     const wrapper = mount(AppSeal, { props: { link: '/ada-lovelace' } });
+    const width = Number(wrapper.get('[data-seal-ticket]').attributes('width'))
+      + 2.5;
 
     expect(wrapper.get('[data-seal-stamp]').attributes('transform')).toBe(
-      'rotate(-8 48 48)',
+      `rotate(-6 ${width / 2} 36)`,
     );
   });
 
@@ -84,8 +109,8 @@ describe('AppSeal', () => {
     const link = '/<script>alert(1)</script>';
     const wrapper = mount(AppSeal, { props: { link } });
 
-    expect(wrapper.get('[data-seal-ring-text]').text()).toContain(
-      '<SCRIPT>ALERT(1)</SCRIPT>',
+    expect(wrapper.get('[data-seal-link]').text()).toContain(
+      '<script>alert(1)</script>',
     );
     expect(wrapper.attributes('aria-label')).toBe(
       `Public at aboutme.vn${link}`,

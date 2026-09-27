@@ -6,7 +6,14 @@ import type { WorkspaceCopy } from './workspace';
 
 export const siteName = 'aboutme.vn';
 export const siteOrigin = 'https://aboutme.vn';
-export const ogImageUrl = `${siteOrigin}/og-image-v3.jpg`;
+/**
+ * The site's Open Graph image in each language (docs/brand/README.md). A
+ * crawler without the locale cookie gets Vietnamese, the site default.
+ */
+export const ogImageUrl: Record<Locale, string> = {
+  vi: `${siteOrigin}/og-image-v4.jpg`,
+  en: `${siteOrigin}/og-image-v4-en.jpg`,
+};
 
 export const indexablePaths: ReadonlySet<string> = new Set([
   '/',

@@ -21,7 +21,7 @@ const (
 	// LayoutVersion names the card layout. The web card component pins a
 	// hash of its markup and CSS to the same number, so a layout change
 	// raises it on both sides and every live card gets a new version.
-	LayoutVersion = 1
+	LayoutVersion = 2
 	// MaxPNGBytes bounds one stored card.
 	MaxPNGBytes = 524_288
 	// VersionLength is the number of hex digits in a card version.

@@ -59,34 +59,32 @@ describe('AppLogo', () => {
       .toBeNull();
   });
 
-  it('gives two instances on one page disjoint gradient ids that each '
-    + 'resolve inside their own svg', () => {
-    const wrapper = mount({
-      components: { AppLogo },
-      template: '<div><AppLogo /><AppLogo /></div>',
-    });
-    const svgs = wrapper.element.querySelectorAll('svg');
-    expect(svgs).toHaveLength(2);
+  it('uses no ids or gradients, so any number of logos can share a page',
+    () => {
+      // ADR 0065 retired the gradient mark; the seal and the dot take seal
+      // red through currentColor, and nothing is referenced by id.
+      const svg = svgOf(mount(AppLogo));
 
-    const idSets = Array.from(svgs).map((svg) =>
-      new Set(Array.from(svg.querySelectorAll('[id]'))
-        .map((element) => element.id)));
-    expect(idSets[0].size).toBeGreaterThan(0);
-    for (const id of idSets[0]) expect(idSets[1].has(id)).toBe(false);
-
-    for (const svg of Array.from(svgs)) {
-      const ids = new Set(Array.from(svg.querySelectorAll('[id]'))
-        .map((element) => element.id));
-      const referenced = Array.from(svg.querySelectorAll('[fill]'))
-        .map((element) => element.getAttribute('fill'))
-        .filter((fill): fill is string => fill !== null
-          && fill.startsWith('url(#'));
-      expect(referenced.length).toBeGreaterThan(0);
-      for (const fill of referenced) {
-        const id = fill.slice('url(#'.length, -1);
-        expect(ids.has(id)).toBe(true);
+      expect(svg.querySelectorAll('[id]')).toHaveLength(0);
+      expect(svg.querySelector('linearGradient, radialGradient, mask'))
+        .toBeNull();
+      for (const element of Array.from(svg.querySelectorAll('*'))) {
+        for (const name of ['fill', 'stroke', 'mask']) {
+          expect(element.getAttribute(name) ?? '').not.toMatch(/url\(/u);
+        }
       }
-    }
+    });
+
+  it('draws the seal mark in seal red and only the dot of .vn in red', () => {
+    const svg = svgOf(mount(AppLogo));
+    const red = Array.from(svg.querySelectorAll('.text-seal-text'))
+      .map((element) => element.getAttribute('data-logo-part'));
+
+    expect(red).toEqual(['mark', 'dot']);
+    expect(svg.querySelector('[data-logo-ring="outer"]')).not.toBeNull();
+    expect(svg.querySelector('[data-logo-ring="inner"]')).not.toBeNull();
+    expect(svg.querySelector('[data-logo-part="mark"]')
+      ?.getAttribute('transform')).toBe('rotate(-8 15 16)');
   });
 
   it('sets no style attribute or style element anywhere in the mark', () => {

@@ -580,6 +580,7 @@ onBeforeUnmount(resetCopyState);
           <AppSeal
             :link="publicHref"
             :label="publicSealLabel"
+            :locale="locale"
             size="stamp"
           />
           <a

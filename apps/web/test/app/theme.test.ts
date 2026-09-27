@@ -11,8 +11,9 @@ const webRoot = resolve(import.meta.dirname, '../..');
 const workspaceRoot = resolve(webRoot, '../..');
 const themePath = resolve(webRoot, 'app/assets/css/theme.css');
 
-// Aurora application chrome tokens (ADR 0050). Resume renderer tokens are
-// covered separately below; they must never move with this palette.
+// Aurora application chrome tokens (ADR 0050, amended by ADR 0065). Resume
+// renderer tokens are covered separately below; they must never move with
+// this palette.
 const lightTokens = {
   '--radius': '10px',
   '--radius-sheet': '2px',
@@ -32,26 +33,31 @@ const lightTokens = {
   '--muted-foreground': '#56648c',
   '--accent': '#eaf2ff',
   '--accent-foreground': '#101b3f',
-  '--destructive': '#b42318',
+  '--destructive': '#b54708',
   '--border': '#dce5f5',
   '--input': '#7886ae',
   '--ring': '#1a5ceb',
   '--seal': '#cc2649',
   '--seal-foreground': '#ffffff',
+  '--seal-text': '#cc2649',
   '--link': '#123edb',
-  '--brand-blue': '#246bfd',
-  '--brand-deep-blue': '#123edb',
+  '--brand-blue': 'var(--primary)',
+  '--brand-deep-blue': 'var(--link)',
   '--brand-indigo': '#6254ff',
   '--brand-cyan': '#35c8f5',
   '--brand-purple': '#a855f7',
-  '--brand-pink': '#f55db1',
-  '--brand-orange': '#ff9c47',
   '--surface-blue': '#eaf2ff',
   '--surface-indigo': '#f0eeff',
   '--surface-pink': '#fff0fa',
   '--surface-destructive':
     'color-mix(in srgb, var(--destructive) 7%, var(--card))',
   '--editor-canvas': '#eef3fc',
+  '--space-module': '8px',
+  '--space-dialog-title': '6px',
+  '--space-field': '16px',
+  '--space-dialog': '24px',
+  '--space-section': '80px',
+  '--space-section-lg': '112px',
   '--primary-hover': '#1550d4',
   '--shadow-primary':
     '0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(26 92 235 / 0.2)',
@@ -93,20 +99,19 @@ const darkTokens = {
   '--muted-foreground': '#9eacca',
   '--accent': '#1a2b52',
   '--accent-foreground': '#f4f7ff',
-  '--destructive': '#f0736a',
+  '--destructive': '#fd8a4b',
   '--border': 'rgba(180,200,255,0.16)',
   '--input': '#5a6a95',
   '--ring': '#72a0ff',
   '--seal': '#cc2649',
   '--seal-foreground': '#ffffff',
+  '--seal-text': '#ff6b8a',
   '--link': '#8fb3ff',
-  '--brand-blue': '#72a0ff',
-  '--brand-deep-blue': '#4c7dff',
+  '--brand-blue': 'var(--primary)',
+  '--brand-deep-blue': 'var(--link)',
   '--brand-indigo': '#8b80ff',
   '--brand-cyan': '#54d6ff',
   '--brand-purple': '#c08bff',
-  '--brand-pink': '#ff7cc4',
-  '--brand-orange': '#ffb067',
   '--surface-blue': '#10224a',
   '--surface-indigo': '#1a1a4a',
   '--surface-pink': '#2a1533',
@@ -168,12 +173,16 @@ describe('application theme', () => {
     );
     expect(theme['--color-seal']).toBe('var(--seal)');
     expect(theme['--color-seal-foreground']).toBe('var(--seal-foreground)');
+    expect(theme['--color-seal-text']).toBe('var(--seal-text)');
     expect(theme['--color-link']).toBe('var(--link)');
     for (const brand of [
-      'blue', 'deep-blue', 'indigo', 'cyan', 'purple', 'pink', 'orange',
+      'blue', 'deep-blue', 'indigo', 'cyan', 'purple',
     ]) {
       expect(theme[`--color-brand-${brand}`]).toBe(`var(--brand-${brand})`);
     }
+    // Pink and orange were retired as brand colors (ADR 0065).
+    expect(theme['--color-brand-pink']).toBeUndefined();
+    expect(theme['--color-brand-orange']).toBeUndefined();
     for (const surface of ['blue', 'indigo', 'pink', 'destructive']) {
       expect(theme[`--color-surface-${surface}`]).toBe(
         `var(--surface-${surface})`,
@@ -186,25 +195,28 @@ describe('application theme', () => {
     expect(theme['--color-paper-muted']).toBe('var(--paper-muted)');
     expect(theme['--color-paper-hover']).toBe('var(--paper-hover)');
     expect(theme['--text-xs']).toBe('0.75rem');
-    expect(theme['--text-sm']).toBe('0.8125rem');
-    expect(theme['--text-base']).toBe('0.875rem');
+    expect(theme['--text-sm']).toBe('0.875rem');
+    expect(theme['--text-base']).toBe('0.9375rem');
     expect(theme['--text-md']).toBe('1rem');
     expect(theme['--text-lg']).toBe('1.25rem');
     expect(theme['--text-xl']).toBe('1.5rem');
     expect(theme['--text-2xl']).toBe('2rem');
-    expect(theme['--text-3xl']).toBe('2.75rem');
-    expect(theme['--text-4xl']).toBe('2.5rem');
-    expect(theme['--text-4xl--line-height']).toBe('1.15');
+    expect(theme['--text-3xl']).toBe('2.5rem');
+    expect(theme['--text-4xl']).toBe('3rem');
     expect(theme['--text-6xl']).toBe('3.75rem');
-    expect(theme['--text-6xl--line-height']).toBe('1.1');
+    expect(theme['--text-6xl--line-height']).toBe('1.2');
     // The gallery page uses the Tailwind default text-5xl; the homepage
     // hero does not need it overridden (DESIGN.md; ADR 0050).
     expect(theme['--text-5xl']).toBeUndefined();
     for (const step of ['xs', 'sm', 'base', 'md']) {
       expect(theme[`--text-${step}--line-height`]).toBe('1.5');
     }
-    for (const step of ['lg', 'xl', '2xl', '3xl']) {
-      expect(theme[`--text-${step}--line-height`]).toBe('1.2');
+    // Heading steps leave room for stacked Vietnamese diacritics.
+    for (const step of ['lg', 'xl', '2xl']) {
+      expect(theme[`--text-${step}--line-height`]).toBe('1.3');
+    }
+    for (const step of ['3xl', '4xl']) {
+      expect(theme[`--text-${step}--line-height`]).toBe('1.25');
     }
     expect(theme['--radius-sm']).toBe('calc(var(--radius) - 4px)');
     expect(theme['--radius-md']).toBe('var(--radius)');
@@ -231,7 +243,9 @@ describe('application theme', () => {
         .map((path) => path.slice(webRoot.length + 1))
         .sort();
 
+      // The logo carries the seal (ADR 0065): its mark and the dot of .vn.
       expect(consumers).toEqual([
+        'app/components/app/AppLogo.vue',
         'app/components/app/AppSeal.vue',
         'app/components/ui/button/index.ts',
       ]);
