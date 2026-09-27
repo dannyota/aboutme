@@ -13,12 +13,15 @@ import DeleteResumeDialog from '../../app/components/editor/list/DeleteResumeDia
 import RenameResumeDialog from '../../app/components/editor/list/RenameResumeDialog.vue';
 
 import ResumeList from '../../app/components/editor/list/ResumeList.vue';
-// eslint-disable-next-line max-len -- composable action type import.
-import type { ResumeEditorActions } from '../../app/composables/useResumeEditor';
+import {
+  createResumeEditorActions,
+  type ResumeEditorActions,
+} from '../../app/composables/useResumeEditor';
 import type { CreateResumeIntent } from '../../app/editor/commands';
-import type {
-  OpaqueCreateOutcome,
-  ResumeMutationCoordinator,
+import {
+  createMutationCoordinator,
+  type OpaqueCreateOutcome,
+  type ResumeMutationCoordinator,
 } from '../../app/editor/coordinator';
 import type { ResumeApi, ResumeSummary } from '../../app/editor/resumeApi';
 import { parseRevision } from '../../app/editor/revision';
@@ -597,6 +600,65 @@ describe('useResumeList', () => {
       expect(flush).toHaveBeenCalledWith(accepted.metadata.id);
       expect(refreshAuth).toHaveBeenCalledOnce();
       expect(list.items.value).toEqual([]);
+    },
+  );
+
+  it(
+    'keeps the row and the record when the delete request never reaches '
+    + 'the server',
+    async () => {
+      // The real store, coordinator, and edit action (not stubs), so a
+      // failed dispatch exercises the same drain path production code runs:
+      // the row must survive a delete that never got a durable server
+      // acknowledgement (204), not just one a test tells it to keep.
+      setActivePinia(createPinia());
+      const accepted = acceptedFixture();
+      const id = accepted.metadata.id;
+      const store = useResumeStore();
+      const fakeAuth = {
+        user: computed(() => ({ id: 'owner-1' })),
+        csrfToken: computed(() => 'csrf-1'),
+        authState: computed(() => 'authenticated'),
+      } as never;
+      const runtime: EditorRuntime = {
+        nowEpochMs: () => 0,
+        uuid: () => 'delete-attempt-1',
+        delay: async () => {},
+      };
+      const api = {
+        list: vi.fn().mockResolvedValue({
+          kind: 'ready',
+          items: [{ ...accepted.metadata, revision: accepted.revision }],
+        }),
+        read: vi.fn().mockResolvedValue({ kind: 'complete', accepted }),
+        dispatch: vi.fn().mockResolvedValue({
+          kind: 'unknown',
+          reason: 'transport',
+        }),
+      } as unknown as ResumeApi;
+      const coordinator = createMutationCoordinator({
+        api, store, auth: fakeAuth, runtime,
+      });
+      const list = useResumeList({
+        api,
+        store,
+        coordinator,
+        runtime,
+        actionsFor: (resumeId) => createResumeEditorActions({
+          resumeId, store, coordinator, auth: fakeAuth, runtime,
+        }),
+        authState: computed(() => 'authenticated') as never,
+      });
+      await nextTick();
+      await list.settled();
+
+      await list.remove(id, accepted.metadata.title);
+
+      expect(api.dispatch).toHaveBeenCalled();
+      expect(store.recordFor(id)).toBeDefined();
+      expect(list.items.value).toEqual([
+        { ...accepted.metadata, revision: accepted.revision },
+      ]);
     },
   );
 
