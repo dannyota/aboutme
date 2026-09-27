@@ -22,7 +22,7 @@ chrome may frame the renderer but does not change its output.
 Vietnamese is the default site language. The language choice persists in the
 `aboutme-locale` cookie. Every application route renders in the chosen language:
 
-- `/`, `/privacy`, `/terms`, and `/verify`.
+- `/`, `/privacy`, `/terms`, `/verify`, and `/guide/mcp`.
 - `/templates` and `/templates/{id}`.
 - `/login`, `/login/second-factor`, `/register`, `/forgot-password`,
   `/reset-password`, and `/verify-email`.
