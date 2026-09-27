@@ -43,7 +43,7 @@ record may change until accepted.
 | [0025](0025-single-host-production.md)                   | Accepted | One AWS host, no hosted UAT, CloudFront edge, Route 53 DNS                       |
 | [0026](0026-replica-scaling.md)                          | Accepted | One serving replica; the designed path to a second                               |
 | [0027](0027-vietnam-hosted-production.md)                | Accepted | Move production to Vietnam-hosted providers                                      |
-| [0028](0028-deployment-transparency-observer.md)         | Proposed | An independent observer publishes the running image digests                      |
+| [0028](0028-deployment-transparency-observer.md)         | Accepted | An independent observer publishes the running image digests                      |
 
 ## Former numbers
 

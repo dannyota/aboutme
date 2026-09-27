@@ -1,8 +1,8 @@
 # 0028: Deployment transparency through an independent observer
 
-Status: Proposed (2026-09-26). The choices marked **Owner approval** in the
-[deployment transparency design](../design/deployment-transparency/README.md)
-stay open until the owner approves them.
+Status: Accepted (2026-09-27). The owner approved the choices marked **Owner
+approval** (A1 to A5) in the
+[deployment transparency design](../design/deployment-transparency/README.md).
 
 ## Context
 
