@@ -123,6 +123,7 @@ describe("openapi contract", () => {
       expect(start.get.parameters).toEqual([
         { $ref: "#/components/parameters/AuthPurpose" },
         { $ref: "#/components/parameters/AuthReturnPath" },
+        { $ref: "#/components/parameters/AuthViewSlug" },
       ]);
       expect(
         start.get.responses["405"],
