@@ -18,7 +18,6 @@ export type SettingsCopy = {
   readonly providers: string;
   readonly genericError: string;
   readonly reauthLink: string;
-  readonly reauthAction: string;
   readonly signInAgainWith: (provider: string) => string;
   readonly cancelled: string;
   readonly identityAlreadyLinked: string;
@@ -50,7 +49,6 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     genericError: 'Đã xảy ra lỗi. Hãy thử lại.',
     reauthLink:
       'Hãy đăng nhập lại để xác nhận trước khi liên kết nhà cung cấp mới.',
-    reauthAction: 'Hãy đăng nhập lại để xác nhận, rồi thử lại.',
     signInAgainWith: (provider) => `Đăng nhập lại với ${provider}`,
     cancelled: 'Đã hủy.',
     identityAlreadyLinked:
@@ -84,7 +82,6 @@ export const settingsCopy: WorkspaceCopy<SettingsCopy> = {
     genericError: 'Something went wrong. Please try again.',
     reauthLink:
       'Sign in again to confirm it\'s you before we link a new provider.',
-    reauthAction: 'Sign in again to confirm it\'s you, then try again.',
     signInAgainWith: (provider) => `Sign in again with ${provider}`,
     cancelled: 'That was cancelled.',
     identityAlreadyLinked:

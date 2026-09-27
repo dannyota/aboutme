@@ -358,7 +358,11 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 func TestPasswordAuthCleanupIsBounded(t *testing.T) {
 	ctx, _, _, q := newPasswordStoreTx(t)
 
-	now := time.Now().UTC()
+	// Other packages commit expired registrations and run this cleanup with a
+	// wall-clock cutoff. If the page picked one of their rows, a concurrent
+	// delete would shrink the count below the limit. The simulated clock
+	// predates every other test clock, so only this test's rows qualify.
+	now := time.Date(1998, time.January, 1, 0, 0, 0, 0, time.UTC)
 	expired := now.Add(-time.Hour)
 	for i := 0; i < 5; i++ {
 		if _, err := q.CreatePasswordRegistration(ctx, store.CreatePasswordRegistrationParams{

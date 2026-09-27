@@ -459,9 +459,7 @@ export interface paths {
         post?: never;
         /**
          * Log out everywhere (revoke every live session)
-         * @description Revokes every one of the caller's own live sessions, clears the current `__Host-session` cookie, and sets `Clear-Site-Data: "cookies", "storage"`.
-         *
-         *     Requires a RECENT reauthentication — the session's last full OAuth login within the last 15 minutes — rejected with `403 reauth_required` otherwise, checked BEFORE any session row is touched.
+         * @description Revokes every one of the caller's own live sessions, clears the current `__Host-session` cookie, and sets `Clear-Site-Data: "cookies", "storage"`. Needs only a live current-epoch session and no recent reauthentication, because ending sessions only reduces access.
          */
         delete: operations["deleteSessions"];
         options?: never;
@@ -487,7 +485,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke one of the caller's own sessions
-         * @description Revokes exactly one session, which must belong to the caller AND be LIVE by the same rule `GET /sessions` excludes by (not revoked, not idle/absolute-expired, not a grace-dead rotation predecessor). Requires a RECENT reauthentication (see `DELETE /sessions`), checked BEFORE any row is touched.
+         * @description Revokes exactly one session, which must belong to the caller AND be LIVE by the same rule `GET /sessions` excludes by (not revoked, not idle/absolute-expired, not a grace-dead rotation predecessor). Needs only a live current-epoch session and no recent reauthentication, because ending sessions only reduces access.
          *
          *     Also revokes the target's own rotation LINEAGE partner(s), if any: the session it was itself rotated from, and the session (if still live) that was rotated from it. This applies to any target, not only the caller's current session — a caller who sees both halves of a still-open rotation pair in their own device list must not be able to leave the other half live by revoking just one of the two rows.
          *
@@ -1786,9 +1784,7 @@ export interface components {
          *     - `reauth_required`: `POST /auth/{provider}/start?purpose=link`
          *       only, never a callback query. The session is valid, but its last
          *       full OAuth login is more than 15 minutes old. The server checks
-         *       this before creating a transaction. Session revocation endpoints
-         *       use the same JSON error code so one prompt can handle each
-         *       sensitive action.
+         *       this before creating a transaction.
          * @enum {string}
          */
         OAuthCallbackErrorCode: "auth_failed" | "email_not_verified" | "cancelled" | "email_already_registered" | "identity_already_linked" | "reauth_required";
@@ -5873,12 +5869,20 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description CSRF validation failed, OR the session's last reauthentication is stale — two distinct codes under the same status (`csrf_rejected`, `reauth_required`); the CSRF check always runs first. */
+            /** @description CSRF validation failed. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "csrf_rejected",
+                     *         "message": "CSRF validation failed"
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };
@@ -5917,12 +5921,20 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description CSRF validation failed, or recent reauthentication is required. */
+            /** @description CSRF validation failed. */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "error": {
+                     *         "code": "csrf_rejected",
+                     *         "message": "CSRF validation failed"
+                     *       }
+                     *     }
+                     */
                     "application/json": components["schemas"]["Error"];
                 };
             };

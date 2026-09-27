@@ -135,25 +135,16 @@ function isNotFound(error: unknown): boolean {
   );
 }
 
-// Reauthentication can come from a callback or a session mutation.
-
-type ReauthReason = 'link' | 'action';
+// Reauthentication is only for linking a new provider (ADR 0015): a session
+// revoke or logout-everywhere 403 is a CSRF failure, not a reauth prompt.
 
 const reauthRequired = ref(route.query.error === 'reauth_required');
-const reauthReason = ref<ReauthReason>(
-  route.query.error === 'reauth_required' ? 'link' : 'action',
-);
-const reauthMessage = computed(() =>
-  reauthReason.value === 'link'
-    ? copy.value.reauthLink
-    : copy.value.reauthAction);
 const reauthProvider = computed(
   () => enabledIdentities.value[0]?.provider ?? null,
 );
 
-function triggerReauthPrompt(reason: ReauthReason): void {
+function triggerReauthPrompt(): void {
   reauthRequired.value = true;
-  reauthReason.value = reason;
 }
 
 async function revokeSession(id: string): Promise<void> {
@@ -161,10 +152,6 @@ async function revokeSession(id: string): Promise<void> {
   try {
     await mutate(`/api/v1/sessions/${id}`, { method: 'DELETE' });
   } catch (error) {
-    if (hasErrorCode(error, 'reauth_required')) {
-      triggerReauthPrompt('action');
-      return;
-    }
     if (!isNotFound(error)) {
       revokeError.value = 'single';
       return;
@@ -188,7 +175,7 @@ async function signOutOtherDevices(): Promise<void> {
   try {
     for (const session of otherSessions.value) {
       await revokeSession(session.id);
-      if (revokeError.value !== null || reauthRequired.value) return;
+      if (revokeError.value !== null) return;
     }
     unlinkedNotice.value = null;
   } finally {
@@ -200,12 +187,7 @@ async function revokeAll(): Promise<void> {
   revokeError.value = null;
   try {
     await mutate('/api/v1/sessions', { method: 'DELETE' });
-  } catch (error) {
-    if (hasErrorCode(error, 'reauth_required')) {
-      // Nothing was revoked, so keep the page state and request reauth.
-      triggerReauthPrompt('action');
-      return;
-    }
+  } catch {
     revokeError.value = 'all';
     return;
   }
@@ -247,7 +229,7 @@ async function startOAuth(
     await navigateTo(url, { external: true });
   } catch (error) {
     if (purpose === 'link' && hasErrorCode(error, 'reauth_required')) {
-      triggerReauthPrompt('link');
+      triggerReauthPrompt();
       return;
     }
     startError.value = true;
@@ -598,7 +580,7 @@ const linkErrorMessage = computed(() => {
         kind="error"
         testid="reauth-prompt"
       >
-        {{ reauthMessage }}
+        {{ copy.reauthLink }}
         <Button
           class="mt-2"
           :disabled="!csrfToken || startPending"

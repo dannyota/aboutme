@@ -192,8 +192,8 @@ describe('sessions.vue', () => {
   });
 
   it(
-    'shows the reauth prompt (not a generic error) when a single-session '
-    + 'revoke requires recent reauth',
+    'shows the revoke error banner (not a reauth prompt) for a '
+    + 'single-session revoke 403',
     async () => {
       let deleteAttempts = 0;
       registerEndpoint('/api/v1/sessions/sess-2', {
@@ -220,12 +220,14 @@ describe('sessions.vue', () => {
       // the server already refused for an unrelated reason).
       expect(deleteAttempts).toBe(1);
 
-      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(false);
-      const prompt = wrapper.get('[data-testid="reauth-prompt"]');
-      // "action" reason copy, not the link-specific wording — revoking a
-      // session has nothing to do with linking a provider.
-      expect(prompt.text()).toContain('then try again');
-      expect(prompt.text()).not.toContain('link a new provider');
+      // A 403 here is a CSRF failure, not a reauth signal (ADR 0015):
+      // it shows the plain revoke error, never the reauth prompt.
+      expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+        'Could not revoke',
+      );
     },
   );
 
@@ -470,8 +472,8 @@ describe('sessions.vue', () => {
   );
 
   it(
-    'shows the reauth prompt when revoke-all requires recent reauth, '
-    + 'without touching any session row',
+    'shows the revoke-all error banner (not a reauth prompt) for a '
+    + 'revoke-all 403, without navigating away',
     async () => {
       let revokeAllAttempts = 0;
       registerEndpoint('/api/v1/sessions', {
@@ -498,12 +500,15 @@ describe('sessions.vue', () => {
       // csrf_rejected and retry it (that would double-fire a mutation
       // the server already refused for an unrelated reason).
       expect(revokeAllAttempts).toBe(1);
-      const prompt = wrapper.get('[data-testid="reauth-prompt"]');
-      expect(prompt.text()).toContain('then try again');
-      expect(prompt.text()).not.toContain('link a new provider');
-      expect(wrapper.find('[data-testid="revoke-error"]').exists()).toBe(false);
-      // Sensitive-op rejection, not a generic failure — and definitely
-      // not a silent success.
+      // A 403 here is a CSRF failure, not a reauth signal (ADR 0015):
+      // it shows the plain logout-everywhere error, never the reauth
+      // prompt — and definitely not a silent success.
+      expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
+        false,
+      );
+      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+        'Could not log out everywhere',
+      );
       expect(vi.mocked(navigateTo)).not.toHaveBeenCalled();
     },
   );
@@ -714,28 +719,15 @@ describe('sessions.vue capability gating', () => {
   );
 
   it(
-    'does not expose provider reauth after a revoke requires reauth when '
-    + 'providerLogin is false',
+    'shows the revoke error banner for a revoke 403 when providerLogin '
+    + 'is false',
     async () => {
-      let providerStarts = 0;
       registerCapabilities({ providerLogin: false, agentAccess: false });
       registerEndpoint('/api/v1/sessions/sess-2', {
         method: 'DELETE',
         handler: (event) => {
           setResponseStatus(event, 403);
           return { error: { code: 'reauth_required', message: 'x' } };
-        },
-      });
-      registerEndpoint('/api/v1/auth/google/start', {
-        method: 'POST',
-        handler: () => {
-          providerStarts += 1;
-          return {
-            data: {
-              authorizeUrl:
-                'https://accounts.google.com/o/oauth2/v2/auth?state=test',
-            },
-          };
         },
       });
 
@@ -747,11 +739,16 @@ describe('sessions.vue capability gating', () => {
       await flushPromises();
       await flushPromises();
 
+      // The revoke error banner does not depend on a linkable provider
+      // existing — there is no reauth path left for a session revoke to
+      // fall back to (ADR 0015).
       expect(wrapper.find('[data-testid="reauth-prompt"]').exists()).toBe(
         false,
       );
       expect(wrapper.text()).not.toContain('Sign in again');
-      expect(providerStarts).toBe(0);
+      expect(wrapper.get('[data-testid="revoke-error"]').text()).toContain(
+        'Could not revoke',
+      );
     },
   );
 
