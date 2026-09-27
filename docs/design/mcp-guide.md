@@ -1,6 +1,6 @@
 # MCP guide page
 
-Status: implemented (2026-09-28). `/guide/mcp` is live.
+Status: implemented (2026-09-28).
 
 The MCP guide is a public, static page that shows a person how to connect an AI
 assistant they already use to their aboutme.vn resumes through the Model Context
@@ -10,14 +10,10 @@ Protocol (MCP). It covers Claude first, names the one server URL,
 rule, schema, or API. Its full Vietnamese and English text is in
 [MCP guide copy](mcp-guide-copy.md).
 
-The page shipped ahead of the full OAuth compatibility work its Claude steps
-describe. The consent page's return-host line and grant-limit message (items 6
-and 7 of [MCP client compatibility](mcp-client-compatibility.md)) are live, but
-the remaining gaps in that design, resource metadata, registration members, the
-native loopback host, refresh parameters, registration rate, and the
-token-endpoint client lookup, are not built. Until they ship and an owner-run
-proof confirms Claude connects, a visitor who follows the Claude steps cannot
-complete the OAuth flow.
+The Claude steps rely on
+[MCP client compatibility](mcp-client-compatibility.md), which shipped in
+v0.6.18. The guide ships after an owner-run proof that Claude on the web and
+Claude Code connect in production.
 
 ## Route
 

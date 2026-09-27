@@ -1,6 +1,6 @@
 # MCP client compatibility
 
-Status: approved (2026-09-27), ready to build. The owner approved every numbered
+Status: implemented in v0.6.18 (2026-09-28). The owner approved every numbered
 choice below as written.
 
 aboutme's OAuth server and MCP endpoint are proven with one client, the official
