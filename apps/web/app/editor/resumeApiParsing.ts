@@ -103,6 +103,8 @@ export function parseSummary(value: unknown): ResumeSummary {
     || typeof value.live !== 'boolean'
     || typeof value.downloadEnabled !== 'boolean'
     || typeof value.seoGeoEnabled !== 'boolean'
+    || (value.signInToView !== undefined
+      && typeof value.signInToView !== 'boolean')
     || (value.slug !== null && typeof value.slug !== 'string')
     || !optionalText(value.publicTitle)
     || !optionalText(value.faviconEmoji)
@@ -119,6 +121,9 @@ export function parseSummary(value: unknown): ResumeSummary {
     live: value.live,
     downloadEnabled: value.downloadEnabled,
     seoGeoEnabled: value.seoGeoEnabled,
+    // A server that predates sign in to view sends no key; absence reads as
+    // off, like the public page fields above.
+    signInToView: value.signInToView === true,
     slug: value.slug,
     publicTitle: (value.publicTitle as string | null | undefined) ?? null,
     faviconEmoji: (value.faviconEmoji as string | null | undefined) ?? null,

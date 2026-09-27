@@ -105,6 +105,11 @@ export interface ResumeMetadata {
   readonly live: boolean;
   readonly downloadEnabled: boolean;
   readonly seoGeoEnabled: boolean;
+  /**
+   * Whether viewers must sign in to view this resume. Never part of the
+   * document (docs/design/viewer-analytics/sign-in-to-view.md#setting).
+   */
+  readonly signInToView: boolean;
   readonly slug: string | null;
   /** The public page's tab title; null means "<Full name> — Resume". */
   readonly publicTitle: string | null;

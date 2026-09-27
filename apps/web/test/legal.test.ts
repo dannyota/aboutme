@@ -107,7 +107,9 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).toContain(
       'Cookies are used only to keep you signed in, to complete Google or '
       + 'LinkedIn sign-in, to hold a pending second-factor sign-in for '
-      + 'five minutes, and to remember your theme and language.',
+      + 'five minutes, to remember your theme and language, and, when a '
+      + 'resume owner requires sign-in to view, to let you view that '
+      + 'resume for 7 days.',
     );
     expect(wrapper.text()).not.toContain('CSRF');
     expect(wrapper.text()).toContain('Have I Been Pwned');

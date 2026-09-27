@@ -171,3 +171,111 @@ describe('public render envelope card image', () => {
     }
   });
 });
+
+describe('resume envelope join-invite marker', () => {
+  it('accepts an envelope without the marker', () => {
+    expect(decode(base).joinInvite).toBeUndefined();
+  });
+
+  it('accepts /register and /login', () => {
+    for (const value of ['/register', '/login']) {
+      expect(decode({ ...base, joinInvite: value }).joinInvite).toBe(value);
+    }
+  });
+
+  it('rejects any other value', () => {
+    for (const value of ['/', 'register', '/Register', '', null, 7, []]) {
+      rejects({ ...base, joinInvite: value });
+    }
+  });
+});
+
+describe('gate envelope', () => {
+  const gate = {
+    mode: 'gate',
+    canonicalOrigin: 'https://resume.example',
+    slug: 'ada1',
+    lng: 'en',
+    pageTitle: 'Ada — Resume',
+    faviconHref: '',
+    preview,
+    providers: ['google', 'linkedin'],
+    message: 'none',
+  };
+
+  it('accepts a well-formed gate envelope', () => {
+    expect(decode(gate)).toEqual(gate);
+  });
+
+  it('accepts vi and empty and full provider lists', () => {
+    expect(decode({ ...gate, lng: 'vi' }).lng).toBe('vi');
+    for (const providers of [[], ['google'], ['linkedin']]) {
+      expect(decode({ ...gate, providers }).providers).toEqual(providers);
+    }
+  });
+
+  it('accepts each closed message value', () => {
+    for (const message of ['none', 'cancelled', 'failed']) {
+      expect(decode({ ...gate, message }).message).toBe(message);
+    }
+  });
+
+  it('rejects a missing or extra key', () => {
+    for (const key of Object.keys(gate)) {
+      const { [key]: _omitted, ...rest } = gate;
+      rejects(rest);
+    }
+    rejects({ ...gate, extra: 'x' });
+  });
+
+  it('rejects a malformed slug', () => {
+    for (const slug of ['', 'Ada', 'a'.repeat(64), '-ada', 'ada-', 'ada_1']) {
+      rejects({ ...gate, slug });
+    }
+  });
+
+  it('rejects a language other than vi or en', () => {
+    for (const lng of ['en-US', 'vi-VN', 'fr', '', null, 7]) {
+      rejects({ ...gate, lng });
+    }
+  });
+
+  it('rejects an unknown, duplicated, or misordered provider', () => {
+    for (const providers of [
+      ['github'],
+      ['google', 'google'],
+      ['linkedin', 'google'],
+      'google',
+      null,
+    ]) {
+      rejects({ ...gate, providers });
+    }
+  });
+
+  it('rejects an unknown message value', () => {
+    for (const message of ['', 'ok', null, 7]) {
+      rejects({ ...gate, message });
+    }
+  });
+
+  it('rejects a missing preview', () => {
+    rejects({ ...gate, preview: undefined });
+  });
+
+  it('accepts and validates the stored card image URL', () => {
+    const imageUrl
+      = 'https://resume.example/api/v1/public/resumes/ada1/og/'
+        + '0123456789abcdef.png';
+    expect(decode({ ...gate, preview: { ...preview, imageUrl } })
+      .preview.imageUrl).toBe(imageUrl);
+    rejects({
+      ...gate,
+      preview: {
+        ...preview,
+        imageUrl:
+          'https://resume.example/api/v1/public/resumes/bob1/og/'
+          + '0123456789abcdef.png',
+      },
+    });
+  });
+});
