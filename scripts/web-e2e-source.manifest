@@ -68,6 +68,7 @@ apps/web/app/components/editor/EntryCard.vue
 apps/web/app/components/editor/ErrorSummary.vue
 apps/web/app/components/editor/InspectorPanel.vue
 apps/web/app/components/editor/PDFDownloadButton.vue
+apps/web/app/components/editor/PanelResizeHandle.vue
 apps/web/app/components/editor/PublishDialog.vue
 apps/web/app/components/editor/PublishPageFields.vue
 apps/web/app/components/editor/PublishPreview.vue
@@ -299,6 +300,7 @@ apps/web/app/composables/useLocale.ts
 apps/web/app/composables/useNow.ts
 apps/web/app/composables/useOAuthConsent.ts
 apps/web/app/composables/usePasswordAuth.ts
+apps/web/app/composables/useResizablePanel.ts
 apps/web/app/composables/useResumeEditor.ts
 apps/web/app/composables/useResumeList.ts
 apps/web/app/composables/useSiteSeo.ts

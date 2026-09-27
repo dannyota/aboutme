@@ -52,6 +52,7 @@ import TemplatePanel from './templates/TemplatePanel.vue';
 import ConflictPanel from './ConflictPanel.vue';
 import EditorPreview from './EditorPreview.vue';
 import ErrorSummary from './ErrorSummary.vue';
+import PanelResizeHandle from './PanelResizeHandle.vue';
 import SaveStatus from './SaveStatus.vue';
 import PublishDialog from './PublishDialog.vue';
 import PDFDownloadButton from './PDFDownloadButton.vue';
@@ -207,7 +208,7 @@ async function discardAndSignIn(): Promise<void> {
   <main
     :class="[
       'editor-shell grid min-h-dvh max-h-dvh',
-      'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_22rem]',
+      'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_var(--panel-width,22rem)]',
       'grid-rows-[4rem_minmax(0,1fr)] overflow-hidden bg-editor-canvas',
       'text-foreground max-[72rem]:grid-cols-[16.5rem_minmax(0,1fr)]',
       'max-[42rem]:grid-cols-[minmax(0,1fr)]',
@@ -490,6 +491,7 @@ async function discardAndSignIn(): Promise<void> {
       />
     </div>
 
+    <PanelResizeHandle />
     <aside
       class="editor-inspector col-start-4 row-start-2 min-w-0 overflow-auto
         border-l bg-card p-4 max-[72rem]:col-start-2 max-[72rem]:row-start-2

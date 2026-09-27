@@ -422,6 +422,21 @@ describe('EditorShell', () => {
   });
 
   it(
+    'sizes the fourth grid column from the resizable panel width, '
+    + 'defaulting to 22rem',
+    () => {
+      const wrapper = mountShell();
+
+      expect(wrapper.get('.editor-shell').classes()).toContain(
+        'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_var(--panel-width,22rem)]',
+      );
+      expect(
+        wrapper.find('[data-testid="panel-resize-handle"]').exists(),
+      ).toBe(true);
+    },
+  );
+
+  it(
     'keeps the phone switch outside the topbar and fits the preview',
     async () => {
       const originalWidth = window.innerWidth;
