@@ -155,7 +155,7 @@ fail)
   ;;
 fail-with-evidence)
   [ ! -s "$ctl/runner.stderr" ] || cat "$ctl/runner.stderr" >&2
-  publish "$run/evidence.json" '{"version":1,"mode":"production","stage":"owner_workflow","sdk_version":"go-sdk v1.7.0","transport":"streamable-http","tool_count":15,"language":"vi","source_unchanged":true,"target_private":true,"count_delta":1,"create_reconciliation":"created","revocation":"revocation_unconfirmed","post_revocation_401":false}'
+  publish "$run/evidence.json" '{"version":1,"mode":"production","stage":"owner_workflow","sdk_version":"go-sdk v1.8.0","transport":"streamable-http","tool_count":15,"language":"vi","source_unchanged":true,"target_private":true,"count_delta":1,"create_reconciliation":"created","revocation":"revocation_unconfirmed","post_revocation_401":false}'
   exit 1
   ;;
 fail-with-source)
@@ -193,9 +193,9 @@ fi
 if [ "$behavior" = bad-evidence ]; then
   publish "$run/evidence.json" "{\"version\":1,\"mode\":\"$mode\",\"stage\":\"owner_workflow\",\"extra\":true}"
 elif [ "$mode" = local ]; then
-  publish "$run/evidence.json" '{"version":1,"mode":"local","stage":"owner_workflow","sdk_version":"go-sdk v1.7.0","transport":"streamable-http","tool_count":15,"language":"vi","source_unchanged":true,"target_private":true,"count_delta":1,"create_reconciliation":"replayed","revocation":"revoked","post_revocation_401":true}'
+  publish "$run/evidence.json" '{"version":1,"mode":"local","stage":"owner_workflow","sdk_version":"go-sdk v1.8.0","transport":"streamable-http","tool_count":15,"language":"vi","source_unchanged":true,"target_private":true,"count_delta":1,"create_reconciliation":"replayed","revocation":"revoked","post_revocation_401":true}'
 else
-  publish "$run/evidence.json" '{"version":1,"mode":"production","stage":"owner_workflow","sdk_version":"go-sdk v1.7.0","transport":"streamable-http","tool_count":15,"language":"vi","source_unchanged":true,"target_private":true,"count_delta":1,"create_reconciliation":"created","revocation":"revoked","post_revocation_401":true}'
+  publish "$run/evidence.json" '{"version":1,"mode":"production","stage":"owner_workflow","sdk_version":"go-sdk v1.8.0","transport":"streamable-http","tool_count":15,"language":"vi","source_unchanged":true,"target_private":true,"count_delta":1,"create_reconciliation":"created","revocation":"revoked","post_revocation_401":true}'
 fi
 exit 0
 EOF

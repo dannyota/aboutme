@@ -15,7 +15,7 @@ const (
 	evidenceVersion       = 1
 	stageOwnerWorkflow    = "owner_workflow"
 	stageRevocationOnly   = "revocation_recovery"
-	sdkVersionLabel       = "go-sdk v1.7.0"
+	sdkVersionLabel       = "go-sdk v1.8.0"
 	transportLabel        = "streamable-http"
 	reconcileCreated      = "created"
 	reconcileReplayed     = "replayed"
