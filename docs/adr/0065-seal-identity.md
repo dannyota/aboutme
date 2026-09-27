@@ -1,7 +1,7 @@
 # 0065: Seal identity
 
-Status: Proposed (2026-09-27). The owner chose the logo direction and asked for
-the seal redesign; this record awaits approval in review.
+Status: Accepted (2026-09-27). The owner chose the logo direction, asked for the
+seal redesign, and accepted this record.
 
 Amends [ADR 0050](0050-aurora-application-identity.md): its logo, its seal
 stamp, its pink and orange accents, its duplicate blues, its destructive hue,
