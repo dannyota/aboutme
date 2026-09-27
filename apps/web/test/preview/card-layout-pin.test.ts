@@ -22,7 +22,7 @@ const LAYOUT_FILES = [
 const PINNED: Record<number, string> = {
   1: 'f2c881e2aa99b538f000099b19845cc00badae743c96cffb69d4ee736cfb2991',
   // ADR 0065: the footer mark became the seal.
-  2: 'afe040554aff6dafb25b4b33cd982d776c763e892dd24555312652b998d4ef0b',
+  2: '48e7f9aa55ce5dfbacf7253739532e4645c5e86b85fddcc20332075697191c4c',
 };
 
 describe('card layout pin', () => {

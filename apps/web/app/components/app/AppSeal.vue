@@ -3,80 +3,47 @@ import { computed } from 'vue';
 
 import type { Locale } from '@/i18n/locale';
 
+import { SEAL_WORD, sealLayout, STAMP_HEIGHT } from './sealLayout';
+
 // The public seal (DESIGN.md, ADR 0065). The stamp is a rounded ticket: the
-// logo's seal mark and the word PUBLIC (CÔNG KHAI in Vietnamese) on top, a
-// hairline, then the public link. It grows with the link so a long slug never
-// overlaps itself. The mark is a 20 px seal tile with a check that always sits
-// beside the public link.
+// logo's seal mark (outer ring and "a") and the word PUBLIC (CÔNG KHAI in
+// Vietnamese) on top, a hairline, then the public link. It grows with the
+// link so a slug never overlaps itself (sealLayout.ts). The mark is a 20 px
+// seal tile with a check that always sits beside the public link.
 const props = withDefaults(
   defineProps<{
     link: string;
+    /** The stamp's word follows the page language (PUBLIC or CÔNG KHAI). */
+    locale: Locale;
     label?: string;
     size?: 'mark' | 'stamp';
     rotate?: number;
-    locale?: Locale;
   }>(),
   {
     size: 'stamp',
     rotate: -6,
-    locale: 'en',
   },
 );
 
-const STAMP_HEIGHT = 72;
-const MIN_WIDTH = 156;
-const MAX_WIDTH = 260;
-// Measured advances for Be Vietnam Pro: the link at 11 px weight 600, and the
-// word at 20 px weight 800 with 2.8 px tracking.
-const LINK_ADVANCE = 6.1;
-const WORD_ADVANCE = 14.4;
-const MARK_WIDTH = 26;
-const MARK_GAP = 8;
-
-const word = computed(() => (props.locale === 'vi' ? 'CÔNG KHAI' : 'PUBLIC'));
+const word = computed(() => SEAL_WORD[props.locale]);
 const linkText = computed(() => `aboutme.vn${props.link}`);
-
-const layout = computed(() => {
-  const wordWidth = [...word.value].length * WORD_ADVANCE;
-  const naturalLink = [...linkText.value].length * LINK_ADVANCE;
-  const headWidth = MARK_WIDTH + MARK_GAP + wordWidth;
-  const width = Math.min(
-    MAX_WIDTH,
-    Math.max(
-      MIN_WIDTH,
-      Math.round(naturalLink + 40),
-      Math.round(headWidth + 48),
-    ),
-  );
-  const linkRoom = width - 40;
-  const headX = (width - headWidth) / 2;
-  return {
-    width,
-    headX,
-    wordX: headX + MARK_WIDTH + MARK_GAP,
-    // Past the cap the link is squeezed to fit rather than overflow; the word
-    // and the mark never shrink.
-    linkLength: naturalLink > linkRoom ? linkRoom : undefined,
-  };
-});
+const layout = computed(() =>
+  sealLayout(props.link, props.locale, props.rotate));
 
 const logoTransform = computed(() =>
   `translate(${layout.value.headX} 9.5) scale(0.8125) rotate(-8 15 16)`);
-
-const viewBox = computed(() =>
-  `-8 -14 ${layout.value.width + 16} ${STAMP_HEIGHT + 28}`);
 </script>
 
 <template>
   <svg
     v-if="size === 'stamp'"
     :aria-label="label ?? `Public at aboutme.vn${link}`"
-    class="text-seal-text"
+    class="h-auto max-w-full text-seal-text"
     data-app-seal="stamp"
-    :height="STAMP_HEIGHT + 28"
+    :height="layout.svgHeight"
     role="img"
-    :viewBox="viewBox"
-    :width="layout.width + 16"
+    :viewBox="layout.viewBox"
+    :width="layout.svgWidth"
     xmlns="http://www.w3.org/2000/svg"
   >
     <g

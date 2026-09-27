@@ -73,7 +73,7 @@
   --gradient-aurora:
     radial-gradient(
       44rem 30rem at 8% -4rem,
-      rgb(36 107 253 / 0.14),
+      rgb(26 92 235 / 0.14),
       transparent 70%
     ),
     radial-gradient(
@@ -103,7 +103,7 @@
     radial-gradient(55% 40% at 22% 28%, rgb(53 200 245 / 0.3), transparent 70%),
     radial-gradient(
       55% 42% at 78% 36%,
-      rgb(36 107 253 / 0.24),
+      rgb(26 92 235 / 0.24),
       transparent 70%
     ),
     radial-gradient(
@@ -111,7 +111,7 @@
       rgb(168 85 247 / 0.18),
       transparent 70%
     );
-  --shadow-cta: 0 8px 24px rgb(36 107 253 / 0.28);
+  --shadow-cta: 0 8px 24px rgb(26 92 235 / 0.28);
 }
 
 html[data-theme="dark"] {
@@ -163,7 +163,7 @@ html[data-theme="dark"] {
   --gradient-aurora:
     radial-gradient(
       44rem 30rem at 8% -4rem,
-      rgb(36 107 253 / 0.24),
+      rgb(26 92 235 / 0.24),
       transparent 70%
     ),
     radial-gradient(

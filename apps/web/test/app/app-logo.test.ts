@@ -87,6 +87,16 @@ describe('AppLogo', () => {
       ?.getAttribute('transform')).toBe('rotate(-8 15 16)');
   });
 
+  it('drops the hairline inner ring at the 24 px size only', () => {
+    for (const size of ['md', 'lg'] as const) {
+      const svg = svgOf(mount(AppLogo, { props: { size } }));
+      expect(svg.querySelector('[data-logo-ring="inner"]')).not.toBeNull();
+    }
+    const small = svgOf(mount(AppLogo, { props: { size: 'sm' } }));
+    expect(small.querySelector('[data-logo-ring="inner"]')).toBeNull();
+    expect(small.querySelector('[data-logo-ring="outer"]')).not.toBeNull();
+  });
+
   it('sets no style attribute or style element anywhere in the mark', () => {
     const svg = svgOf(mount(AppLogo));
     expect(svg.querySelector('style')).toBeNull();

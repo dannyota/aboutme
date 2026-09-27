@@ -68,7 +68,7 @@ const lightTokens = {
   '--shadow-paper':
     '0 1px 2px rgba(23,26,24,0.06),0 12px 32px rgba(23,26,24,0.1)',
   '--gradient-brand-strong': 'linear-gradient(90deg,#1a5ceb,#5144f0)',
-  '--shadow-cta': '0 8px 24px rgb(36 107 253 / 0.28)',
+  '--shadow-cta': '0 8px 24px rgb(26 92 235 / 0.28)',
 } as const;
 
 // The paper tokens are defined in :root only (section 1); they never enter
@@ -157,7 +157,7 @@ describe('application theme', () => {
       expect(value).toContain('transparent 70%');
     }
     expect(light).toContain('rgb(53 200 245 / 0.3)');
-    expect(light).toContain('rgb(36 107 253 / 0.24)');
+    expect(light).toContain('rgb(26 92 235 / 0.24)');
     expect(light).toContain('rgb(168 85 247 / 0.18)');
     expect(dark).toContain('rgb(84 214 255 / 0.22)');
     expect(dark).toContain('rgb(114 160 255 / 0.3)');

@@ -179,7 +179,7 @@ Entry rows show plain text only, never HTML:
 | Certifications | Title                         | None                                                    |
 
 Dates show as the editor shows them, with `present` for an open end. An entry
-with a notice adds a third line: an `Info` 14 px icon in `--brand-orange` and a
+with a notice adds a third line: an `Info` 14 px icon in `--brand-indigo` and a
 `text-xs` foreground mark, `entryNoDates` or `entryCut`. An entry that fails the
 schema check instead gets a `CircleAlert` 14 px icon and `entryInvalid` in
 `--destructive`. Entries past 64 in a section start unchecked.
@@ -239,7 +239,7 @@ theme. Points to check in both themes at 390 and 1280 px:
 - Cards are `--card` (`#FFFFFF`, dark `#0D1935`); the step circles and the drop
   zone use `--surface-blue`; muted text stays AA on both.
 - Meter and progress fills are `--primary` on `--muted`; over the limit the fill
-  and reason are `--destructive` (`#B42318`, dark `#F0736A`).
+  and reason are `--destructive` (`#B54708`, dark `#FD8A4B`).
 - No seal red, gradient, or paper token appears: nothing on this page is public
   or a resume sheet.
 
