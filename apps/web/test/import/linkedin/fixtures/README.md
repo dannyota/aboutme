@@ -21,7 +21,8 @@ or file is used.
   unreadable date, a start after the end, and `less than a year` as both a
   date duration and a group duration.
 - `dropped-en.pdf`: Honors-Awards, Publications, Patents, Volunteer
-  Experience, and Projects, the sections the parser drops.
+  Experience, and Projects, the sections the parser drops, beside Contact and
+  a one-role Experience so the file reads as English.
 - `vietnamese-letters.pdf`: an English profile whose name and one employer
   carry Vietnamese letters.
 - `localized-vi.pdf`: the same layout with Vietnamese section headings, so
@@ -30,9 +31,10 @@ or file is used.
 - `limits-en.pdf`: 20 pages, a 220-character headline, 80 roles, and one
   role description over 16 KiB of UTF-8.
 - `injection-en.pdf`: `<script>alert(1)</script>`, `<img src=x
-  onerror=alert(1)>`, and `javascript:alert(1)` in every mapped field and
-  contact line, escaped in the XSL-FO source so the PDF's extracted text
-  carries the literal characters.
+  onerror=alert(1)>`, and `javascript:alert(1)` spread over every mapped field
+  and contact line, escaped in the XSL-FO source so the PDF's extracted text
+  carries the literal characters. Each line fits its column, as in a real
+  export, so no text runs off the page.
 - `other.pdf`: an ordinary two-page document with no "Page N of M" footer,
   for the not-a-LinkedIn-export message.
 

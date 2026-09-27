@@ -252,6 +252,8 @@ function basicEn() {
     18);
   l.main('in software delivery, team building, and customer research.', 12,
     18);
+  l.main('• Grew example activation by a sample margin.', 12, 18);
+  l.main('• Ran a weekly example discovery practice.', 12, 18);
   l.main('Experience', 16, 54);
   l.main('Example Co.', 12, 30.5);
   l.main('Senior Product Manager, Head of PM Function', 11.5, 16);
@@ -267,7 +269,6 @@ function basicEn() {
   l.main('and tracked adoption metrics after each release across two', 10.5,
     18);
   l.main('Mẫu Group', 12, 38.5);
-  l.main('Product Manager', 11.5, 16);
   l.main('2 years 1 month', 10.5, 16.5);
   l.main('Product Manager, Growth', 11.5, 21.5);
   l.main('April 2017 - March 2018 (1 year)', 10.5, 14.5);
@@ -286,7 +287,13 @@ function basicEn() {
     21.5);
   l.main('three, covering discovery, design, and a public launch across', 10.5,
     18);
-  l.main('web and a companion mobile app.', 10.5, 18);
+  l.main('web and a companion mobile app. The role also covered pricing', 10.5,
+    18);
+  l.main('experiments, onboarding research, and an example partner program',
+    10.5, 18);
+  l.main('that grew into a separate team after the launch year ended.', 10.5,
+    18);
+  l.main('It closed with a handover of every example workstream.', 10.5, 18);
 
   // Education starts on its own page, as in the real export this mirrors.
   l.newPage();
@@ -313,22 +320,19 @@ function wrapsEn() {
   l.sidebar('Contact', 13);
   l.sidebar('0900000000 (Home)', 10.5, 19.5);
   l.sidebar('sample.wrap@example.com', 10.5, 12.5);
-  l.sidebar('linkedin.com/in/sample-person-with-a-very-long-vanity', 11, 24.5);
-  l.sidebar('-slug-that-wraps', 11, 12.5);
+  l.sidebar('linkedin.com/in/sample-person-', 11, 24.5);
+  l.sidebar('with-a-long-slug', 11, 12.5);
   l.sidebar('(LinkedIn)', 11, 14.5);
   l.sidebar('Top Skills', 13, 35);
-  l.sidebar('An Example Skill Name That Is Long Enough To Wrap Onto', 10.5,
-    19.5);
-  l.sidebar('A Second Visual Line', 10.5, 12.5);
+  l.sidebar('An Example Skill Name That', 10.5, 19.5);
+  l.sidebar('Wraps Onto A Second Line', 10.5, 12.5);
   l.sidebar('Public Speaking', 10.5, 17.5);
   l.sidebar('Languages', 13, 34.5);
-  l.sidebar('Vietnamese, at a Native or Bilingual level that wraps', 10.5,
-    19.5);
-  l.sidebar('onto a second line', 10.5, 12.5);
+  l.sidebar('Vietnamese (Native or', 10.5, 19.5);
+  l.sidebar('Bilingual)', 10.5, 12.5);
   l.sidebar('Certifications', 13, 34.5);
-  l.sidebar('An Example Certification Whose Long Title Wraps Onto A', 10.5,
-    19.5);
-  l.sidebar('Second Visual Line', 10.5, 12.5);
+  l.sidebar('An Example Certification', 10.5, 19.5);
+  l.sidebar('Whose Title Wraps', 10.5, 12.5);
   // Sidebar continues on page 2: split by hand into a second static block.
   l.breakSidebarToNextPage();
   l.sidebar('Second Example Certificate', 10.5, 17.5);
@@ -384,14 +388,18 @@ function datesEn() {
 
   l.main('Example Co. D', 12, 38.5);
   l.main('Analyst', 11.5, 16);
-  l.main('Someday 2019 - Another Day 2020', 10.5, 14.5);
+  l.main('Someday 2019 - Later 2020 (1 year)', 10.5, 14.5);
   l.main('Remote', 10.5, 14.5);
 
   l.main('Example Co. E', 12, 38.5);
-  l.main('Analyst', 11.5, 16);
   l.main('less than a year', 10.5, 16.5);
   l.main('Junior Analyst', 11.5, 21.5);
   l.main('June 2022 - August 2022 (less than a year)', 10.5, 14.5);
+  l.main('Remote', 10.5, 14.5);
+
+  l.main('Example Co. F', 12, 38.5);
+  l.main('Analyst', 11.5, 16);
+  l.main('Jan 2016 \u2013 Sept 2017 (1 year 9 months)', 10.5, 14.5);
   l.main('Remote', 10.5, 14.5);
 
   write('dates-en', l);
@@ -415,6 +423,10 @@ function droppedEn() {
   l.main('Sample Droppedperson', 26);
   l.main('Example Engineer', 12, 21);
   l.main('Ho Chi Minh City, Vietnam', 12, 15.5);
+  l.main('Experience', 16, 54);
+  l.main('Example Co.', 12, 30.5);
+  l.main('Engineer', 11.5, 16);
+  l.main('2019 - Present (6 years)', 10.5, 14.5);
   l.main('Volunteer Experience', 16, 54);
   l.main('Example Nonprofit', 12, 30.5);
   l.main('Volunteer', 11.5, 16);
@@ -479,92 +491,123 @@ function localizedVi() {
 
 // ---------------------------------------------------------------------------
 // limits-en: 20 pages; a 220-character headline; 80 roles; one description
-// over 16 KiB of UTF-8.
+// over 16 KiB of UTF-8. Every line fits the page, as LinkedIn wraps its text:
+// the long headline and the long description wrap onto many lines.
 // ---------------------------------------------------------------------------
-function limitsEn() {
+
+// Splits text at spaces into lines of at most `width` characters; joining
+// them with one space gives the text back.
+function wrapWords(text, width) {
+  const lines = [];
+  let current = '';
+  for (const word of text.split(' ')) {
+    if (current !== '' && current.length + 1 + word.length > width) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current === '' ? word : `${current} ${word}`;
+    }
+  }
+  if (current !== '') lines.push(current);
+  return lines;
+}
+
+function limitsLayout(summaryLines) {
   const l = new Layout();
   l.sidebar('Contact', 13);
   l.sidebar('0900000000 (Home)', 10.5, 19.5);
   l.sidebar('sample.limits@example.com', 10.5, 12.5);
 
-  const headline = 'Example Role # '.repeat(15).slice(0, 220);
+  const headline = 'Example Role # '.repeat(15).slice(0, 220).trim();
   l.main('Sample Limitsperson', 26);
-  l.main(headline, 12, 21);
+  wrapWords(headline, 50).forEach((line, index) => {
+    l.main(line, 12, index === 0 ? 21 : 18);
+  });
   l.main('Ho Chi Minh City, Vietnam', 12, 15.5);
+  l.main('Summary', 16, 37.5);
+  for (let i = 0; i < summaryLines; i += 1) {
+    l.main(`An example summary line number ${i + 1}.`, 12, i === 0 ? 25.5 : 18);
+  }
   l.main('Experience', 16, 54);
 
-  // A description over 16 KiB of UTF-8, as one very long wrapped line: the
-  // extracted text is what the parser measures, not the visual layout, so
-  // this line is allowed to auto-wrap (unlike every other line here).
-  let longDescription = '';
   const sentence = 'This role covered a wide range of example duties across '
     + 'product, design, and engineering collaboration. ';
+  let longDescription = '';
   while (Buffer.byteLength(longDescription, 'utf8') < 16 * 1024 + 100) {
     longDescription += sentence;
   }
 
-  // 4 roles per page for the 80 roles: an explicit page break every 4th
-  // role, so the page count (20) does not depend on the auto-break margin,
-  // which the giant description below would otherwise throw off.
-  const ROLES_PER_PAGE = 4;
   for (let i = 0; i < 80; i += 1) {
-    if (i > 0 && i % ROLES_PER_PAGE === 0) l.newPage();
-    const company = `Example Co. ${i + 1}`;
-    const gap = i % ROLES_PER_PAGE === 0 ? 30.5 : 38.5;
-    l.main(company, 12, gap);
+    l.main(`Example Co. ${i + 1}`, 12, i === 0 ? 30.5 : 38.5);
     l.main(`Analyst Level ${i + 1}`, 11.5, 16);
     l.main(`January 20${String(10 + (i % 10)).padStart(2, '0')} - `
-      + `Present (1 year)`, 10.5, 14.5);
+      + 'Present (1 year)', 10.5, 14.5);
     l.main('Remote', 10.5, 14.5);
     if (i === 40) {
-      // The one role carrying the over-16-KiB description, as a single
-      // long fo:block that FOP wraps naturally within the column width. It
-      // is allowed to overflow its page visually: pdf.js still extracts
-      // every text-showing operator regardless of where it falls on the
-      // page, and this fixture's purpose is the character count, not the
-      // layout.
-      l.push('main', longDescription, 10.5, 21.5);
-      l.lastLine('main').noWrap = false;
+      wrapWords(longDescription.trim(), 60).forEach((line, index) => {
+        l.main(line, 10.5, index === 0 ? 21.5 : 18);
+      });
     }
   }
+  return l;
+}
 
-  if (l.pageCount !== 20) {
-    throw new Error(`limits-en must render as 20 pages, got ${l.pageCount}`);
+function limitsEn() {
+  // Summary lines pad the file to exactly 20 pages.
+  for (let summaryLines = 1; summaryLines < 200; summaryLines += 1) {
+    const l = limitsLayout(summaryLines);
+    if (l.pageCount > 20) break;
+    if (l.pageCount === 20) {
+      write('limits-en', l);
+      return;
+    }
   }
-
-  write('limits-en', l);
+  throw new Error('limits-en cannot be laid out on exactly 20 pages');
 }
 
 // ---------------------------------------------------------------------------
 // injection-en: script tag, img onerror, and javascript: text in every
-// mapped field and contact line.
+// mapped field and contact line. Each line fits its column, so no text runs
+// off the page.
 // ---------------------------------------------------------------------------
 function injectionEn() {
-  const payload = '<script>alert(1)</script> <img src=x onerror=alert(1)> '
-    + 'javascript:alert(1)';
+  const script = '<script>alert(1)</script>';
+  const img = '<img src=x onerror=alert(1)>';
+  const js = 'javascript:alert(1)';
   const l = new Layout();
   l.sidebar('Contact', 13);
-  l.sidebar(`0900000000 (Home) ${payload}`, 10.5, 19.5);
-  l.sidebar(`sample+${payload}@example.com`, 10.5, 12.5);
-  l.sidebar(`example.com/${payload}`, 11, 24.5);
-  l.sidebar('(LinkedIn)', 11, 14.5);
+  l.sidebar('0900000000 (Home)', 10.5, 19.5);
+  l.sidebar('<script>@example.com', 10.5, 12.5);
+  l.sidebar('example.com/<script>', 11, 24.5);
+  l.sidebar('(Portfolio)', 11, 14.5);
+  l.sidebar(js, 11, 13.5);
+  l.sidebar('(Blog)', 11, 13);
   l.sidebar('Top Skills', 13, 35);
-  l.sidebar(payload, 10.5, 19.5);
+  l.sidebar(img, 10.5, 19.5);
+  l.sidebar(js, 10.5, 17.5);
+  l.sidebar('Languages', 13, 34.5);
+  l.sidebar('<script> (Native or Bilingual)', 10.5, 19.5);
+  l.sidebar('Certifications', 13, 34.5);
+  l.sidebar(script, 10.5, 19.5);
 
-  l.main(`Sample Person ${payload}`, 26);
-  l.main(payload, 12, 21);
-  l.main(payload, 12, 15.5);
+  l.main('Sample <script>', 26);
+  l.main(`${script} ${js}`, 12, 21);
+  l.main(img, 12, 15.5);
   l.main('Summary', 16, 37.5);
-  l.main(payload, 12, 25.5);
+  l.main(script, 12, 25.5);
+  l.main(img, 12, 18);
+  l.main(js, 12, 18);
   l.main('Experience', 16, 54);
-  l.main(payload, 12, 30.5);
-  l.main(payload, 11.5, 16);
+  l.main(img, 12, 30.5);
+  l.main(script, 11.5, 16);
   l.main('January 2020 - Present (5 years 8 months)', 10.5, 14.5);
-  l.main(payload, 10.5, 14.5);
-  l.main(payload, 10.5, 21.5);
+  l.main(`${js}, ${script}`, 10.5, 14.5);
+  l.main(script, 10.5, 21.5);
+  l.main(img, 10.5, 18);
+  l.main(js, 10.5, 18);
   l.main('Education', 16, 54);
-  l.main(payload, 12, 25.5);
-  l.main(`${payload} · (2011 - 2015)`, 10.5, 17.5);
+  l.main(script, 12, 25.5);
+  l.main(`${img} · (2011 - 2015)`, 10.5, 17.5);
 
   write('injection-en', l);
 }

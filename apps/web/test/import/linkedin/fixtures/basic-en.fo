@@ -34,6 +34,8 @@
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="12.540pt">A product manager at Example Co, running a Sample Product team</fo:block>
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="6.000pt">focused on measurable outcomes over an example number of years</fo:block>
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="6.000pt">in software delivery, team building, and customer research.</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="6.000pt">• Grew example activation by a sample margin.</fo:block>
+      <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="6.000pt">• Ran a weekly example discovery practice.</fo:block>
       <fo:block font-family="NotoSans" font-size="16pt" line-height="16pt" wrap-option="no-wrap" space-before="38.960pt">Experience</fo:block>
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="17.540pt">Example Co.</fo:block>
       <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="4.380pt">Senior Product Manager, Head of PM Function</fo:block>
@@ -45,8 +47,7 @@
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">a quarterly roadmap. Ran discovery interviews, wrote specs,</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">and tracked adoption metrics after each release across two</fo:block>
       <fo:block font-family="NotoSans" font-size="12pt" line-height="12pt" wrap-option="no-wrap" space-before="26.860pt">Mẫu Group</fo:block>
-      <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="4.380pt">Product Manager</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="5.760pt">2 years 1 month</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="5.640pt">2 years 1 month</fo:block>
       <fo:block font-family="NotoSans" font-size="11.5pt" line-height="11.5pt" wrap-option="no-wrap" space-before="10.240pt">Product Manager, Growth</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="3.760pt">April 2017 - March 2018 (1 year)</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="4.000pt">Hanoi, Vietnam</fo:block>
@@ -70,7 +71,10 @@
     <fo:block-container position="absolute" top="46.419pt" left="223.6pt" width="364.4pt" overflow="visible">
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="0.000pt">Built the first version of the product with a founding team of</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">three, covering discovery, design, and a public launch across</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">web and a companion mobile app.</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">web and a companion mobile app. The role also covered pricing</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">experiments, onboarding research, and an example partner program</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">that grew into a separate team after the launch year ended.</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.500pt">It closed with a handover of every example workstream.</fo:block>
     </fo:block-container>
     <fo:block-container position="absolute" top="771.259pt" left="223.6pt" width="364.4pt" overflow="visible">
       <fo:block font-family="NotoSans" font-size="9pt" line-height="9pt" wrap-option="no-wrap" text-align="right">Page 2 of 3</fo:block>

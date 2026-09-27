@@ -11,19 +11,19 @@
       <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="0.000pt">Contact</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">0900000000 (Home)</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">sample.wrap@example.com</fo:block>
-      <fo:block font-family="NotoSans" font-size="11pt" line-height="11pt" wrap-option="no-wrap" space-before="13.620pt">linkedin.com/in/sample-person-with-a-very-long-vanity</fo:block>
-      <fo:block font-family="NotoSans" font-size="11pt" line-height="11pt" wrap-option="no-wrap" space-before="1.500pt">-slug-that-wraps</fo:block>
+      <fo:block font-family="NotoSans" font-size="11pt" line-height="11pt" wrap-option="no-wrap" space-before="13.620pt">linkedin.com/in/sample-person-</fo:block>
+      <fo:block font-family="NotoSans" font-size="11pt" line-height="11pt" wrap-option="no-wrap" space-before="1.500pt">with-a-long-slug</fo:block>
       <fo:block font-family="NotoSans" font-size="11pt" line-height="11pt" wrap-option="no-wrap" space-before="3.500pt">(LinkedIn)</fo:block>
       <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="22.480pt">Top Skills</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">An Example Skill Name That Is Long Enough To Wrap Onto</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">A Second Visual Line</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">An Example Skill Name That</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">Wraps Onto A Second Line</fo:block>
       <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="7.000pt">Public Speaking</fo:block>
       <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="22.100pt">Languages</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">Vietnamese, at a Native or Bilingual level that wraps</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">onto a second line</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">Vietnamese (Native or</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">Bilingual)</fo:block>
       <fo:block font-family="NotoSans" font-size="13pt" line-height="13pt" wrap-option="no-wrap" space-before="22.100pt">Certifications</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">An Example Certification Whose Long Title Wraps Onto A</fo:block>
-      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">Second Visual Line</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="8.400pt">An Example Certification</fo:block>
+      <fo:block font-family="NotoSans" font-size="10.5pt" line-height="10.5pt" wrap-option="no-wrap" space-before="2.000pt">Whose Title Wraps</fo:block>
     </fo:block-container>
     <fo:block-container position="absolute" top="34.637pt" left="223.6pt" width="364.4pt" overflow="visible">
       <fo:block font-family="NotoSans" font-size="26pt" line-height="26pt" wrap-option="no-wrap" space-before="0.000pt">Sample Wrapperson</fo:block>
