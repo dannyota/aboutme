@@ -61,6 +61,11 @@ export type EditorShellCopy = {
   readonly previewModePdf: string;
   readonly previewModeWeb: string;
   readonly issueFor: (code: string) => string;
+  // Labels for PreviewZoomControls.vue.
+  readonly zoomOut: string;
+  readonly zoomIn: string;
+  readonly zoomFit: string;
+  readonly zoomPercent: (percent: number) => string;
 };
 
 export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
@@ -142,6 +147,11 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
       }
       return 'Giá trị này cần được kiểm tra.';
     },
+    // Labels for PreviewZoomControls.vue.
+    zoomOut: 'Thu nhỏ',
+    zoomIn: 'Phóng to',
+    zoomFit: 'Vừa khung',
+    zoomPercent: (percent) => `Thu phóng ${percent}%`,
   },
   en: {
     localeLabel: 'Language',
@@ -218,5 +228,10 @@ export const editorShellCopy: WorkspaceCopy<EditorShellCopy> = {
       }
       return 'This value needs attention.';
     },
+    // Labels for PreviewZoomControls.vue.
+    zoomOut: 'Zoom out',
+    zoomIn: 'Zoom in',
+    zoomFit: 'Fit to width',
+    zoomPercent: (percent) => `Zoom ${percent}%`,
   },
 };

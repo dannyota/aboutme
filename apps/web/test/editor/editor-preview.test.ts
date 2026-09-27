@@ -3,9 +3,46 @@ import { defineComponent, nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import EditorPreview from '../../app/components/editor/EditorPreview.vue';
+import { PREVIEW_ZOOM_STORAGE_KEY } from '../../app/editor/previewZoom';
 import { editorShellCopy } from '../../app/i18n/editor-shell';
 import { acceptedFixture } from './fixture';
 import { setSiteLocale } from '../support/locale';
+
+const WIDE_LAYOUT_WIDTH = 1440;
+const PHONE_LAYOUT_WIDTH = 390;
+
+function setInnerWidth(width: number): void {
+  Object.defineProperty(window, 'innerWidth', {
+    configurable: true,
+    value: width,
+  });
+}
+
+// This environment's WheelEvent constructor ignores the MouseEvent-derived
+// ctrlKey/clientX/clientY init fields, so they are set directly afterward.
+function ctrlWheelEvent(
+  deltaY: number,
+  point: { x: number; y: number },
+): WheelEvent {
+  const event = new WheelEvent('wheel', {
+    bubbles: true, cancelable: true, deltaY,
+  });
+  Object.assign(event, {
+    clientX: point.x, clientY: point.y, ctrlKey: true,
+  });
+  return event;
+}
+
+async function mountPreviewAtWidth(width: number) {
+  setInnerWidth(width);
+  const accepted = acceptedFixture();
+  const wrapper = mount(EditorPreview, {
+    props: { document: accepted.document, lng: accepted.metadata.lng },
+    global: { stubs: { ResumeDocument: true } },
+  });
+  await nextTick();
+  return wrapper;
+}
 
 const resize = vi.hoisted(() => ({
   callback: null as ResizeObserverCallback | null,
@@ -459,6 +496,211 @@ describe('EditorPreview', () => {
       photoUrl: 'data:image/jpeg;base64,AA==',
     });
     expect(wrapper.html()).not.toContain('private-object.jpg');
+  });
+});
+
+describe('EditorPreview zoom controls', () => {
+  it(
+    'shows the zoom controls above the phone breakpoint and hides them at '
+    + 'phone width',
+    async () => {
+      const wide = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      expect(
+        wide.find('[data-testid="preview-zoom-controls"]').exists(),
+      ).toBe(true);
+      wide.unmount();
+
+      const phone = await mountPreviewAtWidth(PHONE_LAYOUT_WIDTH);
+      expect(
+        phone.find('[data-testid="preview-zoom-controls"]').exists(),
+      ).toBe(false);
+      phone.unmount();
+    },
+  );
+
+  it('names the four controls in English', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+
+    expect(wrapper.get('[data-testid="zoom-out"]').attributes('aria-label'))
+      .toBe(editorShellCopy.en.zoomOut);
+    expect(wrapper.get('[data-testid="zoom-in"]').attributes('aria-label'))
+      .toBe(editorShellCopy.en.zoomIn);
+    expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-label'))
+      .toBe(editorShellCopy.en.zoomFit);
+    expect(
+      wrapper.get('[data-testid="zoom-percent"]').attributes('aria-label'),
+    ).toBe(editorShellCopy.en.zoomPercent(84));
+    wrapper.unmount();
+  });
+
+  it('names the four controls in Vietnamese', async () => {
+    setSiteLocale('vi');
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+
+    expect(wrapper.get('[data-testid="zoom-out"]').attributes('aria-label'))
+      .toBe(editorShellCopy.vi.zoomOut);
+    expect(wrapper.get('[data-testid="zoom-in"]').attributes('aria-label'))
+      .toBe(editorShellCopy.vi.zoomIn);
+    expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-label'))
+      .toBe(editorShellCopy.vi.zoomFit);
+    expect(
+      wrapper.get('[data-testid="zoom-percent"]').attributes('aria-label'),
+    ).toBe(editorShellCopy.vi.zoomPercent(84));
+    wrapper.unmount();
+  });
+
+  it('starts at Fit: zoom-out disabled, Fit and percent pressed', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+
+    expect(wrapper.get('[data-testid="zoom-out"]').attributes('disabled'))
+      .toBeDefined();
+    expect(wrapper.get('[data-testid="zoom-in"]').attributes('disabled'))
+      .toBeUndefined();
+    expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-pressed'))
+      .toBe('true');
+    expect(
+      wrapper.get('[data-testid="zoom-percent"]').attributes('aria-pressed'),
+    ).toBe('true');
+    wrapper.unmount();
+  });
+
+  it('disables zoom-in at 200% and clears aria-pressed once off Fit',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const zoomIn = wrapper.get('[data-testid="zoom-in"]');
+      for (let step = 0; step < 10; step += 1) {
+        await zoomIn.trigger('click');
+      }
+
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('200%');
+      expect(wrapper.get('[data-testid="zoom-in"]').attributes('disabled'))
+        .toBeDefined();
+      expect(wrapper.get('[data-testid="zoom-out"]').attributes('disabled'))
+        .toBeUndefined();
+      expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-pressed'))
+        .toBe('false');
+      wrapper.unmount();
+    });
+
+  it('reflects a manually chosen zoom in data-sheet-zoom', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    await wrapper.get('[data-testid="zoom-in"]').trigger('click');
+
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+    const sheet = wrapper.get('[data-testid="preview-sheet"]');
+    expect(sheet.attributes('data-sheet-zoom')).toBe('0.5000');
+    wrapper.unmount();
+  });
+
+  it('resets to Fit from the percent button and from the Fit toggle',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      await wrapper.get('[data-testid="zoom-in"]').trigger('click');
+      await wrapper.get('[data-testid="zoom-percent"]').trigger('click');
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+
+      await wrapper.get('[data-testid="zoom-in"]').trigger('click');
+      await wrapper.get('[data-testid="zoom-fit"]').trigger('click');
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+      wrapper.unmount();
+    });
+
+  it(
+    'zooms with Ctrl/Cmd + "=" / "-" / "0" while focus is inside the preview',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const root = wrapper.element;
+
+      root.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true, ctrlKey: true, key: '=',
+      }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+
+      root.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true, ctrlKey: true, key: '0',
+      }));
+      await nextTick();
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+      wrapper.unmount();
+    },
+  );
+
+  it('ignores the zoom shortcut when focus is outside the preview',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+
+      document.body.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true, ctrlKey: true, key: '=',
+      }));
+      await nextTick();
+
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+      wrapper.unmount();
+    });
+
+  it('does not react to the plain "=" key without Ctrl/Cmd', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+
+    wrapper.element.dispatchEvent(new KeyboardEvent('keydown', {
+      bubbles: true, cancelable: true, key: '=',
+    }));
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+    wrapper.unmount();
+  });
+
+  it('zooms on Ctrl/Cmd + wheel over the preview and prevents the default',
+    async () => {
+      const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+      const zoomInEvent = ctrlWheelEvent(-100, { x: 20, y: 20 });
+
+      scroll.dispatchEvent(zoomInEvent);
+      await nextTick();
+
+      expect(zoomInEvent.defaultPrevented).toBe(true);
+      expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+      wrapper.unmount();
+    });
+
+  it('leaves a plain wheel alone so the pane scrolls instead', async () => {
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+    const scroll = wrapper.get('[data-testid="preview-scroll"]').element;
+    const plainWheel = new WheelEvent('wheel', {
+      bubbles: true, cancelable: true, deltaY: -100,
+    });
+
+    scroll.dispatchEvent(plainWheel);
+    await nextTick();
+
+    expect(plainWheel.defaultPrevented).toBe(false);
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+    wrapper.unmount();
+  });
+
+  it('persists the chosen zoom across mounts in the same browser',
+    async () => {
+      const first = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      await first.get('[data-testid="zoom-in"]').trigger('click');
+      expect(window.localStorage.getItem(PREVIEW_ZOOM_STORAGE_KEY))
+        .toBe('50');
+      first.unmount();
+
+      const second = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+      expect(second.get('[data-testid="zoom-percent"]').text()).toBe('50%');
+      second.unmount();
+    });
+
+  it('falls back to Fit when the stored zoom is corrupted', async () => {
+    window.localStorage.setItem(PREVIEW_ZOOM_STORAGE_KEY, 'not-a-zoom');
+    const wrapper = await mountPreviewAtWidth(WIDE_LAYOUT_WIDTH);
+
+    expect(wrapper.get('[data-testid="zoom-percent"]').text()).toBe('84%');
+    expect(wrapper.get('[data-testid="zoom-fit"]').attributes('aria-pressed'))
+      .toBe('true');
+    wrapper.unmount();
   });
 });
 
