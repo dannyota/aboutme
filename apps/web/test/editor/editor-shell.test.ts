@@ -437,6 +437,20 @@ describe('EditorShell', () => {
   );
 
   it(
+    'positions the inspector so its hidden section heading cannot escape '
+    + 'into the page',
+    () => {
+      const wrapper = mountShell();
+
+      // A sr-only heading inside the inspector is `position: absolute`; the
+      // inspector must be a positioned ancestor or the heading is placed
+      // against the page instead, growing the page's scroll area.
+      expect(wrapper.get('[data-region="inspector"]').classes())
+        .toContain('relative');
+    },
+  );
+
+  it(
     'keeps the phone switch outside the topbar and fits the preview',
     async () => {
       const originalWidth = window.innerWidth;

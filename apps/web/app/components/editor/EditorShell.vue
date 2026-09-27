@@ -493,11 +493,11 @@ async function discardAndSignIn(): Promise<void> {
 
     <PanelResizeHandle />
     <aside
-      class="editor-inspector col-start-4 row-start-2 min-w-0 overflow-auto
-        border-l bg-card p-4 max-[72rem]:col-start-2 max-[72rem]:row-start-2
-        max-[72rem]:ml-0 max-[72rem]:w-full max-[72rem]:max-w-none
-        max-[72rem]:pt-20 max-[42rem]:col-start-1 max-[42rem]:w-full
-        max-[42rem]:max-w-none max-[42rem]:pb-24
+      class="editor-inspector relative col-start-4 row-start-2 min-w-0
+        overflow-auto border-l bg-card p-4 max-[72rem]:col-start-2
+        max-[72rem]:row-start-2 max-[72rem]:ml-0 max-[72rem]:w-full
+        max-[72rem]:max-w-none max-[72rem]:pt-20 max-[42rem]:col-start-1
+        max-[42rem]:w-full max-[42rem]:max-w-none max-[42rem]:pb-24
         max-[72rem]:data-[narrow-active=false]:pointer-events-none
         max-[72rem]:data-[narrow-active=false]:invisible"
       data-region="inspector"

@@ -9,13 +9,13 @@ import {
 } from '../../app/composables/useResizablePanel';
 import { setSiteLocale } from '../support/locale';
 
-const originalWidth = window.innerWidth;
+const originalClientWidth = document.documentElement.clientWidth;
 
 // A viewport wide enough that the preview's 32rem floor never limits the
 // panel (needs more than 100.5rem), so the default max reads as the flat
 // 48rem ceiling.
 function useWideViewport(): void {
-  Object.defineProperty(window, 'innerWidth', {
+  Object.defineProperty(document.documentElement, 'clientWidth', {
     configurable: true,
     value: 200 * 16,
   });
@@ -34,9 +34,9 @@ afterEach(() => {
   // inherit them.
   document.body.style.userSelect = '';
   document.body.style.cursor = '';
-  Object.defineProperty(window, 'innerWidth', {
+  Object.defineProperty(document.documentElement, 'clientWidth', {
     configurable: true,
-    value: originalWidth,
+    value: originalClientWidth,
   });
 });
 
@@ -174,4 +174,80 @@ describe('PanelResizeHandle', () => {
     expect(document.body.style.userSelect).not.toBe('none');
     wrapper.unmount();
   });
+
+  it(
+    'announces a whole rem while a fractional drag is still live',
+    async () => {
+      const wrapper = mount(PanelResizeHandle);
+      await wrapper.vm.$nextTick();
+      const element = handle(wrapper);
+
+      await element.trigger('pointerdown', { clientX: 200, pointerId: 1 });
+      // 19px left at a 16px root font size is 22 + 1.1875 = 23.1875rem.
+      await element.trigger('pointermove', { clientX: 181, pointerId: 1 });
+
+      expect(element.attributes('aria-valuenow')).toBe('23');
+      expect(element.attributes('aria-valuetext')).toBe('23rem');
+      wrapper.unmount();
+    },
+  );
+
+  it(
+    'snaps the width a drag commits to the nearest quarter rem',
+    async () => {
+      const wrapper = mount(PanelResizeHandle);
+      await wrapper.vm.$nextTick();
+      const element = handle(wrapper);
+
+      await element.trigger('pointerdown', { clientX: 200, pointerId: 1 });
+      // 19px left is 23.1875rem live; committed, it snaps to 23.25rem.
+      await element.trigger('pointermove', { clientX: 181, pointerId: 1 });
+      await element.trigger('pointerup', { clientX: 181, pointerId: 1 });
+
+      expect(window.localStorage.getItem(EDITOR_PANEL_STORAGE_KEY))
+        .toBe('23.25');
+      wrapper.unmount();
+    },
+  );
+
+  it('keeps the 1px border line at rest', async () => {
+    const wrapper = mount(PanelResizeHandle);
+    await wrapper.vm.$nextTick();
+    const bar = wrapper.get('[data-testid="panel-resize-handle"] span');
+
+    expect(bar.classes()).toContain('w-px');
+    expect(bar.classes()).toContain('bg-border');
+    wrapper.unmount();
+  });
+
+  it(
+    'widens to a 3px primary bar on hover, drag, and focus-visible',
+    async () => {
+      const wrapper = mount(PanelResizeHandle);
+      await wrapper.vm.$nextTick();
+      const bar = wrapper.get('[data-testid="panel-resize-handle"] span');
+
+      expect(bar.classes()).toEqual(expect.arrayContaining([
+        'group-hover:w-[3px]',
+        'group-hover:bg-primary',
+        'group-active:w-[3px]',
+        'group-active:bg-primary',
+        'group-focus-visible:w-[3px]',
+        'group-focus-visible:bg-primary',
+      ]));
+      wrapper.unmount();
+    },
+  );
+
+  it(
+    'pulls the focus outline inward instead of a second ring',
+    async () => {
+      const wrapper = mount(PanelResizeHandle);
+      await wrapper.vm.$nextTick();
+
+      expect(handle(wrapper).classes())
+        .toContain('focus-visible:-outline-offset-2');
+      wrapper.unmount();
+    },
+  );
 });

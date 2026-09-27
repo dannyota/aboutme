@@ -19,27 +19,28 @@ import {
 // panel (needs more than 100.5rem), so tests can assert the flat 48rem
 // ceiling.
 const WIDE_VIEWPORT_REM = 200;
-const originalInnerWidth = window.innerWidth;
+const originalClientWidth = document.documentElement.clientWidth;
 
-function useWideViewport(): void {
-  Object.defineProperty(window, 'innerWidth', {
+function setClientWidthPx(px: number): void {
+  Object.defineProperty(document.documentElement, 'clientWidth', {
     configurable: true,
-    value: WIDE_VIEWPORT_REM * 16,
+    value: px,
   });
 }
 
-// useResizablePanel reads window.innerWidth at setup, so every test gets a
-// viewport wide enough that the 48rem ceiling, not the preview floor, is
-// what a stored or dragged width is checked against.
+function useWideViewport(): void {
+  setClientWidthPx(WIDE_VIEWPORT_REM * 16);
+}
+
+// useResizablePanel reads document.documentElement.clientWidth at setup, so
+// every test gets a viewport wide enough that the 48rem ceiling, not the
+// preview floor, is what a stored or dragged width is checked against.
 beforeEach(useWideViewport);
 
 afterEach(() => {
   window.localStorage.removeItem(EDITOR_PANEL_STORAGE_KEY);
   document.documentElement.style.removeProperty(EDITOR_PANEL_CSS_VAR);
-  Object.defineProperty(window, 'innerWidth', {
-    configurable: true,
-    value: originalInnerWidth,
-  });
+  setClientWidthPx(originalClientWidth);
   vi.unstubAllGlobals();
 });
 
@@ -226,6 +227,31 @@ describe('createResizablePanelController', () => {
     expect(preventDefault).not.toHaveBeenCalled();
     expect(panel.widthRem.value).toBe(EDITOR_PANEL_DEFAULT_REM);
   });
+
+  it(
+    'fires onCommit only for a commit, not a live setWidthRem call',
+    () => {
+      const onCommit = vi.fn();
+      const withCommit = createResizablePanelController(
+        ref(EDITOR_PANEL_DEFAULT_REM),
+        ref(WIDE_VIEWPORT_REM),
+        onCommit,
+      );
+      withCommit.setWidthRem(30);
+      expect(onCommit).not.toHaveBeenCalled();
+
+      withCommit.commit();
+      expect(onCommit).toHaveBeenCalledTimes(1);
+      expect(onCommit).toHaveBeenCalledWith(30);
+    },
+  );
+
+  it('snaps a committed width to the nearest quarter rem', () => {
+    const { panel } = controller();
+    panel.setWidthRem(23.1875);
+    panel.commit();
+    expect(panel.widthRem.value).toBe(23.25);
+  });
 });
 
 const Harness = defineComponent({
@@ -271,12 +297,35 @@ describe('useResizablePanel', () => {
     getItem.mockRestore();
   });
 
-  it('persists a changed width to localStorage', async () => {
+  it('does not persist a live width change alone', async () => {
     const wrapper = mount(Harness);
     await wrapper.vm.$nextTick();
     wrapper.vm.panel.setWidthRem(28);
     await wrapper.vm.$nextTick();
+    expect(window.localStorage.getItem(EDITOR_PANEL_STORAGE_KEY)).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('persists a width once a drag commits it', async () => {
+    const wrapper = mount(Harness);
+    await wrapper.vm.$nextTick();
+    wrapper.vm.panel.setWidthRem(28);
+    wrapper.vm.panel.commit();
+    await wrapper.vm.$nextTick();
     expect(window.localStorage.getItem(EDITOR_PANEL_STORAGE_KEY)).toBe('28');
+    wrapper.unmount();
+  });
+
+  it('persists a width committed by a keyboard action', async () => {
+    const wrapper = mount(Harness);
+    await wrapper.vm.$nextTick();
+    wrapper.vm.panel.handleKeyDown({
+      key: 'ArrowLeft',
+      shiftKey: false,
+      preventDefault: vi.fn(),
+    } as never);
+    await wrapper.vm.$nextTick();
+    expect(window.localStorage.getItem(EDITOR_PANEL_STORAGE_KEY)).toBe('23');
     wrapper.unmount();
   });
 
@@ -287,7 +336,8 @@ describe('useResizablePanel', () => {
       });
     const wrapper = mount(Harness);
     await wrapper.vm.$nextTick();
-    expect(() => wrapper.vm.panel.setWidthRem(28)).not.toThrow();
+    wrapper.vm.panel.setWidthRem(28);
+    expect(() => wrapper.vm.panel.commit()).not.toThrow();
     wrapper.unmount();
     setItem.mockRestore();
   });
@@ -303,20 +353,46 @@ describe('useResizablePanel', () => {
     wrapper.unmount();
   });
 
-  it('re-clamps on window resize', async () => {
+  it('re-clamps the displayed width on window resize', async () => {
     const wrapper = mount(Harness);
     await wrapper.vm.$nextTick();
     wrapper.vm.panel.setWidthRem(40);
+    wrapper.vm.panel.commit();
     expect(wrapper.vm.panel.widthRem.value).toBe(40);
 
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      value: 72.5 * 16,
-    });
+    setClientWidthPx(72.5 * 16);
     window.dispatchEvent(new Event('resize'));
     await wrapper.vm.$nextTick();
 
     expect(wrapper.vm.panel.widthRem.value).toBe(EDITOR_PANEL_MIN_REM);
     wrapper.unmount();
   });
+
+  it(
+    'keeps a stored width through a shrink and regrow past it',
+    async () => {
+      window.localStorage.setItem(EDITOR_PANEL_STORAGE_KEY, '30');
+      const wrapper = mount(Harness);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.vm.panel.widthRem.value).toBe(30);
+
+      // 1100px (68.75rem) leaves no room for the panel beyond the preview's
+      // 32rem floor, so the display clamps to the 22rem minimum.
+      setClientWidthPx(1100);
+      window.dispatchEvent(new Event('resize'));
+      await wrapper.vm.$nextTick();
+      expect(wrapper.vm.panel.widthRem.value).toBe(EDITOR_PANEL_MIN_REM);
+
+      // 1440px (90rem) has room for 30rem again; the stored preference,
+      // not the shrunk display value, drives the regrow.
+      setClientWidthPx(1440);
+      window.dispatchEvent(new Event('resize'));
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.vm.panel.widthRem.value).toBe(30);
+      expect(window.localStorage.getItem(EDITOR_PANEL_STORAGE_KEY))
+        .toBe('30');
+      wrapper.unmount();
+    },
+  );
 });
