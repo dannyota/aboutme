@@ -302,10 +302,17 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 	ctx, pool, tx, q := newPasswordStoreTx(t)
 	lockExistingAuthEmailJobs(ctx, t, pool)
 
+	// Other packages commit due jobs after the blocker takes its snapshot. If
+	// this transaction claimed one, the second UPDATE below would re-check the
+	// foreign key on a row version this transaction created, taking KEY SHARE
+	// on the other package's registration while that package deletes it and
+	// waits on this job: a deadlock. The simulated clock predates every other
+	// test clock, so the claim and the requeue match only this test's job.
+	fixtureNow := time.Date(1999, time.January, 1, 0, 0, 0, 0, time.UTC)
 	regID := newPasswordRegistration(ctx, t, q)
-	newPendingVerifyJob(ctx, t, q, regID)
+	fixture := newPendingVerifyJobAt(ctx, t, q, regID, fixtureNow)
 
-	now := time.Now().UTC()
+	now := fixtureNow
 	claimed, err := q.ClaimAuthEmailJobs(ctx, store.ClaimAuthEmailJobsParams{
 		LeaseOwner:     "worker",
 		LeaseExpiresAt: now.Add(30 * time.Second),
@@ -315,8 +322,8 @@ func TestPasswordAuthStaleLeaseRequeueDecrementsAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClaimAuthEmailJobs: %v", err)
 	}
-	if len(claimed) != 1 || claimed[0].Attempts != 1 {
-		t.Fatalf("claimed = %+v, want exactly one leased job with attempts 1", claimed)
+	if len(claimed) != 1 || claimed[0].ID != fixture.ID || claimed[0].Attempts != 1 {
+		t.Fatalf("claimed = %+v, want only fixture job %s leased with attempts 1", claimed, fixture.ID)
 	}
 
 	if _, execErr := tx.Exec(ctx,
