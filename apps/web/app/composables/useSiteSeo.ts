@@ -39,7 +39,7 @@ export function useSiteSeo(input: MaybeRefOrGetter<SiteSeo>): void {
         { property: 'og:url', content: url },
         { property: 'og:locale', content: ogLocales[locale] },
         { property: 'og:locale:alternate', content: alternate },
-        { property: 'og:image', content: ogImageUrl },
+        { property: 'og:image', content: ogImageUrl[locale] },
         { property: 'og:image:width', content: '1200' },
         { property: 'og:image:height', content: '630' },
         { property: 'og:image:alt', content: siteName },

@@ -2,6 +2,10 @@
 
 Status: Accepted (2026-09-24), approved by the owner.
 
+Amended by [ADR 0065](0065-seal-identity.md) (proposed): the logo, the seal
+stamp, the duplicate blues, pink and orange, the destructive hue, and the chrome
+type scale.
+
 Supersedes in part [ADR 0030](0030-stamped-document-visual-identity.md): its
 signature blue-black ink, its desk neutrals and lamp-lit dark palette, its 6 px
 chrome radius, and its seal hex.

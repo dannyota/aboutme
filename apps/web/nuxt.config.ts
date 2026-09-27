@@ -225,7 +225,7 @@ export default defineNuxtConfig({
     head: {
       htmlAttrs: { lang: 'en' },
       script: [{ src: '/theme-bootstrap.js' }],
-      // The Aurora document-and-identity mark (DESIGN.md; ADR 0050). Order
+      // The seal mark (DESIGN.md; ADR 0065). Order
       // matters: a PNG `sizes="32x32"` link goes first so browsers that
       // pick the first suitable icon (notably iOS/iPadOS Safari, which
       // does not resolve the SVG for the tab switcher and pinned-tab
@@ -240,15 +240,15 @@ export default defineNuxtConfig({
           rel: 'icon',
           type: 'image/png',
           sizes: '32x32',
-          href: '/icon-32-v2.png',
+          href: '/icon-32-v3.png',
         },
-        { rel: 'icon', href: '/favicon-v2.svg', type: 'image/svg+xml' },
+        { rel: 'icon', href: '/favicon-v3.svg', type: 'image/svg+xml' },
         {
           rel: 'apple-touch-icon',
           sizes: '180x180',
-          href: '/apple-touch-icon-v2.png',
+          href: '/apple-touch-icon-v3.png',
         },
-        { rel: 'manifest', href: '/site-v2.webmanifest' },
+        { rel: 'manifest', href: '/site-v3.webmanifest' },
       ],
       meta: [
         // Safari auto-links digit runs such as date ranges into tel: links;

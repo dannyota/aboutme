@@ -45,7 +45,8 @@ and the owner's color scheme.
 
 Colorful product UI. Calm white resume.
 [ADR 0050](docs/adr/0050-aurora-application-identity.md) records the Aurora
-identity.
+identity, and [ADR 0065](docs/adr/0065-seal-identity.md) the seal logo, the
+stamp, and the token clean-up.
 
 - The application canvas is a pale blue ground with large, soft radial glows:
   blue and indigo at the top corners, cyan and a faint pink further down. The
@@ -53,12 +54,14 @@ identity.
   with the page, and never animate.
 - The resume is a whole white sheet with a neutral paper shadow. It stays white
   in dark theme and never takes an Aurora token, gradient, radius, or shadow.
-- Blue leads: actions, links, focus, the logo, and `/verify`'s verified state.
-  Indigo, purple, and cyan support templates, customization, and features. Pink
-  and orange are small, rare accents. A section uses a few, never all.
-- Red means public. Seal red marks the public state, the Publish action, and the
-  seal, and nothing else. Destructive actions use the separate destructive
-  token.
+- Blue leads: actions, links, focus, and `/verify`'s verified state. There are
+  two blues: `--primary` fills and `--link` colors text. Indigo, purple, and
+  cyan support templates, customization, and features. A section uses a few,
+  never all.
+- Red means public. Seal red marks the public state, the Publish action, the
+  seal, and the logo's seal, which makes the same promise, and nothing else.
+  Destructive actions use the burnt-orange destructive token as an outline, so
+  Delete never reads as Publish.
 - State is communicated by a mark or plain text: a pencil tick for saved, text
   for saving and draft, destructive text for failure, and a seal plus link for
   public.
@@ -68,23 +71,29 @@ identity.
 
 ## Logo
 
-The logo is lowercase `aboutme.vn`: a rounded document mark with a folded corner
-whose body forms a cut-out single-story `a` in a cyan to blue to indigo
-gradient, then `about` in the text color and `me.vn` in the blue-to-indigo
-gradient. Strokes and a filled-circle dot draw the letters without a font.
+The logo is the seal. The mark is a stamp in seal red: a thick outer ring, a
+hairline inner ring, and a single-story `a`, tilted −8° like the public stamp.
+The wordmark is lowercase `aboutme.vn` in the text color, and only the dot
+before `vn` is seal red. Strokes and a filled-circle dot draw the letters
+without a font, and nothing uses a gradient or an id.
 
 `AppLogo` renders it inline at 24, 32, or 48 px high, or as the mark alone, as
-one image named “aboutme.vn”. Under `forced-colors: active`, the mark and
-`me.vn` use the text color. `public/favicon-v2.svg` is the mark with a plain
-fold. Home-screen and install icons use the glossy square app icon; icon file
-names carry a version so browsers fetch a changed icon. Source art (wordmark,
-light and dark banners) is in `docs/brand/`; `public/og-image-v3.jpg` is the
-share image, 1200 × 630.
+one image named “aboutme.vn”. The mark and the dot take `--seal-text`, so they
+lift to `#FF6B8A` in dark theme. Under `forced-colors: active`, they use the
+text color. `public/favicon-v3.svg` is the mark with the inner ring dropped, and
+it follows the system color scheme. Home-screen and install icons are the mark
+on a white square; icon file names carry a version so browsers fetch a changed
+icon. Brand files, banners, and the Open Graph images, with where each is used
+and how to re-render them, are in [`docs/brand/`](docs/brand/README.md).
 
 ## Typography and tokens
 
 Application chrome uses `Be Vietnam Pro`, then `Inter`, `system-ui`, and
-`sans-serif`. Uppercase text is used inside the seal. The renderer keeps its own
+`sans-serif`. Uppercase text is used inside the seal. The chrome body is
+`text-base`, 15 px, and controls and labels are `text-sm`, 14 px. The scale runs
+12, 14, 15, 16, 20, 24, 32, 40, 48, and 60 px. Headings take line height 1.3 (20
+to 32 px), 1.25 (40 and 48 px), and 1.2 (60 px), so stacked Vietnamese
+diacritics such as ệ, ở, and Ử clear the line above. The renderer keeps its own
 typography and tokens.
 
 The semantic tokens below are defined on `:root` and switched by
@@ -108,30 +117,35 @@ The semantic tokens below are defined on `:root` and switched by
 | Link                              | `#123EDB` | `#8FB3FF`                   |
 | Seal                              | `#CC2649` | `#CC2649`                   |
 | Editor canvas                     | `#EEF3FC` | `#071126`                   |
-| Destructive                       | `#B42318` | `#F0736A`                   |
+| Seal text and strokes             | `#CC2649` | `#FF6B8A`                   |
+| Destructive                       | `#B54708` | `#FD8A4B`                   |
 
 Brand and surface tokens have Tailwind color utilities such as `bg-surface-blue`
 and `text-brand-indigo`:
 
-| Token                                | Light                | Dark                 |
-| ------------------------------------ | -------------------- | -------------------- |
-| `--brand-blue`, `--brand-deep-blue`  | `#246BFD`, `#123EDB` | `#72A0FF`, `#4C7DFF` |
-| `--brand-indigo`, `--brand-cyan`     | `#6254FF`, `#35C8F5` | `#8B80FF`, `#54D6FF` |
-| `--brand-purple`                     | `#A855F7`            | `#C08BFF`            |
-| `--brand-pink`, `--brand-orange`     | `#F55DB1`, `#FF9C47` | `#FF7CC4`, `#FFB067` |
-| `--surface-blue`                     | `#EAF2FF`            | `#10224A`            |
-| `--surface-indigo`, `--surface-pink` | `#F0EEFF`, `#FFF0FA` | `#1A1A4A`, `#2A1533` |
-| `--surface-destructive`              | 7% destructive, card | 12% destructive      |
+| Token                                | Light                           | Dark                 |
+| ------------------------------------ | ------------------------------- | -------------------- |
+| `--brand-blue`, `--brand-deep-blue`  | `var(--primary)`, `var(--link)` | same aliases         |
+| `--brand-indigo`, `--brand-cyan`     | `#6254FF`, `#35C8F5`            | `#8B80FF`, `#54D6FF` |
+| `--brand-purple`                     | `#A855F7`                       | `#C08BFF`            |
+| `--surface-blue`                     | `#EAF2FF`                       | `#10224A`            |
+| `--surface-indigo`, `--surface-pink` | `#F0EEFF`, `#FFF0FA`            | `#1A1A4A`, `#2A1533` |
+| `--surface-destructive`              | 7% destructive, card            | 12% destructive      |
 
 Text on the canvas, a card, or a tinted surface meets WCAG AA: 4.5:1 for normal
 text and 3:1 for large text, input borders, and focus rings, measured over the
 brightest canvas glow. Blue text uses `--link`, not `--primary` or the brand
 colors. Brand colors are for fills, icons, and large text.
 
-`--gradient-brand` runs from brand blue to brand indigo; it colors `me` and at
-most one key phrase or hero action on a page. `--gradient-aurora` holds the
-canvas glows, at 7 to 14 percent opacity in light theme and 10 to 24 percent in
-dark theme.
+`--gradient-brand` runs from brand blue to brand indigo; it colors at most one
+key phrase or hero action on a page. The logo no longer uses it.
+`--gradient-aurora` holds the canvas glows, at 7 to 14 percent opacity in light
+theme and 10 to 24 percent in dark theme.
+
+Chrome spacing follows the 8 px module, and its named rhythms are custom
+properties: `--space-module` (8 px), `--space-dialog-title` (6 px),
+`--space-field` (16 px), `--space-dialog` (24 px), `--space-section` (80 px),
+and `--space-section-lg` (112 px).
 
 The standard radius is 10 px, dialogs use 14 px, feature and marketing cards use
 `--radius-feature` (20 px), and the sheet stays at 2 px. `rounded-md` and
@@ -152,8 +166,9 @@ Buttons use the button primitive's variants. `default` fills with `--primary`,
 darkens to `--primary-hover` on hover, and carries `--shadow-primary`, a soft
 blue lift in light theme and a plain dark shadow in dark theme. `link` is
 `--link` text with an underline on hover. `seal` fills with `--seal` for
-Publish; these three are the guarded exception below. `outline`, `secondary`,
-`ghost`, and `destructive` keep the generated classes.
+Publish. `destructive` is a `--destructive` outline with matching text and a 10
+percent tint on hover; these four are the guarded exception below. `outline`,
+`secondary`, and `ghost` keep the generated classes.
 
 Dialogs share one rhythm: 24 px between the header, the body, and the actions; 6
 px from title to description; and 16 px between fields, with hints 6 px under
@@ -164,11 +179,14 @@ right-aligned from 640 px up and stack full-width below it, primary first.
 
 `AppSeal` has two implemented forms:
 
-- The 96 px stamp is a rotated red SVG with inner and outer rings, text on a
-  path reading `PUBLIC RESUME · ABOUTME.VN/<SLUG>`, and `aboutme` in the center.
-  Its default rotation is -8 degrees.
-- The 20 px mark is a red circle with a white check and carries the public link
-  beside it.
+- The stamp is a 72 px high rounded ticket in `--seal-text`: a 2.5 px border
+  over a 7 percent tint, a dashed inner hairline, the logo's seal mark and the
+  word PUBLIC (CÔNG KHAI when `locale` is `vi`) on top, a hairline, and
+  `aboutme.vn/<slug>` underneath. It grows with the link from 156 to 260 px and
+  squeezes a longer link to fit, so the text never overlaps. Its default
+  rotation is -6 degrees.
+- The 20 px mark is a seal tile, a `--seal` square with 6 px corners and a white
+  check, and carries the public link beside it.
 
 `StateMark` exposes six states: Saved (pencil tick), Unsaved (an edit held or
 queued but not yet sent), Saving…, Save failed, Draft, and Public (the small

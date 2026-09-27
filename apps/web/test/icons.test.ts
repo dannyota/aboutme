@@ -49,19 +49,19 @@ describe('application icon links', () => {
         }))).toEqual([
           {
             rel: 'icon', type: 'image/png', sizes: '32x32',
-            href: '/icon-32-v2.png',
+            href: '/icon-32-v3.png',
           },
           {
             rel: 'icon', type: 'image/svg+xml', sizes: null,
-            href: '/favicon-v2.svg',
+            href: '/favicon-v3.svg',
           },
           {
             rel: 'apple-touch-icon', type: null, sizes: '180x180',
-            href: '/apple-touch-icon-v2.png',
+            href: '/apple-touch-icon-v3.png',
           },
           {
             rel: 'manifest', type: null, sizes: null,
-            href: '/site-v2.webmanifest',
+            href: '/site-v3.webmanifest',
           },
         ]);
       });
@@ -81,8 +81,8 @@ describe('application icon links', () => {
     });
 });
 
-describe('site-v2.webmanifest', () => {
-  const manifestPath = join(publicDir, 'site-v2.webmanifest');
+describe('site-v3.webmanifest', () => {
+  const manifestPath = join(publicDir, 'site-v3.webmanifest');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
     name: string;
     short_name: string;
@@ -125,9 +125,9 @@ describe('site-v2.webmanifest', () => {
     });
 });
 
-describe('apple-touch-icon-v2.png', () => {
+describe('apple-touch-icon-v3.png', () => {
   it('is a 180x180 truecolor PNG with no palette and no alpha', () => {
-    const bytes = readFileSync(join(publicDir, 'apple-touch-icon-v2.png'));
+    const bytes = readFileSync(join(publicDir, 'apple-touch-icon-v3.png'));
     expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
     expect(bytes.subarray(12, 16).toString('ascii')).toBe('IHDR');
     expect(bytes.readUInt32BE(16)).toBe(180);
