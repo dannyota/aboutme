@@ -40,19 +40,21 @@ func TestCapabilitiesRegistrarReflectsConfig(t *testing.T) {
 		registerOff       bool
 		passkeyEnrollment bool
 		totpEnrollment    bool
+		signInToView      bool
 		want              string
 	}{
-		{"password only", config.ProviderLogin{}, false, false, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
-		{"google only", config.ProviderLogin{Google: true}, false, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
-		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}, false, false, false,
-			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
-		{"google sign-up only", config.ProviderLogin{Google: true}, true, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":false,"passkeyEnrollment":false,"totpEnrollment":false}}` + "\n"},
-		{"passkey enrollment open", config.ProviderLogin{}, false, true, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":true,"totpEnrollment":false}}` + "\n"},
-		{"totp enrollment open", config.ProviderLogin{}, false, false, true, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":true}}` + "\n"},
+		{"password only", config.ProviderLogin{}, false, false, false, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false,"signInToView":false}}` + "\n"},
+		{"google only", config.ProviderLogin{Google: true}, false, false, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false,"signInToView":false}}` + "\n"},
+		{"every provider", config.ProviderLogin{Google: true, GitHub: true, LinkedIn: true}, false, false, false, false,
+			`{"data":{"providerLogin":true,"providers":["google","github","linkedin"],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false,"signInToView":false}}` + "\n"},
+		{"google sign-up only", config.ProviderLogin{Google: true}, true, false, false, false, `{"data":{"providerLogin":true,"providers":["google"],"agentAccess":false,"passwordRegistration":false,"passkeyEnrollment":false,"totpEnrollment":false,"signInToView":false}}` + "\n"},
+		{"passkey enrollment open", config.ProviderLogin{}, false, true, false, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":true,"totpEnrollment":false,"signInToView":false}}` + "\n"},
+		{"totp enrollment open", config.ProviderLogin{}, false, false, true, false, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":true,"signInToView":false}}` + "\n"},
+		{"sign in to view open", config.ProviderLogin{}, false, false, false, true, `{"data":{"providerLogin":false,"providers":[],"agentAccess":false,"passwordRegistration":true,"passkeyEnrollment":false,"totpEnrollment":false,"signInToView":true}}` + "\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			cfg := config.Config{ProviderLogin: tc.login, PasswordRegistrationDisabled: tc.registerOff, PasskeyEnrollment: tc.passkeyEnrollment, TOTPEnrollment: tc.totpEnrollment}
+			cfg := config.Config{ProviderLogin: tc.login, PasswordRegistrationDisabled: tc.registerOff, PasskeyEnrollment: tc.passkeyEnrollment, TOTPEnrollment: tc.totpEnrollment, SignInToViewEnabled: tc.signInToView}
 			cfg.AgentAccess.Enabled = false
 			mux := http.NewServeMux()
 			capabilitiesRegistrar(cfg)(mux)

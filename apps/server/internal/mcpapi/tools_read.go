@@ -109,7 +109,17 @@ func responseData(body []byte) (map[string]any, error) {
 	if err := decoder.Decode(&envelope); err != nil || envelope.Data == nil {
 		return nil, errors.New("mcp tools: invalid resume response")
 	}
+	stripAgentOnlyFields(envelope.Data)
 	return envelope.Data, nil
+}
+
+// stripAgentOnlyFields removes REST-only resume fields that this feature
+// deliberately keeps out of every agent and MCP response. MCP has no
+// publish tool, so an agent has no path to read or change signInToView;
+// the REST resume response still carries it
+// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
+func stripAgentOnlyFields(data map[string]any) {
+	delete(data, "signInToView")
 }
 
 func responseMutation(body []byte) (mutationOutput, error) {
@@ -136,6 +146,9 @@ func registerReadTools(server *mcp.Server, runtime *toolRuntime) {
 			}
 			if err := json.Unmarshal(response.Body, &envelope); err != nil || envelope.Data == nil {
 				return nil, listResumesOutput{}, closedToolError("agent_access_unavailable")
+			}
+			for _, resume := range envelope.Data {
+				stripAgentOnlyFields(resume)
 			}
 			return nil, listResumesOutput{Resumes: envelope.Data}, nil
 		})

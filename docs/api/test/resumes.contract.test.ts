@@ -684,12 +684,17 @@ describe("Phase 5A publish and public wire contract", () => {
       "seoGeoEnabled",
       "publicTitle",
       "faviconEmoji",
+      "signInToView",
     ]);
     // The page settings are optional strings: omitted keeps them, and a null
     // is malformed rather than a clear.
     for (const field of ["publicTitle", "faviconEmoji"]) {
       expect(request.properties[field].type).toBe("string");
     }
+    // signInToView is an optional switch: omitted keeps the stored value
+    // (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
+    expect(request.properties.signInToView.type).toBe("boolean");
+    expect(request.required).not.toContain("signInToView");
     expect(request.properties.slug).toMatchObject({
       type: "string",
       minLength: 1,
@@ -711,6 +716,7 @@ describe("Phase 5A publish and public wire contract", () => {
       "too_long",
       "invalid_characters",
       "invalid_emoji",
+      "disabled",
     ]);
   });
 
