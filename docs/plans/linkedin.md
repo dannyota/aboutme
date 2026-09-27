@@ -7,7 +7,7 @@ LinkedIn sign-in is done: it shipped in v0.6.2 and is on in production from v0.6
 ## Before any code
 
 1. The owner answers I1 to I10. The manager sets ADR 0064 to Accepted, records ADR 0059's final status, and updates `docs/design/decisions.md`.
-2. Done 2026-09-27: the owner's shape report settled the design's [facts to confirm](../design/linkedin-import.md#facts-to-confirm-before-the-build); the design now carries the measured sizes and gaps, per-column heading sizes, the unlabeled email, unparenthesized group durations, and the 1.4 sidebar entry threshold. Facts one profile could not settle stay marked **Verify**, and the parser handles them defensively. Steps 3 onward may start.
+2. Done 2026-09-27: the owner's shape report settled the design's [facts to confirm](../design/linkedin-import.md#open-facts); the design now carries the measured sizes and gaps, per-column heading sizes, the unlabeled email, unparenthesized group durations, and the 1.4 sidebar entry threshold. Facts one profile could not settle stay marked **Verify**, and the parser handles them defensively. Steps 3 onward may start.
 
 ## Steps
 

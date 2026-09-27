@@ -12,6 +12,7 @@ produces the same document everywhere.
 | Legal              | `/privacy`, `/terms`                                                               | Nuxt SSR; static, no data fetch                              |
 | Agent consent      | `/authorize`                                                                       | Nuxt page; session required, decision posted client-side     |
 | Account and editor | `/app/**`                                                                          | Client application; authenticated requests never run in SSR  |
+| LinkedIn import    | `/app/import/linkedin`                                                             | Client only (`ssr: false`); the only route that loads pdf.js |
 | Public resume      | `/{slug}`                                                                          | Nuxt SSR followed by client hydration and live refetch       |
 | Print              | `/print/**`                                                                        | Internal Nuxt route gated by one Go-issued render capability |
 

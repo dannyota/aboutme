@@ -100,8 +100,9 @@ used by the browser tests that read rendered PDFs. It is the current npm release
   their own; aboutme cannot check it.
 - The import page loads about 450 KB of pdf.js (Brotli: 126 KB API and 322 KB
   worker, measured on 6.3.289). No other page loads it.
-- The legacy build supports Chrome 125+, Firefox ESR, and Safari 18+ [7]. Older
-  browsers get a message instead of the file picker.
+- The legacy build supports Chrome 125+, Firefox ESR, and Safari 18+ [7]; the
+  page also needs `URL.parse` (Chrome 126+). Older browsers get a message
+  instead of the file picker.
 - `pdfjs-dist` upgrades follow the security advisories above and need review,
   like any runtime dependency.
 

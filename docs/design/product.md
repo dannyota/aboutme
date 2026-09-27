@@ -11,8 +11,10 @@ without publishing an account profile.
    may close new password registration without disabling existing password
    sign-in. An account may add a passkey or authenticator app as a
    [second factor](second-factor-authentication.md).
-2. Create up to three resumes and edit incomplete drafts without save-time
-   completeness errors.
+2. Create up to three resumes, blank, from a template, or from an English
+   LinkedIn "Save to PDF" file that the browser reads and never uploads
+   ([LinkedIn import](linkedin-import.md)), and edit incomplete drafts without
+   save-time completeness errors.
 3. Preview the same layout used by the public page and PDF.
 4. Publish a resume at `aboutme.vn/{slug}` with explicit download and discovery
    choices.

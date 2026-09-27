@@ -8,9 +8,9 @@ uploaded. Only the resume the person creates is stored.
 of the PDF, and [ADR 0059](../adr/0059-linkedin-import-in-the-browser.md) the
 rule that parsing stays in the browser.
 
-Status: accepted; the owner approved I1 to I10 on 2026-09-27. Facts were checked
-on 2026-09-26 and 2026-09-27. **Verify** marks a fact one profile could not
-settle, as listed in [Facts to confirm](#facts-to-confirm-before-the-build).
+Status: accepted and built; the owner approved I1 to I10 on 2026-09-27. Facts
+were checked on 2026-09-26 and 2026-09-27. **Verify** marks a fact one profile
+could not settle, as listed in [Open facts](#open-facts).
 
 ## Sources a normal app can use
 
@@ -91,27 +91,33 @@ in the sidebar [6] (**Verify**), and metadata with author "LinkedIn" and subject
    editor. Nothing is written before Create.
 
 Import only creates a new resume, so there is no merge rule. A browser without
-module workers, or older than pdf.js's legacy build supports (Chrome 125,
-Firefox ESR, Safari 18) [8], gets a message instead of the file picker.
+module workers, `ReadableStream`, or `URL.parse` gets a message instead of the
+picker. `URL.parse` ships in Chrome 126, Firefox 126, and Safari 18, one Chrome
+version above pdf.js's legacy build floor [8] (**Owner approval** I9).
 
 ## Reading the file
 
 Parsing is TypeScript in the browser. pdf.js 6.3.289 (legacy build) runs in a
 dedicated module worker; the rest runs on the main thread over plain data.
 `GlobalWorkerOptions.workerPort` receives a worker built from
-`pdfjs-dist/legacy/build/pdf.worker.min.mjs`. The page loads pdf.js and starts a
-worker when it opens, so no request follows the pick. Each pick gets a fresh
-worker; the page ends the old one. The route renders on the client only
-(`ssr: false`) and imports pdf.js dynamically, so no pdf.js code reaches the
-server bundle or any other route.
+`pdfjs-dist/legacy/build/pdf.worker.min.mjs`. The route renders on the client
+only (`ssr: false`) and imports pdf.js dynamically, so no pdf.js code reaches
+the server bundle or any other route.
+
+Each pick uses its own worker, started when the page enters the pick state: on
+open, after a failed or stopped read, and on "choose another file". Each read
+terminates its worker, and none runs during the review. So no request happens
+between a pick and its result, or between a pick that reaches the review and
+Create; after a failure, the next worker's script loads.
 
 `getDocument` options: `data` (the bytes read), `useWasm: false`,
 `enableXfa: false`, `isOffscreenCanvasSupported: false`,
 `isImageDecoderSupported: false`, `useSystemFonts: false`,
 `disableFontFace: true`, `stopAtErrors: true`, and no `url`, `cMapUrl`,
-`standardFontDataUrl`, or `wasmUrl`. An `onPassword` callback rejects the file.
-The page calls only `getDocument`, `getMetadata`, `getPage`, and
-`getTextContent`; it never renders, and never loads the viewer or its scripting.
+`standardFontDataUrl`, or `wasmUrl`. `onPassword` is set on the loading task,
+not passed as an option (6.3.289 ignores it there), and rejects the file. The
+page calls only `getDocument`, `getPage`, and `streamTextContent`, so a read can
+stop inside a page. It never renders, reads metadata, or loads the viewer.
 
 | Check         | Rule                                                                                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,7 +126,7 @@ The page calls only `getDocument`, `getMetadata`, `getPage`, and
 | Encryption    | Any password request rejects the file                                                                                                               |
 | Pages         | `numPages` from 1 to 20, checked before any page is read                                                                                            |
 | Text          | Items are counted as they arrive; more than 100,000 extracted characters or 20,000 text items in the file stops the read with the too-large message |
-| Time          | 15 seconds from the pick; then `loadingTask.destroy()` and `worker.terminate()`                                                                     |
+| Time          | 15 seconds from the pick, or Stop; then `worker.terminate()` and `loadingTask.destroy()`                                                            |
 | Readable text | More than 1% of characters that are U+FFFD, private use (U+E000 to U+F8FF), or controls other than line breaks gives "cannot read this file"        |
 
 A failed check shows its message and creates nothing. Every string is normalized
@@ -128,21 +134,21 @@ to Unicode NFC after extraction.
 
 ### Lines
 
-Each text item has a string, a transform, a width, and a height. The page turns
-items into lines per page: items whose baselines lie within 40% of their font
-size join one line, ordered left to right, with one space where the gap between
-items is wider than a quarter of the font size. A line keeps its page, left
-edge, baseline, and font size (the transform's vertical scale), rounded to 0.5
-pt.
+Each text item has a string, a transform, a width, and a height. First, the page
+finds the column boundary B: the left edge of page 1's largest item (the name)
+minus 12 pt. On every page it splits items at B, then within each side joins
+items whose baselines lie within 40% of the larger font size into one line,
+ordered left to right, with one space where the gap between items is wider than
+a quarter of the font size. A sidebar and a main item on one baseline never
+join. A line keeps its page, left edge, baseline, and font size (the transform's
+vertical scale), rounded to 0.5 pt.
 
 - **Footer.** A line matching `^Page (\d+) of (\d+)$` in the bottom 72 pt is the
   footer. Every page must have one, with N equal to the page number and M to
   `numPages`. The footer is then dropped.
-- **Columns.** On page 1, the name is the line with the largest font size; its
-  left edge minus 12 pt is the column boundary B. Lines left of B are sidebar,
-  the rest are main. Later pages apply the same B; their main lines keep the
-  page-1 main edge. A sidebar that continues on page 2 is read the same way
-  (**Verify**; not yet seen).
+- **Columns.** Lines left of B are sidebar, the rest are main, on every page;
+  later pages keep the page-1 main edge. A sidebar that continues on page 2 is
+  read the same way (**Verify**; not yet seen).
 - **Headings.** Sidebar and main headings differ in size. A line is a heading
   when its whole text equals a known heading of its column and its font size is
   larger than the median line size of the file. The largest such size in a
@@ -196,10 +202,11 @@ wrapped headline without a location would give its last line as the location
 **Contact.** A line with `@` and no label is an email entry on its own. Other
 lines join without spaces until a line ends with `(Label)` or is only `(Label)`;
 the text before the label is the value. A value of only digits, spaces, and
-`+ ( ) -` is a phone, whatever its label. `(LinkedIn)` marks the profile URL;
-any other label marks a website. Gaps do not separate contact entries. The
-report shows `(Home)`, `(LinkedIn)`, and one website label (**Verify** other
-labels, and that a long URL wraps onto a second line).
+`+ ( ) -` is a phone, and a value with `@` is an email, whatever its label.
+`(LinkedIn)` marks the profile URL; any other label marks a website. A URL with
+whitespace, a user name or password, or a host without a dot is not imported;
+`http://` becomes `https://`. Gaps do not separate contact entries (**Verify**
+other labels and long URL wraps).
 
 In the other sidebar lists, a gap between lines larger than 1.4 times the font
 size starts a new entry, so a wrapped skill or certificate stays one entry; 1.4
@@ -234,8 +241,9 @@ shows no such gap, and one sentence end runs into the next capital with no
 space, so the PDF likely drops the profile's own line breaks (assumption); the
 import keeps the text as extracted. A line starting with `•`, `-`, `*`, or `–`
 starts a list item, and a run of them becomes one `ul` (**Verify**; the report
-has no bullet line). HTML special characters are escaped. Output uses only `p`,
-`ul`, and `li` from the sanitizer allowlist and stays under 16 KiB.
+has no bullet line). Only `&`, `<`, and `>` are escaped; quotes stay literal, as
+the sanitizer writes them, so the sanitizer returns the output unchanged. Output
+uses only `p`, `ul`, and `li` from the allowlist and stays under 16 KiB.
 
 **Locations** split at the last comma: the right part is the country, the left
 the city. Without a comma it is the city.
@@ -257,10 +265,8 @@ import never translates.
 
 `parseLinkedInDate` returns `{y, m?}` or nothing. It accepts `2020`, `Jan 2020`,
 and `January 2020` (English month names, any case). A range is `start - end`,
-with a hyphen or an en dash and spaces, where `end` may be `Present`. The report
-shows only a spaced hyphen and full month names; the en dash and short names
-stay accepted (**Verify** `Present`; every role in the report has ended). Years
-must fall in 1900 to 2100, the schema range.
+with a hyphen or an en dash and spaces, where `end` may be `Present` (**Verify**
+`Present` and short names). Years must fall in 1900 to 2100, the schema range.
 
 - Start and end: `{start, end, present: false}`.
 - Start and `Present`: `{start, end: null, present: true}`.
@@ -292,8 +298,9 @@ The review shows, in the interface language:
 - Notices: sections not imported, unreadable dates, cut fields, and entries over
   a limit.
 - The size meter: Create stays disabled while the request would pass 256 KiB,
-  with a note to deselect entries. The document must also pass the generated
-  schema validator before Create is enabled.
+  with a note to deselect entries. Create is enabled only when the document
+  passes the generated schema validator and the store checks the create route
+  applies (`packages/schema/validation/store.ts`), such as date order.
 
 Values render as text nodes only, never as HTML. Leaving the page drops
 everything; the review is not saved.
@@ -324,11 +331,12 @@ everything; the review is not saved.
   policies keep `worker-src 'none'`. The worker script is a same-origin
   `/_nuxt/` file and, under CSP Level 3, runs under its own response's policy,
   the app page policy (**Verify** the header reaches `/_nuxt/` files).
-- The size, page, text, and time caps bound time in the person's own tab; the
-  time cap terminates the worker. pdf.js has no output cap for compressed
-  streams, so a small file whose page content inflates to gigabytes uses worker
-  memory until the time cap or the browser's own limit ends the worker. A
-  hostile file can at worst fail the import or crash that tab.
+- The caps bound time in the person's own tab. The main thread counts text as it
+  arrives, so it cannot stop pdf.js inside the worker, and pdf.js has no output
+  cap for compressed streams. A page that inflates to gigabytes uses worker
+  memory until a cap, the time limit, or Stop terminates the worker (before
+  `destroy()`, which a busy worker may never answer), as the browser proof
+  shows. A hostile file can at worst fail the import or crash that tab.
 - The page never requests a PDF's JavaScript actions, forms, annotations, links,
   or embedded files: text content is the only output used.
 - `pdfjs-dist` moves to runtime dependencies at the same exact version; upgrades
@@ -346,15 +354,14 @@ other route loads them.
 
 ## Tests
 
-Tests cite this design and ADR 0064. Fixtures are synthetic: names such as
-"Sample Person" and "Nguyễn Văn Mẫu", employers such as "Example Co.", and
-`example.com` links. No real person's PDF or text from one enters the
-repository.
-
-Layout fixtures under `apps/web/test/import/linkedin/fixtures/` are generated,
-not copied. Each has a committed XSL-FO source (`*.fo`) that reproduces the
-structure, sizes, and gaps above with invented data, rendered once by Apache FOP
-2.3 in a pinned container with a free font (Noto Sans) and a Unicode map.
+Tests cite this design and ADR 0064. Fixtures are synthetic ("Sample Person",
+"Nguyễn Văn Mẫu", "Example Co.", `example.com`); no real person's PDF or text
+from one enters the repository. Layout fixtures under
+`apps/web/test/import/linkedin/fixtures/` are generated, not copied. Each has a
+committed XSL-FO source (`*.fo`) that reproduces the structure, sizes, and gaps
+above with invented data, rendered once by Apache FOP 2.3 in a pinned container
+with a free font (Noto Sans) and a Unicode map. FOP 2.3 cannot read Noto Sans's
+GDEF table, so it runs with `-nocs` (no complex script features).
 `fixtures/README.md` records the command, and the generated PDFs are committed.
 
 | Fixture                  | Contents                                                                                                                                                                                                                                                                                                          |
@@ -385,53 +392,46 @@ stream that inflates past 1 GiB, and deeply nested objects.
   fixtures cannot, such as a wrapped headline without a location, a role without
   a location, and unknown headings.
 - CSP tests: `apps/web/test/csp.test.ts` and `apps/web/e2e/normal-csp.spec.ts`
-  assert the new app policy; the public, print, and harness policies stay
-  unchanged.
+  assert the app policy and the unchanged public, print, and harness policy.
 - Component test: the review renders `injection-en.pdf` values as text.
 - Browser proof, `deploy/dev-https-browser/linkedin-import.spec.ts`: at 390 and
   1280 px, in Vietnamese and English, pick `basic-en.pdf`, deselect one section,
   create, and land in the editor with the expected content. It records every
   request and asserts that none carries the file bytes, the only write is one
-  JSON `POST /api/v1/resumes`, no request leaves the origin, and no request
-  happens between the pick and Create. It also covers the cap message, the
-  not-LinkedIn and English-only messages, and the time limit on a slow file in
-  Chromium and WebKit.
+  JSON `POST /api/v1/resumes`, no request leaves the origin, and the request
+  rule in [Reading the file](#reading-the-file) holds. It also covers the cap
+  message, the not-LinkedIn and English-only messages, and the time limit on a
+  slow file in Chromium and WebKit.
 
-## Facts to confirm before the build
+## Open facts
 
-The owner ran `apps/web/scripts/linkedin-pdf-shape.mjs` on his English Save to
-PDF on 2026-09-27. It prints only masked layout (letters as `a`, digits as `9`,
-keeping heading, date, footer, and label words); the report is not committed.
+One profile's masked shape report could not settle these facts. The parser
+follows the rules above, and the review lets the person fix the result.
 
-| Fact                                  | Status                                                                                                                                                                                                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Headings, order, column split      | Confirmed for the six headings found. Differs: sidebar and main headings have different sizes. Not settled: the six headings absent from this profile.                                                      |
-| 2. Font sizes per line type           | Confirmed: name largest, employer largest in Experience, school largest in Education, location equal to the date size. Differs: headline and location share one size.                                       |
-| 3. Sidebar on later pages; boundary B | Boundary confirmed: later pages keep the page-1 main edge. Not settled: a sidebar that continues; this one ends on page 1.                                                                                  |
-| 4. Dates and durations                | Confirmed: a spaced hyphen, full month names, year-only education ranges, duration forms. Differs: group duration lines have no parentheses. Not settled: `Present`, short month names, `less than a year`. |
-| 5. Contact labels, URL wrap           | Differs: the email has no label; the phone's label shares its line; URL labels sit on the next line. Not settled: other labels, long URL wraps.                                                             |
-| 6. Metadata, encryption               | Confirmed: not encrypted, Apache FOP 2.3, Author names LinkedIn. Not settled: the Subject value. The parser does not use metadata.                                                                          |
-| 7. Sidebar wrap gap and entry gap     | Confirmed: 12.5 against 17.5 pt at 10.5 pt; the threshold is their midpoint, 1.4 times. Contact gaps do not follow it.                                                                                      |
-
-Two more facts stay open: whether Vietnamese letters in an English profile
-extract cleanly (the owner's has none), and whether Nuxt's route header reaches
-`/_nuxt/` files (the CSP test checks). For an open fact the parser follows the
-rule above, and the review lets the person fix the result.
+| Area     | Open                                                                       |
+| -------- | -------------------------------------------------------------------------- |
+| Headings | The six known headings absent from that profile                            |
+| Sidebar  | A sidebar that continues past page 1                                       |
+| Dates    | `Present`, short month names, `less than a year`                           |
+| Contact  | Labels other than `(Home)`, `(LinkedIn)`, and one website label; URL wraps |
+| Metadata | The Subject value; the parser does not use metadata                        |
+| Letters  | Whether Vietnamese letters in an English profile extract cleanly           |
+| CSP      | Whether the app page policy header reaches `/_nuxt/` files                 |
 
 ## Owner approval
 
-| ID  | Choice                                                                                                                               | Decision |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| I1  | Accept ADR 0064: English Save to PDF, parsed in the browser by pdf.js 6.3.289 in a worker; `pdfjs-dist` becomes a runtime dependency | Approved |
-| I2  | App page policy `worker-src 'self'`; public, print, and harness policies unchanged                                                   | Approved |
-| I3  | Entry link in the create dialog; page `/app/import/linkedin`                                                                         | Approved |
-| I4  | Resume language English; the gallery's first template; the person changes the template in the editor                                 | Approved |
-| I5  | Sections and fields in Mapping; email and phone unselected; the dropped list above                                                   | Approved |
-| I6  | Privacy notice item above; the owner reviews the Vietnamese                                                                          | Approved |
-| I7  | Non-LinkedIn and non-English PDFs get a message and no import; no partial import                                                     | Approved |
-| I8  | The page asks people to import their own profile; no technical check                                                                 | Approved |
-| I9  | Browsers older than Chrome 125, Firefox ESR, and Safari 18 get a message                                                             | Approved |
-| I10 | The data download import stays deferred as the later path for Vietnamese profiles                                                    | Approved |
+| ID  | Choice                                                                                                                               | Decision                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| I1  | Accept ADR 0064: English Save to PDF, parsed in the browser by pdf.js 6.3.289 in a worker; `pdfjs-dist` becomes a runtime dependency | Approved                             |
+| I2  | App page policy `worker-src 'self'`; public, print, and harness policies unchanged                                                   | Approved                             |
+| I3  | Entry link in the create dialog; page `/app/import/linkedin`                                                                         | Approved                             |
+| I4  | Resume language English; the gallery's first template; the person changes the template in the editor                                 | Approved                             |
+| I5  | Sections and fields in Mapping; email and phone unselected; the dropped list above                                                   | Approved                             |
+| I6  | Privacy notice item above; the owner reviews the Vietnamese                                                                          | Approved                             |
+| I7  | Non-LinkedIn and non-English PDFs get a message and no import; no partial import                                                     | Approved                             |
+| I8  | The page asks people to import their own profile; no technical check                                                                 | Approved                             |
+| I9  | Browsers older than Chrome 125, Firefox ESR, and Safari 18 get a message                                                             | Approved; the check needs Chrome 126 |
+| I10 | The data download import stays deferred as the later path for Vietnamese profiles                                                    | Approved                             |
 
 ## Sources
 

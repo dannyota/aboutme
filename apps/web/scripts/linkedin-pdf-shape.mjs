@@ -331,10 +331,11 @@ async function readShape(filePath) {
     useSystemFonts: false,
     disableFontFace: true,
     stopAtErrors: true,
-    onPassword: (updatePassword) => {
-      updatePassword(new Error('this PDF requires a password'));
-    },
   });
+  // pdf.js 6.3.289 reads onPassword from the loading task, not the options.
+  loadingTask.onPassword = (updatePassword) => {
+    updatePassword(new Error('this PDF requires a password'));
+  };
   const pdfDocument = await loadingTask.promise;
 
   try {
