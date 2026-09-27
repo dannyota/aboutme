@@ -33,6 +33,12 @@ export interface UseCapabilitiesReturn {
    * ignore this flag (totp-second-factor-contract.md "Release surface").
    */
   totpEnrollment: ComputedRef<boolean>;
+  /**
+   * Owners may turn the per-resume sign-in-to-view switch on. Never derived
+   * from any resume's own state (docs/design/viewer-analytics/
+   * sign-in-to-view.md#setting).
+   */
+  signInToView: ComputedRef<boolean>;
   resolved: ComputedRef<boolean>;
 }
 
@@ -65,6 +71,9 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const totpEnrollment = computed(
     () => data.value?.data?.totpEnrollment === true,
   );
+  const signInToView = computed(
+    () => data.value?.data?.signInToView === true,
+  );
   // Only an explicit false closes sign-up, so an older server that lacks the
   // field keeps the form.
   const passwordRegistration = computed(
@@ -83,6 +92,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
     agentAccess,
     passkeyEnrollment,
     totpEnrollment,
+    signInToView,
     resolved,
   };
 }

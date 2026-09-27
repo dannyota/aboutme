@@ -16,6 +16,10 @@ import { acceptedFixture } from './fixture';
 
 const locale = ref<'vi' | 'en'>('en');
 mockNuxtImport('useLocale', () => () => ({ locale }));
+const signInToViewCapability = ref(false);
+mockNuxtImport('useCapabilities', () => () => ({
+  signInToView: computed(() => signInToViewCapability.value),
+}));
 
 const mounted: VueWrapper[] = [];
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(
@@ -25,6 +29,7 @@ const clipboardDescriptor = Object.getOwnPropertyDescriptor(
 
 afterEach(() => {
   locale.value = 'en';
+  signInToViewCapability.value = false;
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
   if (clipboardDescriptor === undefined) {
     Reflect.deleteProperty(navigator, 'clipboard');
@@ -1131,6 +1136,71 @@ describe('PublishDialog browser tab fields', () => {
         .setValue('🚀');
       expect(wrapper.text()).not.toContain('Enter exactly one emoji.');
     });
+
+  describe('sign-in-to-view switch', () => {
+    it('hides the switch while the capability is off and the resume '
+      + 'never had it on', async () => {
+      const record = editorRecord({ live: true });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      expect(wrapper.find('[data-action="publish-sign-in-to-view"]').exists())
+        .toBe(false);
+    });
+
+    it('shows the switch when the capability is on', async () => {
+      signInToViewCapability.value = true;
+      const record = editorRecord({ live: true });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      expect(wrapper.find('[data-action="publish-sign-in-to-view"]').exists())
+        .toBe(true);
+    });
+
+    it('shows the switch when the resume already has it on, even with '
+      + 'the capability off', async () => {
+      const record = editorRecord({ live: true, signInToView: true });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      expect(wrapper.find('[data-action="publish-sign-in-to-view"]').exists())
+        .toBe(true);
+    });
+
+    it('omits signInToView from the command when left unchanged', async () => {
+      signInToViewCapability.value = true;
+      const record = editorRecord({ live: true, seoGeoEnabled: true });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      await wrapper.get('[data-action="publish-submit"]').trigger('click');
+      expect(actions.publish.submit).toHaveBeenLastCalledWith(
+        expect.not.objectContaining({ signInToView: expect.anything() }),
+      );
+    });
+
+    it('sends signInToView only when the owner turns it on', async () => {
+      signInToViewCapability.value = true;
+      const record = editorRecord({ live: true });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      await wrapper.get('[data-action="publish-sign-in-to-view"]')
+        .trigger('click');
+      await wrapper.get('[data-action="publish-submit"]').trigger('click');
+      expect(actions.publish.submit).toHaveBeenLastCalledWith(
+        expect.objectContaining({ signInToView: true }),
+      );
+    });
+
+    it('disables and shows the note on the discovery switch while sign-in '
+      + 'to view is on', async () => {
+      signInToViewCapability.value = true;
+      const record = editorRecord({ live: true, signInToView: true });
+      const { actions } = actionsFor(record);
+      const wrapper = await mountDialog(record, actions);
+      const discovery = wrapper.get('[data-action="publish-seo-geo"]');
+      expect(discovery.attributes('disabled')).toBeDefined();
+      expect(wrapper.text())
+        .toContain('Off because this resume requires sign-in to view.');
+    });
+  });
 });
 
 async function mountDialog(

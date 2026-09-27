@@ -1,13 +1,16 @@
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 
-// This is the explicit worker-relative component boundary.
+// These are the explicit worker-relative component boundaries.
 // eslint-disable-next-line max-len
 import PublicResumeApp from '../../../app/components/public/PublicResumeApp.vue';
+import PublicGate from '../../../app/components/public/PublicGate.vue';
 import {
   PUBLIC_RENDER_FAILURE,
   PUBLIC_RENDER_HTML_MAX_BYTES,
-  type PublicRenderRequest,
+  type PublicRenderGateRequest,
+  type PublicRenderPreview,
+  type PublicRenderResumeRequest,
 } from '../../utils/public-render/envelope';
 
 const jsonString = (value: string): string => {
@@ -54,7 +57,7 @@ const SAME_AS_TYPES = new Set([
   'custom',
 ]);
 
-const jsonLd = (request: PublicRenderRequest): string => {
+const jsonLd = (request: PublicRenderResumeRequest): string => {
   if (!request.discoveryEnabled) return '';
   const person = request.publicResume.document.personalDetails;
   const details = person.details ?? [];
@@ -96,10 +99,10 @@ const meta = (
 // computed, and rejects twitter:title, twitter:description and theme-color.
 // A request without preview text gets only the image tags.
 const previewHead = (
-  request: PublicRenderRequest,
+  pageURL: string,
+  preview: PublicRenderPreview | undefined,
   imageURL: string,
 ): string => {
-  const preview = request.preview;
   const image = [
     meta('property', 'og:image', imageURL),
     ...(preview === undefined
@@ -113,7 +116,6 @@ const previewHead = (
     meta('name', 'twitter:image', imageURL),
   ];
   if (preview === undefined) return [...image, ...card].join('');
-  const pageURL = `${request.canonicalOrigin}/${request.publicResume.slug}`;
   return [
     meta('name', 'description', preview.description),
     meta('property', 'og:type', 'profile'),
@@ -141,7 +143,7 @@ export interface PublicAssetVersions {
 }
 
 export async function renderPublicResume(
-  request: PublicRenderRequest,
+  request: PublicRenderResumeRequest,
   versions: PublicAssetVersions,
 ): Promise<string> {
   try {
@@ -184,7 +186,11 @@ export async function renderPublicResume(
         : `<link rel="icon" href="${escapeAttribute(request.faviconHref)}">`,
       `<link rel="canonical" href="${request.canonicalOrigin}/`,
       `${request.publicResume.slug}">`,
-      previewHead(request, imageURL),
+      previewHead(
+        `${request.canonicalOrigin}/${request.publicResume.slug}`,
+        request.preview,
+        imageURL,
+      ),
       // Template CSS and fonts, self-hosted and shared with the print document.
       // The version query fetches fresh copies of these fixed-name, immutable
       // files after each release that changes them.
@@ -199,9 +205,101 @@ export async function renderPublicResume(
       `<html lang="${request.publicResume.lng}"><head>${head}</head>`,
       '<body><a href="#public-resume">Skip to content</a>',
       '<main id="public-resume" ',
+      request.joinInvite === undefined
+        ? ''
+        : `data-join-invite="${escapeAttribute(request.joinInvite)}" `,
       `data-revision="${request.publicResume.revision}">${body}</main>`,
       '<script type="module" ',
       `src="/_nuxt/assets/public-resume.mjs?v=${scriptVersion}"></script>`,
+      '</body></html>',
+    ].join('');
+    if (Buffer.byteLength(html, 'utf8') > PUBLIC_RENDER_HTML_MAX_BYTES) {
+      throw new Error();
+    }
+    return html;
+  } catch {
+    throw new Error(PUBLIC_RENDER_FAILURE);
+  }
+}
+
+// The gate's one inline <style>, in literal token values
+// (docs/design/viewer-analytics/sign-in-to-view.md, "Gate page"). It holds
+// no url(, @import, or expression(, so it passes the same unsafe-inline-style
+// rule Go applies to style attributes.
+const GATE_STYLE = [
+  'body{margin:0;background:#F5F8FF;',
+  'font-family:"Be Vietnam Pro",Inter,system-ui,sans-serif;}',
+  '#public-gate{display:flex;justify-content:center;',
+  'padding:32px 16px 16px;box-sizing:border-box;}',
+  '.gate-card{width:100%;max-width:480px;background:#FFFFFF;',
+  'border:1px solid #DCE5F5;border-radius:14px;padding:24px;',
+  'box-sizing:border-box;}',
+  '.gate-title{margin:0 0 12px;font-size:20px;line-height:1.3;',
+  'color:#101B3F;}',
+  '.gate-text{margin:0;font-size:15px;line-height:1.5;color:#101B3F;}',
+  '.gate-providers{display:flex;flex-direction:column;gap:12px;',
+  'margin-top:16px;}',
+  '.gate-provider{display:flex;align-items:center;justify-content:center;',
+  'height:44px;border:1px solid #DCE5F5;border-radius:10px;',
+  'background:#FFFFFF;color:#123EDB;font-size:15px;font-weight:500;',
+  'text-decoration:none;}',
+  '.gate-provider:hover{background:#EAF2FF;}',
+  '.gate-provider:focus-visible{outline:2px solid #1A5CEB;',
+  'outline-offset:2px;}',
+  '.gate-message{margin:12px 0 0;font-size:14px;color:#56648C;}',
+  '.gate-refusal{margin:20px 0 0;font-size:14px;color:#56648C;}',
+  '.gate-home{display:block;margin-top:16px;font-size:14px;',
+  'color:#123EDB;text-decoration:underline;}',
+  '@media (min-width:640px){#public-gate{min-height:100vh;',
+  'align-items:center;padding:16px;}}',
+].join('');
+
+export async function renderPublicGate(
+  request: PublicRenderGateRequest,
+  versions: PublicAssetVersions,
+): Promise<string> {
+  try {
+    const { style: styleVersion } = versions;
+    if (!/^[0-9a-f]{16}$/u.test(styleVersion)) {
+      throw new Error();
+    }
+    const body = await renderToString(
+      createSSRApp({
+        render: () =>
+          h(PublicGate, {
+            pageTitle: request.pageTitle,
+            slug: request.slug,
+            lng: request.lng,
+            providers: request.providers,
+            message: request.message,
+            homeHref: `${request.canonicalOrigin}/`,
+          }),
+      }),
+    );
+    const pageURL = `${request.canonicalOrigin}/${request.slug}`;
+    const imageURL = request.preview.imageUrl ?? [
+      request.canonicalOrigin,
+      '/api/v1/public/resumes/',
+      request.slug,
+      '/og.png',
+    ].join('');
+    const head = [
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<title>${escapeText(request.pageTitle)}</title>`,
+      request.faviconHref === ''
+        ? ''
+        : `<link rel="icon" href="${escapeAttribute(request.faviconHref)}">`,
+      `<link rel="canonical" href="${pageURL}">`,
+      previewHead(pageURL, request.preview, imageURL),
+      '<link rel="stylesheet" ',
+      `href="/_nuxt/assets/print-fonts.css?v=${styleVersion}">`,
+      `<style>${GATE_STYLE}</style>`,
+    ].join('');
+    const html = [
+      '<!doctype html>',
+      `<html lang="${request.lng}"><head>${head}</head><body>`,
+      body,
       '</body></html>',
     ].join('');
     if (Buffer.byteLength(html, 'utf8') > PUBLIC_RENDER_HTML_MAX_BYTES) {

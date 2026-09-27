@@ -12,6 +12,12 @@ type ViewChallenge = components['schemas']['ViewChallenge'];
 
 interface ViewStartData {
   readonly owner: boolean;
+  /**
+   * True when the request carries any valid account session, owner or not.
+   * The join invite uses it, together with `owner`, to decide whether to
+   * show (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
+   */
+  readonly signedIn: boolean;
   readonly token?: string;
   readonly challenge?: ViewChallenge;
 }
@@ -38,6 +44,16 @@ export interface ViewBeaconOptions {
   readonly now?: () => number;
   readonly setTimeout?: typeof setTimeout;
   readonly clearTimeout?: typeof clearTimeout;
+  /**
+   * Called once, only when view start succeeds, with the `owner` and
+   * `signedIn` flags it returned; the join invite reads them to decide
+   * whether to show (docs/design/viewer-analytics/sign-in-to-view.md#
+   * join-invite).
+   */
+  readonly onStart?: (result: {
+    readonly owner: boolean;
+    readonly signedIn: boolean;
+  }) => void;
 }
 
 /**
@@ -84,6 +100,7 @@ async function runViewBeacon(options: ViewBeaconOptions): Promise<void> {
   } catch {
     return;
   }
+  options.onStart?.({ owner: data.owner, signedIn: data.signedIn === true });
   // The owner is never counted and sees no beacon activity.
   if (data.owner || !data.token || !data.challenge) return;
   const token = data.token;

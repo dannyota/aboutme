@@ -24,9 +24,11 @@ import LocaleToggle from '@/components/app/LocaleToggle.vue';
 import { editorShellCopy } from '@/i18n/editor-shell';
 import { publishCopy } from '../../i18n/publish';
 import { workspaceCopy } from '../../i18n/workspace';
+import PublishAccess from './PublishAccess.vue';
 import PublishPageFields from './PublishPageFields.vue';
 import PublishPreview from './PublishPreview.vue';
 import type { ResumeRecord } from '../../stores/resumes';
+import { useCapabilities } from '../../composables/useCapabilities';
 
 const props = defineProps<{
   readonly open: boolean;
@@ -36,6 +38,7 @@ const props = defineProps<{
 }>();
 const { locale } = useLocale();
 const copy = computed(() => publishCopy[locale.value]);
+const { signInToView: signInToViewCapability } = useCapabilities();
 
 const emit = defineEmits<{
   'close': [];
@@ -45,6 +48,8 @@ const emit = defineEmits<{
 const live = ref(false);
 const downloadEnabled = ref(false);
 const seoGeoEnabled = ref(false);
+const signInToView = ref(false);
+const storedSignInToView = ref(false);
 const slug = ref('');
 const pageTitle = ref('');
 const tabIcon = ref('');
@@ -85,6 +90,11 @@ const slugDescribedBy = computed(() => [
 const defaultTitle = computed(() => defaultPublicTitle(
   props.record.current.document.personalDetails.fullName,
 ));
+// Shown when the deployment allows turning the switch on, or the resume
+// already has it on, so an owner can always turn it back off (AC-VIEW-001).
+const showSignInToView = computed(
+  () => signInToViewCapability.value || storedSignInToView.value,
+);
 const pageFieldsValid = computed(() =>
   publicTitleIssue(pageTitle.value) === null
   && faviconEmojiIssue(tabIcon.value) === null);
@@ -138,6 +148,8 @@ function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
   live.value = metadata.live;
   downloadEnabled.value = metadata.live && metadata.downloadEnabled;
   seoGeoEnabled.value = metadata.live && metadata.seoGeoEnabled;
+  signInToView.value = metadata.signInToView;
+  storedSignInToView.value = metadata.signInToView;
   slug.value = metadata.slug ?? '';
   storedPage.value = {
     publicTitle: metadata.publicTitle,
@@ -206,6 +218,9 @@ function command(): PublishCommand {
       publicTitle: pageTitle.value,
       faviconEmoji: tabIcon.value,
     }),
+    ...(signInToView.value === storedSignInToView.value
+      ? {}
+      : { signInToView: signInToView.value }),
   };
 }
 
@@ -399,8 +414,17 @@ onBeforeUnmount(resetCopyState);
           :label="copy.discovery"
           name="seoGeoEnabled"
           data-action="publish-seo-geo"
+          :disabled="busy || !live || signInToView"
+          :description="
+            signInToView ? copy.discoveryOffForSignIn : copy.discoveryHelp
+          "
+        />
+        <PublishAccess
+          v-if="showSignInToView"
+          v-model="signInToView"
           :disabled="busy || !live"
-          :description="copy.discoveryHelp"
+          :label="copy.signInToView"
+          :description="copy.signInToViewHelp"
         />
       </fieldset>
 

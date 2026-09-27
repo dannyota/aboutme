@@ -108,6 +108,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'thông tin trình duyệt của bạn chỉ được dùng tạm trong bộ nhớ '
             + 'máy chủ và bị xóa trong ngày; trình duyệt của bạn giải một '
             + 'phép tính nhỏ. Việc đếm lượt xem không dùng cookie.',
+            'Nếu chủ CV yêu cầu đăng nhập để xem: Google hoặc LinkedIn xác '
+            + 'minh tài khoản của bạn, và chúng tôi xóa ngay tên và email '
+            + 'của bạn. Chủ CV không được cho biết bạn là ai.',
           ],
         },
         {
@@ -134,12 +137,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'tiếp thị.',
             'Cookie chỉ dùng để giữ phiên đăng nhập, hoàn tất đăng nhập bằng '
             + 'Google hoặc LinkedIn, giữ trạng thái xác thực hai bước đang '
-            + 'chờ trong năm phút, và ghi nhớ giao diện và ngôn ngữ bạn '
-            + 'chọn.',
+            + 'chờ trong năm phút, ghi nhớ giao diện và ngôn ngữ bạn chọn, '
+            + 'và, khi chủ CV yêu cầu đăng nhập để xem, cho phép bạn xem CV '
+            + 'đó trong 7 ngày.',
             'Bộ nhớ cục bộ của trình duyệt (localStorage) chỉ dùng để ghi '
             + 'nhớ đường dẫn quay lại sau khi bạn xác minh email (tối đa 24 '
-            + 'giờ), và chế độ xem trước (PDF hoặc web) bạn chọn trong '
-            + 'trình chỉnh sửa CV.',
+            + 'giờ), chế độ xem trước (PDF hoặc web) bạn chọn trong trình '
+            + 'chỉnh sửa CV, và việc bạn đã đóng lời mời tạo CV miễn phí '
+            + '(tối đa 90 ngày).',
           ],
         },
         {
@@ -430,6 +435,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'browser details are used only in server memory and '
             + 'discarded the same day, and your browser solves a small '
             + 'computing task. Counting uses no cookie.',
+            'If a resume owner requires sign-in to view: Google or '
+            + 'LinkedIn confirms your account, and we discard your name '
+            + 'and email at once. The owner is not told who you are.',
           ],
         },
         {
@@ -454,12 +462,14 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             'We don\'t sell your data or share it for marketing.',
             'Cookies are used only to keep you signed in, to complete '
             + 'Google or LinkedIn sign-in, to hold a pending second-factor '
-            + 'sign-in for five minutes, and to remember your theme and '
-            + 'language.',
+            + 'sign-in for five minutes, to remember your theme and '
+            + 'language, and, when a resume owner requires sign-in to '
+            + 'view, to let you view that resume for 7 days.',
             'Browser local storage is used only to remember the page to '
             + 'return to after you verify your email (for up to 24 hours), '
-            + 'and your chosen preview mode (PDF or web) in the resume '
-            + 'editor.',
+            + 'your chosen preview mode (PDF or web) in the resume editor, '
+            + 'and whether you closed the free-resume invite (for up to '
+            + '90 days).',
           ],
         },
         {

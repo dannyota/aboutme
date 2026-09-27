@@ -196,3 +196,47 @@ describe('startViewBeacon', () => {
     expect(collectCalls(fetchImpl)).toHaveLength(0);
   });
 });
+
+describe('view start owner and signedIn callback', () => {
+  it('reports owner and signedIn once start succeeds', async () => {
+    const onStart = vi.fn();
+    const fetchImpl = vi.fn(async () => okStartResponse({
+      owner: false,
+      signedIn: true,
+      token: 'tok',
+      challenge: CHALLENGE,
+    }));
+    startViewBeacon({
+      slug: 'ada-lovelace',
+      fetch: fetchImpl as unknown as typeof fetch,
+      onStart,
+    });
+    await flushMicrotasks();
+    expect(onStart).toHaveBeenCalledWith({ owner: false, signedIn: true });
+  });
+
+  it('defaults signedIn to false when the server omits it', async () => {
+    const onStart = vi.fn();
+    const fetchImpl = vi.fn(async () => okStartResponse());
+    startViewBeacon({
+      slug: 'ada-lovelace',
+      fetch: fetchImpl as unknown as typeof fetch,
+      onStart,
+    });
+    await flushMicrotasks();
+    expect(onStart).toHaveBeenCalledWith({ owner: false, signedIn: false });
+  });
+
+  it('reports the owner flag and never calls onStart when start fails',
+    async () => {
+      const onStart = vi.fn();
+      const fetchImpl = vi.fn(async () => notFoundResponse());
+      startViewBeacon({
+        slug: 'ada-lovelace',
+        fetch: fetchImpl as unknown as typeof fetch,
+        onStart,
+      });
+      await flushMicrotasks();
+      expect(onStart).not.toHaveBeenCalled();
+    });
+});
