@@ -1,6 +1,6 @@
 // Site languages. The homepage, account pages, the Privacy Policy, Terms,
-// and Verify pages, the Library, resume workspace, Views, settings, and
-// authorization are bilingual and default to Vietnamese
+// Verify, and MCP guide pages, the Library, resume workspace, Views,
+// settings, and authorization are bilingual and default to Vietnamese
 // (docs/design/localization.md).
 
 export const locales = ['vi', 'en'] as const;
@@ -42,6 +42,7 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/privacy',
   '/terms',
   '/verify',
+  '/guide/mcp',
   '/app/settings/sessions',
   '/authorize',
   '/app/import/linkedin',
