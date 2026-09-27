@@ -43,7 +43,8 @@ const detailFixtures: Readonly<Record<string, readonly unknown[]>> = {
   'viewsDetailCopy.chartDay': ['2026-09-26', 4],
   'viewsDetailCopy.axisDay': ['2026-09-26'],
   'viewsDetailCopy.fullDay': ['2026-09-26'],
-  'viewsDetailCopy.monthLabel': ['2026-09', 6],
+  'viewsDetailCopy.monthName': ['2026-09'],
+  'viewsDetailCopy.realCount': [6],
   'viewsDetailCopy.count': [9],
   'viewsDetailCopy.previewLine': ['Zalo', 3],
 };

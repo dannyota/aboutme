@@ -71,7 +71,8 @@ describe('views detail page', () => {
       expect(wrapper.text()).toContain('Sep 26, 2026');
       // Formatted month total, with grouped thousands.
       const monthly = wrapper.get('[data-testid="views-monthly-totals"]');
-      expect(monthly.text()).toContain('Sep 2026: 12,345 real views');
+      expect(monthly.get('dt').text()).toBe('Sep 2026');
+      expect(monthly.get('dd').text()).toBe('12,345 real views');
       const breakdown = wrapper.get('[data-testid="views-filtered-breakdown"]');
       expect(breakdown.text()).toContain('Bots');
       expect(breakdown.text()).toContain('Hosting networks');
@@ -142,7 +143,8 @@ describe('views detail page', () => {
     await flushPromises();
 
     const unavailable = wrapper.get('[data-testid="views-detail-unavailable"]');
-    expect(unavailable.text()).toContain('Try again');
+    expect(unavailable.text()).toContain('Could not load views.');
+    expect(unavailable.get('button').text()).toBe('Try again');
   });
 
   it('handles the singular "1 real view" in English', async () => {
@@ -172,6 +174,7 @@ describe('views detail page', () => {
       + 'người xem vào hai ngày được tính hai lần.',
     );
     const monthly = wrapper.get('[data-testid="views-monthly-totals"]');
-    expect(monthly.text()).toContain('tháng 9 năm 2026: 12.345 lượt xem thật');
+    expect(monthly.get('dt').text()).toBe('tháng 9 năm 2026');
+    expect(monthly.get('dd').text()).toBe('12.345 lượt xem thật');
   });
 });

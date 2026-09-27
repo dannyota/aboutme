@@ -15,7 +15,7 @@ const props = defineProps<{
   <section
     v-if="props.previews.length > 0"
     aria-labelledby="views-previews-heading"
-    class="mt-8 border-t py-8"
+    class="border-t py-8"
     data-testid="views-link-previews"
   >
     <h2

@@ -32,7 +32,7 @@ const totals = computed(() => {
 <template>
   <section
     aria-labelledby="views-filtered-heading"
-    class="mt-8 border-t py-8"
+    class="border-t py-8"
   >
     <h2
       id="views-filtered-heading"

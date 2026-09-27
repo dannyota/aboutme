@@ -41,13 +41,12 @@ function realViewsEn(real: number): string {
 // calendar values. Parsing as Date.UTC and formatting with timeZone: 'UTC'
 // keeps the calendar day from shifting with the viewer's own time zone.
 function parseDay(date: string): Date {
-  const [year, month, day] = date.split('-').map(Number);
+  const [year = 0, month = 1, day = 1] = date.split('-').map(Number);
   return new Date(Date.UTC(year, month - 1, day));
 }
 
 function parseMonth(month: string): Date {
-  const [year, monthIndex] = month.split('-').map(Number);
-  return new Date(Date.UTC(year, monthIndex - 1, 1));
+  return parseDay(`${month}-01`);
 }
 
 const axisDayFormatters: Readonly<Record<Locale, Intl.DateTimeFormat>> = {
@@ -122,7 +121,8 @@ export type ViewsDetailCopy = {
   readonly axisDay: (date: string) => string;
   readonly fullDay: (date: string) => string;
   readonly monthlyHeading: string;
-  readonly monthLabel: (month: string, real: number) => string;
+  readonly monthName: (month: string) => string;
+  readonly realCount: (real: number) => string;
   readonly filteredHeading: string;
   readonly filteredLabels: Readonly<Record<ViewsFilteredKey, string>>;
   readonly count: (n: number) => string;
@@ -166,7 +166,7 @@ export const viewsIndexCopy: WorkspaceCopy<ViewsIndexCopy> = {
 export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
   vi: {
     loading: 'Đang tải lượt xem…',
-    unavailable: 'Không thể tải lượt xem. Hãy thử lại.',
+    unavailable: 'Không thể tải lượt xem.',
     notFoundTitle: 'Không tìm thấy CV',
     notFoundDescription: 'CV này không tồn tại hoặc bạn không có quyền xem.',
     backToViews: 'Quay lại Lượt xem',
@@ -188,9 +188,8 @@ export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
     axisDay: (date) => formatAxisDay('vi', date),
     fullDay: (date) => formatFullDay('vi', date),
     monthlyHeading: 'Tổng theo tháng (12 tháng qua)',
-    monthLabel: (month, real) => (
-      `${formatMonth('vi', month)}: ${formatNumber('vi', real)} lượt xem thật`
-    ),
+    monthName: (month) => formatMonth('vi', month),
+    realCount: (real) => `${formatNumber('vi', real)} lượt xem thật`,
     filteredHeading: 'Lượt bị lọc trong 90 ngày qua',
     filteredLabels: {
       bot: 'Bot',
@@ -202,7 +201,7 @@ export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
     count: (n) => formatNumber('vi', n),
     previewsHeading: 'Xem trước liên kết',
     previewsNote:
-      'Mỗi lần chia sẻ, ứng dụng có thể tải bản xem trước nhiều lần.',
+      'Một lượt chia sẻ có thể khiến nền tảng tải bản xem trước nhiều lần.',
     previewLine: (platform, fetches) => (
       `Xem trước liên kết trên ${platform} × ${formatNumber('vi', fetches)}`
     ),
@@ -213,7 +212,7 @@ export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
   },
   en: {
     loading: 'Loading views…',
-    unavailable: 'Could not load views. Try again.',
+    unavailable: 'Could not load views.',
     notFoundTitle: 'Resume not found',
     notFoundDescription: 'This resume does not exist or you cannot view it.',
     backToViews: 'Back to views',
@@ -234,9 +233,8 @@ export const viewsDetailCopy: WorkspaceCopy<ViewsDetailCopy> = {
     axisDay: (date) => formatAxisDay('en', date),
     fullDay: (date) => formatFullDay('en', date),
     monthlyHeading: 'Monthly totals (last 12 months)',
-    monthLabel: (month, real) => (
-      `${formatMonth('en', month)}: ${realViewsEn(real)}`
-    ),
+    monthName: (month) => formatMonth('en', month),
+    realCount: (real) => realViewsEn(real),
     filteredHeading: 'Filtered over the last 90 days',
     filteredLabels: {
       bot: 'Bots',

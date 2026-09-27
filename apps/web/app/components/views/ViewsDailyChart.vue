@@ -28,11 +28,13 @@ function barHeightPercent(real: number): number {
   return Math.max(2, Math.round((real / maxReal.value) * 100));
 }
 
-const firstDay = computed(() => props.days[0]);
-const middleDay = computed(() => (
-  props.days[Math.floor(props.days.length / 2)]
-));
-const lastDay = computed(() => props.days[props.days.length - 1]);
+// First, middle, and last day label the x-axis.
+const axisDays = computed(() => {
+  const days = props.days;
+  if (days.length === 0) return [];
+  const picks = [0, Math.floor(days.length / 2), days.length - 1];
+  return [...new Set(picks)].map((index) => days[index]?.date ?? '');
+});
 </script>
 
 <template>
@@ -75,9 +77,10 @@ const lastDay = computed(() => props.days[props.days.length - 1]);
           aria-hidden="true"
           class="mt-1 flex justify-between text-xs text-muted-foreground"
         >
-          <span>{{ props.copy.axisDay(firstDay.date) }}</span>
-          <span>{{ props.copy.axisDay(middleDay.date) }}</span>
-          <span>{{ props.copy.axisDay(lastDay.date) }}</span>
+          <span
+            v-for="date in axisDays"
+            :key="date"
+          >{{ props.copy.axisDay(date) }}</span>
         </div>
       </template>
     </div>
@@ -99,7 +102,7 @@ const lastDay = computed(() => props.days[props.days.length - 1]);
 
   <section
     aria-labelledby="views-monthly-heading"
-    class="mt-8 border-t py-8"
+    class="border-t py-8"
   >
     <h2
       id="views-monthly-heading"
@@ -107,16 +110,21 @@ const lastDay = computed(() => props.days[props.days.length - 1]);
     >
       {{ props.copy.monthlyHeading }}
     </h2>
-    <ul
-      class="mt-4 grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"
+    <dl
+      class="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4"
       data-testid="views-monthly-totals"
     >
-      <li
+      <div
         v-for="month in props.months"
         :key="month.month"
       >
-        {{ props.copy.monthLabel(month.month, month.real) }}
-      </li>
-    </ul>
+        <dt class="text-muted-foreground">
+          {{ props.copy.monthName(month.month) }}
+        </dt>
+        <dd class="tabular-nums">
+          {{ props.copy.realCount(month.real) }}
+        </dd>
+      </div>
+    </dl>
   </section>
 </template>
