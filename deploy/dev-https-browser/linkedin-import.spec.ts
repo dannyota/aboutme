@@ -142,6 +142,11 @@ function watchForFileBytes(page: Page, violations: string[]): void {
 // isExpectedWebKitInterruptedFetch below): Nuxt's dev-server build-meta poll
 // (buildAssetsURL('builds/meta/<id>.json')) and the app's own capabilities
 // read.
+function isKnownInterruptedFetchPathname(pathname: string): boolean {
+  return pathname.startsWith('/_nuxt/builds/meta/')
+    || pathname === '/api/v1/capabilities';
+}
+
 function isKnownInterruptedFetchURL(url: string): boolean {
   let pathname: string;
   try {
@@ -149,8 +154,24 @@ function isKnownInterruptedFetchURL(url: string): boolean {
   } catch {
     return false;
   }
-  return pathname.startsWith('/_nuxt/builds/meta/')
-    || pathname === '/api/v1/capabilities';
+  return isKnownInterruptedFetchPathname(pathname);
+}
+
+// A local run of this proof observed WebKit report the capabilities poll's
+// interruption with its scheme and one slash dropped ("/localhost:20443/api/
+// v1/capabilities due to access control checks." instead of "https://
+// localhost:20443/api/v1/capabilities due to access control checks."), which
+// new URL cannot parse without a base. isKnownInterruptedFetchToken matches
+// that exact shape too, still scoped to this origin's host and the same two
+// known pathnames, so an unrelated blocked request is never mistaken for
+// this noise.
+const ORIGIN_HOST = new URL(ALLOWED_ORIGIN).host;
+
+function isKnownInterruptedFetchToken(token: string): boolean {
+  if (isKnownInterruptedFetchURL(token)) return true;
+  const hostPrefix = `/${ORIGIN_HOST}`;
+  return token.startsWith(hostPrefix)
+    && isKnownInterruptedFetchPathname(token.slice(hostPrefix.length));
 }
 
 const INTERRUPTED_FETCH_URL = /(\S+) due to access control checks\.$/u;
@@ -170,7 +191,36 @@ function isExpectedWebKitInterruptedFetch(
   if (engine !== 'webkit') return false;
   if (text === 'TypeError: Importing a module script failed.') return true;
   const match = INTERRUPTED_FETCH_URL.exec(text);
-  return match !== null && isKnownInterruptedFetchURL(match[1]!);
+  return match !== null && isKnownInterruptedFetchToken(match[1]!);
+}
+
+// isExpectedAnonymousMeConsole (network-policy.ts) matches only Chromium's
+// exact wording for a failed fetch's status line, which leaves the status
+// text empty ("...status of 401 ()"). A local WebKit run of this proof
+// showed the same single anonymous /api/v1/me read loginAsDevelopmentUser
+// triggers before sign-in completes reported with the status text filled in
+// instead ("...status of 401 (Unauthorized)"): the same expected event, in
+// WebKit's own wording, not a second, new failure.
+const WEBKIT_ANONYMOUS_ME_CONSOLE =
+  /^Failed to load resource: the server responded with a status of 401 \([^)]*\)$/u;
+
+function isExpectedAnonymousMeConsoleAnyWording(
+  engine: 'chromium' | 'webkit',
+  text: string,
+  url: string,
+): boolean {
+  if (isExpectedAnonymousMeConsole(text, url)) return true;
+  if (engine !== 'webkit' || !WEBKIT_ANONYMOUS_ME_CONSOLE.test(text)) {
+    return false;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  return parsed.origin === ORIGIN && parsed.pathname === '/api/v1/me'
+    && parsed.search === '';
 }
 
 interface WindowRequest {
@@ -222,12 +272,48 @@ async function fillToResumeCap(page: Page): Promise<void> {
   }
 }
 
-async function writeFailureEvidence(name: string, stageName: string): Promise<void> {
+async function writeFailureEvidence(
+  name: string,
+  stageName: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
   await writeFile(
     name,
-    `${JSON.stringify({ lastStage: stageName, schemaVersion: 1 })}\n`,
+    `${JSON.stringify({ lastStage: stageName, schemaVersion: 1, ...extra })}\n`,
     { flag: 'wx', mode: 0o600 },
   );
+}
+
+interface RedactedConsoleMessage {
+  readonly type: string;
+  readonly pathname: string;
+}
+
+// Resume ids are UUIDs; the Nuxt build-meta poll's id is an opaque hash
+// segment ending in ".json" (isKnownInterruptedFetchPathname above). Both
+// are replaced so failure evidence never carries an identifier that could
+// be looked up against the harness (same bar as exports.spec.ts's
+// redactSavePath).
+const ID_PLACEHOLDER = '{id}';
+const UUID_SEGMENT =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/giu;
+const NUXT_BUILD_META_PATH = /^\/_nuxt\/builds\/meta\/[^/]+\.json$/u;
+
+function redactPathname(pathname: string): string {
+  if (NUXT_BUILD_META_PATH.test(pathname)) {
+    return `/_nuxt/builds/meta/${ID_PLACEHOLDER}.json`;
+  }
+  return pathname.replace(UUID_SEGMENT, ID_PLACEHOLDER);
+}
+
+// pathnameOf never throws: failure evidence is best-effort, and a console
+// message's own location URL is not guaranteed to parse.
+function pathnameOf(url: string): string {
+  try {
+    return redactPathname(new URL(url).pathname);
+  } catch {
+    return '';
+  }
 }
 
 // --- The core create flow (Chromium) ----------------------------------------
@@ -493,6 +579,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
     const counters = newDiagnosticCounters();
     const fileByteViolations: string[] = [];
     const unexpectedPageErrors: string[] = [];
+    const unexpectedConsoleMessages: RedactedConsoleMessage[] = [];
     // The chromium fixture's own browser carries the config's baseURL to any
     // context it creates. A directly launched WebKit browser has no baseURL,
     // so it needs one explicitly; it needs no certificate bypass, because
@@ -515,8 +602,16 @@ for (const engine of ['chromium', 'webkit'] as const) {
       // never fails the check.
       pageDiagnosticsAttacher(counters, {
         countConsoleError: (message) =>
-          !isExpectedAnonymousMeConsole(message.text(), message.location().url)
+          !isExpectedAnonymousMeConsoleAnyWording(
+            engine, message.text(), message.location().url,
+          )
           && !isExpectedWebKitInterruptedFetch(engine, message.text()),
+        onCountedConsoleError: (message) => {
+          unexpectedConsoleMessages.push({
+            pathname: pathnameOf(message.location().url),
+            type: message.type(),
+          });
+        },
         onPageError: (error) => {
           if (!isExpectedWebKitInterruptedFetch(engine, error.message)) {
             unexpectedPageErrors.push(error.message);
@@ -581,6 +676,16 @@ for (const engine of ['chromium', 'webkit'] as const) {
       ).toHaveCount(0);
 
       stage(`${engine}-done`);
+
+      // Inside the try, not after it: a failure here must reach the catch
+      // below the same way a failure earlier in this test does, so it too
+      // gets a failure-evidence record naming the last stage, the engine,
+      // and every unexpected console message this run actually saw.
+      expect(fileByteViolations).toEqual([]);
+      expect(counters.certificateErrors).toBe(0);
+      expect(counters.externalRequests).toBe(0);
+      expect(counters.consoleErrors).toBe(0);
+      expect(unexpectedPageErrors).toEqual([]);
     } catch (error) {
       // Same reasoning as the create-flow test's catch block: keep the named
       // stage in the evidence and add the exact source line to the console.
@@ -594,6 +699,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
       try {
         await writeFailureEvidence(
           `/evidence/linkedin-import-failure-${engine}.json`, stageAtFailure,
+          { engine, unexpectedConsoleMessages },
         );
       } catch {
         stage('failure-evidence-write-failed');
@@ -602,11 +708,5 @@ for (const engine of ['chromium', 'webkit'] as const) {
     } finally {
       await context.close();
     }
-
-    expect(fileByteViolations).toEqual([]);
-    expect(counters.certificateErrors).toBe(0);
-    expect(counters.externalRequests).toBe(0);
-    expect(counters.consoleErrors).toBe(0);
-    expect(unexpectedPageErrors).toEqual([]);
   });
 }
