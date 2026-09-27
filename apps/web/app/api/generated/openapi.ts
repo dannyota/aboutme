@@ -1784,9 +1784,7 @@ export interface components {
          *     - `reauth_required`: `POST /auth/{provider}/start?purpose=link`
          *       only, never a callback query. The session is valid, but its last
          *       full OAuth login is more than 15 minutes old. The server checks
-         *       this before creating a transaction. Session revocation endpoints
-         *       use the same JSON error code so one prompt can handle each
-         *       sensitive action.
+         *       this before creating a transaction.
          * @enum {string}
          */
         OAuthCallbackErrorCode: "auth_failed" | "email_not_verified" | "cancelled" | "email_already_registered" | "identity_already_linked" | "reauth_required";
