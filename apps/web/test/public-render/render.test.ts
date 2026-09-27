@@ -582,4 +582,51 @@ describe('public sign-in gate', () => {
       script: SCRIPT_VERSION,
     })).rejects.toThrow();
   });
+
+  // legal.md "Sign-in gate text": both texts name only the providers the
+  // envelope actually offers.
+  describe('gate text names only the offered providers', () => {
+    it.each([
+      ['en', ['google'], 'If you continue, Google confirms your account '
+      + 'to aboutme.'],
+      ['en', ['linkedin'], 'If you continue, LinkedIn confirms your '
+      + 'account to aboutme.'],
+      ['en', ['google', 'linkedin'], 'If you continue, Google or '
+      + 'LinkedIn confirms your account to aboutme.'],
+      ['vi', ['google'], 'Nếu bạn tiếp tục, Google sẽ xác minh tài khoản '
+      + 'của bạn cho aboutme.'],
+      ['vi', ['linkedin'], 'Nếu bạn tiếp tục, LinkedIn sẽ xác minh tài '
+      + 'khoản của bạn cho aboutme.'],
+      ['vi', ['google', 'linkedin'], 'Nếu bạn tiếp tục, Google hoặc '
+      + 'LinkedIn sẽ xác minh tài khoản của bạn cho aboutme.'],
+    ] as const)('names %s for %j', async (lng, providers, sentence) => {
+      const html = await renderPublicGate(
+        { ...gateRequest(), lng, providers },
+        VERSIONS,
+      );
+      expect(html).toContain(sentence);
+    });
+
+    it('drops the whole provider sentence when none is offered', async () => {
+      const en = await renderPublicGate(
+        { ...gateRequest(), providers: [] },
+        VERSIONS,
+      );
+      expect(en).not.toContain('confirms your account');
+      expect(en).not.toContain('If you continue');
+      expect(en).toContain(
+        'Prefer not to sign in? Contact the resume owner directly.',
+      );
+
+      const vi_ = await renderPublicGate(
+        { ...gateRequest(), lng: 'vi', providers: [] },
+        VERSIONS,
+      );
+      expect(vi_).not.toContain('sẽ xác minh');
+      expect(vi_).not.toContain('Nếu bạn tiếp tục');
+      expect(vi_).toContain(
+        'Không muốn đăng nhập? Hãy liên hệ trực tiếp chủ CV.',
+      );
+    });
+  });
 });
