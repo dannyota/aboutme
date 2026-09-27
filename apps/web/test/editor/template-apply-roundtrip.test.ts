@@ -171,6 +171,32 @@ function startingPoints(order: KeyOrder) {
   }));
 }
 
+/**
+ * Applies driven through the store and coordinator. The pure matrix above
+ * already proves the group state machine for every start and preset pair.
+ * The store path adds dispatch and the reconcile of each re-encoded server
+ * response (content is an unordered map, ADR 0009), which does not depend on
+ * which pair it carries. So it runs every preset as the target from each
+ * base, and each preset once as the one already applied, followed by the
+ * next preset in the list. Both key orders run through describe.each.
+ */
+function storePathCases(order: KeyOrder) {
+  const starts = startingPoints(order);
+  const bases = starts.slice(0, 3);
+  const fromPresets = starts.slice(3);
+  const cases = bases.flatMap((start) =>
+    TEMPLATES.map((preset) => ({ start, preset })),
+  );
+  TEMPLATES.forEach((_, index) => {
+    const base = index % bases.length;
+    cases.push({
+      start: fromPresets[base * TEMPLATES.length + index]!,
+      preset: TEMPLATES[(index + 1) % TEMPLATES.length]!,
+    });
+  });
+  return cases;
+}
+
 describe.each(['server', 'fixture'] as const)(
   'template apply when the editor holds content in %s key order',
   (order) => {
@@ -199,54 +225,59 @@ describe.each(['server', 'fixture'] as const)(
 
     it('ends complete through the editor store and coordinator', async () => {
       const failures: string[] = [];
-      for (const start of startingPoints(order)) {
-        for (const preset of TEMPLATES) {
-          setActivePinia(createPinia());
-          const store = useResumeStore();
-          store.initialize(start.accepted);
-          const id = start.accepted.metadata.id;
-          let server = start.accepted;
-          let revision = 2;
-          const auth = {
-            user: computed(() => ({ id: 'owner-1' })),
-            csrfToken: computed(() => 'csrf-1'),
-            authState: computed(() => 'authenticated'),
-          } as never;
-          const api = {
-            dispatch: async () => {
-              const command = store.recordFor(id)!.attempt!.command;
-              server = serverAccept(
-                server,
-                command as TemplateChildCommand,
-                revision++,
-              );
-              return { kind: 'complete', status: 200, accepted: server };
-            },
-            read: async () => ({ kind: 'complete', accepted: server }),
-          } as never;
-          const shared = runtime();
-          const coordinator = createMutationCoordinator({
-            api,
-            store,
-            auth,
-            runtime: shared,
-          });
-          const actions = createResumeEditorActions({
-            resumeId: id,
-            store,
-            coordinator,
-            auth,
-            runtime: shared,
-          });
-          if (actions.applyTemplate(preset).kind !== 'enqueued') continue;
-          await coordinator.flush(id);
-          const state = store.recordFor(id)!.templateState;
-          if (state?.kind !== 'complete') {
-            failures.push(`${start.name} -> ${preset.id}: ${state?.kind}`);
-          }
+      const targets = new Set<string>();
+      for (const { start, preset } of storePathCases(order)) {
+        setActivePinia(createPinia());
+        const store = useResumeStore();
+        store.initialize(start.accepted);
+        const id = start.accepted.metadata.id;
+        let server = start.accepted;
+        let revision = 2;
+        const auth = {
+          user: computed(() => ({ id: 'owner-1' })),
+          csrfToken: computed(() => 'csrf-1'),
+          authState: computed(() => 'authenticated'),
+        } as never;
+        const api = {
+          dispatch: async () => {
+            const command = store.recordFor(id)!.attempt!.command;
+            server = serverAccept(
+              server,
+              command as TemplateChildCommand,
+              revision++,
+            );
+            return { kind: 'complete', status: 200, accepted: server };
+          },
+          read: async () => ({ kind: 'complete', accepted: server }),
+        } as never;
+        const shared = runtime();
+        const coordinator = createMutationCoordinator({
+          api,
+          store,
+          auth,
+          runtime: shared,
+        });
+        const actions = createResumeEditorActions({
+          resumeId: id,
+          store,
+          coordinator,
+          auth,
+          runtime: shared,
+        });
+        if (actions.applyTemplate(preset).kind !== 'enqueued') continue;
+        targets.add(preset.id);
+        await coordinator.flush(id);
+        const state = store.recordFor(id)!.templateState;
+        if (state?.kind !== 'complete') {
+          failures.push(`${start.name} -> ${preset.id}: ${state?.kind}`);
         }
       }
       expect(failures).toEqual([]);
+      // Every preset reached the server at least once, so no preset's
+      // children skip dispatch and reconcile.
+      expect([...targets].sort()).toEqual(
+        TEMPLATES.map((preset) => preset.id).sort(),
+      );
     });
   },
 );
