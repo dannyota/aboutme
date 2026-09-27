@@ -25,7 +25,10 @@ export interface PublicRenderPreview {
   imageUrl?: string;
 }
 
-export interface PublicRenderRequest {
+/** The route the sign-in-to-view join invite links to (AC-VIEW-008). */
+export type PublicRenderJoinInvite = '/register' | '/login';
+
+export interface PublicRenderResumeRequest {
   publicResume: PublicResume;
   mode: 'continuous';
   canonicalOrigin: string;
@@ -36,7 +39,34 @@ export interface PublicRenderRequest {
   faviconHref: string;
   /** Absent from a server that predates link previews. */
   preview?: PublicRenderPreview;
+  /**
+   * Present only for a sign_in resume; the marker the join invite reads
+   * (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
+   */
+  joinInvite?: PublicRenderJoinInvite;
 }
+
+/** A provider offered on the sign-in gate, in envelope order. */
+export type PublicGateProvider = 'google' | 'linkedin';
+
+/** The closed message code the gate shows after a failed or cancelled try. */
+export type PublicGateMessage = 'none' | 'cancelled' | 'failed';
+
+export interface PublicRenderGateRequest {
+  mode: 'gate';
+  canonicalOrigin: string;
+  slug: string;
+  lng: 'vi' | 'en';
+  pageTitle: string;
+  faviconHref: string;
+  preview: PublicRenderPreview;
+  providers: readonly PublicGateProvider[];
+  message: PublicGateMessage;
+}
+
+export type PublicRenderRequest
+  = | PublicRenderResumeRequest
+    | PublicRenderGateRequest;
 
 // The server percent-encodes every byte outside the URL-unreserved set, so a
 // favicon href holds only these characters and cannot leave its attribute.
@@ -57,6 +87,41 @@ const boundedText = (value: unknown, maxBytes: number): value is string =>
   typeof value === 'string'
   && value.length > 0
   && Buffer.byteLength(value, 'utf8') <= maxBytes;
+
+// Same shape the public page's own slug validates against
+// (app/public/public-resume.client.ts).
+const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+
+const validSlug = (value: unknown): value is string =>
+  typeof value === 'string' && SLUG.test(value);
+
+const validLng = (value: unknown): value is 'vi' | 'en' =>
+  value === 'vi' || value === 'en';
+
+const GATE_PROVIDER_ORDER: readonly PublicGateProvider[] = [
+  'google',
+  'linkedin',
+];
+
+const validProviders = (
+  value: unknown,
+): value is readonly PublicGateProvider[] => {
+  if (!Array.isArray(value)) return false;
+  if (new Set(value).size !== value.length) return false;
+  if (value.some((entry) => !GATE_PROVIDER_ORDER.includes(entry))) {
+    return false;
+  }
+  const positions = value.map((entry) => GATE_PROVIDER_ORDER.indexOf(entry));
+  return positions.every(
+    (position, index) => index === 0 || position > positions[index - 1]!,
+  );
+};
+
+const validMessage = (value: unknown): value is PublicGateMessage =>
+  value === 'none' || value === 'cancelled' || value === 'failed';
+
+const validJoinInvite = (value: unknown): value is PublicRenderJoinInvite =>
+  value === '/register' || value === '/login';
 
 const validPreview = (value: unknown): value is PublicRenderPreview => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
@@ -202,11 +267,11 @@ function normalizedOrigin(value: unknown): value is string {
 // head"): this page's own origin and slug, and a 16-hex-digit version.
 const validCardImageURL = (
   value: unknown,
-  request: PublicRenderRequest,
+  canonicalOrigin: string,
+  slug: string,
 ): boolean => {
   if (typeof value !== 'string') return false;
-  const prefix = `${request.canonicalOrigin}/api/v1/public/resumes/`
-    + `${request.publicResume.slug}/og/`;
+  const prefix = `${canonicalOrigin}/api/v1/public/resumes/${slug}/og/`;
   return value.startsWith(prefix)
     && /^[0-9a-f]{16}\.png$/u.test(value.slice(prefix.length));
 };
@@ -229,44 +294,109 @@ export function decodePublicRenderEnvelope(
     }
     const envelope = value as Record<string, unknown>;
     const keys = Object.keys(envelope).sort();
-    const baseKeys = [
-      'canonicalOrigin',
-      'discoveryEnabled',
-      'faviconHref',
-      'mode',
-      'pageTitle',
-      'publicResume',
-    ];
-    // A server that predates link previews sends no preview object.
-    const hasPreview = keys.includes('preview');
-    const expectedKeys = [...baseKeys, ...(hasPreview ? ['preview'] : [])]
-      .sort()
-      .join(',');
-    if (keys.join(',') !== expectedKeys) {
-      fail();
+    if (envelope.mode === 'gate') {
+      return decodeGateEnvelope(envelope, keys);
     }
-    if (hasPreview && !validPreview(envelope.preview)) {
-      fail();
-    }
-    if (
-      envelope.mode !== 'continuous'
-      || !normalizedOrigin(envelope.canonicalOrigin)
-      || typeof envelope.discoveryEnabled !== 'boolean'
-      || !validPageTitle(envelope.pageTitle)
-      || !validFaviconHref(envelope.faviconHref)
-      || !isPublicResume(envelope.publicResume)
-    ) {
-      fail();
-    }
-    const request = envelope as unknown as PublicRenderRequest;
-    const imageUrl = request.preview?.imageUrl;
-    if (imageUrl !== undefined && !validCardImageURL(imageUrl, request)) {
-      fail();
-    }
-    return request;
+    return decodeResumeEnvelope(envelope, keys);
   } catch {
     return fail();
   }
+}
+
+function decodeResumeEnvelope(
+  envelope: Record<string, unknown>,
+  keys: readonly string[],
+): PublicRenderResumeRequest {
+  const baseKeys = [
+    'canonicalOrigin',
+    'discoveryEnabled',
+    'faviconHref',
+    'mode',
+    'pageTitle',
+    'publicResume',
+  ];
+  // A server that predates link previews sends no preview object, and one
+  // that predates sign in to view sends no joinInvite marker.
+  const hasPreview = keys.includes('preview');
+  const hasJoinInvite = keys.includes('joinInvite');
+  const expectedKeys = [
+    ...baseKeys,
+    ...(hasPreview ? ['preview'] : []),
+    ...(hasJoinInvite ? ['joinInvite'] : []),
+  ].sort().join(',');
+  if (keys.join(',') !== expectedKeys) {
+    fail();
+  }
+  if (hasPreview && !validPreview(envelope.preview)) {
+    fail();
+  }
+  if (hasJoinInvite && !validJoinInvite(envelope.joinInvite)) {
+    fail();
+  }
+  if (
+    envelope.mode !== 'continuous'
+    || !normalizedOrigin(envelope.canonicalOrigin)
+    || typeof envelope.discoveryEnabled !== 'boolean'
+    || !validPageTitle(envelope.pageTitle)
+    || !validFaviconHref(envelope.faviconHref)
+    || !isPublicResume(envelope.publicResume)
+  ) {
+    fail();
+  }
+  const request = envelope as unknown as PublicRenderResumeRequest;
+  const imageUrl = request.preview?.imageUrl;
+  if (
+    imageUrl !== undefined
+    && !validCardImageURL(
+      imageUrl,
+      request.canonicalOrigin,
+      request.publicResume.slug,
+    )
+  ) {
+    fail();
+  }
+  return request;
+}
+
+function decodeGateEnvelope(
+  envelope: Record<string, unknown>,
+  keys: readonly string[],
+): PublicRenderGateRequest {
+  const expectedKeys = [
+    'canonicalOrigin',
+    'faviconHref',
+    'lng',
+    'message',
+    'mode',
+    'pageTitle',
+    'preview',
+    'providers',
+    'slug',
+  ].sort().join(',');
+  if (keys.join(',') !== expectedKeys) {
+    fail();
+  }
+  if (
+    !normalizedOrigin(envelope.canonicalOrigin)
+    || !validSlug(envelope.slug)
+    || !validLng(envelope.lng)
+    || !validPageTitle(envelope.pageTitle)
+    || !validFaviconHref(envelope.faviconHref)
+    || !validPreview(envelope.preview)
+    || !validProviders(envelope.providers)
+    || !validMessage(envelope.message)
+  ) {
+    fail();
+  }
+  const request = envelope as unknown as PublicRenderGateRequest;
+  const imageUrl = request.preview.imageUrl;
+  if (
+    imageUrl !== undefined
+    && !validCardImageURL(imageUrl, request.canonicalOrigin, request.slug)
+  ) {
+    fail();
+  }
+  return request;
 }
 
 export function decodePublicRenderEnvelopeBytes(

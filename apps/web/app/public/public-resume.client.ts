@@ -13,6 +13,7 @@ import {
   type RevisionDecision,
 } from '../realtime/controller';
 import validatePublicResume from '#public-render-validator';
+import JoinInvite from '../components/public/JoinInvite.vue';
 import { startViewBeacon } from './viewBeacon';
 
 type PublicResume = components['schemas']['PublicResume'];
@@ -376,6 +377,26 @@ export function createPublicResumeRealtime(options: {
   };
 }
 
+// The marker the server writes only for a sign_in resume
+// (docs/design/viewer-analytics/sign-in-to-view.md#gate-render-envelope).
+function joinInviteHref(root: HTMLElement): '/register' | '/login' | null {
+  const value = root.dataset.joinInvite;
+  return value === '/register' || value === '/login' ? value : null;
+}
+
+function mountJoinInvite(
+  root: HTMLElement,
+  href: '/register' | '/login',
+): void {
+  const lng = document.documentElement.lang.split('-')[0]?.toLowerCase();
+  const container = document.createElement('div');
+  document.body.append(container);
+  createApp({
+    render: () =>
+      h(JoinInvite, { lng: lng === 'vi' ? 'vi' : 'en', href, root }),
+  }).mount(container);
+}
+
 function boot(): void {
   const root = document.querySelector<HTMLElement>('#public-resume');
   const rawRevision = root?.dataset.revision;
@@ -389,9 +410,17 @@ function boot(): void {
   ) {
     return;
   }
+  const joinInvite = joinInviteHref(root);
   // Counts a human view of this resume (counting.md); never on any other
   // path, including a missing or invalid slug.
-  startViewBeacon({ slug: slug[0]! });
+  startViewBeacon({
+    slug: slug[0]!,
+    onStart: (result) => {
+      if (joinInvite !== null && !result.owner && !result.signedIn) {
+        mountJoinInvite(root, joinInvite);
+      }
+    },
+  });
   void hydratePublicResume(root, slug[0]!, rawRevision).then(() => {
     const realtime = createPublicResumeRealtime({
       root,

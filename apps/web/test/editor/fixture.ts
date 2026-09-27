@@ -17,6 +17,7 @@ const fixedMetadata: ResumeMetadata = {
   live: false,
   downloadEnabled: false,
   seoGeoEnabled: false,
+  signInToView: false,
   slug: null,
   publicTitle: null,
   faviconEmoji: null,

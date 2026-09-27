@@ -11,6 +11,8 @@ export interface CapabilityFlags {
   passkeyEnrollment?: boolean;
   /** Defaults to false, the server's value while TOTP enrollment is closed. */
   totpEnrollment?: boolean;
+  /** Defaults to false, the server's value while sign in to view is off. */
+  signInToView?: boolean;
 }
 
 /** Registers GET /api/v1/capabilities; null makes it fail with 500. */
@@ -33,6 +35,7 @@ export function registerCapabilities(
         passwordRegistration: flags.passwordRegistration ?? true,
         passkeyEnrollment: flags.passkeyEnrollment ?? false,
         totpEnrollment: flags.totpEnrollment ?? false,
+        signInToView: flags.signInToView ?? false,
       },
     };
   });
