@@ -73,7 +73,10 @@ export type EditorControlId
     | 'removeSurfaceTarget'
     | 'photo' | 'cropPhoto' | 'saveCrop' | 'clearCrop' | 'zoom'
     | 'exactValues' | 'onResume' | 'templates' | 'undoTemplate'
-    | 'templatePresets' | 'templateWarnings' | 'templateReadRequired';
+    | 'templatePresets' | 'templateWarnings' | 'templateReadRequired'
+    | 'templateSearchLabel' | 'templateSearchPlaceholder'
+    | 'templateSearchClear' | 'templateSearchNoMatch'
+    | 'templateSearchCount';
 
 type EditorControlCopy = Record<
   Exclude<
@@ -85,6 +88,8 @@ type EditorControlCopy = Record<
     | 'photoStatusRateLimited'
     | 'templatePart'
     | 'tryAgainLater'
+    | 'templateSearchNoMatch'
+    | 'templateSearchCount'
   >,
   string
 > & {
@@ -95,6 +100,10 @@ type EditorControlCopy = Record<
   readonly photoStatusRateLimited: (wait: string) => string;
   readonly templatePart: (part: string, status: string) => string;
   readonly tryAgainLater: (seconds?: number) => string;
+  /** "No templates match "{q}"." (DESIGN.md, editor Templates panel). */
+  readonly templateSearchNoMatch: (query: string) => string;
+  /** "{n} templates", announced politely as the result count changes. */
+  readonly templateSearchCount: (count: number) => string;
 };
 
 export type CustomizationGroupId
@@ -291,6 +300,12 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templatePresets: 'Mẫu có sẵn',
       templateWarnings: 'Cảnh báo mẫu',
       templateReadRequired: 'Tải lại trang để lấy CV mới nhất, rồi thử lại.',
+      templateSearchLabel: 'Tìm mẫu',
+      templateSearchPlaceholder: 'Tên, phong cách hoặc vị trí',
+      templateSearchClear: 'Xóa tìm kiếm',
+      templateSearchNoMatch: (query) =>
+        `Không có mẫu nào khớp với “${query}”.`,
+      templateSearchCount: (count) => `${count} mẫu`,
     },
     customization: {
       'font.family': 'Phông chữ',
@@ -542,6 +557,11 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templateWarnings: 'Template warnings',
       templateReadRequired:
         'Reload the page to get the latest resume, then try again.',
+      templateSearchLabel: 'Search templates',
+      templateSearchPlaceholder: 'Name, style, or role',
+      templateSearchClear: 'Clear search',
+      templateSearchNoMatch: (query) => `No templates match "${query}".`,
+      templateSearchCount: (count) => `${count} templates`,
     },
     customization: {
       'font.family': 'Font',

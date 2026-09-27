@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { TEMPLATES, type TemplatePreset } from '@aboutme/schema/templates';
+import { Search, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import IconButton from '@/components/app/IconButton.vue';
+import FormField from '@/components/app/FormField.vue';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -9,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import InspectorPanel from '../InspectorPanel.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
 
@@ -23,6 +27,7 @@ import TemplatePartialDialog from './TemplatePartialDialog.vue';
 import TemplateThumbnail from './TemplateThumbnail.vue';
 import { defaultSectionNames } from '../sectionTypes';
 import { galleryTemplate } from '../../../templates/catalog';
+import { matchesTemplateSearch } from '../../../templates/search';
 import type { ResumeSnapshot } from '../../../editor/types';
 import { editorControlsCopy } from '../../../i18n/editor-controls';
 
@@ -37,6 +42,25 @@ const copy = computed(() => editorControlsCopy[locale.value].controls);
 
 const notice = ref(false);
 const moved = ref({ main: [] as string[], sidebar: [] as string[] });
+
+// The panel's search box: filters the preset list by name, style, and role
+// chip, in either site language (DESIGN.md, editor Templates panel).
+const search = ref('');
+const searchInput = ref<{ $el?: HTMLElement } | null>(null);
+const visibleTemplates = computed(() => TEMPLATES.filter((preset) => {
+  const entry = galleryTemplate(preset.id);
+  return entry === undefined || matchesTemplateSearch(entry, search.value);
+}));
+function clearSearch(): void {
+  search.value = '';
+  searchInput.value?.$el?.focus();
+}
+function onSearchKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && search.value !== '') {
+    search.value = '';
+  }
+}
+
 const movedText = computed(() => [
   moved.value.sidebar.length > 0
     ? copy.value.movedToSidebar(moved.value.sidebar.join(', '))
@@ -155,6 +179,50 @@ function assertNever(value: never): never {
     :title="copy.templates"
     title-id="template-title"
   >
+    <FormField
+      id="template-search"
+      v-slot="{ id: searchId }"
+      :label="copy.templateSearchLabel"
+    >
+      <div class="relative">
+        <Search
+          aria-hidden="true"
+          class="pointer-events-none absolute left-3 top-1/2 size-4
+            -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          :id="searchId"
+          ref="searchInput"
+          v-model="search"
+          class="pl-9 pr-9"
+          data-testid="template-search-input"
+          :placeholder="copy.templateSearchPlaceholder"
+          type="text"
+          @keydown="onSearchKeydown"
+        />
+        <IconButton
+          v-if="search !== ''"
+          class="absolute right-0 top-1/2 -translate-y-1/2"
+          data-testid="template-search-clear"
+          :label="copy.templateSearchClear"
+          size="icon"
+          variant="ghost"
+          @click="clearSearch"
+        >
+          <X aria-hidden="true" />
+        </IconButton>
+      </div>
+    </FormField>
+    <p
+      v-if="search.trim() !== ''"
+      class="text-sm"
+      data-testid="template-search-status"
+      role="status"
+    >
+      {{ visibleTemplates.length === 0
+        ? copy.templateSearchNoMatch(search)
+        : copy.templateSearchCount(visibleTemplates.length) }}
+    </p>
     <StatusBanner
       v-if="status() !== ''"
       kind="info"
@@ -171,7 +239,7 @@ function assertNever(value: never): never {
     </p>
     <ul :aria-label="copy.templatePresets">
       <li
-        v-for="preset in TEMPLATES"
+        v-for="preset in visibleTemplates"
         :key="preset.id"
         :data-template="preset.id"
       >
