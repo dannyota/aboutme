@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Scan, ZoomIn, ZoomOut } from '@lucide/vue';
+import { nextTick, ref, watch } from 'vue';
 import { Button } from '../ui/button';
 import {
   Tooltip,
@@ -9,7 +10,7 @@ import {
 } from '../ui/tooltip';
 import IconButton from '../app/IconButton.vue';
 
-defineProps<{
+const props = defineProps<{
   readonly percent: number;
   readonly isFit: boolean;
   readonly zoomOutDisabled: boolean;
@@ -28,10 +29,34 @@ defineEmits<{
   zoomIn: [];
   setFit: [];
 }>();
+
+// A step button that disables under keyboard focus would drop focus to the
+// page, outside the preview, where its Ctrl/Cmd shortcuts stop working. Hand
+// focus to the percent button instead.
+const root = ref<HTMLElement | null>(null);
+
+function keepFocusAt(testId: string): void {
+  const button = root.value?.querySelector(`[data-testid="${testId}"]`);
+  if (button === null || button === undefined) return;
+  if (document.activeElement !== button) return;
+  void nextTick(() => {
+    root.value
+      ?.querySelector<HTMLElement>('[data-testid="zoom-percent"]')
+      ?.focus();
+  });
+}
+
+watch(() => props.zoomOutDisabled, (disabled) => {
+  if (disabled) keepFocusAt('zoom-out');
+}, { flush: 'pre' });
+watch(() => props.zoomInDisabled, (disabled) => {
+  if (disabled) keepFocusAt('zoom-in');
+}, { flush: 'pre' });
 </script>
 
 <template>
   <div
+    ref="root"
     class="flex items-center gap-0.5 rounded-md border bg-card p-1
       shadow-[var(--shadow-paper)]"
     data-testid="preview-zoom-controls"
