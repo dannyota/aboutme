@@ -301,7 +301,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templateWarnings: 'Cảnh báo mẫu',
       templateReadRequired: 'Tải lại trang để lấy CV mới nhất, rồi thử lại.',
       templateSearchLabel: 'Tìm mẫu',
-      templateSearchPlaceholder: 'Tên, phong cách hoặc vị trí',
+      templateSearchPlaceholder: 'Tên, phong cách hoặc vị trí ứng tuyển',
       templateSearchClear: 'Xóa tìm kiếm',
       templateSearchNoMatch: (query) =>
         `Không có mẫu nào khớp với “${query}”.`,
