@@ -22,7 +22,7 @@ export type OAuthConsentDecisionResult
   = components['schemas']['OAuthConsentDecisionResponse']['data'];
 
 export type OAuthConsentError
-  = 'session-required' | 'invalid-request' | 'unavailable';
+  = 'session-required' | 'invalid-request' | 'unavailable' | 'agent-limit';
 
 export class OAuthConsentFailure extends Error {
   readonly kind: OAuthConsentError;
@@ -63,6 +63,12 @@ export function mapOAuthConsentError(error: unknown): OAuthConsentFailure {
     || (status === 404 && code === 'not_found')
   ) {
     return new OAuthConsentFailure('invalid-request');
+  }
+  // The ten-grant limit gets its own closed code so the page can point the
+  // person at Settings instead of showing the generic failure banner; see
+  // docs/design/mcp-client-compatibility.md, rule 7.
+  if (status === 409 && code === 'agent_limit_reached') {
+    return new OAuthConsentFailure('agent-limit');
   }
   return new OAuthConsentFailure('unavailable');
 }

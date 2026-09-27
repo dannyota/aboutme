@@ -48,6 +48,11 @@ function route(path = '/authorize') {
   return `${path}${path.includes('?') ? '&' : '?'}${params}`;
 }
 
+function routeWithRedirectURI(redirectURI: string, path = '/authorize') {
+  const params = new URLSearchParams({ ...query, redirect_uri: redirectURI });
+  return `${path}${path.includes('?') ? '&' : '?'}${params}`;
+}
+
 beforeEach(() => {
   vi.mocked(navigateTo).mockClear();
   consentMocks.get.mockReset();
@@ -273,6 +278,127 @@ describe('/authorize', () => {
       const currentPath = useRoute().fullPath;
       expect(target).toBe(`/login?next=${encodeURIComponent(currentPath)}`);
     });
+});
+
+// Rule 6: the consent page names where approval returns.
+describe('consent return-to line', () => {
+  it.each([
+    [
+      'en',
+      'https://agent.example/callback',
+      'After you approve, you return to agent.example.',
+    ],
+    [
+      'en',
+      'https://agent.example:8443/callback',
+      'After you approve, you return to agent.example:8443.',
+    ],
+    [
+      'vi',
+      'https://agent.example/callback',
+      'Sau khi cho phép, bạn sẽ quay lại agent.example.',
+    ],
+    [
+      'vi',
+      'https://agent.example:8443/callback',
+      'Sau khi cho phép, bạn sẽ quay lại agent.example:8443.',
+    ],
+  ] as const)(
+    'shows the %s https host line for %s',
+    async (locale, redirectURI, expected) => {
+      setSiteLocale(locale);
+      const wrapper = await mountSuspended(AuthorizePage, {
+        route: routeWithRedirectURI(redirectURI),
+      });
+      await flushPromises();
+      expect(wrapper.get('[data-testid="consent-return-to"]').text()).toBe(
+        expected,
+      );
+    },
+  );
+
+  it.each([
+    'http://127.0.0.1:51234/callback',
+    'http://localhost:51234/callback',
+    'http://[::1]:51234/callback',
+  ])('shows the loopback line for %s', async (redirectURI) => {
+    const wrapper = await mountSuspended(AuthorizePage, {
+      route: routeWithRedirectURI(redirectURI),
+    });
+    await flushPromises();
+    expect(wrapper.get('[data-testid="consent-return-to"]').text()).toBe(
+      'After you approve, you return to an app on this computer.',
+    );
+  });
+
+  it('shows no line for an unparseable redirect_uri', async () => {
+    const wrapper = await mountSuspended(AuthorizePage, {
+      route: routeWithRedirectURI('not-a-url'),
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="consent-return-to"]').exists()).toBe(
+      false,
+    );
+  });
+
+  it(
+    'shows no line for a redirect scheme that is neither https nor '
+    + 'loopback http',
+    async () => {
+      const wrapper = await mountSuspended(AuthorizePage, {
+        route: routeWithRedirectURI('myapp://callback'),
+      });
+      await flushPromises();
+      expect(
+        wrapper.find('[data-testid="consent-return-to"]').exists(),
+      ).toBe(false);
+    },
+  );
+
+  it(
+    'renders only the host as text, even when the path holds markup',
+    async () => {
+      const wrapper = await mountSuspended(AuthorizePage, {
+        route: routeWithRedirectURI(
+          'https://good.example/<script>evil</script>',
+        ),
+      });
+      await flushPromises();
+      const line = wrapper.get('[data-testid="consent-return-to"]');
+      expect(line.text()).toBe(
+        'After you approve, you return to good.example.',
+      );
+      expect(descendantNames(wrapper.element)).not.toContain('script');
+    },
+  );
+});
+
+// Rule 7: the ten-grant limit gets its own message and a link to Settings.
+describe('grant limit banner', () => {
+  it.each(['en', 'vi'] as const)(
+    'shows the %s banner text with a settings link',
+    async (locale) => {
+      setSiteLocale(locale);
+      consentMocks.decide.mockRejectedValue(
+        new OAuthConsentFailure('agent-limit'),
+      );
+      const wrapper = await mountSuspended(AuthorizePage, { route: route() });
+      await flushPromises();
+      await wrapper.get('[data-testid="consent-form"]').trigger('submit');
+      await flushPromises();
+
+      const banner = wrapper.get('[data-testid="consent-error"]');
+      const link = banner.get('[data-testid="consent-settings-link"]');
+      expect(link.attributes('href')).toBe('/app/settings/sessions');
+      const expectedText = locale === 'en'
+        ? 'You already have 10 connected agents. Revoke one in Settings, '
+        + 'then try again.'
+        : 'Bạn đã có 10 trợ lý được kết nối. Thu hồi một trợ lý trong Cài '
+          + 'đặt rồi thử lại.';
+      expect(banner.text().replace(/\s+/g, ' ').trim()).toBe(expectedText);
+      expect(link.text()).toBe(locale === 'en' ? 'Settings' : 'Cài đặt');
+    },
+  );
 });
 
 function descendantNames(root: Element): string[] {

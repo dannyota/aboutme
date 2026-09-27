@@ -123,6 +123,11 @@ describe('useOAuthConsent', () => {
     [404, 'not_found', 'invalid-request'],
     [401, 'session_required', 'session-required'],
     [500, 'other', 'unavailable'],
+    // Rule 7: only the exact 409/agent_limit_reached pair maps to the
+    // grant-limit failure; every other 409 or 400 stays unavailable.
+    [409, 'agent_limit_reached', 'agent-limit'],
+    [409, 'other', 'unavailable'],
+    [400, 'agent_limit_reached', 'unavailable'],
   ] as const)('maps mutation %s/%s to %s', async (status, code, kind) => {
     let calls = 0;
     registerEndpoint('/api/v1/oauth/consent', {
