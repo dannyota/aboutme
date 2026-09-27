@@ -6,16 +6,16 @@ Schema, API, edge, limits, cost, rollback, tests, and live checks for
 
 ## Schema
 
-Migrations are additive. Each release adds its own; the manager assigns the
-numbers after the migrations already queued.
+Migrations are additive. Each release adds its own, numbered next after the
+latest file in `apps/server/migrations`.
 
-| Table or column            | Release         | Shape                                                                                                                                                       |
-| -------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `resume_view_days`         | View counts     | `(resume_id, day)` key; `counted`, `bot`, `datacenter`, `anomaly`, `invalid`, `crawler` as `integer not null default 0`, each ≥ 0; cascades with the resume |
-| `resume_share_signal_days` | View counts     | `(resume_id, day, platform)` key; `fetches integer ≥ 0`; `platform` closed set; cascades                                                                    |
-| `resumes.sign_in_to_view`  | Sign in to view | `boolean not null default false`                                                                                                                            |
-| `resumes.view_pass_epoch`  | Sign in to view | `integer not null default 0`; raised each time sign-in is turned on                                                                                         |
-| `oauth_transactions`       | Sign in to view | Purpose check gains `view`; nullable `resume_id` required exactly when purpose is `view`                                                                    |
+| Table or column            | Release         | Shape                                                                                                                                                           |
+| -------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resume_view_days`         | View counts     | `(resume_id, day)` key; `counted`, `bot`, `datacenter`, `anomaly`, `invalid`, `crawler` as `integer not null default 0`, each ≥ 0; cascades with the resume     |
+| `resume_share_signal_days` | View counts     | `(resume_id, day, platform)` key; `fetches integer ≥ 0`; `platform` closed set; cascades                                                                        |
+| `resumes.sign_in_to_view`  | Sign in to view | `boolean not null default false`                                                                                                                                |
+| `resumes.view_pass_epoch`  | Sign in to view | `integer not null default 0`, ≥ 0; raised as [sign in to view](sign-in-to-view.md#gated-routes) sets out                                                        |
+| `oauth_transactions`       | Sign in to view | Purpose check gains `view`; nullable `resume_id` referencing `resumes` with cascade, required exactly when purpose is `view`; `linking_user_id` null for `view` |
 
 View counts is migration `00008_resume_view_counts.sql`. Every new table grants
 `aboutme_app` explicitly ([ADR 0005](../../adr/0005-database-migrations.md)). A
@@ -24,6 +24,12 @@ privacy sweep, which deletes rows older than 400 days in bounded pages. No
 resume column is added for counts: the view token carries the resume ID sealed
 ([counting](counting.md#layers-5-and-6-token-and-proof-of-work)). No table holds
 anything about a viewer.
+
+The sign-in migration replaces the purpose and user checks on
+`oauth_transactions` rather than editing the baseline. Its down step deletes
+`view` transactions before it restores the old checks and drops the columns. The
+sitemap and `llms.txt` queries and the public snapshot treat a resume with
+`sign_in_to_view` as not discoverable.
 
 Size: daily rows are about 60 bytes per resume per day, so 1,000 resumes kept
 400 days is about 24 MB.
@@ -39,6 +45,7 @@ OpenAPI holds every route; the web client is regenerated with it.
 | `GET /api/v1/views`                                    | Cookie session             | Owner summary: 7, 30, and 90 days per resume                    |
 | `GET /api/v1/views/{id}`                               | Cookie session             | One resume: 90 daily rows, 12 months, link previews by platform |
 | `GET /api/v1/auth/{provider}/start?purpose=view&slug=` | None                       | Viewer sign-in start (sign in to view)                          |
+| `POST /api/v1/resumes/{id}/publish`                    | Cookie session, CSRF       | Gains optional `signInToView` (sign in to view)                 |
 
 The public `POST` routes accept only a single `application/json` media type and
 an `Origin` equal to the canonical origin, so a cross-site page cannot send them
@@ -50,8 +57,10 @@ rejected it.
 
 Owner routes are cookie-only; bearer tokens never reach them, and no MCP tool
 reads counts. The public start and collect read the session cookie only to
-recognize the owner, never to authorize anything. Sign in to view changes the
-publish route's request with its switch in its own release.
+recognize the owner, and start also to answer `signedIn` for the join invite;
+neither authorizes anything with it. With sign in to view, start needs a pass
+for a `sign_in` resume, the capabilities read gains `signInToView`, and the
+resume response gains the switch.
 
 ## Edge and Caddy
 
@@ -121,11 +130,16 @@ closed; when the buffer is full, the outcome is dropped and logged.
   from start and does nothing. An old cached page never calls start.
 - Rolling back below view counts leaves the two tables unused; nothing public
   depends on them.
-- Rolling back below sign in to view would serve `sign_in` resumes publicly.
-  That release raises the release fence to itself
-  ([release fence](../passkey-release-fence.md)), so `--rollback` below it is
-  refused. To go lower on purpose, first turn the switch off on every resume
-  with an operator command, then lower the fence.
+- Sign in to view ships with its server flag off, so until the fence is raised
+  no resume is gated and rollback below it is safe; the new columns and the
+  `view` purpose stay unused.
+- After the fence is raised to that release, rolling back below it is refused,
+  because an older image would serve `sign_in` resumes publicly
+  ([release](sign-in-to-view.md#release-and-rollback)).
+- A publish dialog loaded before sign in to view omits `signInToView`, which
+  keeps the stored value. A server older than the release treats an unknown
+  `GET` start purpose as login, which is why no gate may render before the
+  release is live.
 
 ## Tests
 
@@ -140,10 +154,15 @@ Tests cite this design, ADR 0022, or `AC-*` IDs.
   flush; live gate re-check; full sets.
 - Go, routes: method, Origin, media type, body bound, strict body shapes, 204
   after validation, owner routes need a session, dense days and months.
-- Go, sign in: gate for every gated route with and without a pass; `view`
-  purpose never touches accounts or sessions and writes nothing about the
-  viewer, including a subject that belongs to an account; turning sign-in on
-  waits for the fence and raises the epoch.
+- Go, sign in: gate for every gated route with and without a pass, before the
+  public cache, with a cached entry present; a pass for another resume, an old
+  epoch, an expired pass, a bad tag, and an 11-pass cookie; `view` purpose never
+  touches accounts or sessions and writes nothing about the viewer, including a
+  subject that belongs to an account, on Google and on LinkedIn without a nonce;
+  callback when the switch went off, the resume was unpublished, or the slug
+  changed; turning sign-in on waits for the fence, ends an open live stream, and
+  raises the epoch; the flag refuses turning it on but allows turning it off;
+  discovery is off while it is on.
 - Store: migrations up, down, and up; grants; cascades; constraint checks; the
   upsert, summary, and sweep queries.
 - Web: the script sends nothing before 8 s visible and one trusted event, and
@@ -171,9 +190,11 @@ After each deploy, on a fictional published resume, evidence under
 5. From an EC2 instance with headless Chromium: `bot` or `datacenter` rises.
 6. The CloudWatch metrics of the two label rules show matches, and no rule
    blocks.
-7. Sign in to view, in its release: anonymous `/{slug}`, JSON, PDF, and live
-   stream are gated; Google sign-in shows the resume and the invite after
-   scrolling; closing the invite keeps it closed on reload; no row names the
-   viewer; turning the switch off serves the resume publicly at once.
+7. Sign in to view, in its release, after the flag is on: anonymous `/{slug}`,
+   JSON, photo, PDF, view start, and live stream are gated; Google and LinkedIn
+   sign-in each show the resume and the invite after scrolling; closing the
+   invite keeps it closed on reload; no row or log line names the viewer;
+   turning the switch off serves the resume publicly at once; a
+   `deploy.sh --rollback` below the release is refused.
 
 [waf-price]: https://aws.amazon.com/waf/pricing/
