@@ -24,7 +24,7 @@ WAL to a second vStorage bucket. Agents send logs and metrics to vMonitor.
 | Concern            | Today (AWS, CloudFront)                     | Vietnam production                                          |
 | ------------------ | ------------------------------------------- | ----------------------------------------------------------- |
 | Edge, TLS, cache   | CloudFront, public origin cert, origin mTLS | vCDN Web Accelerator; origin allowlist plus secret header   |
-| DNS                | Cloudflare, DNS-only CNAMEs to CloudFront   | vDNS                                                        |
+| DNS                | Route 53 with DNSSEC, alias to CloudFront   | P.A Vietnam DNS Pro with DNSSEC                             |
 | Compute            | EC2 `t4g.small`, Bottlerocket ECS           | One amd64 vServer, Podman containers under systemd          |
 | Database           | RDS PostgreSQL 18, 30-day PITR              | PostgreSQL 18 on the vServer, pgBackRest to vStorage        |
 | Media              | Private S3, task role                       | Private vStorage bucket, static key for one service account |
@@ -94,11 +94,12 @@ add it if abuse appears.
 
 ## DNS and mail
 
-vDNS hosts the `aboutme.vn` zone, with the apex pointing at vCDN. **Unconfirmed,
-blocker for the NS move:** vDNS supports an apex CNAME, ALIAS, or flattening. If
-not, the choices are apex A records to stable vCDN addresses, if vCDN has them,
-or Cloudflare as a DNS-only host. The [cutover](#5-cutover) switches records at
-Cloudflare first and moves NS later, so it does not wait on vDNS.
+P.A Vietnam, the registrar, hosts the `aboutme.vn` zone on DNS Pro with DNSSEC,
+with the apex pointing at vCDN. GreenNode vDNS is private DNS inside a VPC and
+cannot host the public zone. **Unconfirmed, blocker for the NS move:** DNS Pro
+supports an apex ALIAS or flattening. If not, the apex uses A records to stable
+vCDN addresses, if vCDN has them. The [cutover](#5-cutover) switches records at
+Route 53 first and moves NS and DS later, so it does not wait on this.
 
 - MX: Bizfly Business Email, after Google Workspace mail has moved.
 - Root SPF: the two Bizfly includes only; `~all` until DMARC reports are clean,
@@ -257,10 +258,10 @@ addresses and request headers. Alarms email the support mailbox.
 
 The `vngcloud/vngcloud` OpenTofu provider (1.3.21, **Unconfirmed** at build
 time) covers servers, volumes, security groups, and floating IPs, but not
-buckets, vCDN, vDNS, or vMonitor. A script creates buckets with the S3 API.
-vCDN, vDNS, and vMonitor settings are applied by API scripts where an API
-exists, or by console steps in the runbook; a change to one updates the runbook
-in the same change.
+buckets, vCDN, or vMonitor, or for P.A Vietnam DNS. A script creates buckets
+with the S3 API. vCDN, DNS, and vMonitor settings are applied by API scripts
+where an API exists, or by console steps in the runbook; a change to one updates
+the runbook in the same change.
 
 State uses the S3 backend on a vStorage bucket with path-style addressing and
 the AWS-only checks skipped. OpenTofu encrypts state client-side with the
@@ -314,7 +315,7 @@ deploy/vn/
   prod/        OpenTofu root: vServer, volumes, security groups, floating IP
   host/        cloud-init, sysctl, Quadlet units, timers, postgresql.conf,
                pg_hba.conf, pgbackrest.conf, log and metric agent config
-  edge/        vCDN, vDNS, and vMonitor settings and the scripts that apply them
+  edge/        vCDN, DNS, and vMonitor settings and the scripts that apply them
   probe/       host fact checks (Podman networking, Chromium sandbox)
   scripts/     deploy.sh, fence.sh, secrets.sh, buckets.sh, restore-drill.sh,
                cutover.sh
@@ -347,15 +348,15 @@ Each ships alone on AWS before cutover:
 
 Devops applies `deploy/vn/prod`, creates buckets, installs the host, secrets,
 PostgreSQL, pgBackRest, agents, and alarms, and runs the probe. Bizfly
-verification records go into Cloudflare DNS beside the existing ones.
+verification records go into Route 53 beside the existing ones.
 
 ### 4. Rehearsal
 
-Under a temporary hostname such as `vn-rehearsal.aboutme.vn` (a DNS-only
-Cloudflare record to vCDN), with fictional data only: first deploy, a normal
-deploy, rollback, a restore drill, every alarm once, mail to a test mailbox, SSE
-and MCP through vCDN, forged-header and direct-IP probes, and a timed dry run of
-the cutover script.
+Under a temporary hostname such as `vn-rehearsal.aboutme.vn` (a Route 53 record
+to vCDN), with fictional data only: first deploy, a normal deploy, rollback, a
+restore drill, every alarm once, mail to a test mailbox, SSE and MCP through
+vCDN, forged-header and direct-IP probes, and a timed dry run of the cutover
+script.
 
 ### 5. Cutover
 
@@ -373,10 +374,10 @@ In one announced maintenance window:
    match and equal object counts.
 5. Run `migrate` if the cutover release adds migrations, start the app, and
    smoke it through vCDN with the production host.
-6. Switch the apex and `www` at Cloudflare to DNS-only CNAMEs to vCDN (TTL 60
-   seconds), and MX and SPF to Bizfly. Visitors on old DNS still get the AWS
-   maintenance page.
-7. After 48 hours with no AWS traffic, move NS to vDNS with identical records.
+6. Switch the apex and `www` at Route 53 to vCDN (TTL 60 seconds), and MX and
+   SPF to Bizfly. Visitors on old DNS still get the AWS maintenance page.
+7. After 48 hours with no AWS traffic, move NS and DS to P.A Vietnam with
+   identical records and a new DNSSEC key.
 
 The auth-mail keys move with the database, so pending outbox mail sends from
 Vietnam. Sessions, passkeys (RP ID `aboutme.vn`), TOTP, and agent grants keep
@@ -425,7 +426,7 @@ subprocessors come from the provider's published terms.
 | Q7  | GreenNode vCDN     | Does vCDN verify the origin certificate? Does it offer a managed apex certificate with automatic renewal?                      |
 | Q8  | GreenNode vCDN     | Where are viewer request logs stored, and for how long?                                                                        |
 | Q9  | GreenNode vCDN     | What L7 protection applies without vWAF?                                                                                       |
-| Q10 | GreenNode vDNS     | Does the apex support CNAME, ALIAS, or flattening? DNSSEC? A records API?                                                      |
+| Q10 | P.A Vietnam DNS    | Does DNS Pro support an apex ALIAS or flattening? An API for records? Does vCDN give stable apex IPs?                          |
 | Q11 | GreenNode vStorage | Does `PUT` with `If-None-Match: *` return 412 when the key exists?                                                             |
 | Q12 | GreenNode vStorage | Are pgBackRest and the OpenTofu S3 backend supported with path-style addressing and conditional writes?                        |
 | Q13 | GreenNode vStorage | Where is each region's data stored, including replicas?                                                                        |
