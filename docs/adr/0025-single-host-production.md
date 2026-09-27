@@ -1,9 +1,8 @@
 # 0025: Single-host AWS production behind CloudFront and Route 53
 
-Status: Accepted (2026-09-05 to 2026-09-26), by the human owner's direction.
-Choices marked **Owner approval** in the
-[CloudFront edge design](../design/cloudfront-edge.md) stay open until the owner
-approves them.
+Status: Accepted (2026-09-05 to 2026-09-26), by the human owner's direction. The
+owner approved every choice in the
+[CloudFront edge design](../design/cloudfront-edge.md).
 
 ## Context
 
@@ -72,7 +71,7 @@ images by digest.
   address from `CloudFront-Viewer-Address` and sends Go one `X-Real-IP`. Caddy,
   not the edge, adds HSTS and `nosniff` and removes `Server`.
 - AWS WAF with a rate-based rule and two managed groups provides
-  application-layer protection (**Owner approval**).
+  application-layer protection, blocking since 2026-09-26.
 
 ### DNS
 
@@ -94,7 +93,7 @@ images by digest.
 - Test accounts and real accounts share one database.
 - AWS, the hosting processor, terminates TLS at edges and answers DNS. Once the
   Cloudflare zone is removed, Cloudflare processes no aboutme data, and the
-  privacy notice changes in both languages (**Owner approval**: the exact text).
+  privacy notice names only AWS in both languages.
 - Cost is about USD 45 to 55 a month for the host, plus about USD 11 for the WAF
   and exportable origin certificate and about USD 1.50 for the hosted zone and
   KMS key. CloudFront stays inside its free tier at current traffic, and alias
