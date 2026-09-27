@@ -356,34 +356,83 @@ func TestAuthorize_TrustedAndUntrustedValidationMatrix(t *testing.T) {
 	}
 }
 
+// resourceCase is one resource query or form suffix. Rule 1 of
+// docs/design/mcp-client-compatibility.md accepts only the origin and
+// origin + "/mcp", each in the exact raw form url.QueryEscape produces.
+type resourceCase struct {
+	name   string
+	suffix string
+	valid  bool
+}
+
+// resourceCases lists both accepted spellings and the rejected neighbors that
+// a lenient comparison (URL normalization, case folding, or decoding before
+// comparing) would let through.
+var resourceCases = []resourceCase{
+	{"missing", "", true},
+	{"origin", "&resource=https%3A%2F%2Faboutme.example", true},
+	{"mcp endpoint", "&resource=https%3A%2F%2Faboutme.example%2Fmcp", true},
+	{"empty", "&resource=", false},
+	{"trailing slash origin", "&resource=https%3A%2F%2Faboutme.example%2F", false},
+	{"mcp trailing slash", "&resource=https%3A%2F%2Faboutme.example%2Fmcp%2F", false},
+	{"mcp upper case", "&resource=https%3A%2F%2Faboutme.example%2FMCP", false},
+	{"other path", "&resource=https%3A%2F%2Faboutme.example%2Fapi", false},
+	{"http scheme", "&resource=http%3A%2F%2Faboutme.example%2Fmcp", false},
+	{"http origin", "&resource=http%3A%2F%2Faboutme.example", false},
+	{"other host", "&resource=https%3A%2F%2Fagent.example%2Fmcp", false},
+	{"other origin", "&resource=https%3A%2F%2Fagent.example", false},
+	{"explicit port", "&resource=https%3A%2F%2Faboutme.example%3A443%2Fmcp", false},
+	{"query", "&resource=https%3A%2F%2Faboutme.example%2Fmcp%3Fx%3D1", false},
+	{"empty query", "&resource=https%3A%2F%2Faboutme.example%2Fmcp%3F", false},
+	{"fragment", "&resource=https%3A%2F%2Faboutme.example%2Fmcp%23x", false},
+	{"duplicate origin", "&resource=https%3A%2F%2Faboutme.example&resource=https%3A%2F%2Faboutme.example", false},
+	{"origin and mcp", "&resource=https%3A%2F%2Faboutme.example&resource=https%3A%2F%2Faboutme.example%2Fmcp", false},
+	{"duplicate mcp", "&resource=https%3A%2F%2Faboutme.example%2Fmcp&resource=https%3A%2F%2Faboutme.example%2Fmcp", false},
+	{"encoded origin dot", "&resource=https%3A%2F%2Faboutme%2Eexample", false},
+	{"raw slash mcp", "&resource=https%3A%2F%2Faboutme.example/mcp", false},
+	{"unescaped mcp", "&resource=https://aboutme.example/mcp", false},
+	{"lower case hex mcp", "&resource=https%3a%2f%2faboutme.example%2fmcp", false},
+	{"encoded mcp letter", "&resource=https%3A%2F%2Faboutme.example%2F%6Dcp", false},
+	{"malformed", "&resource=%ZZ", false},
+}
+
+func TestCanonicalResource_ExactSpellings(t *testing.T) {
+	s := &Service{publicOrigin: "https://aboutme.example"}
+	for _, tc := range resourceCases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := "client_id=x" + tc.suffix
+			values, err := url.ParseQuery(raw)
+			got := err == nil && s.canonicalResource(values, raw)
+			if got != tc.valid {
+				t.Fatalf("canonicalResource(%q) = %v, want %v", raw, got, tc.valid)
+			}
+		})
+	}
+	// An encoded key decodes to "resource" but has no raw "resource=" field
+	// to check, so it fails closed.
+	raw := "%72esource=https%3A%2F%2Faboutme.example%2Fmcp"
+	values, err := url.ParseQuery(raw)
+	if err != nil || s.canonicalResource(values, raw) {
+		t.Fatalf("encoded resource key accepted: %v", err)
+	}
+}
+
 func TestAuthorize_ResourceCompatibility(t *testing.T) {
 	s, q, client, user := newAuthorizeHarness(t)
 	base := urlMustParse(t, authorizeURL(client.ID, "resumes:read"))
 	if _, err := q.UpsertOAuthGrant(context.Background(), store.UpsertOAuthGrantParams{UserID: user.ID, ClientID: client.ID, Scopes: "resumes:read", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("seed grant: %v", err)
 	}
-	for _, tc := range []struct {
-		name  string
-		raw   string
-		valid bool
-	}{
-		{"missing", base.String(), true},
-		{"canonical", base.String() + "&resource=https%3A%2F%2Faboutme.example", true},
-		{"empty", base.String() + "&resource=", false},
-		{"duplicate", base.String() + "&resource=https%3A%2F%2Faboutme.example&resource=https%3A%2F%2Faboutme.example", false},
-		{"encoded", base.String() + "&resource=https%3A%2F%2Faboutme%2Eexample", false},
-		{"path", base.String() + "&resource=https%3A%2F%2Faboutme.example%2Fmcp", false},
-		{"other origin", base.String() + "&resource=https%3A%2F%2Fagent.example", false},
-		{"malformed only", base.String() + "&resource=%ZZ", false},
-		{"canonical and malformed duplicate", base.String() + "&resource=https%3A%2F%2Faboutme.example&resource=%ZZ", false},
-	} {
+	cases := append(append([]resourceCase(nil), resourceCases...),
+		resourceCase{"canonical and malformed duplicate", "&resource=https%3A%2F%2Faboutme.example&resource=%ZZ", false})
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var before int
 			if err := s.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_authorization_codes WHERE client_id = $1", client.ID).Scan(&before); err != nil {
 				t.Fatalf("count codes before: %v", err)
 			}
 			sess := issueTestSession(t, s.pool, user.ID, s.clock(), nil)
-			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, tc.raw, nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, base.String()+tc.suffix, nil)
 			req = req.WithContext(auth.ContextWithSession(req.Context(), sess))
 			rec := httptest.NewRecorder()
 			s.HandleAuthorize(rec, req)

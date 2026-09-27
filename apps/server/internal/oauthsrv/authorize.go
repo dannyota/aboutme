@@ -120,17 +120,26 @@ func (s *Service) authorizeRequest(ctx context.Context, values url.Values, rawQu
 	return query, client, true, nil
 }
 
+// canonicalResource accepts zero or one RFC 8707 resource naming the one
+// protected resource: the MCP endpoint URL or the bare origin, byte for byte.
+// The first raw resource field must also be the exact url.QueryEscape form of
+// that value, so no other percent-encoding, case, or normalization of an
+// accepted value passes. See docs/design/mcp-client-compatibility.md.
 func (s *Service) canonicalResource(values url.Values, raw string) bool {
 	resources, present := values["resource"]
 	if !present {
 		return true
 	}
-	if len(resources) != 1 || resources[0] != s.publicOrigin {
+	if len(resources) != 1 {
+		return false
+	}
+	value := resources[0]
+	if value != s.publicOrigin && value != s.publicOrigin+mcpResourcePath {
 		return false
 	}
 	for _, field := range strings.Split(raw, "&") {
 		if strings.HasPrefix(field, "resource=") {
-			return field == "resource="+url.QueryEscape(s.publicOrigin)
+			return field == "resource="+url.QueryEscape(value)
 		}
 	}
 	return false
