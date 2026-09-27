@@ -129,6 +129,8 @@ const functionFixtures: Readonly<Record<string, readonly unknown[]>> = {
   'editor-controls.controls.photoStatusBusy': ['Wait'],
   'editor-controls.controls.photoStatusRateLimited': ['Wait'],
   'editor-controls.controls.templatePart': ['Layout', 'applied'],
+  'editor-controls.controls.templateSearchNoMatch': ['ats'],
+  'editor-controls.controls.templateSearchCount': [2],
   'editor-controls.controls.tryAgainLater': [2],
   'editor-controls.page.horizontal': ['mm'],
   'editor-controls.page.vertical': ['mm'],
