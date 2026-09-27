@@ -44,6 +44,7 @@ record may change until accepted.
 | [0026](0026-replica-scaling.md)                          | Accepted | One serving replica; the designed path to a second                               |
 | [0027](0027-vietnam-hosted-production.md)                | Accepted | Move production to Vietnam-hosted providers                                      |
 | [0028](0028-deployment-transparency-observer.md)         | Accepted | An independent observer publishes the running image digests                      |
+| [0029](0029-community-showcase.md)                       | Proposed | Opt-in, reviewed, uncached, never-indexed showcase of published resumes          |
 
 ## Former numbers
 

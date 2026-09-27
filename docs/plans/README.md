@@ -9,10 +9,11 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
 |[link-previews.md](link-previews.md)|Link previews, releases 0.6.0 and 0.6.1 (card, publish-panel preview, and the Verify page)|
 |[linkedin.md](linkedin.md)|LinkedIn import from Save to PDF (0.6.6), approved; waiting for the owner's shape report|
-|[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup (0.6.7); view counts shipped in v0.6.4|
+|[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup; view counts shipped in v0.6.4|
 |[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0028](../adr/0028-deployment-transparency-observer.md)), waiting for owner approvals|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
-|[public-page-theme.md](public-page-theme.md)|Public page bar and light/dark theme (0.6.10)|
+|[public-page-theme.md](public-page-theme.md)|Public page bar and light/dark theme|
+|[showcase.md](showcase.md)|Community showcase ([ADR 0029](../adr/0029-community-showcase.md), proposed), waiting for owner approvals|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
@@ -40,7 +41,7 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 
 ## Remaining
 
-- Release order: 0.6.5 aboutme.vn wordmark and brand art, 0.6.6 [LinkedIn PDF import](linkedin.md), 0.6.7 [sign in to view and the join popup](viewer-analytics.md), 0.6.9 community showcase (no plan yet), 0.6.10 [public page bar and light/dark theme](public-page-theme.md), 0.6.11 MCP guide page (no plan yet). The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside them.
+- Release order, next four: [sign in to view and the join popup](viewer-analytics.md), [public page bar and light/dark theme](public-page-theme.md), MCP guide page (no plan yet), [community showcase](showcase.md). Each takes its version number when it ships. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside them.
 - [Vietnam production migration](vietnam-production.md): provider confirmation, app preparation releases, build, rehearsal, cutover, AWS real-data deletion.
 - [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
