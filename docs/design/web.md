@@ -58,7 +58,7 @@ Every page title follows `<page> · aboutme.vn`; the homepage uses its own
 headline title, and the editor uses the resume title. Only `/`, `/privacy`, and
 `/terms` are indexable. Each carries a meta description, a canonical link to
 `https://aboutme.vn/<path>`, Open Graph and Twitter card tags, and a 1200 × 630
-Open Graph image in the page language, `/og-image-v4.jpg` in Vietnamese or
+Open Graph image in the page language, `/og-image-v5.jpg` in Vietnamese or
 `/og-image-v4-en.jpg` in English ([docs/brand](../brand/README.md)); the
 homepage also carries a JSON-LD graph of WebSite, Organization, and a free
 WebApplication, with no ratings, reviews, or counts. Every other Nuxt route
