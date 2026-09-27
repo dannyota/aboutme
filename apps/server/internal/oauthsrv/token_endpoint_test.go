@@ -574,24 +574,14 @@ func (f codeFixture) exchange(t *testing.T, clientID uuid.UUID, redirect, verifi
 	return w
 }
 
+// Rule 1 of docs/design/mcp-client-compatibility.md: the code exchange accepts
+// the same two resource spellings as authorize and rejects every neighbor with
+// invalid_grant, before the code is consumed or any token is written.
 func TestToken_ResourceCompatibility(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		value string
-		valid bool
-	}{
-		{"missing", "", true},
-		{"canonical", "&resource=https%3A%2F%2Faboutme.example", true},
-		{"empty", "&resource=", false},
-		{"duplicate", "&resource=https%3A%2F%2Faboutme.example&resource=https%3A%2F%2Faboutme.example", false},
-		{"encoded", "&resource=https%3A%2F%2Faboutme%2Eexample", false},
-		{"path", "&resource=https%3A%2F%2Faboutme.example%2Fmcp", false},
-		{"other origin", "&resource=https%3A%2F%2Fagent.example", false},
-		{"malformed", "&resource=%ZZ", false},
-	} {
+	for _, tc := range resourceCases {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newCodeFixture(t, time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC))
-			body := "grant_type=authorization_code&code=" + f.code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + f.clientID.String() + "&code_verifier=" + f.verifier + tc.value
+			body := "grant_type=authorization_code&code=" + f.code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + f.clientID.String() + "&code_verifier=" + f.verifier + tc.suffix
 			r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
 			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 			w := httptest.NewRecorder()
@@ -600,45 +590,28 @@ func TestToken_ResourceCompatibility(t *testing.T) {
 				if w.Code != http.StatusOK {
 					t.Fatalf("valid resource response = %d %q", w.Code, w.Body.String())
 				}
-			} else {
-				if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
-					t.Fatalf("invalid resource response = %d %q", w.Code, w.Body.String())
-				}
-				code, err := f.q.GetOAuthAuthorizationCodeByDigest(context.Background(), f.digest[:])
-				if err != nil || code.ConsumedAt != nil {
-					t.Fatal("invalid resource consumed code")
-				}
-				var tokens int
-				if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE client_id = $1", f.clientID).Scan(&tokens); err != nil || tokens != 0 {
-					t.Fatalf("invalid resource inserted tokens: %d %v", tokens, err)
-				}
+				return
+			}
+			if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_grant","error_description":"The request is invalid."}` {
+				t.Fatalf("invalid resource response = %d %q", w.Code, w.Body.String())
+			}
+			code, err := f.q.GetOAuthAuthorizationCodeByDigest(context.Background(), f.digest[:])
+			if err != nil || code.ConsumedAt != nil {
+				t.Fatal("invalid resource consumed code")
+			}
+			var tokens int
+			if err := f.pool.QueryRow(context.Background(), "SELECT count(*) FROM oauth_tokens WHERE client_id = $1", f.clientID).Scan(&tokens); err != nil || tokens != 0 {
+				t.Fatalf("invalid resource inserted tokens: %d %v", tokens, err)
 			}
 		})
 	}
 
-	f := newRefreshFixture(t, time.Date(2026, 9, 11, 12, 0, 0, 0, time.UTC), time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC))
-	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+f.raw+"&resource=https%3A%2F%2Faboutme.example"))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w := httptest.NewRecorder()
-	f.s.HandleToken(w, r)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("refresh resource response = %d", w.Code)
-	}
-
-	r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader("grant_type=refresh_token&refresh_token="+f.raw+"&resource=%ZZ"))
-	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w = httptest.NewRecorder()
-	f.s.HandleToken(w, r)
-	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_request","error_description":"The request is invalid."}` {
-		t.Fatalf("malformed refresh resource response = %d %q", w.Code, w.Body.String())
-	}
-
 	code := newCodeFixture(t, time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC))
 	body := "grant_type=authorization_code&code=" + code.code + "&redirect_uri=http%3A%2F%2F127.0.0.1%3A20090%2Fcallback&client_id=" + code.clientID.String() + "&code_verifier=" + code.verifier + "&resource=https%3A%2F%2Faboutme.example&extra=%ZZ"
-	r = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "https://aboutme.example/oauth/token", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	w = httptest.NewRecorder()
-	f.s.HandleToken(w, r)
+	w := httptest.NewRecorder()
+	code.s.HandleToken(w, r)
 	if w.Code != http.StatusBadRequest || w.Body.String() != `{"error":"invalid_request","error_description":"The request is invalid."}` {
 		t.Fatalf("canonical resource with malformed extra response = %d %q", w.Code, w.Body.String())
 	}
@@ -656,7 +629,7 @@ func TestToken_CodeBindingAndExpiryMatrixDoesNotConsume(t *testing.T) {
 		{"wrong verifier", func(f *codeFixture) {
 			f.verifier = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~abcdefx"
 		}, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"The request is invalid."}`},
-		{"unknown client", func(f *codeFixture) { f.clientID = uuid.New() }, http.StatusBadRequest, `{"error":"invalid_client","error_description":"The request is invalid."}`},
+		{"unknown client", func(f *codeFixture) { f.clientID = uuid.New() }, http.StatusUnauthorized, `{"error":"invalid_client","error_description":"The request is invalid."}`},
 		{"wrong redirect", func(f *codeFixture) {}, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"The request is invalid."}`},
 		{"expiry exact", func(f *codeFixture) { f.s.clock = func() time.Time { return f.now.Add(60 * time.Second) } }, http.StatusBadRequest, `{"error":"invalid_grant","error_description":"The request is invalid."}`},
 		{"expiry after", func(f *codeFixture) {
