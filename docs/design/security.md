@@ -142,12 +142,17 @@ no provider refresh token is stored.
 
 OAuth start methods are purpose-specific:
 
-- `GET /api/v1/auth/{provider}/start` starts an unauthenticated login only.
+- `GET /api/v1/auth/{provider}/start` starts an unauthenticated login by
+  default.
+- The same `GET` route also starts the unauthenticated `view` purpose with
+  `?purpose=view&slug={slug}`, which gates one public resume for sign in to view
+  and never an account
+  ([sign in to view](viewer-analytics/sign-in-to-view.md#sign-in-flow)).
 - Authenticated link and reauthentication starts use a CSRF-protected `POST`.
   The response contains an authorize URL that the browser opens as a top-level
   navigation.
 - A `GET` carrying `purpose=link` or `purpose=reauth` returns `405` and creates
-  no transaction.
+  no transaction. Any other or unrecognized `purpose` value still starts login.
 
 [ADR 0016](../adr/0016-sign-in-providers.md) records why privileged starts do
 not use links or redirects.

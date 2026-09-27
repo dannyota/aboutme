@@ -6,9 +6,9 @@ they sign up. Each listing shows the resume's stored link-preview card and links
 to the public resume. Nothing about visitors is recorded.
 [ADR 0029](../adr/0029-community-showcase.md) records the decisions.
 
-Status: proposed. Every choice marked **Owner approval** S1 to S13 needs the
-owner's answer before code starts; the [approvals](#owner-approvals) section
-lists each with a recommendation.
+Status: approved (2026-09-27), ready to build. The owner approved every choice
+marked **Owner approval** S1 to S13, listed with its recommendation in the
+[approvals](#owner-approvals) section, as written.
 
 ## Opt-in
 
@@ -382,20 +382,22 @@ a one-shot task under the deploy role; the public app gains no privileged route.
 
 ## Owner approvals
 
-Each item needs the owner's answer; the last column is the recommendation.
+Each item needs the owner's answer; the last column records it. The owner
+approved every item on 2026-09-27, as its recommendation reads, with the choices
+below settled.
 
-| ID  | Decision                                                                                                                      | Recommendation                                                                   |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| S1  | Separate switch, off by default, live and open view only; unpublish, sign in to view, and delete end it; republish starts off | Approve as written                                                               |
-| S2  | Tile shows the stored preview card, template, language, optional role, and Report; no contact, slug text, date, or count      | Approve; a page thumbnail can follow later as its own decision                   |
-| S3  | Owner picks an optional role from the nine Library roles plus Other                                                           | Approve                                                                          |
-| S4  | Template derived by exact token match, else "Custom design"                                                                   | Approve                                                                          |
-| S5  | Newest first by first approval; filters role, language, template in the URL; no popularity order                              | Approve                                                                          |
-| S6  | Review before listing through an out-of-band command; re-review when the review key changes; Report by email                  | Approve review before listing                                                    |
-| S7  | No operator notice at launch and no promised review time in the copy                                                          | Approve; add a daily pending-count email once requests pass five a week          |
-| S8  | `/showcase` noindex and nofollow, outside sitemap and `llms.txt`; SEO and GEO switch unchanged                                | Approve                                                                          |
-| S9  | Route `/showcase`; nav link Community / Cộng đồng after Library                                                               | Approve                                                                          |
-| S10 | Launch with `/danny` opted in and approved; empty state as written; nav link from day one                                     | Approve, if the owner wants `/danny` listed                                      |
-| S11 | Privacy and Terms text above; update the dates; no advance email, since nothing changes for anyone who does not opt in        | Approve the text; confirm no email, or send the 15-day notice if counsel prefers |
-| S12 | Each resume of an account may be listed on its own, never grouped                                                             | Approve                                                                          |
-| S13 | Twelve listings per page, lazy card images                                                                                    | Approve                                                                          |
+| ID  | Decision                                                                                                                      | Owner decision (2026-09-27)                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| S1  | Separate switch, off by default, live and open view only; unpublish, sign in to view, and delete end it; republish starts off | Approved as written                                                      |
+| S2  | Tile shows the stored preview card, template, language, optional role, and Report; no contact, slug text, date, or count      | Approved; a page thumbnail can follow later as its own decision          |
+| S3  | Owner picks an optional role from the nine Library roles plus Other                                                           | Approved                                                                 |
+| S4  | Template derived by exact token match, else "Custom design"                                                                   | Approved                                                                 |
+| S5  | Newest first by first approval; filters role, language, template in the URL; no popularity order                              | Approved                                                                 |
+| S6  | Review before listing through an out-of-band command; re-review when the review key changes; Report by email                  | Approved                                                                 |
+| S7  | No operator notice at launch and no promised review time in the copy                                                          | Approved; add a daily pending-count email once requests pass five a week |
+| S8  | `/showcase` noindex and nofollow, outside sitemap and `llms.txt`; SEO and GEO switch unchanged                                | Approved                                                                 |
+| S9  | Route `/showcase`; nav link Community / Cộng đồng after Library                                                               | Approved                                                                 |
+| S10 | Launch with `/danny` opted in and approved; empty state as written; nav link from day one                                     | Approved; the owner wants `/danny` listed                                |
+| S11 | Privacy and Terms text above; update the dates; no advance email, since nothing changes for anyone who does not opt in        | Approved: the text as written, and no advance email                      |
+| S12 | Each resume of an account may be listed on its own, never grouped                                                             | Approved                                                                 |
+| S13 | Twelve listings per page, lazy card images                                                                                    | Approved                                                                 |

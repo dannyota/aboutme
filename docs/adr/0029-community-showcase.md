@@ -1,6 +1,6 @@
 # 0029: Community showcase of opted-in resumes
 
-Status: Proposed (2026-09-27). The owner decides the choices marked **Owner
+Status: Accepted (2026-09-27). The owner approved every choice marked **Owner
 approval** (S1 to S13) in the [showcase design](../design/showcase.md).
 
 ## Context
@@ -71,3 +71,8 @@ document stores no template identity.
   `showcase` becomes claimable as a slug on the older release.
 - The privacy notice and terms gain the text in the design; the next regular
   impact-assessment update notes the showcase.
+
+## History
+
+- Accepted (2026-09-27): the owner approved S1 to S13 in the showcase design as
+  written, including the privacy and terms text and no advance email (S11).

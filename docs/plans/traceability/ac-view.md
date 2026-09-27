@@ -1,0 +1,29 @@
+# AC-VIEW traceability rows
+
+Ten acceptance-criterion rows use the `AC-VIEW-` prefix, for sign in to view
+([design](../../design/viewer-analytics/sign-in-to-view.md),
+[ADR 0022](../../adr/0022-viewer-privacy-and-counting.md),
+[ADR 0016](../../adr/0016-sign-in-providers.md)). The owner approved the design
+on 2026-09-27; no row is built yet, so every row starts `OPEN` with no phase or
+task assigned. A phase plan assigns the `Phase/task` column when work starts
+and moves each row through the states in [README.md](./README.md). See
+[README.md](./README.md) for matrix rules and the full prefix index.
+
+| ID           | Design clause                                                                              | Statement                                                                                                                                                                                                    | Phase/task | State | Test / acceptance reference |
+| ------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ----- | ---------------------------- |
+| AC-VIEW-001 | [Setting](../../design/viewer-analytics/sign-in-to-view.md#setting)                          | The `signInToView` publish switch is off by default, stored on the resume outside the document, changes no rendered content, and is gated by `SIGN_IN_TO_VIEW_ENABLED`; an omitted publish field keeps the stored value and MCP has no path to change it | —          | OPEN  | None yet                    |
+| AC-VIEW-002 | [Gate](../../design/viewer-analytics/sign-in-to-view.md#gate)                                | A request for `/{slug}` without a valid pass returns the gate page with `200`, `Cache-Control: no-store`, and `X-Robots-Tag: noindex, noarchive`; the gate holds no resume content and no script, and its only dynamic input is the closed `signin` query value | —          | OPEN  | None yet                    |
+| AC-VIEW-003 | [Gated routes](../../design/viewer-analytics/sign-in-to-view.md#gated-routes)                | Every public representation of a `sign_in` resume requires a pass except the preview card and its alias; a gated response adds `private` to `Cache-Control`, and each handler checks the pass after admission and before the public cache                | —          | OPEN  | None yet                    |
+| AC-VIEW-004 | [Sign-in flow](../../design/viewer-analytics/sign-in-to-view.md#sign-in-flow)                | `GET /api/v1/auth/{provider}/start?purpose=view&slug={slug}` is unauthenticated, shares the anonymous start limiter, rejects a malformed slug with `400`, and requests scope `openid` only so the provider returns no name or email                       | —          | OPEN  | None yet                    |
+| AC-VIEW-005 | [Sign-in flow](../../design/viewer-analytics/sign-in-to-view.md#sign-in-flow)                | The `view` callback never looks up, creates, links, or signs in an account and never creates a session; it verifies the ID token, re-reads the resume by ID, discards every claim, and sets a pass only when the resume is live with the switch on        | —          | OPEN  | None yet                    |
+| AC-VIEW-006 | [Sign-in flow](../../design/viewer-analytics/sign-in-to-view.md#sign-in-flow)                | Public routes never read the account session to admit a request; the owner is gated on their own `sign_in` resume like any other viewer                                                                                                                    | —          | OPEN  | None yet                    |
+| AC-VIEW-007 | [Pass cookie](../../design/viewer-analytics/sign-in-to-view.md#pass-cookie)                  | `__Host-view-pass` holds at most 10 MAC-sealed passes under `VIEW_PASS_KEY`, each naming a resume ID, pass epoch, and expiry; a pass expires 7 days after sign-in, is never extended, and names no person                                                  | —          | OPEN  | None yet                    |
+| AC-VIEW-008 | [Join invite](../../design/viewer-analytics/sign-in-to-view.md#join-invite)                  | The join invite shows only to a pass holder on a `sign_in` resume with no aboutme session, after the scroll or dwell threshold, never in the first 5 s, and a close click persists for 90 days in that browser only                                       | —          | OPEN  | None yet                    |
+| AC-VIEW-009 | [Release and rollback](../../design/viewer-analytics/sign-in-to-view.md#release-and-rollback) | The release ships with `SIGN_IN_TO_VIEW_ENABLED` false; the deployer refuses the flag on below this release's fence floor, and `--rollback` below the release is refused once the fence is raised                                                          | —          | OPEN  | None yet                    |
+| AC-VIEW-010 | [Setting](../../design/viewer-analytics/sign-in-to-view.md#setting)                          | While `signInToView` is on, effective discovery is forced off and the publish dialog shows the discovery switch disabled while keeping its stored value, restored when sign-in to view is turned off                                                      | —          | OPEN  | None yet                    |
+
+Paths under `internal/` are in `apps/server/`; web test paths are in
+`apps/web/`. `AC-VIEW-006` covers **Owner approval** V9, `AC-VIEW-004` covers
+V10, `AC-VIEW-009` covers V11 and V12, and `AC-VIEW-010` covers V13, all
+approved 2026-09-27 in
+[viewer analytics](../../design/viewer-analytics/README.md#owner-approval).
