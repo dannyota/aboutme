@@ -2,10 +2,10 @@
 
 Production at `https://aboutme.vn` runs behind Amazon CloudFront, in front of
 the same EC2 host, with no load balancer, under
-[ADR 0054](../adr/0054-cloudfront-edge-for-single-host-production.md). Route 53
-serves DNS ([ADR 0056](../adr/0056-route-53-production-dns.md),
+[ADR 0025](../adr/0025-single-host-production.md). Route 53 serves DNS
+([ADR 0025](../adr/0025-single-host-production.md),
 [DNS runbook](../runbooks/dns.md)). This edge is interim:
-[ADR 0051](../adr/0051-vietnam-hosted-production.md) still governs the later
+[ADR 0027](../adr/0027-vietnam-hosted-production.md) still governs the later
 move to Vietnam, which replaces this edge with vCDN.
 
 Status: built and serving production. **Owner approval** marks a choice the
@@ -127,7 +127,7 @@ the host. The viewer certificate stays separate so its key never leaves ACM.
   answers; price class All.
 - The viewer `Host` is forwarded, so Caddy sees the same hosts as behind
   Cloudflare, and `www` keeps redirecting at the origin.
-- **DNS is Route 53** ([ADR 0056](../adr/0056-route-53-production-dns.md)). The
+- **DNS is Route 53** ([ADR 0025](../adr/0025-single-host-production.md)). The
   apex and `www` are alias A, AAAA, and HTTPS records to the distribution in a
   DNSSEC-signed zone ([DNS runbook](../runbooks/dns.md)). An alias answer
   follows the resolver's client subnet: a Vietnamese subnet got `HAN50`.
@@ -138,9 +138,9 @@ the host. The viewer certificate stays separate so its key never leaves ACM.
 
 ## Cache and forwarding
 
-ADR 0022 stands: edge storage is never publication authority. CloudFront caches
+ADR 0010 stands: edge storage is never publication authority. CloudFront caches
 only hashed assets and the deployment document, and passes the rest uncached,
-stricter than the 60-second revalidated maximum ADR 0022 allows.
+stricter than the 60-second revalidated maximum ADR 0010 allows.
 
 | Behavior                       | Cache policy                                                   | Origin request policy                                                                    | Methods   |
 | ------------------------------ | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------- |
@@ -255,7 +255,7 @@ adds label-only rules on one path
 Cloudflare handles no page traffic, IP addresses, or decrypted content, and
 after the DNS move it answers no queries either. AWS, already the hosting
 processor, terminates TLS at CloudFront edges worldwide, including in Vietnam,
-so data still leaves Vietnam until the ADR 0051 move. CloudFront access logs and
+so data still leaves Vietnam until the ADR 0027 move. CloudFront access logs and
 WAF logs stay off, as the privacy policy promises no IP address in request logs.
 
 The notice in `apps/web/app/i18n/legal.ts` changes in both languages at cutover:
@@ -315,7 +315,7 @@ Each step ships alone; the site stays on Cloudflare until step 5.
    both) enables the 443 and 8443 listeners, with the client address rule, HSTS,
    `nosniff`, and `Server` removal. Tests cover forged headers per listener,
    IPv4 and unbracketed IPv6 values, duplicates, and a missing header. ADR
-   0051's Caddy edge selection later adds `vcdn` to this list.
+   0027's Caddy edge selection later adds `vcdn` to this list.
 3. **Build the edge.** `tls.sh` stores the client CA parameter and imports the
    client certificate; OpenTofu adds the viewer certificate, the security group,
    the policies, the distribution, and the web ACL; task definitions get

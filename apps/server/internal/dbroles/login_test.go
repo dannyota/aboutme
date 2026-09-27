@@ -19,7 +19,7 @@ import (
 // withCatalogLock runs fn in a transaction that first takes the shared
 // LockID advisory lock, so a test's own database or role writes serialize
 // with concurrent Ensure and SetLoginVerifiers calls on the same database
-// instead of racing them (ADR 0038).
+// instead of racing them (ADR 0005).
 func withCatalogLock(ctx context.Context, db *sql.DB, fn func(*sql.Tx) error) error {
 	tx, beginErr := db.BeginTx(ctx, nil)
 	if beginErr != nil {

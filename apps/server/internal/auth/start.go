@@ -2,7 +2,7 @@ package auth
 
 // Public login uses GET. Privileged link and reauthentication use authenticated,
 // CSRF-protected POST and return an authorization URL. See
-// docs/adr/0014-oauth-start-methods.md.
+// docs/adr/0016-sign-in-providers.md.
 
 import (
 	"context"

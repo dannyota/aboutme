@@ -1,7 +1,7 @@
 // Package contactlink decides whether an email or phone contact detail renders
 // as a mailto: or tel: link, and computes its exact href. The web renderer
 // applies the same rules; a shared corpus keeps them identical. See
-// docs/adr/0043-email-and-phone-links.md.
+// docs/adr/0013-resume-header-and-contacts.md.
 package contactlink
 
 import (
@@ -18,7 +18,7 @@ const (
 
 // Href returns the anchor target for a contact detail and true, or "" and
 // false when the value stays text. Only email and phone details link here;
-// URL types follow the https rule of ADR 0013 and ADR 0041.
+// URL types follow the https rule of ADR 0013.
 func Href(detailType, value string) (string, bool) {
 	switch detailType {
 	case "email":

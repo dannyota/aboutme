@@ -62,7 +62,7 @@ export interface ResolvedRenderModel {
     readonly align: 'left' | 'center';
     readonly detailsLayout: 'inline' | 'stacked';
     readonly iconStyle: 'none' | 'outline';
-    /** Where a photo sits; absent means top (ADR 0044). */
+    /** Where a photo sits; absent means top (ADR 0013). */
     readonly photoPosition: 'top' | 'left' | 'right';
   };
   readonly nameHeading: 'h1' | 'p';

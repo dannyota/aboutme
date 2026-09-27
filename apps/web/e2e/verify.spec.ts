@@ -494,7 +494,7 @@ test('the landing footer verify link reads "Verify" in English', async ({
   await expect(page.getByTestId('landing-verify-link')).toHaveText('Verify');
 });
 
-// --- Pixel baselines (ADR 0050; DESIGN.md), Vietnamese locale, at 390px and
+// --- Pixel baselines (ADR 0020; DESIGN.md), Vietnamese locale, at 390px and
 // 1280px in both themes, for the verified and unavailable states. ---
 
 const BASELINE_STATES = [

@@ -9,7 +9,7 @@ import type { components } from '../api/generated/openapi';
 /**
  * `totpSettings` — the closed contract behind the account-settings
  * authenticator-app (TOTP) controls
- * (`docs/design/totp-second-factor-contract.md`, ADR 0049).
+ * (`docs/design/totp-second-factor-contract.md`, ADR 0017).
  *
  * `TotpSettings` is presentational: it reads `totpEnabled` and
  * `hasOtherActiveFactor` as props, reads the `totpEnrollment` capability

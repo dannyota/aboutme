@@ -27,12 +27,9 @@ documentation or inference that the live checks must confirm.
 | [Legal](legal.md)                     | Roles, basis, notices, retention, with article citations                 |
 | [Delivery](delivery.md)               | Schema, API, edge, limits, cost, rollback, tests, live checks            |
 
-Decisions: [ADR 0060](../../adr/0060-viewer-data-controller-and-consent.md)
-(aboutme controls the counting and keeps no viewer data),
-[ADR 0061](../../adr/0061-layered-human-view-counting.md) (layered counting
-without fingerprinting), and
-[ADR 0062](../../adr/0062-sign-in-to-view-without-an-account.md) (sign in to
-view with nothing stored about the viewer).
+Decisions: [ADR 0022](../../adr/0022-viewer-privacy-and-counting.md): aboutme
+controls the counting and keeps no viewer data, counting is layered without
+fingerprinting, and sign in to view stores nothing about the viewer.
 
 ## Rules
 

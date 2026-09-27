@@ -5,7 +5,7 @@ package auth
 // session, epoch, and recent proofs under the user lock before any write.
 // Targeted revocation also revokes exact rotation partners. See
 // docs/design/security.md, docs/design/second-factor-authentication.md, and
-// docs/adr/0015-session-rotation-delivery.md.
+// docs/adr/0015-accounts-passwords-and-sessions.md.
 
 import (
 	"context"

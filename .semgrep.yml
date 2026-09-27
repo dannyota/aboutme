@@ -2,7 +2,7 @@
 #
 # aboutme handles personal data (resumes) and OAuth sessions. The connected
 # `make scan` command is required at phase gates; offline Semgrep is a narrower
-# local check (docs/adr/0011-risk-tiered-delivery-gates.md). This file holds the
+# local check (docs/adr/0024-delivery-gates.md). This file holds the
 # project-specific custom rules only — the Go rule YAML schema has no
 # `extends`/include directive for pulling registry packs into a single
 # file, so published packs are combined with this file at the CLI/CI
@@ -78,7 +78,7 @@ rules:
           "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
         ]
       references:
-        - "docs/adr/0012-ssr-sanitizer-authority.md (sanitizer contract: bluemonday write-side, DOMPurify client-render-side, one versioned allowlist)"
+        - "docs/adr/0008-ssr-sanitizer-authority.md (sanitizer contract: bluemonday write-side, DOMPurify client-render-side, one versioned allowlist)"
 
   - id: web-inner-html-without-sanitizer
     languages: [typescript, javascript]
@@ -112,7 +112,7 @@ rules:
           "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
         ]
       references:
-        - "docs/adr/0012-ssr-sanitizer-authority.md (sanitizer contract: bluemonday write-side, DOMPurify client-render-side, one versioned allowlist)"
+        - "docs/adr/0008-ssr-sanitizer-authority.md (sanitizer contract: bluemonday write-side, DOMPurify client-render-side, one versioned allowlist)"
 
   - id: go-template-html-without-sanitizer
     languages: [go]
@@ -146,7 +146,7 @@ rules:
           "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
         ]
       references:
-        - "docs/adr/0012-ssr-sanitizer-authority.md (sanitizer contract: bluemonday write-side, DOMPurify client-render-side, one versioned allowlist)"
+        - "docs/adr/0008-ssr-sanitizer-authority.md (sanitizer contract: bluemonday write-side, DOMPurify client-render-side, one versioned allowlist)"
 
   # ---------------------------------------------------------------------
   # http.ResponseWriter wrappers must stay transparent to

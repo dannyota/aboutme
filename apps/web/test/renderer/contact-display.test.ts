@@ -7,7 +7,7 @@ import { ResumeLngKey } from '../../app/components/resume/formatDate';
 import ContactChip from '../../app/components/resume/primitives/ContactChip.vue'; // eslint-disable-line max-len
 
 // Link display modes, custom https links, and brand marks
-// (docs/adr/0041-contact-link-display-and-body-justify.md).
+// (docs/adr/0013-resume-header-and-contacts.md).
 
 type Display = NonNullable<PersonalDetail['display']>;
 
@@ -139,7 +139,7 @@ describe('link display modes', () => {
 
   it('ignores display on email, phone, and text values', () => {
     for (const display of ['full', 'label'] as const) {
-      // An email links as mailto: with its value as the text (ADR 0043).
+      // An email links as mailto: with its value as the text (ADR 0013).
       const email = chip(
         detail('email', 'ada@example.com', { display }),
         'none',

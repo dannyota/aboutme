@@ -125,7 +125,7 @@ function expectPDF(bytes: Uint8Array): void {
 }
 
 // The PDF Title is the print page title, and its dates are the saved
-// revision's time, never the 1970 epoch (ADR 0045).
+// revision's time, never the 1970 epoch (ADR 0011).
 function expectRevisionMetadata(bytes: Uint8Array): void {
   const text = Buffer.from(bytes).toString("latin1");
   stage("owner-metadata-title");

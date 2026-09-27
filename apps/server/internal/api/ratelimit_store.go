@@ -85,7 +85,7 @@ func newRateLimiter(cfg RateLimiterConfig) *rateLimiter {
 }
 
 // BoundedRateLimiter is an exported, key-bounded admission store built on the
-// same ADR 0018 store that RateLimit's middleware uses: at most cfg.MaxKeys
+// same ADR 0007 store that RateLimit's middleware uses: at most cfg.MaxKeys
 // active keys plus one shared overflow bucket, expired-key reclamation, and
 // monotonic-clock fail-closed behavior. It exists so a non-HTTP caller (the
 // password rate policies in internal/auth) can enforce a per-key admission

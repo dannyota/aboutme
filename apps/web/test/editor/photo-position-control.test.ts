@@ -18,7 +18,7 @@ beforeEach(() => {
   locale.value = 'en';
 });
 
-// Photo position in the Design panel (ADR 0044): absent means top, and a
+// Photo position in the Design panel (ADR 0013): absent means top, and a
 // side position on a resume with no header creates the default header.
 
 const HEADER = {

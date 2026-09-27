@@ -8,7 +8,7 @@
 // callers do neither by hand. IdempotencyStore composes writes inside one
 // transaction and forbids external side effects in its callback. See
 // docs/design/data.md and
-// docs/adr/0016-transactional-idempotency.md.
+// docs/adr/0006-transactional-idempotency.md.
 package resume
 
 import (

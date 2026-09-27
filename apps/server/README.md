@@ -49,7 +49,7 @@ describes the budgets and failure handling. Production schedules all five jobs.
 
 Hand-written, append-only files in `migrations/` are the sole relational schema
 source. Goose applies them through `cmd/migrate`, and sqlc reads the same files
-with `sql/queries.sql`. [ADR 0010](../../docs/adr/0010-goose-only-migrations.md)
+with `sql/queries.sql`. [ADR 0005](../../docs/adr/0005-database-migrations.md)
 records this rule.
 
 The root `go.work` connects this module to the generated schema module at

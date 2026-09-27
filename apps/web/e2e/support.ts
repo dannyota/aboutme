@@ -176,7 +176,7 @@ export async function denyExternalRequests(page: Page): Promise<string[]> {
   return attempted;
 }
 
-// Renderer baselines stay exact (ADR 0029). Chrome captures allow a few
+// Renderer baselines stay exact (ADR 0019). Chrome captures allow a few
 // hundred pixels: Chromium's software raster anti-aliases rounded corners
 // two ways between runs on a tall page, about 200 pixels. chrome.spec.ts and
 // gallery.spec.ts share it so their chrome captures use one tolerance.
@@ -241,7 +241,7 @@ export const FIXTURE_PHOTO_CROP_GEOMETRY: PhotoCropGeometry = {
 /**
  * Diffs `actual` against `expected` pixel by pixel, writing a red/white
  * diff image to `diffPath` when they differ. Baselines are pinned exactly
- * (DESIGN.md; ADR 0050): any difference fails the assertion below.
+ * (DESIGN.md; ADR 0020): any difference fails the assertion below.
  */
 export async function compareRaster(
   actual: Buffer,

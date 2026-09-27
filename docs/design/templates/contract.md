@@ -65,16 +65,16 @@ The boundary in one line each:
 - The **renderer** owns everything not in `customization`, and owns it for all
   templates at once.
 - `layout.sections` is jointly derived, not directly owned: `applyTemplate`
-  computes it (ADR 0008) and `PATCH /resumes/{id}/structure` is the only
-  endpoint that may rewrite it (ADR 0009).
+  computes it (ADR 0012) and `PATCH /resumes/{id}/structure` is the only
+  endpoint that may rewrite it (ADR 0004).
 
 Applying a template therefore replaces the user's customization by definition.
 Content survives and placement follows the preset's rule (§3). The editor makes
 the replacement visible and undoable.
 
-## 3. Apply semantics — ADR 0008 and placement order
+## 3. Apply semantics — ADR 0012 and placement order
 
-Under ADR 0008 a preset carries a **placement rule**, not section keys;
+Under ADR 0012 a preset carries a **placement rule**, not section keys;
 `applyTemplate` computes `layout.sections` from the document's content keys,
 replaces the rest of `customization` wholesale, and leaves `content` untouched.
 A template design must respect these rules:
@@ -82,11 +82,11 @@ A template design must respect these rules:
 - A preset declares `layout.placement` as either `"keep"` (preserve the
   document's current `main`/`sidebar` arrays) or `"byType"` with an ordered
   `sidebarSectionTypes` list. One-column presets use `"keep"`.
-- [ADR 0021](../../adr/0021-template-placement-order.md) fixes ADR 0008's
-  missing tie-breaks. Current visual order is `main` followed by `sidebar`. A
-  `byType` apply visits the unique `sidebarSectionTypes` in list order and
-  places matching keys in their current visual order. Unselected keys and all
-  custom sections remain in `main`, in current visual order.
+- [ADR 0012](../../adr/0012-template-placement.md) also fixes the tie-breaks.
+  Current visual order is `main` followed by `sidebar`. A `byType` apply visits
+  the unique `sidebarSectionTypes` in list order and places matching keys in
+  their current visual order. Unselected keys and all custom sections remain in
+  `main`, in current visual order.
 - Before either rule runs, the current arrays must contain every content key
   exactly once and no unknown key. Invalid placement, duplicate selectors, or a
   `custom` selector fails with a typed error. `keep` returns the validated
@@ -111,9 +111,9 @@ A template design must respect these rules:
   operation** with its own preserve-and-move semantics. It is not an apply and
   must not route through `applyTemplate`.
 
-## 4. Section order — ADR 0009 is binding
+## 4. Section order — ADR 0004 is binding
 
-Under ADR 0009, `customization.layout.sections` is the sole authority for
+Under ADR 0004, `customization.layout.sections` is the sole authority for
 section order and placement, and `content` is an unordered map. The renderer
 iterates `layout.sections.main`, then `layout.sections.sidebar`, looking each
 key up in `content`, and never iterates `content` to emit sections. Entry order
@@ -124,8 +124,8 @@ the store rejects that state on write, and the renderer must not crash on it.
 
 Template application is stricter than rendering stale input. It validates both
 arrays before apply and never derives an order by iterating `content`.
-[ADR 0021](../../adr/0021-template-placement-order.md) defines the exact apply
-order and fail-closed cases.
+[ADR 0012](../../adr/0012-template-placement.md) defines the exact apply order
+and fail-closed cases.
 
 ### 4.1 Resolved render model
 
@@ -159,7 +159,7 @@ reference to a `detailsOrder` — ratified by ADR 0013. A detail with
 `isHidden: true` is omitted entirely. `isHidden` is required on a detail and
 optional on an entry; an entry without the key is visible.
 
-`header.photoPosition` places the photo (ADR 0044). Absent or `top` keeps the
+`header.photoPosition` places the photo (ADR 0013). Absent or `top` keeps the
 order above: the photo sits above the text, and `header.align` positions both.
 With `left` or `right`, the photo and the text block (`fullName`, `headline`,
 and details) sit side by side:
@@ -190,7 +190,7 @@ passes the renderer's own re-check of the exact lowercase `https://` prefix; a
 value that fails renders as text. The underline is renderer-fixed on every
 inline link ([Geometry](geometry.md), [Known contract limits](limitations.md)).
 `email` and `phone` details render as the same underlined anchor only when the
-whole value passes the renderer's strict check (ADR 0043). An email links as
+whole value passes the renderer's strict check (ADR 0013). An email links as
 `mailto:` plus the value when it is at most 254 characters with exactly one `@`,
 text before it, and a dot inside the domain, and holds no white space, control,
 or format character and none of ``< > " ' ` ( ) \ , ; : ? # %``. A phone links
@@ -203,8 +203,8 @@ non-empty, replaces the type's default label; the `twitter` default label is
 
 When `header.iconStyle` shows icons, a typed detail omits its default label; a
 non-empty user `label` and every `custom` detail's label still render (ADR
-0040). A detail's optional `display` sets an anchor's text, and its `href`
-always keeps the full value (ADR 0041):
+0013). A detail's optional `display` sets an anchor's text, and its `href`
+always keeps the full value (ADR 0013):
 
 | `display`       | Anchor text                                                 |
 | --------------- | ----------------------------------------------------------- |
@@ -287,7 +287,7 @@ render if the section itself renders.
 re-sanitizes with DOMPurify **on the client only**, against the same versioned
 allowlist and before any `innerHTML` assignment. On SSR it passes the string
 through because Go is the sole sanitization authority for anything SSR renders
-(ADR 0012). Both the public-page controller and the internal print controller
+(ADR 0008). Both the public-page controller and the internal print controller
 must re-sanitize the current document immediately before that handoff. Either
 way the renderer styles only the permitted tags. It never rewrites, truncates,
 or reflows the markup. Anchors inside rich text get `rel="noopener noreferrer"`.
@@ -359,7 +359,7 @@ Rules the above encodes:
   preserves placement rather than destroying it.
 - **Nothing moves between columns during a template apply** unless the preset's
   placement rule is `"byType"`, in which case the movement is the total function
-  of ADR 0008 and is fully determined by section types.
+  of ADR 0012 and is fully determined by section types.
 - Section type does not imply a column. `skill` in `main` and `work` in
   `sidebar` are both legal documents and must render acceptably. A template
   design may not assume the sidebar holds only short entries.

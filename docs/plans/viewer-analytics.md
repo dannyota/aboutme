@@ -1,6 +1,6 @@
 # Sign in to view (0.6.7)
 
-Status: planned; owner approvals are in [the design](../design/viewer-analytics/README.md#owner-approval). Design: [viewer analytics](../design/viewer-analytics/README.md), [ADR 0060](../adr/0060-viewer-data-controller-and-consent.md), [ADR 0061](../adr/0061-layered-human-view-counting.md), [ADR 0062](../adr/0062-sign-in-to-view-without-an-account.md). View counts shipped in v0.6.4. Consented viewer tracking is dropped for good (ADR 0060), so sign in to view, with its join popup, is the one release left.
+Status: planned; owner approvals are in [the design](../design/viewer-analytics/README.md#owner-approval). Design: [viewer analytics](../design/viewer-analytics/README.md), [ADR 0022](../adr/0022-viewer-privacy-and-counting.md). View counts shipped in v0.6.4. Consented viewer tracking is dropped for good (ADR 0022), so sign in to view, with its join popup, is the one release left.
 
 Starts after the [LinkedIn PDF import](linkedin.md) (0.6.6). Migration numbers: the manager assigns them after the queued ones.
 
@@ -28,4 +28,4 @@ The reviewer does an adversarial pass on 0.6.7 and confirms by name: the `view` 
 
 ## Writing rules for briefs
 
-Code, comments, tests, and living docs cite the design, ADRs 0060 to 0062, or `AC-VIEW-*` IDs, never this plan, its releases, or task names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate. Commit messages never mention AI or agents.
+Code, comments, tests, and living docs cite the design, ADR 0022, or `AC-VIEW-*` IDs, never this plan, its releases, or task names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate. Commit messages never mention AI or agents.

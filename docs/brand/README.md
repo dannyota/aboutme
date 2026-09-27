@@ -1,9 +1,10 @@
 # Brand assets
 
-The aboutme.vn identity is the seal ([ADR 0065](../adr/0065-seal-identity.md)):
-a red stamp mark, an ink wordmark with a red dot, and the public stamp. The
-product draws the logo and the stamp inline (`AppLogo`, `AppSeal`); the files
-here are for everywhere else.
+The aboutme.vn identity is the seal
+([ADR 0020](../adr/0020-application-visual-identity.md)): a red stamp mark, an
+ink wordmark with a red dot, and the public stamp. The product draws the logo
+and the stamp inline (`AppLogo`, `AppSeal`); the files here are for everywhere
+else.
 
 ## Files and where they are used
 
@@ -24,7 +25,7 @@ The site icons live in `apps/web/public/` with versioned names: `favicon-v3.svg`
 (dark-scheme aware), `icon-32-v3.png`, `apple-touch-icon-v3.png`,
 `icon-192-v3.png`, `icon-512-v3.png`, `site-v3.webmanifest`, and `favicon.ico`.
 The `-v2` icons and `og-image-v3.jpg` stay there, unlinked, for one release so
-cached URLs keep working; delete them in the release after ADR 0065 ships.
+cached URLs keep working; delete them in the release after ADR 0020 ships.
 
 ## Rules
 

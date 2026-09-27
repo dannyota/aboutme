@@ -1,6 +1,6 @@
 // Package publicpage validates and renders the owner-set public page title
 // and emoji favicon, publication settings stored beside the slug. See
-// docs/adr/0042-public-page-title-and-favicon.md.
+// docs/adr/0014-public-page-head-and-link-preview.md.
 package publicpage
 
 //go:generate go run extpict_gen.go

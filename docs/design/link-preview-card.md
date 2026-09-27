@@ -3,9 +3,9 @@
 This is the visual spec of the 1200 by 630 link-preview card and of its preview
 in the publish dialog. [Link previews](link-previews.md#preview-card) sets the
 card's inputs, text rules, and size limit, and
-[ADR 0055](../adr/0055-stored-link-preview-card.md) records why the card is
-built ahead of time and stored. All numbers below are CSS pixels on the 1200 by
-630 canvas unless a row says otherwise.
+[ADR 0014](../adr/0014-public-page-head-and-link-preview.md) records why the
+card is built ahead of time and stored. All numbers below are CSS pixels on the
+1200 by 630 canvas unless a row says otherwise.
 
 ## Canvas and boxes
 

@@ -1,6 +1,6 @@
 // icons.test.ts — the favicon, home-screen icon, and manifest set iOS and
 // Android need to show a real icon instead of a generic tile
-// (docs/adr/0050-aurora-application-identity.md).
+// (docs/adr/0020-application-visual-identity.md).
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -21,7 +21,7 @@ import (
 // ones (docs/design/operations.md).
 const IdempotencyTTL = 24 * time.Hour
 
-// Retention bounds from docs/design/budgets.md and ADR 0016. The cleanup
+// Retention bounds from docs/design/budgets.md and ADR 0006. The cleanup
 // batch bounds one request's cleanup work; the two caps bound an account's
 // physically retained records and their stored response bytes (body plus
 // approved headers, by the canonical octet_length expression).
@@ -31,7 +31,7 @@ const (
 	maxRetainedIdempotencyBytes   = 1 << 30 // 1 GiB
 )
 
-// The only response headers a stored response may carry (ADR 0016):
+// The only response headers a stored response may carry (ADR 0006):
 // deterministic, replay-safe values. Request-scoped headers such as Date
 // and X-Request-ID are never persisted; Execute fails closed on any header
 // outside this set.
@@ -157,7 +157,7 @@ func (e *IdempotencyCapacityError) Unwrap() error { return ErrIdempotencyCapacit
 // retention. Execute serializes a user's contenders on the user-row lock
 // that resume creation uses before it looks up the key or invokes mutate.
 // See Execute's doc comment for the callback contract and
-// docs/adr/0016-transactional-idempotency.md.
+// docs/adr/0006-transactional-idempotency.md.
 type IdempotencyStore struct {
 	pool *store.Pool
 	q    *store.Queries

@@ -68,7 +68,7 @@ behavior that contract changes must keep.
 | `GET /events`, `GET /live/{slug}`                                     | Authenticated and public SSE invalidation streams                |
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`      | Live-gated public document and photo                             |
 | `GET /public/resumes/{slug}/pdf`                                      | Live and download-gated public PDF                               |
-| `GET /public/resumes/{slug}/og/{version}.png`, `.../og.png`           | Live-gated stored preview card and its `og.png` alias; ADR 0055  |
+| `GET /public/resumes/{slug}/og/{version}.png`, `.../og.png`           | Live-gated stored preview card and its `og.png` alias; ADR 0014  |
 | `GET /oauth/consent`, `POST /oauth/consent`                           | Agent consent read and the approve/deny decision                 |
 | `GET /me/agents`, `DELETE /me/agents/{grantId}`                       | Connected-agent list and grant revocation                        |
 | `GET /me/export`, `DELETE /me`                                        | Data export and recent-reauthenticated account deletion          |
@@ -171,7 +171,7 @@ closed deletion marker because no row remains. A lost race returns
 delete authority, including deletion of a published resume through the existing
 public revocation fence, drain, tombstone, and cleanup path. There is no
 standalone publish, unpublish, or public-read tool.
-[ADR 0026](../adr/0026-mcp-agent-access.md) records the protocol choice.
+[ADR 0018](../adr/0018-mcp-agent-access.md) records the protocol choice.
 
 ## Resume write safety
 
@@ -182,7 +182,7 @@ normalized precondition, other operation-declared semantic inputs, and bounded
 body or raw file-part bytes. A matching retry returns the stored response
 without executing again. A reused key with a different fingerprint returns `409`
 and writes nothing. The record and mutation commit in one transaction.
-[ADR 0016](../adr/0016-transactional-idempotency.md) records the mechanism.
+[ADR 0006](../adr/0006-transactional-idempotency.md) records the mechanism.
 
 Every mutation of an existing resume also requires `If-Match`. Missing is `428`,
 malformed is `400`, and stale is `412` with the current revision and document in
@@ -222,4 +222,4 @@ generation and drain old-generation origin leases before success; sitemap and
 `llms.txt` use a separate discovery generation drained the same way. Every
 public reuse then passes the origin live-state gate. Edge invalidation, ETags,
 and SSE refetch improve freshness but are not the revocation authority
-([ADR 0022](../adr/0022-public-artifact-revocation.md)).
+([ADR 0010](../adr/0010-public-artifact-revocation.md)).

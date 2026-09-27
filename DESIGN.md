@@ -44,9 +44,8 @@ and the owner's color scheme.
 ## Visual direction
 
 Colorful product UI. Calm white resume.
-[ADR 0050](docs/adr/0050-aurora-application-identity.md) records the Aurora
-identity, and [ADR 0065](docs/adr/0065-seal-identity.md) the seal logo, the
-stamp, and the token clean-up.
+[ADR 0020](docs/adr/0020-application-visual-identity.md) records the aurora
+canvas, the seal logo, the stamp, and the tokens.
 
 - The application canvas is a pale blue ground with large, soft radial glows:
   blue and indigo at the top corners, cyan and a faint pink further down. The
@@ -100,7 +99,7 @@ tables, spacing, radius, button, and dialog rules are in
 - Do not hand-style a generated primitive. A token-colored variant edit is the
   one exception, and only with a guard test; re-apply it after
   `apps/web/scripts/ui-add.sh` regenerates the primitive
-  ([ADR 0052](docs/adr/0052-guarded-token-edits-to-generated-primitives.md)).
+  ([ADR 0019](docs/adr/0019-application-ui-toolkit.md)).
 - Use the existing field, dialog, menu, sheet, button, and status components. Do
   not introduce raw controls or hand-written dialogs in a surface; the crop
   stage and ProseMirror content root are the custom-widget exceptions.

@@ -5,7 +5,7 @@ This spec sets the look, states, copy, and accessibility of
 [LinkedIn import](linkedin-import.md) design owns the flow, limits, parsing,
 mapping, and privacy rules; this page only renders them. Visual rules, tokens,
 and components come from [DESIGN.md](../../DESIGN.md) and
-[ADR 0050](../adr/0050-aurora-application-identity.md). Copy keys live in a new
+[ADR 0020](../adr/0020-application-visual-identity.md). Copy keys live in a new
 `apps/web/app/i18n/import.ts` catalog unless the [copy](#copy) table names an
 existing key.
 

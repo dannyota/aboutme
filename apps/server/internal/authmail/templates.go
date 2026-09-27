@@ -12,7 +12,7 @@ import (
 // HTML has no image, script, stylesheet, web font, tracking pixel, or any
 // external resource: every style is inline and the wordmark is text.
 
-// Ink and paper desk colors, and the primary brand blue (ADR 0050) for the
+// Ink and paper desk colors, and the primary brand blue (ADR 0020) for the
 // "me.vn" in the aboutme.vn wordmark.
 const (
 	colorInk    = "#192024"

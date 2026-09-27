@@ -2,8 +2,8 @@
 
 Status: **available for feature verification**. Native authenticated checks run
 at `https://localhost:20443`. Complete product checks run in production, per
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). No host
-sysctl change is needed.
+[ADR 0025](../adr/0025-single-host-production.md). No host sysctl change is
+needed.
 
 Keep Secure cookies, normal TLS verification, and the local network allowlist.
 The HTTP Compose smoke does not prove authenticated browser behavior.

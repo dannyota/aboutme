@@ -76,8 +76,8 @@ aws ssm get-parameters-by-path --path /aboutme/prod --recursive --query 'Paramet
 The `provider_login_enabled` variable sets `PROVIDER_LOGIN_ENABLED`: `""` (the
 default) keeps provider login off, `"google"` turns on Google, and
 `"google,linkedin"` adds LinkedIn
-([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md)). The app task reads
-each listed provider's credentials from the SecureString parameters
+([ADR 0016](../adr/0016-sign-in-providers.md)). The app task reads each listed
+provider's credentials from the SecureString parameters
 `/aboutme/prod/oauth/<provider>-client-id` and `<provider>-client-secret`. The
 server refuses to start when a listed provider's value is missing, and
 `deploy.sh` refuses to begin a deploy while any task secret is missing.
@@ -285,7 +285,7 @@ administration, not a supported rollback; see
 A rollback cannot cross a document schema release. Every resume write persists
 the current document version, and an older release fails closed on a version it
 does not know. After a release that raises the document version, such as
-document v4 (ADR 0044), any resume saved since the deploy is unreadable and
+document v4 (ADR 0013), any resume saved since the deploy is unreadable and
 unwritable by the older release. Fix forward instead. A rollback past such a
 release first needs every newer row lowered to the older version, and no tool
 does that yet.

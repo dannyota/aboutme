@@ -1,14 +1,14 @@
 # UAT lifecycle cost
 
-Status: historical model. ADR 0037 removed hosted UAT from the first release.
+Status: historical model. ADR 0025 removed hosted UAT from the first release.
 The figures below preserve the earlier planning record and do not describe the
 live production service.
 
 The two-day planning campaign with 16 test hours costs **USD 27.636091 per
 730-hour month before tax**, without free-tier allowances. It leaves USD
 2.363909 below the approved USD 30 ceiling. This is a planning envelope under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md), pending
-local lifecycle proof and hosted timing measurements.
+[ADR 0026](../../adr/0026-replica-scaling.md), pending local lifecycle proof and
+hosted timing measurements.
 
 ## Reproduction and scope
 

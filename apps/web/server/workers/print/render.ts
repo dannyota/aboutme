@@ -25,7 +25,7 @@ const HTML_ESCAPES: Record<string, string> = {
 /**
  * The print page title, which Chromium copies into the PDF Title. Control and
  * format characters become spaces, white space collapses, and a blank name
- * leaves "Resume" (docs/adr/0045-pdf-download-name-and-metadata.md).
+ * leaves "Resume" (docs/adr/0011-print-capability-and-pdf-output.md).
  */
 export function printTitle(fullName: string): string {
   const name = fullName

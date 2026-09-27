@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-// The aboutme.vn logo (DESIGN.md, ADR 0065): a seal mark, two rings and a
+// The aboutme.vn logo (DESIGN.md, ADR 0020): a seal mark, two rings and a
 // single-story "a" tilted -8 degrees like the public stamp, then the
 // lowercase wordmark in the text color with only the dot of ".vn" in seal
 // red. Letters are stroked paths, so no font is needed, and nothing uses a

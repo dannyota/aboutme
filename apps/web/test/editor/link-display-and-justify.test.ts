@@ -41,7 +41,7 @@ function mountContacts(details: readonly PersonalDetail[]) {
   });
 }
 
-describe('contact link display (ADR 0041)', () => {
+describe('contact link display (ADR 0013)', () => {
   it.each([
     ['website', 'https://ada.dev'],
     ['linkedin', 'https://linkedin.com/in/ada'],
@@ -129,7 +129,7 @@ function mountDesign(record: ResumeRecord) {
   };
 }
 
-describe('body text alignment (ADR 0041)', () => {
+describe('body text alignment (ADR 0013)', () => {
   it('shows Left for an absent value in the Type group', async () => {
     const { select, wrapper } = mountDesign(recordFor());
     expect((select.element as HTMLSelectElement).value).toBe('left');
@@ -174,7 +174,7 @@ describe('body text alignment (ADR 0041)', () => {
   });
 });
 
-describe('applyTemplate keeps text alignment (ADR 0041)', () => {
+describe('applyTemplate keeps text alignment (ADR 0013)', () => {
   const fixture = acceptedFixture().document;
   const content: Content = fixture.content;
 

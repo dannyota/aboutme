@@ -5,7 +5,7 @@ application asks the platform which image digests are running, checks each
 digest against the signed GitHub build record, and publishes the result at
 `https://aboutme.vn/.well-known/deployment.json`. The page `/verify` shows the
 same document to people and tells them how to check it themselves.
-[ADR 0057](../../adr/0057-deployment-transparency-observer.md) records the
+[ADR 0028](../../adr/0028-deployment-transparency-observer.md) records the
 choice.
 
 Status: proposed. **Owner approval** marks a product-visible choice the owner
@@ -93,7 +93,7 @@ bucket name; none of them reaches the document.
 ### Kubernetes
 
 **Open conflict for the owner:**
-[ADR 0051](../../adr/0051-vietnam-hosted-production.md) and the
+[ADR 0027](../../adr/0027-vietnam-hosted-production.md) and the
 [Vietnam design](../vietnam-production.md) describe one vServer with Podman
 under systemd, not Kubernetes. This section holds for a GreenNode VKS cluster.
 On the Podman host there is no read-only platform API: the Podman socket grants
@@ -254,9 +254,8 @@ or any image whose status is not `verified`.
 
 **Owner approval:** CloudFront serves `/.well-known/deployment.json` from the S3
 bucket and caches it for 30 seconds. This amends the rule that CloudFront caches
-only `/_nuxt/*`
-([ADR 0054](../../adr/0054-cloudfront-edge-for-single-host-production.md)). The
-document holds no personal data and no publication state, so ADR 0022 does not
+only `/_nuxt/*` ([ADR 0025](../../adr/0025-single-host-production.md)). The
+document holds no personal data and no publication state, so ADR 0010 does not
 apply.
 
 - A new ordered cache behavior for that exact path, GET and HEAD only, with a

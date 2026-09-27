@@ -2,8 +2,7 @@
 
 The release fence stops the supported production path from starting an image
 below the minimum release once second-factor enrollment can exist
-([ADR 0048](../adr/0048-passkey-second-factor-authentication.md),
-[ADR 0049](../adr/0049-totp-second-factor-authentication.md)). Two floors apply:
+([ADR 0017](../adr/0017-second-factor-authentication.md)). Two floors apply:
 
 | Enrollment flag              | Floor  | Numeric release |
 | ---------------------------- | ------ | --------------- |

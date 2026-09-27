@@ -16,7 +16,7 @@ import (
 )
 
 // PreviewCards is the stored preview card boundary
-// (docs/adr/0055-stored-link-preview-card.md); previewcard.Service
+// (docs/adr/0014-public-page-head-and-link-preview.md); previewcard.Service
 // implements it.
 type PreviewCards interface {
 	Version(publicresume.Snapshot) (string, error)

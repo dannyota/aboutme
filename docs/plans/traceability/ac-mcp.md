@@ -7,7 +7,7 @@ all. The design clause column names the amended Approved v4 clause
 [security](../../design/security.md#agent-authorization-and-the-bearer-world),
 [data](../../design/data.md#relational-model),
 [web](../../design/web.md#agent-consent-and-connected-agents)) whose rationale
-is [ADR 0026](../../adr/0026-mcp-agent-access.md). The current mechanism lives
+is [ADR 0018](../../adr/0018-mcp-agent-access.md). The current mechanism lives
 in the implementation and [architecture](../../architecture.md); numeric limits
 remain in the approved [budgets](../../design/budgets.md). See
 [README.md](./README.md) for matrix rules and the full prefix index.

@@ -1,5 +1,5 @@
 // Package pdfname builds the download name of a resume PDF from the owner's
-// full name. See docs/adr/0045-pdf-download-name-and-metadata.md.
+// full name. See docs/adr/0011-print-capability-and-pdf-output.md.
 package pdfname
 
 import (

@@ -1,6 +1,6 @@
 // Package docmigrate converts stored and wire resume documents between
 // released schema versions. See docs/design/data.md and
-// docs/adr/0017-resume-document-versioning.md.
+// docs/adr/0004-resume-document-contract.md.
 //
 //   - Project lifts a row's three jsonb parts, plus the row's own
 //     schema_version, to the current document version without a database

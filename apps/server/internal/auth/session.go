@@ -17,7 +17,7 @@ import (
 )
 
 // Session lifecycle values are defined in docs/design/security.md. Rotation
-// delivery and lineage are defined in docs/adr/0015-session-rotation-delivery.md.
+// delivery and lineage are defined in docs/adr/0015-accounts-passwords-and-sessions.md.
 const (
 	sessionCookieName = "__Host-session"
 	sessionTokenBytes = 32 // 256-bit CSPRNG.
@@ -172,7 +172,7 @@ func (m *SessionManager) Issue(ctx context.Context, userID uuid.UUID, ua, ip str
 // the rotation winner. Dead sessions never rotate. Successors inherit identity,
 // absolute expiry, reauth time, user agent, IP, authentication epoch, and
 // factor-proof time; rotation extends none of them. See
-// docs/adr/0015-session-rotation-delivery.md.
+// docs/adr/0015-accounts-passwords-and-sessions.md.
 //
 // The token lookup compares the session's copied authentication epoch with the
 // account's current epoch in the same statement, so a stale-epoch session
@@ -228,7 +228,7 @@ var errRotationPredecessorRevoked = errors.New("auth: rotation predecessor revok
 // tryRotate admits at most one rotation winner. The admission update and
 // successor insert are separate statements: a lost insert leaves the
 // predecessor usable only to its parked deadline, while a lost response leaves
-// an unreachable successor. See docs/adr/0015-session-rotation-delivery.md.
+// an unreachable successor. See docs/adr/0015-accounts-passwords-and-sessions.md.
 //
 // A pool-backed manager inserts the successor in a short transaction that locks
 // the user row and re-reads the predecessor as live, so a reset that already

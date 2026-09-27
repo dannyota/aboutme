@@ -170,7 +170,7 @@ function changeHidden(id: string, isHidden: boolean): void {
   );
 }
 
-// Absent `display` means short (ADR 0041), so choosing short drops the key.
+// Absent `display` means short (ADR 0013), so choosing short drops the key.
 function changeDisplay(id: string, display: LinkDisplay): void {
   const detail = detailById(id);
   if (detail === undefined || display === (detail.display ?? 'short')) return;

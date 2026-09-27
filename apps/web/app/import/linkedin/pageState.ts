@@ -18,7 +18,7 @@ import type {
   ReviewSection,
 } from './build';
 
-/** The resume the import creates is always English (ADR 0064, decision 7). */
+/** The resume the import creates is always English (ADR 0023, decision 7). */
 const DOCUMENT_LNG = 'en';
 
 export type DateFormat = Customization['dateFormat'];
@@ -210,7 +210,7 @@ export function entryLabel(
 
 /**
  * An entry row's description, per the same table. The document's language
- * is always English (ADR 0064, decision 7), so dates print in English
+ * is always English (ADR 0023, decision 7), so dates print in English
  * regardless of the interface language; the language level name is the
  * interface language's own word.
  */

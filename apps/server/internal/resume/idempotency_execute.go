@@ -35,8 +35,8 @@ import (
 //     record, and commit.
 //
 // mutate MUST perform every database write through the supplied qtx and
-// MUST NOT perform non-transactional side effects (ADR 0016); external
-// media effects follow ADR 0019's compensation rules using the returned
+// MUST NOT perform non-transactional side effects (ADR 0006); external
+// media effects follow ADR 0009's compensation rules using the returned
 // CommitOutcome.
 //
 // Execute returns an ExecuteResult on every path. Failure before the

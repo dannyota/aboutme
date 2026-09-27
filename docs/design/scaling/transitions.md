@@ -1,13 +1,12 @@
 # Durable public transitions
 
-Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md). Not built.
+Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md). Not built.
 The [scaling index](README.md) holds the shared rules.
 
 A publication mutation must close every replica's local fence for its targets
 before business SQL runs. This page extends `publicstate.Plan` and
 `CommittedState` with durable fleet state and keeps the
-[ADR 0022](../../adr/0022-public-artifact-revocation.md) live-state gate,
+[ADR 0010](../../adr/0010-public-artifact-revocation.md) live-state gate,
 idempotency and lease behavior.
 
 ## Categories

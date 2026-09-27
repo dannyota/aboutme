@@ -4,8 +4,7 @@ A person creates a new resume from their LinkedIn profile. They save their
 English profile with LinkedIn's "Save to PDF", pick the file on aboutme, check
 what was found, and create the resume. The browser reads the file; it is never
 uploaded. Only the resume the person creates is stored.
-[ADR 0064](../adr/0064-linkedin-import-from-save-to-pdf.md) records the choice
-of the PDF, and [ADR 0059](../adr/0059-linkedin-import-in-the-browser.md) the
+[ADR 0023](../adr/0023-linkedin-import.md) records the choice of the PDF and the
 rule that parsing stays in the browser.
 
 Status: accepted and built; the owner approved I1 to I10 on 2026-09-27. Facts
@@ -19,7 +18,7 @@ could not settle, as listed in [Open facts](#open-facts).
 | Sign-in scopes | `openid`, `profile`, and `email` give name, picture, locale, and email only. No claim carries positions, education, or skills.                                                                                    | [1], [2] |
 | Partner APIs   | Positions, education, and skills need Talent, Sales Navigator, or Compliance partner programs, which a small resume service cannot join. Member Data Portability accepts only members in the EEA and Switzerland. | [2], [3] |
 | Save to PDF    | Desktop only, one click from the profile. "Currently supports only English characters"; the profile and the member's language setting must be English. Works on other members' profiles too, 200 PDFs a month.    | [4]      |
-| Data download  | A ZIP of UTF-8 CSV files, one per section, sent by email; covers Vietnamese profiles. Deferred to a later release (ADR 0064, decision 8).                                                                         | [5]      |
+| Data download  | A ZIP of UTF-8 CSV files, one per section, sent by email; covers Vietnamese profiles. Deferred to a later release (ADR 0023, decision 8).                                                                         | [5]      |
 
 ## Save to PDF structure
 
@@ -323,7 +322,7 @@ everything; the review is not saved.
   existing create route: idempotency key, the 256 KiB request limit, schema
   validation, the Go sanitizer, the resume cap, and rate limits.
 - pdf.js runs in a worker with no DOM. Its known script-execution advisories
-  (ADR 0064) need font `eval`, PostScript compiled to JavaScript, or viewer
+  (ADR 0023) need font `eval`, PostScript compiled to JavaScript, or viewer
   scripting; 6.3.289 has none of them on this path. WebAssembly is off.
 - The app page policy changes `worker-src 'none'` to `worker-src 'self'`
   (**Owner approval** I2). `script-src 'self'` already lets same-origin code
@@ -354,7 +353,7 @@ other route loads them.
 
 ## Tests
 
-Tests cite this design and ADR 0064. Fixtures are synthetic ("Sample Person",
+Tests cite this design and ADR 0023. Fixtures are synthetic ("Sample Person",
 "Nguyễn Văn Mẫu", "Example Co.", `example.com`); no real person's PDF or text
 from one enters the repository. Layout fixtures under
 `apps/web/test/import/linkedin/fixtures/` are generated, not copied. Each has a
@@ -422,7 +421,7 @@ follows the rules above, and the review lets the person fix the result.
 
 | ID  | Choice                                                                                                                               | Decision                             |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
-| I1  | Accept ADR 0064: English Save to PDF, parsed in the browser by pdf.js 6.3.289 in a worker; `pdfjs-dist` becomes a runtime dependency | Approved                             |
+| I1  | Accept ADR 0023: English Save to PDF, parsed in the browser by pdf.js 6.3.289 in a worker; `pdfjs-dist` becomes a runtime dependency | Approved                             |
 | I2  | App page policy `worker-src 'self'`; public, print, and harness policies unchanged                                                   | Approved                             |
 | I3  | Entry link in the create dialog; page `/app/import/linkedin`                                                                         | Approved                             |
 | I4  | Resume language English; the gallery's first template; the person changes the template in the editor                                 | Approved                             |

@@ -6,8 +6,8 @@
 //
 // Each method takes the transaction-bound *store.Queries that
 // IdempotencyStore.Execute supplies to its callback, so a read-modify-write
-// and its idempotency record commit or roll back together (P2B D15, ADR
-// 0016). None of these methods manages a transaction of its own — no
+// and its idempotency record commit or roll back together (ADR
+// 0006). None of these methods manages a transaction of its own — no
 // Begin/Commit/Rollback. The pool-backed methods in store.go are thin
 // wrappers over these, so each behavior has exactly one implementation.
 //
@@ -236,7 +236,7 @@ func (s *Store) DeleteTx(ctx context.Context, qtx *store.Queries, userID, id uui
 }
 
 // EnqueueMediaDeletionTx records exact-key cleanup work in the caller's
-// transaction (ADR 0019, D13). The caller validates key against resumeID
+// transaction (ADR 0009, D13). The caller validates key against resumeID
 // before this call; the ledger's own database check (D11 grammar with the
 // embedded canonical resume ID equal to resume_id) is the fail-closed
 // backstop, so a malformed or cross-resume key errors here and aborts the

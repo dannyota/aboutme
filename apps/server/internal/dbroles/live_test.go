@@ -169,7 +169,7 @@ func TestEnsureLiveGrantsExactDatabaseAndSchemaPrivileges(t *testing.T) {
 // the same database. Ensure rewrites the pg_database ACL row on every call
 // (grantDatabaseAndSchema), and PostgreSQL raises "tuple concurrently
 // updated" when two transactions update that row without the shared LockID
-// lock serializing them (ADR 0038). Every call must succeed.
+// lock serializing them (ADR 0005). Every call must succeed.
 func TestEnsureLiveSerializesConcurrentCatalogWriters(t *testing.T) {
 	db := livePostgresDB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

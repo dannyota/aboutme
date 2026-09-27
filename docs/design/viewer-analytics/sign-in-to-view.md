@@ -7,8 +7,8 @@ provider returns are discarded in the same request, and the owner never learns
 who viewed. The only thing left is a pass cookie in the viewer's browser that
 names no person. The providers are those enabled for sign-in: Google today, and
 LinkedIn once LinkedIn sign-in is on in production.
-[ADR 0062](../../adr/0062-sign-in-to-view-without-an-account.md) records the
-choices. This is a later release than view counts; nothing here is built yet.
+[ADR 0022](../../adr/0022-viewer-privacy-and-counting.md) records the choices.
+This is a later release than view counts; nothing here is built yet.
 
 ## Setting
 
@@ -59,7 +59,7 @@ The pass check runs before the public cache lookup, so cached bytes are never
 served without a pass. Turning the switch on for a live resume is a material
 publish state change: it advances the public generation and waits for the
 revocation fence before the setting returns
-([ADR 0022](../../adr/0022-public-artifact-revocation.md)), so no anonymous
+([ADR 0010](../../adr/0010-public-artifact-revocation.md)), so no anonymous
 request admitted earlier completes after success. Turning it on again after it
 was off raises the resume's pass epoch, so passes from the earlier period stop
 working.
@@ -69,9 +69,9 @@ working.
 1. The gate button links to
    `GET /api/v1/auth/{provider}/start?purpose=view&slug={slug}`. `view` is a new
    unauthenticated purpose, allowed on `GET` like `login`
-   ([ADR 0014](../../adr/0014-oauth-start-methods.md)). The start checks that
-   the slug is live and requires sign-in, stores the transaction with purpose
-   `view` and the resume ID, and redirects to the provider.
+   ([ADR 0016](../../adr/0016-sign-in-providers.md)). The start checks that the
+   slug is live and requires sign-in, stores the transaction with purpose `view`
+   and the resume ID, and redirects to the provider.
 2. The provider flow is unchanged: Google with PKCE, LinkedIn as
    [LinkedIn sign-in](../linkedin-sign-in.md#protocol) sets out, and ID token
    checks for both, with LinkedIn's nonce checked only when present

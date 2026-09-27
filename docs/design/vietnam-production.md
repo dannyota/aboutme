@@ -2,7 +2,7 @@
 
 Production at `https://aboutme.vn` moves from AWS Singapore and Amazon
 CloudFront to providers that store and process personal data in Vietnam, under
-[ADR 0051](../adr/0051-vietnam-hosted-production.md). This page is the target
+[ADR 0027](../adr/0027-vietnam-hosted-production.md). This page is the target
 design and the migration order. Until cutover, the
 [single-host design](single-host-production.md) describes what runs. The ADR
 holds the legal reason. A data protection impact assessment (DPIA) is still
@@ -40,18 +40,16 @@ WAL to a second vStorage bucket. Agents send logs and metrics to vMonitor.
 All GreenNode resources live in one region. **Owner approval:** HCM03 (Ho Chi
 Minh City), where vServer and vStorage both have current docs.
 
-Unchanged: one serving replica
-([ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)), the
-migrator and roles
-([ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)), the public
-revocation gate ([ADR 0022](../adr/0022-public-artifact-revocation.md)), private
-media ([ADR 0019](../adr/0019-private-media-delivery.md)), and every HTTP, SSE,
+Unchanged: one serving replica ([ADR 0026](../adr/0026-replica-scaling.md)), the
+migrator and roles ([ADR 0005](../adr/0005-database-migrations.md)), the public
+revocation gate ([ADR 0010](../adr/0010-public-artifact-revocation.md)), private
+media ([ADR 0009](../adr/0009-private-media-delivery.md)), and every HTTP, SSE,
 and MCP contract. Public images stay on GitHub Container Registry; they hold no
 personal data.
 
 ## Edge
 
-vCDN Web Accelerator fronts the apex and `www`. Following ADR 0022, it caches
+vCDN Web Accelerator fronts the apex and `www`. Following ADR 0010, it caches
 only hashed `/_nuxt/*` assets; every other path passes through with no edge
 storage. **Unconfirmed:** Web Accelerator caches HTML and API by default, so a
 rule must bypass everything else, and vCDN must neither cache nor replace 5xx
@@ -416,7 +414,7 @@ copy. It gets no domain of its own (owner, 2026-09-24), and `aboutme.vn` keeps
 no AWS records. Its mail goes only to test addresses.
 
 Have I Been Pwned, MCP clients a user connects, and GitHub stay outside this
-move; [ADR 0051](../adr/0051-vietnam-hosted-production.md) records why.
+move; [ADR 0027](../adr/0027-vietnam-hosted-production.md) records why.
 
 ## Provider facts to confirm
 

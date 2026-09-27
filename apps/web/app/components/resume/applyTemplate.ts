@@ -81,7 +81,7 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
 
 /**
  * Text alignment, the header photo position, and the page format belong to the
- * owner, not the preset (ADR 0041, ADR 0044; paper follows where the owner
+ * owner, not the preset (ADR 0013; paper follows where the owner
  * prints), so a template switch keeps the current values, or their absence. A
  * kept photo position under a preset with no header uses the default header,
  * which renders the same as no header.

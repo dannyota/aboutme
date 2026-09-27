@@ -26,7 +26,7 @@ type Querier interface {
 	AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error)
 	// This system backfill intentionally does not change revision or updated_at:
 	// it persists the same projected document already served to readers. It is
-	// not user-scoped. See docs/adr/0017-resume-document-versioning.md.
+	// not user-scoped. See docs/adr/0004-resume-document-contract.md.
 	// Fully named parameters distinguish the from/to schema versions. Both are
 	// int32, and sqlc's positional naming would emit
 	// `SchemaVersion` and `SchemaVersion_2`, neither carrying its direction.
@@ -260,7 +260,7 @@ type Querier interface {
 	// predecessor detaches its successor instead of cascading past the batch bound.
 	DeleteTerminalOAuthTokens(ctx context.Context, arg DeleteTerminalOAuthTokensParams) (int64, error)
 	DeleteWebAuthnCredentialForUser(ctx context.Context, arg DeleteWebAuthnCredentialForUserParams) (WebauthnCredential, error)
-	// Records exact-key cleanup work in the caller's transaction (ADR 0019).
+	// Records exact-key cleanup work in the caller's transaction (ADR 0009).
 	// Duplicate enqueue of the immutable key is idempotent (zero rows); the
 	// table's own check constraint rejects a malformed or cross-resume key.
 	EnqueueMediaDeletionJob(ctx context.Context, arg EnqueueMediaDeletionJobParams) (int64, error)
@@ -361,7 +361,7 @@ type Querier interface {
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
-	// A stored card is derived data (ADR 0055); every public read passes the
+	// A stored card is derived data (ADR 0014); every public read passes the
 	// live-state gate before it reads one.
 	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)
 	GetSecondFactorPolicyForUpdate(ctx context.Context, userID uuid.UUID) (SecondFactorPolicy, error)

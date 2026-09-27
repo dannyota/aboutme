@@ -1,9 +1,9 @@
 # Single-host production
 
 Production runs at `https://aboutme.vn` on one host under
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). This page
-narrows the [deployment design](deployment.md); trust boundaries not named here
-are unchanged. The [production runbook](../runbooks/production.md) holds the
+[ADR 0025](../adr/0025-single-host-production.md). This page narrows the
+[deployment design](deployment.md); trust boundaries not named here are
+unchanged. The [production runbook](../runbooks/production.md) holds the
 commands.
 
 ## Request path
@@ -122,7 +122,7 @@ blocks bridge containers while host-mode containers still get a token.
 
 Memory fits in 2 GiB: roughly 300 MiB for Bottlerocket and the agent, the
 existing 512 MiB Go and Chromium cap, and about 300 MiB for Nuxt and Caddy. A
-larger instance is the first growth step, per ADR 0036.
+larger instance is the first growth step, per ADR 0026.
 
 ## Database
 
@@ -165,9 +165,9 @@ sequenceDiagram
   set, it stores their SCRAM-SHA-256 verifiers, so no plaintext password reaches
   PostgreSQL logs. The deploy script runs it only with `--first-deploy`.
 - `migrate` always runs as `aboutme_migrator` (see
-  [ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)): its
-  `DATABASE_URL` login already is that role, and the migration runner verifies
-  this on every connection, so no separate identity flag selects it.
+  [ADR 0005](../adr/0005-database-migrations.md)): its `DATABASE_URL` login
+  already is that role, and the migration runner verifies this on every
+  connection, so no separate identity flag selects it.
 
 ## Secrets and identity
 

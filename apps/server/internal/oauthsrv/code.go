@@ -1,5 +1,5 @@
 // Package oauthsrv implements the first-party OAuth 2.1 authorization server
-// described in docs/adr/0026-mcp-agent-access.md and docs/design/security.md
+// described in docs/adr/0018-mcp-agent-access.md and docs/design/security.md
 // ("Agent authorization and the bearer world"). This file holds the
 // authorization-code primitives; the package's other files hold the token
 // spellings, PKCE verification, the client registration grammar, and the

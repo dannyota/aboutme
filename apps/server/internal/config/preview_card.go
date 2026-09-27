@@ -1,7 +1,7 @@
 package config
 
 // PREVIEW_CARD_ENABLED parsing. See docs/design/link-previews.md and
-// docs/adr/0055-stored-link-preview-card.md.
+// docs/adr/0014-public-page-head-and-link-preview.md.
 
 import (
 	"errors"

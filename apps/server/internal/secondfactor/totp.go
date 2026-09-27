@@ -2,7 +2,7 @@ package secondfactor
 
 import (
 	"crypto/hmac"
-	"crypto/sha1" //nolint:gosec // ADR 0049 approves HMAC-SHA-1 only for the RFC 6238 interoperability profile
+	"crypto/sha1" //nolint:gosec // ADR 0017 approves HMAC-SHA-1 only for the RFC 6238 interoperability profile
 	"crypto/subtle"
 	"encoding/base32"
 	"encoding/binary"
@@ -132,7 +132,7 @@ func totpSteps(now time.Time) ([]uint64, error) {
 func totpCode(secret TOTPSecret, counter uint64) string {
 	var msg [8]byte
 	binary.BigEndian.PutUint64(msg[:], counter)
-	mac := hmac.New(sha1.New, secret[:]) //nolint:gosec // ADR 0049 approves HMAC-SHA-1 only for the RFC 6238 interoperability profile
+	mac := hmac.New(sha1.New, secret[:]) //nolint:gosec // ADR 0017 approves HMAC-SHA-1 only for the RFC 6238 interoperability profile
 	mac.Write(msg[:])
 	sum := mac.Sum(nil)
 	offset := sum[len(sum)-1] & 0x0f

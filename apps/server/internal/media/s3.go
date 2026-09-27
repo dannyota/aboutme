@@ -121,7 +121,7 @@ func (b *s3Backend) Put(ctx context.Context, key, contentType string, body io.Re
 		Body:          bytes.NewReader(buf),
 		ContentLength: aws.Int64(size),
 		ContentType:   aws.String(contentType),
-		// Conditional create (ADR 0019): the write commits only if no
+		// Conditional create (ADR 0009): the write commits only if no
 		// object exists at the key. No overwrite path exists.
 		IfNoneMatch: aws.String("*"),
 	}, func(o *s3.Options) {

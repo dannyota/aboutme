@@ -11,7 +11,7 @@ import (
 )
 
 // Document v3 adds details[].display and customization.font.textAlign
-// (docs/adr/0041-contact-link-display-and-body-justify.md). A v1 or v2 client
+// (docs/adr/0013-resume-header-and-contacts.md). A v1 or v2 client
 // cannot express either field, so its writes must keep the stored values.
 
 const (

@@ -3,7 +3,7 @@
  * `AuthLayout` — shared frame for the six account pages. The form stays
  * first in the DOM; a brand panel with no focusable element follows it and
  * renders only from 1024 px (DESIGN.md "Authenticated chrome and editor").
- * The renderer never sees this chrome (ADR 0050 renderer isolation).
+ * The renderer never sees this chrome (ADR 0020 renderer isolation).
  */
 import { FileDown, Link2, Lock } from '@lucide/vue';
 

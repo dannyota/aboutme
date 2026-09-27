@@ -317,7 +317,7 @@ func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 // keepV3Fields restores what a v1 or v2 client cannot express: the stored
 // body alignment, and the display of every detail that survives the write,
 // matched by id. A detail the client added gets none.
-// See docs/adr/0041-contact-link-display-and-body-justify.md.
+// See docs/adr/0013-resume-header-and-contacts.md.
 func keepV3Fields(doc *schema.Resume, current schema.Resume) {
 	doc.Customization.Font.TextAlign = current.Customization.Font.TextAlign
 	displays := make(map[string]*schema.Display, len(current.PersonalDetails.Details))
@@ -334,7 +334,7 @@ func keepV3Fields(doc *schema.Resume, current schema.Resume) {
 // survives the write, matched by entry id. The position applies only while
 // both documents have a header, so a client that removes the header removes
 // the position with it. A project entry the client added gets no subtitle.
-// See docs/adr/0044-header-photo-position-and-project-subtitle.md.
+// See docs/adr/0013-resume-header-and-contacts.md.
 func keepV4Fields(doc *schema.Resume, current schema.Resume) {
 	if doc.Customization.Header != nil && current.Customization.Header != nil {
 		doc.Customization.Header.PhotoPosition = current.Customization.Header.PhotoPosition

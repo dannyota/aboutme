@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buttonVariants } from '../../app/components/ui/button';
 
-// The button primitive is generated (ADR 0029), but `default`, `link`,
+// The button primitive is generated (ADR 0019), but `default`, `link`,
 // `seal`, and `destructive` carry local token edits that a regeneration
 // would erase. This guards those edits so `scripts/ui-add.sh --overwrite`
 // cannot drop them silently.
@@ -29,7 +29,7 @@ describe('button variant guard', () => {
 
   it('keeps the destructive variant an outline, apart from the seal fill',
     () => {
-      // ADR 0065: Delete is a burnt-orange outline so it can never read as
+      // ADR 0020: Delete is a burnt-orange outline so it can never read as
       // the red, filled Publish button.
       const classes = buttonVariants({ variant: 'destructive' });
 

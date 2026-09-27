@@ -34,7 +34,7 @@ type memorySlugAttemptLimiter struct {
 
 // newSlugAttemptLimiter creates the per-account, rolling-hour limiter. The
 // optional cap exists for deterministic bounded-state tests; production uses
-// the ADR 0018 maximum.
+// the ADR 0007 maximum.
 func newSlugAttemptLimiter(maxKeys ...int) *memorySlugAttemptLimiter {
 	cap := defaultSlugAttemptKeys
 	if len(maxKeys) == 1 && maxKeys[0] > 0 {

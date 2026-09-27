@@ -16,7 +16,7 @@ import (
 )
 
 // Tests follow docs/design/viewer-analytics/counting.md, "Layers" and
-// "Aggregation", and ADR 0061.
+// "Aggregation", and ADR 0022.
 
 type fakeStore struct {
 	mu      sync.Mutex

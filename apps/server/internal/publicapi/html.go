@@ -423,7 +423,7 @@ func versionedAsset(url, path string) bool {
 }
 
 // derivedContactLinks counts the mailto: and tel: hrefs the renderer may emit
-// for the resume's visible contact details (docs/adr/0043-email-and-phone-links.md).
+// for the resume's visible contact details (docs/adr/0013-resume-header-and-contacts.md).
 func derivedContactLinks(resume publicresume.PublicResume) map[string]int {
 	links := map[string]int{}
 	if !resume.Document.PersonalDetails.Details.Present() {

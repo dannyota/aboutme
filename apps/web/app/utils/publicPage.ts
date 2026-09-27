@@ -1,7 +1,7 @@
 // The owner's public page title and emoji favicon. These mirror the server's
 // internal/publicpage checks so the Publish dialog can explain an issue before
 // saving; the server stays authoritative
-// (docs/adr/0042-public-page-title-and-favicon.md).
+// (docs/adr/0014-public-page-head-and-link-preview.md).
 
 export const MAX_TITLE_GRAPHEMES = 70;
 const MAX_TITLE_CODE_POINTS = 560;

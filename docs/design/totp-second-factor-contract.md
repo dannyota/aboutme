@@ -3,9 +3,9 @@
 This contract adds time-based one-time password (TOTP) codes to the pending,
 recovery, session, and epoch boundary of the
 [second-factor design](second-factor-authentication.md) without weakening
-passkeys. [ADR 0049](../adr/0049-totp-second-factor-authentication.md) records
-the product choices. The [passkey contract](passkey-second-factor-contract.md)
-owns the shared pending, state, recovery, and mail shapes. The
+passkeys. [ADR 0017](../adr/0017-second-factor-authentication.md) records the
+product choices. The [passkey contract](passkey-second-factor-contract.md) owns
+the shared pending, state, recovery, and mail shapes. The
 [key-management design](totp-key-management.md) owns sealing and keys.
 [Numeric budgets](budgets.md) owns every bound.
 

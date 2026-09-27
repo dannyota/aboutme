@@ -1,6 +1,6 @@
 # AWS hosting cost recommendation
 
-Status: historical recommendation from 2026-09-06. ADR 0037 superseded this UAT
+Status: historical recommendation from 2026-09-06. ADR 0025 superseded this UAT
 and autoscaling path for the first release. The current release authority is the
 [single-host production design](../../design/single-host-production.md).
 
@@ -10,13 +10,13 @@ The owner approved part-time UAT and production autoscaling on 2026-09-06:
 USD before tax. These are workload estimates, not a measured bill or a promise
 that arbitrary traffic fits the range.
 
-[ADR 0034](../../adr/0034-scheduled-uat-and-production-autoscaling.md) records
-the decision. The operating plan replaces the proposed $100, 14-day UAT campaign
-and separate $8/month retained-resource allowance. Use **$30/month** as the UAT
-operating ceiling, including retained and allocated shared costs. Production
-launch still requires Phase 11 approval under
-[ADR 0031](../../adr/0031-aws-cost-research-and-hosted-uat.md). This research
-has not provisioned resources or purchased a plan.
+[ADR 0026](../../adr/0026-replica-scaling.md) records the decision. The
+operating plan replaces the proposed $100, 14-day UAT campaign and separate
+$8/month retained-resource allowance. Use **$30/month** as the UAT operating
+ceiling, including retained and allocated shared costs. Production launch still
+requires Phase 11 approval under
+[ADR 0025](../../adr/0025-single-host-production.md). This research has not
+provisioned resources or purchased a plan.
 
 ## Selected configuration
 
@@ -164,12 +164,12 @@ environment. These operations have different costs and data-loss effects.
 
 ## GitHub and mail handoff
 
-[ADR 0033](../../adr/0033-public-image-builds-private-deployment.md) keeps all
-four image builds and native smoke in public `aboutme`. Private `aboutme-infra`
-validates artifacts, publishes to ECR, and deploys using its available quota.
-Public workflows receive no AWS credentials. Keep public caches within 10 GiB
-and private artifacts limited to release metadata. The old private Actions
-columns are overage sensitivities, not approved spend.
+[ADR 0025](../../adr/0025-single-host-production.md) keeps all four image builds
+and native smoke in public `aboutme`. Private `aboutme-infra` validates
+artifacts, publishes to ECR, and deploys using its available quota. Public
+workflows receive no AWS credentials. Keep public caches within 10 GiB and
+private artifacts limited to release metadata. The old private Actions columns
+are overage sensitivities, not approved spend.
 
 GitHub private-repository required-reviewer eligibility remains a Phase 10
 input. Verify an existing eligible plan or design a replacement approval

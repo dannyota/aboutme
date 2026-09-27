@@ -1,5 +1,5 @@
 // The homepage template showcase: four templates, one per gallery filter
-// chip, each with a sample in both site languages (DESIGN.md; ADR 0050).
+// chip, each with a sample in both site languages (DESIGN.md; ADR 0020).
 // `modern-sidebar` is left out because its only filter is "photo", which
 // this showcase does not offer as a chip.
 import type { GalleryFilter } from '../templates/catalog';

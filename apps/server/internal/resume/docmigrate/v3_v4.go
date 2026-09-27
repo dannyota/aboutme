@@ -8,7 +8,7 @@ import (
 
 // Document v4 adds optional customization.header.photoPosition and an
 // optional subtitle on project entries
-// (docs/adr/0044-header-photo-position-and-project-subtitle.md). Lifting v3
+// (docs/adr/0013-resume-header-and-contacts.md). Lifting v3
 // changes only the version; lowering drops both fields, which is the declared
 // v3 emission loss.
 

@@ -8,7 +8,7 @@ stay light in every case.
 Status: proposed. The owner approved the direction: light by default, the owner
 chooses the scheme per resume, and viewers see the owner's choice. The dark
 scheme contradicts the white-sheet rule of
-[ADR 0050](../adr/0050-aurora-application-identity.md), so it needs an ADR that
+[ADR 0020](../adr/0020-application-visual-identity.md), so it needs an ADR that
 amends that rule for the public page on screen before it is built. The page bar
 needs no contract change.
 

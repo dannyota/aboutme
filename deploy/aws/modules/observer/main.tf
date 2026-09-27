@@ -1,5 +1,5 @@
 # The deployment observer on AWS (docs/design/deployment-transparency/
-# README.md; ADR 0057): a Lambda function outside the host that reads which
+# README.md; ADR 0028): a Lambda function outside the host that reads which
 # image digests the production cluster runs, verifies them, and writes
 # deployment.json to a private bucket that only CloudFront reads. The ECR
 # repository holds a byte-for-byte copy of the attested GHCR image

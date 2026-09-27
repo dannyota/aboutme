@@ -3,7 +3,7 @@
 The interface supports Vietnamese and English. Interface language stays separate
 from resume language: a language toggle changes the controls around a resume,
 never the resume, and never an account, session, OAuth, or MCP authority.
-[ADR 0047](../adr/0047-bilingual-resume-workspace.md) records the choice.
+[ADR 0021](../adr/0021-bilingual-resume-workspace.md) records the choice.
 
 ## Two language domains
 
@@ -113,9 +113,9 @@ generic message and never shows a server message. Every interpolation renders as
 text and catalog values are never HTML.
 
 Localization changes no security contract in
-[ADR 0014](../adr/0014-oauth-start-methods.md),
-[ADR 0025](../adr/0025-password-authentication-and-identity-linking.md), or
-[ADR 0026](../adr/0026-mcp-agent-access.md). CSRF, Origin, recent
+[ADR 0016](../adr/0016-sign-in-providers.md),
+[ADR 0015](../adr/0015-accounts-passwords-and-sessions.md), or
+[ADR 0018](../adr/0018-mcp-agent-access.md). CSRF, Origin, recent
 reauthentication, publish, export, sanitizing, and consent checks are the same
 in both languages, and no localized label becomes an action identifier.
 

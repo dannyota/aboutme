@@ -1,8 +1,8 @@
 # Vietnam production migration
 
-Status: open (owner decision 2026-09-24). Moves production to GreenNode and Bizfly in Vietnam; AWS stays as a fictional-data test environment. Design: [vietnam-production.md](../design/vietnam-production.md). Decision: [ADR 0051](../adr/0051-vietnam-hosted-production.md). Design wins over this plan.
+Status: open (owner decision 2026-09-24). Moves production to GreenNode and Bizfly in Vietnam; AWS stays as a fictional-data test environment. Design: [vietnam-production.md](../design/vietnam-production.md). Decision: [ADR 0027](../adr/0027-vietnam-hosted-production.md). Design wins over this plan.
 
-Code, comments, tests, and living docs cite the design or ADR 0051, never this plan or its phase numbers. Each app release is one feature per [How we work](../../AGENTS.md#how-we-work).
+Code, comments, tests, and living docs cite the design or ADR 0027, never this plan or its phase numbers. Each app release is one feature per [How we work](../../AGENTS.md#how-we-work).
 
 ## Owner actions
 

@@ -1,7 +1,7 @@
 import { defineComponent, h } from 'vue';
 
 // Brand marks for contact icons, drawn monochrome in the icon colour
-// (docs/adr/0041-contact-link-display-and-body-justify.md). GitHub and X come
+// (docs/adr/0013-resume-header-and-contacts.md). GitHub and X come
 // from Simple Icons 16.31.0 (CC0-1.0); LinkedIn comes from Font Awesome Free
 // 7.3.1 (CC BY 4.0). THIRD_PARTY_NOTICES.md records both sources.
 

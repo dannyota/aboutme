@@ -1,6 +1,6 @@
 # Link previews (0.6.0 and 0.6.1)
 
-Status: 0.6.0 is tagged `v0.6.0`; 0.6.1 is tagged `v0.6.1`. The owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0055 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0055](../adr/0055-stored-link-preview-card.md). The owner moved the publish-panel preview and the Verify page ([deployment transparency](deployment-transparency.md)) into 0.6.1 with the card. LinkedIn sign-in and import follow in [linkedin.md](linkedin.md).
+Status: 0.6.0 is tagged `v0.6.0`; 0.6.1 is tagged `v0.6.1`. The owner approved every choice in [the design](../design/link-previews.md#owner-decisions), and ADR 0014 is accepted. Design: [link previews](../design/link-previews.md), [ADR 0014](../adr/0014-public-page-head-and-link-preview.md). The owner moved the publish-panel preview and the Verify page ([deployment transparency](deployment-transparency.md)) into 0.6.1 with the card. LinkedIn sign-in and import follow in [linkedin.md](linkedin.md).
 
 |Release|Outcome|Risk|
 |-|-|-|
@@ -45,4 +45,4 @@ Built after the card work in the same release; the frontend starts it once `Prev
 
 ## Writing rules for briefs
 
-Code, comments, tests, and living docs cite the design doc, ADR 0055, or `AC-*` IDs, never this plan, its releases, or task names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate.
+Code, comments, tests, and living docs cite the design doc, ADR 0014, or `AC-*` IDs, never this plan, its releases, or task names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate.

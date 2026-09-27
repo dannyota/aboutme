@@ -1,4 +1,4 @@
-# The CloudFront edge (docs/design/cloudfront-edge.md; ADR 0054): the origin
+# The CloudFront edge (docs/design/cloudfront-edge.md; ADR 0025): the origin
 # certificate, the viewer certificate, the imported origin mTLS client
 # certificate, the cache and origin request policies, the web ACL, and the
 # distribution itself.
@@ -176,7 +176,7 @@ data "aws_cloudfront_cache_policy" "disabled" {
 
 # /.well-known/deployment.json comes from the transparency bucket, cached 30
 # seconds, never from the host (docs/design/deployment-transparency/
-# README.md, "Serving and caching"; ADR 0057).
+# README.md, "Serving and caching"; ADR 0028).
 resource "aws_cloudfront_cache_policy" "deployment_document" {
   name        = "${var.name}-deployment-document"
   min_ttl     = 0

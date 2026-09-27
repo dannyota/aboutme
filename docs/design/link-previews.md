@@ -4,8 +4,8 @@ A shared public resume link (`https://aboutme.vn/<slug>`) shows a clear card in
 chat apps and social networks, with no new setting. The page head carries a
 title, a description from the resume summary, the language, the canonical URL,
 and a preview card image built for thumbnails. The card holds no contact
-details. [ADR 0055](../adr/0055-stored-link-preview-card.md) records the stored
-card and the choices it replaces.
+details. [ADR 0014](../adr/0014-public-page-head-and-link-preview.md) records
+the stored card and the choices it replaces.
 
 Status: accepted. **Verify** marks a fact that comes from community sources or
 inference and that the live checks must confirm.
@@ -86,7 +86,7 @@ missing, repeated, or extra one.
 
 | Element                     | Value                                                              |
 | --------------------------- | ------------------------------------------------------------------ |
-| `<title>`                   | ADR 0042 title, unchanged                                          |
+| `<title>`                   | ADR 0014 title, unchanged                                          |
 | `link rel="canonical"`      | `https://aboutme.vn/<slug>`, unchanged                             |
 | `meta name="description"`   | Description                                                        |
 | `og:type`                   | `profile`                                                          |
@@ -231,7 +231,7 @@ delete lock the row for update, so they serialize with a store.
 
 **Route.** `GET` and `HEAD` `/api/v1/public/resumes/{slug}/og/{version}.png`,
 with `version` matching `^[0-9a-f]{16}$` and no query. The route takes the ADR
-0022 lease, computes the current version, and returns the public 404 for any
+0010 lease, computes the current version, and returns the public 404 for any
 other version. It serves `image/png`,
 `Cache-Control: no-cache, must-revalidate`, a strong entity tag over the bytes,
 and `X-Robots-Tag: noindex, noarchive` when discovery is off. `/og.png` serves
@@ -317,7 +317,7 @@ The publish dialog can show the card and a neutral chat card with the title and
 description, with no new setting. The dialog renders the same card component in
 the browser, so it works before the first publish and needs no new route. A
 TypeScript copy of the text rules checks against the Go rules with one shared
-fixture set, as ADR 0042 does for the public title.
+fixture set, as ADR 0014 does for the public title.
 
 ## Tests
 

@@ -5,7 +5,7 @@ import addFormats from "ajv-formats";
 import { describe, expect, it } from "vitest";
 
 // Document v3 adds a per-detail link display choice and a body text alignment
-// (docs/adr/0041-contact-link-display-and-body-justify.md). Both are optional,
+// (docs/adr/0013-resume-header-and-contacts.md). Both are optional,
 // and absent keeps the v2 rendering.
 
 const root = new URL("..", import.meta.url).pathname;

@@ -6,10 +6,9 @@ it may control, and how it behaves under Chromium's print engine. It fixes the
 boundary between what the template decides, what the user decides, and what the
 document carries, precisely enough that two designers working from it
 independently produce compatible templates. Bound by
-[ADR 0008](../../adr/0008-template-apply-semantics.md),
-[ADR 0009](../../adr/0009-section-order-authority.md), and
-[ADR 0021](../../adr/0021-template-placement-order.md), which fixes the total
-order and fail-closed validation for template placement.
+[ADR 0012](../../adr/0012-template-placement.md), which fixes the placement
+rule, its total order, and fail-closed validation, and
+[ADR 0004](../../adr/0004-resume-document-contract.md).
 
 - [`contract.md`](contract.md) — template identity, apply and ordering
   semantics, rendering, absence, hiding, columns, and conformance.

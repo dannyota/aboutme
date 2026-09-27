@@ -166,7 +166,7 @@ describe("store-layer validator: reversed date range (start > end)", () => {
 
 describe("store-layer validator: contact detail id uniqueness", () => {
   // Old-client writes restore each detail's display by id
-  // (docs/adr/0041-contact-link-display-and-body-justify.md), so ids must be
+  // (docs/adr/0013-resume-header-and-contacts.md), so ids must be
   // unique.
   it("reports every occurrence of a repeated detail id", () => {
     const issues = validateDocument(

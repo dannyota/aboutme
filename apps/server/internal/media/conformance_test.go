@@ -228,7 +228,7 @@ func TestConformance_DeleteThenGet(t *testing.T) {
 
 // TestConformance_SecondPutIsRejected proves create-only semantics: a
 // second Put at the same key returns ErrAlreadyExists with PutNotCreated
-// and leaves the original bytes AND content type unchanged (ADR 0019: no
+// and leaves the original bytes AND content type unchanged (ADR 0009: no
 // overwrite path exists).
 func TestConformance_SecondPutIsRejected(t *testing.T) {
 	t.Parallel()

@@ -95,7 +95,7 @@ export function assertRecoveryCodesSatisfyRegenerationContract(
 }
 
 // --- Accepted TOTP shapes (docs/design/totp-second-factor-contract.md,
-// ADR 0049)
+// ADR 0017)
 //
 // `totpSettings.ts` aliases `TotpEnrollmentStart` and `TotpEnrollmentComplete`
 // straight from `components['schemas']`, so a mismatch there cannot compile
@@ -175,7 +175,7 @@ describe('generated API surface (consumer wiring)', () => {
 });
 
 describe(
-  'generated TOTP shapes (totp-second-factor-contract.md, ADR 0049)',
+  'generated TOTP shapes (totp-second-factor-contract.md, ADR 0017)',
   () => {
     it('exposes totpEnrollment on GET /capabilities', async () => {
       const client = createApiClient({

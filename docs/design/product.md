@@ -65,7 +65,7 @@ There is no publish, unpublish, or public-read tool: making a resume public
 stays a human decision in the web UI. Detailed behavior lives in
 [the API design](api.md#agent-access-and-the-bearer-world),
 [the security design](security.md#agent-authorization-and-the-bearer-world), and
-[ADR 0026](../adr/0026-mcp-agent-access.md).
+[ADR 0018](../adr/0018-mcp-agent-access.md).
 
 ## Public namespace
 
@@ -81,11 +81,12 @@ Nuxt page manifest, or generated dispatch fails the build.
 The registry keys one row per literal top-level segment; finer paths dispatch
 inside the owning router. `packages/publicroots/public-roots.v9.json` holds the
 exact roots. `admin`, `people`, and `u` are reserved for future use with no
-handler ([ADR 0004](../adr/0004-resume-slug-only-urls.md)). The dotted and
-underscore-prefixed roots cannot pass the slug grammar but stay in the registry
-so dispatch and reservation parity remain exhaustive. Dynamic `/{slug}` and
-`/{slug}.md` routes add no rows. Framework-generated paths that are not fixed
-product or infrastructure routes fall through to Nuxt outside the registry.
+handler ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
+The dotted and underscore-prefixed roots cannot pass the slug grammar but stay
+in the registry so dispatch and reservation parity remain exhaustive. Dynamic
+`/{slug}` and `/{slug}.md` routes add no rows. Framework-generated paths that
+are not fixed product or infrastructure routes fall through to Nuxt outside the
+registry.
 
 `/authorize` is the Nuxt consent page and `/oauth/authorize` is the Go endpoint
 that validates a request before redirecting to it. They are different roots, so
@@ -95,8 +96,9 @@ A slug claim validates both the grammar and exact registry membership. Reserved
 root segments cannot be claimed. A resume keeps its slug when unpublished.
 Rename or deletion releases the old slug into a tombstone that holds no link to
 any account. The tombstone blocks the slug for 180 days, then the daily privacy
-retention sweep deletes it. [ADR 0004](../adr/0004-resume-slug-only-urls.md)
-records the rationale.
+retention sweep deletes it.
+[ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) records the
+rationale.
 
 ## Publish controls
 
@@ -110,7 +112,7 @@ three independent choices:
 It also sets two optional page details: the browser-tab title (default
 `<full name> — Resume`) and one emoji shown as the page icon (default none).
 Both are public, like the slug
-([ADR 0042](../adr/0042-public-page-title-and-favicon.md)).
+([ADR 0014](../adr/0014-public-page-head-and-link-preview.md)).
 
 | State                    | Public behavior                                                                                                                                 |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -118,7 +120,7 @@ Both are public, like the slug
 | Live, discovery disabled | Shareable; HTML, JSON, photo, PDF, and preview card send `X-Robots-Tag: noindex, noarchive`; absent from sitemap and `llms.txt`; markdown `404` |
 | Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                       |
 | Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                    |
-| Preview card             | Stored 1200 by 630 PNG with name, headline, and photo, never contact details; live only, independent of download and discovery; ADR 0055        |
+| Preview card             | Stored 1200 by 630 PNG with name, headline, and photo, never contact details; live only, independent of download and discovery; ADR 0014        |
 
 The sitemap lists `/`, `/privacy`, `/terms`, `/templates`, and each
 `/templates/{id}` page, then every discoverable resume. `llms.txt` follows the
@@ -135,7 +137,7 @@ Every public representation revalidates the current publish state before a
 stored response is reused. Unpublish, delete, and rename do not return success
 until the old public generation can no longer be admitted. A service-controlled
 cache never extends access beyond that success boundary.
-[ADR 0022](../adr/0022-public-artifact-revocation.md) defines the revocation
+[ADR 0010](../adr/0010-public-artifact-revocation.md) defines the revocation
 fence and its 60-second cache trade-off.
 
 ## Product boundaries
@@ -149,7 +151,8 @@ fence and its 60-second cache trade-off.
   fence and cleanup path rather than exposing a publish-state control.
 - The public application has no operator or platform-admin surface. Operator
   actions run out of band with database credentials.
-  [ADR 0028](../adr/0028-no-operator-surface.md) owns this rule.
+  [ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) owns this
+  rule.
 - Publishing explains that public content can be delivered through a global
   content-delivery network. The discovery option separately explains crawler and
   AI-engine access.

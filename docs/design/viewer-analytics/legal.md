@@ -35,7 +35,7 @@ run one (Decree Article 22(1)), under a certificate from the Ministry of Public
 Security (Decree Article 24(1)). aboutme is run by an individual. Keeping the
 processing fixed by aboutme and giving the owner only totals avoids that role.
 This is the reason for
-[ADR 0060](../../adr/0060-viewer-data-controller-and-consent.md).
+[ADR 0022](../../adr/0022-viewer-privacy-and-counting.md).
 
 ## What the data is
 

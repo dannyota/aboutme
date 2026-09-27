@@ -326,7 +326,7 @@ func runTOTPChangeUseRace(t *testing.T, useRecovery, remove, changeFirst bool) {
 // revokes; a change that commits first advances the epoch, so the rotation
 // mints nothing. Either way the change's replacement is the only live session
 // (docs/design/second-factor-authentication.md#assurance-boundary;
-// docs/adr/0015-session-rotation-delivery.md; AC-AUTH-027).
+// docs/adr/0015-accounts-passwords-and-sessions.md; AC-AUTH-027).
 func TestTOTPChangeRacesSessionRotation(t *testing.T) {
 	for _, remove := range []bool{false, true} {
 		for _, changeFirst := range []bool{false, true} {

@@ -52,7 +52,7 @@ type GetResumePreviewCardRow struct {
 	PNG     []byte
 }
 
-// A stored card is derived data (ADR 0055); every public read passes the
+// A stored card is derived data (ADR 0014); every public read passes the
 // live-state gate before it reads one.
 func (q *Queries) GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error) {
 	row := q.db.QueryRow(ctx, getResumePreviewCard, resumeID)

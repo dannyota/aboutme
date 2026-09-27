@@ -176,7 +176,7 @@ func TestPublicHTMLAllowsOnlyTheOwnPDFDownloadLink(t *testing.T) {
 
 // The owner's title and emoji favicon are the only head values that vary per
 // resume: the validator derives both from the stored settings and accepts
-// nothing else (docs/adr/0042-public-page-title-and-favicon.md).
+// nothing else (docs/adr/0014-public-page-head-and-link-preview.md).
 func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 	origin := mustPublicOrigin(t)
 	resume := publicresume.PublicResume{Slug: "ada", Revision: "1",
@@ -235,7 +235,7 @@ func TestPublicHTMLAcceptsOnlyTheStoredTitleAndFavicon(t *testing.T) {
 }
 
 // Header email and phone anchors must be exactly the links the contact rules
-// derive from visible details (docs/adr/0043-email-and-phone-links.md). Rich
+// derive from visible details (docs/adr/0013-resume-header-and-contacts.md). Rich
 // text keeps its own sanitized mailto: and tel: links.
 func TestPublicHTMLAcceptsOnlyDerivedContactLinksInTheHeader(t *testing.T) {
 	origin := mustPublicOrigin(t)

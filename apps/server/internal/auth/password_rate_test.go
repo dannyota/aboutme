@@ -77,7 +77,7 @@ func exhaustAdmission(t *testing.T, limit int, admit func() RateDecision) {
 func TestPasswordRateBudgetParity(t *testing.T) {
 	t.Parallel()
 
-	// Every store is capped at the ADR 0018 default of 10,000 active keys plus
+	// Every store is capped at the ADR 0007 default of 10,000 active keys plus
 	// one overflow bucket.
 	if passwordRateMaxKeys != api.DefaultRateLimitMaxKeys {
 		t.Errorf("passwordRateMaxKeys = %d, api default = %d; want equal",

@@ -1,6 +1,6 @@
 // These adversarial HTTP tests cover session ownership, liveness, revocation,
 // rotation delivery, recent reauthentication, and CSRF. See
-// docs/adr/0015-session-rotation-delivery.md.
+// docs/adr/0015-accounts-passwords-and-sessions.md.
 package auth_test
 
 import (

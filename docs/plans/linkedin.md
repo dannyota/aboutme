@@ -1,12 +1,12 @@
 # LinkedIn import from Save to PDF (0.6.6)
 
-Status: planned; the owner approved I1 to I10 in [LinkedIn import](../design/linkedin-import.md#owner-approval) and [ADR 0064](../adr/0064-linkedin-import-from-save-to-pdf.md) on 2026-09-27. One release, one feature: `/app/import/linkedin` reads an English LinkedIn Save to PDF in the browser, shows a review, and creates a new resume. Risk: medium to high (hostile PDF parsing in the browser, a new runtime dependency, an app page CSP change, the privacy claim).
+Status: planned; the owner approved I1 to I10 in [LinkedIn import](../design/linkedin-import.md#owner-approval) and [ADR 0023](../adr/0023-linkedin-import.md) on 2026-09-27. One release, one feature: `/app/import/linkedin` reads an English LinkedIn Save to PDF in the browser, shows a review, and creates a new resume. Risk: medium to high (hostile PDF parsing in the browser, a new runtime dependency, an app page CSP change, the privacy claim).
 
-LinkedIn sign-in is done: it shipped in v0.6.2 and is on in production from v0.6.3 ([ADR 0058](../adr/0058-linkedin-sign-in-in-production.md), [ADR 0063](../adr/0063-linkedin-sign-in-without-a-nonce-claim.md)). Git keeps its release plan.
+LinkedIn sign-in is done: it shipped in v0.6.2 and is on in production from v0.6.3 ([ADR 0016](../adr/0016-sign-in-providers.md)). Git keeps its release plan.
 
 ## Before any code
 
-1. The owner answers I1 to I10. The manager sets ADR 0064 to Accepted, records ADR 0059's final status, and updates `docs/design/decisions.md`.
+1. Done 2026-09-27: the owner answered I1 to I10, and ADR 0023 is accepted.
 2. Done 2026-09-27: the owner's shape report settled the design's [facts to confirm](../design/linkedin-import.md#open-facts); the design now carries the measured sizes and gaps, per-column heading sizes, the unlabeled email, unparenthesized group durations, and the 1.4 sidebar entry threshold. Facts one profile could not settle stay marked **Verify**, and the parser handles them defensively. Steps 3 onward may start.
 
 ## Steps
@@ -28,4 +28,4 @@ The reviewer confirms by name: every limit is enforced on bytes read and items c
 
 ## Writing rules for briefs
 
-Code, comments, tests, and living docs cite the design page, ADR 0064, ADR 0059, or `AC-*` IDs, never this plan, its release, or step names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate. Fixtures use synthetic people only; no real LinkedIn PDF or text from one is committed.
+Code, comments, tests, and living docs cite the design page, ADR 0023, or `AC-*` IDs, never this plan, its release, or step names. No em dashes. Human-read Markdown keeps Prettier's 80-column wrap. Run `make pre-push` before every push; GitHub CI is the gate. Fixtures use synthetic people only; no real LinkedIn PDF or text from one is committed.

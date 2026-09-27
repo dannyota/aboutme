@@ -1,6 +1,6 @@
 # AWS hosting cost comparison
 
-Status: historical cost research from 2026-09-06. ADR 0037 superseded the UAT,
+Status: historical cost research from 2026-09-06. ADR 0025 superseded the UAT,
 CloudFront, load-balancer, and autoscaling release path with single-host
 production. Amounts are US dollars before tax and are not the current deployed
 topology.
@@ -10,10 +10,9 @@ topology.
 The historical fixed-host ECS-on-EC2 and RDS baseline was the lowest gross-cost
 option in every expected and stress campaign case. The owner then selected the
 scheduled UAT and autoscaled production target in
-[ADR 0034](../../adr/0034-scheduled-uat-and-production-autoscaling.md). The
-target still depends on UAT proving ARM64 Chromium, concurrent job headroom,
-render latency, replica safety, server-sent event (SSE) behavior, and the
-private print path.
+[ADR 0026](../../adr/0026-replica-scaling.md). The target still depends on UAT
+proving ARM64 Chromium, concurrent job headroom, render latency, replica safety,
+server-sent event (SSE) behavior, and the private print path.
 
 The owner approved a revised operating estimate of **$20–30 per month** for
 part-time UAT, **$140–170 per month** for future autoscaled production, and
@@ -158,7 +157,7 @@ Expected production lifecycle cost is:
 
 ## Historical option 1: fixed-host ECS on EC2 with RDS
 
-This gross comparison option preserves the former one-host topology. ADR 0034
+This gross comparison option preserves the former one-host topology. ADR 0026
 supersedes its single-host routing and placement as the production target:
 
 - Caddy and Go remain separate host-network tasks with loopback origin trust.

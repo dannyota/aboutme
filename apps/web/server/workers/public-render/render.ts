@@ -59,7 +59,7 @@ const jsonLd = (request: PublicRenderRequest): string => {
   const person = request.publicResume.document.personalDetails;
   const details = person.details ?? [];
   // Must pick exactly what Go's publicformat.JSONLD picks: the public HTML
-  // validator requires this script to byte-equal Go's (ADR 0041).
+  // validator requires this script to byte-equal Go's (ADR 0013).
   const sameAs = [...new Set(details.flatMap((detail) => (
     SAME_AS_TYPES.has(detail.type)
     && detail.value.startsWith('https://')
@@ -177,7 +177,7 @@ export async function renderPublicResume(
       '<meta name="format-detection" '
       + 'content="telephone=no, date=no, address=no, email=no">',
       // The server computes the title and favicon href from the owner's
-      // settings, and its validator accepts exactly these (ADR 0042).
+      // settings, and its validator accepts exactly these (ADR 0014).
       `<title>${escapeText(request.pageTitle)}</title>`,
       request.faviconHref === ''
         ? ''

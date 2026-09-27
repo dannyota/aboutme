@@ -1,4 +1,4 @@
-// Proves the ownership and grant shape ADR 0038 requires: aboutme_migrator
+// Proves the ownership and grant shape ADR 0005 requires: aboutme_migrator
 // owns every object in public (including goose_db_version and the citext
 // extension) and belongs to no other role, and aboutme_app holds exactly
 // SELECT/INSERT/UPDATE/DELETE (no grant option, nothing else) on each of

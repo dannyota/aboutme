@@ -19,9 +19,9 @@ describes what is implemented now.
 | `deploy/`                     | Application images, local/self-host tools, and AWS OpenTofu modules              |
 
 AWS OpenTofu modules live in `deploy/aws/` under
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md). State,
-account identifiers and environment values stay out of Git. Public checks need
-no AWS access, and no workflow holds cloud credentials or deploys.
+[ADR 0025](../adr/0025-single-host-production.md). State, account identifiers
+and environment values stay out of Git. Public checks need no AWS access, and no
+workflow holds cloud credentials or deploys.
 
 Generated files are committed but never hand-edited. Document types derive from
 JSON Schema. Store types derive from migrations and sqlc queries. Web API types

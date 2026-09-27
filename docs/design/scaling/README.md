@@ -1,16 +1,14 @@
 # Replica scaling
 
-Status: Accepted under
-[ADR 0035](../../adr/0035-replica-coordination-and-uat-lifecycle.md), narrowed
-by [ADR 0036](../../adr/0036-single-replica-launch-and-pipeline-migrations.md),
-[ADR 0037](../../adr/0037-single-host-production-without-hosted-uat.md) and
-[ADR 0038](../../adr/0038-single-baseline-and-plain-migrator.md). These pages
-hold the accepted design that a second serving replica needs. Only the
+Status: Accepted under [ADR 0026](../../adr/0026-replica-scaling.md), with
+[ADR 0025](../../adr/0025-single-host-production.md) and
+[ADR 0005](../../adr/0005-database-migrations.md). These pages hold the accepted
+design that a second serving replica needs. Only the
 [policy catalog](policy-catalog.md) describes built behavior.
 
 ## Current state
 
-Production runs one serving replica on one host under ADR 0037. Deployment
+Production runs one serving replica on one host under ADR 0025. Deployment
 configuration, not the database, holds the service at one replica. With one
 replica these process-local mechanisms are correct:
 
@@ -18,11 +16,11 @@ replica these process-local mechanisms are correct:
 - render jobs and one-use print capabilities in `internal/renderjob`;
 - SSE hubs and subscriber queues in `internal/realtime`;
 - rate limiters in `internal/api` under
-  [ADR 0018](../../adr/0018-bounded-rate-limiter.md), and the concurrency caps
+  [ADR 0007](../../adr/0007-bounded-rate-limiter.md), and the concurrency caps
   in the policy catalog.
 
 The schema holds no coordination tables. Migrations run as a deploy step through
-plain goose under a session advisory lock (ADR 0036, ADR 0038). The design below
+plain goose under a session advisory lock (ADR 0026, ADR 0005). The design below
 returns as new migrations with explicit grants.
 
 ## Pages
@@ -38,8 +36,8 @@ returns as new migrations with explicit grants.
 
 This design has no database write barrier, scheduled UAT stop receipt, wake
 operation or protected migrator. Those served scheduled UAT shutdown and
-migration inside a running fleet. ADR 0036 and ADR 0037 retired both uses, and
-ADR 0038 removed the code. Hosted UAT returns at about 500 users under a new
+migration inside a running fleet. ADR 0026 and ADR 0025 retired both uses, and
+ADR 0005 removed the code. Hosted UAT returns at about 500 users under a new
 decision.
 
 ## Shared rules
@@ -50,7 +48,7 @@ These rules apply to every page:
   function. Functions are `SECURITY DEFINER`, set `search_path = pg_catalog`,
   qualify every object and use no dynamic SQL. `PUBLIC` has nothing. Each login
   gets `EXECUTE` on its named functions only and no direct DML.
-- Fleet logins beside ADR 0038's `aboutme_migrator` and `aboutme_app` are
+- Fleet logins beside ADR 0005's `aboutme_migrator` and `aboutme_app` are
   `aboutme_maintenance`, `aboutme_lifecycle_command` and
   `aboutme_fencing_proof`. `db-setup` creates cluster roles; goose never creates
   or drops a role.
@@ -82,6 +80,7 @@ Raise the service maximum above one only after these steps, in order:
 4. Compose membership, readiness and the lifecycle controller.
 5. Prove locally a 1 → 2 → 1 transition during writes, revocation, render and
    SSE traffic, plus crash and graceful-drain cases, without weakening any limit
-   (ADR 0034).
-6. Decide the fleet edge and load balancer. ADR 0037 retired the CloudFront and
-   ALB edge that ADR 0034 chose.
+   (ADR 0026).
+6. Decide the fleet edge and load balancer. Single-host production (ADR 0025)
+   has no load balancer; the ALB edge that ADR 0026's history records is
+   retired.

@@ -7,7 +7,7 @@ import (
 )
 
 // Document v3 adds optional personalDetails.details[].display and
-// customization.font.textAlign (docs/adr/0041-contact-link-display-and-body-justify.md).
+// customization.font.textAlign (docs/adr/0013-resume-header-and-contacts.md).
 // Lifting v2 changes only the version; lowering drops both fields, which is
 // the declared v2 emission loss.
 

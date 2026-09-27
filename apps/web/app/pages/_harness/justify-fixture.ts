@@ -2,7 +2,7 @@ import type { Resume } from '@aboutme/schema';
 
 /**
  * Body text long enough to wrap, so the justify screenshot cell shows
- * justified paragraphs and list items (ADR 0041). The vn-full fixture's body
+ * justified paragraphs and list items (ADR 0013). The vn-full fixture's body
  * lines each fit on one line, where justify has no visible effect.
  */
 const PROFILE_TEXT

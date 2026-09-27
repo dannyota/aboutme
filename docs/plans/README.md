@@ -10,8 +10,8 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |[link-previews.md](link-previews.md)|Link previews, releases 0.6.0 and 0.6.1 (card, publish-panel preview, and the Verify page)|
 |[linkedin.md](linkedin.md)|LinkedIn import from Save to PDF (0.6.6), approved; waiting for the owner's shape report|
 |[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup (0.6.7); view counts shipped in v0.6.4|
-|[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0057](../adr/0057-deployment-transparency-observer.md)), waiting for owner approvals|
-|[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0051](../adr/0051-vietnam-hosted-production.md))|
+|[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0028](../adr/0028-deployment-transparency-observer.md)), waiting for owner approvals|
+|[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
 |[public-page-theme.md](public-page-theme.md)|Public page bar and light/dark theme (0.6.10)|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
@@ -20,7 +20,7 @@ A multi-release goal gets one plan file; its task briefs go in a directory of th
 
 ## Shipped
 
-Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELEASE_TAG` on one AWS Singapore host ([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)), live since v0.1.1.
+Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELEASE_TAG` on one AWS Singapore host ([ADR 0025](../adr/0025-single-host-production.md)), live since v0.1.1.
 
 |Tag|Shipped|
 |-|-|
@@ -47,4 +47,4 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 
 ## Gates
 
-[ADR 0046](../adr/0046-github-ci-delivery-gate.md) governs: failing test first, one fresh review per plan or release, green GitHub CI on the exact commit before tag and deploy. Authentication, sessions, CSRF, concurrency, idempotency, migrations, sanitizing, publish revocation, secrets, and production deploys are high risk; the reviewer confirms those invariants by name.
+[ADR 0024](../adr/0024-delivery-gates.md) governs: failing test first, one fresh review per plan or release, green GitHub CI on the exact commit before tag and deploy. Authentication, sessions, CSRF, concurrency, idempotency, migrations, sanitizing, publish revocation, secrets, and production deploys are high risk; the reviewer confirms those invariants by name.

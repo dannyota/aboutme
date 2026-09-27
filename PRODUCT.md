@@ -72,7 +72,7 @@ so.
 - Slug grammar `^[a-z0-9]+(-[a-z0-9]+)*$`, 4 to 30 characters, globally unique;
   released slugs enter a 180-day tombstone. Reserved roots cannot be claimed.
 - Email and password authentication, plus independently enabled provider login
-  (ADR 0039). Production enables Google and disables password registration. The
+  (ADR 0016). Production enables Google and disables password registration. The
   UI shows a provider control only for a name in the capabilities read's
   `providers` list.
 - The resume renderer is pure: `(document, renderContext) -> HTML`. Application
@@ -82,7 +82,7 @@ so.
   or CDNs at runtime. Fonts are self-hosted from a licensed catalog of 26
   families (all OFL-1.1); Be Vietnam Pro is rank 1 and Inter rank 2.
 - Application UI toolkit: Tailwind CSS v4 and shadcn-vue primitives with reka-ui
-  (ADR 0029).
+  (ADR 0019).
 - Terminology: "resume" (never CV in English), "publish" and "unpublish",
   "public resume", "PDF download", "SEO and GEO", "connected agents", "signed-in
   devices", "slug". Vietnamese copy uses "CV", the common Vietnamese word.

@@ -5,7 +5,7 @@ import ContactChip from './primitives/ContactChip.vue';
 import Photo from './primitives/Photo.vue';
 
 // A left or right photo position applies only when a photo renders; the
-// name, headline, and details sit in one text block beside it (ADR 0044).
+// name, headline, and details sit in one text block beside it (ADR 0013).
 withDefaults(
   defineProps<{
     personalDetails: ResolvedRenderModel['personalDetails'];

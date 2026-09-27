@@ -24,7 +24,7 @@ type RateConfig struct {
 	MaxKeys           int
 }
 
-// RatePolicies composes OAuth endpoint admission over the ADR 0018 bounded
+// RatePolicies composes OAuth endpoint admission over the ADR 0007 bounded
 // limiter and one bounded fixed-window failed-grant store.
 type RatePolicies struct {
 	trusted  api.TrustedProxies

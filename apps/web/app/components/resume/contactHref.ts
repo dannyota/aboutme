@@ -3,7 +3,7 @@ import type { PersonalDetail } from '@aboutme/schema';
 /**
  * The link a contact detail renders as, or null for plain text. The renderer
  * re-checks every value itself and never trusts write-time validation
- * (ADR 0013, ADR 0041, ADR 0043).
+ * (ADR 0013).
  */
 
 const URL_TYPES = new Set<PersonalDetail['type']>([

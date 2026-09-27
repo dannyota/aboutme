@@ -344,7 +344,7 @@ func TestLoad_ProviderCredentialsRequiredPerEnabledProvider(t *testing.T) {
 				t.Fatalf("ProviderLogin = %+v, want google only", got.ProviderLogin)
 			}
 		})
-		// Production may enable Google and LinkedIn together (ADR 0058).
+		// Production may enable Google and LinkedIn together (ADR 0016).
 		t.Run(environment+" google,linkedin with both providers' credentials", func(t *testing.T) {
 			t.Parallel()
 			vars := base(environment, "google,linkedin")

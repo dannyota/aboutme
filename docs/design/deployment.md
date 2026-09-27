@@ -32,7 +32,7 @@ Browser authentication requires HTTPS because session and OAuth transaction
 cookies are always `Secure`. Native HTTP remains useful for unauthenticated UI
 and API work. Auth feature checks run at the native HTTPS origin. Complete
 product acceptance runs in production, per
-[ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md).
+[ADR 0025](../adr/0025-single-host-production.md).
 
 ## Production topology
 
@@ -46,12 +46,11 @@ infrastructure and deploys from the laptop by image digest, never a moving tag.
 
 Production is Amazon CloudFront in front of one EC2 host running Caddy, Go, and
 Nuxt, with private single-AZ RDS PostgreSQL and private S3
-([ADR 0037](../adr/0037-single-host-production-without-hosted-uat.md)). The
+([ADR 0025](../adr/0025-single-host-production.md)). The
 [single-host design](single-host-production.md) owns its details. One serving
-replica runs under
-[ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md), and
-the growth path is a larger instance first. Raising the replica count alone is
-unsafe: publication fences, render jobs and capabilities, and SSE state are
+replica runs under [ADR 0026](../adr/0026-replica-scaling.md), and the growth
+path is a larger instance first. Raising the replica count alone is unsafe:
+publication fences, render jobs and capabilities, and SSE state are
 process-local until the [scaling contract](scaling/README.md) lands.
 
 ## Client-IP boundary
@@ -73,7 +72,7 @@ client certificate. Every path except hashed `/_nuxt/*` assets bypasses the edge
 cache, so edge storage is never publication authority: each public request
 reaches the origin, which checks slug, live state, route flag, and public
 generation before a strong ETag can validate retained bytes
-([ADR 0022](../adr/0022-public-artifact-revocation.md)).
+([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
 Go reaches Nuxt on the host's private network, and at the native Nuxt address in
 development. Caddy denies `/internal-render` and `/internal-render/*` before its
@@ -90,7 +89,7 @@ while one replica serves.
 Object storage is private, and Go authorizes every owner and public media read,
 including the live-gated public photo. There is no direct object-store origin,
 because a leaked key must not keep an unpublished photo public
-([ADR 0019](../adr/0019-private-media-delivery.md)).
+([ADR 0009](../adr/0009-private-media-delivery.md)).
 
 The bucket is unversioned, so a delete removes the bytes instead of leaving a
 noncurrent version outside the orphan sweep. Object keys are random and
@@ -139,15 +138,14 @@ more than backup configuration: one isolated restore with data verification
 precedes the public announcement.
 
 Migrations run as a separate deploy step, never at server startup
-([ADR 0036](../adr/0036-single-replica-launch-and-pipeline-migrations.md)); the
+([ADR 0026](../adr/0026-replica-scaling.md)); the
 [single-host design](single-host-production.md#release-and-deploy) lists the
 order. A nonzero migration exit blocks the update. The runner uses goose's
 Provider with a PostgreSQL session advisory locker, which takes the lock before
 reading the pending set, so a second concurrent runner is safe. Every migration
 runs as the fixed `aboutme_migrator` role that `db-setup` creates.
 `apps/server/migrations/.uat-baseline` keeps existing migrations immutable
-([ADR 0020](../adr/0020-uat-migration-baseline.md),
-[ADR 0038](../adr/0038-single-baseline-and-plain-migrator.md)).
+([ADR 0005](../adr/0005-database-migrations.md)).
 
 The [release fence](passkey-release-fence.md) keeps every supported deploy,
 rollback, and restoration at or above the second-factor floor. Every supported

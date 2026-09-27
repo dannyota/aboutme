@@ -17,7 +17,7 @@ import {
 
 // Application chrome pixel baselines: the signed-out homepage, the login
 // page, and the template gallery, at phone and desktop widths, in both
-// themes (DESIGN.md; ADR 0050). Vietnamese is the default locale, so these
+// themes (DESIGN.md; ADR 0020). Vietnamese is the default locale, so these
 // baselines pin it rather than English (gallery.spec.ts uses the same
 // cookie pattern).
 

@@ -1,10 +1,9 @@
 # CloudFront edge
 
 Production serves `https://aboutme.vn` through Amazon CloudFront, in front of
-the same EC2 host, under
-[ADR 0054](../adr/0054-cloudfront-edge-for-single-host-production.md). See the
-[CloudFront edge design](../design/cloudfront-edge.md) for the full request path
-and the return path to Cloudflare. Cloudflare answers DNS only; see the
+the same EC2 host, under [ADR 0025](../adr/0025-single-host-production.md). See
+the [CloudFront edge design](../design/cloudfront-edge.md) for the full request
+path and the return path to Cloudflare. Cloudflare answers DNS only; see the
 [production runbook's Cloudflare DNS section](production.md#cloudflare-dns).
 This runbook covers the origin certificate, the client certificate, and the
 checks that run around a deploy or an edge change.

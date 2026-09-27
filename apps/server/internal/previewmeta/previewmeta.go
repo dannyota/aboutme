@@ -2,7 +2,7 @@
 // preview title, the description, the Open Graph locale, and the image text.
 // Every value comes from the admitted public snapshot and the validated public
 // title, never from hidden fields. See docs/design/link-previews.md, "Text
-// rules", and docs/adr/0055-stored-link-preview-card.md.
+// rules", and docs/adr/0014-public-page-head-and-link-preview.md.
 package previewmeta
 
 import (

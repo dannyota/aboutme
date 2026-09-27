@@ -16,7 +16,7 @@ import ProjectSection from
   '../../app/components/resume/sections/ProjectSection.vue';
 
 // The header photo sits on top, left, or right of the name block
-// (docs/adr/0044-header-photo-position-and-project-subtitle.md).
+// (docs/adr/0013-resume-header-and-contacts.md).
 
 type Position = ResolvedRenderModel['header']['photoPosition'];
 

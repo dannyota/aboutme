@@ -138,7 +138,7 @@ export interface paths {
         };
         /**
          * Begin "Sign in with Google"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (PKCE S256, an OIDC nonce) and redirects the browser to Google's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/google/callback` consumes.
          *
          *     A `HEAD` request is rejected with `405`, not treated as a bodyless `GET`, because a successful request creates a database-backed transaction. `GET` accepts only the login purpose. A `link` or `reauth` purpose returns `405` with `Allow: POST` before a session lookup, database write, or cookie is set.
          */
@@ -146,7 +146,7 @@ export interface paths {
         put?: never;
         /**
          * Begin a Google link or reauthentication
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns Google's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/google/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0016). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns Google's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/google/callback` consumes.
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
@@ -168,7 +168,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with Google"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves or creates the local user or attaches the identity to an already-authenticated one, depending on the transaction's own `purpose` (set at `/auth/google/start`):
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `google`; otherwise this path returns the uniform not-found response (ADR 0016). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (PKCE), verifies the ID token (issuer/audience/signature/expiry, plus the OIDC nonce), and resolves or creates the local user or attaches the identity to an already-authenticated one, depending on the transaction's own `purpose` (set at `/auth/google/start`):
          *
          *     - `purpose=login` (default): requires `email_verified == true`,
          *       then resolves the identity — an already-linked identity signs
@@ -240,13 +240,13 @@ export interface paths {
         };
         /**
          * Begin "Sign in with GitHub"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2 login transaction (PKCE S256; GitHub has no OIDC ID token, so no nonce) and redirects the browser to GitHub's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/github/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
          */
         get: operations["getAuthGitHubStart"];
         put?: never;
         /**
          * Begin a GitHub link or reauthentication
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns GitHub's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/github/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0016). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns GitHub's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/github/callback` consumes.
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
@@ -268,7 +268,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with GitHub"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code, and — for `purpose=login` only — fetches the authenticated user's verified primary email from GitHub's REST API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID token, no issuer/audience/ signature/nonce to verify. `purpose=link`/`reauth` never fetches email at all (no email check for linking — see below). Otherwise follows the exact same purpose-dependent resolution and always-redirect contract as `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `github`; otherwise this path returns the uniform not-found response (ADR 0016). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code, and — for `purpose=login` only — fetches the authenticated user's verified primary email from GitHub's REST API (AC-AUTH-003) — deliberately plain OAuth2, never OIDC: no ID token, no issuer/audience/ signature/nonce to verify. `purpose=link`/`reauth` never fetches email at all (no email check for linking — see below). Otherwise follows the exact same purpose-dependent resolution and always-redirect contract as `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets.
          */
         get: operations["getAuthGitHubCallback"];
         put?: never;
@@ -288,13 +288,13 @@ export interface paths {
         };
         /**
          * Begin "Sign in with LinkedIn"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Begins a fresh OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's token endpoint takes client credentials in the request body, ADR 0063) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Begins a fresh OAuth2/OIDC login transaction (an OIDC nonce, no PKCE: LinkedIn's token endpoint takes client credentials in the request body, ADR 0016) and redirects the browser to LinkedIn's own authorize endpoint. Sets the `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) that the matching `GET /auth/linkedin/callback` consumes. `HEAD` is rejected with `405`. `GET` accepts only login; `link` and `reauth` return `405` with `Allow: POST` before any transaction is created.
          */
         get: operations["getAuthLinkedInStart"];
         put?: never;
         /**
          * Begin a LinkedIn link or reauthentication
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns LinkedIn's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/linkedin/callback` consumes.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Begins an OAuth transaction for the CALLER's own already- authenticated account — `purpose=link` (attach this provider identity to that account) or `purpose=reauth` (refresh the session's `reauthenticated_at` against an ALREADY-linked identity) — and returns LinkedIn's authorize URL for the client to navigate to. Sets the same `__Host-oauth-tx` cookie (opaque transaction handle, 10-minute TTL) the matching `GET /auth/linkedin/callback` consumes.
          *
          *     The response deliberately does NOT redirect: a `302` answering a `fetch()` would be followed by the fetch, and the provider's consent screen has to be a real top-level navigation the client performs itself with the returned URL.
          *
@@ -316,7 +316,7 @@ export interface paths {
         };
         /**
          * Complete "Sign in with LinkedIn"
-         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0027, ADR 0039). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (client credentials in the request body, no PKCE), verifies the ID token (issuer/audience/signature/expiry; a present nonce claim must match the transaction's nonce, but LinkedIn's ID tokens omit the claim and an absent one is accepted, ADR 0063), and resolves the local user per `purpose`, exactly like `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets, with ONE LinkedIn-specific difference: `purpose=login`'s registration path (an UNKNOWN identity only — an existing identity's repeat login never re-checks email at all, matching every other provider) requires a verified email exactly like Google, EXCEPT LinkedIn's OIDC `email`/`email_verified` claims are OPTIONAL — an absent `email_verified` claim is never treated as true (AC-AUTH-002). `purpose=link`/`reauth` never checks email; linking an existing account remains allowed without a verified email.
+         * @description Registered only when `PROVIDER_LOGIN_ENABLED` enables `linkedin`; otherwise this path returns the uniform not-found response (ADR 0016). Consumes the pending OAuth transaction (`__Host-oauth-tx` cookie), exchanges the authorization code (client credentials in the request body, no PKCE), verifies the ID token (issuer/audience/signature/expiry; a present nonce claim must match the transaction's nonce, but LinkedIn's ID tokens omit the claim and an absent one is accepted, ADR 0016), and resolves the local user per `purpose`, exactly like `GET /auth/google/callback` — see that operation's own description for the full `purpose=login` vs `purpose=link`/`reauth` behavior and redirect targets, with ONE LinkedIn-specific difference: `purpose=login`'s registration path (an UNKNOWN identity only — an existing identity's repeat login never re-checks email at all, matching every other provider) requires a verified email exactly like Google, EXCEPT LinkedIn's OIDC `email`/`email_verified` claims are OPTIONAL — an absent `email_verified` claim is never treated as true (AC-AUTH-002). `purpose=link`/`reauth` never checks email; linking an existing account remains allowed without a verified email.
          */
         get: operations["getAuthLinkedInCallback"];
         put?: never;
@@ -590,7 +590,7 @@ export interface paths {
          * Create a resume
          * @description Creates one resume owned by the caller and returns it with its starting document. The body carries `title`, optional `lng`, and an optional seed `document` at the declared wire version. The revision, slug, publish state, and any photo metadata are server-owned.
          *
-         *     A create has no prior revision, so it takes `Idempotency-Key` and rejects `If-Match` with `400 precondition_not_supported` rather than ignoring it (ADR 0016, plan D6). The per-account resume cap is a domain conflict: the fourth create returns `409 resume_cap_exceeded`, never `412`.
+         *     A create has no prior revision, so it takes `Idempotency-Key` and rejects `If-Match` with `400 precondition_not_supported` rather than ignoring it (ADR 0006). The per-account resume cap is a domain conflict: the fourth create returns `409 resume_cap_exceeded`, never `412`.
          */
         post: operations["createResume"];
         delete?: never;
@@ -608,7 +608,7 @@ export interface paths {
         };
         /**
          * Read one of the caller's own resumes
-         * @description Returns one owned resume and its whole document, projected to the requested wire version. A read never writes: a stored document below the current version is projected in memory and the row keeps its revision and `updated_at` (ADR 0017).
+         * @description Returns one owned resume and its whole document, projected to the requested wire version. A read never writes: a stored document below the current version is projected in memory and the row keeps its revision and `updated_at` (ADR 0004).
          *
          *     Another account's resume id is indistinguishable from a missing one: both are `404 resume_not_found`, so the API is not an existence oracle.
          */
@@ -617,7 +617,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a resume
-         * @description Deletes one owned resume and enqueues exact-key deletion of its photo object in the same transaction (ADR 0019). The response is `204` with zero bytes and no `ETag`: the parent no longer exists, so there is no successor revision to report.
+         * @description Deletes one owned resume and enqueues exact-key deletion of its photo object in the same transaction (ADR 0009). The response is `204` with zero bytes and no `ETag`: the parent no longer exists, so there is no successor revision to report.
          *
          *     The request has no body. Its idempotency fingerprint hashes a zero-length payload, so a retry with the same key replays the original `204`.
          */
@@ -714,7 +714,7 @@ export interface paths {
         head?: never;
         /**
          * Change one section's own metadata
-         * @description Updates a section's display name, icon, or entry order. This route never moves a section between columns and never changes section order: `layout.sections` is the sole placement authority (ADR 0009) and only `PATCH /resumes/{id}/structure` writes it.
+         * @description Updates a section's display name, icon, or entry order. This route never moves a section between columns and never changes section order: `layout.sections` is the sole placement authority (ADR 0004) and only `PATCH /resumes/{id}/structure` writes it.
          *
          *     `entryOrder` must be a permutation of that section's existing entry ids — it reorders, it does not add or remove.
          */
@@ -820,7 +820,7 @@ export interface paths {
         };
         /**
          * Read the resume photo's normalized bytes
-         * @description Streams the stored normalized JPEG or PNG to the owner. Objects are private: existence never grants access, and every read passes the ownership check first (ADR 0019).
+         * @description Streams the stored normalized JPEG or PNG to the owner. Objects are private: existence never grants access, and every read passes the ownership check first (ADR 0009).
          *
          *     The strong `ETag` is derived from the immutable object key, so it changes only when the photo is replaced. `If-None-Match` accepts one well-formed strong tag: an exact match is `304` with no body, a different tag is `200`. This binary read is outside the wire-version contract and emits no schema-version header.
          */
@@ -832,12 +832,12 @@ export interface paths {
          *
          *     Intake fully decodes static JPEG, PNG, or WebP within the dimension, pixel, time, and memory budgets, applies Exif orientation, rejects animation and invalid structure, strips every metadata block, and stores only normalized JPEG or PNG pixels under a server-derived immutable key. The original container never reaches storage. An unsupported container is `415 media_type_unsupported`; a recognized but unsafe or unnormalizable image is `422 media_invalid`.
          *
-         *     Concurrency is bounded by one task-wide media permit: a second intake that cannot acquire it within one second is `503 media_busy` with `Retry-After: 1`, before any body read. Replacement clears any crop attached to the old pixels and enqueues exact-key deletion of the old object in the same transaction (ADR 0019).
+         *     Concurrency is bounded by one task-wide media permit: a second intake that cannot acquire it within one second is `503 media_busy` with `Retry-After: 1`, before any body read. Replacement clears any crop attached to the old pixels and enqueues exact-key deletion of the old object in the same transaction (ADR 0009).
          */
         post: operations["uploadResumePhoto"];
         /**
          * Delete the resume photo
-         * @description Removes the photo reference and its crop, and enqueues exact-key deletion of the object in the same transaction. Access is revoked at commit; the bytes are removed by the deletion worker within the 24-hour target (ADR 0019).
+         * @description Removes the photo reference and its crop, and enqueues exact-key deletion of the object in the same transaction. Access is revoked at commit; the bytes are removed by the deletion worker within the 24-hour target (ADR 0009).
          *
          *     The request has no body. Its idempotency fingerprint hashes a zero-length payload. The response is `204` with the new parent `ETag`.
          */
@@ -974,7 +974,7 @@ export interface paths {
         };
         /**
          * Read a published resume's share image
-         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this path is an alias of the current preview card that `/public/resumes/{slug}/og/{version}.png` serves, so share images that platforms fetched earlier keep working (ADR 0055). The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
+         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this path is an alias of the current preview card that `/public/resumes/{slug}/og/{version}.png` serves, so share images that platforms fetched earlier keep working (ADR 0014). The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
          */
         get: operations["getPublicResumeShareImage"];
         put?: never;
@@ -998,7 +998,7 @@ export interface paths {
         };
         /**
          * Read a published resume's link-preview card
-         * @description Serves the stored 1200 by 630 preview card of a live resume: name, headline, photo, and aboutme branding, with no contact details. The live-state gate runs before any stored card is read. Only the current card version answers; any other version, and every version of a private, unpublished, renamed, or deleted resume, is the same `404 public_not_found`. When the current card is not stored yet, the request joins the pending build or starts one and waits within the 20-second render deadline. Answers `404` for every version while stored preview cards are off (`PREVIEW_CARD_ENABLED` unset or `false`). Query parameters and request bodies are rejected. A build shares the 20-render-per-minute client IP limit with PDF and PNG misses; every request also passes the 300-per-minute IP limit (docs/adr/0055-stored-link-preview-card.md).
+         * @description Serves the stored 1200 by 630 preview card of a live resume: name, headline, photo, and aboutme branding, with no contact details. The live-state gate runs before any stored card is read. Only the current card version answers; any other version, and every version of a private, unpublished, renamed, or deleted resume, is the same `404 public_not_found`. When the current card is not stored yet, the request joins the pending build or starts one and waits within the 20-second render deadline. Answers `404` for every version while stored preview cards are off (`PREVIEW_CARD_ENABLED` unset or `false`). Query parameters and request bodies are rejected. A build shares the 20-render-per-minute client IP limit with PDF and PNG misses; every request also passes the 300-per-minute IP limit (docs/adr/0014-public-page-head-and-link-preview.md).
          */
         get: operations["getPublicResumePreviewCard"];
         put?: never;
@@ -1024,7 +1024,7 @@ export interface paths {
         put?: never;
         /**
          * Start counting a view of a published resume
-         * @description Called once by the public page's script at load. Returns a one-time sealed view token and an ALTCHA v2 proof-of-work challenge bound to it (docs/adr/0061-layered-human-view-counting.md). The request needs an `Origin` equal to the site origin and a JSON body; it carries no CSRF token because it holds no session authority. A `__Host-session` cookie is read only to recognize the resume's owner: then `owner` is true, no token is issued, and the owner's network is excluded from the day's count. Limited to 30 requests a minute per client IP.
+         * @description Called once by the public page's script at load. Returns a one-time sealed view token and an ALTCHA v2 proof-of-work challenge bound to it (docs/adr/0022-viewer-privacy-and-counting.md). The request needs an `Origin` equal to the site origin and a JSON body; it carries no CSRF token because it holds no session authority. A `__Host-session` cookie is read only to recognize the resume's owner: then `owner` is true, no token is issued, and the owner's network is excluded from the day's count. Limited to 30 requests a minute per client IP.
          */
         post: operations["startPublicResumeView"];
         delete?: never;
@@ -1853,7 +1853,7 @@ export interface components {
             type: "email" | "phone" | "location" | "website" | "linkedin" | "github" | "twitter" | "custom";
             value: string;
             /**
-             * @description Anchor text for a detail that renders as a link. Absent means `short`. See `docs/adr/0041-contact-link-display-and-body-justify.md`.
+             * @description Anchor text for a detail that renders as a link. Absent means `short`. See `docs/adr/0013-resume-header-and-contacts.md`.
              * @enum {string}
              */
             display?: "short" | "full" | "label";
@@ -2186,7 +2186,7 @@ export interface components {
             entry: Record<string, never>;
         };
         /**
-         * @description A section's own metadata. Placement is never here: moving a section between columns or changing section order goes through `PATCH /resumes/{id}/structure` (ADR 0009).
+         * @description A section's own metadata. Placement is never here: moving a section between columns or changing section order goes through `PATCH /resumes/{id}/structure` (ADR 0004).
          * @example {
          *       "displayName": "Experience",
          *       "iconKey": "briefcase"
@@ -4533,7 +4533,7 @@ export interface components {
         /** @description View counting responses are never stored. */
         ViewNoStore: "no-store, no-transform";
         /**
-         * @description Public PDF download filename, `<Full-Name>-Resume.pdf`. `filename` carries the full name folded to ASCII letters and digits, words joined by hyphens; `filename*` (RFC 5987) carries the same words in UTF-8. A name with no usable words downloads as `Resume.pdf` without `filename*`. See `docs/adr/0045-pdf-download-name-and-metadata.md`.
+         * @description Public PDF download filename, `<Full-Name>-Resume.pdf`. `filename` carries the full name folded to ASCII letters and digits, words joined by hyphens; `filename*` (RFC 5987) carries the same words in UTF-8. A name with no usable words downloads as `Resume.pdf` without `filename*`. See `docs/adr/0011-print-capability-and-pdf-output.md`.
          * @example attachment; filename="Nguyen-Van-Duc-Resume.pdf"; filename*=UTF-8''Nguy%E1%BB%85n-V%C4%83n-%C4%90%E1%BB%A9c-Resume.pdf
          */
         PublicPDFAttachment: components["schemas"]["PDFAttachment"];

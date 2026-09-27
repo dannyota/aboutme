@@ -5,7 +5,7 @@
 // docs/design/data.md#schema-and-migrations. Production sequencing and lock
 // rationale are in docs/design/deployment.md#database-and-releases. The
 // migrator is plain goose behind a PostgreSQL session advisory lock (ADR
-// 0038). Every migration always runs as aboutme_migrator (see Open), which
+// 0005). Every migration always runs as aboutme_migrator (see Open), which
 // db-setup (cmd/db-setup) creates and grants ahead of time.
 package migrations
 
