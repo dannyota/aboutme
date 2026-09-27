@@ -1,9 +1,9 @@
 # 10. Decision status
 
 This design integrates the outcomes below. Each ADR keeps its rationale and
-history; these pages state the resulting design. ADRs 0001 to 0027 are accepted
-and ADR 0028 is proposed. The [ADR index](../adr/README.md) maps every former
-ADR number to its current record.
+history; these pages state the resulting design. ADRs 0001 to 0028 are accepted.
+The [ADR index](../adr/README.md) maps every former ADR number to its current
+record.
 
 | ADR                                                             | Status   | Outcome                                                                                                                             | Design                                                                                      |
 | --------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -34,7 +34,7 @@ ADR number to its current record.
 | [0025](../adr/0025-single-host-production.md)                   | Accepted | One AWS Singapore host, no hosted UAT until about 500 users, CloudFront edge, Route 53 DNS                                          | [Single-host production](single-host-production.md), [CloudFront edge](cloudfront-edge.md)  |
 | [0026](../adr/0026-replica-scaling.md)                          | Accepted | One serving replica; the scaling design returns before a second                                                                     | [Scaling](scaling/README.md)                                                                |
 | [0027](../adr/0027-vietnam-hosted-production.md)                | Accepted | Vietnam-hosted production on GreenNode and Bizfly; AWS becomes test only                                                            | [Vietnam production](vietnam-production.md)                                                 |
-| [0028](../adr/0028-deployment-transparency-observer.md)         | Proposed | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                              | [Deployment transparency](deployment-transparency/README.md)                                |
+| [0028](../adr/0028-deployment-transparency-observer.md)         | Accepted | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                              | [Deployment transparency](deployment-transparency/README.md)                                |
 
 ## Remaining gates
 

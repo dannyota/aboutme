@@ -8,10 +8,11 @@ same document to people and tells them how to check it themselves.
 [ADR 0028](../../adr/0028-deployment-transparency-observer.md) records the
 choice.
 
-Status: proposed. **Owner approval** marks a product-visible choice the owner
-makes before the work that depends on it starts ([list](#owner-approval)).
-**Verify** marks a platform fact that devops confirms on the account before
-relying on it ([facts](#facts-checked-on-the-account)).
+Status: accepted; the owner approved A1 to A5 on 2026-09-27. **Owner approval**
+marks a product-visible choice the owner makes before the work that depends on
+it starts ([list](#owner-approval)). **Verify** marks a platform fact that
+devops confirms on the account before relying on it
+([facts](#facts-checked-on-the-account)).
 
 | Page                            | Holds                                                     |
 | ------------------------------- | --------------------------------------------------------- |
@@ -336,13 +337,13 @@ Compatibility:
 
 ## Owner approval
 
-| ID  | Choice                                                                                                                     | Recommendation                                                              |
-| --- | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| A1  | Page path `/verify` or `/transparency` ([page](page.md#path))                                                              | `/verify`: it matches the approved label and title                          |
-| A2  | Lambda observer every minute, off the host, under USD 0.50 a month; edge caches the document 30 seconds                    | Approve                                                                     |
-| A3  | `release-images.yml` creates a GitHub Release per tag holding the SBOMs and digests ([verification](verification.md#sbom)) | Approve: SBOMs need a stable public link; workflow artifacts expire         |
-| A4  | List serving services only (server, web, caddy, maintenance while it runs), not one-shot jobs                              | Approve: jobs run for seconds and use the server image of their own release |
-| A5  | Show the observer's verdict and the command to verify it yourself, with the limits above ([page](page.md))                 | Approve both, so people who cannot run a command still see a checked result |
+| ID  | Choice                                                                                                                     | Decision |
+| --- | -------------------------------------------------------------------------------------------------------------------------- | -------- |
+| A1  | Page path `/verify` or `/transparency` ([page](page.md#path))                                                              | Approved |
+| A2  | Lambda observer every minute, off the host, under USD 0.50 a month; edge caches the document 30 seconds                    | Approved |
+| A3  | `release-images.yml` creates a GitHub Release per tag holding the SBOMs and digests ([verification](verification.md#sbom)) | Approved |
+| A4  | List serving services only (server, web, caddy, maintenance while it runs), not one-shot jobs                              | Approved |
+| A5  | Show the observer's verdict and the command to verify it yourself, with the limits above ([page](page.md))                 | Approved |
 
 The footer label ("Kiểm chứng" and "Verify") and page title ("Kiểm chứng phiên
 bản đang chạy" and "Verify what's running") are decided.
