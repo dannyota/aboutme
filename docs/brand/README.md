@@ -24,8 +24,6 @@ else.
 The site icons live in `apps/web/public/` with versioned names: `favicon-v3.svg`
 (dark-scheme aware), `icon-32-v3.png`, `apple-touch-icon-v3.png`,
 `icon-192-v3.png`, `icon-512-v3.png`, `site-v3.webmanifest`, and `favicon.ico`.
-The `-v2` icons and `og-image-v3.jpg` stay there, unlinked, for one release so
-cached URLs keep working; delete them in the release after ADR 0020 ships.
 
 ## Rules
 
