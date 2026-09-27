@@ -348,17 +348,22 @@ describe('TemplatePanel search', () => {
     ).toContain('graduate-friendly');
   });
 
-  it('renders an empty status line while the query is blank', () => {
-    const wrapper = mount(TemplatePanel, {
-      props: { actions: actionsFor(vi.fn()) },
+  it('renders an empty status line and no count while the query is blank',
+    () => {
+      const wrapper = mount(TemplatePanel, {
+        props: { actions: actionsFor(vi.fn()) },
+      });
+
+      expect(wrapper.get('[data-testid="template-search-status"]').text())
+        .toBe('');
+      expect(wrapper.find('[data-testid="template-search-count"]').exists())
+        .toBe(false);
     });
 
-    expect(wrapper.get('[data-testid="template-search-status"]').text())
-      .toBe('');
-  });
-
-  it('announces the result count politely once typing pauses, following '
-    + 'the locale, without repeating the query itself', async () => {
+  it('shows the visible count immediately from the filtered list, then '
+    + 'announces the same count politely to screen readers once typing '
+    + 'pauses, following the locale, without repeating the query itself',
+  async () => {
     const wrapper = mount(TemplatePanel, {
       props: { actions: actionsFor(vi.fn()) },
     });
@@ -368,9 +373,14 @@ describe('TemplatePanel search', () => {
       .setValue('BrSE');
     await nextTick();
 
-    // Not yet announced: typing has not paused for 500 ms.
+    // The visible count tracks the list with no delay.
+    expect(wrapper.get('[data-testid="template-search-count"]').text())
+      .toBe('1 template');
+    // The screen-reader-only live region waits for typing to pause.
     expect(wrapper.get('[data-testid="template-search-status"]').text())
       .toBe('');
+    expect(wrapper.get('[data-testid="template-search-status"]').classes())
+      .toContain('sr-only');
 
     vi.advanceTimersByTime(500);
     await nextTick();
@@ -383,6 +393,8 @@ describe('TemplatePanel search', () => {
     locale.value = 'vi';
     await nextTick();
 
+    expect(wrapper.get('[data-testid="template-search-count"]').text())
+      .toBe('1 mẫu');
     expect(wrapper.get('[data-testid="template-search-status"]').text())
       .toBe('1 mẫu');
   });
@@ -403,6 +415,8 @@ describe('TemplatePanel search', () => {
     expect(wrapper.findAll('[data-template]')).toHaveLength(0);
     expect(wrapper.get('[data-testid="template-search-message"]').text())
       .toBe('No templates match “zzz-no-match”.');
+    expect(wrapper.find('[data-testid="template-search-count"]').exists())
+      .toBe(false);
     expect(wrapper.get('[data-testid="template-search-status"]').text())
       .toBe('');
 
@@ -419,6 +433,8 @@ describe('TemplatePanel search', () => {
     expect((input.element as HTMLInputElement).value).toBe('');
     expect(wrapper.findAll('[data-template]')).toHaveLength(TEMPLATES.length);
     expect(wrapper.find('[data-testid="template-search-message"]').exists())
+      .toBe(false);
+    expect(wrapper.find('[data-testid="template-search-count"]').exists())
       .toBe(false);
     expect(wrapper.get('[data-testid="template-search-status"]').text())
       .toBe('');

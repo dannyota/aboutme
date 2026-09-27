@@ -94,6 +94,15 @@ const searchMessage = computed(() => {
   }
   return copy.value.templateSearchNoMatch(search.value);
 });
+// Visible and immediate: tracks the filtered list with no delay. The
+// no-match case is covered by searchMessage above instead.
+const searchCount = computed(() => {
+  const count = visibleTemplates.value.length;
+  if (search.value.trim() === '' || count === 0) return '';
+  return copy.value.templateSearchCount(count);
+});
+// Screen-reader only and debounced, so a live region does not announce
+// every keystroke.
 const searchStatus = computed(() => {
   if (search.value.trim() === '' || announcedCount.value === null) return '';
   return announcedCount.value === 0
@@ -261,7 +270,14 @@ function assertNever(value: never): never {
       {{ searchMessage }}
     </p>
     <p
+      v-if="searchCount !== ''"
       class="text-sm text-muted-foreground"
+      data-testid="template-search-count"
+    >
+      {{ searchCount }}
+    </p>
+    <p
+      class="sr-only"
       data-testid="template-search-status"
       role="status"
     >
