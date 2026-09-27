@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "roots": [
     {
       "root": ".well-known",
@@ -23,6 +23,10 @@
     },
     {
       "root": "forgot-password",
+      "dispatch": "nuxt"
+    },
+    {
+      "root": "guide",
       "dispatch": "nuxt"
     },
     {
