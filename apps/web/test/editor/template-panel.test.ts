@@ -375,8 +375,9 @@ describe('TemplatePartialDialog', () => {
       document.body.querySelector('[role="alertdialog"]'),
     ).not.toBeNull();
     expect(alerts[alerts.length - 1]!.textContent).toBe(
-      'Hồ sơ đã được thêm hoặc xóa mục sau khi lưu mẫu nên không thể '
-      + 'làm việc này nữa. Hãy chọn Giữ như hiện tại, rồi áp dụng lại mẫu.',
+      'Đã có phần được thêm hoặc xóa sau khi lưu mẫu, nên không thể thực '
+      + 'hiện thao tác này nữa. Hãy chọn “Giữ như hiện tại”, rồi áp dụng '
+      + 'lại mẫu.',
     );
     wrapper.unmount();
   });
@@ -431,7 +432,8 @@ describe('TemplatePartialDialog', () => {
     await nextTick();
 
     expect(document.body.textContent).toContain('Giữ như hiện tại');
-    expect(document.body.textContent).toContain('Vị trí các mục: đã áp dụng.');
+    expect(document.body.textContent)
+      .toContain('Vị trí các phần: đã áp dụng.');
     expect(document.body.textContent).toContain(
       'Phông chữ, màu sắc và khoảng cách: chưa áp dụng.',
     );

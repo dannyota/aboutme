@@ -217,26 +217,27 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templateChangeProgress: 'Các phần của mẫu',
       templateChangesReady: 'Các thay đổi mẫu đã sẵn sàng để lưu.',
       templatePartialTitle: 'Mẫu mới chỉ được áp dụng một phần',
-      templatePartialFailed: 'Máy chủ không nhận một phần của mẫu.',
+      templatePartialFailed: 'Máy chủ không chấp nhận một phần của mẫu.',
       templatePartialConnection:
         'Kết nối bị gián đoạn khi đang lưu mẫu nên một phần chưa được lưu.',
       templatePartialChanged:
-        'Hồ sơ đã thay đổi trong lúc lưu mẫu, ví dụ từ một thẻ khác.',
-      templatePartLayout: 'Vị trí các mục',
+        'CV đã thay đổi trong lúc lưu mẫu, ví dụ ở một thẻ khác.',
+      templatePartLayout: 'Vị trí các phần',
       templatePartStyle: 'Phông chữ, màu sắc và khoảng cách',
       templatePartApplied: 'đã áp dụng',
       templatePartNotApplied: 'chưa áp dụng',
       templatePart: (part, status) => `${part}: ${status}.`,
-      templateKeepHint: 'Giữ như hiện tại: để nguyên hồ sơ như bây giờ.',
+      templateKeepHint: 'Giữ như hiện tại: để nguyên CV như bây giờ.',
       templateUndoHint:
-        'Hoàn tác mẫu: đưa hồ sơ về như trước khi áp dụng mẫu này.',
+        'Hoàn tác mẫu: đưa CV về như trước khi áp dụng mẫu này.',
       templateRetryHint: 'Áp dụng phần còn lại: lưu phần chưa được áp dụng.',
       templateApplyAgain:
-        'Để hoàn tất, hãy chọn Giữ như hiện tại rồi áp dụng lại mẫu '
+        'Để hoàn tất, hãy chọn “Giữ như hiện tại” rồi áp dụng lại mẫu '
         + 'từ danh sách.',
       templateCurrentChanged:
-        'Hồ sơ đã được thêm hoặc xóa mục sau khi lưu mẫu nên không thể '
-        + 'làm việc này nữa. Hãy chọn Giữ như hiện tại, rồi áp dụng lại mẫu.',
+        'Đã có phần được thêm hoặc xóa sau khi lưu mẫu, nên không thể thực '
+        + 'hiện thao tác này nữa. Hãy chọn “Giữ như hiện tại”, rồi áp dụng '
+        + 'lại mẫu.',
       templateFormatWarning: 'Định dạng ngày sẽ thay đổi.',
       templateMarginWarning: 'Mẫu này đặt lề dưới 5 mm.',
       templateNeedsAttention: 'Mẫu cần được xem lại',
@@ -244,8 +245,9 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       templateSaved: 'Đã lưu mẫu',
       templateSizeWarning: 'Mẫu này dùng cỡ chữ cơ bản 10 pt.',
       templateUndoUnavailable:
-        'Hồ sơ đã thay đổi sau khi lưu mẫu nên không thể làm việc này nữa. '
-        + 'Hãy chọn Giữ như hiện tại, rồi áp dụng lại mẫu nếu muốn.',
+        'CV đã thay đổi sau khi lưu mẫu, nên không thể thực hiện thao tác '
+        + 'này nữa. Hãy chọn “Giữ như hiện tại”, rồi áp dụng lại mẫu nếu '
+        + 'muốn.',
       tryAgainLater: (seconds?: number) => seconds === undefined
         ? 'Vui lòng thử lại sau.'
         : `Thử lại sau ${seconds} giây.`,
@@ -288,7 +290,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       undoTemplate: 'Hoàn tác thay đổi mẫu',
       templatePresets: 'Mẫu có sẵn',
       templateWarnings: 'Cảnh báo mẫu',
-      templateReadRequired: 'Tải lại trang để lấy hồ sơ mới nhất, rồi thử lại.',
+      templateReadRequired: 'Tải lại trang để lấy CV mới nhất, rồi thử lại.',
     },
     customization: {
       'font.family': 'Phông chữ',

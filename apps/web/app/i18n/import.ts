@@ -84,50 +84,51 @@ export type ImportCopy = {
 export const importCopy: WorkspaceCopy<ImportCopy> = {
   vi: {
     documentTitle: 'Nhập từ LinkedIn',
-    back: 'Quay lại CV của bạn',
+    back: 'Quay lại danh sách CV',
     heading: 'Nhập từ LinkedIn',
-    lead: 'Tạo CV mới từ tệp PDF hồ sơ LinkedIn của bạn. Bạn kiểm tra những gì '
-      + 'đọc được trước khi lưu.',
+    lead: 'Tạo CV mới từ tệp PDF hồ sơ LinkedIn của bạn. Bạn sẽ xem lại nội '
+      + 'dung đọc được trước khi lưu.',
     stepsHeading: 'Lấy tệp PDF hồ sơ',
-    step1: 'Trên máy tính, mở hồ sơ của bạn trên linkedin.com. Ứng dụng '
+    step1: 'Mở hồ sơ của bạn trên linkedin.com bằng máy tính. Ứng dụng '
       + 'LinkedIn trên điện thoại không lưu được PDF.',
-    step2: 'Đặt ngôn ngữ LinkedIn sang tiếng Anh và kiểm tra hồ sơ của bạn '
-      + 'được viết bằng tiếng Anh.',
+    step2: 'Chuyển ngôn ngữ LinkedIn sang tiếng Anh và đảm bảo hồ sơ của bạn '
+      + 'viết bằng tiếng Anh.',
     step3: 'Trên trang hồ sơ, chọn More, rồi Save to PDF.',
     step4: 'Chọn tệp vừa tải về ở bên dưới.',
-    englishOnly: 'Chỉ hồ sơ tiếng Anh dùng được, vì LinkedIn chỉ lưu văn bản '
+    englishOnly: 'Chỉ nhập được hồ sơ tiếng Anh, vì LinkedIn chỉ lưu văn bản '
       + 'tiếng Anh vào PDF.',
     pickHeading: 'Chọn tệp PDF',
     dropPrompt: 'Thả tệp PDF LinkedIn vào đây',
-    dropActive: 'Thả ra để đọc tệp này',
+    dropActive: 'Thả tệp để đọc',
     or: 'hoặc',
     choose: 'Chọn tệp PDF',
     chooseAnother: 'Chọn tệp PDF khác',
     limits: 'Một tệp PDF, tối đa 4 MB và 20 trang.',
     privacy: 'Tệp không rời khỏi thiết bị này: trình duyệt của bạn tự đọc '
-      + 'tệp, aboutme không nhận tệp. Chúng tôi chỉ lưu CV bạn tạo.',
+      + 'tệp và aboutme không bao giờ nhận tệp. Chúng tôi chỉ lưu CV bạn tạo.',
     ownProfile: 'Hãy nhập hồ sơ của chính bạn, không phải của người khác.',
     reading: 'Đang đọc tệp PDF…',
     readingPage: (n, m) => `Trang ${n}/${m}`,
-    readingNote: 'Việc này mất vài giây. Sau 15 giây, chúng tôi sẽ dừng.',
+    readingNote: 'Việc này mất vài giây. Nếu quá 15 giây, chúng tôi sẽ dừng.',
     progressLabel: 'Tiến độ đọc',
     stop: 'Dừng',
     stopLabel: 'Dừng đọc tệp PDF',
     stopped: 'Đã dừng. Hãy chọn tệp PDF để thử lại.',
-    notPdf: 'Tệp này không phải PDF. Hãy chọn tệp PDF mà LinkedIn đã lưu.',
+    notPdf: 'Tệp này không phải PDF. Hãy chọn tệp PDF bạn đã lưu từ '
+      + 'LinkedIn.',
     notLinkedIn: 'Đây không phải tệp PDF hồ sơ LinkedIn. Hãy mở hồ sơ trên '
       + 'LinkedIn, chọn More, rồi Save to PDF.',
-    notEnglish: 'Tệp PDF LinkedIn này không phải tiếng Anh. LinkedIn chỉ lưu '
-      + 'hồ sơ tiếng Anh vào PDF. Hãy đặt ngôn ngữ LinkedIn sang tiếng Anh '
-      + 'rồi lưu lại PDF.',
+    notEnglish: 'Tệp PDF LinkedIn này không viết bằng tiếng Anh. LinkedIn '
+      + 'chỉ lưu hồ sơ tiếng Anh vào PDF. Hãy chuyển ngôn ngữ LinkedIn sang '
+      + 'tiếng Anh rồi lưu lại PDF.',
     unreadable: 'Không đọc được chữ trong tệp này. Hãy lưu lại PDF từ '
       + 'LinkedIn rồi chọn tệp mới.',
     encrypted: 'Tệp PDF này có mật khẩu. PDF hồ sơ LinkedIn không có mật '
-      + 'khẩu, nên hãy lưu lại từ LinkedIn.',
+      + 'khẩu, nên hãy lưu lại PDF từ LinkedIn.',
     tooLarge: 'Tệp này quá lớn để nhập. PDF hồ sơ LinkedIn nhỏ hơn nhiều; '
-      + 'hãy kiểm tra bạn đã chọn đúng tệp.',
-    tooManyPages: 'Tệp PDF này có hơn 20 trang. Hãy chọn tệp PDF mà LinkedIn '
-      + 'lưu từ hồ sơ của bạn.',
+      + 'hãy kiểm tra xem bạn đã chọn đúng tệp chưa.',
+    tooManyPages: 'Tệp PDF này có hơn 20 trang. Hãy chọn tệp PDF bạn đã lưu '
+      + 'từ hồ sơ LinkedIn.',
     timedOut: 'Đọc tệp này mất hơn 15 giây nên chúng tôi đã dừng. Hãy thử '
       + 'lại, hoặc lưu lại PDF từ LinkedIn.',
     dropOne: 'Mỗi lần chỉ thả một tệp.',
@@ -135,9 +136,9 @@ export const importCopy: WorkspaceCopy<ImportCopy> = {
       + 'phiên bản mới của Chrome, Edge, Firefox hoặc Safari.',
     readerFailed: 'Không tải được trình đọc PDF. Hãy kiểm tra kết nối rồi '
       + 'tải lại trang.',
-    reviewHeading: 'Kiểm tra dữ liệu nhập',
-    reviewLead: 'Chọn những gì đưa vào CV mới. Chưa có gì được lưu cho đến '
-      + 'khi bạn tạo CV.',
+    reviewHeading: 'Kiểm tra nội dung từ LinkedIn',
+    reviewLead: 'Chọn nội dung đưa vào CV mới. Chúng tôi chỉ lưu khi bạn tạo '
+      + 'CV.',
     noticesHeading: 'Kiểm tra trước khi tạo',
     noticeDates: (entry) =>
       `${entry}: không đọc được thời gian. Hãy thêm trong trình chỉnh sửa.`,
@@ -149,21 +150,21 @@ export const importCopy: WorkspaceCopy<ImportCopy> = {
       + 'được chọn; các mục còn lại không được chọn.',
     resumeHeading: 'CV',
     defaultTitle: 'CV từ LinkedIn',
-    languageLine: 'Ngôn ngữ: tiếng Anh, giống hồ sơ LinkedIn của bạn.',
+    languageLine: 'Ngôn ngữ: tiếng Anh, theo hồ sơ LinkedIn của bạn.',
     templateLine: (name) =>
       `Mẫu: ${name}. Bạn có thể đổi mẫu trong trình chỉnh sửa.`,
-    contactOffHint: 'Mặc định không chọn, vì CV đã đăng sẽ hiển thị thông '
+    contactOffHint: 'Mặc định không chọn, vì CV công khai sẽ hiển thị thông '
       + 'tin này.',
     groupLabel: (section) => `Nhập toàn bộ ${section}`,
     groupCount: (n, m) => `Đã chọn ${n}/${m}`,
     summaryEntry: 'Đoạn tóm tắt hồ sơ',
     entryNoDates: 'Chưa có thời gian',
     entryCut: 'Đã rút gọn',
-    entryInvalid: 'Không lưu được như hiện tại. Hãy bỏ chọn, hoặc sửa sau '
-      + 'trong trình chỉnh sửa.',
+    entryInvalid: 'Mục này không lưu được như hiện tại. Hãy bỏ chọn, hoặc '
+      + 'sửa sau trong trình chỉnh sửa.',
     checkLine: 'Hãy kiểm tra từng mục. Bố cục PDF có thể tách hoặc nối nhầm '
       + 'dòng; bạn có thể sửa trong trình chỉnh sửa.',
-    notImportedHeading: 'Không được nhập',
+    notImportedHeading: 'Các phần không nhập',
     notImportedLine: (section, n) => `${section} (${n})`,
     notImportedNote: 'aboutme không nhập các phần này. Bạn có thể tự thêm '
       + 'trong trình chỉnh sửa nếu cần.',

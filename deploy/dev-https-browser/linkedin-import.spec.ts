@@ -317,7 +317,7 @@ test('entry link, review, and create land the imported content in the editor', a
     await page.getByTestId('landing-locale-vi').click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'vi');
     const reviewHeadingVi = page.getByRole('heading', {
-      name: 'Kiểm tra dữ liệu nhập',
+      name: 'Kiểm tra nội dung từ LinkedIn',
     });
     await expect(reviewHeadingVi).toBeVisible();
     // The switch above changed only displayed copy, never the file result
