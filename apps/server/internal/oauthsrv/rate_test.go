@@ -494,3 +494,32 @@ func TestRatePolicies_RegisterGlobalCeiling(t *testing.T) {
 		}
 	})
 }
+
+func TestRatePolicies_RegisterKeysIPv6OnItsSlash64(t *testing.T) {
+	now := time.Date(2026, 9, 27, 14, 0, 0, 0, time.UTC)
+	policies := testEgressRatePolicies(t)
+	// One host usually controls a whole /64, so distinct addresses inside it
+	// share one per-address budget and cannot drain the global ceiling.
+	addr := netip.MustParseAddr("2001:db8:1:2::1")
+	for i := 1; i <= 5; i++ {
+		if allowed, _ := registerFrom(policies, now, addr.String()); !allowed {
+			t.Fatalf("registration %d from the /64 denied within its budget", i)
+		}
+		addr = addr.Next()
+	}
+	if allowed, retry := registerFrom(policies, now, "2001:db8:1:2:ffff:ffff:ffff:ffff"); allowed || retry < 1 {
+		t.Fatalf("6th registration from the same /64 = (%t,%d), want refused with Retry-After", allowed, retry)
+	}
+	if allowed, _ := registerFrom(policies, now, "2001:db8:1:3::1"); !allowed {
+		t.Fatal("a neighboring /64 shared the exhausted bucket")
+	}
+	// IPv4 keeps its per-address key.
+	for i := 1; i <= 5; i++ {
+		if allowed, _ := registerFrom(policies, now, "198.51.100.8"); !allowed {
+			t.Fatalf("IPv4 registration %d denied", i)
+		}
+	}
+	if allowed, _ := registerFrom(policies, now, "198.51.100.9"); !allowed {
+		t.Fatal("a neighboring IPv4 address shared a bucket")
+	}
+}

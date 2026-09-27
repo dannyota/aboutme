@@ -23,8 +23,9 @@ func (s *Service) HandleMetadata(w http.ResponseWriter, r *http.Request) {
 
 // HandleProtectedResourceMetadata serves the configured RFC 9728 document.
 // Its bytes depend only on the validated canonical public origin. The resource
-// is the MCP endpoint URL, which RFC 9728 section 3.3 requires a client to
-// match against the URL it called; the authorization server is the origin.
+// is the MCP endpoint URL a person enters; a client that finds this document
+// through the /mcp challenge's resource_metadata URL checks it against the URL
+// it called (RFC 9728 section 3.3). The authorization server is the origin.
 // See docs/design/mcp-client-compatibility.md.
 func (s *Service) HandleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
