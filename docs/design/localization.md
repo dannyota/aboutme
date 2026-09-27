@@ -21,10 +21,11 @@ locale, or locale header, so the choice is per browser.
 
 Localized routes are the homepage, authentication and recovery pages, legal
 pages, template gallery, the verify page (`/verify`), the resume workspace
-(`/app/resumes`, `/app/new`, and the editor below `/app/resumes/`),
-`/app/settings/sessions`, and `/authorize`. Route classification in
-`useRouteLocale()` names these paths exactly. It excludes `/oauth/*`, MCP, API,
-and public resume routes. A new settings route joins only by an explicit change.
+(`/app/resumes`, `/app/new`, and the editor below `/app/resumes/`), the Views
+pages (`/app/views` and `/app/views/{id}`), `/app/settings/sessions`, and
+`/authorize`. Route classification in `useRouteLocale()` names these paths
+exactly. It excludes `/oauth/*`, MCP, API, and public resume routes. A new
+settings route joins only by an explicit change.
 
 Public resume chrome follows resume language: `Tải PDF` and
 `Tạo bằng aboutme.vn` for Vietnamese resumes, `Download PDF` and
@@ -55,7 +56,7 @@ settings it covers sessions, password, linked identities, privacy, and connected
 agents. On `/authorize` it covers the request explanation, permission labels,
 errors, and actions.
 
-The application shell shows the language control on the list, creation,
+The application shell shows the language control on the list, creation, Views,
 settings, and consent routes; the editor shows it in its own top bar. The
 control stays reachable and named at phone and desktop widths. Settings
 confirmation dialogs (unlink, agent revoke, and account deletion) carry a second

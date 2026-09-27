@@ -21,6 +21,9 @@ describe('workspace locale', () => {
     '/app/resumes/resume-1/',
     '/app/resumes//',
     '/app/settings/sessions',
+    '/app/views',
+    '/app/views/',
+    '/app/views/resume-1',
     '/authorize',
     '/app/import/linkedin',
   ])('localizes %s', (path) => {
@@ -38,6 +41,9 @@ describe('workspace locale', () => {
     '/app/resumes/resume-1?next=/app/new',
     '/app/resumes/resume-1#section',
     '/app/resumes-lookalike/resume-1',
+    '/app/views/resume-1/x',
+    '/app/views/%2e%2e',
+    '/app/views-lookalike',
   ])('keeps %s English-only', (path) => {
     expect(isLocalizedPath(path)).toBe(false);
   });
