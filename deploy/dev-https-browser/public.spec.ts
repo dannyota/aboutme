@@ -568,3 +568,64 @@ test('proves a published resume hydrates in a real browser', async ({
     steps: { published: true, ssr: true, hydrated: true },
   })}\n`, { flag: 'wx', mode: 0o600 });
 });
+
+// The MCP guide (/guide/mcp) is a static public page (docs/design/mcp-guide.md):
+// Vietnamese by default, English behind the site's aboutme-locale cookie, no
+// data fetch.
+test('the MCP guide page renders through Caddy in both '
+  + 'languages', async ({ page }) => {
+  const viResponse = await page.goto(`${ORIGIN}/guide/mcp`);
+  expect(viResponse?.status()).toBe(200);
+  await expect(page.locator('[data-page-title]')).toHaveText(
+    'Kết nối trợ lý AI với aboutme.vn',
+  );
+
+  await page.context().addCookies([
+    { name: 'aboutme-locale', value: 'en', url: ORIGIN },
+  ]);
+  const enResponse = await page.goto(`${ORIGIN}/guide/mcp`);
+  expect(enResponse?.status()).toBe(200);
+  await expect(page.locator('[data-page-title]')).toHaveText(
+    'Connect your AI assistant to aboutme.vn',
+  );
+});
+
+// /guide itself reserves the root for later guides but holds no page of its
+// own (docs/design/mcp-guide.md, "Route"): it renders the app's normal
+// not-found page rather than a guide.
+test('/guide with no further path is not found', async ({ page }) => {
+  const response = await page.goto(`${ORIGIN}/guide`);
+  expect(response?.status()).toBe(404);
+  await expect(page.getByTestId('error-page')).toBeVisible();
+});
+
+// The guide root is a Nuxt root, and /mcp stays the Go MCP endpoint
+// (docs/design/mcp-guide.md, "Route"): a request with no bearer token still
+// gets the protected-resource challenge (apps/server/internal/mcpapi/errors.go).
+test('POST /mcp without a token returns 401 with the metadata '
+  + 'challenge', async ({ page }) => {
+  // Load a same-origin page first so the fetch below is not cross-origin.
+  expect((await page.goto(`${ORIGIN}/guide/mcp`))?.status()).toBe(200);
+  const rejected = await page.evaluate(async (origin) => {
+    const response = await fetch(new URL('/mcp', origin), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'tools/list', params: {},
+      }),
+    });
+    return {
+      status: response.status,
+      body: await response.text(),
+      wwwAuthenticate: response.headers.get('www-authenticate'),
+    };
+  }, ORIGIN);
+  expect(rejected.status).toBe(401);
+  expect(rejected.body).toBe('{"error":"unauthorized"}');
+  expect(rejected.wwwAuthenticate).toBe(
+    `Bearer resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource"`,
+  );
+});
