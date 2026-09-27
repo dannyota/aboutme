@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount } from 'vue';
 
 import { useResizablePanel } from '../../composables/useResizablePanel';
 import { editorShellCopy } from '../../i18n/editor-shell';
@@ -29,6 +29,8 @@ function endDragStyles(): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
+  // Only the primary button of the first pointer starts a drag.
+  if (event.button !== 0 || drag !== null) return;
   drag = { startClientX: event.clientX, startWidthRem: panel.widthRem.value };
   (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
   beginDragStyles();
@@ -56,6 +58,17 @@ function onPointerUp(event: PointerEvent): void {
   panel.commit();
 }
 
+// A drag can end without pointerup: the handle hides below 72 rem or the
+// editor unmounts mid-drag. Either way the body styles must not stay behind.
+function abandonDrag(): void {
+  if (drag === null) return;
+  drag = null;
+  endDragStyles();
+  panel.commit();
+}
+
+onBeforeUnmount(abandonDrag);
+
 // Screen readers announce a whole rem; the committed (stored) width still
 // snaps to the finer quarter-rem grid in useResizablePanel's commit.
 const announcedWidthRem = computed(() => Math.round(panel.widthRem.value));
@@ -65,7 +78,7 @@ const announcedWidthRem = computed(() => Math.round(panel.widthRem.value));
   <div
     aria-orientation="vertical"
     :aria-label="copy.resizePanel"
-    :aria-valuemax="panel.maxRem.value"
+    :aria-valuemax="Math.round(panel.maxRem.value)"
     :aria-valuemin="panel.minRem"
     :aria-valuenow="announcedWidthRem"
     :aria-valuetext="`${announcedWidthRem}rem`"
@@ -78,6 +91,7 @@ const announcedWidthRem = computed(() => Math.round(panel.widthRem.value));
     tabindex="0"
     @dblclick="panel.reset()"
     @keydown="panel.handleKeyDown"
+    @lostpointercapture="abandonDrag"
     @pointercancel="onPointerUp"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
