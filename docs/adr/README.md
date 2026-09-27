@@ -7,10 +7,10 @@ in [`../design/`](../design/README.md), and the
 pages that apply it.
 
 Each record states the decisions in force for one topic. Its History section
-names the former records it replaces and why each changed. A changed decision
-needs a new ADR that supersedes the affected part. An accepted record is
-otherwise edited only for wording, links, and its status line. A proposed record
-may change until accepted.
+names the former records it replaces and why each changed. To change a decision
+in force, edit its record with the owner's approval and add a History line
+naming what changed and why. A new record is only for a new topic. A proposed
+record may change until accepted.
 
 ## Records
 

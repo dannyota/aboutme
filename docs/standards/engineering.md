@@ -53,8 +53,9 @@ of that work; do not start repository-wide sweeps. Cite files, commands, and
 uncertainty, and claim only checks that ran. Reviews check these rules on the
 files a change touches.
 
-ADRs are decision records. Edit an accepted ADR only for wording, links, plan
-IDs, and its status line; supersede a decision with a new ADR.
+ADRs are one record per topic. To change a decision in force, edit its topic
+record with the owner's approval and add a line to its History section naming
+what changed and why; open a new ADR only for a new topic.
 
 ## Plans and records
 
