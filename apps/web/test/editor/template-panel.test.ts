@@ -265,6 +265,111 @@ describe('TemplatePanel', () => {
   });
 });
 
+describe('TemplatePanel search', () => {
+  it('filters the visible templates by name, style, and role, keeping '
+    + 'catalog order', async () => {
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(vi.fn()) },
+    });
+
+    await wrapper
+      .get('[data-testid="template-search-input"]')
+      .setValue('backend');
+    await nextTick();
+
+    expect(
+      wrapper.findAll('[data-template]')
+        .map((template) => template.attributes('data-template')),
+    ).toEqual(['minimal-air', 'one-page-tight']);
+  });
+
+  it('matches a role chip label even when it names only one template',
+    async () => {
+      const wrapper = mount(TemplatePanel, {
+        props: { actions: actionsFor(vi.fn()) },
+      });
+
+      await wrapper
+        .get('[data-testid="template-search-input"]')
+        .setValue('BrSE');
+      await nextTick();
+
+      expect(
+        wrapper.findAll('[data-template]')
+          .map((template) => template.attributes('data-template')),
+      ).toEqual(['international-lang']);
+    });
+
+  it('announces the result count politely, following the locale',
+    async () => {
+      const wrapper = mount(TemplatePanel, {
+        props: { actions: actionsFor(vi.fn()) },
+      });
+
+      await wrapper
+        .get('[data-testid="template-search-input"]')
+        .setValue('BrSE');
+      await nextTick();
+
+      expect(wrapper.get('[data-testid="template-search-status"]').text())
+        .toBe('1 templates');
+      expect(wrapper.get('[role="status"]').attributes('data-testid'))
+        .toBe('template-search-status');
+
+      locale.value = 'vi';
+      await nextTick();
+
+      expect(wrapper.get('[data-testid="template-search-status"]').text())
+        .toBe('1 mẫu');
+    });
+
+  it('names the query in the empty-result message, with a clear action '
+    + 'that restores the list and keeps focus in the field', async () => {
+    const wrapper = mount(TemplatePanel, {
+      attachTo: document.body,
+      props: { actions: actionsFor(vi.fn()) },
+    });
+    const input = wrapper.get('[data-testid="template-search-input"]');
+
+    await input.setValue('zzz-no-match');
+    await nextTick();
+
+    expect(wrapper.findAll('[data-template]')).toHaveLength(0);
+    expect(wrapper.get('[data-testid="template-search-status"]').text())
+      .toBe('No templates match "zzz-no-match".');
+
+    await wrapper.get('[data-testid="template-search-clear"]')
+      .trigger('click');
+    await nextTick();
+
+    expect((input.element as HTMLInputElement).value).toBe('');
+    expect(wrapper.findAll('[data-template]')).toHaveLength(TEMPLATES.length);
+    expect(wrapper.find('[data-testid="template-search-status"]').exists())
+      .toBe(false);
+    expect(document.activeElement).toBe(input.element);
+    wrapper.unmount();
+  });
+
+  it('clears a non-empty field on Escape and keeps focus in the field',
+    async () => {
+      const wrapper = mount(TemplatePanel, {
+        attachTo: document.body,
+        props: { actions: actionsFor(vi.fn()) },
+      });
+      const input = wrapper.get('[data-testid="template-search-input"]');
+
+      await input.setValue('backend');
+      (input.element as HTMLInputElement).focus();
+      await input.trigger('keydown', { key: 'Escape' });
+      await nextTick();
+
+      expect((input.element as HTMLInputElement).value).toBe('');
+      expect(wrapper.findAll('[data-template]')).toHaveLength(TEMPLATES.length);
+      expect(document.activeElement).toBe(input.element);
+      wrapper.unmount();
+    });
+});
+
 describe('TemplatePartialDialog', () => {
   it.each([
     'retry-remaining',
