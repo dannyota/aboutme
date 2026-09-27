@@ -209,7 +209,7 @@ async function discardAndSignIn(): Promise<void> {
   <main
     :class="[
       'editor-shell grid min-h-dvh max-h-dvh',
-      'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_var(--panel-width,22rem)]',
+      'grid-cols-[4rem_16.5rem_minmax(29.5rem,1fr)_var(--panel-width,22rem)]',
       'grid-rows-[4rem_minmax(0,1fr)] overflow-hidden bg-editor-canvas',
       'text-foreground max-[72rem]:grid-cols-[16.5rem_minmax(0,1fr)]',
       'max-[42rem]:grid-cols-[minmax(0,1fr)]',

@@ -7,6 +7,10 @@ import {
   createFieldDrafts,
   FieldDraftsKey,
 } from '../../app/composables/useFieldDrafts';
+import {
+  EDITOR_PANEL_MIN_REM,
+  EDITOR_PREVIEW_MIN_REM,
+} from '../../app/composables/useResizablePanel';
 import EditorShell from '../../app/components/editor/EditorShell.vue';
 import AccountMenu from '../../app/components/app/AccountMenu.vue';
 import IconButton from '../../app/components/app/IconButton.vue';
@@ -454,11 +458,36 @@ describe('EditorShell', () => {
       const wrapper = mountShell();
 
       expect(wrapper.get('.editor-shell').classes()).toContain(
-        'grid-cols-[4rem_16.5rem_minmax(32rem,1fr)_var(--panel-width,22rem)]',
+        'grid-cols-[4rem_16.5rem_minmax(29.5rem,1fr)_var(--panel-width,22rem)]',
       );
       expect(
         wrapper.find('[data-testid="panel-resize-handle"]').exists(),
       ).toBe(true);
+    },
+  );
+
+  it(
+    'fits the four-region grid inside the viewport at its 72rem breakpoint',
+    () => {
+      const classes = mountShell().get('.editor-shell').classes();
+      const wide = classes.find((name) => name.startsWith('grid-cols-[4rem_'));
+      const narrow = classes.find((name) => (
+        /^max-\[[\d.]+rem\]:grid-cols-\[16\.5rem_/.test(name)
+      ));
+      expect(wide).toBeDefined();
+      expect(narrow).toBeDefined();
+      // The narrow layout takes over below this width; at it, the rail,
+      // outline, preview floor, and default 22rem panel must not overflow.
+      const breakpointRem = Number(/^max-\[([\d.]+)rem\]/.exec(narrow!)![1]);
+      const tracks = [...wide!.matchAll(/([\d.]+)rem/g)]
+        .map((match) => Number(match[1]));
+      expect(tracks).toHaveLength(4);
+      const [rail, outline, previewFloor, panel] = tracks;
+      expect(previewFloor).toBe(EDITOR_PREVIEW_MIN_REM);
+      expect(panel).toBe(EDITOR_PANEL_MIN_REM);
+      expect(rail! + outline! + previewFloor! + panel!).toBeLessThanOrEqual(
+        breakpointRem,
+      );
     },
   );
 
