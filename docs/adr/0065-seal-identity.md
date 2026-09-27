@@ -97,5 +97,7 @@ A design review found five smaller problems:
   print stylesheet has no Tailwind utilities and the white card needs the light
   seal red in both themes.
 - The production maintenance page (`deploy/caddy/production/maintenance.html`)
-  still draws the old logo inline, with its own test; it follows in a separate
-  change.
+  carries its own copy of the tokens and an inline logo. It takes Logo B, the
+  `--seal` values, and the primary blue in its glows; its CSP hashes are
+  recomputed from the page at build, and `test.sh` probes a fetched `url()` on
+  the wordmark stroke instead of the removed gradient.
