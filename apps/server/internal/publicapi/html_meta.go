@@ -25,6 +25,7 @@ func publicRenderRequest(resume publicresume.PublicResume, discoverable bool, pa
 		PageTitle:        page.Title,
 		FaviconHref:      page.FaviconHref,
 		Preview:          page.Preview,
+		JoinInvite:       page.JoinInvite,
 	}
 }
 

@@ -47,6 +47,10 @@ const (
 	reasonStartRateLimited          // the start routes' own per-(account, IP) budget is exhausted
 	reasonStartClientIPUnresolvable // no trusted, unambiguous client IP, so the request could not even be keyed
 
+	// Sign in to view (view purpose start).
+	reasonStartSlugInvalid             // purpose=view start with a missing or malformed slug
+	reasonStartViewProviderUnsupported // purpose=view start on a provider the gate never offers (GitHub)
+
 	// numRejectReasons bounds exhaustive token tests.
 	numRejectReasons
 )
@@ -83,6 +87,8 @@ var rejectReasonTokens = map[rejectReason]string{
 	reasonStartMethodNotAllowed:               "start_method_not_allowed",
 	reasonStartRateLimited:                    "start_rate_limited",
 	reasonStartClientIPUnresolvable:           "start_client_ip_unresolvable",
+	reasonStartSlugInvalid:                    "start_slug_invalid",
+	reasonStartViewProviderUnsupported:        "start_view_provider_unsupported",
 }
 
 // String returns the stable log token. Callers must pass this string to slog;

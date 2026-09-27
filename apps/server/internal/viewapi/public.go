@@ -10,11 +10,16 @@ import (
 	"net/netip"
 	"regexp"
 	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/dannyota/aboutme/apps/server/internal/api"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/publicroots"
 	"github.com/dannyota/aboutme/apps/server/internal/viewcount"
+	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
 )
 
 // maxBodyBytes bounds start and collect bodies. A collect body with its
@@ -104,6 +109,10 @@ type startResponse struct {
 	Owner     bool                 `json:"owner"`
 	Token     string               `json:"token,omitempty"`
 	Challenge *viewcount.Challenge `json:"challenge,omitempty"`
+	// SignedIn is true when the request carries any valid account session,
+	// for the join invite; it authorizes nothing
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite").
+	SignedIn bool `json:"signedIn"`
 }
 
 func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byte) {
@@ -117,6 +126,24 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 		writeNotFound(w)
 		return
 	}
+	// A sign-in-to-view resume needs a pass before it is counted; the check
+	// runs before Start so a missing pass is never counted
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
+	// AC-VIEW-003).
+	resume, err := s.queries.GetPublicResumeBySlug(r.Context(), slug)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		writeNotFound(w)
+		return
+	case err != nil:
+		s.writeInternal(w, r)
+		return
+	}
+	if resume.SignInToView && !hasValidPass(r, s.viewPassKey, resume.ID, resume.ViewPassEpoch, s.now) {
+		writeNotFound(w)
+		return
+	}
+
 	result, err := s.counter.Start(r.Context(), slug, s.viewer(r))
 	switch {
 	case errors.Is(err, viewcount.ErrNotFound):
@@ -127,12 +154,29 @@ func (s *Service) handleStart(w http.ResponseWriter, r *http.Request, body []byt
 		api.WriteError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "service temporarily unavailable")
 		return
 	}
-	response := startResponse{Owner: result.Owner}
+	_, signedIn := auth.SessionFromContext(r.Context())
+	response := startResponse{Owner: result.Owner, SignedIn: signedIn}
 	if !result.Owner {
 		response.Token = result.Token
 		response.Challenge = &result.Challenge
 	}
 	api.WriteData(w, http.StatusOK, response)
+}
+
+// hasValidPass reports whether r carries a __Host-view-pass cookie with a
+// pass for resumeID at exactly passEpoch, not expired as of clock()
+// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie", "Gated
+// routes"; AC-VIEW-003, AC-VIEW-007). A nil clock uses time.Now.
+func hasValidPass(r *http.Request, key []byte, resumeID uuid.UUID, passEpoch int32, clock func() time.Time) bool {
+	cookie, err := r.Cookie(viewpass.CookieName)
+	if err != nil {
+		return false
+	}
+	now := time.Now
+	if clock != nil {
+		now = clock
+	}
+	return viewpass.Valid(cookie.Value, key, resumeID, passEpoch, now())
 }
 
 func writeNotFound(w http.ResponseWriter) {

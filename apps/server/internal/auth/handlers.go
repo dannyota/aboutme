@@ -5,6 +5,7 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -102,9 +103,17 @@ type Service struct {
 	pending *PendingAuthenticationManager
 	logger  *slog.Logger
 
-	publicOrigin            string
-	providerLogin           config.ProviderLogin
-	trustedProxies          api.TrustedProxies
+	publicOrigin   string
+	providerLogin  config.ProviderLogin
+	trustedProxies api.TrustedProxies
+	// signInToViewLinkedInEnabled gates whether the view purpose offers
+	// LinkedIn, in addition to LinkedIn account login being enabled
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow").
+	signInToViewLinkedInEnabled bool
+	// viewPassKey seals the __Host-view-pass cookie (docs/design/viewer-analytics/
+	// sign-in-to-view.md "Pass cookie"). It is 32 bytes, decoded once at
+	// construction from config.Config.ViewPassKey.
+	viewPassKey             []byte
 	googleIssuerURL         string
 	linkedinIssuerURL       string
 	githubOAuthAuthorizeURL string
@@ -145,25 +154,35 @@ func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Serv
 	}
 	q := store.New(pool)
 	sessionMgr := NewSessionManagerWithPool(pool)
+	// config.Config.ViewPassKey is validated at config load whenever it is
+	// non-blank (docs/design/viewer-analytics/sign-in-to-view.md "Pass
+	// cookie"); a test config that leaves it unset simply carries no key,
+	// which never seals a real pass.
+	viewPassKey, decodeErr := base64.RawURLEncoding.Strict().DecodeString(cfg.ViewPassKey)
+	if decodeErr != nil {
+		viewPassKey = nil
+	}
 	return &Service{
-		tx:                      NewTransactionStore(q),
-		q:                       q,
-		pool:                    pool,
-		sessions:                sessionMgr,
-		sessionMgr:              sessionMgr,
-		pending:                 NewPendingAuthenticationManager(pool, logger),
-		logger:                  logger,
-		publicOrigin:            cfg.PublicOrigin,
-		providerLogin:           cfg.ProviderLogin,
-		trustedProxies:          api.TrustedProxies(cfg.TrustedProxyCIDRs),
-		googleIssuerURL:         endpointOrDefault(cfg.GoogleOIDCIssuerURL, googleIssuer),
-		linkedinIssuerURL:       endpointOrDefault(cfg.LinkedInOIDCIssuerURL, linkedinIssuer),
-		githubOAuthAuthorizeURL: endpointOrDefault(cfg.GitHubOAuthAuthorizeURL, githubAuthorizeURL),
-		githubOAuthTokenURL:     endpointOrDefault(cfg.GitHubOAuthTokenURL, githubTokenURL),
-		githubAPIBaseURL:        endpointOrDefault(cfg.GitHubAPIBaseURL, githubAPIBaseURL),
-		googleLocalOIDC:         cfg.GoogleOIDCIssuerURL != "",
-		linkedinLocalOIDC:       cfg.LinkedInOIDCIssuerURL != "",
-		githubLocalOAuth:        cfg.GitHubOAuthAuthorizeURL != "",
+		tx:                          NewTransactionStore(q),
+		q:                           q,
+		pool:                        pool,
+		sessions:                    sessionMgr,
+		sessionMgr:                  sessionMgr,
+		pending:                     NewPendingAuthenticationManager(pool, logger),
+		logger:                      logger,
+		publicOrigin:                cfg.PublicOrigin,
+		providerLogin:               cfg.ProviderLogin,
+		trustedProxies:              api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		signInToViewLinkedInEnabled: cfg.SignInToViewLinkedInEnabled,
+		viewPassKey:                 viewPassKey,
+		googleIssuerURL:             endpointOrDefault(cfg.GoogleOIDCIssuerURL, googleIssuer),
+		linkedinIssuerURL:           endpointOrDefault(cfg.LinkedInOIDCIssuerURL, linkedinIssuer),
+		githubOAuthAuthorizeURL:     endpointOrDefault(cfg.GitHubOAuthAuthorizeURL, githubAuthorizeURL),
+		githubOAuthTokenURL:         endpointOrDefault(cfg.GitHubOAuthTokenURL, githubTokenURL),
+		githubAPIBaseURL:            endpointOrDefault(cfg.GitHubAPIBaseURL, githubAPIBaseURL),
+		googleLocalOIDC:             cfg.GoogleOIDCIssuerURL != "",
+		linkedinLocalOIDC:           cfg.LinkedInOIDCIssuerURL != "",
+		githubLocalOAuth:            cfg.GitHubOAuthAuthorizeURL != "",
 
 		startRateLimitRequests: startRateLimitRequests,
 		startRateLimitWindow:   startRateLimitWindow,
@@ -361,14 +380,14 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, PurposeLogin, reasonTxCookieMissing)
+		s.redirectAuthFailed(w, r, ProviderGoogle, Transaction{Purpose: PurposeLogin}, reasonTxCookieMissing)
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGoogle)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderGoogle, PurposeLogin, reasonTxInvalid)
+			s.redirectAuthFailed(w, r, ProviderGoogle, Transaction{Purpose: PurposeLogin}, reasonTxInvalid)
 			return
 		}
 		s.writeInternalError(w, r, ProviderGoogle, "consume_transaction", err)
@@ -379,19 +398,19 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	// a victim's pending transaction; the cookie and PKCE do not replace it.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonStateMismatch)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonStateMismatch)
 		return
 	}
 
 	// Validate state before exposing the friendlier consent-denied result.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
+		s.redirectWithError(w, r, ProviderGoogle, tx, cancelledErrorCode, reasonConsentDenied)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonAuthorizationCodeMissing)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonAuthorizationCodeMissing)
 		return
 	}
 
@@ -407,32 +426,37 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	oauth2Cfg := s.googleOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonTokenExchangeFailed)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonTokenExchangeFailed)
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonIDTokenMissing)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonIDTokenMissing)
 		return
 	}
 
 	verifier := provider.Verifier(&oidc.Config{ClientID: s.google.clientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonIDTokenVerificationFailed)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonIDTokenVerificationFailed)
 		return
 	}
 
 	// go-oidc exposes the nonce but does not validate it.
 	if idToken.Nonce == "" || idToken.Nonce != tx.Nonce {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonNonceMismatch)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonNonceMismatch)
+		return
+	}
+
+	if tx.Purpose == PurposeView {
+		s.handleViewCallback(w, r, ProviderGoogle, tx)
 		return
 	}
 
 	var claims googleClaims
 	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
-		s.redirectAuthFailed(w, r, ProviderGoogle, tx.Purpose, reasonIDTokenClaimsDecodeFailed)
+		s.redirectAuthFailed(w, r, ProviderGoogle, tx, reasonIDTokenClaimsDecodeFailed)
 		return
 	}
 
@@ -440,7 +464,7 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
 		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGoogle, idToken.Subject)
 		if linkErr != nil {
-			s.redirectLinkOrReauthError(w, r, ProviderGoogle, tx.Purpose, linkErr)
+			s.redirectLinkOrReauthError(w, r, ProviderGoogle, tx, linkErr)
 			return
 		}
 		s.finishLinkOrReauth(w, r, tx, pendingRaw)
@@ -465,12 +489,12 @@ func (s *Service) handleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	// A new subject requires a verified, canonical email.
 	if claims.Email == "" || !claims.EmailVerified {
-		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, emailNotVerifiedErrorCode, reasonEmailNotVerified)
+		s.redirectWithError(w, r, ProviderGoogle, tx, emailNotVerifiedErrorCode, reasonEmailNotVerified)
 		return
 	}
 	canonicalEmail, err := accountemail.Canonicalize(claims.Email)
 	if err != nil {
-		s.redirectWithError(w, r, ProviderGoogle, tx.Purpose, emailNotVerifiedErrorCode, reasonEmailNotVerified)
+		s.redirectWithError(w, r, ProviderGoogle, tx, emailNotVerifiedErrorCode, reasonEmailNotVerified)
 		return
 	}
 
@@ -534,17 +558,23 @@ func emailLocalPart(email string) string {
 
 // redirectWithError clears the transaction cookie, logs the rejection, and
 // redirects to the purpose-specific error page. Unknown-purpose failures use
-// the login page.
-func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, code string, reason rejectReason) {
+// the login page. A view-purpose transaction whose tx was already consumed
+// redirects to its own gate instead
+// (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow").
+func (s *Service) redirectWithError(w http.ResponseWriter, r *http.Request, provider Provider, tx Transaction, code string, reason rejectReason) {
 	ClearOAuthTxCookie(w)
 	s.logRejection(r, provider, code, reason)
-	http.Redirect(w, r, s.callbackErrorRedirectBase(purpose)+"?error="+url.QueryEscape(code), http.StatusFound)
+	if tx.Purpose == PurposeView {
+		s.redirectViewFailure(w, r, tx, code)
+		return
+	}
+	http.Redirect(w, r, s.callbackErrorRedirectBase(tx.Purpose)+"?error="+url.QueryEscape(code), http.StatusFound)
 }
 
 // redirectAuthFailed exposes one code while retaining a typed, server-only
 // reason for operators.
-func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, reason rejectReason) {
-	s.redirectWithError(w, r, provider, purpose, authFailedErrorCode, reason)
+func (s *Service) redirectAuthFailed(w http.ResponseWriter, r *http.Request, provider Provider, tx Transaction, reason rejectReason) {
+	s.redirectWithError(w, r, provider, tx, authFailedErrorCode, reason)
 }
 
 // redirectEmailAlreadyRegistered names only the attempted provider, never the

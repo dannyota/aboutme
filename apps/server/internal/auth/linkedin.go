@@ -155,14 +155,14 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, PurposeLogin, reasonTxCookieMissing)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, Transaction{Purpose: PurposeLogin}, reasonTxCookieMissing)
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderLinkedIn)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderLinkedIn, PurposeLogin, reasonTxInvalid)
+			s.redirectAuthFailed(w, r, ProviderLinkedIn, Transaction{Purpose: PurposeLogin}, reasonTxInvalid)
 			return
 		}
 		s.writeInternalError(w, r, ProviderLinkedIn, "consume_transaction", err)
@@ -172,7 +172,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	// State prevents authorization-code splicing.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonStateMismatch)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonStateMismatch)
 		return
 	}
 
@@ -180,16 +180,16 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	// with a code beside it, stops the flow before the token exchange.
 	if providerError := r.URL.Query().Get("error"); providerError != "" {
 		if linkedinCancelErrors[providerError] {
-			s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
+			s.redirectWithError(w, r, ProviderLinkedIn, tx, cancelledErrorCode, reasonConsentDenied)
 			return
 		}
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonLinkedInProviderError)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonLinkedInProviderError)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonAuthorizationCodeMissing)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonAuthorizationCodeMissing)
 		return
 	}
 
@@ -205,20 +205,20 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	oauth2Cfg := s.linkedinOAuth2Config(provider.Endpoint(), tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonTokenExchangeFailed)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonTokenExchangeFailed)
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok || rawIDToken == "" {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonIDTokenMissing)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonIDTokenMissing)
 		return
 	}
 
 	verifier := provider.Verifier(&oidc.Config{ClientID: s.linkedin.clientID})
 	idToken, err := verifier.Verify(ctx, rawIDToken)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonIDTokenVerificationFailed)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonIDTokenVerificationFailed)
 		return
 	}
 
@@ -227,13 +227,18 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	// is rejected before any other claim is used. ADR 0016 records the
 	// remaining code-injection risk.
 	if idToken.Nonce != "" && idToken.Nonce != tx.Nonce {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonNonceMismatch)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonNonceMismatch)
+		return
+	}
+
+	if tx.Purpose == PurposeView {
+		s.handleViewCallback(w, r, ProviderLinkedIn, tx)
 		return
 	}
 
 	var claims linkedinClaims
 	if claimsErr := idToken.Claims(&claims); claimsErr != nil {
-		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx.Purpose, reasonIDTokenClaimsDecodeFailed)
+		s.redirectAuthFailed(w, r, ProviderLinkedIn, tx, reasonIDTokenClaimsDecodeFailed)
 		return
 	}
 
@@ -241,7 +246,7 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
 		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderLinkedIn, idToken.Subject)
 		if linkErr != nil {
-			s.redirectLinkOrReauthError(w, r, ProviderLinkedIn, tx.Purpose, linkErr)
+			s.redirectLinkOrReauthError(w, r, ProviderLinkedIn, tx, linkErr)
 			return
 		}
 		s.finishLinkOrReauth(w, r, tx, pendingRaw)
@@ -267,13 +272,13 @@ func (s *Service) handleLinkedInCallback(w http.ResponseWriter, r *http.Request)
 	// Only a new identity requires a present, true, canonical email.
 	// Existing identities do not re-evaluate email. See docs/design/security.md.
 	if claims.Email == "" || claims.EmailVerified == nil || !bool(*claims.EmailVerified) {
-		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
+		s.redirectWithError(w, r, ProviderLinkedIn, tx, emailNotVerifiedErrorCode,
 			reasonLinkedInRegistrationEmailUnverified)
 		return
 	}
 	canonicalEmail, err := accountemail.Canonicalize(claims.Email)
 	if err != nil {
-		s.redirectWithError(w, r, ProviderLinkedIn, tx.Purpose, emailNotVerifiedErrorCode,
+		s.redirectWithError(w, r, ProviderLinkedIn, tx, emailNotVerifiedErrorCode,
 			reasonLinkedInRegistrationEmailUnverified)
 		return
 	}

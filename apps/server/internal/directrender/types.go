@@ -13,6 +13,10 @@ import (
 // PublicRenderMode identifies the renderer mode used for public pages.
 const PublicRenderMode = "continuous"
 
+// GateRenderMode identifies the renderer mode used for the sign-in-to-view
+// gate page (docs/design/viewer-analytics/sign-in-to-view.md "Gate").
+const GateRenderMode = "gate"
+
 // PublicRenderRequest contains all renderer inputs for one public resume.
 type PublicRenderRequest struct {
 	PublicResume     publicresume.PublicResume `json:"publicResume"`
@@ -26,6 +30,31 @@ type PublicRenderRequest struct {
 	// Preview is the link-preview text the page head carries; the validator
 	// accepts exactly these values (docs/design/link-previews.md).
 	Preview previewmeta.Meta `json:"preview"`
+	// JoinInvite is "/register" or "/login" for a sign-in-to-view resume's
+	// page, and omitted for every other public resume
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite"). It
+	// authorizes nothing; it only names the link the page's join invite uses.
+	JoinInvite string `json:"joinInvite,omitempty"`
+}
+
+// GateRenderRequest contains the renderer inputs for the sign-in-to-view
+// gate page. It carries no resume content
+// (docs/design/viewer-analytics/sign-in-to-view.md "Gate"; AC-VIEW-002).
+type GateRenderRequest struct {
+	Mode            string           `json:"mode"`
+	CanonicalOrigin string           `json:"canonicalOrigin"`
+	Slug            string           `json:"slug"`
+	Lng             string           `json:"lng"`
+	PageTitle       string           `json:"pageTitle"`
+	FaviconHref     string           `json:"faviconHref"`
+	Preview         previewmeta.Meta `json:"preview"`
+	// Providers is a subset of ["google","linkedin"] in that order; it may
+	// be empty.
+	Providers []string `json:"providers"`
+	// Message is "none", the canceled outcome, or the failed outcome
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Gate"); see
+	// gateMessage for the exact wire values.
+	Message string `json:"message"`
 }
 
 // Result is a validated renderer response.

@@ -69,6 +69,13 @@ func (noOwnerQueries) ListResumeShareSignals(context.Context, store.ListResumeSh
 	return nil, nil
 }
 
+// GetPublicResumeBySlug returns a resume with sign-in-to-view off, so a test
+// service built without a real store still exercises the public start route
+// as an ordinary, ungated resume.
+func (noOwnerQueries) GetPublicResumeBySlug(context.Context, string) (store.Resume, error) {
+	return store.Resume{}, nil
+}
+
 type routeFixture struct {
 	now     time.Time
 	store   *memoryStore

@@ -90,6 +90,11 @@ func (s *Service) handleLoginStart(w http.ResponseWriter, r *http.Request, provi
 		api.WriteError(w, http.StatusMethodNotAllowed, "method_not_allowed",
 			"purpose=link and purpose=reauth require POST on "+r.URL.Path)
 		return
+	case PurposeView:
+		// Sign in to view gates one public resume, never an account
+		// (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow").
+		s.handleViewStart(w, r, provider)
+		return
 	}
 
 	ctx := withProviderHTTPClient(r.Context())

@@ -44,6 +44,15 @@ type ServiceDependencies struct {
 	// Views records crawler and link-preview fetches of resume pages. Nil
 	// records nothing.
 	Views ViewObserver
+	// ViewPassKey seals and opens the __Host-view-pass cookie
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie").
+	ViewPassKey []byte
+	// GateProviders is the fixed subset of ["google","linkedin"] the gate
+	// offers (design "Gate"; ADR 0016).
+	GateProviders []string
+	// JoinInviteTarget is "/register" or "/login": the join invite's link
+	// for a sign-in-to-view resume's page (design "Join invite").
+	JoinInviteTarget string
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
@@ -68,7 +77,11 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	if dependencies.Reader == nil || dependencies.DiscoveryStore == nil || dependencies.Cache == nil || dependencies.Renderer == nil || dependencies.PublicOrigin.String() == "" || dependencies.AppDigest == "" || dependencies.RendererDigest == "" {
 		return nil, ErrUnavailableDependencies
 	}
-	html, err := NewHTMLHandler(HTMLDependencies{Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin, AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger, Cards: dependencies.Cards, Views: dependencies.Views})
+	html, err := NewHTMLHandler(HTMLDependencies{
+		Reader: dependencies.Reader, Cache: dependencies.Cache, Renderer: dependencies.Renderer, PublicOrigin: dependencies.PublicOrigin,
+		AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest, Logger: dependencies.Logger, Cards: dependencies.Cards, Views: dependencies.Views,
+		ViewPassKey: dependencies.ViewPassKey, Clock: dependencies.Clock, GateProviders: dependencies.GateProviders, JoinInviteTarget: dependencies.JoinInviteTarget,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -93,12 +106,13 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 		return nil, err
 	}
 	service := &Service{html: html, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms, live: dependencies.Live}
-	service.json = service.newJSONHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest)
-	service.photo = service.newPhotoHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest)
+	service.json = service.newJSONHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest, dependencies.ViewPassKey, dependencies.Clock)
+	service.photo = service.newPhotoHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest, dependencies.ViewPassKey, dependencies.Clock)
 	artifacts, artifactErr := newArtifactHandlers(ArtifactDependencies{
 		Reader: dependencies.Reader, Cache: dependencies.Cache, Queue: dependencies.PrintQueue,
 		AppDigest: dependencies.AppDigest, RendererDigest: dependencies.RendererDigest,
 		TrustedProxies: dependencies.TrustedProxies, Clock: dependencies.Clock, Cards: dependencies.Cards,
+		ViewPassKey: dependencies.ViewPassKey,
 	})
 	if artifactErr != nil {
 		return nil, artifactErr
@@ -107,7 +121,7 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 	return service, nil
 }
 
-func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache.Cache, appDigest string) http.Handler {
+func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache.Cache, appDigest string, viewPassKey []byte, clock func() time.Time) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if !publicJSONGetOrHead(w, request) {
 			return
@@ -125,9 +139,16 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			return
 		}
 		defer lease.Release()
+		// The pass check runs after admission and before any public cache
+		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
+		// routes"; AC-VIEW-003).
+		if snapshot.SignInToView && !hasValidPass(request, viewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, clock) {
+			servePublicJSONError(w, request, http.StatusNotFound)
+			return
+		}
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationJSON, Variant: "default", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: jsonFormatVersion, AppDigest: appDigest}
 		if cached, ok := cache.Get(key); ok {
-			withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
+			withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
 			return
 		}
 		response, err := NewPublicJSON(snapshot.Public)
@@ -136,11 +157,11 @@ func (s *Service) newJSONHandler(reader *publicresume.Reader, cache *publiccache
 			return
 		}
 		cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		withDiscoveryRobots(response, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
+		withPrivateCacheControl(withDiscoveryRobots(response, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
 	})
 }
 
-func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccache.Cache, appDigest string) http.Handler {
+func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccache.Cache, appDigest string, viewPassKey []byte, clock func() time.Time) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		if !publicJSONGetOrHead(w, request) {
 			return
@@ -158,9 +179,13 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 			return
 		}
 		defer lease.Release()
+		if snapshot.SignInToView && !hasValidPass(request, viewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, clock) {
+			servePublicJSONError(w, request, http.StatusNotFound)
+			return
+		}
 		key := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationPhoto, Variant: "default", ResumeID: snapshot.ResumeID, Generation: snapshot.Revision, FormatVersion: photoFormatVersion, AppDigest: appDigest}
 		if cached, ok := cache.Get(key); ok {
-			withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
+			withPrivateCacheControl(withDiscoveryRobots(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
 			return
 		}
 		//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
@@ -175,7 +200,7 @@ func (s *Service) newPhotoHandler(reader *publicresume.Reader, cache *publiccach
 			return
 		}
 		cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		withDiscoveryRobots(response, snapshot.DiscoveryEnabled).ServeHTTP(w, request)
+		withPrivateCacheControl(withDiscoveryRobots(response, snapshot.DiscoveryEnabled), snapshot.SignInToView).ServeHTTP(w, request)
 	})
 }
 

@@ -207,13 +207,13 @@ func (s *Service) authenticateLinkOrReauthSession(r *http.Request, w http.Respon
 
 // redirectLinkOrReauthError exposes expected authorization failures and keeps
 // unexpected failures opaque.
-func (s *Service) redirectLinkOrReauthError(w http.ResponseWriter, r *http.Request, provider Provider, purpose Purpose, err error) {
+func (s *Service) redirectLinkOrReauthError(w http.ResponseWriter, r *http.Request, provider Provider, tx Transaction, err error) {
 	switch {
 	case errors.Is(err, errIdentityAlreadyLinked):
-		s.redirectWithError(w, r, provider, purpose, identityAlreadyLinkedErrorCode,
+		s.redirectWithError(w, r, provider, tx, identityAlreadyLinkedErrorCode,
 			reasonLinkIdentityAlreadyClaimed)
 	case errors.Is(err, errLinkOrReauthRejected):
-		s.redirectAuthFailed(w, r, provider, purpose,
+		s.redirectAuthFailed(w, r, provider, tx,
 			reasonLinkOrReauthRejected)
 	default:
 		s.writeInternalError(w, r, provider, "resolve_link_or_reauth", err)
