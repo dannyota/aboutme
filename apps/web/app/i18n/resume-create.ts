@@ -43,6 +43,8 @@ export type ResumeCreateCopy = {
   readonly browseAll: (count: number) => string;
   readonly cancel: string;
   readonly close: string;
+  /** The LinkedIn import link in the create dialog's footer. */
+  readonly importLinkedIn: string;
   readonly languageName: (language: 'vi' | 'en') => string;
   readonly language: {
     readonly other: string;
@@ -101,6 +103,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
     browseAll: (count) => `Xem cả ${count} trong thư viện`,
     cancel: 'Hủy',
     close: 'Đóng',
+    importLinkedIn: 'Nhập từ LinkedIn (PDF)',
     languageName: (language) =>
       language === 'vi' ? 'Tiếng Việt' : 'Tiếng Anh',
     language: {
@@ -159,6 +162,7 @@ export const resumeCreateCopy: WorkspaceCopy<ResumeCreateCopy> = {
     browseAll: (count) => `Browse all ${count} in the library`,
     cancel: 'Cancel',
     close: 'Close',
+    importLinkedIn: 'Import from LinkedIn (PDF)',
     languageName: (language) =>
       language === 'vi' ? 'Vietnamese' : 'English',
     language: {

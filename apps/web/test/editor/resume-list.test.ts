@@ -1348,6 +1348,46 @@ describe('useResumeList', () => {
     trigger.remove();
   });
 
+  it.each([
+    ['vi', 'Nhập từ LinkedIn (PDF)'],
+    ['en', 'Import from LinkedIn (PDF)'],
+  ] as const)(
+    'shows the LinkedIn import link in %s (docs/design/linkedin-import-ui.md)',
+    async (locale, label) => {
+      setSiteLocale(locale);
+      const wrapper = mount(CreateResumeDialog, {
+        attachTo: document.body,
+        props: { open: true, busy: false, retained: null },
+      });
+      await nextTick();
+      const link = document.body.querySelector<HTMLAnchorElement>(
+        '[data-action="create-import-linkedin"]',
+      );
+      expect(link).not.toBeNull();
+      expect(link?.tagName).toBe('A');
+      expect(link?.getAttribute('href')).toBe('/app/import/linkedin');
+      expect(link?.textContent).toBe(label);
+      wrapper.unmount();
+      setSiteLocale(undefined);
+    },
+  );
+
+  it(
+    'hides the LinkedIn import link in the uncertain-create state '
+    + '(docs/design/linkedin-import-ui.md)',
+    async () => {
+      const wrapper = mount(CreateResumeDialog, {
+        attachTo: document.body,
+        props: { open: true, busy: false, retained: opaqueOutcome() },
+      });
+      await nextTick();
+      expect(
+        document.body.querySelector('[data-action="create-import-linkedin"]'),
+      ).toBeNull();
+      wrapper.unmount();
+    },
+  );
+
   it('returns focus after a successful delete close', async () => {
     const trigger = document.createElement('button');
     document.body.append(trigger);

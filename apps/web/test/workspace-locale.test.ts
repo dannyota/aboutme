@@ -22,6 +22,7 @@ describe('workspace locale', () => {
     '/app/resumes//',
     '/app/settings/sessions',
     '/authorize',
+    '/app/import/linkedin',
   ])('localizes %s', (path) => {
     expect(isLocalizedPath(path)).toBe(true);
   });

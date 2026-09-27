@@ -7,6 +7,7 @@ import { editorControlsCopy } from '../../app/i18n/editor-controls';
 import { editorFieldsCopy } from '../../app/i18n/editor-fields';
 import { editorSectionsCopy } from '../../app/i18n/editor-sections';
 import { editorShellCopy } from '../../app/i18n/editor-shell';
+import { importCopy } from '../../app/i18n/import';
 import { workspaceTitles } from '../../app/i18n/meta';
 import { pdfCopy } from '../../app/i18n/pdf';
 import { publishCopy } from '../../app/i18n/publish';
@@ -29,6 +30,7 @@ const catalogs = [
   'i18n/editor-fields.ts',
   'i18n/editor-sections.ts',
   'i18n/editor-shell.ts',
+  'i18n/import.ts',
   'i18n/meta.ts',
   'i18n/pdf.ts',
   'i18n/publish.ts',
@@ -156,6 +158,18 @@ const functionFixtures: Readonly<Record<string, readonly unknown[]>> = {
   'resume-list.relativeTime.days': [2],
   'resume-list.relativeTime.date': [1, 2, 2026],
   'workspace.publicAt': ['/resume'],
+  'import.readingPage': [1, 2],
+  'import.noticeDates': ['Entry'],
+  'import.noticeStartOnly': ['Entry'],
+  'import.noticeCut': ['Field', 120],
+  'import.noticeOverLimit': ['Skills'],
+  'import.templateLine': ['Template'],
+  'import.groupLabel': ['Skills'],
+  'import.groupCount': [1, 2],
+  'import.notImportedLine': ['Section', 1],
+  'import.selectedCount': [1, 1],
+  'import.sizeValue': [1, 256],
+  'import.sizeOver': [256],
 };
 const workspaceCatalogNames = new Set(
   catalogs.map((path) => path.slice(5, -3)),
@@ -296,6 +310,7 @@ describe('workspace localization source guard', () => {
       ['editor-fields', editorFieldsCopy],
       ['editor-sections', editorSectionsCopy],
       ['editor-shell', editorShellCopy],
+      ['import', importCopy],
       ['meta', workspaceTitles],
       ['pdf', pdfCopy],
       ['publish', publishCopy],

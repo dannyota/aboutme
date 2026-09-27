@@ -74,6 +74,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'lưu dưới dạng mã băm Argon2id. Nếu bạn đăng nhập bằng Google '
             + 'hoặc LinkedIn: ID tài khoản của bạn tại nhà cung cấp đó, '
             + 'email và tên.',
+            'Nhập từ LinkedIn: trình duyệt của bạn đọc tệp PDF hồ sơ '
+            + 'LinkedIn bạn chọn. Chúng tôi không nhận tệp này; chúng tôi '
+            + 'chỉ lưu CV bạn tạo từ nó.',
             'Nội dung: các CV bạn viết, ảnh bạn tải lên, và, khi một CV '
             + 'đang công khai, ảnh xem trước chúng tôi tạo từ CV đó để hiển '
             + 'thị khi đường dẫn được chia sẻ.',
@@ -394,6 +397,9 @@ export const legalCopy: Record<Locale, LegalCopy> = {
             + 'as an Argon2id hash. If you sign in with Google or LinkedIn: '
             + 'your account ID with that provider, your email, and your '
             + 'name.',
+            'LinkedIn import: your browser reads the LinkedIn profile PDF '
+            + 'you pick. We never receive the file; we store only the '
+            + 'resume you create from it.',
             'Content: the resumes you write, the photos you upload, and, '
             + 'while a resume is public, the preview image we make from it '
             + 'for link previews.',

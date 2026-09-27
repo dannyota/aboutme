@@ -316,13 +316,22 @@ function persona(templateId: string): string {
       #footer
     >
       <!-- First here, so it stacks last on phones (DESIGN.md dialogs). -->
-      <NuxtLink
-        class="create-resume-browse text-sm text-link underline
-          underline-offset-4 sm:mr-auto sm:self-center"
-        to="/templates"
-      >
-        {{ copy.browseAll(GALLERY.length) }}
-      </NuxtLink>
+      <div class="flex flex-col gap-2 sm:mr-auto sm:gap-1 sm:self-center">
+        <NuxtLink
+          class="create-resume-browse text-sm text-link underline
+            underline-offset-4"
+          to="/templates"
+        >
+          {{ copy.browseAll(GALLERY.length) }}
+        </NuxtLink>
+        <a
+          class="text-sm text-link underline underline-offset-4"
+          data-action="create-import-linkedin"
+          href="/app/import/linkedin"
+        >
+          {{ copy.importLinkedIn }}
+        </a>
+      </div>
       <Button
         :disabled="busy"
         type="button"
