@@ -323,6 +323,13 @@ serves) uses a policy scoped to the app's own origin instead
 `frame-ancestors 'none'` and `object-src 'none'`, and both forbid
 `'unsafe-eval'` outright. `apps/web/app/utils/csp.ts` holds the exact strings.
 
+`worker-src` is `'none'` on the locked-down policy and `'self'` on the app
+policy, so only a same-origin script file can start a worker, never a `blob:` or
+`data:` URL. `script-src 'self'` already runs same-origin code, so `'self'` adds
+no code source. The [LinkedIn import](linkedin-import.md#security) page is the
+only page that starts one: a module worker that runs pdf.js
+([ADR 0064](../adr/0064-linkedin-import-from-save-to-pdf.md)).
+
 `script-src` never carries `'unsafe-inline'` on either policy: Nuxt's own
 hydration payload is externalized into a same-origin script file for every
 response. The homepage and template pages each render their JSON-LD as a
