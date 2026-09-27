@@ -72,6 +72,20 @@ describe('IconButton type', () => {
     expect(explicit.submit).toHaveBeenCalledTimes(1);
     explicit.wrapper.unmount();
   });
+
+  it('omits aria-pressed when no pressed prop is given', () => {
+    const wrapper = mount(IconButton, { props: { label: 'Plain' } });
+    expect(wrapper.get('button').attributes('aria-pressed')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('exposes aria-pressed only when a boolean pressed prop is passed', () => {
+    const wrapper = mount(IconButton, {
+      props: { label: 'Toggle', pressed: false },
+    });
+    expect(wrapper.get('button').attributes('aria-pressed')).toBe('false');
+    wrapper.unmount();
+  });
 });
 
 describe('password visibility toggle', () => {

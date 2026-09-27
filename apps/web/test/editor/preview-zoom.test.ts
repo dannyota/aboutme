@@ -28,17 +28,24 @@ describe('isPreviewZoomStep', () => {
 });
 
 describe('stepPreviewZoom', () => {
-  it('walks the steps in order, both directions', () => {
-    expect(stepPreviewZoom('fit', 1)).toBe(50);
-    expect(stepPreviewZoom(50, 1)).toBe(67);
-    expect(stepPreviewZoom(100, 1)).toBe(110);
-    expect(stepPreviewZoom(100, -1)).toBe(90);
-    expect(stepPreviewZoom(50, -1)).toBe('fit');
+  it('steps from Fit to the fixed step just past the live fit percent',
+    () => {
+      expect(stepPreviewZoom('fit', 1, 84)).toBe(90);
+      expect(stepPreviewZoom('fit', -1, 84)).toBe(75);
+      expect(stepPreviewZoom('fit', 1, 72)).toBe(75);
+      expect(stepPreviewZoom('fit', -1, 72)).toBe(67);
+    });
+
+  it('walks the fixed steps in order once off Fit', () => {
+    expect(stepPreviewZoom(50, 1, 84)).toBe(67);
+    expect(stepPreviewZoom(100, 1, 84)).toBe(110);
+    expect(stepPreviewZoom(100, -1, 84)).toBe(90);
   });
 
-  it('clamps at Fit and at 200%, never wrapping around', () => {
-    expect(stepPreviewZoom('fit', -1)).toBe('fit');
-    expect(stepPreviewZoom(200, 1)).toBe(200);
+  it('clamps instead of wrapping: zoom out stops at 50%, zoom in at 200%,'
+    + ' never landing back on Fit', () => {
+    expect(stepPreviewZoom(50, -1, 84)).toBe(50);
+    expect(stepPreviewZoom(200, 1, 84)).toBe(200);
   });
 });
 
