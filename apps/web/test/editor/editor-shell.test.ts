@@ -516,6 +516,11 @@ describe('EditorShell', () => {
         .toContain('max-[72rem]:pb-24');
       expect(wrapper.get('[data-region="outline"]').classes())
         .toContain('max-[72rem]:pb-16');
+      // The outline's padding only extends the scroll area if its content
+      // box grows with the section list instead of clipping at min-h-0.
+      expect(
+        wrapper.get('[data-region="outline"] > *').classes(),
+      ).toContain('max-[72rem]:min-h-fit');
       expect(preview.classes()).toContain('min-[42rem]:max-[72rem]:pb-16');
 
       const show = switcher.get('[data-action="show-preview"]');
