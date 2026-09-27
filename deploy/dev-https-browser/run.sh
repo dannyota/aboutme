@@ -18,6 +18,7 @@ readonly -a SPEC_SOURCES=(
   password-auth.spec.ts
   mcp.spec.ts
   mcp-sdk.spec.ts
+  mcp-ts-sdk.spec.ts
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
@@ -85,7 +86,7 @@ validate_capture_token_file() {
 mode_input_entries() {
   case $1 in
   password-auth | sample-start | linkedin) printf 'caddy-root.crt\nmail-capture-token' ;;
-  mcp | privacy) printf 'caddy-root.crt\nmcp-client-name' ;;
+  mcp | privacy | mcp-ts-sdk) printf 'caddy-root.crt\nmcp-client-name' ;;
   second-factor | totp)
     printf 'caddy-root.crt\nmail-capture-token\nmcp-client-name'
     ;;
@@ -102,7 +103,7 @@ mode_input_diagnostic() {
   password-auth | sample-start | linkedin)
     printf 'CA input must contain the Caddy root and the capture token'
     ;;
-  mcp | privacy)
+  mcp | privacy | mcp-ts-sdk)
     printf 'MCP input must contain the Caddy root and the run client name'
     ;;
   second-factor | totp)
@@ -155,7 +156,7 @@ validate_mode_input_files() {
     ;;
   esac
   case $mode in
-  mcp | privacy | second-factor | totp)
+  mcp | privacy | mcp-ts-sdk | second-factor | totp)
     validate_mcp_client_name_file "$dir/mcp-client-name" "$uid"
     ;;
   esac
@@ -211,8 +212,8 @@ mount_has_option() {
 
 require_valid_mode() {
   case $1 in
-  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | linkedin-import | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk) ;;
-  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, or mcp-sdk' ;;
+  auth | transport | editor | public | password-auth | mcp | entry | publish | exports | privacy | sample-start | linkedin | linkedin-import | second-factor | second-factor-disabled | totp | totp-disabled | totp-prod-flag-off | totp-prod-enabled | totp-prod-cleanup | mcp-sdk | mcp-ts-sdk) ;;
+  *) fail 'mode must be auth, transport, editor, public, password-auth, mcp, entry, publish, exports, privacy, sample-start, linkedin, linkedin-import, second-factor, second-factor-disabled, totp, totp-disabled, totp-prod-flag-off, totp-prod-enabled, totp-prod-cleanup, mcp-sdk, or mcp-ts-sdk' ;;
   esac
 }
 
@@ -356,6 +357,7 @@ inside_container() {
   public) evidence_name=public-proof.json evidence_limit=4096 proof_name=public spec=public.spec.ts ;;
   password-auth) evidence_name=password-proof.json evidence_limit=4096 proof_name=password-authentication spec=password-auth.spec.ts ;;
   mcp) evidence_name=mcp-proof.json evidence_limit=4096 proof_name='MCP agent access' spec=mcp.spec.ts ;;
+  mcp-ts-sdk) evidence_name=mcp-ts-sdk-proof.json evidence_limit=4096 proof_name='MCP TypeScript SDK compatibility' spec=mcp-ts-sdk.spec.ts ;;
   entry) evidence_name=entry-proof.json evidence_limit=4096 proof_name='entry flow' spec=entry.spec.ts ;;
   publish) evidence_name=publish-proof.json evidence_limit=8192 proof_name='native HTTPS publish, discovery, and revocation' spec=publish.spec.ts ;;
   exports) evidence_name=exports-proof.json evidence_limit=8192 proof_name=exports spec=exports.spec.ts ;;
@@ -404,6 +406,15 @@ inside_container() {
   local -a mode_env=(ABOUTME_BROWSER_MODE="$mode")
   if [ "$mode" = mcp-sdk ]; then
     mode_env+=(ABOUTME_MCP_BROWSER_DIR=/mcp-browser ABOUTME_MCP_WORKFLOW_MODE="$workflow_mode")
+  fi
+  if [ "$mode" = mcp-ts-sdk ]; then
+    # Extends Node's default trust store for every fetch the pinned SDK
+    # client makes (registration, discovery, token, and MCP traffic) to the
+    # harness's own Caddy root, the same trust the other proofs establish
+    # through the browser's imported NSS database. Node reads this once at
+    # startup, so it must be set on the `env` invocation, never mutated by
+    # the spec after the process is running.
+    mode_env+=(NODE_EXTRA_CA_CERTS=/uat-input/caddy-root.crt)
   fi
   add_shard_env mode_env '' "$mode"
   env "${mode_env[@]}" \
