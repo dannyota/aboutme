@@ -71,9 +71,10 @@ The bar follows the resume language, as today.
 
 ### Tokens
 
-The bar takes the Aurora values from [DESIGN.md](../../DESIGN.md). The public
-page does not load the application theme, so `print.css` declares these as
-custom properties scoped to `.public-toolbar`.
+The bar takes the Aurora values from
+[Typography and tokens](ui/typography-and-tokens.md). The public page does not
+load the application theme, so `print.css` declares these as custom properties
+scoped to `.public-toolbar`.
 
 | Role                  | Light                              | Dark                        | Aurora source    |
 | --------------------- | ---------------------------------- | --------------------------- | ---------------- |
