@@ -75,6 +75,21 @@ describe('StateMark', () => {
       expect(wrapper.attributes('role')).toBeUndefined();
     });
 
+  it('truncates a long public link beside a seal that keeps its size', () => {
+    const link = '/nguyen-thi-thanh-huong-backend';
+    const wrapper = mount(StateMark, { props: { state: 'public', link } });
+    const anchor = wrapper.get('[data-public-link]');
+
+    expect(wrapper.classes()).toContain('min-w-0');
+    expect(anchor.classes()).toEqual(
+      expect.arrayContaining(['min-w-0', 'truncate']),
+    );
+    expect(anchor.attributes('title')).toBe(`aboutme.vn${link}`);
+    expect(wrapper.get('[data-app-seal="mark"]').classes()).toContain(
+      'shrink-0',
+    );
+  });
+
   it('requires a link for the public state', () => {
     expect(() => mount(StateMark, { props: { state: 'public' } })).toThrow(
       'StateMark public state requires a link.',

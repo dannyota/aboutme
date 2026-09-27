@@ -23,7 +23,7 @@ const copy = computed(() => workspaceCopy[locale.value]);
   <span
     :aria-live="state === 'saving' ? 'polite' : undefined"
     :class="[
-      'inline-flex items-center gap-1.5 text-sm',
+      'inline-flex min-w-0 items-center gap-1.5 text-sm',
       state === 'failed' ? 'text-destructive' : 'text-muted-foreground',
     ]"
     :data-state-mark="state"
@@ -62,14 +62,19 @@ const copy = computed(() => workspaceCopy[locale.value]);
     <template v-else-if="state === 'draft'"> {{ copy.draft }} </template>
     <template v-else>
       <AppSeal
+        class="shrink-0"
         :link="publicLink"
         :label="copy.publicAt(publicLink)"
         :locale="locale"
         size="mark"
       />
+      <!-- A long link truncates rather than pushing the controls beside it
+           off-screen; the title keeps the whole address readable. -->
       <a
+        class="min-w-0 truncate"
         data-public-link
         :href="publicLink"
+        :title="`aboutme.vn${publicLink}`"
       >aboutme.vn{{ publicLink }}</a>
     </template>
   </span>

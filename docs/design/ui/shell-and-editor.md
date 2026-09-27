@@ -63,7 +63,10 @@ The current outline item takes the `--surface-blue` fill and semibold text.
 The editor top bar is 64 px high. It holds the 24 px logo linking to the resume
 list, a divider, the resume title as the page h1, save state, public mark, the
 language toggle, Download PDF with the page size beside it, Publish, and the
-account menu. Publish is the seal button.
+account menu. Publish is the seal button. Below 56 rem the logo shows the mark
+alone and the bar's gaps shrink from 16 to 8 px. When space runs short, the
+title and the public link truncate with an ellipsis before any control moves;
+the link's `title` attribute holds the whole address.
 
 The preview opens with a card-colored toolbar holding a PDF and Web toggle; the
 active mode uses the default button variant and the choice is remembered. PDF
