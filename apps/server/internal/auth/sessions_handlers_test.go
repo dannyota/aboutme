@@ -1172,6 +1172,43 @@ func TestRevokeAll_EpochReplacementCommittedFirst(t *testing.T) {
 	}
 }
 
+// TestRevokeAll_EpochAdvanceCommittedFirst proves logout everywhere's locked
+// recheck compares the caller session's own epoch against the user's current
+// epoch, not merely revoked_at: a holder that only advances the user's epoch
+// (no session row is touched) still makes the caller's recheck fail closed,
+// so logout everywhere reports failure instead of revoking every session.
+func TestRevokeAll_EpochAdvanceCommittedFirst(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	rawCaller, caller := issueTestSession(t, q, userID)
+	_, other := issueTestSession(t, q, userID)
+
+	holder, qtx, pid := beginUserLockHolder(t, pool, userID)
+	if _, err := qtx.AdvanceUserAuthEpoch(t.Context(), userID); err != nil {
+		t.Fatalf("advance epoch: %v", err)
+	}
+
+	done := serveAsync(t.Context(), handler, http.MethodDelete, auth.SessionsPath, csrfTokenFor(caller), rawCaller)
+	waitBlockedBy(t, pid)
+	if err := holder.Commit(t.Context()); err != nil {
+		t.Fatalf("commit epoch advance: %v", err)
+	}
+	rec := awaitRecorder(t, done)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("logout everywhere with only the epoch advanced status = %d (%s), want 401", rec.Code, rec.Body)
+	}
+	if n := unrevokedSessionCount(t, userID); n != 2 {
+		t.Errorf("live sessions after a failed logout everywhere = %d, want 2 (untouched)", n)
+	}
+	if rowRevokedAt(t, caller.ID) != nil {
+		t.Error("caller session revoked by a failed logout everywhere, want untouched")
+	}
+	if rowRevokedAt(t, other.ID) != nil {
+		t.Error("other session revoked by a failed logout everywhere, want untouched")
+	}
+}
+
 // TestRevokeAll_LogoutFirstThenReplacementFails proves the other order: once
 // logout everywhere commits, an epoch-change replacement of a revoked session
 // mints nothing.
@@ -1319,6 +1356,40 @@ func TestDeleteSession_CallerSessionRevokedFirst(t *testing.T) {
 	}
 	if rowRevokedAt(t, target.ID) != nil {
 		t.Error("target session was revoked even though the caller's own session was invalid, want untouched")
+	}
+}
+
+// TestDeleteSession_EpochAdvanceCommittedFirst proves single-session revoke's
+// locked recheck compares the caller session's own epoch against the user's
+// current epoch, not merely revoked_at: a holder that only advances the
+// user's epoch (no session row is touched) still makes the caller's recheck
+// fail closed, so the request fails instead of revoking the named target.
+func TestDeleteSession_EpochAdvanceCommittedFirst(t *testing.T) {
+	handler, pool, q := newRevocationRaceService(t)
+	userID := createTestUser(t, q)
+	rawCaller, caller := issueTestSession(t, q, userID)
+	_, target := issueTestSession(t, q, userID)
+
+	holder, qtx, pid := beginUserLockHolder(t, pool, userID)
+	if _, err := qtx.AdvanceUserAuthEpoch(t.Context(), userID); err != nil {
+		t.Fatalf("advance epoch: %v", err)
+	}
+
+	done := serveAsync(t.Context(), handler, http.MethodDelete, sessionIDPath(target.ID), csrfTokenFor(caller), rawCaller)
+	waitBlockedBy(t, pid)
+	if err := holder.Commit(t.Context()); err != nil {
+		t.Fatalf("commit epoch advance: %v", err)
+	}
+	rec := awaitRecorder(t, done)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("DELETE %s with only the epoch advanced status = %d (%s), want 401", sessionIDPath(target.ID), rec.Code, rec.Body)
+	}
+	if rowRevokedAt(t, target.ID) != nil {
+		t.Error("target session was revoked even though the caller's epoch was stale, want untouched")
+	}
+	if rowRevokedAt(t, caller.ID) != nil {
+		t.Error("caller session revoked by a failed single-session revoke, want untouched")
 	}
 }
 
