@@ -38,6 +38,7 @@ readonly -a SPEC_SOURCES=(
   password-auth.spec.ts
   mcp.spec.ts
   mcp-sdk.spec.ts
+  mcp-ts-sdk.spec.ts
   entry.spec.ts
   publish.spec.ts
   exports.spec.ts
@@ -79,6 +80,7 @@ password-auth)
   TARGET=dev-https-password-check
   ;;
 mcp) evidence_prefix=mcp ;;
+mcp-ts-sdk) evidence_prefix=mcp-ts-sdk ;;
 entry) evidence_prefix=entry ;;
 publish) evidence_prefix=publish ;;
 exports) evidence_prefix=exports ;;
@@ -100,7 +102,7 @@ totp)
   ;;
 *)
   TARGET=dev-https-check
-  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|entry|publish|exports|privacy|sample-start|linkedin|linkedin-import|passkey|totp'
+  fail 'usage: dev-https-check.sh auth|transport|editor|public|password-auth|mcp|mcp-ts-sdk|entry|publish|exports|privacy|sample-start|linkedin|linkedin-import|passkey|totp'
   ;;
 esac
 
@@ -461,7 +463,7 @@ elif [ "$MODE" = linkedin ]; then
   "$REPO/.dev/bin/password-auth-fixture" linkedin-cleanup --database-url "$NATIVE_DSN"
   curl -fsS -X DELETE -H "Authorization: Bearer $capture_token" \
     "http://127.0.0.1:20444/api/messages" >/dev/null
-elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
+elif [ "$MODE" = mcp ] || [ "$MODE" = mcp-ts-sdk ] || [ "$MODE" = privacy ]; then
   mcp_run_id=$(</proc/sys/kernel/random/uuid)
   [[ $mcp_run_id =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
     fail 'cannot create an MCP run identifier'
@@ -481,7 +483,7 @@ elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
   "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"
   mcp_seeded=1
-  if [ "$MODE" = mcp ]; then
+  if [ "$MODE" = mcp ] || [ "$MODE" = mcp-ts-sdk ]; then
     "$mcp_fixture" seed --database-url "$NATIVE_DSN" \
       --client-name "$mcp_client_name"
   fi
@@ -513,7 +515,7 @@ if [ "$MODE" = password-auth ] || [ "$MODE" = sample-start ]; then
 elif [ "$MODE" = linkedin ]; then
   "$REPO/.dev/bin/password-auth-fixture" linkedin-cleanup --database-url "$NATIVE_DSN" ||
     status=1
-elif [ "$MODE" = mcp ] || [ "$MODE" = privacy ]; then
+elif [ "$MODE" = mcp ] || [ "$MODE" = mcp-ts-sdk ] || [ "$MODE" = privacy ]; then
   if "$mcp_fixture" cleanup --database-url "$NATIVE_DSN" \
     --client-name "$mcp_client_name"; then
     mcp_seeded=0

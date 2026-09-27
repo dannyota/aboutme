@@ -401,6 +401,10 @@ dev-https-password-check: dev-https-status ## Prove password authentication over
 dev-https-mcp-check: dev-https-status ## Prove MCP agent access over native HTTPS and retain only bounded local evidence
 	@bash scripts/dev-https-check.sh mcp
 
+.PHONY: dev-https-mcp-ts-sdk-check
+dev-https-mcp-ts-sdk-check: dev-https-status ## Prove the pinned official TypeScript MCP SDK client over native HTTPS and retain only bounded local evidence
+	@bash scripts/dev-https-check.sh mcp-ts-sdk
+
 .PHONY: dev-https-mcp-sdk-check
 dev-https-mcp-sdk-check: dev-https-status ## Prove the MCP owner workflow through the official Go SDK with synthetic local data
 	@bash scripts/mcp-owner-workflow.sh local
