@@ -7,7 +7,7 @@ Status: implemented on `feat/mcp-guide`, awaiting current baselines, review, CI,
 1. Regenerate guide and affected shell baselines in hosted CI after merging current `main`; inspect and commit the candidates.
 2. Complete the designer finish review and fresh reviewer pass, resolve findings, and obtain green branch CI at the exact head.
 3. Confirm the owner's production proof for Claude web and Claude Code: private edit, reuse after more than one hour, revoke, and refused access. Confirmation remains pending.
-4. Confirm no production resume slug or tombstone is `guide` through a reviewed read-only check. No ad hoc production database query path exists; settle the supported check before deploy.
+4. Complete and adversarially review the candidate-image `check-public-root` command and its deploy-script modes. Confirm no production resume slug or tombstone is `guide` with `deploy.sh --check-public-root <tag> guide`; deploy with `--require-free-root guide` to repeat the check after the old app stops and before migrations.
 5. Merge to `main`, push, wait for green CI at the exact commit, then tag, build release images, deploy, and verify production. Do not release before both production prerequisites pass.
 
 ## Implemented scope and review criteria
