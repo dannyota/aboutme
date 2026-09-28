@@ -45,7 +45,7 @@ const lightTokens = {
   '--brand-deep-blue': 'var(--link)',
   '--brand-indigo': '#4a4dbf',
   '--brand-jade': '#0f7c6e',
-  '--brand-ochre': '#a86d12',
+  '--brand-ochre': '#8f6f0d',
   '--surface-blue': '#eceef7',
   '--surface-indigo': '#efeef8',
   '--surface-sand': '#f6eedf',
@@ -111,7 +111,7 @@ const darkTokens = {
   '--brand-deep-blue': 'var(--link)',
   '--brand-indigo': '#9a9cff',
   '--brand-jade': '#5fcfbb',
-  '--brand-ochre': '#e2b45c',
+  '--brand-ochre': '#e6c35f',
   '--surface-blue': '#151d36',
   '--surface-indigo': '#1a1b3d',
   '--surface-sand': '#231d16',
@@ -158,10 +158,10 @@ describe('application theme', () => {
     }
     expect(light).toContain('rgb(15 124 110 / 0.16)');
     expect(light).toContain('rgb(38 64 156 / 0.18)');
-    expect(light).toContain('rgb(183 121 31 / 0.16)');
+    expect(light).toContain('rgb(143 111 13 / 0.16)');
     expect(dark).toContain('rgb(95 207 187 / 0.14)');
     expect(dark).toContain('rgb(143 166 240 / 0.22)');
-    expect(dark).toContain('rgb(226 180 92 / 0.12)');
+    expect(dark).toContain('rgb(230 195 95 / 0.12)');
   });
 
   it('maps the chrome font, seal colors, radii, shadow, and type scale', () => {
@@ -273,7 +273,8 @@ describe('application theme', () => {
       Object.assign(tokens, blockDeclarations(css, selector));
       const grounds = [
         '--background', '--card', '--muted', '--surface-blue',
-        '--surface-indigo', '--surface-sand',
+        '--surface-indigo', '--surface-sand', '--secondary', '--accent',
+        '--popover', '--editor-canvas', '--surface-destructive',
       ];
       // Body text needs 4.5:1; icons, dots, and input borders need 3:1.
       const text = [
@@ -284,15 +285,16 @@ describe('application theme', () => {
         '--primary', '--brand-indigo', '--brand-jade', '--brand-ochre',
       ];
       for (const ground of grounds) {
+        const groundHex = resolveColor(tokens[ground]!, tokens);
         for (const fg of text) {
           expect(
-            contrast(tokens[fg]!, tokens[ground]!),
+            contrast(tokens[fg]!, groundHex),
             `${selector} ${fg} on ${ground}`,
           ).toBeGreaterThanOrEqual(4.5);
         }
         for (const fg of marks) {
           expect(
-            contrast(tokens[fg]!, tokens[ground]!),
+            contrast(tokens[fg]!, groundHex),
             `${selector} ${fg} on ${ground}`,
           ).toBeGreaterThanOrEqual(3);
         }
@@ -431,6 +433,39 @@ function sourceFiles(directory: string): string[] {
     if (entry.isDirectory()) return sourceFiles(path);
     return /\.(?:css|ts|vue)$/.test(entry.name) ? [path] : [];
   });
+}
+
+// Resolves a token value to a six-digit hex color, following a var()
+// reference or computing a color-mix() the way the browser would, so
+// grounds built from either (--surface-destructive) can be checked for
+// contrast like any other ground.
+function resolveColor(
+  value: string,
+  tokens: Record<string, string>,
+): string {
+  const trimmed = value.trim();
+  const varMatch = /^var\((--[\w-]+)\)$/u.exec(trimmed);
+  if (varMatch) return resolveColor(tokens[varMatch[1]!]!, tokens);
+  const mixMatch
+    = /^color-mix\(in srgb,\s*(.+?) (\d+)%,\s*(.+?)\)$/u.exec(trimmed);
+  if (mixMatch) {
+    const fraction = Number(mixMatch[2]) / 100;
+    const first = resolveColor(mixMatch[1]!, tokens);
+    const second = resolveColor(mixMatch[3]!, tokens);
+    return mixHex(first, second, fraction);
+  }
+  return trimmed;
+}
+
+function mixHex(first: string, second: string, fraction: number): string {
+  const channel = (at: number): number => {
+    const a = Number.parseInt(first.slice(1 + at, 3 + at), 16);
+    const b = Number.parseInt(second.slice(1 + at, 3 + at), 16);
+    return Math.round(a * fraction + b * (1 - fraction));
+  };
+  return `#${[0, 2, 4]
+    .map((at) => channel(at).toString(16).padStart(2, '0'))
+    .join('')}`;
 }
 
 function contrast(first: string, second: string): number {

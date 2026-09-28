@@ -53,7 +53,7 @@ Colorful product UI, calm white resume, and one red that means public.
 - Two ink blues: `--primary` fills (`#26409C` light; `#8FA6F0` with dark text in
   dark theme) and `--link` colors blue text. `--brand-blue` and
   `--brand-deep-blue` are aliases of those two. Indigo, jade, and ochre are
-  supporting accents; jade and ochre pair with vermilion and sit far from it.
+  supporting accents; jade and ochre pair with seal red and sit far from it.
   Pink, orange, cyan, and purple are not brand colors; `--surface-sand` tints
   the third feature card.
 - `--seal` fills are `#CC2649`, keeping white Publish text above 4.5:1 including
@@ -140,7 +140,7 @@ otherwise for the public page on screen.
 - The button primitive's guarded edits (ADR 0019) follow these tokens.
 - Icons use versioned file names (`favicon-v3.svg`, `icon-*-v3.png`,
   `apple-touch-icon-v3.png`, `site-v3.webmanifest`) and the Open Graph image is
-  `og-image-v6.jpg` and `og-image-v5-en.jpg`. A replaced icon or image set stays
+  `og-image-v7.jpg` and `og-image-v6-en.jpg`. A replaced icon or image set stays
   in `public/`, unlinked, for one release so caches and crawlers get no 404.
 - The stored link-preview card (ADR 0014) draws `AppLogo` mark-only and pins it
   to `#CC2649` in both themes; a logo change raises the card layout version.
@@ -177,3 +177,6 @@ otherwise for the public page on screen.
   blue ground, ink blue replaces the electric blue primary, jade and ochre
   replace cyan and purple, sand replaces the pink surface, and dark theme moves
   from midnight blue to ink black. Token names follow the new hues.
+- Owner-approved (2026-09-28): `--brand-ochre` shifts yellower, `#8F6F0D` light
+  and `#E6C35F` dark, so it cannot be read as the burnt-orange destructive
+  color. Both still meet 3:1 as a mark on every ground in their theme.

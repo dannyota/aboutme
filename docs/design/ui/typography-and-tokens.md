@@ -46,13 +46,13 @@ and `text-brand-indigo`:
 | ------------------------------------ | ------------------------------- | -------------------- |
 | `--brand-blue`, `--brand-deep-blue`  | `var(--primary)`, `var(--link)` | same aliases         |
 | `--brand-indigo`, `--brand-jade`     | `#4A4DBF`, `#0F7C6E`            | `#9A9CFF`, `#5FCFBB` |
-| `--brand-ochre`                      | `#A86D12`                       | `#E2B45C`            |
+| `--brand-ochre`                      | `#8F6F0D`                       | `#E6C35F`            |
 | `--surface-blue`                     | `#ECEEF7`                       | `#151D36`            |
 | `--surface-indigo`, `--surface-sand` | `#EFEEF8`, `#F6EEDF`            | `#1A1B3D`, `#231D16` |
 | `--surface-destructive`              | 7% destructive, card            | 12% destructive      |
 
-Jade and ochre are the seal's partners: neither sits near red, so seal red stays
-the only warm, saturated color in the chrome.
+Jade and ochre are the seal's partners: seal red stays the only red; jade and
+ochre stay out of the red to orange range.
 
 Text on the canvas, a card, or a tinted surface meets WCAG AA: 4.5:1 for normal
 text and 3:1 for large text, input borders, and focus rings, measured over the
