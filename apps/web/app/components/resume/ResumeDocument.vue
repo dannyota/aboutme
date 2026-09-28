@@ -111,43 +111,163 @@ body:has(> #public-resume) {
   max-width: calc(70em + 2 * var(--page-margin-x));
 }
 
+/*
+ * The page bar (docs/design/public-page-theme.md, "Page bar"): aboutme
+ * chrome above the resume, not part of it, so it takes the application
+ * tokens and typeface rather than the resume's own. It is the first child of
+ * .public-resume-page, full width, with an inner row matching the resume
+ * measure. The tokens below are the light column of the design's Tokens
+ * table, taken from theme.css's :root (ADR 0020); the dark column and
+ * data-color-scheme are a later release.
+ */
 .public-toolbar {
+  --toolbar-ground: #f9f8f5;
+  --toolbar-border: #e5e1d6;
+  --toolbar-mark: #cc2649;
+  --toolbar-credit: #5c6178;
+  --toolbar-credit-hover: #23399a;
+  --toolbar-button-fill: #ffffff;
+  --toolbar-button-border: #e5e1d6;
+  --toolbar-button-label: #23399a;
+  --toolbar-button-hover-fill: #eceef6;
+  --toolbar-focus-ring: #26409c;
+  box-sizing: border-box;
+  /* The bottom rule is part of the bar's total height (48 px, 56 px on a
+     touch screen), so the bottom padding is 1 px less than the top
+     (docs/design/public-page-theme.md, "Size and placement"). */
+  padding-block: 8px 7px;
+  background: var(--toolbar-ground);
+  border-bottom: 1px solid var(--toolbar-border);
+}
+
+.public-toolbar-inner {
+  box-sizing: border-box;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1em;
-  padding: var(--page-margin-y) var(--page-margin-x) 0;
-  font-family: var(--font-family);
-  font-size: var(--fs-meta);
+  column-gap: 16px;
+  row-gap: 8px;
+  /* Keeps the bar at the same height with the download button off, when the
+     row holds only the 20 px brand (docs/design/public-page-theme.md,
+     "Behavior"). */
+  min-height: 32px;
+  max-width: calc(52em + 2 * var(--page-margin-x));
+  margin-inline: auto;
+  padding-inline: var(--page-margin-x);
+  font-size: var(--fs-body);
+}
+
+.public-resume-page[data-columns="2"] .public-toolbar-inner {
+  max-width: calc(70em + 2 * var(--page-margin-x));
+}
+
+@media (width < 40rem) {
+  .public-toolbar-inner {
+    column-gap: 12px;
+    padding-inline: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  .public-toolbar-inner {
+    min-height: 40px;
+  }
+}
+
+.public-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.public-mark {
+  flex-shrink: 0;
+  color: var(--toolbar-mark);
 }
 
 .public-credit {
-  color: var(--color-link);
-  text-decoration: underline;
+  font: 500 13px/20px "Be Vietnam Pro", system-ui, sans-serif;
+  color: var(--toolbar-credit);
+  text-decoration: none;
 }
 
-/* The one action a reader takes on a shared resume, so it reads as a button
-   in the template's link color rather than as another text link. */
+@media (hover: hover) {
+  .public-credit:hover {
+    color: var(--toolbar-credit-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.public-credit:focus-visible {
+  outline: 2px solid var(--toolbar-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  /* Grows the credit's tap target to match the button's touch height
+     without moving the row's layout: the negative block margin cancels the
+     added padding, so the anchor's own box grows but its neighbors do not
+     shift (docs/design/public-page-theme.md, "Size and placement"). */
+  .public-credit {
+    display: inline-block;
+    padding-block: 10px;
+    margin-block: -10px;
+  }
+}
+
+/* The one action a reader takes on a shared resume: the application's
+   outline button at size sm (docs/design/public-page-theme.md), not a
+   filled button in the resume's own color. */
 .public-download {
+  box-sizing: border-box;
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
-  min-height: 2.75em;
-  padding: 0.5em 1.1em;
-  border-radius: 0.4em;
-  background: var(--color-link);
-  color: var(--color-surface);
-  font-weight: 600;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--toolbar-button-border);
+  border-radius: 10px;
+  background: var(--toolbar-button-fill);
+  color: var(--toolbar-button-label);
+  font: 500 14px/20px "Be Vietnam Pro", system-ui, sans-serif;
   text-decoration: none;
   white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(16, 27, 63, 0.06);
 }
 
-.public-download:hover {
-  filter: brightness(1.12);
+.public-download svg {
+  flex-shrink: 0;
+}
+
+@media (pointer: coarse) {
+  .public-download {
+    height: 40px;
+  }
+}
+
+@media (hover: hover) {
+  .public-download:hover {
+    background: var(--toolbar-button-hover-fill);
+  }
 }
 
 .public-download:focus-visible {
-  outline: 2px solid var(--color-link);
+  outline: 2px solid var(--toolbar-focus-ring);
   outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .public-mark {
+    color: CanvasText;
+  }
+
+  .public-download {
+    border-color: ButtonBorder;
+  }
 }
 
 @media print {

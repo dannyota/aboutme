@@ -221,17 +221,26 @@ test.describe('public page measure', () => {
         const measure = box('.public-measure');
         return {
           page: box('.public-resume-page').width,
+          bar: box('.public-toolbar').width,
           measure: { left: measure.left, right: measure.right },
           charsPerLine: paragraph.getBoundingClientRect().width
             / averageCharacter,
           lines,
           linkRight: link.right,
           linkTop: link.top,
+          linkHeight: link.height,
           articleTop: box('.resume-document').top,
         };
       });
       expect(geometry.page).toBe(cell.width);
+      // The bar is the first child of .public-resume-page, full width,
+      // above the resume article (docs/design/public-page-theme.md,
+      // "Structure" and "Size and placement").
+      expect(geometry.bar).toBe(cell.width);
       expect(geometry.linkTop).toBeLessThan(geometry.articleTop);
+      // A fine pointer (the default here) keeps the download button at
+      // 32 px high; a coarse pointer grows it to 40 px.
+      expect(geometry.linkHeight).toBeLessThanOrEqual(32);
       if (cell.width === 390) {
         // Phones keep the full width.
         expect(geometry.measure.left).toBe(0);
