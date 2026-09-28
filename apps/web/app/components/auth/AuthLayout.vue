@@ -66,7 +66,7 @@ const copy = computed(() => authCopy[locale.value]);
             <li class="flex items-center gap-3">
               <FileDown
                 aria-hidden="true"
-                class="size-5 text-brand-purple"
+                class="size-5 text-brand-ochre"
               />
               {{ copy.brandPanel.points[2] }}
             </li>

@@ -214,7 +214,7 @@ useHead(computed(() => ({
           >
             <Link2
               aria-hidden="true"
-              class="size-4 shrink-0 text-brand-purple"
+              class="size-4 shrink-0 text-brand-ochre"
             />aboutme.vn{{ sampleLink }}
           </li>
         </ul>
@@ -240,7 +240,7 @@ useHead(computed(() => ({
             'rounded-[var(--radius-feature)] border border-border p-6',
             'shadow-[var(--shadow-product)] min-[42rem]:flex',
             'min-[42rem]:gap-6 lg:block lg:p-8',
-            ['bg-surface-blue', 'bg-surface-indigo', 'bg-surface-pink'][
+            ['bg-surface-blue', 'bg-surface-indigo', 'bg-surface-sand'][
               index
             ],
           )"
@@ -261,7 +261,7 @@ useHead(computed(() => ({
             />
             <Sparkles
               v-else
-              class="size-6 text-brand-purple"
+              class="size-6 text-brand-ochre"
             />
           </span>
           <strong

@@ -113,21 +113,21 @@ and under Match device when the viewer prefers dark.
 
 | Role                  | Light                              | Dark                        | Source           |
 | --------------------- | ---------------------------------- | --------------------------- | ---------------- |
-| Bar ground            | `#F5F8FF`                          | `#071126`                   | Page background  |
-| Bar bottom rule       | `#DCE5F5`                          | `rgba(180, 200, 255, 0.16)` | Border           |
+| Bar ground            | `#F9F8F5`                          | `#0C1020`                   | Page background  |
+| Bar bottom rule       | `#E5E1D6`                          | `rgba(230, 225, 210, 0.13)` | Border           |
 | Mark                  | `#CC2649`                          | `#FF6B8A`                   | Seal text        |
-| Credit text           | `#56648C`                          | `#9EACCA`                   | Muted foreground |
-| Credit hover          | `#123EDB`                          | `#8FB3FF`                   | Link             |
-| Button fill           | `#FFFFFF`                          | `#0D1935`                   | Card             |
-| Button border         | `#DCE5F5`                          | `rgba(180, 200, 255, 0.24)` | Border           |
-| Button label and icon | `#123EDB`                          | `#8FB3FF`                   | Link             |
-| Button hover fill     | `#EAF2FF`                          | `#1A2B52`                   | Secondary        |
-| Focus ring            | `#1A5CEB`                          | `#72A0FF`                   | Ring             |
+| Credit text           | `#5C6178`                          | `#A5ABBF`                   | Muted foreground |
+| Credit hover          | `#23399A`                          | `#A3B6F5`                   | Link             |
+| Button fill           | `#FFFFFF`                          | `#141A2E`                   | Card             |
+| Button border         | `#E5E1D6`                          | `rgba(230, 225, 210, 0.2)`  | Border           |
+| Button label and icon | `#23399A`                          | `#A3B6F5`                   | Link             |
+| Button hover fill     | `#ECEEF6`                          | `#212A45`                   | Secondary        |
+| Focus ring            | `#26409C`                          | `#8FA6F0`                   | Ring             |
 | Button shadow         | `0 1px 2px rgba(16, 27, 63, 0.06)` | none                        | Shadow xs        |
 
-Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.5:1 and
-8.2:1; the button label 7.7:1 on white, 6.8:1 on the hover fill, 8.3:1 dark, and
-6.7:1 on the dark hover fill.
+Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.7:1 and
+8.3:1; the button label 9.9:1 on white, 8.5:1 on the hover fill, 8.7:1 dark, and
+7.1:1 on the dark hover fill.
 
 ### Size and placement
 

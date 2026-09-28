@@ -5,47 +5,47 @@
   --radius-sheet: 2px;
   --radius-dialog: 14px;
   --radius-feature: 20px;
-  --background: #f5f8ff;
+  --background: #f9f8f5;
   --foreground: #101b3f;
   --card: #ffffff;
   --card-foreground: #101b3f;
   --popover: #ffffff;
   --popover-foreground: #101b3f;
-  --primary: #1a5ceb;
+  --primary: #26409c;
   --primary-foreground: #ffffff;
-  --secondary: #eaf2ff;
+  --secondary: #eceef6;
   --secondary-foreground: #101b3f;
-  --muted: #edf1fa;
-  --muted-foreground: #56648c;
-  --accent: #eaf2ff;
+  --muted: #efede6;
+  --muted-foreground: #5c6178;
+  --accent: #eceef6;
   --accent-foreground: #101b3f;
   /* Burnt orange, kept apart from seal red so Delete never reads as Publish
      (ADR 0020). */
   --destructive: #b54708;
-  --border: #dce5f5;
-  --input: #7886ae;
-  --ring: #1a5ceb;
+  --border: #e5e1d6;
+  --input: #7d8398;
+  --ring: #26409c;
   --seal: #cc2649;
   --seal-foreground: #ffffff;
   /* Seal red for text and thin strokes: the stamp's words and ring and the
      logo mark (ADR 0020). Equal to --seal in light theme. */
   --seal-text: #cc2649;
   /* Text-safe blue for links and blue text on tinted surfaces. */
-  --link: #123edb;
+  --link: #23399a;
   /* Two blues only (ADR 0020): brand-blue is the primary fill and
      brand-deep-blue the text-safe link blue. */
   --brand-blue: var(--primary);
   --brand-deep-blue: var(--link);
-  --brand-indigo: #6254ff;
-  --brand-cyan: #35c8f5;
-  --brand-purple: #a855f7;
-  --surface-blue: #eaf2ff;
-  --surface-indigo: #f0eeff;
-  --surface-pink: #fff0fa;
+  --brand-indigo: #4a4dbf;
+  --brand-jade: #0f7c6e;
+  --brand-ochre: #a86d12;
+  --surface-blue: #eceef7;
+  --surface-indigo: #efeef8;
+  --surface-sand: #f6eedf;
   /* Mismatch tint on the verify page (docs/design/deployment-transparency/
      visual.md); never used by the renderer. */
   --surface-destructive: color-mix(in srgb, var(--destructive) 7%, var(--card));
-  --editor-canvas: #eef3fc;
+  --editor-canvas: #f1efe9;
   /* Chrome spacing (DESIGN.md): the 8 px module and the named rhythms that
      were only written down before (ADR 0020). */
   --space-module: 8px;
@@ -54,9 +54,9 @@
   --space-dialog: 24px;
   --space-section: 80px;
   --space-section-lg: 112px;
-  --primary-hover: #1550d4;
+  --primary-hover: #1e3483;
   --shadow-primary:
-    0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(26 92 235 / 0.2);
+    0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(38 64 156 / 0.2);
   /* Chrome for a resume sheet (DESIGN.md): white paper and neutral ink in
      both themes. Defined on :root only, never inside the dark block. */
   --paper: #ffffff;
@@ -73,45 +73,45 @@
   --gradient-aurora:
     radial-gradient(
       44rem 30rem at 8% -4rem,
-      rgb(26 92 235 / 0.14),
+      rgb(38 64 156 / 0.08),
       transparent 70%
     ),
     radial-gradient(
       38rem 28rem at 96% 0,
-      rgb(98 84 255 / 0.1),
+      rgb(74 77 191 / 0.05),
       transparent 70%
     ),
     radial-gradient(
       40rem 28rem at 0% 40rem,
-      rgb(53 200 245 / 0.12),
+      rgb(15 124 110 / 0.05),
       transparent 70%
     ),
     radial-gradient(
       34rem 24rem at 100% 44rem,
-      rgb(245 93 177 / 0.07),
+      rgb(183 121 31 / 0.06),
       transparent 70%
     );
   --shadow-product:
-    0 1px 2px rgba(16, 27, 63, 0.06), 0 12px 40px rgba(26, 63, 140, 0.1);
+    0 1px 2px rgba(16, 27, 63, 0.06), 0 12px 40px rgba(40, 44, 80, 0.09);
   /* Neutral on purpose: the sheet reads as paper, never as a blue card. */
   --shadow-paper:
     0 1px 2px rgba(23, 26, 24, 0.06), 0 12px 32px rgba(23, 26, 24, 0.1);
   /* Homepage hero: the gradient CTA's hover state, its resting shadow, and
      the glow behind the sample sheet (DESIGN.md; ADR 0020). */
-  --gradient-brand-strong: linear-gradient(90deg, #1a5ceb, #5144f0);
+  --gradient-brand-strong: linear-gradient(90deg, #1e3483, #3d40ad);
   --gradient-hero-glow:
-    radial-gradient(55% 40% at 22% 28%, rgb(53 200 245 / 0.3), transparent 70%),
+    radial-gradient(55% 40% at 22% 28%, rgb(15 124 110 / 0.16), transparent 70%),
     radial-gradient(
       55% 42% at 78% 36%,
-      rgb(26 92 235 / 0.24),
+      rgb(38 64 156 / 0.18),
       transparent 70%
     ),
     radial-gradient(
       60% 40% at 50% 82%,
-      rgb(168 85 247 / 0.18),
+      rgb(183 121 31 / 0.16),
       transparent 70%
     );
-  --shadow-cta: 0 8px 24px rgb(26 92 235 / 0.28);
+  --shadow-cta: 0 8px 24px rgb(38 64 156 / 0.24);
 }
 
 html[data-theme="dark"] {
@@ -119,41 +119,41 @@ html[data-theme="dark"] {
   --radius-sheet: 2px;
   --radius-dialog: 14px;
   --radius-feature: 20px;
-  --background: #071126;
-  --foreground: #f4f7ff;
-  --card: #0d1935;
-  --card-foreground: #f4f7ff;
-  --popover: #132244;
-  --popover-foreground: #f4f7ff;
-  --primary: #72a0ff;
-  --primary-foreground: #071126;
-  --secondary: #132244;
-  --secondary-foreground: #f4f7ff;
-  --muted: #132244;
-  --muted-foreground: #9eacca;
-  --accent: #1a2b52;
-  --accent-foreground: #f4f7ff;
+  --background: #0c1020;
+  --foreground: #f3f1ec;
+  --card: #141a2e;
+  --card-foreground: #f3f1ec;
+  --popover: #1a2138;
+  --popover-foreground: #f3f1ec;
+  --primary: #8fa6f0;
+  --primary-foreground: #0c1020;
+  --secondary: #1a2138;
+  --secondary-foreground: #f3f1ec;
+  --muted: #1a2138;
+  --muted-foreground: #a5abbf;
+  --accent: #212a45;
+  --accent-foreground: #f3f1ec;
   --destructive: #fd8a4b;
-  --border: rgba(180, 200, 255, 0.16);
-  --input: #5a6a95;
-  --ring: #72a0ff;
+  --border: rgba(230, 225, 210, 0.13);
+  --input: #6a7390;
+  --ring: #8fa6f0;
   --seal: #cc2649;
   --seal-foreground: #ffffff;
-  /* Lifted so seal-red words and strokes stay 4.5:1 on midnight blue. */
+  /* Lifted so seal-red words and strokes stay 4.5:1 on the ink ground. */
   --seal-text: #ff6b8a;
-  --link: #8fb3ff;
+  --link: #a3b6f5;
   --brand-blue: var(--primary);
   --brand-deep-blue: var(--link);
-  --brand-indigo: #8b80ff;
-  --brand-cyan: #54d6ff;
-  --brand-purple: #c08bff;
-  --surface-blue: #10224a;
-  --surface-indigo: #1a1a4a;
-  --surface-pink: #2a1533;
+  --brand-indigo: #9a9cff;
+  --brand-jade: #5fcfbb;
+  --brand-ochre: #e2b45c;
+  --surface-blue: #151d36;
+  --surface-indigo: #1a1b3d;
+  --surface-sand: #231d16;
   --surface-destructive:
     color-mix(in srgb, var(--destructive) 12%, var(--card));
-  --editor-canvas: #071126;
-  --primary-hover: #8fb3ff;
+  --editor-canvas: #0c1020;
+  --primary-hover: #a3b6f5;
   --shadow-primary: 0 1px 2px rgb(0 0 0 / 0.4);
   --gradient-brand: linear-gradient(
     90deg,
@@ -163,45 +163,45 @@ html[data-theme="dark"] {
   --gradient-aurora:
     radial-gradient(
       44rem 30rem at 8% -4rem,
-      rgb(26 92 235 / 0.24),
+      rgb(60 90 200 / 0.18),
       transparent 70%
     ),
     radial-gradient(
       38rem 28rem at 96% 0,
-      rgb(98 84 255 / 0.2),
+      rgb(90 92 220 / 0.12),
       transparent 70%
     ),
     radial-gradient(
       40rem 28rem at 0% 40rem,
-      rgb(53 200 245 / 0.14),
+      rgb(40 170 150 / 0.08),
       transparent 70%
     ),
     radial-gradient(
       34rem 24rem at 100% 44rem,
-      rgb(245 93 177 / 0.1),
+      rgb(210 150 60 / 0.07),
       transparent 70%
     );
   --shadow-product:
     0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 40px rgba(0, 0, 0, 0.45);
   --shadow-paper: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
-  --gradient-brand-strong: linear-gradient(90deg, #8fb3ff, #a39bff);
+  --gradient-brand-strong: linear-gradient(90deg, #a3b6f5, #b0b2ff);
   --gradient-hero-glow:
     radial-gradient(
       55% 40% at 22% 28%,
-      rgb(84 214 255 / 0.22),
+      rgb(95 207 187 / 0.14),
       transparent 70%
     ),
     radial-gradient(
       55% 42% at 78% 36%,
-      rgb(114 160 255 / 0.3),
+      rgb(143 166 240 / 0.22),
       transparent 70%
     ),
     radial-gradient(
       60% 40% at 50% 82%,
-      rgb(192 139 255 / 0.22),
+      rgb(226 180 92 / 0.12),
       transparent 70%
     );
-  --shadow-cta: 0 8px 24px rgb(114 160 255 / 0.22);
+  --shadow-cta: 0 8px 24px rgb(143 166 240 / 0.18);
 }
 
 /* Chrome that stands for a resume sheet (DESIGN.md): white paper and
@@ -211,8 +211,8 @@ html[data-theme="dark"] {
   --muted-foreground: var(--paper-muted);
   --accent: var(--paper-hover);
   --accent-foreground: var(--paper-ink);
-  --ring: #1a5ceb;
-  --link: #123edb;
+  --ring: #26409c;
+  --link: #23399a;
   background-color: var(--paper);
   color: var(--paper-ink);
 }
@@ -244,11 +244,11 @@ html[data-theme="dark"] {
   --color-brand-blue: var(--brand-blue);
   --color-brand-deep-blue: var(--brand-deep-blue);
   --color-brand-indigo: var(--brand-indigo);
-  --color-brand-cyan: var(--brand-cyan);
-  --color-brand-purple: var(--brand-purple);
+  --color-brand-jade: var(--brand-jade);
+  --color-brand-ochre: var(--brand-ochre);
   --color-surface-blue: var(--surface-blue);
   --color-surface-indigo: var(--surface-indigo);
-  --color-surface-pink: var(--surface-pink);
+  --color-surface-sand: var(--surface-sand);
   --color-surface-destructive: var(--surface-destructive);
   --color-editor-canvas: var(--editor-canvas);
   --color-primary-hover: var(--primary-hover);
