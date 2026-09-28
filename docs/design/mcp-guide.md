@@ -30,6 +30,23 @@ has. `guide` becomes a reserved slug. Before release, a read-only production
 check confirms no resume holds or tombstones the slug `guide`; if one does, the
 release stops for an owner decision.
 
+The check runs as an operator-only ECS one-shot from the candidate server
+image. It uses the existing jobs task's database connection and
+runtime-resolved app password. In one repeatable-read, read-only transaction,
+it returns only the `resumeOccupied` and `tombstoneOccupied` booleans from
+indexed existence reads. It accepts only a root reserved by the candidate
+image and logs no resume, account, title, time, database address, or secret.
+The deploy script maps fixed exit codes to the same two booleans, so it needs
+no database or CloudWatch log access.
+
+The operator runs the check once before deployment. The deploy runs it again
+after maintenance is confirmed and the old app has stopped, before any
+migration. The second check closes the interval in which the old app could
+accept a new `guide` claim. An occupied result follows the existing
+pre-migration recovery path and restores the old app without changing resume
+data. The one-shot creates normal ECS task-definition, task, and CloudWatch log
+records; only its database transaction is read-only.
+
 `/guide` itself has no page and returns the normal not-found page. A later guide
 takes another path under `/guide/` without a registry change.
 

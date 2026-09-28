@@ -204,4 +204,47 @@ describe('guide mcp page copy buttons', () => {
         );
       });
     });
+
+  it.each([
+    [
+      'Vietnamese add command',
+      undefined,
+      'Sao chép lệnh',
+      'guide-command-add',
+      'Không sao chép được. Hãy chọn lệnh và tự sao chép.',
+    ],
+    [
+      'Vietnamese login command',
+      undefined,
+      'Sao chép lệnh',
+      'guide-command-login',
+      'Không sao chép được. Hãy chọn lệnh và tự sao chép.',
+    ],
+    [
+      'English add command',
+      'en',
+      'Copy command',
+      'guide-command-add',
+      'Could not copy. Select the command and copy it yourself.',
+    ],
+    [
+      'English login command',
+      'en',
+      'Copy command',
+      'guide-command-login',
+      'Could not copy. Select the command and copy it yourself.',
+    ],
+  ] as const)('announces the command failure sentence for %s',
+    async (_localeName, locale, copyLabel, testid, expected) => {
+      setSiteLocale(locale);
+      const wrapper = await mountGuide();
+      const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+      stubClipboard(writeText);
+
+      const command = wrapper.get(`[data-testid="${testid}"]`);
+      await command.get(`[aria-label="${copyLabel}"]`).trigger('click');
+      await vi.waitFor(() => {
+        expect(wrapper.text()).toContain(expected);
+      });
+    });
 });

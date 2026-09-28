@@ -1,6 +1,6 @@
 # MCP guide copy
 
-Status: approved (2026-09-27), ready to build.
+Status: implemented (2026-09-28).
 
 The Vietnamese and English text of the [MCP guide](mcp-guide.md), in page order.
 Vietnamese is the default. **Bold** marks a UI name set in weight 600; backticks
@@ -175,6 +175,9 @@ troubleshooting question from its answer.
 - Command copied announcement
   - vi: Đã sao chép lệnh.
   - en: Copied the command.
+- Command copy failed announcement
+  - vi: Không sao chép được. Hãy chọn lệnh và tự sao chép.
+  - en: Could not copy. Select the command and copy it yourself.
 
 ## Try a request
 
