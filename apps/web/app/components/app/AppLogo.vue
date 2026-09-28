@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
+import {
+  MARK_BOWL,
+  MARK_HEIGHT,
+  MARK_INNER_RING,
+  MARK_OUTER_RING,
+  MARK_STEM,
+  MARK_TILT,
+  MARK_WIDTH,
+} from './sealMark';
+
 // The aboutme.vn logo (DESIGN.md, ADR 0020): a seal mark, two rings and a
 // single-story "a" tilted -8 degrees like the public stamp, then the
 // lowercase wordmark in the text color with only the dot of ".vn" in seal
@@ -23,7 +33,7 @@ const WORDMARK = `M36.4 19.05${BOWL}M46.1 14.2v9.7M51.5 8.7v15.2m0-4.85${BOWL}`
   + '7.4 0v6';
 
 const height = computed(() => ({ sm: 24, md: 32, lg: 48 })[props.size]);
-const viewWidth = computed(() => (props.markOnly ? 30 : 170));
+const viewWidth = computed(() => (props.markOnly ? MARK_WIDTH : 170));
 const sizeClass = computed(
   () => ({ sm: 'h-6', md: 'h-8', lg: 'h-12' })[props.size],
 );
@@ -36,8 +46,8 @@ const sizeClass = computed(
     :data-logo-size="size"
     :height="height"
     role="img"
-    :viewBox="`0 0 ${viewWidth} 32`"
-    :width="(height * viewWidth) / 32"
+    :viewBox="`0 0 ${viewWidth} ${MARK_HEIGHT}`"
+    :width="(height * viewWidth) / MARK_HEIGHT"
     xmlns="http://www.w3.org/2000/svg"
   >
     <g
@@ -45,33 +55,33 @@ const sizeClass = computed(
       data-logo-part="mark"
       fill="none"
       stroke="currentColor"
-      transform="rotate(-8 15 16)"
+      :transform="MARK_TILT"
     >
       <circle
-        cx="15"
-        cy="16"
+        :cx="MARK_OUTER_RING.cx"
+        :cy="MARK_OUTER_RING.cy"
         data-logo-ring="outer"
-        r="13.4"
-        stroke-width="2.6"
+        :r="MARK_OUTER_RING.r"
+        :stroke-width="MARK_OUTER_RING.strokeWidth"
       />
       <circle
         v-if="size !== 'sm'"
-        cx="15"
-        cy="16"
+        :cx="MARK_INNER_RING.cx"
+        :cy="MARK_INNER_RING.cy"
         data-logo-ring="inner"
-        r="9.6"
-        stroke-width="1"
+        :r="MARK_INNER_RING.r"
+        :stroke-width="MARK_INNER_RING.strokeWidth"
       />
       <g
         stroke-linecap="round"
-        stroke-width="3.2"
+        :stroke-width="MARK_STEM.strokeWidth"
       >
         <circle
-          cx="13.4"
-          cy="17.2"
-          r="3.7"
+          :cx="MARK_BOWL.cx"
+          :cy="MARK_BOWL.cy"
+          :r="MARK_BOWL.r"
         />
-        <path d="M17.1 13.2v7.8" />
+        <path :d="MARK_STEM.d" />
       </g>
     </g>
     <g
