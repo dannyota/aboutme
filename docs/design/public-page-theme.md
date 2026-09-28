@@ -119,9 +119,9 @@ and under Match device when the viewer prefers dark.
 | Credit text           | `#5C6178`                          | `#A5ABBF`                   | Muted foreground |
 | Credit hover          | `#23399A`                          | `#A3B6F5`                   | Link             |
 | Button fill           | `#FFFFFF`                          | `#141A2E`                   | Card             |
-| Button border         | `#E5E1D6`                          | `rgba(230, 225, 210, 0.2)`  | Border           |
+| Button border         | `#E5E1D6`                          | `rgba(230, 225, 210, 0.13)` | Border           |
 | Button label and icon | `#23399A`                          | `#A3B6F5`                   | Link             |
-| Button hover fill     | `#ECEEF6`                          | `#212A45`                   | Secondary        |
+| Button hover fill     | `#ECEEF6`                          | `#1A2138`                   | Secondary        |
 | Focus ring            | `#26409C`                          | `#8FA6F0`                   | Ring             |
 | Button shadow         | `0 1px 2px rgba(16, 27, 63, 0.06)` | none                        | Shadow xs        |
 

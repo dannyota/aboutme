@@ -38,7 +38,7 @@
   --brand-deep-blue: var(--link);
   --brand-indigo: #4a4dbf;
   --brand-jade: #0f7c6e;
-  --brand-ochre: #a86d12;
+  --brand-ochre: #8f6f0d;
   --surface-blue: #eceef7;
   --surface-indigo: #efeef8;
   --surface-sand: #f6eedf;
@@ -88,7 +88,7 @@
     ),
     radial-gradient(
       34rem 24rem at 100% 44rem,
-      rgb(183 121 31 / 0.06),
+      rgb(143 111 13 / 0.06),
       transparent 70%
     );
   --shadow-product:
@@ -100,7 +100,11 @@
      the glow behind the sample sheet (DESIGN.md; ADR 0020). */
   --gradient-brand-strong: linear-gradient(90deg, #1e3483, #3d40ad);
   --gradient-hero-glow:
-    radial-gradient(55% 40% at 22% 28%, rgb(15 124 110 / 0.16), transparent 70%),
+    radial-gradient(
+      55% 40% at 22% 28%,
+      rgb(15 124 110 / 0.16),
+      transparent 70%
+    ),
     radial-gradient(
       55% 42% at 78% 36%,
       rgb(38 64 156 / 0.18),
@@ -108,7 +112,7 @@
     ),
     radial-gradient(
       60% 40% at 50% 82%,
-      rgb(183 121 31 / 0.16),
+      rgb(143 111 13 / 0.16),
       transparent 70%
     );
   --shadow-cta: 0 8px 24px rgb(38 64 156 / 0.24);
@@ -146,7 +150,7 @@ html[data-theme="dark"] {
   --brand-deep-blue: var(--link);
   --brand-indigo: #9a9cff;
   --brand-jade: #5fcfbb;
-  --brand-ochre: #e2b45c;
+  --brand-ochre: #e6c35f;
   --surface-blue: #151d36;
   --surface-indigo: #1a1b3d;
   --surface-sand: #231d16;
@@ -198,7 +202,7 @@ html[data-theme="dark"] {
     ),
     radial-gradient(
       60% 40% at 50% 82%,
-      rgb(226 180 92 / 0.12),
+      rgb(230 195 95 / 0.12),
       transparent 70%
     );
   --shadow-cta: 0 8px 24px rgb(143 166 240 / 0.18);
