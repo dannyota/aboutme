@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -158,17 +159,23 @@ func TestReadRootOccupancyUsesReadOnlyTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
-	if _, err := readRootOccupancy(t.Context(), tx, "guide"); err != nil {
-		t.Fatal(err)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), rootOccupancyCleanupTimeout)
+		defer cancel()
+		if rollbackErr := tx.Rollback(cleanupCtx); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback read-only transaction: %v", rollbackErr)
+		}
+	})
+	if _, readErr := readRootOccupancy(t.Context(), tx, "guide"); readErr != nil {
+		t.Fatal(readErr)
 	}
-	_, err = tx.Exec(t.Context(), `INSERT INTO slug_tombstones (slug) VALUES ($1)`, "guide")
-	if err == nil {
+	_, execErr := tx.Exec(t.Context(), `INSERT INTO slug_tombstones (slug) VALUES ($1)`, "guide")
+	if execErr == nil {
 		t.Fatal("read-only transaction accepted an insert")
 	}
 	var pgErr *pgconn.PgError
-	if !errors.As(err, &pgErr) || pgErr.Code != "25006" {
-		t.Fatalf("read-only insert error = %v, want SQLSTATE 25006", err)
+	if !errors.As(execErr, &pgErr) || pgErr.Code != "25006" {
+		t.Fatalf("read-only insert error = %v, want SQLSTATE 25006", execErr)
 	}
 }
 
