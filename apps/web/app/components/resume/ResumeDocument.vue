@@ -132,7 +132,10 @@ body:has(> #public-resume) {
   --toolbar-button-hover-fill: #eceef6;
   --toolbar-focus-ring: #26409c;
   box-sizing: border-box;
-  padding-block: 8px;
+  /* The bottom rule is part of the bar's total height (48 px, 56 px on a
+     touch screen), so the bottom padding is 1 px less than the top
+     (docs/design/public-page-theme.md, "Size and placement"). */
+  padding-block: 8px 7px;
   background: var(--toolbar-ground);
   border-bottom: 1px solid var(--toolbar-border);
 }
@@ -190,15 +193,29 @@ body:has(> #public-resume) {
   text-decoration: none;
 }
 
-.public-credit:hover {
-  color: var(--toolbar-credit-hover);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+@media (hover: hover) {
+  .public-credit:hover {
+    color: var(--toolbar-credit-hover);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
 }
 
 .public-credit:focus-visible {
   outline: 2px solid var(--toolbar-focus-ring);
   outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  /* Grows the credit's tap target to match the button's touch height
+     without moving the row's layout: the negative block margin cancels the
+     added padding, so the anchor's own box grows but its neighbors do not
+     shift (docs/design/public-page-theme.md, "Size and placement"). */
+  .public-credit {
+    display: inline-block;
+    padding-block: 10px;
+    margin-block: -10px;
+  }
 }
 
 /* The one action a reader takes on a shared resume: the application's
@@ -232,8 +249,10 @@ body:has(> #public-resume) {
   }
 }
 
-.public-download:hover {
-  background: var(--toolbar-button-hover-fill);
+@media (hover: hover) {
+  .public-download:hover {
+    background: var(--toolbar-button-hover-fill);
+  }
 }
 
 .public-download:focus-visible {
