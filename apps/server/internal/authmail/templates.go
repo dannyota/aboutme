@@ -16,7 +16,7 @@ import (
 // "me.vn" in the aboutme.vn wordmark.
 const (
 	colorInk    = "#192024"
-	colorBrand  = "#1A5CEB"
+	colorBrand  = "#26409C"
 	colorDesk   = "#EDEFEB"
 	colorMuted  = "#5B6470"
 	colorRule   = "#DADDD6"

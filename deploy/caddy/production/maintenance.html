@@ -10,59 +10,61 @@
     <noscript><meta http-equiv="refresh" content="60" /></noscript>
     <title>Đang cập nhật · aboutme.vn</title>
     <style>
-      /* Aurora tokens (DESIGN.md, ADR 0020), copied
+      /* Application tokens (DESIGN.md, ADR 0020), copied
          because this page cannot load the app's CSS. */
       :root {
-        --bg: #f5f8ff;
+        --bg: #f9f8f5;
         --fg: #101b3f;
         --card: #fff;
-        --muted: #56648c;
-        --border: #dce5f5;
-        --ring: #1a5ceb;
-        --link: #123edb;
-        --blue: #1a5ceb;
-        --indigo: #6254ff;
+        --muted: #5c6178;
+        --border: #e5e1d6;
+        --ring: #26409c;
+        --link: #23399a;
+        --blue: #26409c;
+        --indigo: #4a4dbf;
+        --jade: #0f7c6e;
         --seal: #cc2649;
-        --surface: #eaf2ff;
+        --surface: #eceef7;
         --paper: #fff;
         --paper-line: #e4e7e5;
         --paper-ink: #171a18;
-        --shadow: 0 1px 2px #101b3f0f, 0 12px 40px #1a3f8c1a;
+        --shadow: 0 1px 2px #101b3f0f, 0 12px 40px #282c5017;
         --shadow-paper: 0 1px 2px #171a180f, 0 12px 32px #171a181a;
         --aurora:
-          radial-gradient(44rem 30rem at 8% -4rem, #1a5ceb24, #0000 70%),
-          radial-gradient(38rem 28rem at 96% 0, #6254ff1a, #0000 70%),
-          radial-gradient(40rem 28rem at 0% 40rem, #35c8f51f, #0000 70%),
-          radial-gradient(34rem 24rem at 100% 44rem, #f55db112, #0000 70%);
+          radial-gradient(44rem 30rem at 8% -4rem, #26409c14, #0000 70%),
+          radial-gradient(38rem 28rem at 96% 0, #4a4dbf0d, #0000 70%),
+          radial-gradient(40rem 28rem at 0% 40rem, #0f7c6e0d, #0000 70%),
+          radial-gradient(34rem 24rem at 100% 44rem, #b7791f0f, #0000 70%);
         --glow:
-          radial-gradient(closest-side at 30% 34%, #35c8f54d, #0000),
-          radial-gradient(closest-side at 70% 40%, #1a5ceb3d, #0000),
-          radial-gradient(closest-side at 50% 72%, #a855f72e, #0000);
+          radial-gradient(closest-side at 30% 34%, #0f7c6e29, #0000),
+          radial-gradient(closest-side at 70% 40%, #26409c2e, #0000),
+          radial-gradient(closest-side at 50% 72%, #b7791f29, #0000);
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --bg: #071126;
-          --fg: #f4f7ff;
-          --card: #0d1935;
-          --muted: #9eacca;
-          --border: #b4c8ff29;
-          --ring: #72a0ff;
-          --link: #8fb3ff;
-          --blue: #72a0ff;
-          --indigo: #8b80ff;
+          --bg: #0c1020;
+          --fg: #f3f1ec;
+          --card: #141a2e;
+          --muted: #a5abbf;
+          --border: #e6e1d221;
+          --ring: #8fa6f0;
+          --link: #a3b6f5;
+          --blue: #8fa6f0;
+          --indigo: #9a9cff;
+          --jade: #5fcfbb;
           --seal: #ff6b8a;
-          --surface: #10224a;
+          --surface: #151d36;
           --shadow: 0 1px 2px #0006, 0 12px 40px #00000073;
           --shadow-paper: 0 1px 2px #0006, 0 12px 32px #00000080;
           --aurora:
-            radial-gradient(44rem 30rem at 8% -4rem, #1a5ceb3d, #0000 70%),
-            radial-gradient(38rem 28rem at 96% 0, #6254ff33, #0000 70%),
-            radial-gradient(40rem 28rem at 0% 40rem, #35c8f524, #0000 70%),
-            radial-gradient(34rem 24rem at 100% 44rem, #f55db11a, #0000 70%);
+            radial-gradient(44rem 30rem at 8% -4rem, #3c5ac82e, #0000 70%),
+            radial-gradient(38rem 28rem at 96% 0, #5a5cdc1f, #0000 70%),
+            radial-gradient(40rem 28rem at 0% 40rem, #28aa9614, #0000 70%),
+            radial-gradient(34rem 24rem at 100% 44rem, #d2963c12, #0000 70%);
           --glow:
-            radial-gradient(closest-side at 30% 34%, #54d6ff38, #0000),
-            radial-gradient(closest-side at 70% 40%, #72a0ff4d, #0000),
-            radial-gradient(closest-side at 50% 72%, #c08bff38, #0000);
+            radial-gradient(closest-side at 30% 34%, #5fcfbb24, #0000),
+            radial-gradient(closest-side at 70% 40%, #8fa6f038, #0000),
+            radial-gradient(closest-side at 50% 72%, #e2b45c1f, #0000);
         }
       }
       * {
@@ -214,8 +216,8 @@
       }
       .status i {
         flex: none;
-        background: #35c8f5;
-        box-shadow: 0 0 0 4px #35c8f533;
+        background: var(--jade);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--jade) 20%, transparent);
       }
       .done .status i {
         background: var(--blue);

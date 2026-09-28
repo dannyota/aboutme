@@ -1,7 +1,7 @@
 # 0020: Application visual identity: the seal, the aurora canvas, and the resume ground
 
-Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27). The owner chose each
-direction, including the public page color scheme below.
+Status: Accepted (2026-09-04, 2026-09-24, 2026-09-27, 2026-09-28). The owner
+chose each direction, including the public page color scheme below.
 
 ## Context
 
@@ -14,6 +14,9 @@ products, blurred below 24 px, and its round seal's ring text overlapped once a
 slug passed about ten characters. A design review also found three
 near-identical blues, a destructive red next to the seal red, unused pink and
 orange, an inverted type scale, and a seal red too dark on the midnight ground.
+Once the seal logo shipped, the electric blue primary sat beside the navy
+wordmark as a second blue, and the cyan and pink glows left the seal red reading
+as an alert rather than a stamp on paper.
 
 ## Decision
 
@@ -42,18 +45,20 @@ Colorful product UI, calm white resume, and one red that means public.
 
 **Canvas and color.**
 
-- Application pages sit on a pale blue ground (`#F5F8FF`) with large, soft,
-  static CSS glows in blue, indigo, cyan, and a faint pink. Dark theme is
-  midnight blue (`#071126` ground, `#0D1935` cards) with slightly stronger
+- The palette is keyed to the logo's two colors, navy ink `#101B3F` and seal
+  red. Application pages sit on warm paper (`#F9F8F5`) with large, soft, static
+  CSS glows in ink blue, indigo, jade, and ochre. Dark theme is ink black
+  (`#0C1020` ground, `#141A2E` cards, warm white text) with slightly stronger
   glows.
-- Two blues: `--primary` fills (`#1A5CEB` light; `#72A0FF` with dark text in
+- Two ink blues: `--primary` fills (`#26409C` light; `#8FA6F0` with dark text in
   dark theme) and `--link` colors blue text. `--brand-blue` and
-  `--brand-deep-blue` are aliases of those two. Indigo, purple, and cyan are
-  supporting accents. Pink and orange are not brand colors; `--surface-pink`
-  stays for the third feature card.
+  `--brand-deep-blue` are aliases of those two. Indigo, jade, and ochre are
+  supporting accents; jade and ochre pair with vermilion and sit far from it.
+  Pink, orange, cyan, and purple are not brand colors; `--surface-sand` tints
+  the third feature card.
 - `--seal` fills are `#CC2649`, keeping white Publish text above 4.5:1 including
   hover. `--seal-text` colors words and thin strokes: `#CC2649` light, `#FF6B8A`
-  dark (6.9:1 on `#071126`).
+  dark (6.9:1 on `#0C1020`).
 - `--destructive` is burnt orange, `#B54708` light and `#FD8A4B` dark, and the
   destructive button is an outline, so Delete cannot be mistaken for Publish.
 - Text meets WCAG AA over the brightest point of the canvas.
@@ -103,7 +108,7 @@ otherwise for the public page on screen.
 - The dark colors come from one pure rule over the resume's own five colors,
   followed by the unchanged role derivation and its contrast floors. No chrome
   token enters the document area, and no template has hand-picked dark colors.
-- The page bar takes the light or midnight values of its scoped tokens to match
+- The page bar takes the light or ink-black values of its scoped tokens to match
   the page's scheme. Its mark is the logo's seal mark in `--seal-text`.
 
 ## Rejected alternatives
@@ -135,7 +140,7 @@ otherwise for the public page on screen.
 - The button primitive's guarded edits (ADR 0019) follow these tokens.
 - Icons use versioned file names (`favicon-v3.svg`, `icon-*-v3.png`,
   `apple-touch-icon-v3.png`, `site-v3.webmanifest`) and the Open Graph image is
-  `og-image-v5.jpg` and `og-image-v4-en.jpg`. A replaced icon or image set stays
+  `og-image-v6.jpg` and `og-image-v5-en.jpg`. A replaced icon or image set stays
   in `public/`, unlinked, for one release so caches and crawlers get no 404.
 - The stored link-preview card (ADR 0014) draws `AppLogo` mark-only and pins it
   to `#CC2649` in both themes; a logo change raises the card layout version.
@@ -168,3 +173,7 @@ otherwise for the public page on screen.
   picks a dark scheme for the public page on screen" and retitles this record
   from "a white resume" to "the resume ground", since the resume is no longer
   always white.
+- Accepted (2026-09-28): the ink-and-seal palette. Warm paper replaces the pale
+  blue ground, ink blue replaces the electric blue primary, jade and ochre
+  replace cyan and purple, sand replaces the pink surface, and dark theme moves
+  from midnight blue to ink black. Token names follow the new hues.

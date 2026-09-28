@@ -11,8 +11,8 @@ export const siteOrigin = 'https://aboutme.vn';
  * crawler without the locale cookie gets Vietnamese, the site default.
  */
 export const ogImageUrl: Record<Locale, string> = {
-  vi: `${siteOrigin}/og-image-v5.jpg`,
-  en: `${siteOrigin}/og-image-v4-en.jpg`,
+  vi: `${siteOrigin}/og-image-v6.jpg`,
+  en: `${siteOrigin}/og-image-v5-en.jpg`,
 };
 
 export const indexablePaths: ReadonlySet<string> = new Set([
