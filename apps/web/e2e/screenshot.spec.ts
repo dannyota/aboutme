@@ -273,18 +273,43 @@ test.describe('public page measure', () => {
 });
 
 interface GuideCell {
+  readonly locale: 'en' | 'vi';
   readonly name: string;
   readonly theme: 'light' | 'dark';
   readonly width: number;
 }
 
-// The MCP guide page (/guide/mcp), Vietnamese default locale, both themes,
-// at phone and desktop measures (docs/design/mcp-guide.md, "Layout").
+// The MCP guide page (/guide/mcp), both locales and themes, at phone and
+// desktop measures (docs/design/mcp-guide.md, "Layout").
 const GUIDE_CELLS: readonly GuideCell[] = [
-  { name: 'guide--light--390.png', theme: 'light', width: 390 },
-  { name: 'guide--light--1280.png', theme: 'light', width: 1280 },
-  { name: 'guide--dark--390.png', theme: 'dark', width: 390 },
-  { name: 'guide--dark--1280.png', theme: 'dark', width: 1280 },
+  { locale: 'vi', name: 'guide--light--390.png', theme: 'light', width: 390 },
+  { locale: 'vi', name: 'guide--light--1280.png', theme: 'light', width: 1280 },
+  { locale: 'vi', name: 'guide--dark--390.png', theme: 'dark', width: 390 },
+  { locale: 'vi', name: 'guide--dark--1280.png', theme: 'dark', width: 1280 },
+  {
+    locale: 'en',
+    name: 'guide--en--light--390.png',
+    theme: 'light',
+    width: 390,
+  },
+  {
+    locale: 'en',
+    name: 'guide--en--light--1280.png',
+    theme: 'light',
+    width: 1280,
+  },
+  {
+    locale: 'en',
+    name: 'guide--en--dark--390.png',
+    theme: 'dark',
+    width: 390,
+  },
+  {
+    locale: 'en',
+    name: 'guide--en--dark--1280.png',
+    theme: 'dark',
+    width: 1280,
+  },
 ];
 
 test.describe('guide page pixel baselines', () => {
@@ -292,7 +317,7 @@ test.describe('guide page pixel baselines', () => {
     test(cell.name, async ({ page }, testInfo) => {
       await page.setViewportSize({ width: cell.width, height: 900 });
       await page.context().addCookies([
-        { name: 'aboutme-locale', value: 'vi', url: GUIDE_BASE_URL },
+        { name: 'aboutme-locale', value: cell.locale, url: GUIDE_BASE_URL },
         { name: 'aboutme-theme', value: cell.theme, url: GUIDE_BASE_URL },
       ]);
       await mockSignedOutSession(page);
@@ -308,6 +333,12 @@ test.describe('guide page pixel baselines', () => {
       });
       await expect(page.locator('[data-testid="guide-mcp-page"]'))
         .toBeVisible();
+      if (cell.locale === 'en') {
+        await expect(page.getByRole('heading', {
+          level: 1,
+          name: 'Connect your AI assistant to aboutme.vn',
+        })).toBeVisible();
+      }
       await page.evaluate(() => document.fonts.ready);
       await waitForImages(page);
 
