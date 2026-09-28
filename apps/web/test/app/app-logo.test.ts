@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 
 import AppLogo from '../../app/components/app/AppLogo.vue';
+import { MARK_OUTER_RING, MARK_TILT } from '../../app/components/app/sealMark';
 
 /**
  * Reads the accessible name a role="img" svg exposes, however the mark
@@ -85,6 +86,19 @@ describe('AppLogo', () => {
     expect(svg.querySelector('[data-logo-ring="inner"]')).not.toBeNull();
     expect(svg.querySelector('[data-logo-part="mark"]')
       ?.getAttribute('transform')).toBe('rotate(-8 15 16)');
+  });
+
+  it('draws the outer ring from the shared seal mark geometry', () => {
+    // AppLogo and the public page bar's mark (PublicMark) both import
+    // sealMark.ts, so a logo change reaches both
+    // (docs/design/ui/identity-and-seal.md, "Logo").
+    const svg = svgOf(mount(AppLogo));
+    const outer = svg.querySelector('[data-logo-ring="outer"]');
+    expect(outer?.getAttribute('cx')).toBe(String(MARK_OUTER_RING.cx));
+    expect(outer?.getAttribute('cy')).toBe(String(MARK_OUTER_RING.cy));
+    expect(outer?.getAttribute('r')).toBe(String(MARK_OUTER_RING.r));
+    expect(svg.querySelector('[data-logo-part="mark"]')
+      ?.getAttribute('transform')).toBe(MARK_TILT);
   });
 
   it('drops the hairline inner ring at the 24 px size only', () => {
