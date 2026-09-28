@@ -1,13 +1,13 @@
 # MCP guide page
 
-Status: implemented on `feat/mcp-guide`, awaiting current baselines, review, CI, and production prerequisites. Design: [MCP guide](../design/mcp-guide.md), [copy](../design/mcp-guide-copy.md), and [MCP client compatibility](../design/mcp-client-compatibility.md). The owner approved both approval lists on 2026-09-27. Compatibility shipped in v0.6.18; the page bar shipped in v0.6.24. The guide takes the next free patch version when it ships.
+Status: implemented on `feat/mcp-guide`, awaiting final branch CI and production prerequisites. Baselines passed hosted runs `36462068279` and `36464844990`; designer review accepted both languages, widths, and themes. Fresh adversarial review cleared the page and production root-check command. Design: [MCP guide](../design/mcp-guide.md), [copy](../design/mcp-guide-copy.md), and [MCP client compatibility](../design/mcp-client-compatibility.md). The owner approved both approval lists on 2026-09-27. Compatibility shipped in v0.6.18; the page bar shipped in v0.6.24. The guide takes the next free patch version when it ships.
 
 ## Remaining release work
 
-1. Regenerate guide and affected shell baselines in hosted CI after merging current `main`; inspect and commit the candidates.
-2. Complete the designer finish review and fresh reviewer pass, resolve findings, and obtain green branch CI at the exact head.
+1. Obtain green branch CI at the exact head containing the accepted baselines and reviewed root-check command.
+2. Resolve any hosted failures through the owning role and confirm fixes at the final head.
 3. Confirm the owner's production proof for Claude web and Claude Code: private edit, reuse after more than one hour, revoke, and refused access. Confirmation remains pending.
-4. Complete and adversarially review the candidate-image `check-public-root` command and its deploy-script modes. Confirm no production resume slug or tombstone is `guide` with `deploy.sh --check-public-root <tag> guide`; deploy with `--require-free-root guide` to repeat the check after the old app stops and before migrations.
+4. Confirm no production resume slug or tombstone is `guide` with `deploy.sh --check-public-root <tag> guide`; deploy with `--require-free-root guide` to repeat the check after the old app stops and before migrations.
 5. Merge to `main`, push, wait for green CI at the exact commit, then tag, build release images, deploy, and verify production. Do not release before both production prerequisites pass.
 
 ## Implemented scope and review criteria
