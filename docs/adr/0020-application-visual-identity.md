@@ -141,7 +141,10 @@ otherwise for the public page on screen.
 - Icons use versioned file names (`favicon-v3.svg`, `icon-*-v3.png`,
   `apple-touch-icon-v3.png`, `site-v3.webmanifest`) and the Open Graph image is
   `og-image-v7.jpg` and `og-image-v6-en.jpg`. A replaced icon or image set stays
-  in `public/`, unlinked, for one release so caches and crawlers get no 404.
+  in `public/`, unlinked, for one release so caches and crawlers get no 404. The
+  MCP server's `initialize` `serverInfo` names the same `favicon-v3.svg` and
+  `icon-*-v3.png` files by absolute URL; a future version bump renames both
+  together.
 - The stored link-preview card (ADR 0014) draws `AppLogo` mark-only and pins it
   to `#CC2649` in both themes; a logo change raises the card layout version.
 - The production maintenance page (`deploy/caddy/production/maintenance.html`)
