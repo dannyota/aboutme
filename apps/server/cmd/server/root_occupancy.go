@@ -116,15 +116,21 @@ func executeCheckPublicRoot(ctx context.Context, root string, getenv func(string
 	return nil
 }
 
-func checkPublicRootOccupancy(ctx context.Context, pool *pgxpool.Pool, root string) (rootOccupancy, error) {
+func checkPublicRootOccupancy(ctx context.Context, pool *pgxpool.Pool, root string) (occupancy rootOccupancy, resultErr error) {
 	tx, err := pool.BeginTx(ctx, rootOccupancyTxOptions)
 	if err != nil {
 		return rootOccupancy{}, err
 	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	occupancy, err := readRootOccupancy(ctx, tx, root)
-	if err != nil {
-		return rootOccupancy{}, err
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rootOccupancyCleanupTimeout)
+		defer cancel()
+		if rollbackErr := tx.Rollback(cleanupCtx); resultErr == nil && rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			resultErr = rollbackErr
+		}
+	}()
+	occupancy, resultErr = readRootOccupancy(ctx, tx, root)
+	if resultErr != nil {
+		return rootOccupancy{}, resultErr
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return rootOccupancy{}, err
