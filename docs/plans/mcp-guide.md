@@ -1,30 +1,16 @@
-# MCP guide page (0.6.11)
+# MCP guide page
 
-Status: approved, ready to build. Design: [MCP guide](../design/mcp-guide.md), [copy](../design/mcp-guide-copy.md), and [MCP client compatibility](../design/mcp-client-compatibility.md). The owner approved both approval lists on 2026-09-27.
+Status: implemented on `feat/mcp-guide`, awaiting current baselines, review, CI, and production prerequisites. Design: [MCP guide](../design/mcp-guide.md), [copy](../design/mcp-guide-copy.md), and [MCP client compatibility](../design/mcp-client-compatibility.md). The owner approved both approval lists on 2026-09-27. Compatibility shipped in v0.6.18; the page bar shipped in v0.6.24. The guide takes the next free patch version when it ships.
 
-Two releases, in order. Claude's clients fail against today's OAuth server, so the compatibility release ships first and the owner proves Claude in production before the guide goes live. The manager assigns the version numbers; the guide keeps 0.6.11 only if compatibility takes an earlier free number.
+## Remaining release work
 
-|Release|Outcome|Risk|
-|-|-|-|
-|Compatibility|Claude on the web and Claude Code connect, refresh, and revoke; consent names where approval returns|High: OAuth, rate limits, consent; adversarial review|
-|Guide|Public `/guide/mcp` page in both languages, header, footer, landing, and settings links, sitemap and `llms.txt`|Low: static page, one new reserved root|
+1. Regenerate guide and affected shell baselines in hosted CI after merging current `main`; inspect and commit the candidates.
+2. Complete the designer finish review and fresh reviewer pass, resolve findings, and obtain green branch CI at the exact head.
+3. Confirm the owner's production proof for Claude web and Claude Code: private edit, reuse after more than one hour, revoke, and refused access. Confirmation remains pending.
+4. Confirm no production resume slug or tombstone is `guide` through a reviewed read-only check. No ad hoc production database query path exists; settle the supported check before deploy.
+5. Merge to `main`, push, wait for green CI at the exact commit, then tag, build release images, deploy, and verify production. Do not release before both production prerequisites pass.
 
-## Release 1: MCP client compatibility
-
-Order: backend and frontend in parallel on disjoint paths, then qa, then review, then the owner's production proof after deploy.
-
-|Role|Files|Work|
-|-|-|-|
-|backend|`apps/server/internal/oauthsrv/metadata.go`, `clients.go`, `authorize.go`, `token_endpoint.go`, `consent.go`, `session_http.go`, `rate.go` and their tests; `apps/server/cmd/server/main.go` and config for the egress-range list; `apps/server/cmd/mcp-workflow/` only if it asserts the old metadata `resource`; `docs/api/openapi.yaml` (`agent_limit_reached` on the consent operation) and the generated web client|Rules 1 to 5, 7, and 8 of the compatibility design, each with its rejected neighbors as failing tests first|
-|frontend|`apps/web/app/pages/authorize.vue`, `apps/web/app/composables/useOAuthConsent.ts`, `apps/web/app/i18n/consent.ts`, their tests|Rule 6 host line from the validated `redirect_uri`, loopback wording, and the rule 7 message with the Settings link|
-|qa|new `deploy/dev-https-browser/mcp-ts-sdk.spec.ts`; `deploy/dev-https-browser/package.json` and lockfile (pinned official TypeScript SDK); `deploy/dev-https-browser/proof-shards.mjs` and shard coverage check; `Makefile` target `dev-https-mcp-ts-sdk-check` (shared file, report every line)|TypeScript SDK proof: discovery, registration with the SDK's default body, consent, token, `tools/list`, one private write, forced refresh with `client_id` and `resource`, revoke, `401`|
-|devops|production app configuration for the egress-range list (value `160.79.104.0/21` from Anthropic's published page); `docs/runbooks/production.md` line naming the list|Add the setting, no other infrastructure change|
-|architect|`docs/design/api.md`, `mcp-owner-workflow.md`, `security.md`, `budgets.md`|State the new rules in the living docs; mark the compatibility design implemented|
-|reviewer|none|Adversarial review of the OAuth diff: PKCE S256, exact redirect match, refresh rotation and reuse revocation, cross-client refresh, resource set of exactly two values, ignored members never stored or logged, bucket ceiling, consent host as text|
-
-After deploy, the owner runs the production proof in the compatibility design with the owner test account: Claude on the web and Claude Code, one private edit each, use again after more than one hour, revoke, refused. The guide release waits for that result.
-
-## Release 2: guide page
+## Implemented scope and review criteria
 
 Order: backend registry and discovery first, because the web root list and the web source manifest follow it; then frontend; then qa baselines in CI; then designer finish review; then review.
 
@@ -45,6 +31,5 @@ Checks: GitHub CI on the branch and on `main`. No local runs. A tag and deploy n
 
 ## Open
 
-- Owner approvals: eight in the guide design, nine in the compatibility design.
 - Visual Studio Code joins Other apps only after its own proof; a qa brief can reuse the compatibility proof with its redirect `http://127.0.0.1:33418`.
 - Client ID Metadata Documents need their own design before any build.
