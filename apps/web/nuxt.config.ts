@@ -261,7 +261,7 @@ export default defineNuxtConfig({
         },
         // Matches the manifest's theme_color (ADR 0020's brand blue): the
         // browser chrome color on Android and the pull-to-refresh tint.
-        { name: 'theme-color', content: '#1a5ceb' },
+        { name: 'theme-color', content: '#26409c' },
       ],
     },
   },

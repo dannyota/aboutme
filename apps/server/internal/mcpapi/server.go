@@ -41,7 +41,7 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 	if dependencies.Bearer == nil || isNil(dependencies.Resumes) || dependencies.Rates == nil || dependencies.MaxRequestBodyBytes <= 0 {
 		return nil, errors.New("mcp server: invalid dependencies")
 	}
-	server := mcp.NewServer(&mcp.Implementation{Name: "aboutme", Version: "1"}, &mcp.ServerOptions{
+	server := mcp.NewServer(serverImplementation(dependencies.Bearer.publicOrigin), &mcp.ServerOptions{
 		Instructions: serverInstructions,
 	})
 	runtime := &toolRuntime{resumes: dependencies.Resumes}
@@ -105,6 +105,27 @@ func NewServer(dependencies ServerDependencies) (http.Handler, error) {
 			streamable.ServeHTTP(w, r.WithContext(ctx))
 		}))
 	}), nil
+}
+
+// serverImplementation names aboutme for the MCP initialize handshake so a
+// client's connector list shows the seal mark instead of a generic icon. The
+// website URL and icon sources are absolute on publicOrigin, the same
+// canonical origin the bearer boundary and OAuth metadata already serve, per
+// docs/design/api.md#agent-access-and-the-bearer-world. The icon file names
+// track the versioned set ADR 0020 records; Name and Version stay fixed so
+// registered clients and stored evidence keep identifying this server.
+func serverImplementation(publicOrigin string) *mcp.Implementation {
+	return &mcp.Implementation{
+		Name:       "aboutme",
+		Version:    "1",
+		Title:      "aboutme.vn",
+		WebsiteURL: publicOrigin,
+		Icons: []mcp.Icon{
+			{Source: publicOrigin + "/icon-192-v3.png", MIMEType: "image/png", Sizes: []string{"192x192"}},
+			{Source: publicOrigin + "/icon-512-v3.png", MIMEType: "image/png", Sizes: []string{"512x512"}},
+			{Source: publicOrigin + "/favicon-v3.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}},
+		},
+	}
 }
 
 func jsonRPCMethod(body []byte) string {

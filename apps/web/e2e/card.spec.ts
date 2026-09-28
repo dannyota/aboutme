@@ -251,7 +251,7 @@ const CROPPED_PHOTO = {
   url: FIXED_PHOTO_DATA_URL,
 };
 const UNCROPPED_PHOTO = { crop: null, url: FIXED_PHOTO_DATA_URL };
-const BRAND_ACCENT = '#1a5ceb';
+const FIXTURE_ACCENT = '#1a5ceb';
 
 interface CardCase {
   readonly card: PreviewCardContent;
@@ -261,7 +261,7 @@ interface CardCase {
 const CASES: readonly CardCase[] = [
   {
     card: {
-      accent: BRAND_ACCENT,
+      accent: FIXTURE_ACCENT,
       headline: longVietnameseText(80),
       layoutVersion: CARD_LAYOUT_VERSION,
       lng: 'vi',
@@ -273,7 +273,7 @@ const CASES: readonly CardCase[] = [
   },
   {
     card: {
-      accent: BRAND_ACCENT,
+      accent: FIXTURE_ACCENT,
       headline: 'Analyst',
       layoutVersion: CARD_LAYOUT_VERSION,
       lng: 'en',
@@ -285,7 +285,7 @@ const CASES: readonly CardCase[] = [
   },
   {
     card: {
-      accent: BRAND_ACCENT,
+      accent: FIXTURE_ACCENT,
       headline: 'Computer Scientist',
       layoutVersion: CARD_LAYOUT_VERSION,
       lng: 'en',
@@ -297,7 +297,7 @@ const CASES: readonly CardCase[] = [
   },
   {
     card: {
-      accent: BRAND_ACCENT,
+      accent: FIXTURE_ACCENT,
       headline: null,
       layoutVersion: CARD_LAYOUT_VERSION,
       lng: 'en',
@@ -335,7 +335,7 @@ const CASES: readonly CardCase[] = [
   },
   {
     card: {
-      accent: BRAND_ACCENT,
+      accent: FIXTURE_ACCENT,
       headline: '軟件工程師',
       layoutVersion: CARD_LAYOUT_VERSION,
       lng: 'zh',
@@ -393,7 +393,7 @@ test('a noisy photo keeps the rendered card under its byte cap', async ({
 }) => {
   const external = await denyExternalRequests(page);
   const card: PreviewCardContent = {
-    accent: BRAND_ACCENT,
+    accent: FIXTURE_ACCENT,
     headline: 'Stress case',
     layoutVersion: CARD_LAYOUT_VERSION,
     lng: 'en',

@@ -58,6 +58,7 @@ apps/web/app/components/app/SwitchField.vue
 apps/web/app/components/app/TextField.vue
 apps/web/app/components/app/ThemeToggle.vue
 apps/web/app/components/app/sealLayout.ts
+apps/web/app/components/app/sealMark.ts
 apps/web/app/components/auth/AuthLayout.vue
 apps/web/app/components/auth/PasswordField.vue
 apps/web/app/components/auth/PasswordSettings.vue
@@ -135,6 +136,7 @@ apps/web/app/components/preview/cardLayout.ts
 apps/web/app/components/preview/preview-card.css
 apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
+apps/web/app/components/public/PublicMark.vue
 apps/web/app/components/public/PublicResumeApp.vue
 apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
@@ -568,8 +570,8 @@ apps/web/public/icon-192-v3.png
 apps/web/public/icon-32-v3.png
 apps/web/public/icon-512-v3.png
 apps/web/public/landing/danny.webp
-apps/web/public/og-image-v4-en.jpg
-apps/web/public/og-image-v5.jpg
+apps/web/public/og-image-v6-en.jpg
+apps/web/public/og-image-v7.jpg
 apps/web/public/site-v3.webmanifest
 apps/web/public/templates/pages/ats-plain-en-p1.png
 apps/web/public/templates/pages/ats-plain-vi-p1.png
