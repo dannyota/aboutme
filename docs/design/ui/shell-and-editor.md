@@ -32,8 +32,8 @@ card up to 64 rem wide with a border, the 20 px feature radius, and
 the brand panel follows it and holds no focusable element. The panel shows the
 32 px logo, the statement “CV của bạn luôn riêng tư cho đến khi bạn xuất bản.”
 or “Your resume stays private until you publish it.”, three points with blue,
-indigo, and purple icons (Free and open source, One link per resume, PDF in A4
-or Letter), and a decorative white sheet tilted 3 degrees over the hero glow.
+indigo, and ochre icons (Free and open source, One link per resume, PDF in A4 or
+Letter), and a decorative white sheet tilted 3 degrees over the hero glow.
 
 The resume list is a desk of up to three paper cards: one column, three from 768
 px, with 24 px gaps and 32 px from 768 px. Each card is a `.paper-surface` sheet

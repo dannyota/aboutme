@@ -250,11 +250,11 @@ useHead(computed(() => ({
 }
 
 [data-group="format"] .gallery-chip__dot {
-  background: var(--brand-cyan);
+  background: var(--brand-jade);
 }
 
 [data-group="audience"] .gallery-chip__dot {
-  background: var(--brand-purple);
+  background: var(--brand-ochre);
 }
 
 [aria-current="page"] .gallery-chip__dot {

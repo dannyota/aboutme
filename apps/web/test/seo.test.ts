@@ -133,8 +133,8 @@ describe('site page search metadata', () => {
         );
         expect(meta('meta[property="og:image"]')).toBe(
           locale === 'vi'
-            ? 'https://aboutme.vn/og-image-v5.jpg'
-            : 'https://aboutme.vn/og-image-v4-en.jpg',
+            ? 'https://aboutme.vn/og-image-v7.jpg'
+            : 'https://aboutme.vn/og-image-v6-en.jpg',
         );
         expect(meta('meta[name="twitter:card"]')).toBe('summary_large_image');
         expect(document.head.querySelector('meta[name="robots"]')).toBeNull();

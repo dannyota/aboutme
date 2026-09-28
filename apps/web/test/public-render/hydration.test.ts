@@ -140,6 +140,13 @@ describe('public resume hydration', () => {
         const credit = root.querySelector('a.public-credit');
         expect(credit?.getAttribute('href')).toBe('https://aboutme.example/');
         expect(credit?.textContent).toBe('Built with aboutme.vn');
+        // The brand mark sits beside the credit inside the same span, both
+        // hydrated from the same SSR markup (docs/design/public-page-theme.md,
+        // "Structure").
+        const mark = root.querySelector('span.public-brand > svg.public-mark');
+        expect(mark?.getAttribute('aria-hidden')).toBe('true');
+        expect(mark?.getAttribute('focusable')).toBe('false');
+        expect(credit?.parentElement).toBe(mark?.parentElement);
       } finally {
         canonical.remove();
       }
