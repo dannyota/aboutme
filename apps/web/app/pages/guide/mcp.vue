@@ -91,7 +91,7 @@ provide(verifyAnnounceKey, (message: string) => {
     <GuideClaudeSteps
       :copied-text="copy.claude.commandCopied"
       :copy="copy.claude"
-      :copy-failed-text="copy.header.copyFailed"
+      :copy-failed-text="copy.claude.commandCopyFailed"
     />
 
     <section

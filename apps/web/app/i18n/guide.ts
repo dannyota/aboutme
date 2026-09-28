@@ -102,6 +102,7 @@ export interface GuideCopy {
     readonly removeStep: GuideLine;
     readonly copyCommandLabel: string;
     readonly commandCopied: string;
+    readonly commandCopyFailed: string;
   };
   readonly tryRequest: {
     readonly heading: string;
@@ -221,6 +222,8 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         t(', rồi thu hồi quyền trong Cài đặt của aboutme.vn.')],
       copyCommandLabel: 'Sao chép lệnh',
       commandCopied: 'Đã sao chép lệnh.',
+      commandCopyFailed: 'Không sao chép được. Hãy chọn lệnh và tự sao '
+        + 'chép.',
     },
     tryRequest: {
       heading: 'Thử một yêu cầu',
@@ -398,6 +401,8 @@ export const guideCopy: WorkspaceCopy<GuideCopy> = {
         t(', then revoke access in aboutme.vn Settings.')],
       copyCommandLabel: 'Copy command',
       commandCopied: 'Copied the command.',
+      commandCopyFailed: 'Could not copy. Select the command and copy it '
+        + 'yourself.',
     },
     tryRequest: {
       heading: 'Try a request',
