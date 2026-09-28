@@ -21,7 +21,7 @@ Order: backend registry and discovery first, because the web root list and the w
 |qa|`apps/web/e2e/screenshot.spec.ts`; new baselines `guide--light--390.png`, `guide--light--1280.png`, `guide--dark--390.png`, `guide--dark--1280.png`; regenerated `chrome--*`, `template-*`, and `verify--*` baselines whose header or footer changed, listed from the CI diff; `deploy/dev-https-browser/public.spec.ts`|Header overflow check at 704, 768, and 1024 px in both languages, signed in and out; public proof: `/guide/mcp` renders through Caddy in both languages, `/guide` is not found, `POST /mcp` without a token still returns `401` with the metadata challenge|
 |designer|`DESIGN.md` language coverage list|Add `/guide/mcp`; finish review at 390 and 1280 px, both themes and languages|
 |architect|`docs/design/localization.md`, `ui/landing-and-library.md`, `ui/shell-and-editor.md`, `product.md` (registry note if it names the version), `mcp-guide.md`|Living docs name the route and links; mark the guide design implemented|
-|devops|none in the repository|Before deploy, a read-only production query confirms no resume slug or tombstone is `guide`; review the generated Caddy line|
+|devops|`deploy/aws/scripts/deploy.sh`, `public-root-check.sh`, `deploy_test.sh`; `docs/runbooks/production.md`|Run the candidate server's read-only root check through the fenced jobs task; repeat after stopping the old app and before migrations; preserve the lock when task completion is unknown; document recovery|
 
 Unchanged: every renderer, print, card, and public resume baseline; OpenAPI; the database.
 

@@ -9,29 +9,15 @@
 #   deploy.sh --totp-key-reencrypt <tag>   runs the TOTP key re-encryption
 #                                     one-shot; no image, service, or schedule
 #                                     change (see fence.sh's fence_epoch_totp)
+#   deploy.sh --check-public-root <tag> <root>  audits one candidate root
+#   deploy.sh <tag> --require-free-root <root>  checks a root before release
 #
-# Every mode assumes the operator role, strongly reads the release fence,
-# assumes the deploy role, and holds one operation lock across the run (see
-# the sourced fence.sh). Order: verify each image's build provenance (the
-# sourced provenance.sh), build revisions, check that every task secret
-# exists, snapshot, register revisions, stop jobs, start maintenance beside
-# the app, stop the app, migrate, start web, start the new app beside
-# maintenance, stop maintenance, re-enable jobs, smoke, warm the release,
-# re-enable the task-stopped rule, wait (bounded) for the site-down alarm's
-# post-recovery health, then re-enable its actions. Each handoff starts the
-# incoming service before it stops the outgoing one, so host port 8443 always
-# has a listener (see the sourced handoff.sh). The release-snapshot-sweep job
-# deletes this script's tagged snapshots once they are more than 27 days old,
-# before they reach 30.
-#
-# Any failure after the handoff starts restores the previous app before a
-# migration, or leaves maintenance up after a database task may have run.
-# Recovery starts a service before it stops another, as the forward path
-# does. After a migration, if the new app never confirmed healthy, it is
-# scaled back to 0 while maintenance stays up; if it did confirm healthy and
-# only a later step failed, tearing down a proven-healthy app would be a
-# self-inflicted outage, so it stays up, maintenance is stopped, and the
-# script names the schedules to fix by hand.
+# The operator role reads the fence and assumes the deploy role. A deploy holds
+# the lock through provenance, task and secret checks, snapshot, handoff,
+# database work, smoke, warm-up, and notification recovery. Each handoff starts
+# the incoming service before stopping the outgoing one. Pre-migration failures
+# restore the previous app. A database task may have changed the database, so
+# recovery leaves maintenance up and requires a forward fix or snapshot restore.
 set -euo pipefail
 
 region=ap-southeast-1
@@ -43,27 +29,32 @@ families=(app web maintenance migrate jobs db-setup)
 # release-snapshot-sweep deletes snapshots with this tag within 30 days.
 snapshot_tag_key=aboutme:created-by
 snapshot_tag_value=deploy.sh
-
 usage() {
-  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh --rollback <tag> | deploy.sh --activate <tag> | deploy.sh --totp-key-reencrypt <tag>" >&2
+  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh <tag> --require-free-root <root> | deploy.sh --check-public-root <tag> <root> | deploy.sh --rollback <tag> | deploy.sh --activate <tag> | deploy.sh --totp-key-reencrypt <tag>" >&2
   exit 2
 }
 first=0
 rollback=0
 activate=0
 totp_reencrypt=0
+public_root_audit=0
+require_free_root=0
+public_root=""
 case "$#:${1:-}:${2:-}" in
   2:--rollback:?*) rollback=1 tag=$2 ;;
   2:--activate:?*) activate=1 tag=$2 ;;
   2:--totp-key-reencrypt:?*) totp_reencrypt=1 tag=$2 ;;
+  3:--check-public-root:?*) public_root_audit=1 tag=$2 public_root=$3 ;;
   1:[!-]*:) tag=$1 ;;
   2:[!-]*:--first-deploy) first=1 tag=$1 ;;
+  3:[!-]*:--require-free-root) require_free_root=1 tag=$1 public_root=$3 ;;
   *) usage ;;
 esac
 operation_kind=deploy
 ((!rollback)) || operation_kind=rollback
 ((!activate)) || operation_kind=activate
 ((!totp_reencrypt)) || operation_kind=totp_reencrypt
+((!public_root_audit)) || operation_kind=public_root_check
 
 # fd 9 is a fixed duplicate of the script's own stderr, made once, before
 # anything ever redirects fd 2 for a single read (notifications.sh's alarm
@@ -71,6 +62,7 @@ operation_kind=deploy
 # messages to that same file).
 exec 9>&2
 say() { printf 'deploy: %s\n' "$*" >&9; }
+public_root_valid() { [[ ${#1} -ge 4 && ${#1} -le 30 && $1 =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]; }
 
 # A strict vMAJOR.MINOR.PATCH tag, no leading zero, components 0 through 999,
 # maps to MAJOR*1000000 + MINOR*1000 + PATCH. Defined here, before fence.sh is
@@ -81,6 +73,9 @@ release_number() {
   echo $(( 10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[3]} ))
 }
 candidate=$(release_number "$tag") || { say "$tag is not a strict vMAJOR.MINOR.PATCH tag"; exit 1; }
+if ((public_root_audit || require_free_root)); then
+  public_root_valid "$public_root" || { say "invalid public root '$public_root'"; exit 1; }
+fi
 
 work=$(mktemp -d)
 # Cleared as soon as fence.sh's role and identity work needs it, so an early
@@ -100,8 +95,8 @@ source "$script_dir/handoff.sh"
 source "$script_dir/edge.sh"
 # shellcheck source=provenance.sh
 source "$script_dir/provenance.sh"
-
-# Shared by the mid-deploy maintenance-page check and the final smoke checks.
+# shellcheck source=public-root-check.sh
+source "$script_dir/public-root-check.sh"
 smoke_attempts=5
 smoke_delay=${DEPLOY_SMOKE_DELAY:-3}
 retry() { # command...
@@ -113,23 +108,16 @@ retry() { # command...
   return 1
 }
 
-# phase: prepare -> changing -> finished. oneshot_task is set while a database
-# task may be running. migration_may_be_applied is set before requesting a
-# migration task because an accepted request can lose its response.
-# app_start_requested and app_stable track the new app
-# through section 8, so restore() can tell "asked to start, health unknown"
-# from "confirmed healthy". maintenance_stopped marks the final maintenance
-# stop. schedules_enabled tracks the enable loop the same way.
-# site_up_epoch records the moment maintenance stops, so the post-recovery
-# site-down alarm wait (notifications.sh) never reads Route 53 data from
-# before the site actually came back up. signaled marks a HUP/INT/TERM that
-# arrived before on_exit's cleanup wait, so that wait is skipped entirely; one
-# that arrives during the cleanup wait itself stops that wait early instead,
-# without re-entering on_signal. site_alarm_waited marks that the wait already
-# ran once this exit, however it ended, so a later failure in the same exit
-# (such as a failed alarm-actions retry) never runs it again.
+# phase tracks handoff recovery. oneshot_task remains set while a task may run.
+# migration_may_be_applied marks a possible migration. app_stable and
+# maintenance_stopped track the final handoff. site_alarm_waited prevents a
+# second wait during cleanup.
 phase=prepare
 oneshot_task=""
+# A root check retains the fence until ECS proves its task stopped.
+public_root_pending=0
+public_root_started_by=""
+public_root_check_attempt=0
 migration_may_be_applied=0
 app_start_requested=0
 app_stable=0
@@ -178,8 +166,11 @@ on_exit() {
   else
     restore_deploy_notifications || cleanup_failed=1
   fi
-  ((!lock_held)) || fence_release ||
-    { say "could not release the operation lock; the runbook owns the manual clear"; cleanup_failed=1; }
+  if ((public_root_pending)); then
+    say "public-root check may still run; leave the operation lock closed; list tasks with started-by $public_root_started_by, wait for STOPPED, then follow the release-fence recovery"
+  elif ((lock_held)); then
+    fence_release || { say "could not release the operation lock; the runbook owns the manual clear"; cleanup_failed=1; }
+  fi
   rm -rf "$work"
   ((cleanup_failed)) && status=1
   exit "$status"
@@ -265,6 +256,12 @@ if ((totp_reencrypt)); then
   exit 0
 fi
 
+if ((public_root_audit)); then
+  fence_lock || exit 1
+  public_root_check "$public_root"
+  exit $?
+fi
+
 declare -A image
 for name in server web caddy; do
   d=$(digest "$name")
@@ -272,6 +269,11 @@ for name in server web caddy; do
   provenance_verify "$name" "$d" "$tag" "$commit" || exit 1
   image[$name]="ghcr.io/$repo-$name@$d"
 done
+
+if ((require_free_root)); then
+  fence_lock || exit 1
+  public_root_check "$public_root"
+fi
 
 edge_origin_cert_check || exit 1
 
@@ -380,7 +382,7 @@ if ((candidate >= fence_epoch_totp)); then
     { say "run tofu apply for the TOTP key before deploying this release"; exit 1; }
 fi
 
-fence_lock || exit 1
+((lock_held)) || fence_lock || exit 1
 
 # 4. Snapshot.
 if ((!rollback)); then
@@ -425,7 +427,7 @@ restore() {
     status=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$oneshot_task" \
       --query 'tasks[0].lastStatus' --output text)
     if [[ $status != STOPPED ]]; then
-      say "failed while a database task may still be running: $oneshot_task ($status)"
+      say "failed while a one-shot task may still be running: $oneshot_task ($status)"
       say "the maintenance page stays up; the app and job schedules stay stopped"
       say "check the task, then rerun deploy.sh"
       return
@@ -566,6 +568,10 @@ if retry maintenance_smoke_ok; then
 else
   say "maintenance smoke: could not confirm the maintenance page through CloudFront"
   exit 1
+fi
+
+if ((require_free_root)); then
+  public_root_check "$public_root"
 fi
 
 # 7. Database steps.

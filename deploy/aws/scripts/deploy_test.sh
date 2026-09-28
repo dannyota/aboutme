@@ -29,6 +29,49 @@ STUB
 done
 cp "$here/testdata/respond" "$work/respond"
 
+mkdir -p "$work/root-bin"
+cat >"$work/root-bin/aws" <<'STUB'
+#!/usr/bin/env bash
+args="$*"
+if [[ ${ROOT_CHECK_ONLY:-0} == 1 && $args == *"ecs describe-task-definition"* && $args == *"aboutme-prod-jobs"* ]]; then
+  printf '[%s] %s %s\n' "${AWS_PROFILE:-none}" "$(basename "$0")" "$args" >>"$CALLS"
+  printf '%s\n' '{"family":"aboutme-prod-jobs","networkMode":"bridge","requiresCompatibilities":["EC2"],"containerDefinitions":[{"name":"jobs","image":"unchanged","memory":256,"entryPoint":["/usr/local/bin/server"],"command":["idempotency-expiry-sweep"],"environment":[{"name":"DATABASE_URL","value":"postgres://aboutme_app@db/aboutme"},{"name":"DEPLOY_RELEASE_TAG","value":"old"},{"name":"DEPLOY_RELEASE_NUMBER","value":"1"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+  exit 0
+fi
+if [[ $args == *"ecs run-task"* && $args == *"--started-by root-"* ]]; then
+  printf '[%s] %s %s\n' "${AWS_PROFILE:-none}" "$(basename "$0")" "$args" >>"$CALLS"
+  n=$(($(cat "$STUB_DIR/root-check-count.$STUB_CASE" 2>/dev/null || echo 0) + 1))
+  echo "$n" >"$STUB_DIR/root-check-count.$STUB_CASE"
+  action=$(cut -d, -f"$n" <<<"${ROOT_CHECK_RUN_TASK_SEQUENCE:-ok}")
+  [[ $action == lost ]] && exit 255
+  printf 'arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/deploy-public-root-check-%s\n' "$n"
+  exit 0
+fi
+if [[ $args == *"ecs wait tasks-stopped"* && $args == *"deploy-public-root-check-"* ]]; then
+  printf '[%s] %s %s\n' "${AWS_PROFILE:-none}" "$(basename "$0")" "$args" >>"$CALLS"
+  n=${args##*deploy-public-root-check-}
+  n=${n%% *}
+  action=$(cut -d, -f"$n" <<<"${ROOT_CHECK_WAIT_SEQUENCE:-ok}")
+  [[ $action == fail ]] && exit 255
+  exit 0
+fi
+if [[ $args == *"ecs describe-tasks"* && $args == *"deploy-public-root-check-"* ]]; then
+  printf '[%s] %s %s\n' "${AWS_PROFILE:-none}" "$(basename "$0")" "$args" >>"$CALLS"
+  n=${args##*deploy-public-root-check-}
+  n=${n%% *}
+  if [[ $args == *"lastStatus"* ]]; then
+    action=$(cut -d, -f"$n" <<<"${ROOT_CHECK_WAIT_SEQUENCE:-ok}")
+    [[ $action == fail ]] && printf 'RUNNING\n' || printf 'STOPPED\n'
+  else
+    code=$(cut -d, -f"$n" <<<"${ROOT_CHECK_EXIT_SEQUENCE:-${ROOT_CHECK_EXIT:-0}}")
+    printf '%s\n' "${code:-0}"
+  fi
+  exit 0
+fi
+exec "$STUB_DIR/bin/aws" "$@"
+STUB
+chmod +x "$work/root-bin/aws"
+
 run_case() { # name expected-exit|fail args...
   local name=$1 want=$2 got
   shift 2
@@ -38,7 +81,10 @@ run_case() { # name expected-exit|fail args...
   # command substitution) lands in $name.pid: a stub that signals deploy.sh
   # from inside its own cleanup wait needs that exact PID, since a signal to
   # the wrong process only kills a disposable subshell there.
-  CALLS="$work/$name.calls" STUB_DIR="$work" STUB_CASE="$name" PATH="$work/bin:$PATH" \
+  CALLS="$work/$name.calls" STUB_DIR="$work" STUB_CASE="$name" ROOT_CHECK_ONLY="${ROOT_CHECK_ONLY:-0}" \
+    ROOT_CHECK_EXIT="${ROOT_CHECK_EXIT:-0}" ROOT_CHECK_EXIT_SEQUENCE="${ROOT_CHECK_EXIT_SEQUENCE:-}" \
+    ROOT_CHECK_RUN_TASK_SEQUENCE="${ROOT_CHECK_RUN_TASK_SEQUENCE:-}" ROOT_CHECK_WAIT_SEQUENCE="${ROOT_CHECK_WAIT_SEQUENCE:-}" \
+    PATH="$work/root-bin:$work/bin:$PATH" \
     AWS_CONFIG_FILE="$work/no-such-aws-config" AWS_PROFILE=test-base \
     DEPLOY_SMOKE_TIMEOUT=1 DEPLOY_SMOKE_DELAY=0 \
     DEPLOY_ALARM_WAIT="${DEPLOY_ALARM_WAIT:-3}" DEPLOY_ALARM_POLL="${DEPLOY_ALARM_POLL:-0}" \
@@ -1449,6 +1495,122 @@ for case_ in provenance_fails provenance_wrong_subject; do
   absent "$f" "gh attestation verify oci://ghcr.io/dannyota/aboutme-web@"
   grep -qF "provenance:" "$work/$case_.out" || { echo "$case_: no provenance message" >&2; exit 1; }
 done
+
+# The standalone root audit builds a one-shot from the candidate server image,
+# keeps the jobs task's command and secret references, and never changes a
+# service, schedule, or snapshot.
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT=0 run_case public_root_clear 0 --check-public-root v0.1.0 guide
+f=$work/public_root_clear.calls
+grep -qF '{"resumeOccupied":false,"tombstoneOccupied":false}' "$work/public_root_clear.out" ||
+  { echo "public_root_clear: missing clear result" >&2; exit 1; }
+[[ $(count "$f" "$(policy server v0.1.0)") == 1 ]] ||
+  { echo "public_root_clear: candidate server provenance was not verified" >&2; exit 1; }
+before "$f" "operation_checked_at=:s" "ecs register-task-definition"
+before "$f" "ecs register-task-definition" "--started-by root-"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "ecs update-service"
+absent "$f" "scheduler update-schedule"
+absent "$f" "cloudwatch"
+jq -e '.containerDefinitions[] | select(.name == "jobs")
+  | .image == "ghcr.io/dannyota/aboutme-server@sha256:'"$(printf '%064d' 1)"'"
+    and .entryPoint == ["/usr/local/bin/server"]
+    and .command == ["idempotency-expiry-sweep"]
+    and .secrets == [{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]
+    and (.environment | any(.name == "DEPLOY_RELEASE_TAG" and .value == "v0.1.0"))
+    and (.environment | any(.name == "DEPLOY_RELEASE_NUMBER" and .value == "1000"))' \
+  "$work/last-registered.json" >/dev/null ||
+  { echo "public_root_clear: candidate task did not preserve jobs configuration" >&2; exit 1; }
+grep -qF -- '--overrides {"containerOverrides":[{"name":"jobs","command":["check-public-root","guide"]}]}' "$f" ||
+  { echo "public_root_clear: missing jobs command override" >&2; exit 1; }
+grep -qF "public-root check task: arn:aws:ecs:" "$work/public_root_clear.out" ||
+  { echo "public_root_clear: missing task correlation" >&2; exit 1; }
+
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT=10 run_case public_root_resume 10 --check-public-root v0.1.0 guide
+grep -qF '{"resumeOccupied":true,"tombstoneOccupied":false}' "$work/public_root_resume.out" ||
+  { echo "public_root_resume: wrong result" >&2; exit 1; }
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT=11 run_case public_root_tombstone 11 --check-public-root v0.1.0 guide
+grep -qF '{"resumeOccupied":false,"tombstoneOccupied":true}' "$work/public_root_tombstone.out" ||
+  { echo "public_root_tombstone: wrong result" >&2; exit 1; }
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT=12 run_case public_root_both 12 --check-public-root v0.1.0 guide
+grep -qF '{"resumeOccupied":true,"tombstoneOccupied":true}' "$work/public_root_both.out" ||
+  { echo "public_root_both: wrong result" >&2; exit 1; }
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT=1 run_case public_root_error fail --check-public-root v0.1.0 guide
+grep -qF "public-root check exited with 1" "$work/public_root_error.out" ||
+  { echo "public_root_error: missing fatal error" >&2; exit 1; }
+for invalid_root in bad guide- a--b; do
+  run_case "public_root_invalid_$invalid_root" fail --check-public-root v0.1.0 "$invalid_root"
+  absent "$work/public_root_invalid_$invalid_root.calls" "aws "
+done
+
+# A lost RunTask response and a failed waiter leave the fence closed because
+# the audit task may still be running. The short started-by value identifies it
+# for manual recovery without logging a database credential.
+ROOT_CHECK_ONLY=1 ROOT_CHECK_RUN_TASK_SEQUENCE=lost run_case public_root_lost_task fail --check-public-root v0.1.0 guide
+f=$work/public_root_lost_task.calls
+absent "$f" "REMOVE operation_id"
+grep -qF "public-root check may still run; leave the operation lock closed; list tasks with started-by root-" "$work/public_root_lost_task.out" ||
+  { echo "public_root_lost_task: missing lock-recovery direction" >&2; exit 1; }
+ROOT_CHECK_ONLY=1 ROOT_CHECK_WAIT_SEQUENCE=fail run_case public_root_wait_pending fail --check-public-root v0.1.0 guide
+f=$work/public_root_wait_pending.calls
+absent "$f" "REMOVE operation_id"
+grep -qF "public-root check may still run; leave the operation lock closed; list tasks with started-by root-" "$work/public_root_wait_pending.out" ||
+  { echo "public_root_wait_pending: missing lock-recovery direction" >&2; exit 1; }
+
+# A guide release checks before any release handoff and checks again after the
+# old app stopped. A raced claim restores the pre-migration service state.
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT_SEQUENCE=0,0 run_case require_free_root 0 v0.1.0 --require-free-root guide
+f=$work/require_free_root.calls
+[[ $(count "$f" "--started-by root-") == 2 ]] ||
+  { echo "require_free_root: want two checks" >&2; exit 1; }
+mapfile -t root_started_by < <(grep -oE -- '--started-by root-[^ ]+' "$f" | cut -d' ' -f2)
+mapfile -t root_tokens < <(grep -oE -- '--client-token root-[^ ]+' "$f" | cut -d' ' -f2)
+[[ ${#root_started_by[@]} == 2 && ${#root_tokens[@]} == 2 && ${root_started_by[0]} != "${root_started_by[1]}" && ${root_tokens[0]} != "${root_tokens[1]}" && ${root_started_by[0]%-*} == "${root_started_by[1]%-*}" && ${root_tokens[0]%-*} == "${root_tokens[1]%-*}" ]] ||
+  { echo "require_free_root: audits did not use distinct operation-correlated tokens" >&2; exit 1; }
+first_root=$(nth "$f" "--started-by root-" 1)
+second_root=$(nth "$f" "--started-by root-" 2)
+snapshot_line=$(line "$f" "rds create-db-snapshot")
+stop_line=$(line "$f" "$stop_app")
+maintenance_line=$(line "$f" "curl -s -m 10")
+migrate_line=$(line "$f" "--started-by deploy-migrate")
+[[ $first_root -lt $snapshot_line && $stop_line -lt $maintenance_line && $maintenance_line -lt $second_root && $second_root -lt $migrate_line ]] ||
+  { echo "require_free_root: checks ran in the wrong order" >&2; exit 1; }
+
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT_SEQUENCE=0,10 run_case require_free_root_raced fail v0.1.0 --require-free-root guide
+f=$work/require_free_root_raced.calls
+[[ $(count "$f" "--started-by root-") == 2 ]] ||
+  { echo "require_free_root_raced: want two checks" >&2; exit 1; }
+absent "$f" "--started-by deploy-migrate"
+grep -qF -- "$prev_app_up" "$f" ||
+  { echo "require_free_root_raced: previous app was not restored" >&2; exit 1; }
+grep -qF -- "$down_maintenance" "$f" ||
+  { echo "require_free_root_raced: maintenance was not stopped" >&2; exit 1; }
+before "$f" "$prev_app_up" "$down_maintenance"
+[[ $(count "$f" "scheduler update-schedule") == 8 ]] ||
+  { echo "require_free_root_raced: schedules were not restored" >&2; exit 1; }
+
+# A second audit that cannot prove STOPPED keeps the deploy lock closed while
+# recovery leaves maintenance serving and the previous app stopped.
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT_SEQUENCE=0,0 ROOT_CHECK_WAIT_SEQUENCE=ok,fail \
+  run_case require_free_root_pending fail v0.1.0 --require-free-root guide
+f=$work/require_free_root_pending.calls
+absent "$f" "REMOVE operation_id"
+grep -qF "public-root check may still run; leave the operation lock closed; list tasks with started-by root-" "$work/require_free_root_pending.out" ||
+  { echo "require_free_root_pending: missing lock-recovery direction" >&2; exit 1; }
+grep -qF -- "$maint_up1" "$f" ||
+  { echo "require_free_root_pending: maintenance was not left up" >&2; exit 1; }
+absent "$f" "--started-by deploy-migrate"
+
+# A lost response from the second audit remains distinct from the clear first
+# audit and retains the deploy lock before migration can start.
+ROOT_CHECK_ONLY=1 ROOT_CHECK_EXIT_SEQUENCE=0,0 ROOT_CHECK_RUN_TASK_SEQUENCE=ok,lost \
+  run_case require_free_root_lost_second fail v0.1.0 --require-free-root guide
+f=$work/require_free_root_lost_second.calls
+[[ $(count "$f" "--started-by root-") == 2 ]] ||
+  { echo "require_free_root_lost_second: want two distinct audit requests" >&2; exit 1; }
+absent "$f" "REMOVE operation_id"
+absent "$f" "--started-by deploy-migrate"
+grep -qF "public-root check may still run; leave the operation lock closed; list tasks with started-by root-" "$work/require_free_root_lost_second.out" ||
+  { echo "require_free_root_lost_second: missing lock-recovery direction" >&2; exit 1; }
 
 run_case usage 2
 
