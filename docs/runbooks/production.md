@@ -365,8 +365,8 @@ image that predates the raise.
 
 A script failure or signal restores alarm actions and the task-stopped rule,
 then releases the lock unless a public-root audit or TOTP key re-encryption may
-still run. A public-root audit prints `started-by root-...` and retains the lock.
-Do not clear it until that ECS list-tasks search has no active task or all
+still run. A public-root audit prints `started-by root-...` and retains the
+lock. Do not clear it until that ECS list-tasks search has no active task or all
 matches are STOPPED. Process death (SIGKILL, host loss) also leaves the lock
 closed. Use the AWS-login principal's privileged bypass credentials to clear it:
 
