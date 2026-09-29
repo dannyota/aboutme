@@ -111,8 +111,8 @@ func TestPublicRepresentationsFollowDiscoveryForNoindex(t *testing.T) {
 	}
 	service := &Service{}
 	cases := []robotsCase{
-		{"json", service.newJSONHandler(reader, cache, "sha256:app"), "/api/v1/public/resumes/ada-lovelace"},
-		{"photo", service.newPhotoHandler(reader, cache, "sha256:app"), "/api/v1/public/resumes/ada-lovelace/photo"},
+		{"json", service.newJSONHandler(reader, cache, "sha256:app", nil, now), "/api/v1/public/resumes/ada-lovelace"},
+		{"photo", service.newPhotoHandler(reader, cache, "sha256:app", nil, now), "/api/v1/public/resumes/ada-lovelace/photo"},
 		{"pdf", artifacts.pdf, "/api/v1/public/resumes/ada-lovelace/pdf"},
 		{"og.png", artifacts.png, "/api/v1/public/resumes/ada-lovelace/og.png"},
 	}

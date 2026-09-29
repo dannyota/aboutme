@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -171,14 +172,21 @@ func run() error {
 		return fmt.Errorf("create realtime hub: %w", err)
 	}
 	defer hub.Close()
+	// VIEW_PASS_KEY is validated at config load as the canonical 43-character
+	// unpadded base64url encoding of 32 bytes (docs/design/viewer-analytics/
+	// sign-in-to-view.md "Pass cookie").
+	viewPassKey, err := base64.RawURLEncoding.Strict().DecodeString(cfg.ViewPassKey)
+	if err != nil {
+		return fmt.Errorf("decode VIEW_PASS_KEY: %w", err)
+	}
 	streams, err := realtimeapi.New(realtimeapi.Dependencies{
 		Hub: hub, Store: queries, Sessions: sessionManager, Coordinator: coordinator,
-		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), ViewPassKey: viewPassKey,
 	})
 	if err != nil {
 		return fmt.Errorf("create realtime service: %w", err)
 	}
-	views, err := newViewCounts(cfg, logger, queries, sessionManager)
+	views, err := newViewCounts(cfg, logger, queries, sessionManager, viewPassKey)
 	if err != nil {
 		return err
 	}
@@ -188,6 +196,7 @@ func run() error {
 		Live: streams.PublicHandler(), PrintQueue: printQueue,
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now, Logger: logger,
 		Cards: cards.public, Views: views.counter,
+		ViewPassKey: viewPassKey, GateProviders: signInToViewGateProviders(cfg), JoinInviteTarget: joinInviteTarget(cfg),
 	})
 	if err != nil {
 		return fmt.Errorf("create public service: %w", err)
@@ -455,6 +464,31 @@ func parsePublicRuntime(publicOrigin, renderOrigin, environment, appDigest, rend
 		return publicRuntime{}, errors.New("PUBLIC_RENDERER_BUILD_DIGEST is invalid")
 	}
 	return publicRuntime{PublicOrigin: parsedPublicOrigin, RenderOrigin: parsedRenderOrigin, AppDigest: appDigest, RendererDigest: rendererDigest}, nil
+}
+
+// signInToViewGateProviders is the fixed subset of ["google","linkedin"] the
+// sign-in-to-view gate offers: Google whenever it is enabled for account
+// sign-in, and LinkedIn only when it is also enabled for account sign-in and
+// SIGN_IN_TO_VIEW_LINKEDIN_ENABLED is true (docs/design/viewer-analytics/
+// sign-in-to-view.md "Gate"; ADR 0016).
+func signInToViewGateProviders(cfg config.Config) []string {
+	providers := make([]string, 0, 2)
+	if cfg.ProviderLogin.Google {
+		providers = append(providers, "google")
+	}
+	if cfg.ProviderLogin.LinkedIn && cfg.SignInToViewLinkedInEnabled {
+		providers = append(providers, "linkedin")
+	}
+	return providers
+}
+
+// joinInviteTarget is "/register" when password registration is open, else
+// "/login" (docs/design/viewer-analytics/sign-in-to-view.md "Join invite").
+func joinInviteTarget(cfg config.Config) string {
+	if cfg.PasswordRegistrationDisabled {
+		return "/login"
+	}
+	return "/register"
 }
 
 func printableDigest(value string) bool {

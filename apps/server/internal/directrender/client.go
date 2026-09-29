@@ -40,6 +40,19 @@ type renderOutcome struct {
 
 // Render returns a bounded, validated HTML representation for request.
 func (c *Client) Render(ctx context.Context, request PublicRenderRequest) (Result, error) {
+	return c.render(ctx, request)
+}
+
+// RenderGate returns a bounded, validated HTML representation of the
+// sign-in-to-view gate, through the same internal render endpoint as an
+// ordinary resume (docs/design/viewer-analytics/sign-in-to-view.md "Gate").
+func (c *Client) RenderGate(ctx context.Context, request GateRenderRequest) (Result, error) {
+	return c.render(ctx, request)
+}
+
+// render encodes and posts either request shape to the internal render
+// endpoint and validates the response.
+func (c *Client) render(ctx context.Context, request any) (Result, error) {
 	if c == nil || c.http == nil || c.origin.value == "" {
 		return Result{}, renderUnavailable(errors.New("direct render client is not configured"))
 	}
@@ -79,7 +92,7 @@ func (c *Client) Render(ctx context.Context, request PublicRenderRequest) (Resul
 	return readResponse(outcome.response)
 }
 
-func encodeRequest(request PublicRenderRequest) ([]byte, error) {
+func encodeRequest(request any) ([]byte, error) {
 	buffer := &limitedBuffer{limit: publicRenderRequestMaxBytes}
 	if err := json.NewEncoder(buffer).Encode(request); err != nil {
 		return nil, err

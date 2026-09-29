@@ -108,6 +108,20 @@ func writeHeader(w http.ResponseWriter, header http.Header) {
 	}
 }
 
+// withPrivateCacheControl adds "private" ahead of a cacheable response's
+// stored Cache-Control for a sign-in-to-view resume
+// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
+// AC-VIEW-003), applied per request so the cached bytes themselves stay
+// identical and shareable among every pass holder.
+func withPrivateCacheControl(response SelectedResponse, private bool) SelectedResponse {
+	if !private {
+		return response
+	}
+	response.Header = response.Header.Clone()
+	response.Header.Set("Cache-Control", "private, "+response.Header.Get("Cache-Control"))
+	return response
+}
+
 // withDiscoveryRobots adds X-Robots-Tag: noindex, noarchive when the resume's
 // discovery is off. Handlers apply it per request from the current snapshot and
 // never store it in the cache, so toggling discovery at the same revision
