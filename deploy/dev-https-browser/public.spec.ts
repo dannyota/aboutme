@@ -45,9 +45,29 @@ const PUBLIC_PROOF_DESCRIPTION = 'Engineer, Example Corp';
 const PUBLIC_PROOF_IMAGE_ALT = 'Public proof resume';
 let createdID: string | undefined;
 
+let currentStage = 'none';
+
 function stage(name: string): void {
+  currentStage = name;
   console.log('public-stage:' + name);
 }
+
+test.beforeEach(() => {
+  currentStage = 'none';
+});
+
+// run.sh prints only bounded stage lines, and a later test's stages would
+// hide an earlier failure, so each failing test prints one closed line naming
+// its stage. The stage names are fixed words in this file; the outcome word
+// is the only thing derived from the error, and never its text.
+test.afterEach(({}, testInfo) => {
+  if (testInfo.status === 'skipped') return;
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const name = currentStage.toLowerCase().replace(/[^a-z0-9]+/gu, '-')
+    .slice(0, 48);
+  const outcome = testInfo.status === 'timedOut' ? 'timeout' : 'assertion';
+  console.log(`public-stage:fail-${name}-${outcome}`);
+});
 
 // One head meta element, by its naming attribute's value (for example
 // "og:title") and its decoded content.
@@ -435,6 +455,7 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   expect(gateHeaders['x-robots-tag']).toBe('noindex, noarchive');
   expect(gateHeaders['content-security-policy']).toContain("default-src 'none'");
   expect(await gateResponse?.text() ?? '').not.toMatch(/<script/iu);
+  stage('view-gate-body');
   await expect(anon).toHaveTitle(PAGE_TITLE);
   await expect(anon.locator('#public-gate h1')).toHaveText(PAGE_TITLE);
   await expect(anon.locator('#public-resume')).toHaveCount(0);
@@ -442,6 +463,7 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   const gateBody = await anon.evaluate(() => document.body.innerHTML);
   expect(gateBody).not.toContain('Public proof resume');
   expect(gateBody).not.toContain('Example Corp');
+  stage('view-gate-providers');
   // Google and LinkedIn are offered; GitHub never is.
   await expect(anon.locator('a.gate-provider')).toHaveCount(2);
   await expect(gateLink(anon, 'google')).toHaveCount(1);
@@ -449,6 +471,7 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   await expect(anon.locator('.gate-message')).toHaveCount(0);
   expect((await anonymous.context.cookies(ORIGIN)).map((cookie) => cookie.name))
     .not.toContain(VIEW_PASS_COOKIE);
+  stage('view-gate-query');
   // Only the two closed ?signin= values reach the page.
   await anon.goto(`${ORIGIN}/${slug}?signin=cancelled`);
   await expect(anon.locator('.gate-message')).toHaveCount(1);
@@ -958,6 +981,7 @@ test('proves a published resume hydrates in a real browser', async ({
   // The sign-in-to-view test runs first in this file; its evidence is part
   // of this run's, so a missing step fails here rather than passing quietly.
   if (Object.values(viewSteps).some((done) => !done)) {
+    stage('sign-in-to-view-incomplete');
     throw new Error('sign-in-to-view-incomplete');
   }
 
