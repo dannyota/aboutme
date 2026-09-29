@@ -175,7 +175,7 @@ describe('JoinInvite', () => {
       expect(children.map((child) => child.tagName))
         .toEqual(['P', 'A', 'BUTTON']);
       expect(children[0]!.className).toContain('join-invite-text');
-      expect(children[1]!.getAttribute('style')).toContain('height:36px');
+      expect((children[1] as HTMLElement).style.height).toBe('36px');
       expect(children[2]!.getAttribute('aria-label')).toBe('Close');
     });
 
@@ -219,9 +219,10 @@ describe('JoinInvite', () => {
         const children = [...wrapper.get('[role="region"]').element.children];
         expect(children.map((child) => child.tagName))
           .toEqual(['DIV', 'P', 'A']);
-        expect(children[0]!.querySelector('button')!.getAttribute('style'))
-          .toContain('width:32px');
-        expect(children[2]!.getAttribute('style')).toContain('height:40px');
+        expect(
+          (children[0]!.querySelector('button') as HTMLElement).style.width,
+        ).toBe('32px');
+        expect((children[2] as HTMLElement).style.height).toBe('40px');
       });
 
     it('slides in with the Web Animations API unless motion is reduced',

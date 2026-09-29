@@ -479,8 +479,10 @@ onMounted(async () => {
 </template>
 
 <style>
-html:not(.harness-gate),
-html:not(.harness-gate) body {
+/* :where() keeps the original (0,0,1) specificity per selector, so print
+   and template rules that override this background still win. */
+html:where(:not(.harness-gate)),
+:where(html:not(.harness-gate)) body {
   margin: 0;
   background: #d9d9d9;
 }
