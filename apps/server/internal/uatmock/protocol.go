@@ -165,7 +165,7 @@ func (s *Service) authorizeBinding(values url.Values) (codeBinding, bool) {
 		}
 	}
 	challenge := values.Get("code_challenge")
-	if values.Get("client_id") != s.cfg.ClientID || values.Get("redirect_uri") != s.cfg.RedirectURL || values.Get("response_type") != "code" || values.Get("scope") != "openid profile email" || values.Get("code_challenge_method") != "S256" || !validPKCEChallenge(challenge) {
+	if values.Get("client_id") != s.cfg.ClientID || values.Get("redirect_uri") != s.cfg.RedirectURL || values.Get("response_type") != "code" || !authorizeScopeAllowed(values.Get("scope")) || values.Get("code_challenge_method") != "S256" || !validPKCEChallenge(challenge) {
 		return codeBinding{}, false
 	}
 	return codeBinding{
@@ -174,6 +174,14 @@ func (s *Service) authorizeBinding(values url.Values) (codeBinding, bool) {
 		codeChallenge: challenge,
 		nonce:         values.Get("nonce"),
 	}, true
+}
+
+// authorizeScopeAllowed accepts exactly the two scope strings the server
+// sends: "openid profile email" for login and link, and "openid" alone for the
+// sign-in-to-view purpose (docs/design/viewer-analytics/sign-in-to-view.md
+// "Sign-in flow"; AC-VIEW-004). Any other value is refused.
+func authorizeScopeAllowed(scope string) bool {
+	return scope == "openid profile email" || scope == "openid"
 }
 
 func validPKCEChallenge(value string) bool {

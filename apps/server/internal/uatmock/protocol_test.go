@@ -366,3 +366,34 @@ func cloneValues(values url.Values) url.Values {
 	}
 	return cloned
 }
+
+func TestGoogleAuthorizeAcceptsOnlyLoginAndViewScopes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		scope string
+		want  int
+	}{
+		{scope: "openid profile email", want: http.StatusFound},
+		{scope: "openid", want: http.StatusFound},
+		{scope: "openid profile", want: http.StatusBadRequest},
+		{scope: "openid email", want: http.StatusBadRequest},
+		{scope: "openid profile email extra", want: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.scope, func(t *testing.T) {
+			t.Parallel()
+			svc := newTestService(t)
+			form := validAuthorizeQuery()
+			form.Set("scope", tt.scope)
+			form.Set("account", googleSubject)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, authorizePath, strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rec := httptest.NewRecorder()
+			svc.Handler().ServeHTTP(rec, req)
+			if rec.Code != tt.want {
+				t.Fatalf("scope %q status = %d, want %d", tt.scope, rec.Code, tt.want)
+			}
+		})
+	}
+}
