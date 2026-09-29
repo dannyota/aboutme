@@ -199,6 +199,7 @@ describe('joinInviteContainerStyle', () => {
       position: 'fixed',
       right: '16px',
       bottom: '16px',
+      boxSizing: 'border-box',
       width: '320px',
       padding: '16px',
       borderRadius: '14px',
