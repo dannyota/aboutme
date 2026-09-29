@@ -1152,6 +1152,16 @@ publish-fail)
   printf '%s\n' 'publish-stage:credentials-filled'
   exit 1
   ;;
+public-fail)
+  # A later test prints its own last stage after the failing one's fail- line.
+  printf '%s\n' 'browser-secret-must-not-escape'
+  printf '%s\n' 'public-stage:view-gate'
+  printf '%s\n' 'public-stage:fail-view-gate-assertion'
+  printf '%s\n' 'public-stage:public-skip-link'
+  printf '%s\n' 'public-stage:sign-in-to-view-incomplete'
+  printf '%s\n' 'public-stage:fail-sign-in-to-view-incomplete-assertion'
+  exit 1
+  ;;
 totp-shards-fail)
   # Two parallel shards interleave their stage lines; the one that failed is
   # not the one that printed last.
@@ -1606,6 +1616,21 @@ grep -Fxq 'dev-https-browser: editor-stage:photo-session' <<<"$output" ||
   fail 'editor failure did not expose its last bounded stage'
 if grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
   fail 'editor failure leaked volatile output'
+fi
+
+# Any mode prints its own fail- lines instead of the last stage line.
+reset_inside
+if output=$(FAKE_BROWSER_MODE=public-fail PATH="$INSIDE_BIN:$PATH" \
+  "$INSIDE_RUN" --inside public 2>&1); then
+  fail 'public browser failure was accepted'
+fi
+grep -Fxq 'dev-https-browser: public-stage:fail-view-gate-assertion' <<<"$output" ||
+  fail 'public failure did not print its fail line'
+grep -Fxq 'dev-https-browser: public-stage:fail-sign-in-to-view-incomplete-assertion' \
+  <<<"$output" || fail 'public failure did not print its second fail line'
+if grep -Fq 'public-skip-link' <<<"$output" ||
+  grep -Fq 'browser-secret-must-not-escape' <<<"$output"; then
+  fail 'public failure printed more than its fail lines'
 fi
 
 reset_inside

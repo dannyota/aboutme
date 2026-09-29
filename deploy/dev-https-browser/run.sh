@@ -428,11 +428,12 @@ inside_container() {
       mapfile -t bounded_stages < <(
         grep -E "^${mode}-stage:[a-z0-9-]+$" "$log_file" || true
       )
-      # Parallel TOTP shards interleave their stage lines, so the last one
-      # can belong to a shard that passed; print each failing test's own
-      # fail- line instead, which names its role.
-      [ "$mode" != totp ] || mapfile -t failed_stages < <(
-        grep -E '^totp-stage:fail-[a-z0-9-]+$' "$log_file" | head -n 6 || true
+      # A test that fails prints one bounded fail- line naming its stage.
+      # Print those first (at most six), since a later test can hide the
+      # failing one behind its own last stage line, and parallel TOTP shards
+      # interleave theirs.
+      mapfile -t failed_stages < <(
+        grep -E "^${mode}-stage:fail-[a-z0-9-]+$" "$log_file" | head -n 6 || true
       )
       if [ "${#failed_stages[@]}" -gt 0 ]; then
         printf 'dev-https-browser: %s\n' "${failed_stages[@]}" >&2
