@@ -1,4 +1,9 @@
-import { expect, test, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Page,
+} from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 
 import {
@@ -12,11 +17,15 @@ import {
   installExternalRequestFirewall,
   installExternalWebSocketFirewall,
   newDiagnosticCounters,
+  pageDiagnosticsAttacher,
   pinEnglish,
+  signInWithGoogle,
+  startLinkedInAuthorize,
   waitForHydration,
 } from './harness-lib';
 import {
   ALLOWED_ORIGIN,
+  httpFailureStatus,
   isAllowedHTTPURL,
   isAllowedWebSocketURL,
 } from './network-policy';
@@ -184,6 +193,392 @@ test.afterEach(async ({ browser }, testInfo) => {
     stage('cleanup-failed');
     throw error;
   }
+});
+
+// --- Sign in to view (docs/design/viewer-analytics/sign-in-to-view.md) ------
+
+const SEVEN_DAYS_SECONDS = 7 * 24 * 60 * 60;
+const JOIN_INVITE_FLOOR_MS = 5_000;
+const JOIN_INVITE_CLOSED_KEY = 'aboutme.joinInvite.closedAt';
+const VIEW_PASS_COOKIE = '__Host-view-pass';
+
+// What the sign-in-to-view test proved. The hydration test writes the run's
+// evidence, so it refuses to write until every step here is true.
+const viewSteps = {
+  gate: false,
+  gatedRoutes: false,
+  googlePass: false,
+  linkedinPass: false,
+  passCookie: false,
+  ownerGated: false,
+  joinInvite: false,
+  joinInviteClosed: false,
+  switchOff: false,
+  viewCleanup: false,
+};
+let joinInviteMs = 0;
+
+interface GatedStatuses {
+  readonly json: number;
+  readonly pdf: number;
+  readonly start: number;
+  readonly live: number;
+}
+
+// gatedStatuses reads the gated public routes from a page whose CSP allows
+// same-origin fetches. The live stream is skipped when `withLive` is false,
+// because a served stream stays open.
+async function gatedStatuses(
+  page: Page,
+  slug: string,
+  withLive: boolean,
+): Promise<GatedStatuses> {
+  return page.evaluate(async (input) => {
+    const get = async (path: string): Promise<number> => (
+      await fetch(path, { cache: 'no-store' })
+    ).status;
+    const start = await fetch(
+      `/api/v1/public/resumes/${input.slug}/views/start`,
+      {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      },
+    );
+    return {
+      json: await get(`/api/v1/public/resumes/${input.slug}`),
+      pdf: await get(`/api/v1/public/resumes/${input.slug}/pdf`),
+      start: start.status,
+      live: input.withLive ? await get(`/api/v1/live/${input.slug}`) : 0,
+    };
+  }, { slug, withLive });
+}
+
+// expectPassCookie checks the pass cookie's attributes and size without ever
+// recording its value (design "Pass cookie"; AC-VIEW-007), and that the
+// sign-in made no account session (AC-VIEW-005).
+async function expectPassCookie(context: BrowserContext): Promise<void> {
+  const cookies = await context.cookies(ORIGIN);
+  const passes = cookies.filter((cookie) => cookie.name === VIEW_PASS_COOKIE);
+  expect(passes).toHaveLength(1);
+  const pass = passes[0]!;
+  expect(pass.httpOnly).toBe(true);
+  expect(pass.secure).toBe(true);
+  expect(pass.sameSite).toBe('Lax');
+  expect(pass.path).toBe('/');
+  expect(pass.value.length).toBeLessThan(1024);
+  const remaining = pass.expires - Date.now() / 1000;
+  expect(remaining).toBeGreaterThan(SEVEN_DAYS_SECONDS - 3_600);
+  expect(remaining).toBeLessThanOrEqual(SEVEN_DAYS_SECONDS + 60);
+  expect(cookies.map((cookie) => cookie.name)).not.toContain('__Host-session');
+}
+
+async function readResumeRevision(page: Page, id: string): Promise<string> {
+  return page.evaluate(async (resumeID) => {
+    const response = await fetch(`/api/v1/resumes/${resumeID}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    const body = await response.json() as { data?: { revision?: unknown } };
+    const revision = body.data?.revision;
+    if (response.status !== 200 || typeof revision !== 'string') {
+      throw new Error('resume read failed');
+    }
+    return revision;
+  }, id);
+}
+
+// publishWithSignIn publishes the resume live at its current revision with
+// the sign-in switch set as given (downloads on, discovery off).
+async function publishWithSignIn(
+  page: Page,
+  id: string,
+  slug: string,
+  signInToView: boolean,
+): Promise<{ status: number; body: unknown }> {
+  const revision = await readResumeRevision(page, id);
+  const csrf = await freshCSRF(page);
+  return page.evaluate(async (input) => {
+    const response = await fetch(`/api/v1/resumes/${input.id}/publish`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': crypto.randomUUID(),
+        'If-Match': `"r${input.revision}"`,
+        'X-CSRF-Token': input.csrf,
+        'X-Resume-Schema-Version': input.schemaVersion,
+      },
+      body: JSON.stringify({
+        slug: input.slug,
+        live: true,
+        downloadEnabled: true,
+        seoGeoEnabled: false,
+        publicTitle: input.publicTitle,
+        faviconEmoji: input.faviconEmoji,
+        signInToView: input.signInToView,
+      }),
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  }, {
+    id,
+    slug,
+    revision,
+    csrf,
+    schemaVersion: SCHEMA_VERSION,
+    publicTitle: PAGE_TITLE,
+    faviconEmoji: PAGE_EMOJI,
+    signInToView,
+  });
+}
+
+test('proves sign in to view gates a resume, admits a pass holder, and '
+  + 'opens again when switched off', async ({ browser, page }) => {
+  test.setTimeout(240_000);
+  const slug = `gate-${crypto.randomUUID().slice(0, 8)}`;
+  const counters = newDiagnosticCounters();
+  // Gated routes answer 404 to an anonymous fetch on purpose, so the
+  // browser's own console line for those exact reads is expected.
+  const attach = pageDiagnosticsAttacher(counters, {
+    countConsoleError: (message) => {
+      if (httpFailureStatus(message.text()) !== 404) return true;
+      let path = '';
+      try {
+        path = new URL(message.location().url).pathname;
+      } catch {
+        return true;
+      }
+      return !(path.startsWith(`/api/v1/public/resumes/${slug}`)
+        || path === `/api/v1/live/${slug}`);
+    },
+  });
+  const openContext = async (
+    viewport?: { width: number; height: number },
+  ): Promise<{ context: BrowserContext; page: Page }> => {
+    const context = await browser.newContext(viewport ? { viewport } : {});
+    await installExternalRequestFirewall(context, counters);
+    await installExternalWebSocketFirewall(context, counters);
+    const opened = await context.newPage();
+    attach(opened);
+    return { context, page: opened };
+  };
+  const gateLink = (target: Page, provider: string) => target.locator(
+    `a.gate-provider[href="/api/v1/auth/${provider}/start?purpose=view&slug=${slug}"]`,
+  );
+  stage('view-locale');
+  await pinEnglish(page.context());
+  stage('view-sign-in');
+  await loginAsDevelopmentUser(page);
+  stage('view-create-resume');
+  const created = await createBlankResume(
+    page,
+    uniqueTitle(),
+    (createStage) => {
+      stage('view-create-' + createStage);
+    },
+    (accepted) => {
+      createdID = accepted.metadata.id;
+    },
+  );
+  const resumeID = created.metadata.id;
+  createdID = resumeID;
+
+  stage('view-personal-details');
+  await page.locator('[data-action="open-document"]').press('Enter');
+  await page.locator('[data-field="fullName"] [data-field-input]')
+    .fill('Public proof resume');
+  await page.locator('[data-field="fullName"] [data-field-input]').press('Tab');
+  await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
+  stage('view-work-entry');
+  await page.locator('[data-action="open-structure"]').press('Enter');
+  await page.locator('[data-action="section-type"]').selectOption('work');
+  await page
+    .getByTestId('section-create-form')
+    .locator('[data-action="create"]')
+    .press('Enter');
+  await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
+  await page.locator('[data-outline-key="work"]').press('Enter');
+  await page.locator('[data-action="add-entry"]').press('Enter');
+  const entry = page.locator('[data-entry-id]').first();
+  await entry.locator('[data-entry-field="jobTitle"] [data-field-input]')
+    .fill('Engineer');
+  await entry.locator('[data-entry-field="jobTitle"] [data-field-input]').press('Tab');
+  await entry.locator('[data-entry-field="employer"] [data-field-input]')
+    .fill('Example Corp');
+  await entry.locator('[data-entry-field="employer"] [data-field-input]').press('Tab');
+  await expect(page.getByTestId('save-status')).toHaveAttribute('data-state', 'saved');
+
+  stage('view-publish-gated');
+  const gatedPublish = await publishWithSignIn(page, resumeID, slug, true);
+  expect(gatedPublish.status, JSON.stringify(gatedPublish.body)).toBe(200);
+
+  // A phone-sized window, short enough that the resume scrolls, so the
+  // invite proof below sees the bottom bar and the scroll rule.
+  const anonymous = await openContext({ width: 390, height: 400 });
+  const anon = anonymous.page;
+  let startResponseAt = 0;
+  let startBody: Promise<unknown> = Promise.resolve(null);
+  anon.on('response', (response) => {
+    if (response.request().method() !== 'POST') return;
+    const url = new URL(response.url());
+    if (url.pathname !== `/api/v1/public/resumes/${slug}/views/start`) return;
+    startResponseAt = Date.now();
+    startBody = response.json().catch(() => null);
+  });
+
+  stage('view-gate');
+  const gateResponse = await anon.goto(`${ORIGIN}/${slug}`);
+  expect(gateResponse?.status()).toBe(200);
+  const gateHeaders = gateResponse?.headers() ?? {};
+  expect(gateHeaders['cache-control']).toContain('no-store');
+  expect(gateHeaders['x-robots-tag']).toBe('noindex, noarchive');
+  expect(gateHeaders['content-security-policy']).toContain("default-src 'none'");
+  expect(await gateResponse?.text() ?? '').not.toMatch(/<script/iu);
+  await expect(anon).toHaveTitle(PAGE_TITLE);
+  await expect(anon.locator('#public-gate h1')).toHaveText(PAGE_TITLE);
+  await expect(anon.locator('#public-resume')).toHaveCount(0);
+  await expect(anon.locator('script')).toHaveCount(0);
+  const gateBody = await anon.evaluate(() => document.body.innerHTML);
+  expect(gateBody).not.toContain('Public proof resume');
+  expect(gateBody).not.toContain('Example Corp');
+  // Google and LinkedIn are offered; GitHub never is.
+  await expect(anon.locator('a.gate-provider')).toHaveCount(2);
+  await expect(gateLink(anon, 'google')).toHaveCount(1);
+  await expect(gateLink(anon, 'linkedin')).toHaveCount(1);
+  await expect(anon.locator('.gate-message')).toHaveCount(0);
+  expect((await anonymous.context.cookies(ORIGIN)).map((cookie) => cookie.name))
+    .not.toContain(VIEW_PASS_COOKIE);
+  // Only the two closed ?signin= values reach the page.
+  await anon.goto(`${ORIGIN}/${slug}?signin=cancelled`);
+  await expect(anon.locator('.gate-message')).toHaveCount(1);
+  await anon.goto(`${ORIGIN}/${slug}?signin=other`);
+  await expect(anon.locator('.gate-message')).toHaveCount(0);
+  viewSteps.gate = true;
+
+  stage('view-gated-routes');
+  await anon.goto(`${ORIGIN}/guide/mcp`);
+  expect(await gatedStatuses(anon, slug, true)).toEqual({
+    json: 404,
+    pdf: 404,
+    start: 404,
+    live: 404,
+  });
+  viewSteps.gatedRoutes = true;
+
+  stage('view-owner-gated');
+  // Public routes never read the account session: the signed-in owner gets
+  // the gate like any viewer (AC-VIEW-006).
+  const ownerGate = await page.goto(`${ORIGIN}/${slug}`);
+  expect(ownerGate?.status()).toBe(200);
+  await expect(page.locator('#public-gate')).toHaveCount(1);
+  await expect(page.locator('#public-resume')).toHaveCount(0);
+  await page.goto('/app/resumes');
+  viewSteps.ownerGated = true;
+
+  stage('view-google');
+  await anon.goto(`${ORIGIN}/${slug}`);
+  await signInWithGoogle(anon, {
+    activator: gateLink(anon, 'google'),
+    returnPath: `/${slug}`,
+  });
+  // The invite proof runs first: its 5 s floor counts from view start, so
+  // slower checks wait until it is done.
+  stage('view-join-invite');
+  // The invite never shows in the first 5 s after view start, then shows
+  // for this pass holder once the scroll or dwell rule is met
+  // (design "Join invite"; AC-VIEW-008). The window is scrolled to the
+  // bottom at once, so only the 5 s floor holds it back.
+  await expect.poll(() => startResponseAt).toBeGreaterThan(0);
+  const startedAt = startResponseAt;
+  const invite = anon.getByRole('region', {
+    name: /^(Create a free resume invite|Lời mời tạo CV miễn phí)$/u,
+  });
+  await expect(invite).toHaveCount(0);
+  expect(Date.now() - startedAt, 'invite-floor-window-missed').toBeLessThan(4_000);
+  await anon.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(invite).toBeVisible({ timeout: 45_000 });
+  joinInviteMs = Date.now() - startedAt;
+  expect(joinInviteMs).toBeGreaterThanOrEqual(JOIN_INVITE_FLOOR_MS - 100);
+  expect(await startBody).toMatchObject({
+    data: { owner: false, signedIn: false },
+  });
+  await expect(invite).toHaveAttribute('data-placement', 'bar');
+  const inviteLink = invite.getByRole('link');
+  await expect(inviteLink).toHaveAttribute('href', /^\/(register|login)$/u);
+  viewSteps.joinInvite = true;
+
+  stage('view-join-invite-close');
+  await invite.getByRole('button', { name: /^(Close|Đóng)$/u }).click();
+  await expect(invite).toHaveCount(0);
+  expect(await anon.evaluate(
+    (key) => localStorage.getItem(key) !== null,
+    JOIN_INVITE_CLOSED_KEY,
+  )).toBe(true);
+  startResponseAt = 0;
+  await anon.reload();
+  await expect.poll(() => startResponseAt).toBeGreaterThan(0);
+  // Wait past the 5 s floor: a closed invite must not come back.
+  await anon.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await anon.waitForTimeout(JOIN_INVITE_FLOOR_MS + 1_000);
+  await expect(invite).toHaveCount(0);
+  viewSteps.joinInviteClosed = true;
+
+  stage('view-google-pass');
+  await expect(anon.locator('#public-resume')).toBeVisible();
+  await expect(anon.locator('#public-gate')).toHaveCount(0);
+  await waitForHydration(anon, 'public-resume');
+  await expectPassCookie(anonymous.context);
+  viewSteps.passCookie = true;
+  const held = await gatedStatuses(anon, slug, false);
+  expect(held.json).toBe(200);
+  expect(held.pdf).toBe(200);
+  viewSteps.googlePass = true;
+
+  stage('view-linkedin');
+  const second = await openContext();
+  const viaLinkedIn = second.page;
+  await viaLinkedIn.goto(`${ORIGIN}/${slug}`);
+  await expect(viaLinkedIn.locator('#public-gate')).toHaveCount(1);
+  await startLinkedInAuthorize(viaLinkedIn, gateLink(viaLinkedIn, 'linkedin'));
+  await Promise.all([
+    viaLinkedIn.waitForURL((url) =>
+      url.origin === ORIGIN && url.pathname === `/${slug}`
+    ),
+    viaLinkedIn.getByRole('button', { name: 'Allow', exact: true }).click(),
+  ]);
+  await expect(viaLinkedIn.locator('#public-resume')).toBeVisible();
+  await expect(viaLinkedIn.locator('#public-gate')).toHaveCount(0);
+  await expectPassCookie(second.context);
+  viewSteps.linkedinPass = true;
+
+  stage('view-switch-off');
+  const opened = await publishWithSignIn(page, resumeID, slug, false);
+  expect(opened.status, JSON.stringify(opened.body)).toBe(200);
+  const open = await openContext();
+  const publicResponse = await open.page.goto(`${ORIGIN}/${slug}`);
+  expect(publicResponse?.status()).toBe(200);
+  await expect(open.page.locator('#public-resume')).toBeVisible();
+  await expect(open.page.locator('#public-gate')).toHaveCount(0);
+  const publicNow = await gatedStatuses(open.page, slug, false);
+  expect(publicNow.json).toBe(200);
+  expect(publicNow.pdf).toBe(200);
+  viewSteps.switchOff = true;
+
+  stage('view-cleanup');
+  await deleteRecordedResume(page, resumeID);
+  createdID = undefined;
+  const gone = await open.page.goto(`${ORIGIN}/${slug}`);
+  expect(gone?.status()).toBe(404);
+  viewSteps.viewCleanup = true;
+
+  await anonymous.context.close();
+  await second.context.close();
+  await open.context.close();
+  expect(counters.consoleErrors).toBe(0);
+  expect(counters.pageErrors).toBe(0);
+  expect(counters.externalRequests).toBe(0);
+  expect(counters.certificateErrors).toBe(0);
 });
 
 test('proves a published resume hydrates in a real browser', async ({
@@ -560,12 +955,19 @@ test('proves a published resume hydrates in a real browser', async ({
   expect(externalRequests).toEqual([]);
   expect(privateRequests).toEqual([]);
 
+  // The sign-in-to-view test runs first in this file; its evidence is part
+  // of this run's, so a missing step fails here rather than passing quietly.
+  if (Object.values(viewSteps).some((done) => !done)) {
+    throw new Error('sign-in-to-view-incomplete');
+  }
+
   await writeFile(EVIDENCE_PATH, `${JSON.stringify({
     schemaVersion: 1,
     scenario: 'public-resume-hydration',
     origin: ORIGIN,
     errors: { console: consoleErrors.length, externalRequest: externalRequests.length, page: pageErrors.length },
-    steps: { published: true, ssr: true, hydrated: true },
+    steps: { published: true, ssr: true, hydrated: true, ...viewSteps },
+    timings: { joinInviteMs },
   })}\n`, { flag: 'wx', mode: 0o600 });
 });
 

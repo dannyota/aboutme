@@ -113,6 +113,8 @@ export interface SignInWithGoogleOptions {
   readonly keyboard?: boolean;
   /** Expected same-origin callback path (default: /app/resumes). */
   readonly returnPath?: string;
+  /** The link that starts the flow (default: the "Continue with Google" link). */
+  readonly activator?: Locator;
 }
 
 // pinEnglish sets the site-language cookie so the homepage and account pages
@@ -148,7 +150,10 @@ export async function signInWithGoogle(
       url.origin === ALLOWED_ORIGIN
       && url.pathname === '/__uat/oauth/google/authorize'
     ),
-    activate(page.getByRole('link', { name: 'Continue with Google' })),
+    activate(
+      options.activator
+        ?? page.getByRole('link', { name: 'Continue with Google' }),
+    ),
   ]);
   const accountLabel = options.accountLabel ?? DEVELOPMENT_USER_LABEL;
   const account = page.getByLabel(accountLabel);
