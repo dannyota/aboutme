@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -42,9 +44,9 @@ func gateValidHTML(envelope directrender.GateRenderRequest, origin publicresume.
 	}
 	anchors := ""
 	for _, provider := range envelope.Providers {
-		anchors += `<a href="/api/v1/auth/` + provider + `/start?purpose=view&amp;slug=` + envelope.Slug + `">Continue</a>`
+		anchors += `<a class="gate-provider" href="/api/v1/auth/` + provider + `/start?purpose=view&amp;slug=` + envelope.Slug + `">Continue</a>`
 	}
-	anchors += `<a href="` + origin.Resolve("/") + `">Home</a>`
+	anchors += `<a class="gate-home" href="` + origin.Resolve("/") + `">Home</a>`
 	return "<!doctype html><html lang=\"" + envelope.Lng + "\"><head>" +
 		`<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
 		"<title>" + envelope.PageTitle + "</title>" + favicon +
@@ -85,6 +87,57 @@ func TestGateHTMLRejection_AcceptsValidGate(t *testing.T) {
 	}
 }
 
+// TestGateHTMLRejection_AcceptsRendererCorpus proves the validator accepts the
+// HTML the real renderer writes. The fixture is shared with a web test that
+// asserts the renderer produces exactly that HTML (design "Gate"; AC-VIEW-002).
+func TestGateHTMLRejection_AcceptsRendererCorpus(t *testing.T) {
+	raw, err := os.ReadFile("testdata/gate-render.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var corpus struct {
+		Cases []struct {
+			Name     string          `json:"name"`
+			Envelope json.RawMessage `json:"envelope"`
+			HTML     string          `json:"html"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &corpus); err != nil {
+		t.Fatal(err)
+	}
+	if len(corpus.Cases) == 0 {
+		t.Fatal("renderer corpus has no cases")
+	}
+	origin := mustPublicOrigin(t)
+	for _, tc := range corpus.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			var envelope directrender.GateRenderRequest
+			decoder := json.NewDecoder(bytes.NewReader(tc.Envelope))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&envelope); err != nil {
+				t.Fatalf("decode envelope: %v", err)
+			}
+			remarshaled, err := json.Marshal(envelope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got, want any
+			if err := json.Unmarshal(remarshaled, &got); err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(tc.Envelope, &want); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("envelope does not round-trip through GateRenderRequest:\n got %s\nwant %s", remarshaled, tc.Envelope)
+			}
+			if rule := gateHTMLRejection([]byte(tc.HTML), envelope, origin); rule != "" {
+				t.Fatalf("gateHTMLRejection() = %q, want \"\" for renderer HTML", rule)
+			}
+		})
+	}
+}
+
 func TestGateHTMLRejection_RejectsClosedViolations(t *testing.T) {
 	envelope := gateTestEnvelope()
 	origin := mustPublicOrigin(t)
@@ -98,6 +151,10 @@ func TestGateHTMLRejection_RejectsClosedViolations(t *testing.T) {
 		{"extra anchor", replaceOnce(valid, "</main>", `<a href="https://evil.example/">x</a></main>`)},
 		{"form", replaceOnce(valid, "<main", `<form></form><main`)},
 		{"image", replaceOnce(valid, "<main", `<img src="https://aboutme.example/x.png"><main`)},
+		{"wrong anchor class", replaceOnce(valid, `class="gate-home"`, `class="gate-provider"`)},
+		{"missing anchor class", replaceOnce(valid, `<a class="gate-home" `, `<a `)},
+		{"extra anchor attribute", replaceOnce(valid, `class="gate-home" `, `class="gate-home" target="_blank" `)},
+		{"skip link class", replaceOnce(valid, `<a href="#public-gate">`, `<a class="gate-home" href="#public-gate">`)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,0 +1,71 @@
+{
+  "styleVersion": "0123456789abcdef",
+  "cases": [
+    {
+      "name": "cards-on-en-both-providers",
+      "envelope": {
+        "mode": "gate",
+        "canonicalOrigin": "https://aboutme.example",
+        "slug": "ada",
+        "lng": "en",
+        "pageTitle": "Ada Lovelace",
+        "faviconHref": "",
+        "preview": {
+          "title": "Ada Lovelace",
+          "description": "Writes the first program.",
+          "locale": "en_US",
+          "imageAlt": "Ada Lovelace",
+          "imageUrl": "https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png"
+        },
+        "providers": [
+          "google",
+          "linkedin"
+        ],
+        "message": "none"
+      },
+      "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Ada Lovelace</title><link rel=\"canonical\" href=\"https://aboutme.example/ada\"><meta name=\"description\" content=\"Writes the first program.\"><meta property=\"og:type\" content=\"profile\"><meta property=\"og:site_name\" content=\"aboutme.vn\"><meta property=\"og:title\" content=\"Ada Lovelace\"><meta property=\"og:description\" content=\"Writes the first program.\"><meta property=\"og:url\" content=\"https://aboutme.example/ada\"><meta property=\"og:locale\" content=\"en_US\"><meta property=\"og:image\" content=\"https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png\"><meta property=\"og:image:type\" content=\"image/png\"><meta property=\"og:image:width\" content=\"1200\"><meta property=\"og:image:height\" content=\"630\"><meta property=\"og:image:alt\" content=\"Ada Lovelace\"><meta name=\"twitter:card\" content=\"summary_large_image\"><meta name=\"twitter:image\" content=\"https://aboutme.example/api/v1/public/resumes/ada/og/0123456789abcdef.png\"><meta name=\"twitter:image:alt\" content=\"Ada Lovelace\"><link rel=\"stylesheet\" href=\"/_nuxt/assets/print-fonts.css?v=0123456789abcdef\"><style>body{margin:0;background:#F5F8FF;font-family:\"Be Vietnam Pro\",Inter,system-ui,sans-serif;}#public-gate{display:flex;justify-content:center;padding:32px 16px 16px;box-sizing:border-box;}.gate-card{width:100%;max-width:480px;background:#FFFFFF;border:1px solid #DCE5F5;border-radius:14px;padding:24px;box-sizing:border-box;}.gate-title{margin:0 0 12px;font-size:20px;line-height:1.3;color:#101B3F;}.gate-text{margin:0;font-size:15px;line-height:1.5;color:#101B3F;}.gate-providers{display:flex;flex-direction:column;gap:12px;margin-top:16px;}.gate-provider{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid #DCE5F5;border-radius:10px;background:#FFFFFF;color:#123EDB;font-size:15px;font-weight:500;text-decoration:none;}.gate-provider:hover{background:#EAF2FF;}.gate-provider:focus-visible{outline:2px solid #1A5CEB;outline-offset:2px;}.gate-message{margin:12px 0 0;font-size:14px;color:#56648C;}.gate-refusal{margin:20px 0 0;font-size:14px;color:#56648C;}.gate-home{display:block;margin-top:16px;font-size:14px;color:#123EDB;text-decoration:underline;}@media (min-width:640px){#public-gate{min-height:100vh;align-items:center;padding:16px;}.gate-card{padding:32px;}}</style></head><body><main id=\"public-gate\"><div class=\"gate-card\"><h1 class=\"gate-title\">Ada Lovelace</h1><p class=\"gate-text\"><strong>Sign in to view this resume.</strong> The owner asks viewers to sign in, to keep out bots and automated copying. If you continue, Google or LinkedIn confirms your account to aboutme. aboutme does not keep your name or email and does not tell the owner who you are; it only sets a cookie in this browser that lets you view this resume for 7 days. Signing in does not create an aboutme account. Continue only if you are 16 or older.</p><div class=\"gate-providers\"><!--[--><a class=\"gate-provider\" href=\"/api/v1/auth/google/start?purpose=view&amp;slug=ada\">Continue with Google</a><a class=\"gate-provider\" href=\"/api/v1/auth/linkedin/start?purpose=view&amp;slug=ada\">Continue with LinkedIn</a><!--]--></div><!----><p class=\"gate-refusal\">Prefer not to sign in? Contact the resume owner directly.</p><a class=\"gate-home\" href=\"https://aboutme.example/\">Back to aboutme.vn</a></div></main></body></html>"
+    },
+    {
+      "name": "cards-off-vi-google-cancelled-favicon",
+      "envelope": {
+        "mode": "gate",
+        "canonicalOrigin": "https://aboutme.example",
+        "slug": "an-nguyen",
+        "lng": "vi",
+        "pageTitle": "An & Nguyễn",
+        "faviconHref": "data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%9A%80%3C%2Ftext%3E%3C%2Fsvg%3E",
+        "preview": {
+          "title": "An & Nguyễn",
+          "description": "Kỹ sư phần mềm \"Go\" <web>",
+          "locale": "vi_VN",
+          "imageAlt": "An & Nguyễn"
+        },
+        "providers": [
+          "google"
+        ],
+        "message": "cancelled"
+      },
+      "html": "<!doctype html><html lang=\"vi\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>An &amp; Nguyễn</title><link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%9A%80%3C%2Ftext%3E%3C%2Fsvg%3E\"><link rel=\"canonical\" href=\"https://aboutme.example/an-nguyen\"><meta name=\"description\" content=\"Kỹ sư phần mềm &quot;Go&quot; &lt;web&gt;\"><meta property=\"og:type\" content=\"profile\"><meta property=\"og:site_name\" content=\"aboutme.vn\"><meta property=\"og:title\" content=\"An &amp; Nguyễn\"><meta property=\"og:description\" content=\"Kỹ sư phần mềm &quot;Go&quot; &lt;web&gt;\"><meta property=\"og:url\" content=\"https://aboutme.example/an-nguyen\"><meta property=\"og:locale\" content=\"vi_VN\"><link rel=\"stylesheet\" href=\"/_nuxt/assets/print-fonts.css?v=0123456789abcdef\"><style>body{margin:0;background:#F5F8FF;font-family:\"Be Vietnam Pro\",Inter,system-ui,sans-serif;}#public-gate{display:flex;justify-content:center;padding:32px 16px 16px;box-sizing:border-box;}.gate-card{width:100%;max-width:480px;background:#FFFFFF;border:1px solid #DCE5F5;border-radius:14px;padding:24px;box-sizing:border-box;}.gate-title{margin:0 0 12px;font-size:20px;line-height:1.3;color:#101B3F;}.gate-text{margin:0;font-size:15px;line-height:1.5;color:#101B3F;}.gate-providers{display:flex;flex-direction:column;gap:12px;margin-top:16px;}.gate-provider{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid #DCE5F5;border-radius:10px;background:#FFFFFF;color:#123EDB;font-size:15px;font-weight:500;text-decoration:none;}.gate-provider:hover{background:#EAF2FF;}.gate-provider:focus-visible{outline:2px solid #1A5CEB;outline-offset:2px;}.gate-message{margin:12px 0 0;font-size:14px;color:#56648C;}.gate-refusal{margin:20px 0 0;font-size:14px;color:#56648C;}.gate-home{display:block;margin-top:16px;font-size:14px;color:#123EDB;text-decoration:underline;}@media (min-width:640px){#public-gate{min-height:100vh;align-items:center;padding:16px;}.gate-card{padding:32px;}}</style></head><body><main id=\"public-gate\"><div class=\"gate-card\"><h1 class=\"gate-title\">An &amp; Nguyễn</h1><p class=\"gate-text\"><strong>Đăng nhập để xem CV này.</strong> Chủ CV yêu cầu người xem đăng nhập để chặn bot và công cụ tự động sao chép nội dung. Nếu bạn tiếp tục, Google sẽ xác minh tài khoản của bạn cho aboutme. aboutme không lưu tên hay email của bạn và không cho chủ CV biết bạn là ai; chúng tôi chỉ đặt một cookie trên trình duyệt này, cho phép bạn xem CV này trong 7 ngày. Việc đăng nhập không tạo tài khoản aboutme. Chỉ tiếp tục nếu bạn từ 16 tuổi trở lên.</p><div class=\"gate-providers\"><!--[--><a class=\"gate-provider\" href=\"/api/v1/auth/google/start?purpose=view&amp;slug=an-nguyen\">Tiếp tục với Google</a><!--]--></div><p class=\"gate-message\">Bạn đã hủy đăng nhập. Chọn một nút ở trên để thử lại.</p><p class=\"gate-refusal\">Không muốn đăng nhập? Hãy liên hệ trực tiếp chủ CV.</p><a class=\"gate-home\" href=\"https://aboutme.example/\">Về trang chủ aboutme.vn</a></div></main></body></html>"
+    },
+    {
+      "name": "no-provider-en-failed",
+      "envelope": {
+        "mode": "gate",
+        "canonicalOrigin": "https://aboutme.example",
+        "slug": "b2",
+        "lng": "en",
+        "pageTitle": "B",
+        "faviconHref": "",
+        "preview": {
+          "title": "B",
+          "description": "B",
+          "locale": "",
+          "imageAlt": "B"
+        },
+        "providers": [],
+        "message": "failed"
+      },
+      "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>B</title><link rel=\"canonical\" href=\"https://aboutme.example/b2\"><meta name=\"description\" content=\"B\"><meta property=\"og:type\" content=\"profile\"><meta property=\"og:site_name\" content=\"aboutme.vn\"><meta property=\"og:title\" content=\"B\"><meta property=\"og:description\" content=\"B\"><meta property=\"og:url\" content=\"https://aboutme.example/b2\"><link rel=\"stylesheet\" href=\"/_nuxt/assets/print-fonts.css?v=0123456789abcdef\"><style>body{margin:0;background:#F5F8FF;font-family:\"Be Vietnam Pro\",Inter,system-ui,sans-serif;}#public-gate{display:flex;justify-content:center;padding:32px 16px 16px;box-sizing:border-box;}.gate-card{width:100%;max-width:480px;background:#FFFFFF;border:1px solid #DCE5F5;border-radius:14px;padding:24px;box-sizing:border-box;}.gate-title{margin:0 0 12px;font-size:20px;line-height:1.3;color:#101B3F;}.gate-text{margin:0;font-size:15px;line-height:1.5;color:#101B3F;}.gate-providers{display:flex;flex-direction:column;gap:12px;margin-top:16px;}.gate-provider{display:flex;align-items:center;justify-content:center;height:44px;border:1px solid #DCE5F5;border-radius:10px;background:#FFFFFF;color:#123EDB;font-size:15px;font-weight:500;text-decoration:none;}.gate-provider:hover{background:#EAF2FF;}.gate-provider:focus-visible{outline:2px solid #1A5CEB;outline-offset:2px;}.gate-message{margin:12px 0 0;font-size:14px;color:#56648C;}.gate-refusal{margin:20px 0 0;font-size:14px;color:#56648C;}.gate-home{display:block;margin-top:16px;font-size:14px;color:#123EDB;text-decoration:underline;}@media (min-width:640px){#public-gate{min-height:100vh;align-items:center;padding:16px;}.gate-card{padding:32px;}}</style></head><body><main id=\"public-gate\"><div class=\"gate-card\"><h1 class=\"gate-title\">B</h1><p class=\"gate-text\"><strong>Sign in to view this resume.</strong> The owner asks viewers to sign in, to keep out bots and automated copying. aboutme does not keep your name or email and does not tell the owner who you are; it only sets a cookie in this browser that lets you view this resume for 7 days. Signing in does not create an aboutme account. Continue only if you are 16 or older.</p><div class=\"gate-providers\"><!--[--><!--]--></div><p class=\"gate-message\">We could not verify your sign-in. Please try again.</p><p class=\"gate-refusal\">Prefer not to sign in? Contact the resume owner directly.</p><a class=\"gate-home\" href=\"https://aboutme.example/\">Back to aboutme.vn</a></div></main></body></html>"
+    }
+  ]
+}
