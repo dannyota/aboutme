@@ -358,6 +358,9 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   test.setTimeout(240_000);
   const slug = `gate-${crypto.randomUUID().slice(0, 8)}`;
   const counters = newDiagnosticCounters();
+  // Set right after the resume is deleted: only then is a 404 for the page
+  // document itself expected.
+  let deleted = false;
   // Gated routes answer 404 to an anonymous fetch on purpose, so the
   // browser's own console line for those exact reads is expected.
   const attach = pageDiagnosticsAttacher(counters, {
@@ -370,7 +373,8 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
         return true;
       }
       return !(path.startsWith(`/api/v1/public/resumes/${slug}`)
-        || path === `/api/v1/live/${slug}`);
+        || path === `/api/v1/live/${slug}`
+        || (deleted && path === `/${slug}`));
     },
   });
   const openContext = async (
@@ -589,15 +593,22 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   viewSteps.switchOff = true;
 
   stage('view-cleanup');
-  await deleteRecordedResume(page, resumeID);
-  createdID = undefined;
-  const gone = await open.page.goto(`${ORIGIN}/${slug}`);
-  expect(gone?.status()).toBe(404);
-  viewSteps.viewCleanup = true;
-
+  // Close every viewer first: an open page reloads to the deleted slug when
+  // its resume goes away, which is noise this check does not judge.
   await anonymous.context.close();
   await second.context.close();
   await open.context.close();
+  await deleteRecordedResume(page, resumeID);
+  createdID = undefined;
+  deleted = true;
+  stage('view-cleanup-status');
+  const after = await openContext();
+  const gone = await after.page.goto(`${ORIGIN}/${slug}`);
+  expect(gone?.status()).toBe(404);
+  await after.context.close();
+  viewSteps.viewCleanup = true;
+
+  stage('view-cleanup-diagnostics');
   expect(counters.consoleErrors).toBe(0);
   expect(counters.pageErrors).toBe(0);
   expect(counters.externalRequests).toBe(0);
