@@ -11,13 +11,32 @@ and release-fence mechanics.
 
 ## Bootstrap
 
-The base `secrets.sh` run (no arguments) creates `view-pass-key` along with the
-other base secrets; nothing extra is needed before the first apply.
+The v0.6.26 server requires `VIEW_PASS_KEY` at config load, whether or not the
+flag is on. `deploy.sh` refuses a v0.6.26 or later candidate whose server
+container lacks that secret, before any change, so an ordinary deploy alone does
+not ship this release. Run these in order:
+
+1. Run the base secrets script with no arguments:
+
+   ```sh
+   bash deploy/aws/scripts/secrets.sh
+   ```
+
+   It prints `kept` for every parameter that exists and creates only the missing
+   ones, so it leaves the database, email, and rate-limit keys alone. It creates
+   `/aboutme/prod/view-pass-key` as a SecureString holding 32 random bytes in
+   unpadded base64url, written through a private tmpfs file so the value never
+   reaches a command line or a log.
+
+2. Apply the reviewed OpenTofu change. It adds the `VIEW_PASS_KEY` secret to the
+   server container of the app task definition and `view-pass-key` to the
+   execution role's app parameter list
+   ([production runbook](production.md#secrets)).
 
 ## Flag-off deploy and floor activation
 
 1. Deploy v0.6.26 with `sign_in_to_view_enabled = false` (the release's own
-   default, so an ordinary deploy already ships this):
+   default), only after the two Bootstrap steps:
 
    ```sh
    bash deploy/aws/scripts/deploy.sh v0.6.26
@@ -77,12 +96,27 @@ above.
 
 ## Key rotation
 
-`secrets.sh` never overwrites `view-pass-key`. To rotate it, write a fresh
-32-byte value with `--overwrite` on `put-parameter`, the same as
-[rotating a provider credential](production.md#provider-sign-in), then redeploy
-the running tag so its task picks up the new value. Rotation ends every pass at
-once: every viewer of every `sign_in` resume must sign in again, whatever epoch
-their pass carried. This is routine maintenance, not only an incident response.
+`secrets.sh` never overwrites `view-pass-key`. To rotate it, write a fresh value
+with `Overwrite`, then redeploy the running tag so its task picks up the new
+value. The loader accepts only the canonical 43-character unpadded base64url
+encoding of 32 random bytes and refuses to start on anything else, so generate
+it exactly this way, the same as `secrets.sh` does. The request body goes
+through a private tmpfs file, never a command argument, so the value stays out
+of shell history and logs:
+
+```sh
+umask 077
+input=$(mktemp -p "${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must point at a per-user tmpfs}")
+openssl rand 32 | basenc --base64url | tr -d '=\n' |
+  jq -Rn --arg n /aboutme/prod/view-pass-key \
+    '{Name: $n, Type: "SecureString", Value: input, Overwrite: true}' >"$input"
+aws ssm put-parameter --region ap-southeast-1 --cli-input-json "file://$input" >/dev/null
+rm -f "$input"
+```
+
+Rotation ends every pass at once: every viewer of every `sign_in` resume must
+sign in again, whatever epoch their pass carried. This is routine maintenance,
+not only an incident response.
 
 ## Rollback
 

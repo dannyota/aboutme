@@ -372,15 +372,15 @@ check_floor_flag PASSKEY_ENROLLMENT_ENABLED "$fence_epoch" "passkey enrollment" 
 check_floor_flag TOTP_ENROLLMENT_ENABLED "$fence_epoch_totp" "TOTP enrollment" v0.4.7
 check_floor_flag SIGN_IN_TO_VIEW_ENABLED "$fence_epoch_signin" "sign in to view" v0.6.26
 
-# A release at or above v0.4.7 needs the TOTP key OpenTofu provisions
-# (docs/design/totp-key-management.md, "Bootstrap"); an app revision missing
-# it would start, then fail at TOTP use, sending the deploy through a
-# maintenance and restore cycle for a problem tofu apply would have caught.
-if ((candidate >= fence_epoch_totp)); then
-  jq -e '.containerDefinitions[] | select(.name == "server") | (.secrets // [])[] | select(.name == "TOTP_ACTIVE_KEY")' \
-    "$work/app.json" >/dev/null 2>&1 ||
-    { say "run tofu apply for the TOTP key before deploying this release"; exit 1; }
-fi
+# A release at or above a key's floor needs its secret on the server container,
+# or it fails after maintenance starts (totp-key-management.md, sign-in-to-view.md).
+require_server_secret() { # env-var-name fence-epoch message
+  ((candidate >= $2)) || return 0
+  jq -e --arg n "$1" '.containerDefinitions[] | select(.name == "server") | (.secrets // [])[] | select(.name == $n)' "$work/app.json" >/dev/null 2>&1 ||
+    { say "$3"; exit 1; }
+}
+require_server_secret TOTP_ACTIVE_KEY "$fence_epoch_totp" "run tofu apply for the TOTP key before deploying this release"
+require_server_secret VIEW_PASS_KEY "$fence_epoch_signin" "run secrets.sh, then the reviewed tofu apply, for the view pass key before deploying this release"
 
 ((lock_held)) || fence_lock || exit 1
 

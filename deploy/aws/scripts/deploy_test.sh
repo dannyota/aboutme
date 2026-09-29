@@ -1381,6 +1381,29 @@ grep -qF "run tofu apply for the TOTP key before deploying this release" \
   "$work/totp_key_secret_missing.out" ||
   { echo "totp_key_secret_missing: no TOTP key message" >&2; exit 1; }
 
+# A release at or above v0.6.26 must name VIEW_PASS_KEY in the app's server
+# secrets: the server requires it at config load whether or not the flag is
+# on (docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback").
+run_case view_pass_key_secret_missing fail v0.6.26
+f=$work/view_pass_key_secret_missing.calls
+absent "$f" "SET operation_id=:o, operation_kind=:k"
+absent "$f" "ecs register-task-definition"
+grep -qF "for the view pass key before deploying this release" \
+  "$work/view_pass_key_secret_missing.out" ||
+  { echo "view_pass_key_secret_missing: no view pass key message" >&2; exit 1; }
+
+run_case view_pass_key_present 0 v0.6.26
+grep -qF "ecs register-task-definition" "$work/view_pass_key_present.calls" ||
+  { echo "view_pass_key_present: did not register revisions" >&2; exit 1; }
+absent "$work/view_pass_key_present.out" "view pass key"
+
+# A release below the floor is not asked for the key: the older server never
+# reads it.
+run_case view_pass_key_below_floor 0 v0.6.25
+grep -qF "ecs register-task-definition" "$work/view_pass_key_below_floor.calls" ||
+  { echo "view_pass_key_below_floor: did not register revisions" >&2; exit 1; }
+absent "$work/view_pass_key_below_floor.out" "view pass key"
+
 # A revision that turns sign in to view on is refused below the v0.6.26
 # floor, the same way passkey and TOTP enrollment are refused below their own
 # floors (docs/design/viewer-analytics/sign-in-to-view.md, "Release and
