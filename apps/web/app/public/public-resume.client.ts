@@ -126,6 +126,14 @@ function unsupportedDocumentVersion(value: unknown): boolean {
   );
 }
 
+// A sign_in resume's JSON read needs the __Host-view-pass cookie; without it
+// the read is the uniform 404, which the live controller treats as
+// authoritative and answers with a page reload
+// (docs/design/viewer-analytics/sign-in-to-view.md#gated-routes). Public
+// routes never read the account session, so sending same-origin cookies
+// exposes nothing else.
+const PUBLIC_READ_CREDENTIALS: RequestCredentials = 'same-origin';
+
 const diagnostic = (reason: string): void => {
   // Public diagnostics exclude URLs, response bodies, and resume data.
   console.debug(`public resume hydration skipped: ${reason}`);
@@ -138,10 +146,7 @@ export async function hydratePublicResume(
   request: (slug: string) => Promise<unknown> = async (value) => {
     const response = await fetch(
       `/api/v1/public/resumes/${encodeURIComponent(value)}`,
-      {
-        cache: 'no-store',
-        credentials: 'omit',
-      },
+      { cache: 'no-store', credentials: PUBLIC_READ_CREDENTIALS },
     );
     if (!response.ok) throw new Error('public response failed');
     const envelope = (await response.json()) as { data?: unknown };
@@ -229,7 +234,7 @@ export async function readPublicResume(
   try {
     response = await fetch(
       `/api/v1/public/resumes/${encodeURIComponent(slug)}`,
-      { cache: 'no-store', credentials: 'omit', headers },
+      { cache: 'no-store', credentials: PUBLIC_READ_CREDENTIALS, headers },
     );
   } catch {
     return { kind: 'failed' };
