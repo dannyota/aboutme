@@ -8,8 +8,9 @@ import {
   renderPublicGate,
   renderPublicResume,
 } from '../../server/workers/public-render/render';
-import type {
-  PublicRenderGateRequest,
+import {
+  decodePublicRenderEnvelope,
+  type PublicRenderGateRequest,
 } from '../../server/utils/public-render/envelope';
 
 const request = () => {
@@ -628,14 +629,15 @@ describe('public sign-in gate', () => {
     );
   });
 
-  it('names no image when the envelope has no card URL', async () => {
-    const html = await renderPublicGate(gateRequest(), VERSIONS);
-    expect(html).not.toMatch(/og:image|twitter:image|og\.png/u);
-    expect(html).toContain('<meta name="twitter:card" content="summary">');
-    expect(html).toContain(
-      '<meta property="og:title" content="Ada Lovelace">',
-    );
-  });
+  it('names no image and no card type when the envelope has no card URL',
+    async () => {
+      const html = await renderPublicGate(gateRequest(), VERSIONS);
+      expect(html).not.toMatch(/og:image|twitter:image|og\.png/u);
+      expect(html).not.toContain('twitter:card');
+      expect(html).toContain(
+        '<meta property="og:title" content="Ada Lovelace">',
+      );
+    });
 
   it('names the card image when the envelope carries its URL', async () => {
     const imageUrl
@@ -707,4 +709,36 @@ describe('public sign-in gate', () => {
       );
     });
   });
+});
+
+describe('gate HTML parity with the Go gate validator', () => {
+  // Go's gate test feeds the same corpus to gateHTMLRejection, so a change
+  // on either side that makes real renderer output fail Go's closed rules
+  // fails one of the two suites (docs/design/viewer-analytics/
+  // sign-in-to-view.md "Gate"; AC-VIEW-002).
+  const corpus = JSON.parse(readFileSync(
+    resolve(
+      process.cwd(),
+      '../server/internal/publicapi/testdata/gate-render.json',
+    ),
+    'utf8',
+  )) as {
+    styleVersion: string;
+    cases: { name: string; envelope: unknown; html: string }[];
+  };
+
+  it.each(corpus.cases.map((entry) => [entry.name, entry] as const))(
+    'renders exactly the corpus HTML for %s',
+    async (_name, entry) => {
+      const request = decodePublicRenderEnvelope(
+        JSON.stringify(entry.envelope),
+      );
+      expect(request.mode).toBe('gate');
+      const html = await renderPublicGate(
+        request as PublicRenderGateRequest,
+        { style: corpus.styleVersion, script: SCRIPT_VERSION },
+      );
+      expect(html).toBe(entry.html);
+    },
+  );
 });
