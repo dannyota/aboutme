@@ -119,6 +119,24 @@ test.describe('join invite', () => {
         '/register',
       );
 
+      // The entrance is a Web Animations API slide, which the screenshot's
+      // animation-off option does not cover and which page.clock does not
+      // drive. finish() jumps every running animation on the region to its
+      // end state, so the geometry and the capture are the settled ones.
+      const motion = await region.evaluate((element) => {
+        const animations = element.getAnimations();
+        const reduce
+          = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        for (const animation of animations) animation.finish();
+        return { animations: animations.length, reduce };
+      });
+      // Diagnostic: shows in the hosted log whether the entrance ran under
+      // reduced motion.
+      console.log(
+        `join-invite-motion: reduce=${motion.reduce} `
+        + `animations=${motion.animations}`,
+      );
+
       const box = await region.boundingBox();
       if (cell.placement === 'card') {
         // 320 px wide, 16 px from the right and bottom edges
