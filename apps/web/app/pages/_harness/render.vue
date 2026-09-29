@@ -2,11 +2,13 @@
 import type { Resume } from '@aboutme/schema';
 import { HOSTILE_CORPUS } from '@aboutme/schema/sanitizer';
 import { TEMPLATES } from '@aboutme/schema/templates';
-import { computed, onMounted, ref } from 'vue';
+import { computed, createApp, h, onMounted, ref } from 'vue';
 
 import fullSource from '../../../../../packages/schema/fixtures/full.json';
 import vnFullSource from '../../../../../packages/schema/fixtures/vn-full.json';
 import type { components } from '../../api/generated/openapi';
+import JoinInvite from '../../components/public/JoinInvite.vue';
+import PublicGate from '../../components/public/PublicGate.vue';
 import PublicResumeApp from '../../components/public/PublicResumeApp.vue';
 import ResumeDocument from '../../components/resume/ResumeDocument.vue';
 import ScaledSheet from '../../components/resume/ScaledSheet.vue';
@@ -16,6 +18,11 @@ import {
   renderPageRule,
   useResumeStyles,
 } from '../../components/resume/useResumeStyles';
+import type {
+  PublicGateMessage,
+  PublicGateProvider,
+} from '../../../server/utils/public-render/envelope';
+import { GATE_STYLE } from '../../../server/workers/public-render/gate-style';
 import { resolveFontSelection } from '../../utils/fontCatalog';
 import { fontsReady } from '../../utils/fontsReady';
 import { sanitizeRichText } from '../../utils/sanitizeRichText';
@@ -53,6 +60,23 @@ function requireAllowedKeys(allowed: ReadonlySet<string>): void {
 }
 
 const isCorpus = queryKeys.includes('payload');
+// The sign-in gate as the public render worker draws it
+// (docs/design/viewer-analytics/sign-in-to-view.md#gate).
+const isGate = !isCorpus && route.query.mode === 'gate';
+const GATE_PROVIDER_SETS: ReadonlyMap<string, readonly PublicGateProvider[]>
+  = new Map<string, readonly PublicGateProvider[]>([
+    ['google,linkedin', ['google', 'linkedin']],
+    ['google', ['google']],
+    ['', []],
+  ]);
+const GATE_MESSAGES: ReadonlySet<string> = new Set([
+  'none', 'cancelled', 'failed',
+]);
+let gateLng: 'en' | 'vi' = 'en';
+let gateProviders: readonly PublicGateProvider[] = [];
+let gateMessage: PublicGateMessage = 'none';
+// The join invite the real client mounts on a sign_in resume's page.
+let inviteHref: '/register' | '/login' | undefined;
 const corpusHtml = ref('');
 const corpusReady = ref<'raw' | 'sanitized'>();
 const rawWarning = ref(false);
@@ -75,12 +99,29 @@ if (isCorpus) {
   const raw = singleton('raw');
   if (raw !== undefined && raw !== '1') badQuery();
   rawCorpus = raw === '1';
+} else if (isGate) {
+  requireAllowedKeys(new Set(['lng', 'message', 'mode', 'providers']));
+  const lng = singleton('lng', true);
+  if (lng !== 'en' && lng !== 'vi') badQuery();
+  gateLng = lng as 'en' | 'vi';
+  const providers = GATE_PROVIDER_SETS.get(singleton('providers', true) ?? '');
+  if (providers === undefined) badQuery();
+  gateProviders = providers ?? [];
+  const message = singleton('message', true) ?? '';
+  if (!GATE_MESSAGES.has(message)) badQuery();
+  gateMessage = message as PublicGateMessage;
+  // The gate wears Be Vietnam Pro from the print-fonts sheet.
+  selectedFontId = 'be-vietnam-pro';
+  useHead({
+    htmlAttrs: { class: 'harness-gate', lang: gateLng },
+    style: [{ textContent: GATE_STYLE }],
+  });
 } else {
   requireAllowedKeys(
     new Set(
       [
-        'align', 'fixture', 'font', 'mode', 'paper', 'print', 'repeat',
-        'template', 'zoom',
+        'align', 'fixture', 'font', 'invite', 'mode', 'paper', 'print',
+        'repeat', 'template', 'zoom',
       ],
     ),
   );
@@ -120,6 +161,14 @@ if (isCorpus) {
     }
   }
   const template = templateById.get(templateId ?? '') ?? badQuery();
+  const requestedInvite = singleton('invite');
+  if (requestedInvite !== undefined) {
+    if (resolvedMode !== 'public') badQuery();
+    if (requestedInvite !== 'register' && requestedInvite !== 'login') {
+      badQuery();
+    }
+    inviteHref = requestedInvite === 'register' ? '/register' : '/login';
+  }
 
   const printRecord = PRINT_FIXTURES[fixture as PrintFixtureId];
   if (printRecord !== undefined) {
@@ -283,6 +332,10 @@ const paperStyle = computed(() => {
   };
 });
 
+if (inviteHref !== undefined) {
+  useHead({ htmlAttrs: { lang: context?.lng ?? 'en' } });
+}
+
 if (printMode && resumeDocument !== undefined) {
   useHead({
     bodyAttrs: { class: 'resume-print' },
@@ -297,6 +350,24 @@ if (printMode && resumeDocument !== undefined) {
 }
 
 const fontsSettled = ref(false);
+const harnessRoot = ref<HTMLElement>();
+const inviteMounted = ref(false);
+
+// The real client mounts the invite from the page root, outside the page's
+// own app, with the document language (public-resume.client.ts).
+function mountJoinInvite(href: '/register' | '/login'): void {
+  const root = harnessRoot.value;
+  if (root === undefined) return;
+  const lng = document.documentElement.lang.split('-')[0]?.toLowerCase();
+  const container = document.createElement('div');
+  document.body.append(container);
+  createApp({
+    render: () =>
+      h(JoinInvite, { lng: lng === 'vi' ? 'vi' : 'en', href, root }),
+  }).mount(container);
+  inviteMounted.value = true;
+}
+
 onMounted(async () => {
   if (isCorpus) {
     const record = HOSTILE_CORPUS.find(({ id }) => id === corpusId);
@@ -313,6 +384,7 @@ onMounted(async () => {
   await fontsReady(selection.id);
   await fontsReady(selection.fallbackId);
   fontsSettled.value = true;
+  if (inviteHref !== undefined) mountJoinInvite(inviteHref);
 });
 </script>
 
@@ -337,14 +409,27 @@ onMounted(async () => {
     />
     <!-- eslint-enable vue/no-v-html -->
   </main>
+  <PublicGate
+    v-else-if="isGate"
+    data-render-mode="gate"
+    :data-fonts-ready="fontsSettled ? 'true' : undefined"
+    home-href="https://aboutme.vn/"
+    :lng="gateLng"
+    :message="gateMessage"
+    page-title="Nguyễn Văn An, Backend Engineer"
+    :providers="gateProviders"
+    slug="harness-public"
+  />
   <main
     v-else-if="
       resumeDocument !== undefined
         && context !== undefined
         && mode !== undefined
     "
+    ref="harnessRoot"
     class="harness-render"
     :data-fonts-ready="fontsSettled ? 'true' : undefined"
+    :data-invite-mounted="inviteMounted ? 'true' : undefined"
     :data-render-mode="mode"
   >
     <PublicResumeApp
@@ -394,8 +479,8 @@ onMounted(async () => {
 </template>
 
 <style>
-html,
-body {
+html:not(.harness-gate),
+html:not(.harness-gate) body {
   margin: 0;
   background: #d9d9d9;
 }

@@ -528,6 +528,18 @@ describe('public sign-in gate', () => {
     expect(html.match(/<style>/gu)).toHaveLength(1);
   });
 
+  it('pads the card 24 px on a phone and 32 px from 640 px up', async () => {
+    const html = await renderPublicGate(gateRequest(), VERSIONS);
+    const style = /<style>(.*?)<\/style>/su.exec(html)![1]!;
+    const [phone, desktop] = style.split('@media (min-width:640px)');
+    expect(phone).toMatch(/\.gate-card\{[^}]*padding:24px;/u);
+    expect(phone).toContain('#public-gate{display:flex;justify-content:center;'
+      + 'padding:32px 16px 16px;');
+    expect(phone).toContain('max-width:480px');
+    expect(desktop).toContain('.gate-card{padding:32px;}');
+    expect(desktop).toContain('min-height:100vh;align-items:center;');
+  });
+
   it('writes one anchor per offered provider in envelope order', async () => {
     const html = await renderPublicGate(gateRequest(), VERSIONS);
     expect(html).toContain(

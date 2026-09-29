@@ -537,6 +537,7 @@ apps/web/e2e/print.spec.ts
 apps/web/e2e/sample-pages.spec.ts
 apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts
+apps/web/e2e/sign-in-gate.spec.ts
 apps/web/e2e/support.ts
 apps/web/e2e/verify-support.ts
 apps/web/e2e/verify.spec.ts
@@ -630,6 +631,7 @@ apps/web/server/workers/print/print-sanitize.ts
 apps/web/server/workers/print/render.ts
 apps/web/server/workers/print/vue-style.d.ts
 apps/web/server/workers/print/worker-entry.ts
+apps/web/server/workers/public-render/gate-style.ts
 apps/web/server/workers/public-render/public-sanitize.ts
 apps/web/server/workers/public-render/render.ts
 apps/web/server/workers/public-render/worker-entry.ts
