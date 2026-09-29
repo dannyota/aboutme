@@ -378,7 +378,7 @@ export function createPublicResumeRealtime(options: {
 }
 
 // The marker the server writes only for a sign_in resume
-// (docs/design/viewer-analytics/sign-in-to-view.md#gate-render-envelope).
+// (docs/design/viewer-analytics/sign-in-to-view.md#join-invite).
 function joinInviteHref(root: HTMLElement): '/register' | '/login' | null {
   const value = root.dataset.joinInvite;
   return value === '/register' || value === '/login' ? value : null;
