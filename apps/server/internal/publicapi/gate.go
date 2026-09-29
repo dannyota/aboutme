@@ -18,6 +18,7 @@ import (
 
 	"github.com/dannyota/aboutme/apps/server/internal/directrender"
 	"github.com/dannyota/aboutme/apps/server/internal/previewcard"
+	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
 	"github.com/dannyota/aboutme/apps/server/internal/publicformat"
 	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
@@ -54,8 +55,8 @@ func gateMessage(request *http.Request) string {
 	}
 }
 
-// gateLng is "vi" when the resume language is Vietnamese, else "en" (cross-lane
-// contract "Gate render envelope").
+// gateLng is "vi" when the resume language is Vietnamese, else "en" (docs/design/viewer-analytics/sign-in-to-view.md
+// "Gate").
 func gateLng(resumeLng string) string {
 	language, _, _ := strings.Cut(resumeLng, "-")
 	if strings.EqualFold(language, "vi") {
@@ -115,8 +116,7 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 }
 
 // gateExpectedAnchors is every href the gate page may link, from the
-// envelope's own providers in order plus the home page (cross-lane contract
-// "Gate HTML").
+// envelope's own providers in order plus the home page (design "Gate").
 func gateExpectedAnchors(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) map[string]bool {
 	anchors := make(map[string]bool, len(envelope.Providers)+1)
 	for _, provider := range envelope.Providers {
@@ -126,9 +126,38 @@ func gateExpectedAnchors(envelope directrender.GateRenderRequest, origin publicr
 	return anchors
 }
 
+// gateImageMetaKeys is every image meta element of the preview head. A gate
+// with no card image URL carries none of them: the fallback share image is
+// the resume itself, which the gate must not advertise (design "Gate";
+// AC-VIEW-002).
+var gateImageMetaKeys = []metaKey{
+	{"property", "og:image"},
+	{"property", "og:image:type"},
+	{"property", "og:image:width"},
+	{"property", "og:image:height"},
+	{"property", "og:image:alt"},
+	{"name", "twitter:image"},
+	{"name", "twitter:image:alt"},
+}
+
+// newGateHeadMeta is newHeadMeta for the gate head. With no card image URL,
+// every image element is unexpected, so a present one is rejected, and
+// twitter:card may be absent.
+func newGateHeadMeta(resume publicresume.PublicResume, preview previewmeta.Meta, origin publicresume.PublicOrigin) *headMeta {
+	meta := newHeadMeta(resume, preview, origin)
+	if preview.ImageURL != "" {
+		return meta
+	}
+	for _, key := range gateImageMetaKeys {
+		delete(meta.expected, key)
+	}
+	meta.optional = map[metaKey]bool{{"name", "twitter:card"}: true}
+	return meta
+}
+
 // gateHTMLRejection returns "" for gate HTML that passes every closed rule,
 // or the first rule's name it breaks. It never carries resume content, so
-// the name is safe to log (cross-lane contract "Gate HTML"; AC-VIEW-002).
+// the name is safe to log (design "Gate"; AC-VIEW-002).
 func gateHTMLRejection(source []byte, envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) string {
 	if len(source) == 0 || len(source) > 2_097_152 {
 		return "size"
@@ -139,7 +168,7 @@ func gateHTMLRejection(source []byte, envelope directrender.GateRenderRequest, o
 	}
 
 	previewResume := publicresume.PublicResume{Slug: envelope.Slug}
-	meta := newHeadMeta(previewResume, envelope.Preview, origin)
+	meta := newGateHeadMeta(previewResume, envelope.Preview, origin)
 	wantAnchors := gateExpectedAnchors(envelope, origin)
 
 	var htmlRoot, title, canonical, main *html.Node

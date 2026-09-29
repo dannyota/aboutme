@@ -322,6 +322,35 @@ func TestPublishFlagChangeRecoveryRequiresExactEffectiveRow(t *testing.T) {
 	}
 }
 
+// TestPublishRecoveryRejectsMismatchedSignInToView proves the recovery proof
+// compares the sign-in-to-view switch against both the stored row and the
+// stored response, like every other publish field (AC-VIEW-001).
+func TestPublishRecoveryRejectsMismatchedSignInToView(t *testing.T) {
+	h := newResumeAPITestHarness(t)
+	created, err := h.resumes.Create(h.ctx, h.userID, "Recover sign-in", publishCompleteDocument(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug := "recover-signin-" + uuid.NewString()[:8]
+	key := uuid.New()
+	body := `{"slug":"` + slug + `","live":true,"downloadEnabled":true,"seoGeoEnabled":false}`
+	published := h.mutationRequest(t, http.MethodPost, apiResumePath+"/"+created.ID.String()+"/publish", strings.NewReader(body), created.Revision, key.String())
+	if published.status != http.StatusOK {
+		t.Fatalf("publish = %d %s", published.status, published.body)
+	}
+	matching := currentPublish{Slug: &slug, Live: true, DownloadEnabled: true, Revision: created.Revision + 1}
+	resolver := publishRecoveryResolver(h, created.ID, created.Revision, 0, key, body, matching, false)
+	if proof, resolveErr := resolver.Resolve(context.Background()); resolveErr != nil || proof.Disposition != publicstate.RecoveryCommitted {
+		t.Fatalf("matching recovery = %#v err=%v", proof, resolveErr)
+	}
+	mismatched := matching
+	mismatched.SignInToView = true
+	mismatchedResolver := publishRecoveryResolver(h, created.ID, created.Revision, 0, key, body, mismatched, false)
+	if _, resolveErr := mismatchedResolver.Resolve(context.Background()); resolveErr == nil {
+		t.Fatal("recovery accepted an intended signInToView that neither the row nor the stored response carries")
+	}
+}
+
 func publishRecoveryResolver(h *resumeAPITestHarness, resumeID uuid.UUID, revision, discovery int64, key uuid.UUID, body string, effective currentPublish, global bool) mutationRecovery {
 	operation := hexDigest(operationHash(http.MethodPost, "publishResume", []string{"resume_id", resumeID.String()}))
 	hash := requestHash(docmigrate.CurrentVersion, strconv.FormatInt(revision, 10), nil, []byte(body))

@@ -384,7 +384,7 @@ paths:
       responses:
         "302":
           description: >-
-            Success — a redirect to Google's own authorize endpoint, or,
+            Success: a redirect to Google's own authorize endpoint, or,
             for `purpose=view` naming a slug that is not currently a live
             resume with the sign-in-to-view switch on, a redirect back to
             `/{slug}` with no transaction created.
@@ -841,7 +841,7 @@ paths:
       responses:
         "302":
           description: >-
-            Success — a redirect to LinkedIn's own authorize endpoint, or,
+            Success: a redirect to LinkedIn's own authorize endpoint, or,
             for `purpose=view` naming a slug that is not currently a live
             resume with the sign-in-to-view switch on, a redirect back to
             `/{slug}` with no transaction created.
@@ -3259,6 +3259,10 @@ paths:
         platforms fetched earlier keep working (ADR 0014).
         The current generation gate runs before cache reuse or conditional
         evaluation. Query parameters and request bodies are rejected.
+        While preview cards are off, this path renders the resume itself, so
+        for a sign-in-to-view resume it requires a view pass and answers the
+        uniform public `404` without one (`sign-in-to-view.md`, "Gated
+        routes").
         PDF and PNG misses share a 20-render-per-minute client IP limit;
         every artifact request also passes a 300-per-minute IP limit.
       parameters:
@@ -8970,7 +8974,7 @@ components:
         purpose is ignored. A malformed slug returns `400 bad_request`
         before any transaction is created. A well-formed slug that does
         not currently name a live resume with the sign-in-to-view switch
-        on redirects `302` to `/{slug}` and creates no transaction — the
+        on redirects `302` to `/{slug}` and creates no transaction. This is the
         gate's own re-check, not an existence oracle this parameter could
         otherwise become. See
         `docs/design/viewer-analytics/sign-in-to-view.md`.

@@ -99,8 +99,8 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 		case snapshot.SignInToView:
 			// A distinct variant, never shared with an ordinary
 			// nondiscoverable resume's cache entry, since this body carries
-			// the join-invite marker (cross-lane contract "Gate render
-			// envelope").
+			// the join-invite marker (docs/design/viewer-analytics/
+			// sign-in-to-view.md "Join invite").
 			variant = "sign-in"
 		case snapshot.DiscoveryEnabled:
 			variant = "discoverable"
@@ -388,8 +388,7 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 					// data-join-invite carries exactly page.JoinInvite for a
 					// sign-in-to-view resume, and is absent for every other
 					// public resume (docs/design/viewer-analytics/
-					// sign-in-to-view.md "Join invite"; cross-lane contract
-					// "Gate render envelope").
+					// sign-in-to-view.md "Join invite").
 					if attributeCount(node, "data-join-invite") != boolToInt(page.JoinInvite != "") ||
 						(page.JoinInvite != "" && attribute(node, "data-join-invite") != page.JoinInvite) {
 						reject("main")

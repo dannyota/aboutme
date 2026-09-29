@@ -1126,13 +1126,13 @@ func TestPublicPDFCacheHitNamesTheFileAfterTheServedName(t *testing.T) {
 	}
 }
 
-// TestPublicPDFRequiresPassAndOgPNGStaysPublic proves the PDF representation
-// of a sign-in-to-view resume needs a pass, that a cached PDF is never
-// served without one, that a valid pass reaches it with a private
-// Cache-Control, and that og.png -- which the design keeps public -- is
-// unaffected (docs/design/viewer-analytics/sign-in-to-view.md "Gated
-// routes"; AC-VIEW-003).
-func TestPublicPDFRequiresPassAndOgPNGStaysPublic(t *testing.T) {
+// TestPublicPDFRequiresPassAndFallbackOgPNGIsGated proves the PDF
+// representation of a sign-in-to-view resume needs a pass, that a cached PDF
+// is never served without one, that a valid pass reaches it with a private
+// Cache-Control, and that the fallback og.png (preview cards off), which is
+// the resume itself, is gated the same way (docs/design/viewer-analytics/
+// sign-in-to-view.md "Gated routes"; AC-VIEW-003).
+func TestPublicPDFRequiresPassAndFallbackOgPNGIsGated(t *testing.T) {
 	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
 	key := bytes.Repeat([]byte{0x22}, 32)
 	queue := artifactQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
@@ -1200,16 +1200,65 @@ func TestPublicPDFRequiresPassAndOgPNGStaysPublic(t *testing.T) {
 		t.Fatalf("PDF with another resume's pass = %d, want 404", wrongResume.Code)
 	}
 
-	// og.png stays public, exactly as today, on the same gated resume.
-	pngPath := "/api/v1/public/resumes/ada-lovelace/og.png"
-	pngRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, pngPath, nil)
-	pngRequest.RemoteAddr = "192.0.2.21:1234"
-	pngResponse := httptest.NewRecorder()
-	handlers.png.ServeHTTP(pngResponse, pngRequest)
-	if pngResponse.Code != http.StatusOK {
-		t.Fatalf("og.png on a sign-in-to-view resume = %d, want 200 (public)", pngResponse.Code)
+	// With preview cards off, og.png renders the resume itself, so it needs
+	// a pass exactly as the PDF does.
+	getPNG := func(cookie *http.Cookie) *httptest.ResponseRecorder {
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+		request.RemoteAddr = "192.0.2.21:1234"
+		if cookie != nil {
+			request.AddCookie(cookie)
+		}
+		response := httptest.NewRecorder()
+		handlers.png.ServeHTTP(response, request)
+		return response
 	}
-	if cc := pngResponse.Header().Get("Cache-Control"); strings.Contains(cc, "private") {
-		t.Errorf("og.png Cache-Control = %q, want no %q token", cc, "private")
+	if noPassPNG := getPNG(nil); noPassPNG.Code != http.StatusNotFound {
+		t.Fatalf("fallback og.png with no pass = %d, want 404 (the uniform public not-found)", noPassPNG.Code)
+	}
+	withPassPNG := getPNG(&http.Cookie{Name: viewpass.CookieName, Value: pass})
+	if withPassPNG.Code != http.StatusOK {
+		t.Fatalf("fallback og.png with a valid pass = %d, want 200", withPassPNG.Code)
+	}
+	if cc := withPassPNG.Header().Get("Cache-Control"); !strings.Contains(cc, "private") {
+		t.Errorf("fallback og.png with a valid pass Cache-Control = %q, want it to contain %q", cc, "private")
+	}
+	if stalePNG := getPNG(&http.Cookie{Name: viewpass.CookieName, Value: oldEpoch}); stalePNG.Code != http.StatusNotFound {
+		t.Fatalf("fallback og.png with an old-epoch pass = %d, want 404", stalePNG.Code)
+	}
+}
+
+// TestFallbackOgPNGStaysPublicForPublicResume proves the pass check never
+// applies to a resume that is not sign-in-to-view (AC-VIEW-003).
+func TestFallbackOgPNGStaysPublicForPublicResume(t *testing.T) {
+	now := func() time.Time { return time.Date(2026, 9, 6, 0, 0, 0, 0, time.UTC) }
+	queue := artifactQueueFunc(func(ctx context.Context, request renderjob.Request) (renderjob.Result, error) {
+		snapshot, err := request.Prepare(ctx)
+		if err != nil {
+			return renderjob.Result{}, err
+		}
+		body := []byte("\x89PNG\r\npublic")
+		return renderjob.Result{Bytes: body, Digest: sha256.Sum256(body), Revision: snapshot.Revision}, nil
+	})
+	_, reader, _, _ := publicServiceReaderWithStore(t)
+	cache, err := publiccache.New(4, time.Minute, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlers, err := newArtifactHandlers(ArtifactDependencies{
+		Reader: reader, Cache: cache, Queue: queue, AppDigest: "sha256:app", RendererDigest: "sha256:renderer",
+		Clock: now, ViewPassKey: bytes.Repeat([]byte{0x22}, 32),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/public/resumes/ada-lovelace/og.png", nil)
+	request.RemoteAddr = "192.0.2.22:1234"
+	response := httptest.NewRecorder()
+	handlers.png.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("fallback og.png on a public resume = %d, want 200", response.Code)
+	}
+	if cc := response.Header().Get("Cache-Control"); strings.Contains(cc, "private") {
+		t.Errorf("fallback og.png Cache-Control = %q, want no %q token", cc, "private")
 	}
 }

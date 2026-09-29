@@ -972,7 +972,7 @@ export interface paths {
         };
         /**
          * Read a published resume's share image
-         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this path is an alias of the current preview card that `/public/resumes/{slug}/og/{version}.png` serves, so share images that platforms fetched earlier keep working (ADR 0014). The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
+         * @description Requires the current slug and live state, independently of download and discovery flags. The image is exactly 1200 by 630 pixels at device scale 1, cropped to the top of the shared continuous resume renderer on an opaque white background. While stored preview cards are on (`PREVIEW_CARD_ENABLED=true`), this path is an alias of the current preview card that `/public/resumes/{slug}/og/{version}.png` serves, so share images that platforms fetched earlier keep working (ADR 0014). The current generation gate runs before cache reuse or conditional evaluation. Query parameters and request bodies are rejected. While preview cards are off, this path renders the resume itself, so for a sign-in-to-view resume it requires a view pass and answers the uniform public `404` without one (`sign-in-to-view.md`, "Gated routes"). PDF and PNG misses share a 20-render-per-minute client IP limit; every artifact request also passes a 300-per-minute IP limit.
          */
         get: operations["getPublicResumeShareImage"];
         put?: never;
@@ -4442,7 +4442,7 @@ export interface components {
          */
         AuthPurpose: "login" | "view";
         /**
-         * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+         * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction. This is the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
          * @example ada-lovelace
          */
         AuthViewSlug: string;
@@ -4871,7 +4871,7 @@ export interface operations {
                  */
                 next?: components["parameters"]["AuthReturnPath"];
                 /**
-                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction. This is the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
                  * @example ada-lovelace
                  */
                 slug?: components["parameters"]["AuthViewSlug"];
@@ -4882,7 +4882,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success — a redirect to Google's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
+            /** @description Success: a redirect to Google's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
             302: {
                 headers: {
                     /** @example https://accounts.google.com/o/oauth2/v2/auth?... */
@@ -5075,7 +5075,7 @@ export interface operations {
                  */
                 next?: components["parameters"]["AuthReturnPath"];
                 /**
-                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction. This is the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
                  * @example ada-lovelace
                  */
                 slug?: components["parameters"]["AuthViewSlug"];
@@ -5279,7 +5279,7 @@ export interface operations {
                  */
                 next?: components["parameters"]["AuthReturnPath"];
                 /**
-                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction — the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
+                 * @description The resume slug this sign-in-to-view start is bound to. Required exactly when `purpose=view`; absent or present with any other purpose is ignored. A malformed slug returns `400 bad_request` before any transaction is created. A well-formed slug that does not currently name a live resume with the sign-in-to-view switch on redirects `302` to `/{slug}` and creates no transaction. This is the gate's own re-check, not an existence oracle this parameter could otherwise become. See `docs/design/viewer-analytics/sign-in-to-view.md`.
                  * @example ada-lovelace
                  */
                 slug?: components["parameters"]["AuthViewSlug"];
@@ -5290,7 +5290,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Success — a redirect to LinkedIn's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
+            /** @description Success: a redirect to LinkedIn's own authorize endpoint, or, for `purpose=view` naming a slug that is not currently a live resume with the sign-in-to-view switch on, a redirect back to `/{slug}` with no transaction created. */
             302: {
                 headers: {
                     /** @example https://www.linkedin.com/oauth/v2/authorization?... */

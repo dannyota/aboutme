@@ -306,6 +306,29 @@ func TestNewService_MissingPublicOrigin_ReturnsError(t *testing.T) {
 	}
 }
 
+// TestNewService_UndecodableViewPassKey_ReturnsError proves a non-blank
+// VIEW_PASS_KEY that does not decode to 32 bytes is refused rather than
+// silently becoming a nil HMAC key that would let anyone forge a view pass
+// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"; AC-VIEW-003).
+func TestNewService_UndecodableViewPassKey_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	pool := newTestPool(t)
+	for name, key := range map[string]string{
+		"not base64url": "not*base64url",
+		"padded":        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"too short":     "AAAAAAAA",
+		"too long":      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := auth.NewService(testLogger(), config.Config{PublicOrigin: "https://aboutme.example", ViewPassKey: key}, pool)
+			if err == nil {
+				t.Fatalf("NewService() error = nil for ViewPassKey %q, want an error", key)
+			}
+		})
+	}
+}
+
 // ---- shared login identity resolution ------------------------------------
 
 // TestResolveReturningProvider_NewThenExisting_AcrossProviders checks the
