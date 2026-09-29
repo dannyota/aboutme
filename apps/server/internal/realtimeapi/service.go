@@ -20,7 +20,15 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/realtime"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
+	"github.com/dannyota/aboutme/apps/server/internal/viewpass"
 )
+
+// errViewPassRequired marks a sign-in-to-view resume admitted with no valid
+// pass; servePublic reports it as the uniform public 404, exactly like a
+// missing or unpublished resume, and it is never counted
+// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
+// AC-VIEW-003).
+var errViewPassRequired = errors.New("realtimeapi: view pass required")
 
 const (
 	heartbeatInterval = 25 * time.Second
@@ -53,6 +61,9 @@ type Dependencies struct {
 	Coordinator    *publicstate.Coordinator
 	TrustedProxies api.TrustedProxies
 	Clock          func() time.Time
+	// ViewPassKey seals and opens the __Host-view-pass cookie
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie").
+	ViewPassKey []byte
 }
 
 // Service serves metadata streams. Writes continue through the resume API.
@@ -148,9 +159,9 @@ func (s *Service) servePublic(w http.ResponseWriter, r *http.Request) {
 		streamError(w, http.StatusBadRequest)
 		return
 	}
-	row, lease, err := s.admitPublic(r.Context(), strings.TrimPrefix(path, prefix))
+	row, lease, err := s.admitPublic(r, strings.TrimPrefix(path, prefix))
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, errViewPassRequired) {
 			streamError(w, http.StatusNotFound)
 		} else {
 			streamError(w, http.StatusServiceUnavailable)
@@ -170,7 +181,8 @@ func (s *Service) servePublic(w http.ResponseWriter, r *http.Request) {
 	s.stream(lease.Context(), w, r, subscription, nil, false)
 }
 
-func (s *Service) admitPublic(ctx context.Context, slug string) (store.GetPublicRealtimeResumeRow, *publicstate.Lease, error) {
+func (s *Service) admitPublic(r *http.Request, slug string) (store.GetPublicRealtimeResumeRow, *publicstate.Lease, error) {
+	ctx := r.Context()
 	lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
 	defer cancel()
 	for attempt := 0; attempt < 2; attempt++ {
@@ -180,6 +192,12 @@ func (s *Service) admitPublic(ctx context.Context, slug string) (store.GetPublic
 		}
 		if row.ID == uuid.Nil || row.Revision <= 0 {
 			return row, nil, errors.New("realtimeapi: invalid public state")
+		}
+		// The pass check runs after admission and before the stream opens
+		// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
+		// AC-VIEW-003).
+		if row.SignInToView && !hasValidPass(r, s.dependencies.ViewPassKey, row.ID, row.ViewPassEpoch, s.dependencies.Clock) {
+			return row, nil, errViewPassRequired
 		}
 		lease, err := s.dependencies.Coordinator.AcquireResume(ctx, row.ID, row.Revision, publicstate.RepresentationSSE)
 		if err == nil {
@@ -282,6 +300,22 @@ func revisionFrame(change realtime.Change, owner bool) (string, error) {
 		return "", fmt.Errorf("realtimeapi: encode revision frame: %w", err)
 	}
 	return "event: revision\nid: " + id + "\ndata: " + string(encoded) + "\n\n", nil
+}
+
+// hasValidPass reports whether r carries a __Host-view-pass cookie with a
+// pass for resumeID at exactly passEpoch, not expired as of clock()
+// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie", "Gated
+// routes"; AC-VIEW-003, AC-VIEW-007). A nil clock uses time.Now.
+func hasValidPass(r *http.Request, key []byte, resumeID uuid.UUID, passEpoch int32, clock func() time.Time) bool {
+	cookie, err := r.Cookie(viewpass.CookieName)
+	if err != nil {
+		return false
+	}
+	now := time.Now
+	if clock != nil {
+		now = clock
+	}
+	return viewpass.Valid(cookie.Value, key, resumeID, passEpoch, now())
 }
 
 func streamGet(w http.ResponseWriter, r *http.Request) bool {

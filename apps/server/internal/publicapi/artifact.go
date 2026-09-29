@@ -41,6 +41,11 @@ type ArtifactDependencies struct {
 	// current card and the versioned card route answers. Nil keeps the
 	// og.png share image and the versioned route returns 404.
 	Cards PreviewCards
+	// ViewPassKey seals and opens the __Host-view-pass cookie
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"). Only
+	// the PDF representation checks it; the preview card and og.png stay
+	// public (design "Gated routes").
+	ViewPassKey []byte
 }
 
 type artifactHandlers struct {
@@ -65,6 +70,10 @@ type artifactContract struct {
 	// namedDownload serves the body as an attachment named after the slug.
 	namedDownload bool
 	maxBytes      int
+	// gated requires a sign-in-to-view pass, and adds "private" to
+	// Cache-Control for a gated resume's response. Only the PDF
+	// representation sets this; the preview card and og.png stay public.
+	gated bool
 }
 
 func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, error) {
@@ -89,7 +98,7 @@ func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, 
 			format: renderjob.PDF, representation: publicstate.RepresentationPDF,
 			suffix: "/pdf", variant: "default", formatVersion: publicPDFFormatVersion,
 			contentType: "application/pdf", namedDownload: true,
-			maxBytes: renderjob.PDFMaxBytes,
+			maxBytes: renderjob.PDFMaxBytes, gated: true,
 		}),
 		png: service.handler(artifactContract{
 			format: renderjob.PNG, representation: publicstate.RepresentationPNG,
@@ -134,6 +143,14 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 			return
 		}
 		defer lease.Release()
+		// The pass check runs after admission and before any public cache
+		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
+		// routes"; AC-VIEW-003). Only the PDF contract is gated; the
+		// preview card and og.png stay public.
+		if contract.gated && snapshot.SignInToView && !hasValidPass(request, s.dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, s.dependencies.Clock) {
+			servePublicJSONError(w, request, http.StatusNotFound)
+			return
+		}
 		if _, _, valid := parseIfNoneMatch(request.Header); !valid {
 			serveConditionalError(w, request)
 			return
@@ -229,6 +246,7 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 // served revision's full name and is set here, never cached.
 func (contract artifactContract) served(response SelectedResponse, snapshot publicresume.Snapshot) SelectedResponse {
 	response = withDiscoveryRobots(response, snapshot.DiscoveryEnabled)
+	response = withPrivateCacheControl(response, contract.gated && snapshot.SignInToView)
 	if !contract.namedDownload {
 		return response
 	}

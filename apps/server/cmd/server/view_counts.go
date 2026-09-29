@@ -22,7 +22,7 @@ type viewCounts struct {
 	service *viewapi.Service
 }
 
-func newViewCounts(cfg config.Config, logger *slog.Logger, queries *store.Queries, sessions *auth.SessionManager) (viewCounts, error) {
+func newViewCounts(cfg config.Config, logger *slog.Logger, queries *store.Queries, sessions *auth.SessionManager, viewPassKey []byte) (viewCounts, error) {
 	counter, err := viewcount.New(viewcount.Config{Store: viewcount.PGStore{Queries: queries}, Logger: logger})
 	if err != nil {
 		return viewCounts{}, fmt.Errorf("create view counter: %w", err)
@@ -30,6 +30,7 @@ func newViewCounts(cfg config.Config, logger *slog.Logger, queries *store.Querie
 	service, err := viewapi.New(viewapi.Dependencies{
 		Counter: counter, Queries: queries, Sessions: sessions, PublicOrigin: cfg.PublicOrigin,
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Now: time.Now, Logger: logger,
+		ViewPassKey: viewPassKey,
 	})
 	if err != nil {
 		return viewCounts{}, fmt.Errorf("create view routes: %w", err)

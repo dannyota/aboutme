@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -84,15 +85,22 @@ func (noopPinger) Ping(context.Context) error { return nil }
 
 // testServiceConfig holds test-only Service overrides.
 type testServiceConfig struct {
-	googleIssuer    string
-	githubEndpoint  string
-	linkedinIssuer  string
-	providerLogin   config.ProviderLogin
-	logger          *slog.Logger
-	sessionIssuer   sessionIssuerForTest
-	startRateLimit  int
-	startRateWindow time.Duration
+	googleIssuer         string
+	githubEndpoint       string
+	linkedinIssuer       string
+	providerLogin        config.ProviderLogin
+	logger               *slog.Logger
+	sessionIssuer        sessionIssuerForTest
+	startRateLimit       int
+	startRateWindow      time.Duration
+	signInToViewLinkedIn bool
+	viewPassKey          string
 }
+
+// testViewPassKey is a fixed, validly encoded VIEW_PASS_KEY for tests that
+// exercise sign in to view (docs/design/viewer-analytics/sign-in-to-view.md
+// "Pass cookie").
+var testViewPassKey = base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 
 // testServiceOption configures newTestService.
 type testServiceOption func(*testServiceConfig)
@@ -134,6 +142,18 @@ func withStartRateLimit(requests int, window time.Duration) testServiceOption {
 	return func(c *testServiceConfig) { c.startRateLimit, c.startRateWindow = requests, window }
 }
 
+// withSignInToViewLinkedInEnabled turns SIGN_IN_TO_VIEW_LINKEDIN_ENABLED on
+// for one test.
+func withSignInToViewLinkedInEnabled() testServiceOption {
+	return func(c *testServiceConfig) { c.signInToViewLinkedIn = true }
+}
+
+// withViewPassKey sets a fixed, valid VIEW_PASS_KEY so a test can exercise
+// sign in to view's pass cookie.
+func withViewPassKey() testServiceOption {
+	return func(c *testServiceConfig) { c.viewPassKey = testViewPassKey }
+}
+
 // sessionIssuerForTest mirrors the unexported issuance seam structurally.
 type sessionIssuerForTest interface {
 	IssueTx(ctx context.Context, qtx *store.Queries, user store.User, ua, ip string) (auth.SessionIssue, error)
@@ -163,7 +183,12 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 			"request to /start or /callback would perform live network I/O against the real provider")
 	}
 
-	cfg := config.Config{PublicOrigin: testPublicOrigin, ProviderLogin: sc.providerLogin}
+	cfg := config.Config{
+		PublicOrigin:                testPublicOrigin,
+		ProviderLogin:               sc.providerLogin,
+		SignInToViewLinkedInEnabled: sc.signInToViewLinkedIn,
+		ViewPassKey:                 sc.viewPassKey,
+	}
 	if sc.googleIssuer != "" {
 		cfg.GoogleClientID = oidctest.DefaultClientID
 		cfg.GoogleClientSecret = "test-google-client-secret"

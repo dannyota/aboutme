@@ -22,12 +22,16 @@ const (
 	detailMonth = 12
 )
 
-// OwnerQueries is the generated query subset the owner routes read.
+// OwnerQueries is the generated query subset the owner and public routes
+// read. GetPublicResumeBySlug also serves the public start route's
+// sign-in-to-view pass check (docs/design/viewer-analytics/
+// sign-in-to-view.md "Gated routes"; AC-VIEW-003).
 type OwnerQueries interface {
 	ListViewSummaries(ctx context.Context, arg store.ListViewSummariesParams) ([]store.ListViewSummariesRow, error)
 	GetOwnedViewResume(ctx context.Context, arg store.GetOwnedViewResumeParams) (store.GetOwnedViewResumeRow, error)
 	ListResumeViewDays(ctx context.Context, arg store.ListResumeViewDaysParams) ([]store.ListResumeViewDaysRow, error)
 	ListResumeShareSignals(ctx context.Context, arg store.ListResumeShareSignalsParams) ([]store.ListResumeShareSignalsRow, error)
+	GetPublicResumeBySlug(ctx context.Context, slug string) (store.Resume, error)
 }
 
 var _ OwnerQueries = (*store.Queries)(nil)

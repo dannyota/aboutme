@@ -155,14 +155,14 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	handle, err := ReadOAuthTxCookie(r)
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, reasonTxCookieMissing)
+		s.redirectAuthFailed(w, r, ProviderGitHub, Transaction{Purpose: PurposeLogin}, reasonTxCookieMissing)
 		return
 	}
 
 	tx, err := s.tx.Consume(ctx, handle, ProviderGitHub)
 	if err != nil {
 		if errors.Is(err, ErrTransactionInvalid) {
-			s.redirectAuthFailed(w, r, ProviderGitHub, PurposeLogin, reasonTxInvalid)
+			s.redirectAuthFailed(w, r, ProviderGitHub, Transaction{Purpose: PurposeLogin}, reasonTxInvalid)
 			return
 		}
 		s.writeInternalError(w, r, ProviderGitHub, "consume_transaction", err)
@@ -172,19 +172,19 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// State prevents authorization-code splicing.
 	state := r.URL.Query().Get("state")
 	if state == "" || state != tx.State {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonStateMismatch)
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx, reasonStateMismatch)
 		return
 	}
 
 	// Check the provider's consent denial only after validating state.
 	if r.URL.Query().Get("error") == "access_denied" {
-		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, cancelledErrorCode, reasonConsentDenied)
+		s.redirectWithError(w, r, ProviderGitHub, tx, cancelledErrorCode, reasonConsentDenied)
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonAuthorizationCodeMissing)
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx, reasonAuthorizationCodeMissing)
 		return
 	}
 
@@ -194,7 +194,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	oauth2Cfg := s.githubOAuth2Config(tx.RedirectURI)
 	token, err := oauth2Cfg.Exchange(ctx, code, oauth2.VerifierOption(tx.PKCEVerifier))
 	if err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonTokenExchangeFailed)
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx, reasonTokenExchangeFailed)
 		return
 	}
 
@@ -202,11 +202,11 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 
 	var user githubUser
 	if err = s.githubAPIGet(ctx, client, "/user", &user); err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserAPIFailed)
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx, reasonGitHubUserAPIFailed)
 		return
 	}
 	if user.ID == 0 {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserIDMissing)
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx, reasonGitHubUserIDMissing)
 		return
 	}
 	providerUserID := strconv.FormatInt(user.ID, 10)
@@ -215,7 +215,7 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	if tx.Purpose == PurposeLink || tx.Purpose == PurposeReauth {
 		pendingRaw, linkErr := s.resolveLinkOrReauth(ctx, r, w, tx, ProviderGitHub, providerUserID)
 		if linkErr != nil {
-			s.redirectLinkOrReauthError(w, r, ProviderGitHub, tx.Purpose, linkErr)
+			s.redirectLinkOrReauthError(w, r, ProviderGitHub, tx, linkErr)
 			return
 		}
 		s.finishLinkOrReauth(w, r, tx, pendingRaw)
@@ -241,17 +241,17 @@ func (s *Service) handleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	// A new subject fetches a verified primary email, then canonicalizes it.
 	var emails []githubEmail
 	if err = s.githubAPIGet(ctx, client, "/user/emails", &emails); err != nil {
-		s.redirectAuthFailed(w, r, ProviderGitHub, tx.Purpose, reasonGitHubUserEmailsAPIFailed)
+		s.redirectAuthFailed(w, r, ProviderGitHub, tx, reasonGitHubUserEmailsAPIFailed)
 		return
 	}
 	email, ok := primaryVerifiedGitHubEmail(emails)
 	if !ok {
-		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
+		s.redirectWithError(w, r, ProviderGitHub, tx, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
 		return
 	}
 	canonicalEmail, err := accountemail.Canonicalize(email)
 	if err != nil {
-		s.redirectWithError(w, r, ProviderGitHub, tx.Purpose, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
+		s.redirectWithError(w, r, ProviderGitHub, tx, emailNotVerifiedErrorCode, reasonGitHubNoVerifiedPrimaryEmail)
 		return
 	}
 

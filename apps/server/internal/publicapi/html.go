@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -40,6 +41,21 @@ type HTMLDependencies struct {
 	Cards PreviewCards
 	// Views records crawler and link-preview fetches. Nil records nothing.
 	Views ViewObserver
+	// ViewPassKey seals and opens the __Host-view-pass cookie
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"). A nil
+	// or empty key never validates a pass.
+	ViewPassKey []byte
+	// Clock lets tests inject a deterministic time for pass expiry. Nil uses
+	// time.Now.
+	Clock func() time.Time
+	// GateProviders is the fixed subset of ["google","linkedin"] the gate
+	// offers, computed once at startup from provider enablement
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Gate"; ADR 0016).
+	GateProviders []string
+	// JoinInviteTarget is "/register" or "/login": the join invite's link
+	// for a sign-in-to-view resume's page
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite").
+	JoinInviteTarget string
 }
 
 // NewHTMLHandler creates the handler for public resume HTML pages.
@@ -68,8 +84,25 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 		defer lease.Release()
 		observeHTMLView(dependencies.Views, request, snapshot.ResumeID)
 
+		// The pass check runs after admission and before any public cache
+		// lookup, so cached resume bytes are never served without a pass
+		// (docs/design/viewer-analytics/sign-in-to-view.md "Gated routes";
+		// AC-VIEW-003).
+		if snapshot.SignInToView && !hasValidPass(request, dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, dependencies.Clock) {
+			//nolint:contextcheck // The lease context is derived from request.Context and adds revocation cancellation.
+			serveGate(lease.Context(), w, request, dependencies, snapshot)
+			return
+		}
+
 		variant := publiccache.Variant("nondiscoverable")
-		if snapshot.DiscoveryEnabled {
+		switch {
+		case snapshot.SignInToView:
+			// A distinct variant, never shared with an ordinary
+			// nondiscoverable resume's cache entry, since this body carries
+			// the join-invite marker (cross-lane contract "Gate render
+			// envelope").
+			variant = "sign-in"
+		case snapshot.DiscoveryEnabled:
 			variant = "discoverable"
 		}
 		key := publiccache.Key{
@@ -83,7 +116,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			RendererDigest: dependencies.RendererDigest,
 		}
 		if cached, ok := dependencies.Cache.Get(key); ok {
-			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
+			withPrivateCacheControl(SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}, snapshot.SignInToView).ServeHTTP(w, request)
 			return
 		}
 
@@ -94,6 +127,9 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			return
 		}
 		page := expectedPublicPage(snapshot.Public, snapshot.PublicTitle, snapshot.FaviconEmoji)
+		if snapshot.SignInToView {
+			page.JoinInvite = dependencies.JoinInviteTarget
+		}
 		if dependencies.Cards != nil {
 			version, versionErr := dependencies.Cards.Version(snapshot)
 			if versionErr != nil {
@@ -127,7 +163,7 @@ func NewHTMLHandler(dependencies HTMLDependencies) (http.Handler, error) {
 			return
 		}
 		dependencies.Cache.Put(key, publiccache.Value{Status: response.Status, Header: response.Header, Body: response.Body})
-		response.ServeHTTP(w, request)
+		withPrivateCacheControl(response, snapshot.SignInToView).ServeHTTP(w, request)
 	}), nil
 }
 
@@ -187,6 +223,10 @@ type publicPage struct {
 	Title       string
 	FaviconHref string
 	Preview     previewmeta.Meta
+	// JoinInvite is "/register" or "/login" for a sign-in-to-view resume's
+	// page, and "" for every other public resume
+	// (docs/design/viewer-analytics/sign-in-to-view.md "Join invite").
+	JoinInvite string
 }
 
 func expectedPublicPage(resume publicresume.PublicResume, publicTitle, faviconEmoji *string) publicPage {
@@ -336,7 +376,22 @@ func publicHTMLRejectionForPage(source []byte, resume publicresume.PublicResume,
 			case "main":
 				mainCount++
 				if attribute(node, "id") == "public-resume" {
-					if main != nil || len(node.Attr) != 2 || attributeCount(node, "id") != 1 || attributeCount(node, "data-revision") != 1 || attribute(node, "data-revision") != resume.Revision {
+					wantAttrs := 2
+					if page.JoinInvite != "" {
+						wantAttrs = 3
+					}
+					if main != nil || len(node.Attr) != wantAttrs || attributeCount(node, "id") != 1 ||
+						attributeCount(node, "data-revision") != 1 || attribute(node, "data-revision") != resume.Revision {
+						reject("main")
+						return
+					}
+					// data-join-invite carries exactly page.JoinInvite for a
+					// sign-in-to-view resume, and is absent for every other
+					// public resume (docs/design/viewer-analytics/
+					// sign-in-to-view.md "Join invite"; cross-lane contract
+					// "Gate render envelope").
+					if attributeCount(node, "data-join-invite") != boolToInt(page.JoinInvite != "") ||
+						(page.JoinInvite != "" && attribute(node, "data-join-invite") != page.JoinInvite) {
 						reject("main")
 						return
 					}
@@ -576,6 +631,15 @@ func hasHTMLDoctype(node *html.Node) bool {
 		}
 	}
 	return false
+}
+
+// boolToInt is the exact-count idiom the validator uses for an attribute
+// that is present exactly once when a condition holds, and absent otherwise.
+func boolToInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func attribute(node *html.Node, key string) string {
