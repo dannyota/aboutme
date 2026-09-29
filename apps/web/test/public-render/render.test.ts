@@ -628,6 +628,32 @@ describe('public sign-in gate', () => {
     );
   });
 
+  it('names no image when the envelope has no card URL', async () => {
+    const html = await renderPublicGate(gateRequest(), VERSIONS);
+    expect(html).not.toMatch(/og:image|twitter:image|og\.png/u);
+    expect(html).toContain('<meta name="twitter:card" content="summary">');
+    expect(html).toContain(
+      '<meta property="og:title" content="Ada Lovelace">',
+    );
+  });
+
+  it('names the card image when the envelope carries its URL', async () => {
+    const imageUrl
+      = 'https://resume.example/api/v1/public/resumes/ada1/og.png';
+    const html = await renderPublicGate(
+      {
+        ...gateRequest(),
+        preview: { ...gateRequest().preview, imageUrl },
+      },
+      VERSIONS,
+    );
+    expect(html).toContain(`<meta property="og:image" content="${imageUrl}">`);
+    expect(html).toContain(`<meta name="twitter:image" content="${imageUrl}">`);
+    expect(html).toContain(
+      '<meta name="twitter:card" content="summary_large_image">',
+    );
+  });
+
   it('refuses a missing or malformed style version', async () => {
     await expect(renderPublicGate(gateRequest(), {
       style: '',

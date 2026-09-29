@@ -102,20 +102,27 @@ const meta = (
 const previewHead = (
   pageURL: string,
   preview: PublicRenderPreview | undefined,
-  imageURL: string,
+  imageURL: string | undefined,
 ): string => {
-  const image = [
-    meta('property', 'og:image', imageURL),
-    ...(preview === undefined
-      ? []
-      : [meta('property', 'og:image:type', 'image/png')]),
-    meta('property', 'og:image:width', '1200'),
-    meta('property', 'og:image:height', '630'),
-  ];
-  const card = [
-    meta('name', 'twitter:card', 'summary_large_image'),
-    meta('name', 'twitter:image', imageURL),
-  ];
+  // Without an image URL the head names no image at all: a gate has no card
+  // of its own to show, and the resume's PNG would reveal the resume
+  // (docs/design/viewer-analytics/sign-in-to-view.md#gate).
+  const image = imageURL === undefined
+    ? []
+    : [
+        meta('property', 'og:image', imageURL),
+        ...(preview === undefined
+          ? []
+          : [meta('property', 'og:image:type', 'image/png')]),
+        meta('property', 'og:image:width', '1200'),
+        meta('property', 'og:image:height', '630'),
+      ];
+  const card = imageURL === undefined
+    ? [meta('name', 'twitter:card', 'summary')]
+    : [
+        meta('name', 'twitter:card', 'summary_large_image'),
+        meta('name', 'twitter:image', imageURL),
+      ];
   if (preview === undefined) return [...image, ...card].join('');
   return [
     meta('name', 'description', preview.description),
@@ -128,9 +135,13 @@ const previewHead = (
       ? []
       : [meta('property', 'og:locale', preview.locale)]),
     ...image,
-    meta('property', 'og:image:alt', preview.imageAlt),
+    ...(imageURL === undefined
+      ? []
+      : [meta('property', 'og:image:alt', preview.imageAlt)]),
     ...card,
-    meta('name', 'twitter:image:alt', preview.imageAlt),
+    ...(imageURL === undefined
+      ? []
+      : [meta('name', 'twitter:image:alt', preview.imageAlt)]),
   ].join('');
 };
 
@@ -246,12 +257,7 @@ export async function renderPublicGate(
       }),
     );
     const pageURL = `${request.canonicalOrigin}/${request.slug}`;
-    const imageURL = request.preview.imageUrl ?? [
-      request.canonicalOrigin,
-      '/api/v1/public/resumes/',
-      request.slug,
-      '/og.png',
-    ].join('');
+    const imageURL = request.preview.imageUrl;
     const head = [
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
