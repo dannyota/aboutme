@@ -349,6 +349,33 @@ describe('public resume hydration', () => {
     expect(root.querySelector('a')?.textContent).toBe('Link');
   });
 
+  // A sign_in resume's JSON read is the uniform 404 without the view pass
+  // cookie, and that 404 reloads the page, so both reads must send it
+  // (docs/design/viewer-analytics/sign-in-to-view.md#gated-routes;
+  // AC-VIEW-003).
+  it('sends same-origin cookies on both public JSON reads', async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }));
+    vi.stubGlobal('fetch', fetcher);
+    document.body.innerHTML
+      = '<main id="public-resume" data-revision="1"><h1>Ada</h1></main>';
+    const root = document.querySelector<HTMLElement>('#public-resume')!;
+
+    await hydratePublicResume(root, 'ada1', '1');
+    await expect(readPublicResume('ada1', '"r1"')).resolves.toEqual({
+      kind: 'not-found',
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    for (const call of fetcher.mock.calls as unknown as [
+      string,
+      RequestInit,
+    ][]) {
+      expect(call[0]).toBe('/api/v1/public/resumes/ada1');
+      expect(call[1].credentials).toBe('same-origin');
+    }
+    vi.unstubAllGlobals();
+  });
+
   it('reloads when live refetch becomes authoritative public 404', async () => {
     document.body.innerHTML = [
       '<main id="public-resume" data-revision="1"><h1>',
