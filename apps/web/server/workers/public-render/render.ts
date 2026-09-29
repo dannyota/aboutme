@@ -104,9 +104,10 @@ const previewHead = (
   preview: PublicRenderPreview | undefined,
   imageURL: string | undefined,
 ): string => {
-  // Without an image URL the head names no image at all: a gate has no card
-  // of its own to show, and the resume's PNG would reveal the resume
-  // (docs/design/viewer-analytics/sign-in-to-view.md#gate).
+  // Without an image URL the head names no image and no twitter:card at all:
+  // a gate has no card of its own to show, and the resume's PNG would reveal
+  // the resume (docs/design/viewer-analytics/sign-in-to-view.md#gate). Go's
+  // gate validator accepts twitter:card only as summary_large_image.
   const image = imageURL === undefined
     ? []
     : [
@@ -118,7 +119,7 @@ const previewHead = (
         meta('property', 'og:image:height', '630'),
       ];
   const card = imageURL === undefined
-    ? [meta('name', 'twitter:card', 'summary')]
+    ? []
     : [
         meta('name', 'twitter:card', 'summary_large_image'),
         meta('name', 'twitter:image', imageURL),
