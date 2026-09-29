@@ -12,7 +12,6 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup; view counts shipped in v0.6.4|
 |[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0028](../adr/0028-deployment-transparency-observer.md)), waiting for owner approvals|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
-|[mcp-guide.md](mcp-guide.md)|MCP client compatibility, then the MCP guide page, waiting for owner approvals|
 |[public-page-theme.md](public-page-theme.md)|Public page bar and light/dark theme|
 |[showcase.md](showcase.md)|Community showcase ([ADR 0029](../adr/0029-community-showcase.md), proposed), waiting for owner approvals|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
@@ -39,10 +38,11 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 |v0.5.2|Editor PDF and Web preview modes; gallery sample PDF page images and their CI check|
 |v0.5.3|Preview-to-PDF gap check; zoomed preview re-pagination fix; homepage sample fit|
 |v0.5.4|List spacing kept across a split entry; preview-gap ceilings tightened; CI proofs in parallel shards|
+|v0.6.25|MCP connection guide in Vietnamese and English; guarded public-root checks before deployment|
 
 ## Remaining
 
-- Release order, next: [MCP client compatibility, then the MCP guide page](mcp-guide.md), [sign in to view and the join popup](viewer-analytics.md), [public page bar and light/dark theme](public-page-theme.md), [community showcase](showcase.md). Each takes its version number when it ships. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside them.
+- Release order, next: [sign in to view and the join popup](viewer-analytics.md), [light/dark theme](public-page-theme.md), [community showcase](showcase.md). Each takes its version number when it ships. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside them.
 - [Vietnam production migration](vietnam-production.md): provider confirmation, app preparation releases, build, rehearsal, cutover, AWS real-data deletion.
 - [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
