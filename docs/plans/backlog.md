@@ -4,6 +4,8 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Code
 
+- Add Visual Studio Code to the MCP guide only after its client proof, using redirect `http://127.0.0.1:33418`. Evidence: [MCP client compatibility](../design/mcp-client-compatibility.md).
+- Design Client ID Metadata Documents before implementation. Evidence: [MCP client compatibility](../design/mcp-client-compatibility.md).
 - `SheetThumbnail.vue`, `TemplateThumbnail.vue`, and the homepage sample still scale with CSS `zoom`; WebKit shows them with enlarged text. Move them to `ScaledSheet`.
 - `docs/design/vietnam-production.md` contradicts itself: lines 150-151 say the two Caddy units conflict in systemd, while steps 5 and 8 run them side by side (SO_REUSEPORT). Also cover ACME HTTP-01 with two Caddy processes on port 80 (shared certificate storage), same-user units, and check `/readyz` on the server directly in step 8. Evidence: deploy handoff review, 2026-09-25.
 - `docs/design/single-host-production.md:268` and `docs/runbooks/production.md:257` omit the new recovery exceptions: an unconfirmed new app is left running when maintenance cannot be confirmed, and the failed previous-app restart path. Evidence: `deploy/aws/scripts/deploy.sh` restore.
