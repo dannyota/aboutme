@@ -32,10 +32,10 @@ var gateTestKey = bytes.Repeat([]byte{0x11}, 32)
 var gateTestResumeID = uuid.MustParse("00000000-0000-0000-0000-0000000000a1")
 
 // gateValidHTML builds gate HTML that passes gateHTMLRejection for envelope,
-// mirroring how Nuxt is expected to render it (cross-lane contract "Gate
-// HTML").
+// mirroring how Nuxt is expected to render it (design "Gate"). With no card
+// image URL the head carries no image element.
 func gateValidHTML(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) string {
-	head := previewHead(publicresume.PublicResume{Slug: envelope.Slug}, envelope.Preview, origin.String())
+	head := gatePreviewHead(envelope, origin)
 	favicon := ""
 	if envelope.FaviconHref != "" {
 		favicon = `<link rel="icon" href="` + envelope.FaviconHref + `">`
@@ -52,6 +52,19 @@ func gateValidHTML(envelope directrender.GateRenderRequest, origin publicresume.
 		`<link rel="stylesheet" href="/_nuxt/assets/print-fonts.css?v=0123456789abcdef">` +
 		"</head><body>" + `<a href="#public-gate">Skip to content</a>` +
 		`<main id="public-gate">` + anchors + "</main></body></html>"
+}
+
+// gatePreviewHead is the preview head Nuxt writes for the gate: every preview
+// element, less the image elements when the envelope has no card image URL.
+func gatePreviewHead(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) string {
+	var out strings.Builder
+	for _, tag := range previewTags(publicresume.PublicResume{Slug: envelope.Slug}, envelope.Preview, origin.String()) {
+		if envelope.Preview.ImageURL == "" && (strings.Contains(tag.name, "image") || tag.name == "twitter:card") {
+			continue
+		}
+		out.WriteString(tag.html())
+	}
+	return out.String()
 }
 
 func gateTestEnvelope() directrender.GateRenderRequest {
@@ -92,6 +105,42 @@ func TestGateHTMLRejection_RejectsClosedViolations(t *testing.T) {
 				t.Fatalf("gateHTMLRejection() accepted a %s violation, want a rejection rule", tc.name)
 			}
 		})
+	}
+}
+
+// TestGateHTMLRejection_ImageMetaNeedsCardURL proves a gate with no card
+// image URL may carry no og:image or twitter:image meta, and that a gate with
+// one carries exactly that URL (design "Gate"; AC-VIEW-002).
+func TestGateHTMLRejection_ImageMetaNeedsCardURL(t *testing.T) {
+	origin := mustPublicOrigin(t)
+	noCard := gateTestEnvelope()
+	valid := gateValidHTML(noCard, origin)
+	if strings.Contains(valid, "og:image") || strings.Contains(valid, "twitter:image") {
+		t.Fatalf("fixture for a gate with no card URL carries image meta:\n%s", valid)
+	}
+	if rule := gateHTMLRejection([]byte(valid), noCard, origin); rule != "" {
+		t.Fatalf("gateHTMLRejection() = %q for a gate with no image meta, want \"\"", rule)
+	}
+	for _, name := range []string{"og:image", "twitter:image"} {
+		attr := "property"
+		if strings.HasPrefix(name, "twitter") {
+			attr = "name"
+		}
+		injected := replaceOnce(valid, "</head>",
+			`<meta `+attr+`="`+name+`" content="`+origin.Resolve("/api/v1/public/resumes/ada/og.png")+`"></head>`)
+		if rule := gateHTMLRejection([]byte(injected), noCard, origin); rule == "" {
+			t.Errorf("gateHTMLRejection() accepted %s with no card image URL, want a rejection", name)
+		}
+	}
+
+	withCard := gateTestEnvelope()
+	withCard.Preview.ImageURL = origin.Resolve("/api/v1/public/resumes/ada/og/abc.png")
+	cardHTML := gateValidHTML(withCard, origin)
+	if rule := gateHTMLRejection([]byte(cardHTML), withCard, origin); rule != "" {
+		t.Fatalf("gateHTMLRejection() = %q for a gate with a card image, want \"\"", rule)
+	}
+	if rule := gateHTMLRejection([]byte(valid), withCard, origin); rule == "" {
+		t.Error("gateHTMLRejection() accepted a gate missing its card image meta, want a rejection")
 	}
 }
 

@@ -152,16 +152,21 @@ func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Serv
 	if cfg.PublicOrigin == "" {
 		return nil, fmt.Errorf("auth: NewService: config.PublicOrigin is required")
 	}
+	// config.Config.ViewPassKey is validated at config load (docs/design/
+	// viewer-analytics/sign-in-to-view.md "Pass cookie"); a test config that
+	// leaves it blank carries no key. A non-blank key that does not decode
+	// to 32 bytes is an error: an empty or wrong-length HMAC key would let
+	// anyone forge a pass.
+	var viewPassKey []byte
+	if cfg.ViewPassKey != "" {
+		decoded, decodeErr := base64.RawURLEncoding.Strict().DecodeString(cfg.ViewPassKey)
+		if decodeErr != nil || len(decoded) != 32 {
+			return nil, errors.New("auth: NewService: config.ViewPassKey must be base64url encoding exactly 32 bytes")
+		}
+		viewPassKey = decoded
+	}
 	q := store.New(pool)
 	sessionMgr := NewSessionManagerWithPool(pool)
-	// config.Config.ViewPassKey is validated at config load whenever it is
-	// non-blank (docs/design/viewer-analytics/sign-in-to-view.md "Pass
-	// cookie"); a test config that leaves it unset simply carries no key,
-	// which never seals a real pass.
-	viewPassKey, decodeErr := base64.RawURLEncoding.Strict().DecodeString(cfg.ViewPassKey)
-	if decodeErr != nil {
-		viewPassKey = nil
-	}
 	return &Service{
 		tx:                          NewTransactionStore(q),
 		q:                           q,

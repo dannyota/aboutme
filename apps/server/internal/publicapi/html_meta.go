@@ -86,7 +86,10 @@ func expectedPreviewMeta(resume publicresume.PublicResume, preview previewmeta.M
 // most one format-detection element, and each expected preview element
 // exactly once with the exact value Go computed.
 type headMeta struct {
-	expected                           map[metaKey]string
+	expected map[metaKey]string
+	// optional names expected elements a page may omit; finish does not
+	// report them missing.
+	optional                           map[metaKey]bool
 	seen                               map[metaKey]int
 	charset, viewport, formatDetection int
 }
@@ -156,9 +159,13 @@ func (m *headMeta) finish() string {
 		return "required_elements"
 	}
 	for _, key := range previewMetaKeys {
-		if _, expected := m.expected[key]; expected && m.seen[key] != 1 {
-			return "meta_missing"
+		if _, expected := m.expected[key]; !expected || m.seen[key] == 1 {
+			continue
 		}
+		if m.optional[key] && m.seen[key] == 0 {
+			continue
+		}
+		return "meta_missing"
 	}
 	return ""
 }

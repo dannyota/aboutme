@@ -168,11 +168,13 @@ func (s *Service) handleViewCallback(w http.ResponseWriter, r *http.Request, pro
 
 // redirectViewFailure sends a view-purpose callback failure to its own gate
 // instead of the login page, re-reading the resume for its current slug
-// (design "Sign-in flow"). A read failure falls back to an opaque 500; a
-// missing or unpublished resume redirects home, exactly as success would.
+// (design "Sign-in flow"). A read failure logs as the success path does and
+// falls back to an opaque 500; a missing or unpublished resume redirects
+// home, exactly as success would.
 func (s *Service) redirectViewFailure(w http.ResponseWriter, r *http.Request, tx Transaction, code string) {
 	state, notFound, err := s.viewGateResumeState(r.Context(), tx.ResumeID)
 	if err != nil {
+		s.logInternalError(r, tx.Provider, "view_failure_read_resume", err)
 		api.WriteError(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 		return
 	}

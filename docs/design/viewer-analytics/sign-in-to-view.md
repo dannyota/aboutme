@@ -87,7 +87,8 @@ resume, except the preview card and its alias:
 | `GET /api/v1/live/{slug}`                        | The uniform public 404               |
 | `POST /api/v1/public/resumes/{slug}/views/start` | The uniform public 404; not counted  |
 | `/{slug}.md`, sitemap, `llms.txt`                | Absent: sign-in forces discovery off |
-| Preview card and `og.png` alias                  | Served, as today                     |
+| Preview card and `og.png` alias (cards on)       | Served, as today                     |
+| `og.png` with preview cards off                  | The uniform public 404               |
 
 Each gated handler reads the admitted public snapshot, which carries the switch
 and the pass epoch, then checks the pass, and only then looks in the public

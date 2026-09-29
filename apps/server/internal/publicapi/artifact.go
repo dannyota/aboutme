@@ -71,8 +71,11 @@ type artifactContract struct {
 	namedDownload bool
 	maxBytes      int
 	// gated requires a sign-in-to-view pass, and adds "private" to
-	// Cache-Control for a gated resume's response. Only the PDF
-	// representation sets this; the preview card and og.png stay public.
+	// Cache-Control for a gated resume's response. The PDF and the
+	// fallback og.png (preview cards off) set this, since both render the
+	// resume itself; the preview card carries no contact data and stays
+	// public (docs/design/viewer-analytics/sign-in-to-view.md "Gated
+	// routes").
 	gated bool
 }
 
@@ -104,6 +107,7 @@ func newArtifactHandlers(dependencies ArtifactDependencies) (*artifactHandlers, 
 			format: renderjob.PNG, representation: publicstate.RepresentationPNG,
 			suffix: "/og.png", variant: "1200x630", formatVersion: publicPNGFormatVersion,
 			contentType: "image/png", maxBytes: renderjob.PNGMaxBytes,
+			gated: true,
 		}),
 		card: http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 			if validateArtifactRequest(w, request) {
@@ -145,8 +149,8 @@ func (s *artifactService) handler(contract artifactContract) http.Handler {
 		defer lease.Release()
 		// The pass check runs after admission and before any public cache
 		// lookup (docs/design/viewer-analytics/sign-in-to-view.md "Gated
-		// routes"; AC-VIEW-003). Only the PDF contract is gated; the
-		// preview card and og.png stay public.
+		// routes"; AC-VIEW-003). The PDF and the fallback og.png are gated;
+		// the preview card stays public.
 		if contract.gated && snapshot.SignInToView && !hasValidPass(request, s.dependencies.ViewPassKey, snapshot.ResumeID, snapshot.ViewPassEpoch, s.dependencies.Clock) {
 			servePublicJSONError(w, request, http.StatusNotFound)
 			return

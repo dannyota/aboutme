@@ -145,7 +145,8 @@ func (r mutationRecovery) exactStoredPublishResponse(record store.IdempotencyRec
 	}
 	if envelope.Data.ID != r.publish.ResumeID || envelope.Data.Revision != fmt.Sprintf("%d", r.publish.Effective.Revision) ||
 		envelope.Data.Live != r.publish.Effective.Live || envelope.Data.DownloadEnabled != r.publish.Effective.DownloadEnabled ||
-		envelope.Data.SEOGeoEnabled != r.publish.Effective.SEOGeoEnabled || !equalOptionalString(envelope.Data.Slug, r.publish.Effective.Slug) ||
+		envelope.Data.SEOGeoEnabled != r.publish.Effective.SEOGeoEnabled ||
+		envelope.Data.SignInToView != r.publish.Effective.SignInToView || !equalOptionalString(envelope.Data.Slug, r.publish.Effective.Slug) ||
 		!equalOptionalString(envelope.Data.PublicTitle, r.publish.Effective.PublicTitle) ||
 		!equalOptionalString(envelope.Data.FaviconEmoji, r.publish.Effective.FaviconEmoji) {
 		return errors.New("resumeapi: publish recovery response does not match intended state")
@@ -188,6 +189,7 @@ func (r mutationRecovery) proveCommittedPublish(ctx context.Context, q *store.Qu
 	}
 	if row.Revision != r.publish.Effective.Revision || row.Live != r.publish.Effective.Live ||
 		row.DownloadEnabled != r.publish.Effective.DownloadEnabled || row.SEOGeoEnabled != r.publish.Effective.SEOGeoEnabled ||
+		row.SignInToView != r.publish.Effective.SignInToView ||
 		!equalOptionalString(row.Slug, r.publish.Effective.Slug) ||
 		!equalOptionalString(row.PublicTitle, r.publish.Effective.PublicTitle) ||
 		!equalOptionalString(row.FaviconEmoji, r.publish.Effective.FaviconEmoji) {
