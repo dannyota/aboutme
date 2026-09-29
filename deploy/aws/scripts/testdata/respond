@@ -88,7 +88,8 @@ case "$cmd $args" in
       fence_lower) echo '{"Item":{"minimum_release":{"N":"5000"},"minimum_tag":{"S":"v0.5.0"}}}' ;;
       fence_equal | fence_activate) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
       fence_activate_4002_then_4007) echo '{"Item":{"minimum_release":{"N":"4002"},"minimum_tag":{"S":"v0.4.2"}}}' ;;
-      signin_enabled_at_floor) echo '{"Item":{"minimum_release":{"N":"6026"},"minimum_tag":{"S":"v0.6.26"}}}' ;;
+      signin_enabled_at_floor | view_pass_key_present) echo '{"Item":{"minimum_release":{"N":"6026"},"minimum_tag":{"S":"v0.6.26"}}}' ;;
+      view_pass_key_below_floor) echo '{"Item":{"minimum_release":{"N":"4007"},"minimum_tag":{"S":"v0.4.7"}}}' ;;
       signin_rollback_below_floor) echo '{"Item":{"minimum_release":{"N":"6026"},"minimum_tag":{"S":"v0.6.26"}}}' ;;
       totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | totp_reencrypt_tag_mismatch | \
       totp_reencrypt_register_fails | totp_reencrypt_slot_mismatch | totp_reencrypt_wait_timeout | \
@@ -279,6 +280,11 @@ case "$cmd $args" in
         echo '{"family":"aboutme-prod-totp-reencrypt","networkMode":"bridge","requiresCompatibilities":["EC2"],"containerDefinitions":[{"name":"totp-reencrypt","image":"x","environment":[],"secrets":[{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-c"}]}]}'
         exit 0 ;;
     esac
+    if [[ $STUB_CASE == view_pass_key_present ]]; then
+      # At the floor with the key secret on the server, flag off.
+      echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"},{"name":"VIEW_PASS_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/view-pass-key"}]}]}'
+      exit 0
+    fi
     if [[ $STUB_CASE == totp_key_secret_missing ]]; then
       # No TOTP_ACTIVE_KEY: OpenTofu has not been applied for the TOTP key yet.
       echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
