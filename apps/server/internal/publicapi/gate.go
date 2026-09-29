@@ -115,14 +115,16 @@ func serveGate(ctx context.Context, w http.ResponseWriter, request *http.Request
 	}
 }
 
-// gateExpectedAnchors is every href the gate page may link, from the
-// envelope's own providers in order plus the home page (design "Gate").
-func gateExpectedAnchors(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) map[string]bool {
-	anchors := make(map[string]bool, len(envelope.Providers)+1)
+// gateExpectedAnchors maps every href the gate page may link to the one class
+// its anchor must carry, from the envelope's own providers plus the home page
+// (design "Gate"). The gate styles those classes, so no other class or
+// attribute is allowed.
+func gateExpectedAnchors(envelope directrender.GateRenderRequest, origin publicresume.PublicOrigin) map[string]string {
+	anchors := make(map[string]string, len(envelope.Providers)+1)
 	for _, provider := range envelope.Providers {
-		anchors["/api/v1/auth/"+provider+"/start?purpose=view&slug="+envelope.Slug] = true
+		anchors["/api/v1/auth/"+provider+"/start?purpose=view&slug="+envelope.Slug] = "gate-provider"
 	}
-	anchors[origin.Resolve("/")] = true
+	anchors[origin.Resolve("/")] = "gate-home"
 	return anchors
 }
 
@@ -210,20 +212,25 @@ func gateHTMLRejection(source []byte, envelope directrender.GateRenderRequest, o
 				}
 			case "a":
 				href := attribute(node, "href")
-				if attributeCount(node, "href") != 1 || len(node.Attr) != 1 {
+				if attributeCount(node, "href") != 1 || attributeCount(node, "class") > 1 || len(node.Attr) != 1+attributeCount(node, "class") {
 					reject("anchor_href")
 					return
 				}
 				if href == "#public-gate" {
-					if skipLinks != 0 || textNode(node) != "Skip to content" {
+					if len(node.Attr) != 1 || skipLinks != 0 || textNode(node) != "Skip to content" {
 						reject("skip_link")
 						return
 					}
 					skipLinks++
 					break
 				}
-				if !wantAnchors[href] {
+				wantClass, expected := wantAnchors[href]
+				if !expected {
 					reject("anchor_unexpected")
+					return
+				}
+				if attributeCount(node, "class") != 1 || attribute(node, "class") != wantClass {
+					reject("anchor_class")
 					return
 				}
 				anchorCount++
