@@ -232,6 +232,7 @@ export function joinInviteContainerStyle(
       ...shared,
       right: '16px',
       bottom: '16px',
+      boxSizing: 'border-box',
       width: '320px',
       borderRadius: '14px',
       padding: '16px',

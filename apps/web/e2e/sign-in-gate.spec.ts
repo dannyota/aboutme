@@ -123,19 +123,9 @@ test.describe('join invite', () => {
       // animation-off option does not cover and which page.clock does not
       // drive. finish() jumps every running animation on the region to its
       // end state, so the geometry and the capture are the settled ones.
-      const motion = await region.evaluate((element) => {
-        const animations = element.getAnimations();
-        const reduce
-          = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        for (const animation of animations) animation.finish();
-        return { animations: animations.length, reduce };
+      await region.evaluate((element) => {
+        for (const animation of element.getAnimations()) animation.finish();
       });
-      // Diagnostic: shows in the hosted log whether the entrance ran under
-      // reduced motion.
-      console.log(
-        `join-invite-motion: reduce=${motion.reduce} `
-        + `animations=${motion.animations}`,
-      );
 
       const box = await region.boundingBox();
       if (cell.placement === 'card') {
