@@ -1,8 +1,8 @@
-# Sign in to view (next release after the MCP guide)
+# Sign in to view (v0.6.26)
 
 Status: approved, ready to build. The owner settled V9 to V13 on 2026-09-27 in [the design](../design/viewer-analytics/README.md#owner-approval). Design: [sign in to view](../design/viewer-analytics/sign-in-to-view.md), [delivery](../design/viewer-analytics/delivery.md), [legal](../design/viewer-analytics/legal.md), [ADR 0022](../adr/0022-viewer-privacy-and-counting.md). View counts shipped in v0.6.4. Consented viewer tracking is dropped for good (ADR 0022): no viewer tables, no consent migrations, no viewer list, no overlay. This is the one release left in this plan.
 
-Ships as the next release after the MCP guide page, one feature, its own version number. Migration: one file, numbered next after the latest in `apps/server/migrations` (`00008_resume_view_counts.sql` today); the manager assigns the number when the backend brief starts and serializes it with any other queued migration.
+Ships as v0.6.26, one feature, its own version number. Migration: `00009_sign_in_to_view.sql`, next after `00008_resume_view_counts.sql`.
 
 |Release|Outcome|Risk|
 |-|-|-|
@@ -13,7 +13,7 @@ Ships as the next release after the MCP guide page, one feature, its own version
 1. Done 2026-09-27: the owner settled V9 to V13 and reviewed the Vietnamese of V4 (gate text, invite, notice rows, publish switch line).
 2. Done: `docs/plans/traceability/ac-view.md` holds the `AC-VIEW-*` rows from the design, state `OPEN`. Briefs cite those IDs.
 3. Done: [ADR 0016](../adr/0016-sign-in-providers.md) (start methods: `GET` also accepts `purpose=view`; an unknown purpose still means login) and the OAuth start list in `docs/design/security.md` are amended; `docs/design/budgets.md` already carries the pass cookie row and needs no change.
-4. Still open, before the backend brief: verify LinkedIn accepts an authorize request with scope `openid` alone (V10). If it does not, the `view` start keeps the account scopes and still discards every claim; the design line changes, not the gate text.
+4. Still open: verify LinkedIn accepts an authorize request with scope `openid` alone (V10). Until then LinkedIn stays off the gate behind `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` (default false). If it does not, the `view` start keeps the account scopes and still discards every claim; the design line changes, not the gate text.
 
 ## Order and roles
 
@@ -30,7 +30,7 @@ Ships as the next release after the MCP guide page, one feature, its own version
 |devops|`deploy/aws/modules/tasks/main.tf` and `variables.tf` (flag env, `VIEW_PASS_KEY` from SSM); `deploy/aws/prod/variables.tf`; `deploy/aws/scripts/secrets.sh` (`view-pass-key`, 32 random bytes); `deploy/aws/scripts/fence.sh` and `deploy.sh` (floor for the flag: refuse an app revision with the flag on while the fence is below this release's number) and their tests and `testdata/respond`; dev defaults in `.env.example`, `scripts/dev-native.sh`, `scripts/lib/dev-https-lifecycle.sh` (flag on, a dev key); new `docs/runbooks/sign-in-to-view.md` (flag-off deploy, `--activate`, flag on, key rotation, what rollback means) with a one-line pointer in `docs/runbooks/production.md` (at 450 lines: trim a line in the same edit)|No new AWS service; adversarial review before merge|
 |qa|`deploy/dev-https-browser/public.spec.ts` (gate and sign-in through the mock Google and mock LinkedIn, no nonce on LinkedIn), `verify-evidence.mjs`; pixel baselines for the gate and the invite card and bar in both languages|Every gated route with and without a pass; switch on revokes an open page and stream; switch off serves publicly; invite timing and close; live check 7 after the flag is on|
 
-`.env.example`, `scripts/`, and the root `Makefile` are shared: the devops brief names each line; the manager commits them. The flag floor number is this release's own number, known when the manager picks the version; devops writes it once the version is fixed and before the tag.
+`.env.example`, `scripts/`, and the root `Makefile` are shared: the devops brief names each line; the manager commits them. The flag floor is this release's own number: v0.6.26, numeric 6026.
 
 ## Release
 
