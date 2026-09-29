@@ -16,6 +16,21 @@ const JOIN_INVITE_CLOSED_MS = 90 * 24 * 60 * 60 * 1000;
 const CARD_MIN_VIEWPORT_WIDTH = 1_024;
 const CARD_MIN_RIGHT_MARGIN = 360;
 
+/**
+ * The element that holds the resume's box: it caps the measure and centers
+ * itself (ResumeDocument.vue). The page root spans the viewport, so its own
+ * right edge never leaves a margin.
+ */
+export const JOIN_INVITE_MEASURE_SELECTOR = '.public-measure';
+
+/**
+ * The bar's 56 px content band plus the bottom safe area; the page adds
+ * bottom padding of this same total while the bar shows.
+ */
+export const JOIN_INVITE_BAR_BAND = '56px';
+export const JOIN_INVITE_BAR_HEIGHT
+  = `calc(${JOIN_INVITE_BAR_BAND} + env(safe-area-inset-bottom))`;
+
 export type JoinInvitePlacement = 'card' | 'bar';
 
 export interface JoinInviteTimingOptions {
@@ -139,14 +154,17 @@ export function startJoinInviteTiming(
 
 /**
  * The card placement needs a wide viewport and at least 360 px of right
- * margin beside the resume; every other viewport gets the bottom bar.
+ * margin beside the resume; every other viewport gets the bottom bar. The
+ * margin is measured from the resume's own box inside `root`, and from
+ * `root` itself when it holds none.
  */
 export function joinInvitePlacement(
   root: Element,
   window_: Window = window,
 ): JoinInvitePlacement {
   if (window_.innerWidth < CARD_MIN_VIEWPORT_WIDTH) return 'bar';
-  const rect = root.getBoundingClientRect();
+  const measure = root.querySelector(JOIN_INVITE_MEASURE_SELECTOR) ?? root;
+  const rect = measure.getBoundingClientRect();
   const rightMargin = window_.innerWidth - rect.right;
   return rightMargin >= CARD_MIN_RIGHT_MARGIN ? 'card' : 'bar';
 }
@@ -177,4 +195,63 @@ export function recordJoinInviteClosed(
   } catch {
     // Private browsing, a full quota, or storage disabled: never surface it.
   }
+}
+
+/** Below this viewport width the bar drops its body text. */
+export const JOIN_INVITE_BAR_TEXT_MIN_WIDTH = 360;
+
+export const JOIN_INVITE_ENTRANCE = {
+  keyframes: [
+    { opacity: 0, transform: 'translateY(8px)' },
+    { opacity: 1, transform: 'translateY(0)' },
+  ],
+  options: { duration: 200, easing: 'ease-out' },
+} as const;
+
+// The public page bar's Button fill and Button border, and its Credit text
+// (docs/design/public-page-theme.md#tokens), light column: the public page's
+// dark scheme is not built yet.
+const SURFACE = '#FFFFFF';
+const BORDER = '#E5E1D6';
+export const JOIN_INVITE_TEXT_COLOR = '#5C6178';
+
+/** Inline geometry: the public page loads no stylesheet for the invite. */
+export function joinInviteContainerStyle(
+  placement: JoinInvitePlacement,
+): Record<string, string | number> {
+  const shared = {
+    background: SURFACE,
+    border: `1px solid ${BORDER}`,
+    color: JOIN_INVITE_TEXT_COLOR,
+    fontFamily: '"Be Vietnam Pro", Inter, system-ui, sans-serif',
+    position: 'fixed',
+    zIndex: 40,
+  };
+  if (placement === 'card') {
+    return {
+      ...shared,
+      right: '16px',
+      bottom: '16px',
+      width: '320px',
+      borderRadius: '14px',
+      padding: '16px',
+      boxShadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+    };
+  }
+  return {
+    ...shared,
+    left: '0',
+    right: '0',
+    bottom: '0',
+    boxSizing: 'border-box',
+    height: JOIN_INVITE_BAR_HEIGHT,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    border: 'none',
+    borderTop: `1px solid ${BORDER}`,
+    padding:
+      '0 calc(12px + env(safe-area-inset-right)) '
+      + 'env(safe-area-inset-bottom) calc(12px + env(safe-area-inset-left))',
+  };
 }

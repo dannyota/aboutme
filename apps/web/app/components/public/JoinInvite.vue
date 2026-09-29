@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
 
 import {
   isJoinInviteClosed,
+  JOIN_INVITE_BAR_HEIGHT,
+  JOIN_INVITE_BAR_TEXT_MIN_WIDTH,
+  JOIN_INVITE_ENTRANCE,
+  joinInviteContainerStyle,
   joinInvitePlacement,
   recordJoinInviteClosed,
   startJoinInviteTiming,
@@ -21,6 +32,8 @@ const props = defineProps<{
 
 const visible = ref(false);
 const placement = ref<JoinInvitePlacement>('bar');
+const viewportWidth = ref(0);
+const container = ref<HTMLElement>();
 let stopTiming: (() => void) | null = null;
 
 const vietnamese = computed(() => props.lng === 'vi');
@@ -43,7 +56,46 @@ const regionLabel = computed(() => (
 
 function updatePlacement(): void {
   placement.value = joinInvitePlacement(props.root);
+  viewportWidth.value = window.innerWidth;
 }
+
+// Below 360 px the bar keeps only the button and the close button. This is
+// script, not a media query: the public page loads no stylesheet for the
+// invite.
+const showBarText = computed(
+  () => viewportWidth.value >= JOIN_INVITE_BAR_TEXT_MIN_WIDTH,
+);
+
+// A 200 ms fade and 8 px slide from the bottom edge, skipped entirely under
+// `prefers-reduced-motion: reduce`.
+function animateEntrance(): void {
+  const element = container.value;
+  if (element === undefined || typeof element.animate !== 'function') return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  element.animate(
+    [...JOIN_INVITE_ENTRANCE.keyframes],
+    { ...JOIN_INVITE_ENTRANCE.options },
+  );
+}
+
+// The bar never covers resume text: while it shows, the page gains bottom
+// padding equal to the bar's total height.
+let restorePadding: (() => void) | null = null;
+
+function syncPagePadding(): void {
+  restorePadding?.();
+  restorePadding = null;
+  if (!visible.value || placement.value !== 'bar') return;
+  const style = document.body.style;
+  const previous = style.getPropertyValue('padding-bottom');
+  style.setProperty('padding-bottom', JOIN_INVITE_BAR_HEIGHT);
+  restorePadding = () => {
+    if (previous === '') style.removeProperty('padding-bottom');
+    else style.setProperty('padding-bottom', previous);
+  };
+}
+
+watch([visible, placement], syncPagePadding);
 
 function close(): void {
   recordJoinInviteClosed();
@@ -65,56 +117,30 @@ onMounted(() => {
   window.addEventListener('keydown', onKeydown);
   stopTiming = startJoinInviteTiming(() => {
     visible.value = true;
-    void nextTick(updatePlacement);
+    void nextTick(() => {
+      updatePlacement();
+      animateEntrance();
+    });
   });
 });
 
 onBeforeUnmount(() => {
   stopTiming?.();
+  restorePadding?.();
+  restorePadding = null;
   window.removeEventListener('resize', updatePlacement);
   window.removeEventListener('keydown', onKeydown);
 });
 
-const containerStyle = computed(() => {
-  const shared = {
-    background: '#FFFFFF',
-    border: '1px solid #DCE5F5',
-    color: '#56648C',
-    fontFamily: '"Be Vietnam Pro", Inter, system-ui, sans-serif',
-    zIndex: 40,
-  };
-  if (placement.value === 'card') {
-    return {
-      ...shared,
-      position: 'fixed' as const,
-      right: '16px',
-      bottom: '16px',
-      width: '320px',
-      borderRadius: '14px',
-      padding: '16px',
-      boxShadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
-    };
-  }
-  return {
-    ...shared,
-    position: 'fixed' as const,
-    left: '0',
-    right: '0',
-    bottom: '0',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding:
-      '12px calc(12px + env(safe-area-inset-right)) '
-      + 'calc(12px + env(safe-area-inset-bottom)) '
-      + 'calc(12px + env(safe-area-inset-left))',
-  };
-});
+const containerStyle = computed(
+  () => joinInviteContainerStyle(placement.value),
+);
 </script>
 
 <template>
   <div
     v-if="visible"
+    ref="container"
     role="region"
     :aria-label="regionLabel"
     class="join-invite"
@@ -128,7 +154,7 @@ const containerStyle = computed(() => {
           type="button"
           :aria-label="closeLabel"
           style="width:32px;height:32px;border:none;background:transparent;
-            font-size:18px;line-height:1;color:#56648C;cursor:pointer;"
+            font-size:18px;line-height:1;color:#5C6178;cursor:pointer;"
           @click="close"
         >
           ×
@@ -148,7 +174,9 @@ const containerStyle = computed(() => {
     </template>
     <template v-else>
       <p
-        style="margin:0;flex:1;font-size:14px;overflow:hidden;
+        v-if="showBarText"
+        class="join-invite-text"
+        style="margin:0;flex:1;min-width:0;font-size:14px;overflow:hidden;
           text-overflow:ellipsis;white-space:nowrap;"
       >
         {{ bodyText }}
@@ -156,7 +184,8 @@ const containerStyle = computed(() => {
       <a
         :href="href"
         style="flex-shrink:0;display:inline-flex;align-items:center;
-          height:36px;padding:0 12px;border-radius:10px;background:#1A5CEB;
+          margin-left:auto;height:36px;padding:0 12px;border-radius:10px;
+          background:#1A5CEB;
           color:#FFFFFF;text-decoration:none;font-weight:500;font-size:14px;"
         @click="onFollow"
       >{{ buttonText }}</a>
@@ -165,7 +194,7 @@ const containerStyle = computed(() => {
         :aria-label="closeLabel"
         style="flex-shrink:0;width:32px;height:32px;border:none;
           background:transparent;font-size:18px;line-height:1;
-          color:#56648C;cursor:pointer;"
+          color:#5C6178;cursor:pointer;"
         @click="close"
       >
         ×
@@ -173,22 +202,3 @@ const containerStyle = computed(() => {
     </template>
   </div>
 </template>
-
-<style scoped>
-@media (prefers-reduced-motion: no-preference) {
-  .join-invite {
-    animation: join-invite-in 200ms ease-out;
-  }
-}
-
-@keyframes join-invite-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-</style>

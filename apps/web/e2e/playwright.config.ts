@@ -83,6 +83,7 @@ export default defineConfig({
         'sample-pages.spec.ts',
         'preview-gap.spec.ts',
         'card.spec.ts',
+        'sign-in-gate.spec.ts',
       ]
     : [
         'normal-csp.spec.ts',
