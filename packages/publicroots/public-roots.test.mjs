@@ -17,7 +17,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
-const registryPath = join(here, "public-roots.v9.json");
+const registryPath = join(here, "public-roots.v10.json");
 const byteSort = (left, right) =>
   Buffer.compare(Buffer.from(left), Buffer.from(right));
 
@@ -28,6 +28,7 @@ const expectedRoots = [
   ["app", "nuxt"],
   ["authorize", "nuxt"],
   ["forgot-password", "nuxt"],
+  ["guide", "nuxt"],
   ["healthz", "go"],
   ["_nuxt", "nuxt"],
   ["internal-render", "deny"],
@@ -50,7 +51,7 @@ const expectedRoots = [
   ["verify-email", "nuxt"],
 ];
 
-test("the v9 registry is closed and authority ordered", async () => {
+test("the v10 registry is closed and authority ordered", async () => {
   const registryRaw = await readFile(registryPath);
   const registry = parsePublicRoots(registryRaw);
   assert.deepEqual(
@@ -71,7 +72,7 @@ test("the v9 registry is closed and authority ordered", async () => {
   }
 
   assert.throws(() =>
-    parsePublicRoots(Buffer.from(JSON.stringify({ ...registry, version: 8 }))),
+    parsePublicRoots(Buffer.from(JSON.stringify({ ...registry, version: 9 }))),
   );
   assert.throws(() =>
     parsePublicRoots(
@@ -90,7 +91,7 @@ test("the v9 registry is closed and authority ordered", async () => {
       Buffer.from(
         registryRaw
           .toString("utf8")
-          .replace('"version": 9', '"version": 8,\n  "version": 9'),
+          .replace('"version": 10', '"version": 9,\n  "version": 10'),
       ),
     ),
   );

@@ -1,6 +1,6 @@
 // Page titles and search metadata for the site pages. Only the homepage, the
-// Privacy Policy, the Terms, the Verify page, and the template gallery are
-// indexable; every other route is noindex.
+// Privacy Policy, the Terms, the Verify page, the template gallery, and the
+// MCP guide are indexable; every other route is noindex.
 import type { Locale } from './locale';
 import type { WorkspaceCopy } from './workspace';
 
@@ -11,8 +11,8 @@ export const siteOrigin = 'https://aboutme.vn';
  * crawler without the locale cookie gets Vietnamese, the site default.
  */
 export const ogImageUrl: Record<Locale, string> = {
-  vi: `${siteOrigin}/og-image-v5.jpg`,
-  en: `${siteOrigin}/og-image-v4-en.jpg`,
+  vi: `${siteOrigin}/og-image-v7.jpg`,
+  en: `${siteOrigin}/og-image-v6-en.jpg`,
 };
 
 export const indexablePaths: ReadonlySet<string> = new Set([
@@ -20,6 +20,7 @@ export const indexablePaths: ReadonlySet<string> = new Set([
   '/privacy',
   '/terms',
   '/verify',
+  '/guide/mcp',
 ]);
 
 const GALLERY_PATH = /^\/templates(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)?$/u;

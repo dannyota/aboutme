@@ -68,7 +68,7 @@ describe('application icon links', () => {
       expect(
         document.head.querySelector('meta[name="theme-color"]')
           ?.getAttribute('content'),
-      ).toBe('#1a5ceb');
+      ).toBe('#26409c');
       wrapper.unmount();
     });
 
@@ -98,11 +98,11 @@ describe('site-v3.webmanifest', () => {
     }[];
   };
 
-  it('names the app and matches the Aurora brand colors', () => {
+  it('names the app and matches the brand colors', () => {
     expect(manifest.name).toBe('aboutme.vn');
     expect(manifest.short_name).toBe('aboutme.vn');
-    expect(manifest.theme_color).toBe('#1a5ceb');
-    expect(manifest.background_color).toBe('#f5f8ff');
+    expect(manifest.theme_color).toBe('#26409c');
+    expect(manifest.background_color).toBe('#f9f8f5');
     expect(manifest.display).toBe('browser');
     expect(manifest.start_url).toBe('/');
   });

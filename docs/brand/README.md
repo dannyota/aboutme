@@ -12,8 +12,8 @@ else.
 | ------------------------------------------- | ----------- | --------------------------------------------------------------------- |
 | `banner-light.jpg`, `banner-dark.jpg`       | 1672 × 941  | The repository `README.md`, through a light and dark `<picture>`      |
 | `share-image.jpg`                           | 1280 × 640  | GitHub social preview: upload in repository Settings → Social preview |
-| `../../apps/web/public/og-image-v5.jpg`     | 1200 × 630  | Site Open Graph image in Vietnamese, the default (`i18n/meta.ts`)     |
-| `../../apps/web/public/og-image-v4-en.jpg`  | 1200 × 630  | Site Open Graph image in English                                      |
+| `../../apps/web/public/og-image-v7.jpg`     | 1200 × 630  | Site Open Graph image in Vietnamese, the default (`i18n/meta.ts`)     |
+| `../../apps/web/public/og-image-v6-en.jpg`  | 1200 × 630  | Site Open Graph image in English                                      |
 | `aboutme-logo.svg`                          | vector      | The logo on light grounds                                             |
 | `aboutme-logo-on-dark.svg`                  | vector      | The logo on dark grounds (seal `#FF6B8A`)                             |
 | `aboutme-mark.svg`                          | vector      | The seal mark alone                                                   |

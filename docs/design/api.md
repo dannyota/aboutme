@@ -172,7 +172,12 @@ closed deletion marker because no row remains. A lost race returns
 delete authority, including deletion of a published resume through the existing
 public revocation fence, drain, tombstone, and cleanup path. There is no
 standalone publish, unpublish, or public-read tool.
-[ADR 0018](../adr/0018-mcp-agent-access.md) records the protocol choice.
+[ADR 0018](../adr/0018-mcp-agent-access.md) records the protocol choice. The
+`initialize` result's `serverInfo` carries a display title, the public website
+URL, and the versioned seal icons
+([ADR 0020](../adr/0020-application-visual-identity.md)) so a client's connector
+list shows the seal mark; a client may instead show a favicon it already cached
+for the origin.
 
 ## Resume write safety
 

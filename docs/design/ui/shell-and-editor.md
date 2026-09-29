@@ -7,18 +7,21 @@ the [visual design](../../../DESIGN.md).
 
 The shared application shell is a card-colored bar with a bottom border, its
 content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
-Library link for every visitor. Signed-out navigation adds an Open source link
-to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
-and a primary create button. The create button reads Create your resume on the
-home page, the Library, template pages, Terms, and Privacy, and Create account
-elsewhere. On localized routes, both account buttons hide below 44 rem, where
-the page's own links take over. Signed-in navigation also shows Resumes,
+Library link for every visitor, followed by a link to the
+[MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
+public like the Library link. Signed-out navigation adds an Open source link to
+the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button, and
+a primary create button. The create button reads Create your resume on the home
+page, the Library, template pages, Terms, Privacy, and the MCP guide, and Create
+account elsewhere. On localized routes, both account buttons hide below 44 rem,
+where the page's own links take over. Signed-in navigation also shows Resumes,
 Settings, and an account menu. The account menu contains Settings, theme
 switching, and Log out. On signed-in screens below 640 px, the direct Library
-and Settings links are hidden; Settings remains in the account menu. On
-localized routes, the shell adds the Vietnamese and English toggle. Below 640 px
-its visible labels shorten to VI and EN while their accessible names remain
-complete.
+and Settings links are hidden; Settings remains in the account menu. The guide
+link hides below 44 rem signed out and below 64 rem signed in, where the
+signed-in bar also carries Resumes, Views, and Settings. On localized routes,
+the shell adds the Vietnamese and English toggle. Below 640 px its visible
+labels shorten to VI and EN while their accessible names remain complete.
 
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a
@@ -29,8 +32,8 @@ card up to 64 rem wide with a border, the 20 px feature radius, and
 the brand panel follows it and holds no focusable element. The panel shows the
 32 px logo, the statement “CV của bạn luôn riêng tư cho đến khi bạn xuất bản.”
 or “Your resume stays private until you publish it.”, three points with blue,
-indigo, and purple icons (Free and open source, One link per resume, PDF in A4
-or Letter), and a decorative white sheet tilted 3 degrees over the hero glow.
+indigo, and ochre icons (Free and open source, One link per resume, PDF in A4 or
+Letter), and a decorative white sheet tilted 3 degrees over the hero glow.
 
 The resume list is a desk of up to three paper cards: one column, three from 768
 px, with 24 px gaps and 32 px from 768 px. Each card is a `.paper-surface` sheet
@@ -105,3 +108,6 @@ show the device description, relative last-seen time, This device, and Log out
 or Revoke actions, with Log out everywhere below. Password settings are always
 present. Account export and deletion appear in the Privacy section. Connected
 agents and sign-in providers appear only when their capabilities are enabled.
+Connected agents links the [MCP guide](../mcp-guide.md) at `/guide/mcp` from its
+empty state (“Xem cách kết nối trợ lý AI” or “See how to connect an AI
+assistant”) and again under the grant list when it has entries.

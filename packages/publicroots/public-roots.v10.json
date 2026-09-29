@@ -1,5 +1,5 @@
 {
-  "version": 9,
+  "version": 10,
   "roots": [
     { "root": ".well-known", "dispatch": "go" },
     { "root": "admin", "dispatch": "reserved" },
@@ -7,6 +7,7 @@
     { "root": "app", "dispatch": "nuxt" },
     { "root": "authorize", "dispatch": "nuxt" },
     { "root": "forgot-password", "dispatch": "nuxt" },
+    { "root": "guide", "dispatch": "nuxt" },
     { "root": "healthz", "dispatch": "go" },
     { "root": "_nuxt", "dispatch": "nuxt" },
     { "root": "internal-render", "dispatch": "deny" },

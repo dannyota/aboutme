@@ -104,6 +104,37 @@ func mustTestMCPRates(t *testing.T) *RatePolicies {
 	return rates
 }
 
+// TestServer_InitializeResultCarriesBrandedServerInfo proves the initialize
+// handshake names aboutme with the seal icons and website URL a client uses
+// for its connector list, per docs/design/api.md#agent-access-and-the-bearer-world.
+func TestServer_InitializeResultCarriesBrandedServerInfo(t *testing.T) {
+	h := newBearerHarness(t, "resumes:read")
+	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)
+	handler, err := NewServer(ServerDependencies{Bearer: h.bearer, Resumes: &recordingAgentExecutor{}, Rates: mustTestMCPRates(t), MaxRequestBodyBytes: maxMCPRequestBytes})
+	if err != nil {
+		t.Fatalf("NewServer: %v", err)
+	}
+	httpServer := httptest.NewServer(handler)
+	t.Cleanup(httpServer.Close)
+	session := connectMCPClient(t, httpServer.URL, raw, "")
+
+	info := session.InitializeResult().ServerInfo
+	if info.Name != "aboutme" || info.Version != "1" || info.Title != "aboutme.vn" {
+		t.Fatalf("serverInfo identity = %#v", info)
+	}
+	if info.WebsiteURL != bearerPublicOrigin {
+		t.Fatalf("serverInfo websiteUrl = %q, want %q", info.WebsiteURL, bearerPublicOrigin)
+	}
+	want := []mcp.Icon{
+		{Source: bearerPublicOrigin + "/icon-192-v3.png", MIMEType: "image/png", Sizes: []string{"192x192"}},
+		{Source: bearerPublicOrigin + "/icon-512-v3.png", MIMEType: "image/png", Sizes: []string{"512x512"}},
+		{Source: bearerPublicOrigin + "/favicon-v3.svg", MIMEType: "image/svg+xml", Sizes: []string{"any"}},
+	}
+	if !reflect.DeepEqual(info.Icons, want) {
+		t.Fatalf("serverInfo icons = %#v, want %#v", info.Icons, want)
+	}
+}
+
 func TestServer_GoSDKListsExactlyFifteenToolsAndCallsRead(t *testing.T) {
 	h := newBearerHarness(t, "resumes:read resumes:write")
 	raw, _ := h.createToken(t, oauthsrv.TokenKindAccess)

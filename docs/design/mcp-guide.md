@@ -1,7 +1,6 @@
 # MCP guide page
 
-Status: approved (2026-09-27), ready to build. The owner approved every numbered
-choice below as written.
+Status: implemented (2026-09-28).
 
 The MCP guide is a public, static page that shows a person how to connect an AI
 assistant they already use to their aboutme.vn resumes through the Model Context
@@ -11,11 +10,10 @@ Protocol (MCP). It covers Claude first, names the one server URL,
 rule, schema, or API. Its full Vietnamese and English text is in
 [MCP guide copy](mcp-guide-copy.md).
 
-The Claude steps are true only once Claude's clients can complete the OAuth flow
-against aboutme.vn. Today the server rejects requests those clients send;
-[MCP client compatibility](mcp-client-compatibility.md) lists the gaps and the
-proposed fixes. The guide ships after that work and after a proof that Claude
-connects.
+The Claude steps rely on
+[MCP client compatibility](mcp-client-compatibility.md), which shipped in
+v0.6.18. The guide ships after an owner-run proof that Claude on the web and
+Claude Code connect in production.
 
 ## Route
 
@@ -31,6 +29,26 @@ slug-claim set, the web root list, and the parity fixtures, as every new root
 has. `guide` becomes a reserved slug. Before release, a read-only production
 check confirms no resume holds or tombstones the slug `guide`; if one does, the
 release stops for an owner decision.
+
+The check runs as an operator-only ECS one-shot from the candidate server image.
+It uses the existing jobs task's database connection and runtime-resolved app
+password. In one repeatable-read, read-only transaction, it returns only the
+`resumeOccupied` and `tombstoneOccupied` booleans from indexed existence reads.
+Its syntax is `server check-public-root <root>`, with exactly one root that the
+candidate image reserves. Exit 0 means neither table holds the root, 10 means
+only a resume holds it, 11 means only a tombstone holds it, and 12 means both
+do. Invalid invocation, configuration, or query failure exits 1. The command
+logs no resume, account, title, time, database address, or secret. The deploy
+script maps the fixed exit codes to the same two booleans, so it needs no
+database or CloudWatch log access.
+
+The operator runs the check once before deployment. The deploy runs it again
+after maintenance is confirmed and the old app has stopped, before any
+migration. The second check closes the interval in which the old app could
+accept a new `guide` claim. An occupied result follows the existing
+pre-migration recovery path and restores the old app without changing resume
+data. The one-shot creates normal ECS task-definition, task, and CloudWatch log
+records; only its database transaction is read-only.
 
 `/guide` itself has no page and returns the normal not-found page. A later guide
 takes another path under `/guide/` without a registry change.
@@ -92,12 +110,10 @@ Every claim maps to shipped behavior:
 The page never promises a response time, a specific model, or that changes
 appear live in an open editor.
 
-Two lines depend on compatibility choices. Claude step 5 and privacy point 1
-mention where approval returns, which needs the consent host line.
-Troubleshooting pair 3 quotes the grant-limit message. If the owner declines
-either, those lines fall back to the copy file's generic wording: drop “and
-returns to claude.ai” and “where you return”, and start pair 3 with “Approval
-fails and you already have 10 connected agents.”
+Claude step 5 and privacy point 1 name where approval returns, and
+troubleshooting pair 3 quotes the grant-limit message, matching the consent page
+copy that shipped with items 6 and 7 of
+[MCP client compatibility](mcp-client-compatibility.md).
 
 ### Other clients
 

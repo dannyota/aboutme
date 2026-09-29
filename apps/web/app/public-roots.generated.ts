@@ -14,6 +14,7 @@ export const publicRootRoutes = [
   { root: 'app', dispatch: 'nuxt' },
   { root: 'authorize', dispatch: 'nuxt' },
   { root: 'forgot-password', dispatch: 'nuxt' },
+  { root: 'guide', dispatch: 'nuxt' },
   { root: 'healthz', dispatch: 'go' },
   { root: '_nuxt', dispatch: 'nuxt' },
   { root: 'internal-render', dispatch: 'deny' },

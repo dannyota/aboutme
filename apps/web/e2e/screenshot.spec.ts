@@ -2,12 +2,20 @@ import { expect, test } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
+  CHROME_PIXEL_TOLERANCE,
   denyExternalRequests,
   FIXTURE_PHOTO_CROP_GEOMETRY,
+  mockSignedInSession,
+  mockSignedOutSession,
   photoCropGeometry,
   verifyScreenshot,
   waitForImages,
 } from './support';
+
+// The harness webServer's own origin (playwright.config.ts): cookies set
+// before a goto must name it explicitly, since this file's baseURL differs
+// from the app pages tested in chrome.spec.ts and verify.spec.ts.
+const GUIDE_BASE_URL = 'http://127.0.0.1:20090';
 
 interface ScreenshotCell {
   readonly align?: 'justify';
@@ -221,17 +229,26 @@ test.describe('public page measure', () => {
         const measure = box('.public-measure');
         return {
           page: box('.public-resume-page').width,
+          bar: box('.public-toolbar').width,
           measure: { left: measure.left, right: measure.right },
           charsPerLine: paragraph.getBoundingClientRect().width
             / averageCharacter,
           lines,
           linkRight: link.right,
           linkTop: link.top,
+          linkHeight: link.height,
           articleTop: box('.resume-document').top,
         };
       });
       expect(geometry.page).toBe(cell.width);
+      // The bar is the first child of .public-resume-page, full width,
+      // above the resume article (docs/design/public-page-theme.md,
+      // "Structure" and "Size and placement").
+      expect(geometry.bar).toBe(cell.width);
       expect(geometry.linkTop).toBeLessThan(geometry.articleTop);
+      // A fine pointer (the default here) keeps the download button at
+      // 32 px high; a coarse pointer grows it to 40 px.
+      expect(geometry.linkHeight).toBeLessThanOrEqual(32);
       if (cell.width === 390) {
         // Phones keep the full width.
         expect(geometry.measure.left).toBe(0);
@@ -254,3 +271,148 @@ test.describe('public page measure', () => {
     });
   }
 });
+
+interface GuideCell {
+  readonly locale: 'en' | 'vi';
+  readonly name: string;
+  readonly theme: 'light' | 'dark';
+  readonly width: number;
+}
+
+// The MCP guide page (/guide/mcp), both locales and themes, at phone and
+// desktop measures (docs/design/mcp-guide.md, "Layout").
+const GUIDE_CELLS: readonly GuideCell[] = [
+  { locale: 'vi', name: 'guide--light--390.png', theme: 'light', width: 390 },
+  { locale: 'vi', name: 'guide--light--1280.png', theme: 'light', width: 1280 },
+  { locale: 'vi', name: 'guide--dark--390.png', theme: 'dark', width: 390 },
+  { locale: 'vi', name: 'guide--dark--1280.png', theme: 'dark', width: 1280 },
+  {
+    locale: 'en',
+    name: 'guide--en--light--390.png',
+    theme: 'light',
+    width: 390,
+  },
+  {
+    locale: 'en',
+    name: 'guide--en--light--1280.png',
+    theme: 'light',
+    width: 1280,
+  },
+  {
+    locale: 'en',
+    name: 'guide--en--dark--390.png',
+    theme: 'dark',
+    width: 390,
+  },
+  {
+    locale: 'en',
+    name: 'guide--en--dark--1280.png',
+    theme: 'dark',
+    width: 1280,
+  },
+];
+
+test.describe('guide page pixel baselines', () => {
+  for (const cell of GUIDE_CELLS) {
+    test(cell.name, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: cell.width, height: 900 });
+      await page.context().addCookies([
+        { name: 'aboutme-locale', value: cell.locale, url: GUIDE_BASE_URL },
+        { name: 'aboutme-theme', value: cell.theme, url: GUIDE_BASE_URL },
+      ]);
+      await mockSignedOutSession(page);
+      const external = await denyExternalRequests(page);
+
+      const response = await page.goto('/guide/mcp');
+      expect(response?.status()).toBe(200);
+      // Chrome transitions must not be mid-flight at capture (chrome.spec.ts
+      // carries the same reasoning).
+      await page.addStyleTag({
+        content: '*, *::before, *::after { transition: none !important; '
+          + 'animation: none !important; }',
+      });
+      await expect(page.locator('[data-testid="guide-mcp-page"]'))
+        .toBeVisible();
+      if (cell.locale === 'en') {
+        await expect(page.getByRole('heading', {
+          level: 1,
+          name: 'Connect your AI assistant to aboutme.vn',
+        })).toBeVisible();
+      }
+      await page.evaluate(() => document.fonts.ready);
+      await waitForImages(page);
+
+      const settledHeight = await page.evaluate(
+        () => document.documentElement.scrollHeight);
+      await page.setViewportSize({ width: cell.width, height: settledHeight });
+      const overflow = await page.evaluate(() =>
+        document.documentElement.scrollWidth
+        - document.documentElement.clientWidth);
+      expect(overflow).toBe(0);
+      expect(external).toEqual([]);
+
+      await verifyScreenshot(
+        page,
+        cell.name,
+        testInfo,
+        undefined,
+        CHROME_PIXEL_TOLERANCE,
+      );
+    });
+  }
+});
+
+// The header must not overflow at 704, 768, or 1024px in either language,
+// signed in or out, and the Connect AI link shows exactly where
+// docs/design/mcp-guide.md, "Navigation", puts it: signed out, from 44rem
+// (704px); signed in, from 64rem (1024px), because the signed-in bar also
+// carries Resumes, Views, and Settings. /guide/mcp carries both states,
+// since the page reads no API and renders the same content either way.
+const HEADER_WIDTHS = [704, 768, 1024] as const;
+const GUIDE_LINK_VISIBLE_AT: Record<'in' | 'out', readonly number[]> = {
+  out: [704, 768, 1024],
+  in: [1024],
+};
+
+for (const locale of ['vi', 'en'] as const) {
+  for (const session of ['out', 'in'] as const) {
+    for (const width of HEADER_WIDTHS) {
+      const title = `guide header fits ${width}px signed ${session} `
+        + `(${locale})`;
+      test(title, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await page.context().addCookies([
+          { name: 'aboutme-locale', value: locale, url: GUIDE_BASE_URL },
+        ]);
+        if (session === 'in') {
+          await mockSignedInSession(page);
+        } else {
+          await mockSignedOutSession(page);
+        }
+
+        const response = await page.goto('/guide/mcp');
+        expect(response?.status()).toBe(200);
+        const shell = page.locator('[data-testid="app-shell"]');
+        await expect(shell).toBeVisible();
+        if (session === 'in') {
+          // SSR renders the signed-out shell before hydration's own
+          // GET /api/v1/me settles, so wait for the signed-in-only account
+          // menu before measuring (support.ts mockSignedInSession).
+          await expect(page.getByTestId('account-menu')).toBeVisible();
+        }
+
+        const overflow = await shell.evaluate((element) =>
+          element.scrollWidth - element.clientWidth);
+        expect(overflow).toBeLessThanOrEqual(0);
+
+        const guideLink = page.locator('nav a[href="/guide/mcp"]');
+        await expect(guideLink).toHaveCount(1);
+        if (GUIDE_LINK_VISIBLE_AT[session].includes(width)) {
+          await expect(guideLink).toBeVisible();
+        } else {
+          await expect(guideLink).toBeHidden();
+        }
+      });
+    }
+  }
+}

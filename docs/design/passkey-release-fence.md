@@ -33,11 +33,11 @@ mode.
 
 ## Serialized production operation
 
-Every deploy, rollback, failed-deploy restoration, activation, and TOTP key
-re-encryption holds one nonexpiring lock on the item. A 32-byte random base64url
-`operation_id`, a closed `operation_kind` (`deploy`, `rollback`, `activate`, or
-`totp_reencrypt`), and UTC `operation_started_at` name the owner. There is no
-time-based takeover.
+Every deploy, rollback, failed-deploy restoration, activation, TOTP key
+re-encryption, and public-root occupancy check holds one nonexpiring lock on the
+item. A 32-byte random base64url `operation_id`, a closed `operation_kind`
+(`deploy`, `rollback`, `activate`, `totp_reencrypt`, or `public_root_check`),
+and UTC `operation_started_at` name the owner. There is no time-based takeover.
 
 After assuming the deploy role, the deployer acquires the lock with one
 conditional `UpdateItem` that also initializes a missing minimum to zero and tag
@@ -132,6 +132,27 @@ in place.
 Once the raise commits, a lower target cannot take the lock. Deploy, rollback,
 and restoration never run the target release's copy of the script. Rollback
 below the fence is a forward fix or privileged administration.
+
+## Public-root occupancy check
+
+`deploy.sh --check-public-root <tag> <root>` takes the lock with kind
+`public_root_check`. It checkpoints before registering a candidate jobs task
+definition and before starting its one-shot task, waits for the task to stop,
+then releases the lock. A normal deploy with `--require-free-root <root>` runs
+the same check twice under its `deploy` lock: before release mutations, then
+after the old app stops and before migration.
+
+The command reads resume and tombstone occupancy in one read-only database
+transaction. It changes no application data, service, schedule, snapshot, alarm,
+or rule. The operation writes the lock and checkpoint attributes in DynamoDB,
+registers and starts an ECS task, and writes the task's fixed output to
+CloudWatch. The ECS task-definition, task, and log records remain as normal
+operational records.
+
+If the deployer exits while the one-shot may still run, it leaves the lock
+closed. Manual recovery must identify that exact task, wait until it is stopped,
+and inspect the other production state required by the general recovery rule
+before clearing the exact operation ID.
 
 ## Authenticator-app key re-encryption
 

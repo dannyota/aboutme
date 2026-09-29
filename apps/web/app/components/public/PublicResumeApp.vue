@@ -6,6 +6,7 @@ import type { components } from '../../api/generated/openapi';
 import LayoutColumns from '../resume/LayoutColumns.vue';
 import ResumeHeader from '../resume/ResumeHeader.vue';
 import { resolveRenderModel } from '../resume/resolveRenderModel';
+import PublicMark from './PublicMark.vue';
 
 type PublicResume = components['schemas']['PublicResume'];
 
@@ -77,18 +78,37 @@ const rootStyle = computed(() => ({
     :data-columns="model.columns"
     :style="rootStyle"
   >
-    <div class="public-measure">
-      <div class="public-toolbar">
-        <a
-          class="public-credit"
-          :href="homeHref"
-        >{{ creditLabel }}</a>
+    <div class="public-toolbar">
+      <div class="public-toolbar-inner">
+        <span class="public-brand">
+          <PublicMark />
+          <a
+            class="public-credit"
+            :href="homeHref"
+          >{{ creditLabel }}</a>
+        </span>
         <a
           v-if="publicResume.downloadEnabled"
           class="public-download"
           :href="downloadHref"
-        >{{ downloadLabel }}</a>
+        ><svg
+          aria-hidden="true"
+          fill="none"
+          focusable="false"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="16"
+          xmlns="http://www.w3.org/2000/svg"
+        ><path d="M12 15V3" /><path
+          d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+        /><path d="m7 10 5 5 5-5" /></svg><span>{{ downloadLabel }}</span></a>
       </div>
+    </div>
+    <div class="public-measure">
       <article
         class="resume-document"
         :lang="model.lng"

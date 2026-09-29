@@ -9,6 +9,9 @@ type AgentSettingsCopy = {
   readonly retry: string;
   readonly emptyTitle: string;
   readonly emptyDescription: string;
+  /** Links /guide/mcp from the empty state and under the list
+   * (docs/design/mcp-guide.md Navigation). */
+  readonly guideLink: string;
   readonly scopes: Record<AgentGrantScope, string>;
   readonly created: string;
   readonly lastUsed: string;
@@ -29,6 +32,7 @@ export const agentSettingsCopy: WorkspaceCopy<AgentSettingsCopy> = {
     retry: 'Thử lại',
     emptyTitle: 'Chưa có tác nhân nào được kết nối.',
     emptyDescription: 'Tác nhân kết nối qua MCP sau khi bạn cấp quyền.',
+    guideLink: 'Xem cách kết nối trợ lý AI',
     scopes: {
       'resumes:read': 'Đọc CV',
       'resumes:write': 'Chỉnh sửa CV',
@@ -50,6 +54,7 @@ export const agentSettingsCopy: WorkspaceCopy<AgentSettingsCopy> = {
     retry: 'Retry',
     emptyTitle: 'No connected agents.',
     emptyDescription: 'Agents connect through MCP after you approve access.',
+    guideLink: 'See how to connect an AI assistant',
     scopes: {
       'resumes:read': 'Read resumes',
       'resumes:write': 'Write resumes',

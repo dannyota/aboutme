@@ -11,7 +11,7 @@ const webRoot = resolve(import.meta.dirname, '../..');
 const workspaceRoot = resolve(webRoot, '../..');
 const themePath = resolve(webRoot, 'app/assets/css/theme.css');
 
-// Aurora application chrome tokens (ADR 0020). Resume
+// Application chrome tokens (ADR 0020). Resume
 // renderer tokens are covered separately below; they must never move with
 // this palette.
 const lightTokens = {
@@ -19,56 +19,56 @@ const lightTokens = {
   '--radius-sheet': '2px',
   '--radius-dialog': '14px',
   '--radius-feature': '20px',
-  '--background': '#f5f8ff',
+  '--background': '#f9f8f5',
   '--foreground': '#101b3f',
   '--card': '#ffffff',
   '--card-foreground': '#101b3f',
   '--popover': '#ffffff',
   '--popover-foreground': '#101b3f',
-  '--primary': '#1a5ceb',
+  '--primary': '#26409c',
   '--primary-foreground': '#ffffff',
-  '--secondary': '#eaf2ff',
+  '--secondary': '#eceef6',
   '--secondary-foreground': '#101b3f',
-  '--muted': '#edf1fa',
-  '--muted-foreground': '#56648c',
-  '--accent': '#eaf2ff',
+  '--muted': '#efede6',
+  '--muted-foreground': '#5c6178',
+  '--accent': '#eceef6',
   '--accent-foreground': '#101b3f',
   '--destructive': '#b54708',
-  '--border': '#dce5f5',
-  '--input': '#7886ae',
-  '--ring': '#1a5ceb',
+  '--border': '#e5e1d6',
+  '--input': '#7d8398',
+  '--ring': '#26409c',
   '--seal': '#cc2649',
   '--seal-foreground': '#ffffff',
   '--seal-text': '#cc2649',
-  '--link': '#123edb',
+  '--link': '#23399a',
   '--brand-blue': 'var(--primary)',
   '--brand-deep-blue': 'var(--link)',
-  '--brand-indigo': '#6254ff',
-  '--brand-cyan': '#35c8f5',
-  '--brand-purple': '#a855f7',
-  '--surface-blue': '#eaf2ff',
-  '--surface-indigo': '#f0eeff',
-  '--surface-pink': '#fff0fa',
+  '--brand-indigo': '#4a4dbf',
+  '--brand-jade': '#0f7c6e',
+  '--brand-ochre': '#8f6f0d',
+  '--surface-blue': '#eceef7',
+  '--surface-indigo': '#efeef8',
+  '--surface-sand': '#f6eedf',
   '--surface-destructive':
     'color-mix(in srgb, var(--destructive) 7%, var(--card))',
-  '--editor-canvas': '#eef3fc',
+  '--editor-canvas': '#f1efe9',
   '--space-module': '8px',
   '--space-dialog-title': '6px',
   '--space-field': '16px',
   '--space-dialog': '24px',
   '--space-section': '80px',
   '--space-section-lg': '112px',
-  '--primary-hover': '#1550d4',
+  '--primary-hover': '#1e3483',
   '--shadow-primary':
-    '0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(26 92 235 / 0.2)',
+    '0 1px 2px rgb(16 27 63 / 0.08), 0 4px 12px rgb(38 64 156 / 0.2)',
   '--paper': '#ffffff',
   '--paper-ink': '#171a18',
   '--paper-muted': '#5f6763',
   '--paper-hover': '#f0f2f1',
   '--shadow-paper':
     '0 1px 2px rgba(23,26,24,0.06),0 12px 32px rgba(23,26,24,0.1)',
-  '--gradient-brand-strong': 'linear-gradient(90deg,#1a5ceb,#5144f0)',
-  '--shadow-cta': '0 8px 24px rgb(26 92 235 / 0.28)',
+  '--gradient-brand-strong': 'linear-gradient(90deg,#1e3483,#3d40ad)',
+  '--shadow-cta': '0 8px 24px rgb(38 64 156 / 0.24)',
 } as const;
 
 // The paper tokens are defined in :root only (section 1); they never enter
@@ -85,44 +85,44 @@ const darkTokens = {
   '--radius-sheet': '2px',
   '--radius-dialog': '14px',
   '--radius-feature': '20px',
-  '--background': '#071126',
-  '--foreground': '#f4f7ff',
-  '--card': '#0d1935',
-  '--card-foreground': '#f4f7ff',
-  '--popover': '#132244',
-  '--popover-foreground': '#f4f7ff',
-  '--primary': '#72a0ff',
-  '--primary-foreground': '#071126',
-  '--secondary': '#132244',
-  '--secondary-foreground': '#f4f7ff',
-  '--muted': '#132244',
-  '--muted-foreground': '#9eacca',
-  '--accent': '#1a2b52',
-  '--accent-foreground': '#f4f7ff',
+  '--background': '#0c1020',
+  '--foreground': '#f3f1ec',
+  '--card': '#141a2e',
+  '--card-foreground': '#f3f1ec',
+  '--popover': '#1a2138',
+  '--popover-foreground': '#f3f1ec',
+  '--primary': '#8fa6f0',
+  '--primary-foreground': '#0c1020',
+  '--secondary': '#1a2138',
+  '--secondary-foreground': '#f3f1ec',
+  '--muted': '#1a2138',
+  '--muted-foreground': '#a5abbf',
+  '--accent': '#212a45',
+  '--accent-foreground': '#f3f1ec',
   '--destructive': '#fd8a4b',
-  '--border': 'rgba(180,200,255,0.16)',
-  '--input': '#5a6a95',
-  '--ring': '#72a0ff',
+  '--border': 'rgba(230,225,210,0.13)',
+  '--input': '#6a7390',
+  '--ring': '#8fa6f0',
   '--seal': '#cc2649',
   '--seal-foreground': '#ffffff',
   '--seal-text': '#ff6b8a',
-  '--link': '#8fb3ff',
+  '--link': '#a3b6f5',
   '--brand-blue': 'var(--primary)',
   '--brand-deep-blue': 'var(--link)',
-  '--brand-indigo': '#8b80ff',
-  '--brand-cyan': '#54d6ff',
-  '--brand-purple': '#c08bff',
-  '--surface-blue': '#10224a',
-  '--surface-indigo': '#1a1a4a',
-  '--surface-pink': '#2a1533',
+  '--brand-indigo': '#9a9cff',
+  '--brand-jade': '#5fcfbb',
+  '--brand-ochre': '#e6c35f',
+  '--surface-blue': '#151d36',
+  '--surface-indigo': '#1a1b3d',
+  '--surface-sand': '#231d16',
   '--surface-destructive':
     'color-mix(in srgb, var(--destructive) 12%, var(--card))',
-  '--editor-canvas': '#071126',
-  '--primary-hover': '#8fb3ff',
+  '--editor-canvas': '#0c1020',
+  '--primary-hover': '#a3b6f5',
   '--shadow-primary': '0 1px 2px rgb(0 0 0 / 0.4)',
   '--shadow-paper': '0 1px 2px rgba(0,0,0,0.4),0 12px 32px rgba(0,0,0,0.5)',
-  '--gradient-brand-strong': 'linear-gradient(90deg,#8fb3ff,#a39bff)',
-  '--shadow-cta': '0 8px 24px rgb(114 160 255 / 0.22)',
+  '--gradient-brand-strong': 'linear-gradient(90deg,#a3b6f5,#b0b2ff)',
+  '--shadow-cta': '0 8px 24px rgb(143 166 240 / 0.18)',
 } as const;
 
 afterEach(() => {
@@ -156,12 +156,12 @@ describe('application theme', () => {
       expect(value!.match(/radial-gradient/gu)).toHaveLength(3);
       expect(value).toContain('transparent 70%');
     }
-    expect(light).toContain('rgb(53 200 245 / 0.3)');
-    expect(light).toContain('rgb(26 92 235 / 0.24)');
-    expect(light).toContain('rgb(168 85 247 / 0.18)');
-    expect(dark).toContain('rgb(84 214 255 / 0.22)');
-    expect(dark).toContain('rgb(114 160 255 / 0.3)');
-    expect(dark).toContain('rgb(192 139 255 / 0.22)');
+    expect(light).toContain('rgb(15 124 110 / 0.16)');
+    expect(light).toContain('rgb(38 64 156 / 0.18)');
+    expect(light).toContain('rgb(143 111 13 / 0.16)');
+    expect(dark).toContain('rgb(95 207 187 / 0.14)');
+    expect(dark).toContain('rgb(143 166 240 / 0.22)');
+    expect(dark).toContain('rgb(230 195 95 / 0.12)');
   });
 
   it('maps the chrome font, seal colors, radii, shadow, and type scale', () => {
@@ -176,14 +176,16 @@ describe('application theme', () => {
     expect(theme['--color-seal-text']).toBe('var(--seal-text)');
     expect(theme['--color-link']).toBe('var(--link)');
     for (const brand of [
-      'blue', 'deep-blue', 'indigo', 'cyan', 'purple',
+      'blue', 'deep-blue', 'indigo', 'jade', 'ochre',
     ]) {
       expect(theme[`--color-brand-${brand}`]).toBe(`var(--brand-${brand})`);
     }
-    // Pink and orange were retired as brand colors (ADR 0020).
-    expect(theme['--color-brand-pink']).toBeUndefined();
-    expect(theme['--color-brand-orange']).toBeUndefined();
-    for (const surface of ['blue', 'indigo', 'pink', 'destructive']) {
+    // Pink, orange, cyan, and purple are not brand colors (ADR 0020).
+    for (const retired of ['pink', 'orange', 'cyan', 'purple']) {
+      expect(theme[`--color-brand-${retired}`]).toBeUndefined();
+    }
+    expect(theme['--color-surface-pink']).toBeUndefined();
+    for (const surface of ['blue', 'indigo', 'sand', 'destructive']) {
       expect(theme[`--color-surface-${surface}`]).toBe(
         `var(--surface-${surface})`,
       );
@@ -264,6 +266,57 @@ describe('application theme', () => {
     },
   );
 
+  it('keeps chrome text and marks at WCAG AA on every ground', () => {
+    const css = readFileSync(themePath, 'utf8');
+    for (const selector of [':root', 'html[data-theme="dark"]']) {
+      const tokens = { ...blockDeclarations(css, ':root') };
+      Object.assign(tokens, blockDeclarations(css, selector));
+      const grounds = [
+        '--background', '--card', '--muted', '--surface-blue',
+        '--surface-indigo', '--surface-sand', '--secondary', '--accent',
+        '--popover', '--editor-canvas', '--surface-destructive',
+      ];
+      // Body text needs 4.5:1; icons, dots, and input borders need 3:1.
+      const text = [
+        '--foreground', '--muted-foreground', '--link', '--seal-text',
+        '--destructive',
+      ];
+      const marks = [
+        '--primary', '--brand-indigo', '--brand-jade', '--brand-ochre',
+      ];
+      for (const ground of grounds) {
+        const groundHex = resolveColor(tokens[ground]!, tokens);
+        for (const fg of text) {
+          expect(
+            contrast(tokens[fg]!, groundHex),
+            `${selector} ${fg} on ${ground}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+        for (const fg of marks) {
+          expect(
+            contrast(tokens[fg]!, groundHex),
+            `${selector} ${fg} on ${ground}`,
+          ).toBeGreaterThanOrEqual(3);
+        }
+      }
+      for (const ground of ['--background', '--card']) {
+        expect(
+          contrast(tokens['--input']!, tokens[ground]!),
+          `${selector} --input on ${ground}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+      for (const fill of ['--primary', '--primary-hover']) {
+        expect(
+          contrast(tokens['--primary-foreground']!, tokens[fill]!),
+          `${selector} --primary-foreground on ${fill}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(
+        contrast(tokens['--seal-foreground']!, tokens['--seal']!),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('scopes .paper-surface to the paper tokens, not the app palette', () => {
     const css = readFileSync(themePath, 'utf8');
     const scope = blockDeclarations(css, '.paper-surface');
@@ -273,8 +326,8 @@ describe('application theme', () => {
     expect(scope['--muted-foreground']).toBe('var(--paper-muted)');
     expect(scope['--accent']).toBe('var(--paper-hover)');
     expect(scope['--accent-foreground']).toBe('var(--paper-ink)');
-    expect(scope['--ring']).toBe('#1a5ceb');
-    expect(scope['--link']).toBe('#123edb');
+    expect(scope['--ring']).toBe('#26409c');
+    expect(scope['--link']).toBe('#23399a');
     expect(plain['background-color']).toBe('var(--paper)');
     expect(plain['color']).toBe('var(--paper-ink)');
   });
@@ -284,8 +337,11 @@ describe('application theme', () => {
       .filter((path) => path !== themePath)
       .filter((path) => {
         const source = readFileSync(path, 'utf8');
-        return /\b(?:bg|text|border)-(?:positive(?:\/\d+)?|chart-[1-5])\b/
-          .test(source);
+        return (
+          /\b(?:bg|text|border)-(?:positive(?:\/\d+)?|chart-[1-5])\b/
+            .test(source)
+            || /(?:brand-(?:cyan|purple)|surface-pink)\b/.test(source)
+        );
       })
       .map((path) => path.slice(webRoot.length + 1));
 
@@ -377,4 +433,56 @@ function sourceFiles(directory: string): string[] {
     if (entry.isDirectory()) return sourceFiles(path);
     return /\.(?:css|ts|vue)$/.test(entry.name) ? [path] : [];
   });
+}
+
+// Resolves a token value to a six-digit hex color, following a var()
+// reference or computing a color-mix() the way the browser would, so
+// grounds built from either (--surface-destructive) can be checked for
+// contrast like any other ground.
+function resolveColor(
+  value: string,
+  tokens: Record<string, string>,
+): string {
+  const trimmed = value.trim();
+  const varMatch = /^var\((--[\w-]+)\)$/u.exec(trimmed);
+  if (varMatch) return resolveColor(tokens[varMatch[1]!]!, tokens);
+  const mixMatch
+    = /^color-mix\(in srgb,\s*(.+?) (\d+)%,\s*(.+?)\)$/u.exec(trimmed);
+  if (mixMatch) {
+    const fraction = Number(mixMatch[2]) / 100;
+    const first = resolveColor(mixMatch[1]!, tokens);
+    const second = resolveColor(mixMatch[3]!, tokens);
+    return mixHex(first, second, fraction);
+  }
+  return trimmed;
+}
+
+function mixHex(first: string, second: string, fraction: number): string {
+  const channel = (at: number): number => {
+    const a = Number.parseInt(first.slice(1 + at, 3 + at), 16);
+    const b = Number.parseInt(second.slice(1 + at, 3 + at), 16);
+    return Math.round(a * fraction + b * (1 - fraction));
+  };
+  return `#${[0, 2, 4]
+    .map((at) => channel(at).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function contrast(first: string, second: string): number {
+  const [high, low] = [luminance(first), luminance(second)].sort(
+    (a, b) => b - a,
+  );
+  return (high! + 0.05) / (low! + 0.05);
+}
+
+function luminance(hex: string): number {
+  const match = /^#([0-9a-f]{6})$/iu.exec(hex.trim());
+  if (match === null) throw new Error(`not a six-digit hex color: ${hex}`);
+  const [r, g, b] = [0, 2, 4].map((at) => {
+    const channel = Number.parseInt(match[1]!.slice(at, at + 2), 16) / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 }

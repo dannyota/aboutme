@@ -221,8 +221,19 @@ describe('owner page title and emoji favicon', () => {
 });
 
 describe('public page measure and PDF download', () => {
-  const downloadLink = (html: string) =>
-    /<a class="public-download" href="([^"]*)">([^<]*)<\/a>/u.exec(html);
+  // The download anchor wraps a Lucide download icon and a label span
+  // (docs/design/public-page-theme.md, "Structure"), so its href and visible
+  // label are read from separate captures rather than one text child.
+  const downloadLink = (html: string) => {
+    const anchor = /<a class="public-download" href="([^"]*)">(.*?)<\/a>/su
+      .exec(html);
+    if (anchor === null) return null;
+    return {
+      href: anchor[1],
+      label: /<span>([^<]*)<\/span>$/su.exec(anchor[2])?.[1] ?? null,
+      icon: /^<svg[^>]*aria-hidden="true"[^>]*>/su.test(anchor[2]),
+    };
+  };
 
   it('links the public PDF only while download is enabled', async () => {
     const hidden = await renderPublicResume(request(), VERSIONS);
@@ -233,8 +244,9 @@ describe('public page measure and PDF download', () => {
     value.publicResume.downloadEnabled = true;
     const html = await renderPublicResume(value, VERSIONS);
     const link = downloadLink(html);
-    expect(link?.[1]).toBe('/api/v1/public/resumes/ada1/pdf');
-    expect(link?.[2]).toBe('Download PDF');
+    expect(link?.href).toBe('/api/v1/public/resumes/ada1/pdf');
+    expect(link?.label).toBe('Download PDF');
+    expect(link?.icon).toBe(true);
     expect(html.match(/public-download/gu)).toHaveLength(1);
   });
 
@@ -249,9 +261,35 @@ describe('public page measure and PDF download', () => {
       value.publicResume.downloadEnabled = true;
       value.publicResume.lng = lng;
       const html = await renderPublicResume(value, VERSIONS);
-      expect(downloadLink(html)?.[2], lng).toBe(label);
+      expect(downloadLink(html)?.label, lng).toBe(label);
     }
   });
+
+  it('draws the brand mark beside the credit, plain and accessible',
+    async () => {
+      const html = await renderPublicResume(request(), VERSIONS);
+      expect(html).toContain('<div class="public-toolbar">');
+      expect(html).toContain('<div class="public-toolbar-inner">');
+      expect(html).toContain('<span class="public-brand">');
+      // Vue SSR emits static attributes in source order, and PublicMark.vue
+      // declares aria-hidden before class, so the match must not assume
+      // class is the svg's first attribute.
+      const markElement = /<svg\b[^>]*\bclass="public-mark"[^>]*>.*?<\/svg>/su
+        .exec(html)?.[0];
+      expect(markElement).not.toBeUndefined();
+      expect(markElement).toContain('aria-hidden="true"');
+      expect(markElement).toContain('focusable="false"');
+      // Plain SVG only: no gradient, no id, and no style element, matching
+      // the logo's own mark (identity-and-seal.md, "Logo").
+      expect(markElement).not.toMatch(/\bid="/u);
+      expect(markElement).not.toMatch(
+        /<(?:linearGradient|radialGradient|mask|style)\b/u,
+      );
+      const brandStart = html.indexOf('<span class="public-brand">');
+      const creditStart = html.indexOf('<a class="public-credit"');
+      expect(html.indexOf(markElement!)).toBeGreaterThan(brandStart);
+      expect(creditStart).toBeGreaterThan(brandStart);
+    });
 
   it('marks the column count for the public measure', async () => {
     const one = await renderPublicResume(request(), VERSIONS);
