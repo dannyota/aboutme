@@ -118,7 +118,28 @@ async function verify(mode, path) {
     scenario: 'public-resume-hydration',
     origin: 'https://localhost:20443',
     errors: { console: 0, externalRequest: 0, page: 0 },
-    steps: { published: true, ssr: true, hydrated: true },
+    // The sign-in-to-view steps follow the hydration steps, in the order the
+    // spec writes them (docs/design/viewer-analytics/sign-in-to-view.md).
+    steps: {
+      published: true,
+      ssr: true,
+      hydrated: true,
+      gate: true,
+      gatedRoutes: true,
+      googlePass: true,
+      linkedinPass: true,
+      passCookie: true,
+      ownerGated: true,
+      joinInvite: true,
+      joinInviteClosed: true,
+      switchOff: true,
+      viewCleanup: true,
+    },
+    // The invite shows no sooner than its 5 s floor after view start and
+    // within the spec's 45 s wait.
+    timings: { joinInviteMs: Number.isInteger(actual.timings?.joinInviteMs)
+      && actual.timings.joinInviteMs >= 4900
+      && actual.timings.joinInviteMs <= 45000 ? actual.timings.joinInviteMs : -1 },
   } : mode === 'password-auth' ? {
     ...common,
     scenario: 'password-authentication',
