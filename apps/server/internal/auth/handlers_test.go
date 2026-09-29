@@ -164,8 +164,9 @@ func withSessionIssuer(si sessionIssuerForTest) testServiceOption {
 	return func(c *testServiceConfig) { c.sessionIssuer = si }
 }
 
-// newTestService builds the production router over live queries. It requires a
-// Google or GitHub test endpoint; all omitted endpoints become unroutable.
+// newTestService builds the production router over live queries. It requires
+// at least one local provider override (Google issuer, GitHub endpoint, or
+// LinkedIn issuer); every omitted endpoint becomes the unroutable sentinel.
 func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *store.Queries) {
 	t.Helper()
 
@@ -176,11 +177,12 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	for _, opt := range opts {
 		opt(&sc)
 	}
-	if sc.googleIssuer == "" && sc.githubEndpoint == "" {
-		t.Fatal("newTestService: no provider endpoint override supplied (withGoogleIssuer or " +
-			"withGitHubEndpoint) -- every test Service must be pointed at a local stub, never " +
-			"the real https://accounts.google.com or https://github.com/api.github.com, or a " +
-			"request to /start or /callback would perform live network I/O against the real provider")
+	if sc.googleIssuer == "" && sc.githubEndpoint == "" && sc.linkedinIssuer == "" {
+		t.Fatal("newTestService: no provider endpoint override supplied (withGoogleIssuer, " +
+			"withGitHubEndpoint, or withLinkedInIssuer) -- every test Service must be pointed at a " +
+			"local stub, never the real https://accounts.google.com, https://github.com/api.github.com, " +
+			"or https://www.linkedin.com, or a request to /start or /callback would perform live " +
+			"network I/O against the real provider")
 	}
 
 	cfg := config.Config{

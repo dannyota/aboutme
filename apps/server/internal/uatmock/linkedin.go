@@ -238,7 +238,7 @@ func (l *linkedinMock) validAuthorize(values url.Values) bool {
 		return false
 	}
 	return values.Get("client_id") == l.clientID && values.Get("redirect_uri") == l.redirectURL &&
-		values.Get("response_type") == "code" && values.Get("scope") == "openid profile email"
+		values.Get("response_type") == "code" && authorizeScopeAllowed(values.Get("scope"))
 }
 
 func (l *linkedinMock) storeCode(binding linkedinBinding) (string, error) {

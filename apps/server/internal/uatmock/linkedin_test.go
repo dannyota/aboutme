@@ -360,3 +360,32 @@ func TestLinkedInModeNeedsBothCredentials(t *testing.T) {
 		t.Errorf("LinkedIn discovery without LinkedIn credentials = %d, want %d", rec.Code, http.StatusNotFound)
 	}
 }
+
+func TestLinkedInAuthorizeAcceptsOnlyLoginAndViewScopes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		scope string
+		want  int
+	}{
+		{scope: "openid profile email", want: http.StatusFound},
+		{scope: "openid", want: http.StatusFound},
+		{scope: "openid profile", want: http.StatusBadRequest},
+		{scope: "openid email", want: http.StatusBadRequest},
+		{scope: "openid profile email extra", want: http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.scope, func(t *testing.T) {
+			t.Parallel()
+			svc := newLinkedInTestService(t)
+			form := validLinkedInAuthorizeQuery()
+			form.Set("scope", tt.scope)
+			form.Set("action", "allow")
+			form.Set("account", linkedinAccounts[0].Subject)
+			rec := postLinkedInForm(svc.Handler(), linkedinAuthorizePath, form, nil)
+			if rec.Code != tt.want {
+				t.Fatalf("scope %q status = %d, want %d, body = %s", tt.scope, rec.Code, tt.want, rec.Body.String())
+			}
+		})
+	}
+}
