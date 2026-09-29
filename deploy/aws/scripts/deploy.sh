@@ -370,7 +370,7 @@ check_floor_flag() { # env-var-name fence-epoch human-name floor-tag
 }
 check_floor_flag PASSKEY_ENROLLMENT_ENABLED "$fence_epoch" "passkey enrollment" v0.4.2
 check_floor_flag TOTP_ENROLLMENT_ENABLED "$fence_epoch_totp" "TOTP enrollment" v0.4.7
-check_floor_flag SIGN_IN_TO_VIEW_ENABLED "$fence_epoch_signin" "sign in to view" v0.6.22
+check_floor_flag SIGN_IN_TO_VIEW_ENABLED "$fence_epoch_signin" "sign in to view" v0.6.26
 
 # A release at or above v0.4.7 needs the TOTP key OpenTofu provisions
 # (docs/design/totp-key-management.md, "Bootstrap"); an app revision missing

@@ -15,10 +15,10 @@ fence_epoch=4002
 # docs/design/passkey-release-fence.md, "Authenticator-app key
 # re-encryption".
 fence_epoch_totp=4007
-# v0.6.22's own numeric release: the first tag that can turn
+# v0.6.26's own numeric release: the first tag that can turn
 # SIGN_IN_TO_VIEW_ENABLED on. See docs/design/viewer-analytics/sign-in-to-view.md,
 # "Release and rollback".
-fence_epoch_signin=6022
+fence_epoch_signin=6026
 
 # 0. The base identity assumes aboutme-prod-operator, which chains to
 # aboutme-prod-deploy for every mutation below. The profile chain is built
@@ -161,7 +161,7 @@ fence_read() {
     return 1
   fi
   if ((fence_min < fence_epoch_signin)) && [[ $signin_enabled == true ]]; then
-    say "the release fence is below v0.6.22 but the running app has sign in to view on"
+    say "the release fence is below v0.6.26 but the running app has sign in to view on"
     return 1
   fi
 }

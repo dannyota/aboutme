@@ -100,8 +100,8 @@ variable "totp_enrollment_enabled" {
   description = "TOTP_ENROLLMENT_ENABLED for the server"
 }
 
-# Off until a healthy v0.6.22 or later release raises the production
-# minimum-release fence to numeric 6022; see
+# Off until a healthy v0.6.26 or later release raises the production
+# minimum-release fence to numeric 6026; see
 # docs/design/passkey-release-fence.md and
 # docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback".
 variable "sign_in_to_view_enabled" {
