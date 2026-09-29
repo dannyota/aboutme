@@ -23,6 +23,7 @@ var sitePages = []struct{ path, title string }{
 	{"/privacy", "Privacy policy"},
 	{"/terms", "Terms of service"},
 	{"/templates", "Resume templates"},
+	{"/guide/mcp", "Connect an AI assistant with MCP"},
 }
 
 // templateIDs are the template presets, each with a gallery page at

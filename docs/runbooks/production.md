@@ -144,14 +144,14 @@ A release is a `v*` tag on `main` with green `ci.yml` (not `workflow_dispatch`).
 HIGH/CRITICAL finding. `security-scan.yml` also runs `govulncheck`/`npm audit`
 weekly on `main`/latest images; cron editor alone is alerted; 60d idle drops it.
 
-Before the first deploy after adding maintenance mode, apply the reviewed
-OpenTofu change. It creates `aboutme-prod-maintenance` at desired count zero.
-The deploy script registers the release's Caddy image before it starts that
-service, so the initial task definition image never serves traffic.
+Before the first maintenance deploy, apply reviewed OpenTofu. It creates
+`aboutme-prod-maintenance` at desired count zero. The deploy script registers
+its release Caddy image before starting the service.
 
 ```sh
-bash deploy/aws/scripts/deploy.sh <tag>                 # normal release
-bash deploy/aws/scripts/deploy.sh <tag> --first-deploy  # first release only
+bash deploy/aws/scripts/deploy.sh <tag> [--first-deploy]
+bash deploy/aws/scripts/deploy.sh --check-public-root <tag> guide
+bash deploy/aws/scripts/deploy.sh <tag> --require-free-root guide  # MCP guide
 ```
 
 The script verifies the caller, assumes the operator then deploy role, reads the
@@ -364,10 +364,11 @@ image that predates the raise.
 ### Recovery
 
 A script failure or signal restores alarm actions and the task-stopped rule,
-then releases the lock it holds, the same as a successful run. Only an unhandled
-process death (SIGKILL, host loss) skips this and leaves the lock closed. Before
-clearing it by hand, using the AWS-login principal's own credentials, which
-OpenTofu and account administration already trust as a privileged bypass:
+then releases the lock unless a public-root audit or TOTP key re-encryption may
+still run. A public-root audit prints `started-by root-...` and retains the
+lock. Do not clear it until that ECS list-tasks search has no active task or all
+matches are STOPPED. Process death (SIGKILL, host loss) also leaves the lock
+closed. Use the AWS-login principal's privileged bypass credentials to clear it:
 
 1. Confirm no `deploy.sh` process is running.
 2. Confirm no database task and no release snapshot from a prior run is still in
@@ -377,16 +378,15 @@ OpenTofu and account administration already trust as a privileged bypass:
    aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-migrate
    aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-db-setup
    aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by deploy-totp-reencrypt
+   aws ecs list-tasks --region ap-southeast-1 --cluster aboutme-prod --started-by <printed-started-by>
    aws rds describe-db-snapshots --region ap-southeast-1 --db-instance-identifier aboutme-prod \
      --query 'DBSnapshots[?Status!=`available`]'
    ```
 
-   Every `list-tasks` call must return no task ARNs, and the snapshot query must
-   return an empty list, before continuing.
+   Every task must be absent or STOPPED, and the snapshot query must be empty.
 
-3. Inspect `aboutme-prod-app`, `aboutme-prod-web`, `aboutme-prod-maintenance`,
-   the job schedules, the `aboutme-prod-site-down` alarm, and the
-   `aboutme-prod-task-stopped` rule against [Healthy state](#healthy-state).
+3. Inspect app, web, maintenance, job schedules, the site-down alarm, and the
+   task-stopped rule against [Healthy state](#healthy-state).
 4. Strongly read the fence item and record its `operation_id` and
    `operation_kind` with the reason for the clear:
 

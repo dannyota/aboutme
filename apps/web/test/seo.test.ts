@@ -92,6 +92,18 @@ const sitePages = [
     },
     canonical: 'https://aboutme.vn/verify',
   },
+  {
+    route: '/guide/mcp',
+    title: {
+      vi: 'Kết nối trợ lý AI qua MCP · aboutme.vn',
+      en: 'Connect your AI assistant with MCP · aboutme.vn',
+    },
+    description: {
+      vi: 'Kết nối Claude hoặc trợ lý AI khác với aboutme.vn qua MCP',
+      en: 'Connect Claude or another AI assistant to aboutme.vn through MCP',
+    },
+    canonical: 'https://aboutme.vn/guide/mcp',
+  },
 ] as const;
 
 describe('site page search metadata', () => {
@@ -121,8 +133,8 @@ describe('site page search metadata', () => {
         );
         expect(meta('meta[property="og:image"]')).toBe(
           locale === 'vi'
-            ? 'https://aboutme.vn/og-image-v5.jpg'
-            : 'https://aboutme.vn/og-image-v4-en.jpg',
+            ? 'https://aboutme.vn/og-image-v7.jpg'
+            : 'https://aboutme.vn/og-image-v6-en.jpg',
         );
         expect(meta('meta[name="twitter:card"]')).toBe('summary_large_image');
         expect(document.head.querySelector('meta[name="robots"]')).toBeNull();

@@ -447,6 +447,14 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "verify_page", method: http.MethodGet, path: "/verify", want: wantWeb},
 		{name: "verify_markdown", method: http.MethodGet, path: "/verify.md", want: wantWeb},
 		{name: "verify_prefixed_slug", method: http.MethodGet, path: "/verify-me", want: wantGo},
+		// The MCP guide is a fixed Nuxt root; /mcp itself keeps dispatching to
+		// Go, so the guide can never shadow the MCP endpoint.
+		{name: "guide_mcp_page", method: http.MethodGet, path: "/guide/mcp", want: wantWeb},
+		{name: "guide_mcp_markdown", method: http.MethodGet, path: "/guide/mcp.md", want: wantWeb},
+		{name: "guide_root_page", method: http.MethodGet, path: "/guide", want: wantWeb},
+		{name: "guide_prefixed_slug", method: http.MethodGet, path: "/guide-me", want: wantGo},
+		{name: "guides_slug", method: http.MethodGet, path: "/guides", want: wantGo},
+		{name: "mcp_endpoint_still_go", method: http.MethodGet, path: "/mcp", want: wantGo},
 		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
 		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
 		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},

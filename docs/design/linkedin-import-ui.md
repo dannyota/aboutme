@@ -233,10 +233,10 @@ After the request:
 Every color is a semantic or brand token, so light and dark switch with the
 theme. Points to check in both themes at 390 and 1280 px:
 
-- The drop zone is `--surface-blue` (`#EAF2FF`, dark `#10224A`) with the
+- The drop zone is `--surface-blue` (`#ECEEF7`, dark `#151D36`) with the
   `--input` dashed border; drag-over is `--surface-indigo` with a `--primary`
   border.
-- Cards are `--card` (`#FFFFFF`, dark `#0D1935`); the step circles and the drop
+- Cards are `--card` (`#FFFFFF`, dark `#141A2E`); the step circles and the drop
   zone use `--surface-blue`; muted text stays AA on both.
 - Meter and progress fills are `--primary` on `--muted`; over the limit the fill
   and reason are `--destructive` (`#B54708`, dark `#FD8A4B`).

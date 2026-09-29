@@ -9,4 +9,5 @@
 - [Privacy policy](https://aboutme.example/privacy)
 - [Terms of service](https://aboutme.example/terms)
 - [Resume templates](https://aboutme.example/templates)
+- [Connect an AI assistant with MCP](https://aboutme.example/guide/mcp)
 - [Source code](https://github.com/dannyota/aboutme)

@@ -22,7 +22,7 @@ chrome may frame the renderer but does not change its output.
 Vietnamese is the default site language. The language choice persists in the
 `aboutme-locale` cookie. Every application route renders in the chosen language:
 
-- `/`, `/privacy`, `/terms`, and `/verify`.
+- `/`, `/privacy`, `/terms`, `/verify`, and `/guide/mcp`.
 - `/templates` and `/templates/{id}`.
 - `/login`, `/login/second-factor`, `/register`, `/forgot-password`,
   `/reset-password`, and `/verify-email`.
@@ -47,15 +47,16 @@ Colorful product UI. Calm white resume.
 [ADR 0020](docs/adr/0020-application-visual-identity.md) records the aurora
 canvas, the seal logo, the stamp, and the tokens.
 
-- The application canvas is a pale blue ground with large, soft radial glows:
-  blue and indigo at the top corners, cyan and a faint pink further down. The
-  glows are CSS gradients on the body background under `data-ui="app"`, scroll
-  with the page, and never animate.
+- The application canvas is warm paper with large, soft radial glows: ink blue
+  and indigo at the top corners, jade and ochre further down. The palette is
+  keyed to the logo: navy ink for actions and seal red for public. The glows are
+  CSS gradients on the body background under `data-ui="app"`, scroll with the
+  page, and never animate.
 - The resume is a whole white sheet with a neutral paper shadow. It stays white
   in dark theme and never takes an Aurora token, gradient, radius, or shadow.
 - Blue leads: actions, links, focus, and `/verify`'s verified state. There are
-  two blues: `--primary` fills and `--link` colors text. Indigo, purple, and
-  cyan support templates, customization, and features. A section uses a few,
+  two ink blues: `--primary` fills and `--link` colors text. Indigo, jade, and
+  ochre support templates, customization, and features. A section uses a few,
   never all.
 - Red means public. Seal red marks the public state, the Publish action, the
   seal, and the logo's seal, which makes the same promise, and nothing else.
@@ -84,7 +85,7 @@ Each part holds whole sections of this spec.
 
 Chrome uses `Be Vietnam Pro` with a 15 px body and 14 px controls, on the 8 px
 module. Semantic tokens are defined on `:root` and switched by
-`html[data-theme="dark"]`, a midnight-blue theme. `--primary` fills actions,
+`html[data-theme="dark"]`, an ink-black theme. `--primary` fills actions,
 `--link` colors blue text, and `--seal` and `--seal-text` carry the public
 state. Text meets WCAG AA over the brightest canvas glow. The resume sheet and
 chrome that stands for it use the paper tokens, which never switch. The full

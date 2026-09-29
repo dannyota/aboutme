@@ -10,7 +10,8 @@ import {
 
 export interface SiteSeo {
   readonly path:
-    | '/' | '/privacy' | '/terms' | '/verify' | `/templates${string}`;
+    | '/' | '/privacy' | '/terms' | '/verify' | '/guide/mcp'
+    | `/templates${string}`;
   readonly title: string;
   readonly description: string;
   readonly locale: Locale;

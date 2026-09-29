@@ -152,7 +152,15 @@ async function refreshAfterAction(): Promise<void> {
         v-if="!unavailable && grants.length === 0"
         :title="copy.emptyTitle"
         :description="copy.emptyDescription"
-      />
+      >
+        <template #action>
+          <NuxtLink
+            class="text-link underline-offset-4 hover:underline"
+            data-testid="agents-guide-link"
+            to="/guide/mcp"
+          >{{ copy.guideLink }}</NuxtLink>
+        </template>
+      </EmptyState>
 
       <div
         v-if="grants.length > 0"
@@ -200,6 +208,13 @@ async function refreshAfterAction(): Promise<void> {
           </Button>
         </div>
       </div>
+
+      <NuxtLink
+        v-if="grants.length > 0"
+        class="text-link underline-offset-4 hover:underline"
+        data-testid="agents-guide-link"
+        to="/guide/mcp"
+      >{{ copy.guideLink }}</NuxtLink>
     </template>
 
     <ConfirmDialog

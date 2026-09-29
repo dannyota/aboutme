@@ -58,6 +58,7 @@ apps/web/app/components/app/SwitchField.vue
 apps/web/app/components/app/TextField.vue
 apps/web/app/components/app/ThemeToggle.vue
 apps/web/app/components/app/sealLayout.ts
+apps/web/app/components/app/sealMark.ts
 apps/web/app/components/auth/AuthLayout.vue
 apps/web/app/components/auth/PasswordField.vue
 apps/web/app/components/auth/PasswordSettings.vue
@@ -119,6 +120,11 @@ apps/web/app/components/editor/structure/StructurePanel.vue
 apps/web/app/components/editor/templates/TemplatePanel.vue
 apps/web/app/components/editor/templates/TemplatePartialDialog.vue
 apps/web/app/components/editor/templates/TemplateThumbnail.vue
+apps/web/app/components/guide/GuideCanCannot.vue
+apps/web/app/components/guide/GuideClaudeSteps.vue
+apps/web/app/components/guide/GuideCopyBlock.vue
+apps/web/app/components/guide/GuideRichText.vue
+apps/web/app/components/guide/GuideTroubleshooting.vue
 apps/web/app/components/import/ImportActionPanel.vue
 apps/web/app/components/import/ImportEntryRow.vue
 apps/web/app/components/import/ImportPick.vue
@@ -133,6 +139,7 @@ apps/web/app/components/print/PrintResumeApp.vue
 apps/web/app/components/print/vue-style.d.ts
 apps/web/app/components/public/JoinInvite.vue
 apps/web/app/components/public/PublicGate.vue
+apps/web/app/components/public/PublicMark.vue
 apps/web/app/components/public/PublicResumeApp.vue
 apps/web/app/components/resume/LayoutColumns.vue
 apps/web/app/components/resume/PagedResume.vue
@@ -357,6 +364,7 @@ apps/web/app/i18n/editor-fields.ts
 apps/web/app/i18n/editor-sections.ts
 apps/web/app/i18n/editor-shell.ts
 apps/web/app/i18n/error.ts
+apps/web/app/i18n/guide.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/import.ts
 apps/web/app/i18n/legal.ts
@@ -406,6 +414,7 @@ apps/web/app/pages/app/views/[id].vue
 apps/web/app/pages/app/views/index.vue
 apps/web/app/pages/authorize.vue
 apps/web/app/pages/forgot-password.vue
+apps/web/app/pages/guide/mcp.vue
 apps/web/app/pages/index.vue
 apps/web/app/pages/login.vue
 apps/web/app/pages/login/second-factor.vue
@@ -475,6 +484,14 @@ apps/web/e2e/baselines/consulting-formal--vn-full--letter--paged.png
 apps/web/e2e/baselines/consulting-formal--vn-full--paged.png
 apps/web/e2e/baselines/engineer-compact--vn-full--paged.png
 apps/web/e2e/baselines/executive-band--vn-full--paged.png
+apps/web/e2e/baselines/guide--dark--1280.png
+apps/web/e2e/baselines/guide--dark--390.png
+apps/web/e2e/baselines/guide--en--dark--1280.png
+apps/web/e2e/baselines/guide--en--dark--390.png
+apps/web/e2e/baselines/guide--en--light--1280.png
+apps/web/e2e/baselines/guide--en--light--390.png
+apps/web/e2e/baselines/guide--light--1280.png
+apps/web/e2e/baselines/guide--light--390.png
 apps/web/e2e/baselines/modern-sidebar--full--continuous.png
 apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
 apps/web/e2e/baselines/public--classic-serif--2560.png
@@ -561,8 +578,8 @@ apps/web/public/icon-192-v3.png
 apps/web/public/icon-32-v3.png
 apps/web/public/icon-512-v3.png
 apps/web/public/landing/danny.webp
-apps/web/public/og-image-v4-en.jpg
-apps/web/public/og-image-v5.jpg
+apps/web/public/og-image-v6-en.jpg
+apps/web/public/og-image-v7.jpg
 apps/web/public/site-v3.webmanifest
 apps/web/public/templates/pages/ats-plain-en-p1.png
 apps/web/public/templates/pages/ats-plain-vi-p1.png

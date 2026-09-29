@@ -36,6 +36,8 @@ export type LegalCopy = {
   readonly termsLink: string;
   /** The homepage footer's link to /verify. */
   readonly verifyLink: string;
+  /** The homepage footer's link to /guide/mcp, right after Verify. */
+  readonly guideLink: string;
   /** "By creating an account you agree to the [Terms] and the [Privacy]." */
   readonly agreement: readonly [string, string, string];
 };
@@ -46,6 +48,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     privacyLink: 'Chính sách quyền riêng tư',
     termsLink: 'Điều khoản sử dụng',
     verifyLink: 'Kiểm chứng',
+    guideLink: 'Kết nối AI',
     agreement: [
       'Khi tạo tài khoản, bạn xác nhận đủ 16 tuổi và đồng ý với ',
       ' và ',
@@ -375,6 +378,7 @@ export const legalCopy: Record<Locale, LegalCopy> = {
     privacyLink: 'Privacy Policy',
     termsLink: 'Terms of Service',
     verifyLink: 'Verify',
+    guideLink: 'Connect AI',
     agreement: [
       'By creating an account you confirm you are at least 16 and agree '
       + 'to the ',

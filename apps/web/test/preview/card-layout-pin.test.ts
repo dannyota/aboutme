@@ -25,7 +25,11 @@ const PINNED: Record<number, string> = {
   // ADR 0020: the footer mark became the seal.
   // Re-pinned without a version bump: only an ADR citation in a comment
   // changed, so the rendered card is identical.
-  2: 'a28b2c244fe4c56a049ab5013ad1016cd4c2755b575502d31fefddb2d310e3a4',
+  // Re-pinned again without a version bump: AppLogo.vue now draws its mark
+  // from the shared sealMark.ts geometry module
+  // (docs/design/ui/identity-and-seal.md, "Logo"), so the rendered card is
+  // still identical.
+  2: '8924cdc6668ccae6238b97f02b69923d6d8765a2051f24d55c6cdf77aec7f331',
 };
 
 describe('card layout pin', () => {

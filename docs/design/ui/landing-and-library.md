@@ -28,9 +28,11 @@ that. Screen readers skip them.
 
 Four sections follow the hero:
 
-1. Three feature cards on blue, indigo, and pink surface tints with the 20 px
+1. Three feature cards on blue, indigo, and sand surface tints with the 20 px
    feature radius: Private by default, One link per resume, and Bring your own
-   AI. They sit in three columns from 1024 px.
+   AI. They sit in three columns from 1024 px. The Bring your own AI card ends
+   with a text link, “Xem cách kết nối” or “See how to connect”, to the
+   [MCP guide](../mcp-guide.md) at `/guide/mcp`.
 2. Choose your style: filter chips for ATS-friendly, Technical, First job, and
    Management, each linking to `/templates?filter=…`, and one real template card
    per chip, in two columns and four from 1024 px. A text link opens the full
@@ -41,7 +43,8 @@ Four sections follow the hero:
    repository.
 
 The footer shows `aboutme.vn` and links Terms and Privacy. The
-[verify page spec](../deployment-transparency/visual.md) adds Verify.
+[verify page spec](../deployment-transparency/visual.md) adds Verify, and the
+[MCP guide](../mcp-guide.md) adds “Kết nối AI” or “Connect AI” right after it.
 
 ## Library
 
@@ -65,8 +68,8 @@ lists every template. The row scrolls sideways like the filter row.
 
 Filter chips are 36 px pills on the card color with a border. All comes first
 with the template count. Format chips (With a sample, ATS-friendly, One page,
-Suits a photo) carry a cyan dot; audience chips (First job, Technical,
-Management) carry a purple dot and sit after a thin divider. The dot is
+Suits a photo) carry a jade dot; audience chips (First job, Technical,
+Management) carry an ochre dot and sit after a thin divider. The dot is
 decorative; the chip text carries the meaning. A hovered chip takes the
 `--surface-indigo` tint. The active chip fills with `--primary`, its dot takes
 the text color, and it carries `aria-current="page"`. One chip is active at a

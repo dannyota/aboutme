@@ -214,7 +214,7 @@ useHead(computed(() => ({
           >
             <Link2
               aria-hidden="true"
-              class="size-4 shrink-0 text-brand-purple"
+              class="size-4 shrink-0 text-brand-ochre"
             />aboutme.vn{{ sampleLink }}
           </li>
         </ul>
@@ -240,7 +240,7 @@ useHead(computed(() => ({
             'rounded-[var(--radius-feature)] border border-border p-6',
             'shadow-[var(--shadow-product)] min-[42rem]:flex',
             'min-[42rem]:gap-6 lg:block lg:p-8',
-            ['bg-surface-blue', 'bg-surface-indigo', 'bg-surface-pink'][
+            ['bg-surface-blue', 'bg-surface-indigo', 'bg-surface-sand'][
               index
             ],
           )"
@@ -261,7 +261,7 @@ useHead(computed(() => ({
             />
             <Sparkles
               v-else
-              class="size-6 text-brand-purple"
+              class="size-6 text-brand-ochre"
             />
           </span>
           <strong
@@ -272,6 +272,13 @@ useHead(computed(() => ({
           <p class="mt-2 text-md leading-relaxed text-muted-foreground">
             {{ point.text }}
           </p>
+          <NuxtLink
+            v-if="point.link"
+            class="mt-2 inline-block text-md font-medium text-link
+              underline-offset-4 hover:underline"
+            data-testid="landing-point-link"
+            :to="point.link.to"
+          >{{ point.link.label }}</NuxtLink>
         </li>
       </ul>
     </section>
@@ -496,6 +503,11 @@ useHead(computed(() => ({
         data-testid="landing-verify-link"
         to="/verify"
       >{{ legal.verifyLink }}</NuxtLink>
+      <NuxtLink
+        class="text-link underline-offset-4 hover:underline"
+        data-testid="landing-guide-link"
+        to="/guide/mcp"
+      >{{ legal.guideLink }}</NuxtLink>
     </footer>
   </main>
 </template>
