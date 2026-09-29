@@ -61,7 +61,7 @@ variable "totp_enrollment_enabled" {
 }
 
 # Off until SIGN_IN_TO_VIEW_ENABLED's own release raises the production
-# minimum-release fence to numeric 6022; see
+# minimum-release fence to numeric 6026; see
 # docs/design/passkey-release-fence.md and
 # docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback".
 variable "sign_in_to_view_enabled" {

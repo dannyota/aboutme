@@ -1381,7 +1381,7 @@ grep -qF "run tofu apply for the TOTP key before deploying this release" \
   "$work/totp_key_secret_missing.out" ||
   { echo "totp_key_secret_missing: no TOTP key message" >&2; exit 1; }
 
-# A revision that turns sign in to view on is refused below the v0.6.22
+# A revision that turns sign in to view on is refused below the v0.6.26
 # floor, the same way passkey and TOTP enrollment are refused below their own
 # floors (docs/design/viewer-analytics/sign-in-to-view.md, "Release and
 # rollback").
@@ -1394,13 +1394,13 @@ run_case fence_new_revision_signin_enrolled fail v0.1.0
 f=$work/fence_new_revision_signin_enrolled.calls
 absent "$f" "SET operation_id=:o, operation_kind=:k"
 absent "$f" "ecs register-task-definition"
-grep -qF "sign in to view on while the release fence is below v0.6.22" \
+grep -qF "sign in to view on while the release fence is below v0.6.26" \
   "$work/fence_new_revision_signin_enrolled.out" ||
   { echo "fence_new_revision_signin_enrolled: no sign-in-to-view message" >&2; exit 1; }
 
 # At or above its own floor, a revision that turns sign in to view on deploys
 # normally.
-run_case signin_enabled_at_floor 0 v0.6.22
+run_case signin_enabled_at_floor 0 v0.6.26
 grep -qF "ecs register-task-definition" "$work/signin_enabled_at_floor.calls" ||
   { echo "signin_enabled_at_floor: did not register revisions" >&2; exit 1; }
 absent "$work/signin_enabled_at_floor.out" "run --activate first"
@@ -1413,7 +1413,7 @@ grep -qF "ecs register-task-definition" "$work/signin_disabled_below_floor.calls
 absent "$work/signin_disabled_below_floor.out" "sign in to view"
 
 # deploy.sh --rollback shares fence_read with a normal deploy, so once the
-# fence is raised to (or above) v0.6.22, a rollback target below it is
+# fence is raised to (or above) v0.6.26, a rollback target below it is
 # refused the same generic way as any other below-floor target; no
 # sign-in-to-view-specific rollback code exists to test separately.
 run_case signin_rollback_below_floor fail --rollback v0.0.9

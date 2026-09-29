@@ -1,6 +1,6 @@
 # Sign in to view
 
-Status: **v0.6.22 floor, numeric 6022**. This runbook covers the production
+Status: **v0.6.26 floor, numeric 6026**. This runbook covers the production
 flag-off deploy, floor activation, flag enablement, the LinkedIn view switch,
 key rotation, and what rollback means for sign in to view. It extends
 [the production runbook](production.md), which owns the shared deploy, rollback,
@@ -16,24 +16,24 @@ other base secrets; nothing extra is needed before the first apply.
 
 ## Flag-off deploy and floor activation
 
-1. Deploy v0.6.22 with `sign_in_to_view_enabled = false` (the release's own
+1. Deploy v0.6.26 with `sign_in_to_view_enabled = false` (the release's own
    default, so an ordinary deploy already ships this):
 
    ```sh
-   bash deploy/aws/scripts/deploy.sh v0.6.22
+   bash deploy/aws/scripts/deploy.sh v0.6.26
    ```
 
    No resume can be gated yet: the switch in the publish dialog stays hidden, so
    this step needs no proof beyond the
    [Healthy state](production.md#healthy-state) checks.
 
-2. Raise the fence to numeric 6022:
+2. Raise the fence to numeric 6026:
 
    ```sh
-   bash deploy/aws/scripts/deploy.sh --activate v0.6.22
+   bash deploy/aws/scripts/deploy.sh --activate v0.6.26
    ```
 
-   This requires `aboutme-prod-app` to already be the exact stable v0.6.22
+   This requires `aboutme-prod-app` to already be the exact stable v0.6.26
    candidate and only raises the stored minimum; it makes no image, ECS,
    snapshot, or notification change. A lower or malformed fence state, an
    operation already in progress, or a running app that is not the exact
@@ -45,12 +45,12 @@ Only after the raise succeeds, apply the reviewed OpenTofu change that sets
 `sign_in_to_view_enabled = true`, then redeploy the same tag:
 
 ```sh
-bash deploy/aws/scripts/deploy.sh v0.6.22
+bash deploy/aws/scripts/deploy.sh v0.6.26
 ```
 
 Enabling the flag before the raise, or redeploying a different tag after it, is
 not the supported order. `deploy.sh` refuses to register an app revision with
-`SIGN_IN_TO_VIEW_ENABLED=true` while the fence is missing or below 6022, the
+`SIGN_IN_TO_VIEW_ENABLED=true` while the fence is missing or below 6026, the
 same way it refuses passkey enrollment below 4002 and TOTP enrollment
 below 4007. If the raise succeeds but the apply or redeploy then fails, the
 fence stays raised; fix forward with the same or a newer capable tag.
@@ -86,8 +86,8 @@ their pass carried. This is routine maintenance, not only an incident response.
 
 ## Rollback
 
-The release ships with the flag off, so a rollback below v0.6.22 is safe until
-the fence is raised. Once raised, `deploy.sh --rollback` below v0.6.22 is
+The release ships with the flag off, so a rollback below v0.6.26 is safe until
+the fence is raised. Once raised, `deploy.sh --rollback` below v0.6.26 is
 refused, the same way a rollback below the passkey or TOTP floors is refused
 ([the release fence](production.md#passkey-release-fence)): an older image would
 serve `sign_in` resumes publicly, which is unsafe regardless of whether a

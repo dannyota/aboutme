@@ -88,8 +88,8 @@ case "$cmd $args" in
       fence_lower) echo '{"Item":{"minimum_release":{"N":"5000"},"minimum_tag":{"S":"v0.5.0"}}}' ;;
       fence_equal | fence_activate) echo '{"Item":{"minimum_release":{"N":"1000"},"minimum_tag":{"S":"v0.1.0"}}}' ;;
       fence_activate_4002_then_4007) echo '{"Item":{"minimum_release":{"N":"4002"},"minimum_tag":{"S":"v0.4.2"}}}' ;;
-      signin_enabled_at_floor) echo '{"Item":{"minimum_release":{"N":"6022"},"minimum_tag":{"S":"v0.6.22"}}}' ;;
-      signin_rollback_below_floor) echo '{"Item":{"minimum_release":{"N":"6022"},"minimum_tag":{"S":"v0.6.22"}}}' ;;
+      signin_enabled_at_floor) echo '{"Item":{"minimum_release":{"N":"6026"},"minimum_tag":{"S":"v0.6.26"}}}' ;;
+      signin_rollback_below_floor) echo '{"Item":{"minimum_release":{"N":"6026"},"minimum_tag":{"S":"v0.6.26"}}}' ;;
       totp_reencrypt_ok | totp_reencrypt_runtask_fails | totp_reencrypt_task_fails | totp_reencrypt_tag_mismatch | \
       totp_reencrypt_register_fails | totp_reencrypt_slot_mismatch | totp_reencrypt_wait_timeout | \
       totp_reencrypt_provenance_fails)
@@ -257,7 +257,7 @@ case "$cmd $args" in
       exit 0
     fi
     if [[ $STUB_CASE == signin_enabled_at_floor ]]; then
-      # v0.6.22 is also above the TOTP key floor (v0.4.7), so this revision
+      # v0.6.26 is also above the TOTP key floor (v0.4.7), so this revision
       # must carry TOTP_ACTIVE_KEY too, or deploy.sh's own TOTP-key check
       # would refuse it for an unrelated reason.
       echo '{"family":"f","networkMode":"bridge","containerDefinitions":[{"name":"caddy","image":"x","environment":[]},{"name":"server","image":"x","environment":[{"name":"SIGN_IN_TO_VIEW_ENABLED","value":"true"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"},{"name":"GOOGLE_CLIENT_ID","valueFrom":"/aboutme/prod/oauth/google-client-id"},{"name":"MASTER","valueFrom":"arn:aws:secretsmanager:ap-southeast-1:1:secret:rds!db-abc-XyZ12:password::"},{"name":"TOTP_ACTIVE_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/totp/key-a"},{"name":"VIEW_PASS_KEY","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/view-pass-key"}]}]}'
