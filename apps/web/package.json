@@ -26,6 +26,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "dompurify": "3.4.16",
+    "h3": "1.15.11",
     "nuxt": "4.5.2",
     "openapi-fetch": "0.17.0",
     "pdfjs-dist": "6.3.289",
@@ -71,6 +72,9 @@
     },
     "@redocly/openapi-core": {
       "js-yaml": "^4.3.2"
+    },
+    "altcha-lib": {
+      "h3": "$h3"
     }
   }
 }
