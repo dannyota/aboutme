@@ -48,6 +48,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   window.sessionStorage.clear();
   document.body.innerHTML = '';
@@ -80,12 +81,10 @@ describe('public not-found reload cap', () => {
 
   it('does not reload when session storage throws', async () => {
     const reload = vi.fn();
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    const blocked = (): never => {
       throw new Error('blocked');
-    });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('blocked');
-    });
+    };
+    vi.stubGlobal('sessionStorage', { getItem: blocked, setItem: blocked });
     await notFoundOnce('ada1', reload);
     expect(reload).not.toHaveBeenCalled();
   });
