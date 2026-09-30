@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 go -C apps/server build -trimpath -ldflags="-s -w" -o /out/db-
 
 # AWS RDS CA bundle for sslmode=verify-full. A changed upstream bundle fails the
 # build until this hash is reviewed and updated.
-ARG RDS_BUNDLE_SHA256=e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3
+ARG RDS_BUNDLE_SHA256=fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c
 RUN wget -qO /out/rds-global-bundle.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
     && echo "${RDS_BUNDLE_SHA256}  /out/rds-global-bundle.pem" | sha256sum -c -
 
