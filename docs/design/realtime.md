@@ -24,7 +24,9 @@ switch the client to polling; a delivered heartbeat restores streaming. The
 client refetches the public or preview document and renders in place without
 resetting scroll or editor state. Refetches coalesce and keep one follow-up when
 an event arrives during a read. Receiving an event does not prove its revision
-was adopted, and a failed read stays retryable.
+was adopted, and a failed read stays retryable. A public page reloads on a `404`
+at most once per slug per minute, tracked in session storage, and not at all
+when session storage is unavailable.
 
 ## Delivery semantics
 

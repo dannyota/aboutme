@@ -280,6 +280,26 @@ export async function readPublicResume(
   }
 }
 
+const reloadWindowMs = 60_000;
+
+// A not-found reload happens at most once per slug per window. When the page
+// and its JSON read disagree, an unbounded reload loops. Storage that cannot
+// be read or written blocks the reload
+// (docs/design/realtime.md#refresh-ladder).
+function reloadAllowed(slug: string, now: number = Date.now()): boolean {
+  try {
+    const key = `aboutme:public-reload:${slug}`;
+    const last = Number(window.sessionStorage.getItem(key));
+    if (Number.isFinite(last) && last > 0 && now - last < reloadWindowMs) {
+      return false;
+    }
+    window.sessionStorage.setItem(key, String(now));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function createPublicResumeRealtime(options: {
   root: HTMLElement;
   slug: string;
@@ -368,7 +388,9 @@ export function createPublicResumeRealtime(options: {
         refetch: refresh,
         onRevision: revisionDecision,
         onUnknownVersion: reload,
-        onNotFound: reload,
+        onNotFound: () => {
+          if (reloadAllowed(options.slug)) reload();
+        },
       });
       controller.start();
     },
