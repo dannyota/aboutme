@@ -479,7 +479,6 @@ start_server() {
     TOTP_ENROLLMENT_ENABLED=true \
     VIEW_PASS_KEY="$VIEW_PASS_KEY_B64" \
     SIGN_IN_TO_VIEW_ENABLED=true \
-    SIGN_IN_TO_VIEW_LINKEDIN_ENABLED=true \
     "$BIN_DIR/server"
   wait_http server "http://127.0.0.1:$SERVER_PORT/healthz" 30
   info "server ready on http://127.0.0.1:$SERVER_PORT"

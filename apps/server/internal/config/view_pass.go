@@ -2,9 +2,7 @@ package config
 
 // Sign in to view (docs/design/viewer-analytics/sign-in-to-view.md
 // "Setting", "Pass cookie"; ADR 0022). SIGN_IN_TO_VIEW_ENABLED lets owners
-// turn the per-resume switch on; SIGN_IN_TO_VIEW_LINKEDIN_ENABLED additionally
-// gates whether the gate offers LinkedIn. VIEW_PASS_KEY seals the pass
-// cookie.
+// turn the per-resume switch on. VIEW_PASS_KEY seals the pass cookie.
 
 import (
 	"encoding/base64"
@@ -28,21 +26,6 @@ func loadSignInToViewFlag(raw string) (bool, error) {
 		return true, nil
 	default:
 		return false, errors.New("config: SIGN_IN_TO_VIEW_ENABLED must be true or false")
-	}
-}
-
-// loadSignInToViewLinkedInFlag parses SIGN_IN_TO_VIEW_LINKEDIN_ENABLED.
-// Blank or "false" keeps LinkedIn off the gate (the default) even when
-// LinkedIn account login is enabled; "true" lets the gate also offer
-// LinkedIn, subject to LinkedIn account login also being enabled.
-func loadSignInToViewLinkedInFlag(raw string) (bool, error) {
-	switch strings.TrimSpace(raw) {
-	case "", "false":
-		return false, nil
-	case "true":
-		return true, nil
-	default:
-		return false, errors.New("config: SIGN_IN_TO_VIEW_LINKEDIN_ENABLED must be true or false")
 	}
 }
 

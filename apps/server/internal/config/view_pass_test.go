@@ -37,31 +37,6 @@ func TestLoad_SignInToViewFlagRejectsInvalidValueWithoutEcho(t *testing.T) {
 	}
 }
 
-func TestLoad_SignInToViewLinkedInFlag(t *testing.T) {
-	t.Parallel()
-	for raw, want := range map[string]bool{"": false, "false": false, "true": true} {
-		vars := validDevEnv()
-		vars["SIGN_IN_TO_VIEW_LINKEDIN_ENABLED"] = raw
-		got, err := config.Load(env(vars))
-		if err != nil {
-			t.Fatalf("Load(%q) error = %v", raw, err)
-		}
-		if got.SignInToViewLinkedInEnabled != want {
-			t.Fatalf("Load(%q).SignInToViewLinkedInEnabled = %t, want %t", raw, got.SignInToViewLinkedInEnabled, want)
-		}
-	}
-}
-
-func TestLoad_SignInToViewLinkedInFlagRejectsInvalidValue(t *testing.T) {
-	t.Parallel()
-	vars := validDevEnv()
-	vars["SIGN_IN_TO_VIEW_LINKEDIN_ENABLED"] = "maybe"
-	_, err := config.Load(env(vars))
-	if err == nil || !strings.Contains(err.Error(), "SIGN_IN_TO_VIEW_LINKEDIN_ENABLED") {
-		t.Fatalf("Load(%q) error = %v", "maybe", err)
-	}
-}
-
 func TestLoad_ViewPassKeyRoundTrips(t *testing.T) {
 	t.Parallel()
 	vars := validDevEnv()

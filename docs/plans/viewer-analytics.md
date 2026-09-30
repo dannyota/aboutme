@@ -13,7 +13,7 @@ Ships as v0.6.26, one feature, its own version number. Migration: `00009_sign_in
 1. Done 2026-09-27: the owner settled V9 to V13 and reviewed the Vietnamese of V4 (gate text, invite, notice rows, publish switch line).
 2. Done: `docs/plans/traceability/ac-view.md` holds the `AC-VIEW-*` rows from the design, state `OPEN`. Briefs cite those IDs.
 3. Done: [ADR 0016](../adr/0016-sign-in-providers.md) (start methods: `GET` also accepts `purpose=view`; an unknown purpose still means login) and the OAuth start list in `docs/design/security.md` are amended; `docs/design/budgets.md` already carries the pass cookie row and needs no change.
-4. Still open: verify LinkedIn accepts an authorize request with scope `openid` alone (V10). Until then LinkedIn stays off the gate behind `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` (default false). If it does not, the `view` start keeps the account scopes and still discards every claim; the design line changes, not the gate text.
+4. Done 2026-09-30: the owner confirmed LinkedIn accepts an authorize request with scope `openid` alone (V10). The gate offers LinkedIn whenever LinkedIn account sign-in is enabled.
 
 ## Order and roles
 

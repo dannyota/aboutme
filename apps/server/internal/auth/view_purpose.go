@@ -47,10 +47,6 @@ func (s *Service) handleViewStart(w http.ResponseWriter, r *http.Request, provid
 		api.WriteError(w, http.StatusBadRequest, "bad_request", "purpose=view is not offered for "+string(provider))
 		return
 	}
-	if provider == ProviderLinkedIn && !s.signInToViewLinkedInEnabled {
-		s.redirectToSlugNoTransaction(w, r, slug)
-		return
-	}
 
 	ctx := withProviderHTTPClient(r.Context())
 	s.reapExpiredOAuthTransactions(ctx, r, provider)

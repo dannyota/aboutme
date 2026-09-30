@@ -106,10 +106,6 @@ type Service struct {
 	publicOrigin   string
 	providerLogin  config.ProviderLogin
 	trustedProxies api.TrustedProxies
-	// signInToViewLinkedInEnabled gates whether the view purpose offers
-	// LinkedIn, in addition to LinkedIn account login being enabled
-	// (docs/design/viewer-analytics/sign-in-to-view.md "Sign-in flow").
-	signInToViewLinkedInEnabled bool
 	// viewPassKey seals the __Host-view-pass cookie (docs/design/viewer-analytics/
 	// sign-in-to-view.md "Pass cookie"). It is 32 bytes, decoded once at
 	// construction from config.Config.ViewPassKey.
@@ -168,26 +164,25 @@ func NewService(logger *slog.Logger, cfg config.Config, pool *store.Pool) (*Serv
 	q := store.New(pool)
 	sessionMgr := NewSessionManagerWithPool(pool)
 	return &Service{
-		tx:                          NewTransactionStore(q),
-		q:                           q,
-		pool:                        pool,
-		sessions:                    sessionMgr,
-		sessionMgr:                  sessionMgr,
-		pending:                     NewPendingAuthenticationManager(pool, logger),
-		logger:                      logger,
-		publicOrigin:                cfg.PublicOrigin,
-		providerLogin:               cfg.ProviderLogin,
-		trustedProxies:              api.TrustedProxies(cfg.TrustedProxyCIDRs),
-		signInToViewLinkedInEnabled: cfg.SignInToViewLinkedInEnabled,
-		viewPassKey:                 viewPassKey,
-		googleIssuerURL:             endpointOrDefault(cfg.GoogleOIDCIssuerURL, googleIssuer),
-		linkedinIssuerURL:           endpointOrDefault(cfg.LinkedInOIDCIssuerURL, linkedinIssuer),
-		githubOAuthAuthorizeURL:     endpointOrDefault(cfg.GitHubOAuthAuthorizeURL, githubAuthorizeURL),
-		githubOAuthTokenURL:         endpointOrDefault(cfg.GitHubOAuthTokenURL, githubTokenURL),
-		githubAPIBaseURL:            endpointOrDefault(cfg.GitHubAPIBaseURL, githubAPIBaseURL),
-		googleLocalOIDC:             cfg.GoogleOIDCIssuerURL != "",
-		linkedinLocalOIDC:           cfg.LinkedInOIDCIssuerURL != "",
-		githubLocalOAuth:            cfg.GitHubOAuthAuthorizeURL != "",
+		tx:                      NewTransactionStore(q),
+		q:                       q,
+		pool:                    pool,
+		sessions:                sessionMgr,
+		sessionMgr:              sessionMgr,
+		pending:                 NewPendingAuthenticationManager(pool, logger),
+		logger:                  logger,
+		publicOrigin:            cfg.PublicOrigin,
+		providerLogin:           cfg.ProviderLogin,
+		trustedProxies:          api.TrustedProxies(cfg.TrustedProxyCIDRs),
+		viewPassKey:             viewPassKey,
+		googleIssuerURL:         endpointOrDefault(cfg.GoogleOIDCIssuerURL, googleIssuer),
+		linkedinIssuerURL:       endpointOrDefault(cfg.LinkedInOIDCIssuerURL, linkedinIssuer),
+		githubOAuthAuthorizeURL: endpointOrDefault(cfg.GitHubOAuthAuthorizeURL, githubAuthorizeURL),
+		githubOAuthTokenURL:     endpointOrDefault(cfg.GitHubOAuthTokenURL, githubTokenURL),
+		githubAPIBaseURL:        endpointOrDefault(cfg.GitHubAPIBaseURL, githubAPIBaseURL),
+		googleLocalOIDC:         cfg.GoogleOIDCIssuerURL != "",
+		linkedinLocalOIDC:       cfg.LinkedInOIDCIssuerURL != "",
+		githubLocalOAuth:        cfg.GitHubOAuthAuthorizeURL != "",
 
 		startRateLimitRequests: startRateLimitRequests,
 		startRateLimitWindow:   startRateLimitWindow,

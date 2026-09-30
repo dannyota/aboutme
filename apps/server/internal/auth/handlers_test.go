@@ -85,16 +85,15 @@ func (noopPinger) Ping(context.Context) error { return nil }
 
 // testServiceConfig holds test-only Service overrides.
 type testServiceConfig struct {
-	googleIssuer         string
-	githubEndpoint       string
-	linkedinIssuer       string
-	providerLogin        config.ProviderLogin
-	logger               *slog.Logger
-	sessionIssuer        sessionIssuerForTest
-	startRateLimit       int
-	startRateWindow      time.Duration
-	signInToViewLinkedIn bool
-	viewPassKey          string
+	googleIssuer    string
+	githubEndpoint  string
+	linkedinIssuer  string
+	providerLogin   config.ProviderLogin
+	logger          *slog.Logger
+	sessionIssuer   sessionIssuerForTest
+	startRateLimit  int
+	startRateWindow time.Duration
+	viewPassKey     string
 }
 
 // testViewPassKey is a fixed, validly encoded VIEW_PASS_KEY for tests that
@@ -142,12 +141,6 @@ func withStartRateLimit(requests int, window time.Duration) testServiceOption {
 	return func(c *testServiceConfig) { c.startRateLimit, c.startRateWindow = requests, window }
 }
 
-// withSignInToViewLinkedInEnabled turns SIGN_IN_TO_VIEW_LINKEDIN_ENABLED on
-// for one test.
-func withSignInToViewLinkedInEnabled() testServiceOption {
-	return func(c *testServiceConfig) { c.signInToViewLinkedIn = true }
-}
-
 // withViewPassKey sets a fixed, valid VIEW_PASS_KEY so a test can exercise
 // sign in to view's pass cookie.
 func withViewPassKey() testServiceOption {
@@ -186,10 +179,9 @@ func newTestService(t *testing.T, opts ...testServiceOption) (http.Handler, *sto
 	}
 
 	cfg := config.Config{
-		PublicOrigin:                testPublicOrigin,
-		ProviderLogin:               sc.providerLogin,
-		SignInToViewLinkedInEnabled: sc.signInToViewLinkedIn,
-		ViewPassKey:                 sc.viewPassKey,
+		PublicOrigin:  testPublicOrigin,
+		ProviderLogin: sc.providerLogin,
+		ViewPassKey:   sc.viewPassKey,
 	}
 	if sc.googleIssuer != "" {
 		cfg.GoogleClientID = oidctest.DefaultClientID

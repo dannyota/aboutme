@@ -13,12 +13,6 @@ sign-in ([ADR 0016](../../adr/0016-sign-in-providers.md#enablement)). GitHub
 never appears on the gate, even where it is enabled, because the gate text and
 the privacy notice name only Google and LinkedIn.
 
-LinkedIn also needs `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` (default false) until a
-live check confirms LinkedIn accepts an authorize request with scope `openid`
-alone. While it is false, the gate offers no LinkedIn button, and
-`GET /api/v1/auth/linkedin/start?purpose=view` redirects to `/{slug}` and
-creates no transaction.
-
 ## Setting
 
 Each resume gains one switch, `signInToView`, in the publish dialog, off by
@@ -124,8 +118,8 @@ resume ID.
    checks for both, with LinkedIn's nonce checked only when present
    ([security](../security.md#oauth-transaction)). The `view` start requests the
    scope `openid` only, so the provider returns no name or email (**Owner
-   approval** V10, approved 2026-09-27; **Verify** that LinkedIn accepts
-   `openid` alone).
+   approval** V10, approved 2026-09-27; the owner confirmed on 2026-09-30 that
+   LinkedIn accepts `openid` alone).
 3. The callback, for purpose `view`, never looks up, creates, links, or signs in
    an account and never creates a session. It verifies the ID token, re-reads
    the resume by ID, discards every claim, and then:

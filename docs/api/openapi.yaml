@@ -831,9 +831,8 @@ paths:
         `GET` accepts the login and view purposes. `link` and `reauth`
         return `405` with `Allow: POST` before any transaction is created.
         `purpose=view` requires `slug`, requests scope `openid` only, and
-        offers LinkedIn on the gate only while both LinkedIn account
-        login and `SIGN_IN_TO_VIEW_LINKEDIN_ENABLED` are on (see
-        `AuthPurpose`, `AuthViewSlug`).
+        offers LinkedIn on the gate whenever LinkedIn account login is
+        on (see `AuthPurpose`, `AuthViewSlug`).
       parameters:
         - $ref: "#/components/parameters/AuthPurpose"
         - $ref: "#/components/parameters/AuthReturnPath"
