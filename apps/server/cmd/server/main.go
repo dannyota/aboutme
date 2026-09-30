@@ -475,16 +475,14 @@ func parsePublicRuntime(publicOrigin, renderOrigin, environment, appDigest, rend
 }
 
 // signInToViewGateProviders is the fixed subset of ["google","linkedin"] the
-// sign-in-to-view gate offers: Google whenever it is enabled for account
-// sign-in, and LinkedIn only when it is also enabled for account sign-in and
-// SIGN_IN_TO_VIEW_LINKEDIN_ENABLED is true (docs/design/viewer-analytics/
-// sign-in-to-view.md "Gate"; ADR 0016).
+// sign-in-to-view gate offers: each provider enabled for account sign-in
+// (docs/design/viewer-analytics/sign-in-to-view.md "Gate"; ADR 0016).
 func signInToViewGateProviders(cfg config.Config) []string {
 	providers := make([]string, 0, 2)
 	if cfg.ProviderLogin.Google {
 		providers = append(providers, "google")
 	}
-	if cfg.ProviderLogin.LinkedIn && cfg.SignInToViewLinkedInEnabled {
+	if cfg.ProviderLogin.LinkedIn {
 		providers = append(providers, "linkedin")
 	}
 	return providers

@@ -1,8 +1,8 @@
 # Sign in to view
 
 Status: **v0.6.26 floor, numeric 6026**. This runbook covers the production
-flag-off deploy, floor activation, flag enablement, the LinkedIn view switch,
-key rotation, and what rollback means for sign in to view. It extends
+flag-off deploy, floor activation, flag enablement, key rotation, and what
+rollback means for sign in to view. It extends
 [the production runbook](production.md), which owns the shared deploy, rollback,
 and release-fence mechanics.
 [Sign in to view](../design/viewer-analytics/sign-in-to-view.md) and
@@ -82,17 +82,6 @@ gated route in
 gated, sign in with Google, confirm the resume shows and the join invite appears
 after scrolling, confirm no row or log line names the viewer, then turn the
 switch off and confirm the resume serves publicly again at once.
-
-## LinkedIn view switch
-
-`sign_in_to_view_linkedin_enabled` stays `false` until a live check confirms
-LinkedIn accepts an authorize request with scope `openid` alone: with the switch
-off, the gate offers no LinkedIn button and the LinkedIn `view` start redirects
-to the resume with no transaction, so leaving it off after the release above is
-always safe. Confirm the scope acceptance directly against LinkedIn's
-authorization endpoint, apply the reviewed OpenTofu change setting the switch
-`true`, redeploy the same tag, then repeat the LinkedIn half of the live check
-above.
 
 ## Key rotation
 

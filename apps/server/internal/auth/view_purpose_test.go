@@ -81,7 +81,7 @@ func viewStartPath(base, slug string) string {
 func TestViewStart_MalformedSlug_BadRequest(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
-	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withSignInToViewLinkedInEnabled(), withViewPassKey())
+	handler, _ := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withViewPassKey())
 
 	for _, path := range []string{
 		viewStartPath(auth.GoogleStartPath, "a"),
@@ -111,24 +111,6 @@ func TestViewStart_GitHub_BadRequest(t *testing.T) {
 	}
 	if extractCookie(resp, auth.OAuthTxCookieName) != nil {
 		t.Error("GitHub purpose=view set a transaction cookie, want none")
-	}
-}
-
-// TestViewStart_LinkedInDisabled_RedirectsWithNoTransaction proves the
-// LinkedIn-specific switch, not just account enablement, gates the offer.
-func TestViewStart_LinkedInDisabled_RedirectsWithNoTransaction(t *testing.T) {
-	t.Parallel()
-	p := oidctest.NewProvider(t)
-	handler, q := newTestService(t, withLinkedInIssuer(p.URL), withViewPassKey()) // withSignInToViewLinkedInEnabled omitted
-
-	f := newViewFixture(t, q, true)
-	resp := doGet(t, handler, viewStartPath(auth.LinkedInStartPath, f.slug)) //nolint:bodyclose // doGet closes the body itself before returning.
-	if resp.StatusCode != http.StatusFound {
-		t.Fatalf("status = %d, want 302", resp.StatusCode)
-	}
-	assertRedirectPath(t, resp.Header.Get("Location"), "/"+f.slug)
-	if extractCookie(resp, auth.OAuthTxCookieName) != nil {
-		t.Error("LinkedIn view start with the switch off set a transaction cookie, want none")
 	}
 }
 
@@ -162,7 +144,7 @@ func TestViewStart_NotLiveOrSwitchOff_RedirectsWithNoTransaction(t *testing.T) {
 func TestViewStart_ScopeIsOpenIDOnly(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
-	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withSignInToViewLinkedInEnabled(), withViewPassKey())
+	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withViewPassKey())
 	f := newViewFixture(t, q, true)
 
 	for _, path := range []string{
@@ -269,7 +251,7 @@ func TestGoogleViewCallback_LiveSwitchOn_SetsPassAndNeverTouchesAccounts(t *test
 func TestLinkedInViewCallback_NoNonce_SetsPassAndNeverTouchesAccounts(t *testing.T) {
 	t.Parallel()
 	p := oidctest.NewProvider(t)
-	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withSignInToViewLinkedInEnabled(), withViewPassKey())
+	handler, q := newTestService(t, withGoogleIssuer(p.URL), withLinkedInIssuer(p.URL), withViewPassKey())
 	f := newViewFixture(t, q, true)
 
 	start := doGet(t, handler, viewStartPath(auth.LinkedInStartPath, f.slug)) //nolint:bodyclose // doGet closes the body itself before returning.

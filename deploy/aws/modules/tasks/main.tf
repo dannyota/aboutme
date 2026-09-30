@@ -74,7 +74,6 @@ locals {
     { name = "PASSKEY_ENROLLMENT_ENABLED", value = var.passkey_enrollment_enabled ? "true" : "false" },
     { name = "TOTP_ENROLLMENT_ENABLED", value = var.totp_enrollment_enabled ? "true" : "false" },
     { name = "SIGN_IN_TO_VIEW_ENABLED", value = var.sign_in_to_view_enabled ? "true" : "false" },
-    { name = "SIGN_IN_TO_VIEW_LINKEDIN_ENABLED", value = var.sign_in_to_view_linkedin_enabled ? "true" : "false" },
     { name = "PREVIEW_CARD_ENABLED", value = var.preview_card_enabled ? "true" : "false" },
     { name = "APP_BUILD_DIGEST", value = var.image_server },
     { name = "PUBLIC_RENDERER_BUILD_DIGEST", value = var.image_web },

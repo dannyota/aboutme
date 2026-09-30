@@ -145,10 +145,6 @@ type Config struct {
 	// the switch off ever bypasses it (docs/design/viewer-analytics/sign-in-to-view.md
 	// "Setting").
 	SignInToViewEnabled bool
-	// SignInToViewLinkedInEnabled reports whether the sign-in gate may also
-	// offer LinkedIn (SIGN_IN_TO_VIEW_LINKEDIN_ENABLED=true), in addition to
-	// LinkedIn account login being enabled. It defaults to false.
-	SignInToViewLinkedInEnabled bool
 	// ViewPassKey is the canonical 43-character unpadded base64url encoding
 	// of the 32 random bytes that seal the sign-in-to-view pass cookie
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Pass cookie"). It is
@@ -304,10 +300,6 @@ func Load(getenv func(string) string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	signInToViewLinkedInEnabled, err := loadSignInToViewLinkedInFlag(getenv("SIGN_IN_TO_VIEW_LINKEDIN_ENABLED"))
-	if err != nil {
-		return Config{}, err
-	}
 	viewPassKey, err := loadViewPassKey(getenv("VIEW_PASS_KEY"))
 	if err != nil {
 		return Config{}, err
@@ -355,7 +347,6 @@ func Load(getenv func(string) string) (Config, error) {
 		TOTPActiveKey:                totpActiveKey,
 		TOTPPreviousKey:              totpPreviousKey,
 		SignInToViewEnabled:          signInToViewEnabled,
-		SignInToViewLinkedInEnabled:  signInToViewLinkedInEnabled,
 		ViewPassKey:                  viewPassKey,
 	}
 	if err := cfg.ValidateAgentAccess(); err != nil {

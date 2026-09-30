@@ -69,14 +69,6 @@ variable "sign_in_to_view_enabled" {
   description = "SIGN_IN_TO_VIEW_ENABLED for the server"
 }
 
-# Off until a live check confirms LinkedIn accepts an authorize request with
-# scope openid alone; see
-# docs/design/viewer-analytics/sign-in-to-view.md.
-variable "sign_in_to_view_linkedin_enabled" {
-  type        = bool
-  description = "SIGN_IN_TO_VIEW_LINKEDIN_ENABLED for the server"
-}
-
 # Chooses which protected totp/key-<slot> parameter supplies
 # TOTP_ACTIVE_KEY. See docs/design/totp-key-management.md, "Key ring".
 variable "totp_active_key_slot" {
