@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese modern-sidebar sample, whose PDF text layer splits a few diacritic words differently from the DOM. Line-break ceilings hold the differences that font hinting (Chromium without the print flags) causes; they change with the browser, the font build, or the sample text. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
+  "note": "Word-level drift ceilings per sample|lng|engine. The preview lays out at full size at every display scale, so each case must report the same counts and page count at every scale the spec runs. The paged preview must break pages and entries where the PDF does, so page-break and entry-page ceilings are 0, and missing and extra ceilings are 0 except the Vietnamese modern-sidebar sample, whose PDF text layer splits a few diacritic words differently from the DOM. The paged preview lays text out with subpixel glyph advances, as the PDF does, so line-break ceilings hold only the differences left after that; they change with the browser, the font build, or the sample text. Lower a ceiling when CI observes less; raise one only with evidence that the new drift is metrics, not layout. A null metric is reported but not enforced.",
   "cases": {
     "ats-plain|en|chromium-normal": {
       "maxLineBreak": 0,
@@ -31,7 +31,7 @@
       "maxEntryPageMismatches": 0
     },
     "consulting-formal|en|chromium-normal": {
-      "maxLineBreak": 2,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -59,7 +59,7 @@
       "maxEntryPageMismatches": 0
     },
     "creative-accent|en|chromium-normal": {
-      "maxLineBreak": 2,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -87,7 +87,7 @@
       "maxEntryPageMismatches": 0
     },
     "elegant-serif-two|en|chromium-normal": {
-      "maxLineBreak": 6,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -101,7 +101,7 @@
       "maxEntryPageMismatches": 0
     },
     "elegant-serif-two|vi|chromium-normal": {
-      "maxLineBreak": 6,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -115,7 +115,7 @@
       "maxEntryPageMismatches": 0
     },
     "engineer-compact|en|chromium-normal": {
-      "maxLineBreak": 5,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -129,7 +129,7 @@
       "maxEntryPageMismatches": 0
     },
     "engineer-compact|vi|chromium-normal": {
-      "maxLineBreak": 7,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -269,7 +269,7 @@
       "maxEntryPageMismatches": 0
     },
     "modern-sidebar|vi|chromium-normal": {
-      "maxLineBreak": 4,
+      "maxLineBreak": 2,
       "maxPageBreak": 0,
       "maxMissing": 1,
       "maxExtra": 1,
@@ -283,7 +283,7 @@
       "maxEntryPageMismatches": 0
     },
     "mono-print|en|chromium-normal": {
-      "maxLineBreak": 2,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -311,7 +311,7 @@
       "maxEntryPageMismatches": 0
     },
     "nordic-muted|en|chromium-normal": {
-      "maxLineBreak": 11,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -325,7 +325,7 @@
       "maxEntryPageMismatches": 0
     },
     "nordic-muted|vi|chromium-normal": {
-      "maxLineBreak": 8,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -339,7 +339,7 @@
       "maxEntryPageMismatches": 0
     },
     "one-page-tight|en|chromium-normal": {
-      "maxLineBreak": 5,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
@@ -353,7 +353,7 @@
       "maxEntryPageMismatches": 0
     },
     "one-page-tight|vi|chromium-normal": {
-      "maxLineBreak": 3,
+      "maxLineBreak": 0,
       "maxPageBreak": 0,
       "maxMissing": 0,
       "maxExtra": 0,
