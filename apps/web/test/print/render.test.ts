@@ -58,6 +58,7 @@ describe('resume language in shared renderers', () => {
       ),
       'utf8',
     ));
+    delete envelope.document.personalDetails.photo;
     envelope.document.customization.dateFormat = 'Mon YYYY';
     return envelope;
   };
