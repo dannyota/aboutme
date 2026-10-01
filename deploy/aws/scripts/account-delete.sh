@@ -35,12 +35,13 @@ account_delete_validate() { # subcommand [args...]
 account_delete_end_marker="account-delete: end"
 
 # Reads the stream from the start, following nextForwardToken until the token
-# repeats, and retries up to five times for a log still being delivered. Prints
+# repeats, and retries up to $2 times (default five) for a log still being
+# delivered. Prints
 # the lines read, never the marker line. Returns 1 when the marker never
 # appeared; what was read is still printed.
-account_delete_log() { # task id
-  local stream=jobs/jobs/$1 attempt page token next buf="" pages
-  for ((attempt = 1; attempt <= 5; attempt++)); do
+account_delete_log() { # task id [attempts]
+  local stream=jobs/jobs/$1 tries=${2:-5} attempt page token next buf="" pages
+  for ((attempt = 1; attempt <= tries; attempt++)); do
     buf="" token="" pages=0
     while ((pages++ < 50)); do
       page=$(aws --region "$region" logs get-log-events --log-group-name "$account_delete_log_group" \
@@ -54,7 +55,7 @@ account_delete_log() { # task id
       grep -vxF "$account_delete_end_marker" <<<"$buf" | grep -v '^$' || true
       return 0
     fi
-    ((attempt == 5)) || sleep "${DEPLOY_SMOKE_DELAY:-3}"
+    ((attempt == tries)) || sleep "${DEPLOY_SMOKE_DELAY:-3}"
   done
   grep -v '^$' <<<"$buf" || true
   return 1
@@ -84,7 +85,7 @@ account_delete_run() {
   fence_lock || exit 1
   fence_checkpoint || exit 1
 
-  # Under the lock, the review must run against the live release: a task at
+  # Under the lock, the deletion must run against the live release: a task at
   # another tag could read or write rows its schema does not match.
   local service service_td running_count desired_count service_release
   service=$(aws_ ecs describe-services --cluster "$cluster" --services aboutme-prod-app --output json) ||
@@ -129,10 +130,14 @@ account_delete_run() {
   code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$task" \
     --query 'tasks[0].containers[?name==`jobs`].exitCode | [0]' --output text) || code=unknown
 
-  local complete=1
-  account_delete_log "${task##*/}" || complete=0
+  # Exit 1 and exit 3 print no end line, so those reads make one pass and do
+  # not wait for a line that never comes.
+  local complete=1 tries=5
+  [[ $code == 1 || $code == 3 ]] && tries=1
+  account_delete_log "${task##*/}" "$tries" || complete=0
   case $code in
     0) ((complete)) || { say "the task log has no end marker, so the result is incomplete; run show <slug> again: not found means the account is deleted"; exit 1; } ;;
+    3) say "result unknown: run show <slug> to confirm; not found means the account is deleted"; exit 3 ;;
     4) say "not found: no account holds that slug (unknown, tombstoned, or already deleted); nothing deleted"; exit 4 ;;
     5) say "mismatch: the slug is not owned by that user ID; nothing deleted; run show <slug> again"; exit 5 ;;
     *) say "account-delete exited with $code"; exit 1 ;;
