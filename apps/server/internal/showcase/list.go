@@ -56,7 +56,7 @@ type Page struct {
 // checks all three listing conditions (the opt-in row, a live resume, sign in
 // to view off), and nothing caches it, so a request admitted after an opt-out,
 // unpublish, sign in to view, rename, or delete commits cannot list the
-// resume. Newest opt-in comes first.
+// resume. Oldest opt-in comes first.
 func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 	queries := store.New(s.db)
 	total, err := queries.CountShowcase(ctx, store.CountShowcaseParams{

@@ -28,6 +28,10 @@ var (
 	ErrSlugMismatch = errors.New("accountapi: slug is not owned by the named account")
 )
 
+// ErrOutcomeUnknown means the commit outcome is unknown and a follow-up read
+// could not prove the account gone. The account may or may not be deleted.
+var ErrOutcomeUnknown = errors.New("accountapi: deletion outcome unknown")
+
 // OperatorDependencies are the dependencies of the one-shot deletion command.
 // The command runs outside the server process, so it has no sessions, public
 // state coordinator, or media backend; queued media deletions run in the
@@ -138,14 +142,15 @@ func (s *Service) deleteAccountAsOperator(ctx context.Context, req deletionReque
 			return accountDeletionPlan{}, err
 		case deleteCommitUnknown:
 			// The user row goes in the same transaction as everything else, so
-			// its absence proves the commit.
+			// its absence proves the commit. A failed read or a user still
+			// present proves nothing: the commit may land later.
 			proofCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deleteDrainTimeout)
 			_, readErr := store.New(s.pool).GetUserByID(proofCtx, plan.user.ID)
 			cancel()
 			if errors.Is(readErr, pgx.ErrNoRows) {
 				return plan, nil
 			}
-			return accountDeletionPlan{}, err
+			return accountDeletionPlan{}, ErrOutcomeUnknown
 		default:
 			return accountDeletionPlan{}, errors.New("accountapi: invalid commit outcome")
 		}
