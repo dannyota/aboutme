@@ -23,6 +23,7 @@ const (
 	publicRouteRobots
 	publicRouteLLMS
 	publicRouteLive
+	publicRouteShowcase
 )
 
 // Recognizes reports whether escapedPath belongs to a public route.
@@ -32,6 +33,12 @@ func (s *Service) Recognizes(escapedPath string) bool {
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	switch classifyPublicRoute(request.URL.EscapedPath()) {
+	case publicRouteShowcase:
+		if s.showcase == nil {
+			serveShowcaseError(w, request, http.StatusNotFound, "not_found", "not found", 0)
+			return
+		}
+		s.showcase.ServeHTTP(w, request)
 	case publicRouteLive:
 		if s.live == nil {
 			w.Header().Set("Cache-Control", "no-store, no-transform")
@@ -76,6 +83,8 @@ func classifyPublicRoute(path string) publicRoute {
 		return publicRouteRobots
 	case "/llms.txt":
 		return publicRouteLLMS
+	case showcasePath:
+		return publicRouteShowcase
 	}
 	if strings.Contains(path, "%") {
 		return publicRouteNone
