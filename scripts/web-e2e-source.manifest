@@ -569,6 +569,7 @@ apps/web/e2e/print.spec.ts
 apps/web/e2e/sample-pages.spec.ts
 apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts
+apps/web/e2e/showcase-baselines.spec.ts
 apps/web/e2e/showcase.spec.ts
 apps/web/e2e/sign-in-gate.spec.ts
 apps/web/e2e/support.ts
