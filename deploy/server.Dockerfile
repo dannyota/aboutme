@@ -41,9 +41,11 @@ FROM mcr.microsoft.com/playwright:v1.62.1-noble@sha256:dcc5531e97840b9b5e794f281
 USER root
 # Nothing in this image runs npm or corepack at runtime, so they are removed
 # rather than shipped unused; the final check fails the build if a base update
-# moves them. Node itself stays: it is Playwright's base.
+# moves them. Node itself stays: it is Playwright's base. OpenSSL takes the
+# current Ubuntu security build, which can be newer than the pinned base's.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates wget \
+    && apt-get install -y --no-install-recommends --only-upgrade libssl3t64 openssl \
     && rm -rf /var/lib/apt/lists/* \
     && chromium=/ms-playwright/chromium-1234/chrome-linux64 \
     && { [ -d "$chromium" ] || chromium=/ms-playwright/chromium-1234/chrome-linux; } \
