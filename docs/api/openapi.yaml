@@ -3357,7 +3357,7 @@ paths:
       security: []
       summary: List the community showcase
       description: >-
-        Lists the resumes in the community showcase, newest opt-in first,
+        Lists the resumes in the community showcase, oldest opt-in first,
         then resume ID, twelve to a page. Nothing is reviewed: a resume appears
         while all three listing conditions hold: its owner opted in, it is
         live, and sign in to view is off. Go computes the page from committed
