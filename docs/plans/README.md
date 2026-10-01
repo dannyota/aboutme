@@ -7,11 +7,8 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |Path|Holds|
 |-|-|
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
-|[link-previews.md](link-previews.md)|Link previews, releases 0.6.0 and 0.6.1 (card, publish-panel preview, and the Verify page)|
 |[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup (v0.6.26); view counts shipped in v0.6.4|
-|[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0028](../adr/0028-deployment-transparency-observer.md)), approved, building|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
-|[public-page-theme.md](public-page-theme.md)|Public page bar and light/dark theme|
 |[showcase.md](showcase.md)|Community showcase ([ADR 0029](../adr/0029-community-showcase.md), proposed), waiting for owner approvals|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
@@ -41,7 +38,7 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 
 ## Remaining
 
-- Release order, next: [sign in to view and the join popup](viewer-analytics.md) as v0.6.26, [light/dark theme](public-page-theme.md), [community showcase](showcase.md). Each takes its version number when it ships. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside them.
+- Release order, next: [community showcase](showcase.md), which takes its version number when it ships. Sign in to view shipped in v0.6.26 and waits only for its live check; the light/dark theme ships with this change. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside them.
 - [Vietnam production migration](vietnam-production.md): provider confirmation, app preparation releases, build, rehearsal, cutover, AWS real-data deletion.
 - [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).

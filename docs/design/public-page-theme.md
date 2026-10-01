@@ -309,11 +309,12 @@ Other rules:
   tinted header band, a tinted sidebar), as `--dark-color-<role>`.
 - `.public-resume-page`, and the editor's Web preview sheet, carry
   `data-color-scheme="dark"` or `"system"`; light carries no attribute.
-- A screen-only rule in the public page block of `ResumeDocument.vue` points
-  each `--color-<role>` at its `--dark-color-<role>` under `dark`, and under
-  `system` inside `@media (prefers-color-scheme: dark)`. On the public page the
-  rule also sets `color-scheme: dark` and `background: Canvas` on the root
-  through `:root:has(.public-resume-page[data-color-scheme])`, so scrollbars and
+- A screen-only rule in `resumeColorScheme.css`, which `ResumeDocument.vue`
+  imports, points each `--color-<role>` at its `--dark-color-<role>` under
+  `dark`, and under `system` inside `@media (prefers-color-scheme: dark)`. On
+  the public page the rule also sets `color-scheme: dark` and
+  `background: Canvas` on the root through
+  `:root:has(.public-resume-page[data-color-scheme])`, so scrollbars and
   overscroll turn dark. A root rule cannot read the page element's inline
   colors, so the root takes the browser's dark Canvas, not the template's
   ground. The page fills the viewport with its own ground (`min-height: 100vh`),
