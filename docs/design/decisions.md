@@ -42,7 +42,7 @@ record.
 | Gate                                                   | Owner                                     | Due                            |
 | ------------------------------------------------------ | ----------------------------------------- | ------------------------------ |
 | Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added |
-| Privacy and disclosure review                          | Qualified privacy counsel and human owner | Before the public announcement |
+| Privacy and disclosure text                            | Human owner approves agent-reviewed text  | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes.
 [ADR 0025](../adr/0025-single-host-production.md) is the production approval;

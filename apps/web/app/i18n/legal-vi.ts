@@ -45,8 +45,8 @@ export const legalVi: LegalCopy = {
           'Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi '
           + 'lưu thời điểm bạn bật, vị trí bạn chọn, và kết quả duyệt.',
           'Phiên đăng nhập: thông tin trình duyệt (user-agent) và địa chỉ '
-          + 'IP của từng phiên, dùng cho bảo mật. Settings → Sessions liệt '
-          + 'kê các thiết bị đang đăng nhập. Chúng tôi xóa địa chỉ IP và '
+          + 'IP của từng phiên, dùng cho bảo mật. Mục Cài đặt → Thiết bị đã '
+          + 'đăng nhập liệt kê các thiết bị đang đăng nhập. Chúng tôi xóa địa chỉ IP và '
           + 'thông tin trình duyệt ghi nhận cho một lần đăng nhập trong '
           + 'vòng 90 ngày kể từ lần đăng nhập đó. Việc duy trì phiên đăng '
           + 'nhập không kéo dài thời hạn này.',
@@ -73,8 +73,10 @@ export const legalVi: LegalCopy = {
           + 'máy chủ và bị xóa trong ngày; trình duyệt của bạn giải một '
           + 'phép tính nhỏ. Việc đếm lượt xem không dùng cookie.',
           'Nếu chủ CV yêu cầu đăng nhập để xem: Google hoặc LinkedIn xác '
-          + 'minh tài khoản của bạn, và chúng tôi xóa ngay tên và email '
-          + 'của bạn. Chủ CV không được cho biết bạn là ai.',
+          + 'minh tài khoản của bạn. Chúng tôi chỉ yêu cầu xác minh đăng '
+          + 'nhập, không yêu cầu tên hay email, nên chỉ nhận một mã định '
+          + 'danh tài khoản do nhà cung cấp cấp, và xóa mã đó ngay trong '
+          + 'lần đăng nhập. Chủ CV không được cho biết bạn là ai.',
         ],
       },
       {
@@ -88,6 +90,13 @@ export const legalVi: LegalCopy = {
           + 'nối trợ lý AI, đăng nhập bằng Google hoặc LinkedIn) chỉ chạy '
           + 'khi bạn tự bật, và bạn có thể tắt bất cứ lúc nào. Bạn có thể '
           + 'chấm dứt thỏa thuận bằng cách xóa tài khoản.',
+          'Người xem CV công khai không cần tài khoản. Khi bạn mở một CV '
+          + 'công khai, chúng tôi dùng địa chỉ IP và thông tin trình '
+          + 'duyệt của bạn để phục vụ trang, chặn lạm dụng, và lọc bot '
+          + 'khỏi số lượt xem. Kết quả chỉ là tổng số theo ngày, không mô '
+          + 'tả bất kỳ ai. Nếu chủ CV yêu cầu đăng nhập để xem, bạn tự '
+          + 'chọn đăng nhập để yêu cầu xem CV đó; chúng tôi chỉ xử lý mã '
+          + 'định danh tài khoản để đáp ứng yêu cầu này.',
         ],
       },
       {
@@ -104,11 +113,14 @@ export const legalVi: LegalCopy = {
           + 'chờ trong năm phút, ghi nhớ giao diện và ngôn ngữ bạn chọn, '
           + 'và, khi chủ CV yêu cầu đăng nhập để xem, cho phép bạn xem CV '
           + 'đó trong 7 ngày.',
-          'Bộ nhớ cục bộ của trình duyệt (localStorage) chỉ dùng để ghi '
-          + 'nhớ đường dẫn quay lại sau khi bạn xác minh email (tối đa 24 '
-          + 'giờ), chế độ xem trước (PDF hoặc web) bạn chọn trong trình '
-          + 'chỉnh sửa CV, và việc bạn đã đóng lời mời tạo CV miễn phí '
-          + '(tối đa 90 ngày).',
+          'Bộ nhớ của trình duyệt chỉ dùng để ghi nhớ: đường dẫn quay '
+          + 'lại sau khi bạn xác minh email (tối đa 24 giờ); chế độ xem '
+          + 'trước (PDF hoặc web), mức thu phóng và độ rộng khung chỉnh '
+          + 'sửa bạn chọn trong trình chỉnh sửa CV; việc bạn đã đóng lời '
+          + 'mời tạo CV miễn phí (tối đa 90 ngày); và, chỉ trong phiên '
+          + 'duyệt hiện tại (sessionStorage), thời điểm một trang CV công '
+          + 'khai tự tải lại lần cuối, để tránh tải lại liên tục. Không có '
+          + 'dữ liệu nào trong số này được gửi đến máy chủ.',
         ],
       },
       {
@@ -127,8 +139,9 @@ export const legalVi: LegalCopy = {
           + 'Khi CV đang công khai, bất kỳ ai xem được cũng có thể lưu '
           + 'hoặc chụp lại trang. Theo mặc định, người xem cũng có thể '
           + 'tải về bản PDF của CV; bạn có thể tắt tính năng này. Đừng '
-          + 'đưa dữ liệu cá nhân nhạy cảm, như số giấy tờ tùy thân, tình '
-          + 'trạng sức khoẻ, hoặc tôn giáo, vào một CV công khai.',
+          + 'đưa dữ liệu cá nhân nhạy cảm, như số hoặc ảnh giấy tờ tùy '
+          + 'thân, tình trạng sức khoẻ, tôn giáo, hoặc quan điểm chính '
+          + 'trị, vào một CV công khai.',
           'Khi bất kỳ ai chia sẻ đường dẫn công khai của bạn trong một ứng '
           + 'dụng nhắn tin hoặc mạng xã hội, dịch vụ đó sẽ lấy tiêu đề '
           + 'trang, phần tóm tắt và ảnh xem trước của trang (họ tên, tiêu '
@@ -152,8 +165,9 @@ export const legalVi: LegalCopy = {
           'Dữ liệu của bạn được lưu tại Amazon Web Services ở Singapore '
           + '(ap-southeast-1): cơ sở dữ liệu, bản sao lưu, kho ảnh, và '
           + 'việc gửi email qua Amazon SES. Amazon CloudFront (mạng máy '
-          + 'chủ toàn cầu của Amazon Web Services) phân phối trang web và '
-          + 'xử lý địa chỉ IP của bạn. Amazon Route 53 cung cấp dịch vụ '
+          + 'chủ toàn cầu của Amazon Web Services) phân phối trang web; '
+          + 'CloudFront và AWS WAF xử lý địa chỉ IP và thông tin trình '
+          + 'duyệt của bạn để chặn tấn công và nhận diện bot. Amazon Route 53 cung cấp dịch vụ '
           + 'DNS. '
           + 'Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
           + 'tài khoản của bạn. Nếu bạn đăng nhập bằng LinkedIn, LinkedIn '
@@ -172,15 +186,18 @@ export const legalVi: LegalCopy = {
           + 'CV, và nếu bạn cấp quyền ghi, tạo, sửa hoặc xóa CV và ảnh. '
           + 'Trợ lý không thể xuất bản hay hủy xuất bản CV, nhưng nếu '
           + 'xóa một CV đang công khai thì đường dẫn của CV đó ngừng hoạt '
-          + 'động. Nội dung trợ lý đọc được sẽ đến dịch vụ AI mà bạn chọn. '
-          + 'Bạn có thể thu hồi quyền bất cứ lúc nào trong Settings.',
+          + 'động. Nội dung trợ lý đọc được sẽ đến dịch vụ AI mà bạn chọn, có '
+          + 'thể ở ngoài Việt Nam. Bạn là người quyết định việc chuyển '
+          + 'dữ liệu này. Bạn có thể thu hồi quyền bất cứ lúc nào trong '
+          + 'Cài đặt.',
         ],
       },
       {
         heading: 'Quyền kiểm soát của bạn',
         paragraphs: [
           'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xóa CV, và xóa tài '
-          + 'khoản. Bản xuất gồm hồ sơ và nội dung CV của bạn; ảnh và '
+          + 'khoản. Chúng tôi giữ tài khoản, CV và ảnh của bạn cho đến khi '
+          + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ và nội dung CV của bạn; ảnh và '
           + 'lịch sử phiên đăng nhập xin liên hệ qua email.',
           'Khi bạn xóa tài khoản:',
         ],
@@ -205,13 +222,27 @@ export const legalVi: LegalCopy = {
       {
         heading: 'Quyền của bạn',
         paragraphs: [
-          'Bạn có quyền được biết, truy cập, chỉnh sửa, xóa dữ liệu cá '
-          + 'nhân của mình, phản đối hoặc yêu cầu hạn chế xử lý, khiếu '
-          + 'nại, tố cáo, khởi kiện, và yêu cầu bồi thường thiệt hại theo '
-          + 'quy định của pháp luật. Phần lớn các quyền này bạn tự thực '
-          + 'hiện được trong Settings; các yêu cầu khác xin gửi qua email '
-          + 'bên dưới. Chúng tôi phản hồi trong vòng 2 ngày làm việc và '
-          + 'hoàn tất yêu cầu trong thời hạn pháp luật quy định.',
+          'Bạn có quyền được biết về việc xử lý dữ liệu cá nhân của mình; '
+          + 'đồng ý, không đồng ý, hoặc rút lại sự đồng ý; xem, chỉnh '
+          + 'sửa, hoặc yêu cầu chỉnh sửa; yêu cầu cung cấp, xóa, hoặc hạn '
+          + 'chế xử lý, và phản đối việc xử lý; yêu cầu chúng tôi áp dụng '
+          + 'biện pháp bảo vệ dữ liệu của bạn; và khiếu nại, tố cáo, khởi '
+          + 'kiện, yêu cầu bồi thường thiệt hại theo quy định của pháp '
+          + 'luật. Bạn tự xuất dữ liệu, sửa hoặc xóa CV, và xóa tài khoản '
+          + 'trong Cài đặt. Các yêu cầu khác xin gửi qua email bên dưới; '
+          + 'nếu yêu cầu liên quan đến một tài khoản, xin gửi từ địa chỉ '
+          + 'email của tài khoản đó để chúng tôi xác minh. Chúng tôi phản '
+          + 'hồi trong vòng 2 ngày làm việc. Chúng tôi cho bạn xem, sửa, '
+          + 'hoặc nhận bản sao dữ liệu trong vòng 10 ngày; xóa dữ liệu '
+          + 'trong vòng 20 ngày; và xử lý yêu cầu hạn chế, phản đối, rút '
+          + 'lại sự đồng ý, hoặc áp dụng biện pháp bảo vệ trong vòng 15 '
+          + 'ngày. Nếu một yêu cầu cần thêm thời gian, chúng tôi báo cho '
+          + 'bạn lý do và chỉ gia hạn một lần, trong giới hạn pháp luật '
+          + 'cho phép.',
+          'Nếu xảy ra sự cố làm lộ hoặc mất dữ liệu cá nhân của bạn, '
+          + 'chúng tôi báo cho cơ quan chuyên trách bảo vệ dữ liệu cá nhân '
+          + 'thuộc Bộ Công an theo quy định của pháp luật và gửi email '
+          + 'cho bạn.',
         ],
       },
       {
@@ -342,8 +373,12 @@ export const legalVi: LegalCopy = {
           'Khi điều khoản thay đổi, chúng tôi cập nhật trang này và ngày '
           + 'cập nhật. Nếu thay đổi là quan trọng, chúng tôi sẽ gửi email '
           + 'báo trước ít nhất 15 ngày trước khi thay đổi có hiệu lực. '
-          + 'Việc bạn tiếp tục sử dụng dịch vụ sau khi thay đổi có hiệu '
-          + 'lực đồng nghĩa với việc bạn chấp nhận điều khoản mới.',
+          + 'Nếu không đồng ý, bạn có thể xuất dữ liệu và xóa tài khoản '
+          + 'trước ngày đó. Việc bạn tiếp tục sử dụng dịch vụ sau khi '
+          + 'thay đổi có hiệu lực đồng nghĩa với việc bạn chấp nhận điều '
+          + 'khoản mới. Nếu một thay đổi cần sự đồng ý của bạn theo pháp '
+          + 'luật, chúng tôi sẽ xin riêng; việc tiếp tục sử dụng không '
+          + 'được coi là đồng ý.',
         ],
         contactLabel: 'Liên hệ',
       },

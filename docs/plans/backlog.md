@@ -23,7 +23,9 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Before the public announcement
 
-- Privacy, terms, and disclosure review (qualified privacy counsel and owner).
+- Move production to Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md)). Announce only after the move.
+- Owner approves the agent-reviewed privacy, terms, and disclosure text.
+- After the move and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. They are not filed now because there are no real users yet.
 
 ## Acceptance evidence gaps
 
