@@ -134,7 +134,10 @@ func TestShowReportsTheState(t *testing.T) {
 		t.Fatalf("Show() = %+v, want a pending devops opt-in with the row's key", state)
 	}
 	e.approve(t, f)
-	state, _, _ = e.reviewer.Show(e.ctx, f.slug)
+	state, found, err = e.reviewer.Show(e.ctx, f.slug)
+	if err != nil || !found {
+		t.Fatalf("Show() after approval found = %t, %v", found, err)
+	}
 	if state.State != "listed" || state.Outcome == nil || state.FirstListedAt == nil {
 		t.Fatalf("Show() after approval = %+v, want listed", state)
 	}
