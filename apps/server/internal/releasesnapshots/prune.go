@@ -1,7 +1,9 @@
 // Package releasesnapshots deletes the manual RDS snapshots that deploy.sh
 // takes before each release once they are more than 27 days old, so with a
 // daily run no database backup outlives the 30-day retention, even after one
-// missed run (docs/design/operations.md).
+// missed run (docs/design/operations.md). It also keeps only the newest
+// KeepNewest, so frequent releases stay under the AWS per-region limit of 100
+// manual snapshots.
 package releasesnapshots
 
 import (
@@ -9,6 +11,7 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -32,6 +35,9 @@ const (
 	MaxAge = 27 * 24 * time.Hour
 	// maxErrorCodeLen bounds the API error code a failed-delete log carries.
 	maxErrorCodeLen = 64
+	// KeepNewest is how many release snapshots survive regardless of age,
+	// newest first by creation time.
+	KeepNewest = 30
 )
 
 // namePattern is the identifier deploy.sh generates:
@@ -63,12 +69,7 @@ type Result struct {
 // backups, the final snapshot, a snapshot created after now, and every other
 // snapshot never qualify.
 func Expired(s types.DBSnapshot, now time.Time) bool {
-	id := aws.ToString(s.DBSnapshotIdentifier)
-	if aws.ToString(s.DBInstanceIdentifier) != Instance || aws.ToString(s.SnapshotType) != "manual" ||
-		aws.ToString(s.Status) != "available" || !namePattern.MatchString(id) || s.SnapshotCreateTime == nil {
-		return false
-	}
-	if _, ok := untagged[id]; !ok && !tagged(s) {
+	if !release(s) {
 		return false
 	}
 	created := *s.SnapshotCreateTime
@@ -76,6 +77,42 @@ func Expired(s types.DBSnapshot, now time.Time) bool {
 		return false
 	}
 	return created.Before(now.Add(-MaxAge))
+}
+
+// release reports whether s is a deploy.sh release snapshot of the production
+// instance that is manual, available, and has a creation time. These are the
+// only snapshots the job ever counts or deletes.
+func release(s types.DBSnapshot) bool {
+	id := aws.ToString(s.DBSnapshotIdentifier)
+	if aws.ToString(s.DBInstanceIdentifier) != Instance || aws.ToString(s.SnapshotType) != "manual" ||
+		aws.ToString(s.Status) != "available" || !namePattern.MatchString(id) || s.SnapshotCreateTime == nil {
+		return false
+	}
+	_, ok := untagged[id]
+	return ok || tagged(s)
+}
+
+// doomed returns the identifiers to delete, in listing order: every expired
+// snapshot plus every one beyond the newest KeepNewest.
+func doomed(releases []types.DBSnapshot, now time.Time) []string {
+	newest := slices.Clone(releases)
+	slices.SortStableFunc(newest, func(a, b types.DBSnapshot) int {
+		return b.SnapshotCreateTime.Compare(*a.SnapshotCreateTime)
+	})
+	excess := make(map[string]struct{})
+	if len(newest) > KeepNewest {
+		for _, s := range newest[KeepNewest:] {
+			excess[aws.ToString(s.DBSnapshotIdentifier)] = struct{}{}
+		}
+	}
+	var ids []string
+	for _, s := range releases {
+		id := aws.ToString(s.DBSnapshotIdentifier)
+		if _, over := excess[id]; over || Expired(s, now) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func tagged(s types.DBSnapshot) bool {
@@ -87,13 +124,14 @@ func tagged(s types.DBSnapshot) bool {
 	return false
 }
 
-// Prune deletes every expired release snapshot. It lists all manual snapshots
+// Prune deletes every expired release snapshot and every one beyond the newest
+// KeepNewest by creation time. It lists all manual snapshots
 // of the instance before deleting any, continues past a failed deletion, and
 // returns an error if listing or any deletion failed. Errors and logs never
 // carry raw SDK text.
 func Prune(ctx context.Context, client Client, now time.Time, logger *slog.Logger) (Result, error) {
 	var result Result
-	var expired []string
+	var releases []types.DBSnapshot
 	pages := rds.NewDescribeDBSnapshotsPaginator(client, &rds.DescribeDBSnapshotsInput{
 		DBInstanceIdentifier: aws.String(Instance),
 		SnapshotType:         aws.String("manual"),
@@ -105,12 +143,12 @@ func Prune(ctx context.Context, client Client, now time.Time, logger *slog.Logge
 		}
 		for _, s := range page.DBSnapshots {
 			result.Examined++
-			if Expired(s, now) {
-				expired = append(expired, aws.ToString(s.DBSnapshotIdentifier))
+			if release(s) {
+				releases = append(releases, s)
 			}
 		}
 	}
-	for _, id := range expired {
+	for _, id := range doomed(releases, now) {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}

@@ -132,9 +132,10 @@ security group. `rds.force_ssl` is on, and Go connects with
 `sslmode=verify-full` against the AWS RDS CA bundle shipped in the server image.
 Automated backups keep 30 days with point-in-time recovery. Each release also
 takes a manual snapshot tagged `aboutme:created-by=deploy.sh`; the daily
-`release-snapshot-sweep` job deletes each one once it is more than 27 days old,
-so none reaches 30 days even after one missed run. Deletion protection is on and
-deletion takes a final snapshot.
+`release-snapshot-sweep` job deletes each one that is more than 27 days old, or
+beyond the newest 30, so none reaches 30 days even after one missed run and
+frequent releases stay under the AWS limit of 100 manual snapshots per region.
+Deletion protection is on and deletion takes a final snapshot.
 
 The RDS master user is named `aboutme` and owns database `aboutme`. RDS manages
 its password in Secrets Manager. It is not a superuser.

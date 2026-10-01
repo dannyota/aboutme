@@ -13,13 +13,13 @@ database; it uses the AWS credential chain, which is the `jobs` task role in
 production. Do not place secret values in command lines, logs, tickets, or
 evidence.
 
-| Command                    | Local use                                                          | Production cadence |
-| -------------------------- | ------------------------------------------------------------------ | ------------------ |
-| `idempotency-expiry-sweep` | Remove expired replay records                                      | Hourly             |
-| `media-deletion-sweep`     | Drain due exact-key deletion jobs                                  | Hourly             |
-| `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection      | Weekly             |
-| `privacy-retention-sweep`  | Apply session, lifecycle-audit, completed-media, and OAuth cleanup | Daily              |
-| `release-snapshot-sweep`   | Delete deploy.sh RDS snapshots more than 27 days old               | Daily              |
+| Command                    | Local use                                                                 | Production cadence |
+| -------------------------- | ------------------------------------------------------------------------- | ------------------ |
+| `idempotency-expiry-sweep` | Remove expired replay records                                             | Hourly             |
+| `media-deletion-sweep`     | Drain due exact-key deletion jobs                                         | Hourly             |
+| `media-orphan-sweep`       | Reconcile old private objects; add `--dry-run` for inspection             | Weekly             |
+| `privacy-retention-sweep`  | Apply session, lifecycle-audit, completed-media, and OAuth cleanup        | Daily              |
+| `release-snapshot-sweep`   | Delete deploy.sh snapshots more than 27 days old, or beyond the newest 30 | Daily              |
 
 Each run has a 30-minute deadline. PostgreSQL advisory locks make overlap a
 successful skip. `release-snapshot-sweep` takes no lock; an overlapping run can

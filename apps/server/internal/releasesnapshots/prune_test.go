@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -272,5 +273,75 @@ func TestPruneLogsOnlyATokenErrorCodeOnAFailedDelete(t *testing.T) {
 				t.Fatalf("log missing %q: %q", tc.want, logged)
 			}
 		})
+	}
+}
+
+// manyReleases returns n tagged release snapshots, one per hour ending an hour
+// before now, so all are far younger than MaxAge. Index 0 is the oldest.
+func manyReleases(n int) []types.DBSnapshot {
+	var out []types.DBSnapshot
+	for i := range n {
+		created := now.Add(-time.Duration(n-i) * time.Hour)
+		id := "aboutme-prod-v1-0-" + strconv.Itoa(i) + "-" + created.Format("200601021504")
+		out = append(out, snapshot(id, Instance, "manual", "available", created, true))
+	}
+	return out
+}
+
+func TestPruneKeepsOnlyTheNewestThirtyReleaseSnapshots(t *testing.T) {
+	t.Parallel()
+	all := manyReleases(35)
+	// Untagged snapshots with release names never count toward the cap and are
+	// never deleted, however many exist or how old they are.
+	for i := range 10 {
+		id := "aboutme-prod-v2-0-" + strconv.Itoa(i) + "-202601010000"
+		all = append(all, snapshot(id, Instance, "manual", "available", day(2026, 1, 1), false))
+	}
+	// Reverse the listing order: the cap goes by creation time, not position.
+	slices.Reverse(all)
+	client := &fakeClient{pages: [][]types.DBSnapshot{all}}
+	logger, _ := testLogger()
+
+	result, err := Prune(t.Context(), client, now, logger)
+	if err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	var want []string
+	for _, s := range manyReleases(35)[:5] {
+		want = append(want, aws.ToString(s.DBSnapshotIdentifier))
+	}
+	slices.Reverse(want)
+	if !slices.Equal(client.deleted, want) {
+		t.Fatalf("deleted = %v, want the 5 oldest %v", client.deleted, want)
+	}
+	if result != (Result{Examined: 45, Deleted: 5}) {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestPruneKeepsThirtyReleaseSnapshotsAndAppliesTheAgeRuleToo(t *testing.T) {
+	t.Parallel()
+	all := manyReleases(KeepNewest)
+	old := snapshot("aboutme-prod-v0-9-9-202607010000", Instance, "manual", "available", day(2026, 7, 1), true)
+	client := &fakeClient{pages: [][]types.DBSnapshot{append(all, old)}}
+	logger, _ := testLogger()
+
+	if _, err := Prune(t.Context(), client, now, logger); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if want := []string{"aboutme-prod-v0-9-9-202607010000"}; !slices.Equal(client.deleted, want) {
+		t.Fatalf("deleted = %v, want only the expired %v", client.deleted, want)
+	}
+}
+
+func TestPruneDeletesNothingAtExactlyThirtyRecentSnapshots(t *testing.T) {
+	t.Parallel()
+	client := &fakeClient{pages: [][]types.DBSnapshot{manyReleases(KeepNewest)}}
+	logger, _ := testLogger()
+	if _, err := Prune(t.Context(), client, now, logger); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if len(client.deleted) != 0 {
+		t.Fatalf("deleted %v, want none", client.deleted)
 	}
 }
