@@ -1020,7 +1020,7 @@ export interface paths {
         };
         /**
          * List the community showcase
-         * @description Lists the resumes in the community showcase, newest opt-in first, then resume ID, twelve to a page. Nothing is reviewed: a resume appears while all three listing conditions hold: its owner opted in, it is live, and sign in to view is off. Go computes the page from committed state on every request, so a request admitted after an opt-out, unpublish, sign in to view, rename, or delete commits omits the resume. The response is never cached and has no validator. The route reads no cookie and sets none, and it sends `X-Robots-Tag: noindex, nofollow`.
+         * @description Lists the resumes in the community showcase, oldest opt-in first, then resume ID, twelve to a page. Nothing is reviewed: a resume appears while all three listing conditions hold: its owner opted in, it is live, and sign in to view is off. Go computes the page from committed state on every request, so a request admitted after an opt-out, unpublish, sign in to view, rename, or delete commits omits the resume. The response is never cached and has no validator. The route reads no cookie and sets none, and it sends `X-Robots-Tag: noindex, nofollow`.
          *
          *     Every query parameter is optional and may appear once. Any other parameter, a repeated parameter, an empty value, or a value outside its set is `400 request_invalid`. A page past the last one is `200` with no items and the real `pageCount`. Each item carries only the closed fields below: no contact detail, account identifier, date, or count. The separate limit is 60 requests a minute per client IP. See `docs/design/showcase.md` and `docs/adr/0029-community-showcase.md`.
          */
