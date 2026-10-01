@@ -11,8 +11,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - `docs/design/single-host-production.md:268` and `docs/runbooks/production.md:257` omit the new recovery exceptions: an unconfirmed new app is left running when maintenance cannot be confirmed, and the failed previous-app restart path. Evidence: `deploy/aws/scripts/deploy.sh` restore.
 - Template date formats ignore the resume language: the style guide wants `MM/YYYY` for Vietnamese and `Mon YYYY` for English, and international-lang's `YYYY` drops months. Evidence: `docs/design/vietnam-tech-resumes.md`, `packages/schema/samples/international-lang.*`.
 - The Vietnam tech style guide conflicts with the samples on two points (Zalo line in English resumes; fresher awards as their own section). The designer decides and updates the guide or the samples. Evidence: `docs/design/vietnam-tech-resumes.md`.
-- A stray dot sits on the stored Executive Band page 1 image (Vietnamese), about 60 px above the bottom edge; check the print path. Evidence: `apps/web/public/templates/pages/executive-band-vi-p1.png`.
-- The deploy warm-up requests `/danny`; if that resume is unpublished, every deploy fails. Evidence: `deploy/aws/scripts/deploy.sh` (`DEPLOY_WARM_PAGE`).
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
 
 ## Production acceptance
