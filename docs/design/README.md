@@ -47,7 +47,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [LinkedIn import page](linkedin-import-ui.md)                          | Import page states, layout, accessibility, and copy            |
 | Other   | [Viewer analytics](viewer-analytics/README.md)                         | View counts and sign in to view, with no viewer data kept      |
 | Other   | [Public page bar and theme](public-page-theme.md)                      | Page bar, owner color scheme, and the dark palette rule        |
-| Other   | [Community showcase](showcase.md)                                      | Opt-in, reviewed listing of published resumes at `/showcase`   |
+| Other   | [Community showcase](showcase.md)                                      | Opt-in listing of published resumes at `/showcase`             |
 | Other   | [UI: logo and seal](ui/identity-and-seal.md)                           | Logo, public seal, and state marks                             |
 | Other   | [UI: typography and tokens](ui/typography-and-tokens.md)               | Chrome type, color tokens, spacing, radius, buttons, dialogs   |
 | Other   | [UI: landing and Library](ui/landing-and-library.md)                   | Landing page and template Library layout                       |
