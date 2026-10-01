@@ -15,6 +15,7 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 
 ## Production acceptance
 
+- Run `scripts/deployment-document-check.sh` once on production and record a denied-call test for the observer role (it cannot describe another cluster). Evidence: [deployment transparency](../design/deployment-transparency/README.md), `docs/runbooks/observer.md`.
 - Trigger every alarm once and confirm its email arrives (AC-OPS-019, `PLANNED`).
 - Record one successful run of each of the five scheduled jobs. Evidence: `docs/architecture.md` production section.
 - Restore a snapshot to a temporary instance, verify the data, delete the instance (AC-OPS-018, `PLANNED`).
