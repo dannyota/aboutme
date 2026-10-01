@@ -9,6 +9,7 @@ import type {
   ValidatedStaleWinner,
 } from './attempt';
 import { parseCurrentDocument } from './documentValidation';
+import { parseOwnerShowcase } from '../lib/showcaseContract';
 import { parentETag, parseParentETag, parseRevision } from './revision';
 import type { AcceptedResume, ParentETag } from './types';
 
@@ -127,6 +128,9 @@ export function parseSummary(value: unknown): ResumeSummary {
     slug: value.slug,
     publicTitle: (value.publicTitle as string | null | undefined) ?? null,
     faviconEmoji: (value.faviconEmoji as string | null | undefined) ?? null,
+    ...(value.showcase === undefined
+      ? {}
+      : { showcase: parseOwnerShowcase(value.showcase) }),
     schemaVersion: CURRENT_VERSION,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,

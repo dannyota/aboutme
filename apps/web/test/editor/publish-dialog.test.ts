@@ -224,17 +224,18 @@ describe('PublishDialog', () => {
       expect(wrapper.find('img[src="x"]').exists()).toBe(false);
     });
 
-  it('renders exactly the three product choices and both disclosures',
+  it('renders exactly the four product choices and both disclosures',
     async () => {
       const record = editorRecord();
       const { actions } = actionsFor(record);
       await mountDialog(record, actions);
 
       const choices = dialog().findAll('[role="switch"]');
-      expect(choices).toHaveLength(3);
+      expect(choices).toHaveLength(4);
       expect(dialog().text()).toContain('Public resume');
       expect(dialog().text()).toContain('PDF download');
       expect(dialog().text()).toContain('SEO and GEO');
+      expect(dialog().text()).toContain('Show in the community showcase');
       expect(dialog().text()).toContain(
         'Public resumes may be delivered through a global '
         + 'content-delivery network.',

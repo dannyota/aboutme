@@ -90,6 +90,7 @@ export default defineConfig({
         'gallery.spec.ts',
         'chrome.spec.ts',
         'verify.spec.ts',
+        'showcase.spec.ts',
       ],
   timeout: 20_000,
   updateSnapshots: 'none',

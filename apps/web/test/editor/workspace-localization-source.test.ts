@@ -53,6 +53,7 @@ const vueSources = [
   'components/editor/PDFDownloadButton.vue',
   'components/editor/PublishDialog.vue',
   'components/editor/PublishPageFields.vue',
+  'components/editor/PublishShowcase.vue',
   'components/editor/SaveStatus.vue',
   'components/editor/customization/ColorField.vue',
   'components/editor/customization/CustomizationPanel.vue',
@@ -97,6 +98,8 @@ const helperSources = [
   'components/editor/sectionTypes.ts',
   'composables/useResumeList.ts',
   'editor/pdfDownload.ts',
+  'editor/publishMessages.ts',
+  'editor/publishShowcase.ts',
   'utils/relativeTime.ts',
 ];
 const approvedLiterals: Readonly<Record<string, readonly string[]>> = {
