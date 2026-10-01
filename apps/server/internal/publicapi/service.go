@@ -53,6 +53,10 @@ type ServiceDependencies struct {
 	// JoinInviteTarget is "/register" or "/login": the join invite's link
 	// for a sign-in-to-view resume's page (design "Join invite").
 	JoinInviteTarget string
+	// Showcase serves the community showcase listing (docs/design/showcase.md).
+	// Nil leaves the route answering 404, so the server can deploy before it
+	// is wired.
+	Showcase ShowcaseListing
 }
 
 var _ store.PublicReadQueries = (*store.Queries)(nil)
@@ -70,6 +74,7 @@ type Service struct {
 	robots   http.Handler
 	llms     http.Handler
 	live     http.Handler
+	showcase http.Handler
 }
 
 // NewService creates the public-route dispatcher from its dependencies.
@@ -106,6 +111,9 @@ func NewService(dependencies ServiceDependencies) (*Service, error) {
 		return nil, err
 	}
 	service := &Service{html: html, markdown: markdown, sitemap: sitemap, robots: robots, llms: llms, live: dependencies.Live}
+	if dependencies.Showcase != nil {
+		service.showcase = newShowcaseHandler(dependencies.Showcase, dependencies.TrustedProxies, dependencies.Clock)
+	}
 	service.json = service.newJSONHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest, dependencies.ViewPassKey, dependencies.Clock)
 	service.photo = service.newPhotoHandler(dependencies.Reader, dependencies.Cache, dependencies.AppDigest, dependencies.ViewPassKey, dependencies.Clock)
 	artifacts, artifactErr := newArtifactHandlers(ArtifactDependencies{
