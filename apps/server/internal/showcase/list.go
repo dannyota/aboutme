@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
 	"github.com/dannyota/aboutme/apps/server/internal/previewmeta"
@@ -73,12 +75,14 @@ func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 	items := make([]Item, 0, len(rows))
 	for _, row := range rows {
 		if row.Slug == nil {
+			s.logSkipped(ctx, row.ID)
 			continue
 		}
 		text, textErr := s.imageText(ctx, queries, row)
 		if textErr != nil {
 			// A resume whose details cannot be read is not shown; it is not
-			// served publicly either.
+			// served publicly either. It still counts in Total.
+			s.logSkipped(ctx, row.ID)
 			continue
 		}
 		items = append(items, Item{
@@ -87,6 +91,14 @@ func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 		})
 	}
 	return Page{Items: items, Page: filter.Page, PageCount: pageCount(total), Total: int(total)}, nil
+}
+
+// logSkipped records a listed resume whose row could not be read. It names the
+// resume ID only, never a name or headline.
+func (s *Service) logSkipped(ctx context.Context, id uuid.UUID) {
+	if s.logger != nil {
+		s.logger.ErrorContext(ctx, "showcase listing skipped a row", "resume_id", id.String())
+	}
 }
 
 func pageCount(total int64) int {
