@@ -188,7 +188,8 @@ func TestResumeShowcaseCascades(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005: the partial index serves the listing order.
+// The partial index on the first approval stays for the previous release; the
+// listing index of the current release is checked with migration 00011.
 func TestResumeShowcaseListingIndex(t *testing.T) {
 	t.Parallel()
 	tx, ctx := newResumeSchemaTx(t)
