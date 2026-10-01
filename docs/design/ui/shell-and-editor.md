@@ -10,21 +10,21 @@ content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
 Library link for every visitor, then a Community link (“Cộng đồng”) to the
 [community showcase](landing-and-library.md#community-showcase), then a link to
 the [MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
-public like the Library link. Below 30 rem, signed out, the logo shows the mark
-alone so both public links fit. Signed-out navigation adds an Open source link
-to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
-and a primary create button. The create button reads Create your resume on the
-home page, the Library, template pages, the showcase, Terms, Privacy, and the
-MCP guide, and Create account elsewhere. On localized routes, both account
-buttons hide below 44 rem, where the page's own links take over. Signed-in
-navigation also shows Resumes, Settings, and an account menu. The account menu
-contains Settings, theme switching, and Log out. On signed-in screens below 640
-px, the direct Library, Community, and Settings links are hidden; Settings
-remains in the account menu. The guide link hides below 44 rem signed out and
-below 64 rem signed in, where the signed-in bar also carries Resumes, Views, and
-Settings. On localized routes, the shell adds the Vietnamese and English toggle.
-Below 640 px its visible labels shorten to VI and EN while their accessible
-names remain complete.
+public like the Library link. Below 64 rem, signed out, the logo shows the mark
+alone so every link and both account buttons fit. Signed-out navigation adds an
+Open source link to the GitHub repository from 56 rem, the theme toggle, a ghost
+Sign in button, and a primary create button. The create button reads Create your
+resume on the home page, the Library, template pages, the showcase, Terms,
+Privacy, and the MCP guide, and Create account elsewhere. On localized routes,
+both account buttons hide below 44 rem, where the page's own links take over.
+Signed-in navigation also shows Resumes, Settings, and an account menu. The
+account menu contains Settings, theme switching, and Log out. On signed-in
+screens below 640 px, the direct Library, Community, and Settings links are
+hidden; Settings remains in the account menu. The guide link hides below 44 rem
+signed out and below 64 rem signed in, where the signed-in bar also carries
+Resumes, Views, and Settings. On localized routes, the shell adds the Vietnamese
+and English toggle. Below 640 px its visible labels shorten to VI and EN while
+their accessible names remain complete.
 
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a

@@ -309,11 +309,14 @@ Library, with Library's class: shown to every visitor and hidden below 640 px
 when signed in. It takes `aria-current="page"` on `/showcase`. On `/showcase`
 the shell's create button reads Create your resume, as on the Library.
 
-The signed-out phone header must still fit. The 390 px Library baseline leaves
-about 34 px between Thư viện and the locale toggle, and Cộng đồng needs about 88
-px. So below 30 rem, signed out, the shell logo shows the mark alone (`AppLogo`
-with `markOnly`), which frees about 100 px. Signed-in headers keep the full
-logo.
+The signed-out header must still fit with every link and both account buttons.
+Cộng đồng needs about 88 px: the 390 px Library baseline leaves 34 px, and the
+English header overflows by 37 px at 704 px and 57 px at 768 px, where the theme
+toggle shows its label. From 56 rem the Open source link adds about 104 px more.
+So below 64 rem, signed out, the shell logo shows the mark alone (`AppLogo` with
+`markOnly`), which frees about 100 px, the way the editor top bar drops its
+wordmark. Sign in, Community, Connect AI, and the create button all stay.
+Signed-in headers keep the full logo.
 
 ### Publish dialog block
 
@@ -424,5 +427,5 @@ page scroll:
   for “Fresher/Intern”; the Declined text wraps.
 
 The finish review checks `/showcase` at 360, 390, 768, 1024, and 1440 px in both
-languages and both themes, and the signed-out header at 360, 390, 704, and 896
-px.
+languages and both themes, and the signed-out header at 360, 390, 704, 768, 896,
+and 1024 px.
