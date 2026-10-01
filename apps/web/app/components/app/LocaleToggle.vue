@@ -7,10 +7,13 @@ import {
 } from '@/i18n/locale';
 import { cn } from '@/lib/utils';
 
-defineProps<{
+// `compact` keeps the short labels (VI and EN) until 64rem instead of 640px,
+// for the signed-out header (docs/design/ui/landing-and-library.md).
+withDefaults(defineProps<{
   readonly label: string;
   readonly testId?: 'landing-locale' | 'workspace-locale';
-}>();
+  readonly compact?: boolean;
+}>(), { testId: undefined, compact: false });
 
 const { locale, setLocale } = useLocale();
 
@@ -50,11 +53,11 @@ const localeClass = cn(
       >
         <span
           aria-hidden="true"
-          class="sm:hidden"
+          :class="compact ? 'lg:hidden' : 'sm:hidden'"
         >{{ localeShortNames[option] }}</span>
         <span
           aria-hidden="true"
-          class="hidden sm:inline"
+          :class="compact ? 'hidden lg:inline' : 'hidden sm:inline'"
         >{{ localeNames[option] }}</span>
       </Button>
     </template>

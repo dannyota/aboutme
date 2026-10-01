@@ -83,19 +83,28 @@ const linkClass = cn(
 // On a signed-in phone the header cannot fit every link beside the locale
 // toggle and account menu, so Templates and Community drop there; the home
 // page still links the gallery. Signed out, they are the header's links.
-const templatesLinkClass = computed(() =>
-  cn(linkClass, signedIn.value && 'max-sm:hidden'));
-// Signed out below 64rem, the logo shows the mark alone so every link and
-// both account buttons fit (docs/design/ui/landing-and-library.md,
-// Navigation). A signed-in header keeps the full logo.
+const templatesLinkClass = computed(() => cn(
+  linkClass,
+  signedIn.value ? 'max-sm:hidden' : 'max-lg:px-2',
+));
+// Signed out below 64rem the header is compact so every link and both
+// account buttons fit: the logo is the mark alone and never shrinks, header
+// gaps are 8px, nav link sides are 8px, the locale toggle shows VI and EN,
+// and the theme button is an icon (docs/design/ui/landing-and-library.md,
+// Navigation). A signed-in header is unchanged.
 const compactLogo = computed(() => !signedIn.value);
+const headerClass = computed(() => cn(
+  'flex min-h-14 items-center gap-4 border-b border-border bg-card',
+  'px-[max(1rem,calc((100vw-76rem)/2))]',
+  compactLogo.value && 'max-lg:gap-2',
+));
 // Signed out, the guide link shows from 44rem, the width where the account
 // buttons appear. Signed in, the signed-in bar also carries Resumes, Views,
 // and Settings, so it shows only from 64rem (docs/design/mcp-guide.md
 // Navigation).
 const guideLinkClass = computed(() => cn(
   linkClass,
-  signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden',
+  signedIn.value ? 'max-[64rem]:hidden' : 'max-[44rem]:hidden max-lg:px-2',
 ));
 // Settings and Views are also one tap away from the account menu, so they
 // are the other links to drop on phones when signed in.
@@ -105,12 +114,11 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
 
 <template>
   <header
-    class="flex min-h-14 items-center gap-4 border-b border-border bg-card
-      px-[max(1rem,calc((100vw-76rem)/2))]"
+    :class="headerClass"
     data-testid="app-shell"
   >
     <NuxtLink
-      class="flex items-center"
+      class="flex shrink-0 items-center"
       to="/"
     >
       <AppLogo
@@ -164,7 +172,7 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
       </template>
       <a
         v-else
-        :class="cn(linkClass, 'max-[56rem]:hidden')"
+        :class="cn(linkClass, 'max-[72rem]:hidden')"
         data-testid="app-shell-open-source"
         href="https://github.com/dannyota/aboutme"
         rel="noopener noreferrer"
@@ -173,6 +181,7 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
     <div class="ml-auto flex items-center gap-2">
       <LocaleToggle
         v-if="localized"
+        :compact="!signedIn"
         :label="copy.localeLabel"
         test-id="landing-locale"
         @pointerdown.prevent

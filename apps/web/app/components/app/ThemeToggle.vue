@@ -31,7 +31,7 @@ const copy = computed(() => shellCopy[props.locale]);
       :size="16"
       aria-hidden="true"
     />
-    <span class="hidden md:inline">
+    <span class="hidden lg:inline">
       {{ theme === 'dark' ? copy.darkMode : copy.lightMode }}
     </span>
   </Button>
