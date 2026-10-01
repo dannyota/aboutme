@@ -1997,6 +1997,7 @@ paths:
                     publicTitle: Danny from aboutme.vn
                     faviconEmoji: "\U0001F680"
                     signInToView: false
+                    showcase: null
                     schemaVersion: 5
                     createdAt: 2026-08-01T09:00:00Z
                     updatedAt: 2026-08-11T18:20:00Z
@@ -2106,6 +2107,7 @@ paths:
                   publicTitle: null
                   faviconEmoji: null
                   signInToView: false
+                  showcase: null
                   schemaVersion: 5
                   createdAt: 2026-08-12T09:00:00Z
                   updatedAt: 2026-08-12T09:00:00Z
@@ -3348,6 +3350,63 @@ paths:
         - $ref: "#/components/parameters/PreviewCardVersion"
         - $ref: "#/components/parameters/IfNoneMatch"
       responses: *publicCardResponses
+  /public/showcase:
+    get:
+      operationId: getPublicShowcase
+      tags: [public]
+      security: []
+      summary: List the community showcase
+      description: >-
+        Lists the resumes in the community showcase, newest first approval
+        first, then resume ID, twelve to a page. A resume appears only while
+        all five listing conditions hold: it is live, sign in to view is off,
+        its owner opted in, the operator approved it, and the approved review
+        key equals its current key. Go computes the page from committed
+        state on every request, so a request admitted after an opt-out,
+        unpublish, sign in to view, decline, rename, or delete commits omits
+        the resume. The response is never cached and has no validator. The
+        route reads no cookie and sets none, and it sends
+        `X-Robots-Tag: noindex, nofollow`.
+
+
+        Every query parameter is optional and may appear once. Any other
+        parameter, a repeated parameter, an empty value, or a value outside
+        its set is `400 request_invalid`. A page past the last one is `200`
+        with no items and the real `pageCount`. Each item carries only the
+        closed fields below: no contact detail, account identifier, date, or
+        count. The separate limit is 60 requests a minute per client IP.
+        See `docs/design/showcase.md` and
+        `docs/adr/0029-community-showcase.md`.
+      parameters:
+        - $ref: "#/components/parameters/ShowcaseRoleFilter"
+        - $ref: "#/components/parameters/ShowcaseLanguageFilter"
+        - $ref: "#/components/parameters/ShowcaseTemplateFilter"
+        - $ref: "#/components/parameters/ShowcasePage"
+      responses: &publicShowcaseResponses
+        "200":
+          $ref: "#/components/responses/PublicShowcaseRead"
+        "400":
+          $ref: "#/components/responses/PublicShowcaseBadRequest"
+        "405":
+          $ref: "#/components/responses/PublicShowcaseMethodNotAllowed"
+        "429":
+          $ref: "#/components/responses/PublicShowcaseRateLimited"
+        "503":
+          $ref: "#/components/responses/PublicShowcaseUnavailable"
+    head:
+      operationId: headPublicShowcase
+      tags: [public]
+      security: []
+      summary: Read community showcase headers
+      description: >-
+        Performs the same admission, parsing, and query as GET. It sends the
+        GET status and headers, including Content-Length, but no body bytes.
+      parameters:
+        - $ref: "#/components/parameters/ShowcaseRoleFilter"
+        - $ref: "#/components/parameters/ShowcaseLanguageFilter"
+        - $ref: "#/components/parameters/ShowcaseTemplateFilter"
+        - $ref: "#/components/parameters/ShowcasePage"
+      responses: *publicShowcaseResponses
   /public/resumes/{slug}/views/start:
     post:
       operationId: startPublicResumeView
@@ -4712,6 +4771,7 @@ components:
               publicTitle: Danny from aboutme.vn
               faviconEmoji: "\U0001F680"
               signInToView: false
+              showcase: null
               schemaVersion: 5
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-11T18:20:00Z
@@ -4746,6 +4806,7 @@ components:
               publicTitle: Danny from aboutme.vn
               faviconEmoji: "\U0001F680"
               signInToView: false
+              showcase: null
               schemaVersion: 5
               createdAt: 2026-08-01T09:00:00Z
               updatedAt: 2026-08-12T09:05:00Z
@@ -5335,6 +5396,96 @@ components:
           example: image/jpeg
         ETag:
           $ref: "#/components/headers/PublicBodyETag"
+    PublicShowcaseRead:
+      description: One page of the community showcase.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ShowcaseNoStore"
+        X-Robots-Tag:
+          $ref: "#/components/headers/ShowcaseRobots"
+        Content-Length:
+          $ref: "#/components/headers/RepresentationContentLength"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ShowcaseListing"
+    PublicShowcaseBadRequest:
+      description: >-
+        `request_invalid`: an unknown, repeated, empty, or out-of-set query
+        parameter, a body, or a content encoding.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ShowcaseNoStore"
+        X-Robots-Tag:
+          $ref: "#/components/headers/ShowcaseRobots"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: request_invalid
+              message: request is invalid
+    PublicShowcaseMethodNotAllowed:
+      description: "`method_not_allowed`: the route accepts only GET and HEAD."
+      headers:
+        Allow:
+          description: Methods this path serves.
+          schema:
+            type: string
+            const: GET, HEAD
+        Cache-Control:
+          $ref: "#/components/headers/ShowcaseNoStore"
+        X-Robots-Tag:
+          $ref: "#/components/headers/ShowcaseRobots"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: method_not_allowed
+              message: method is not allowed
+    PublicShowcaseRateLimited:
+      description: The 60-per-minute client IP budget of the listing is exhausted.
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ShowcaseNoStore"
+        X-Robots-Tag:
+          $ref: "#/components/headers/ShowcaseRobots"
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: rate_limited
+              message: too many requests; retry later
+    PublicShowcaseUnavailable:
+      description: "`temporarily_unavailable`: the listing could not be read."
+      headers:
+        Cache-Control:
+          $ref: "#/components/headers/ShowcaseNoStore"
+        X-Robots-Tag:
+          $ref: "#/components/headers/ShowcaseRobots"
+        Retry-After:
+          description: Whole seconds to wait before retrying.
+          schema:
+            type: integer
+            const: 1
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error:
+              code: temporarily_unavailable
+              message: service temporarily unavailable
     PublicBadRequest:
       description: >-
         `request_invalid`: after public admission, the conditional header is
@@ -6083,6 +6234,16 @@ components:
               code: rate_limited
               message: too many requests; retry later
   headers:
+    ShowcaseNoStore:
+      description: The showcase listing is computed per request and never stored.
+      schema:
+        type: string
+        const: no-store, no-transform
+    ShowcaseRobots:
+      description: The showcase is never indexed.
+      schema:
+        type: string
+        const: noindex, nofollow
     ViewNoStore:
       description: View counting responses are never stored.
       schema:
@@ -6936,6 +7097,24 @@ components:
             resume's pass epoch, ending every earlier pass. Forces effective
             discovery off while on; the stored `seoGeoEnabled` value is kept.
             See `docs/design/viewer-analytics/sign-in-to-view.md`.
+        showcaseEnabled:
+          type: boolean
+          description: >-
+            Show this resume in the community showcase. Omitted keeps the
+            stored value. `true` needs `live` (`requires_live`) and sign in to
+            view off (`requires_open_view`). A request that turns sign in to
+            view on, or turns `live` off, ends the opt-in even when this field
+            is omitted, and publishing again starts with it off. Turning it on
+            starts a review; turning it off and on again starts a new one.
+            Only the web app sets it: no MCP tool reads or changes it. See
+            `docs/design/showcase.md`.
+        showcaseRole:
+          type: string
+          description: >-
+            The role shown with the listing: one of the `ShowcaseRole` values,
+            or empty to clear it. Omitted keeps the stored value. Any other
+            value is `invalid_format`, and a role is allowed only while the
+            switch is on (`invalid_format`).
     PublishValidationIssue:
       type: object
       description: One deterministic semantic publish-policy issue.
@@ -6949,6 +7128,7 @@ components:
           enum:
             - required_for_live
             - requires_live
+            - requires_open_view
             - invalid_format
             - reserved
             - required
@@ -7774,6 +7954,10 @@ components:
             - document
             - photo
           properties:
+            showcase:
+              anyOf:
+                - type: "null"
+                - $ref: "#/components/schemas/AccountExportShowcase"
             document:
               $ref: "#/components/schemas/AccountExportDocument"
             photo:
@@ -7834,6 +8018,7 @@ components:
         - publicTitle
         - faviconEmoji
         - signInToView
+        - showcase
         - schemaVersion
         - createdAt
         - updatedAt
@@ -7885,6 +8070,15 @@ components:
             resume shows. Never part of the document and never changes the
             rendered resume. See
             `docs/design/viewer-analytics/sign-in-to-view.md`.
+        showcase:
+          description: >-
+            The community showcase state of this resume: `null` while the
+            resume is not opted in. Owner-only. It is never part of the
+            document, the public resume JSON, or any MCP tool. See
+            `docs/design/showcase.md`.
+          anyOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ResumeShowcase"
         schemaVersion:
           type: integer
           minimum: 1
@@ -7908,9 +8102,127 @@ components:
         publicTitle: Danny from aboutme.vn
         faviconEmoji: "\U0001F680"
         signInToView: false
+        showcase:
+          state: listed
+          role: backend
         schemaVersion: 5
         createdAt: 2026-08-01T09:00:00Z
         updatedAt: 2026-08-11T18:20:00Z
+    ShowcaseRole:
+      type: string
+      description: >-
+        The closed role list of the community showcase: the nine Library roles
+        plus Other.
+      enum:
+        - backend
+        - frontend
+        - mobile
+        - devops
+        - data-ai
+        - qa
+        - fresher
+        - brse
+        - security
+        - other
+    ResumeShowcase:
+      type: object
+      description: >-
+        The owner's showcase state. `pending`: opted in and the current
+        review key has no result. `listed`: the current key is approved and
+        the resume is shown. `declined`: the current key was declined.
+      required: [state, role]
+      properties:
+        state:
+          type: string
+          enum: [pending, listed, declined]
+        role:
+          anyOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ShowcaseRole"
+          description: The role the owner picked for the listing, or null.
+    AccountExportShowcase:
+      description: >-
+        The account export's showcase state: the owner state plus when the
+        opt-in was requested. Review keys never leave the server.
+      allOf:
+        - $ref: "#/components/schemas/ResumeShowcase"
+        - type: object
+          required: [requestedAt]
+          properties:
+            requestedAt:
+              type: string
+              format: date-time
+      unevaluatedProperties: false
+    ShowcaseItem:
+      type: object
+      additionalProperties: false
+      description: >-
+        One listing. The card image is
+        `/api/v1/public/resumes/{slug}/og/{cardVersion}.png`; `imageText` is
+        its alt text and follows the card's image-text rule, so it holds no
+        contact detail.
+      required: [slug, cardVersion, imageText, language, templateId, role]
+      properties:
+        slug:
+          type: string
+          minLength: 4
+          maxLength: 30
+          pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+        cardVersion:
+          type: string
+          pattern: "^[0-9a-f]{16}$"
+        imageText:
+          type: string
+        language:
+          type: string
+          enum: [vi, en, other]
+          description: The primary subtag of the resume language.
+        templateId:
+          type: [string, "null"]
+          maxLength: 64
+          description: >-
+            The preset ID the resume's design matches exactly, or null for a
+            custom design.
+        role:
+          anyOf:
+            - type: "null"
+            - $ref: "#/components/schemas/ShowcaseRole"
+    ShowcaseListing:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageCount, total]
+      description: >-
+        One page of the community showcase. This body has no `data` envelope.
+      properties:
+        items:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/ShowcaseItem"
+        page:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: The requested page.
+        pageCount:
+          type: integer
+          minimum: 0
+          description: Pages for the current filters; 0 when nothing matches.
+        total:
+          type: integer
+          minimum: 0
+          description: Listings that match the current filters.
+      example:
+        items:
+          - slug: ada-lovelace
+            cardVersion: 0123456789abcdef
+            imageText: Ada Lovelace · Backend engineer
+            language: en
+            templateId: ats-plain
+            role: backend
+        page: 1
+        pageCount: 1
+        total: 1
     Resume:
       allOf:
         - $ref: "#/components/schemas/ResumeSummary"
@@ -8931,6 +9243,42 @@ components:
             - amr_00000-00000-00000-00000-00000-9
 
   parameters:
+    ShowcaseRoleFilter:
+      name: role
+      in: query
+      required: false
+      description: Show only listings with this role. May appear once.
+      schema:
+        $ref: "#/components/schemas/ShowcaseRole"
+    ShowcaseLanguageFilter:
+      name: lang
+      in: query
+      required: false
+      description: Show only listings whose resume language is this. May appear once.
+      schema:
+        type: string
+        enum: [vi, en]
+    ShowcaseTemplateFilter:
+      name: template
+      in: query
+      required: false
+      description: >-
+        Show only listings of this template: a preset ID, or `custom` for a
+        design that matches no preset. May appear once.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: "^[a-z0-9]+(-[a-z0-9]+)*$"
+    ShowcasePage:
+      name: page
+      in: query
+      required: false
+      description: The page to read, from 1 to 100, in canonical form. Defaults to 1.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 1
     AuthPurpose:
       name: purpose
       in: query
