@@ -55,6 +55,11 @@ type Resume struct {
 	// the row's own possibly-stale StoredSchemaVersion.
 	Doc schema.Resume
 
+	// Showcase is the owner's community-showcase state, nil unless the
+	// resume is opted in (docs/design/showcase.md "Opt-in"). Only reads
+	// through Get, List, and their Tx forms fill it.
+	Showcase *Showcase
+
 	CreatedAt, UpdatedAt time.Time
 }
 
