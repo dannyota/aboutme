@@ -61,6 +61,20 @@ describe('TemplateThumbnail', () => {
     expect(observers[0]!.disconnect).toHaveBeenCalled();
   });
 
+  it('scales the sample with a transform and no zoom', async () => {
+    stubObserver();
+    const wrapper = mount(TemplateThumbnail, {
+      props: { preset: TEMPLATES[0]! },
+    });
+    observers[0]!.callback([{ isIntersecting: true }]);
+    await nextTick();
+    const render = wrapper.get('[data-template-thumbnail-render]');
+    expect(render.attributes('style') ?? '').not.toContain('zoom');
+    const content = wrapper.get('.scaled-sheet-content');
+    expect(content.attributes('style')).toContain('scale(0.18)');
+    expect(content.element.contains(render.element)).toBe(true);
+  });
+
   it('applies each template to the sample', async () => {
     stubObserver();
     const renders = new Set<string>();
