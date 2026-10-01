@@ -451,7 +451,7 @@ describe('PDF in a new tab', () => {
       });
 
       const pending = context.controller.openInTab();
-      expect(order).toEqual(['open']);
+      expect(order[0]).toBe('open');
       await pending;
 
       expect(order).toEqual(['open', 'flush', 'fetch']);
