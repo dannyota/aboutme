@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 import type { Content, Customization } from '@aboutme/schema';
@@ -284,10 +286,49 @@ describe('EditorPreview color scheme', () => {
     },
   );
 
+  it.each([
+    ['dark', 'web', false],
+    ['system', 'web', false],
+    ['dark', 'pdf', true],
+    [undefined, 'web', true],
+    ['light', 'web', true],
+  ] as const)(
+    'keeps bg-white only without a scheme (%s, %s mode)',
+    async (scheme, mode, hasWhite) => {
+      const wrapper = await mountPreview(scheme, mode);
+      expect(wrapper.get('[data-testid="preview-sheet"]')
+        .classes('bg-white')).toBe(hasWhite);
+    },
+  );
+
   it('shows the scheme when the reader switches from PDF to Web', async () => {
     const wrapper = await mountPreview('dark', 'pdf');
     await wrapper.get('[data-mode="web"]').trigger('click');
     expect(wrapper.get('[data-testid="preview-sheet"]')
       .attributes('data-color-scheme')).toBe('dark');
+  });
+});
+
+describe('public page skip link focus colors', () => {
+  const css = readFileSync(
+    resolve(__dirname, '../../app/components/resume/resumeColorScheme.css'),
+    'utf8',
+  );
+  const body = `{
+    background: #141a2e;
+    color: #a3b6f5;
+    outline-color: #8fa6f0;
+  }`;
+
+  it.each([
+    ['dark', '@media screen {'],
+    ['system', '@media screen and (prefers-color-scheme: dark) {'],
+  ] as const)('maps the %s page skip link to the bar tokens', (scheme, at) => {
+    const selector = `:root:has(.public-resume-page[data-color-scheme="${
+      scheme}"]) a[href="#public-resume"]:focus`;
+    const start = css.indexOf(at);
+    const end = css.indexOf('\n}\n', start);
+    const block = css.slice(start, end);
+    expect(block).toContain(`${selector} ${body}`);
   });
 });

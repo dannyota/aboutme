@@ -135,15 +135,15 @@ describe('JoinInvite', () => {
     }
 
     it.each([
-      ['dark', false, '#141A2E', '#A5ABBF'],
-      ['dark', true, '#141A2E', '#A5ABBF'],
-      ['system', true, '#141A2E', '#A5ABBF'],
-      ['system', false, '#FFFFFF', '#5C6178'],
-      ['light', true, '#FFFFFF', '#5C6178'],
-      [null, true, '#FFFFFF', '#5C6178'],
+      ['dark', false, '#141A2E', '#A5ABBF', '#72A0FF', '#071126'],
+      ['dark', true, '#141A2E', '#A5ABBF', '#72A0FF', '#071126'],
+      ['system', true, '#141A2E', '#A5ABBF', '#72A0FF', '#071126'],
+      ['system', false, '#FFFFFF', '#5C6178', '#1A5CEB', '#FFFFFF'],
+      ['light', true, '#FFFFFF', '#5C6178', '#1A5CEB', '#FFFFFF'],
+      [null, true, '#FFFFFF', '#5C6178', '#1A5CEB', '#FFFFFF'],
     ] as const)(
       'follows a %s page when the device prefers dark: %s',
-      async (scheme, prefersDark, ground, text) => {
+      async (scheme, prefersDark, ground, text, action, onAction) => {
         const wrapper = await shown(scheme, prefersDark);
         const region = wrapper.get('[role="region"]').element as HTMLElement;
         expect(region.style.background)
@@ -151,6 +151,10 @@ describe('JoinInvite', () => {
         expect(region.style.color).toBe(cssColor('color', text));
         const close = wrapper.get('button').element as HTMLElement;
         expect(close.style.color).toBe(cssColor('color', text));
+        const create = wrapper.get('a').element as HTMLElement;
+        expect(create.style.background)
+          .toBe(cssColor('background', action));
+        expect(create.style.color).toBe(cssColor('color', onAction));
       },
     );
   });
