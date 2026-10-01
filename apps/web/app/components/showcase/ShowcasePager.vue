@@ -57,7 +57,7 @@ function target(page: number) {
     <span
       v-else
       aria-disabled="true"
-      :class="cn(buttonClass, 'opacity-50')"
+      :class="cn(buttonClass, 'pointer-events-none opacity-50')"
       data-action="showcase-previous"
     >
       <ChevronLeft aria-hidden="true" />
@@ -82,7 +82,7 @@ function target(page: number) {
     <span
       v-else
       aria-disabled="true"
-      :class="cn(buttonClass, 'opacity-50')"
+      :class="cn(buttonClass, 'pointer-events-none opacity-50')"
       data-action="showcase-next"
     >
       {{ copy.next }}
