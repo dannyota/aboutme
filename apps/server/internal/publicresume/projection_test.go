@@ -219,6 +219,52 @@ func TestProjectionCarriesDisplayTextAlignAndPhotoPosition(t *testing.T) {
 	}
 }
 
+func TestProjectionCarriesColorScheme(t *testing.T) {
+	origin, err := ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slug, lng := "ada", "en"
+	for _, scheme := range []schema.ColorScheme{schema.Light, schema.Dark, schema.System} {
+		t.Run(string(scheme), func(t *testing.T) {
+			value := scheme
+			source := resume.Resume{
+				ID: uuid.New(), UserID: uuid.New(), Slug: &slug, Live: true, Revision: 7, Lng: &lng,
+				Doc: schema.Resume{SchemaVersion: schema.CurrentVersion, Customization: schema.Customization{ColorScheme: &value}},
+			}
+			got, projectErr := Project(source, origin)
+			if projectErr != nil {
+				t.Fatal(projectErr)
+			}
+			projected := got.Document.Customization.ColorScheme
+			if projected == nil || *projected != scheme {
+				t.Fatalf("projected colorScheme = %v, want %q", projected, scheme)
+			}
+			value = schema.ColorScheme("changed")
+			if *projected != scheme {
+				t.Fatal("projection shares the colorScheme pointer with its source")
+			}
+		})
+	}
+	absent, err := Project(resume.Resume{
+		ID: uuid.New(), UserID: uuid.New(), Slug: &slug, Live: true, Revision: 7, Lng: &lng,
+		Doc: schema.Resume{SchemaVersion: schema.CurrentVersion},
+	}, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if absent.Document.Customization.ColorScheme != nil {
+		t.Fatalf("absent colorScheme projected as %v", *absent.Document.Customization.ColorScheme)
+	}
+	body, err := json.Marshal(absent.Document.Customization)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "colorScheme") {
+		t.Fatalf("absent colorScheme appears in public JSON: %s", body)
+	}
+}
+
 func TestProjectionCarriesProjectSubtitle(t *testing.T) {
 	origin, err := ParsePublicOrigin("https://resume.example", "production")
 	if err != nil {

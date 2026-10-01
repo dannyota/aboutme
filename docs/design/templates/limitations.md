@@ -20,9 +20,9 @@ in [ADR 0004](../../adr/0004-resume-document-contract.md).
 2. **Template apply resets `dateFormat`.** It is a regional preference, not
    visual design, but ADR 0012's wholesale replace covers it. `pageFormat` is
    the exception: paper follows where the owner prints, so a switch keeps it, as
-   it keeps `font.textAlign` and `header.photoPosition`, and every preset ships
-   on A4. _Cost of leaving it out:_ a switch can change how dates read. The
-   editor warns before apply when the date format changes.
+   it keeps `font.textAlign`, `header.photoPosition`, and `colorScheme`, and
+   every preset ships on A4. _Cost of leaving it out:_ a switch can change how
+   dates read. The editor warns before apply when the date format changes.
 3. **No photo visibility control.** A photo lives in `personalDetails.photo`;
    nothing in `customization` can suppress it, and §3 has no `showPhoto` flag.
    An ATS-oriented or photo-free template must therefore still render a photo

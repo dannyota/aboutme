@@ -48,11 +48,11 @@ flowchart LR
 
 Three domains, disjoint by construction.
 
-| Domain            | Holds                                                                                                                                                                                                | Written by                                        | Template apply       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------- |
-| **Document**      | `personalDetails`, `content` (entries, `displayName`, `iconKey`, `sectionType`)                                                                                                                      | the user, through entry/section/details endpoints | never touched        |
-| **Customization** | 25 author-controlled leaf values under `customization` (§2 of `tokens.md`); 10 are optional, including `font.textAlign`, two margin axes, two colors, `layout.surfaceTarget`, and four header leaves | the user, and a preset on apply                   | replaced wholesale   |
-| **Renderer**      | everything else: type scale ratios, weights, rule geometry, the absent-margin 15 mm fallback and derived page geometry, column ratio, photo shape                                                    | the codebase                                      | identical everywhere |
+| Domain            | Holds                                                                                                                                                                                                               | Written by                                        | Template apply       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------- |
+| **Document**      | `personalDetails`, `content` (entries, `displayName`, `iconKey`, `sectionType`)                                                                                                                                     | the user, through entry/section/details endpoints | never touched        |
+| **Customization** | 26 author-controlled leaf values under `customization` (§2 of `tokens.md`); 11 are optional, including `font.textAlign`, two margin axes, two colors, `layout.surfaceTarget`, four header leaves, and `colorScheme` | the user, and a preset on apply                   | replaced wholesale   |
+| **Renderer**      | everything else: type scale ratios, weights, rule geometry, the absent-margin 15 mm fallback and derived page geometry, column ratio, photo shape                                                                   | the codebase                                      | identical everywhere |
 
 The boundary in one line each:
 
@@ -107,9 +107,11 @@ A template design must respect these rules:
   follows where the owner prints, so a preset's `pageFormat` only seeds a resume
   started from it. See
   [Known contract limits](limitations.md#9-known-contract-limits).
+- Apply also keeps the owner's `colorScheme`, or its absence, as it keeps
+  `font.textAlign` and `header.photoPosition`. A preset never sets it.
 - The one-column ↔ two-column toggle in the customize panel is a **different
   operation** with its own preserve-and-move semantics. It is not an apply and
-  must not route through `applyTemplate`.
+  must not route through `applyTemplate`. It does not touch `colorScheme`.
 
 ## 4. Section order — ADR 0004 is binding
 

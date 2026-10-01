@@ -1,0 +1,104 @@
+/*
+ * The owner's color scheme (docs/design/public-page-theme.md, "Dark palette
+ * rule"). useResumeStyles writes each role's dark value beside its light one
+ * as --dark-color-<role>, at every element that carries roles inline: the
+ * article, a tinted header band, and a tinted sidebar. These rules point the
+ * light roles at the dark values on screen only, so print and the PDF keep
+ * the light roles. They need !important because the light roles are inline.
+ *
+ * A dark page applies them always; a Match device page applies them when the
+ * viewer prefers dark. The attribute carries one of two fixed words, never a
+ * CSS value, and light pages carry no attribute at all.
+ */
+@media screen {
+  :is([data-color-scheme="dark"], [data-color-scheme="dark"] *)[style*="--dark-color-surface"] {
+    --color-surface: var(--dark-color-surface) !important;
+    --color-surface-header: var(--dark-color-surface-header) !important;
+    --color-surface-sidebar: var(--dark-color-surface-sidebar) !important;
+    --color-heading: var(--dark-color-heading) !important;
+    --color-body: var(--dark-color-body) !important;
+    --color-meta: var(--dark-color-meta) !important;
+    --color-accent: var(--dark-color-accent) !important;
+    --color-accent-text: var(--dark-color-accent-text) !important;
+    --color-accent-solid: var(--dark-color-accent-solid) !important;
+    --color-on-accent: var(--dark-color-on-accent) !important;
+    --color-link: var(--dark-color-link) !important;
+    --color-rule: var(--dark-color-rule) !important;
+    --color-track: var(--dark-color-track) !important;
+  }
+
+  /* The page's scheme reaches the root, so scrollbars and overscroll match.
+     The document root cannot read the page's inline roles, so Canvas under
+     color-scheme: dark stands in for the ground there. */
+  :root:has(.public-resume-page[data-color-scheme="dark"]) {
+    color-scheme: dark;
+    background: Canvas;
+  }
+
+  [data-color-scheme="dark"] .public-toolbar {
+    --toolbar-ground: #0c1020;
+    --toolbar-border: rgba(230, 225, 210, 0.13);
+    --toolbar-mark: #ff6b8a;
+    --toolbar-credit: #a5abbf;
+    --toolbar-credit-hover: #a3b6f5;
+    --toolbar-button-fill: #141a2e;
+    --toolbar-button-border: rgba(230, 225, 210, 0.13);
+    --toolbar-button-label: #a3b6f5;
+    --toolbar-button-hover-fill: #1a2138;
+    --toolbar-focus-ring: #8fa6f0;
+    --toolbar-button-shadow: none;
+  }
+
+  /* The skip link takes the bar's dark Button fill, Button label, and Ring
+     tokens (docs/design/public-page-theme.md, "Tokens"). */
+  :root:has(.public-resume-page[data-color-scheme="dark"]) a[href="#public-resume"]:focus {
+    background: #141a2e;
+    color: #a3b6f5;
+    outline-color: #8fa6f0;
+  }
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :is([data-color-scheme="system"], [data-color-scheme="system"] *)[style*="--dark-color-surface"] {
+    --color-surface: var(--dark-color-surface) !important;
+    --color-surface-header: var(--dark-color-surface-header) !important;
+    --color-surface-sidebar: var(--dark-color-surface-sidebar) !important;
+    --color-heading: var(--dark-color-heading) !important;
+    --color-body: var(--dark-color-body) !important;
+    --color-meta: var(--dark-color-meta) !important;
+    --color-accent: var(--dark-color-accent) !important;
+    --color-accent-text: var(--dark-color-accent-text) !important;
+    --color-accent-solid: var(--dark-color-accent-solid) !important;
+    --color-on-accent: var(--dark-color-on-accent) !important;
+    --color-link: var(--dark-color-link) !important;
+    --color-rule: var(--dark-color-rule) !important;
+    --color-track: var(--dark-color-track) !important;
+  }
+
+  :root:has(.public-resume-page[data-color-scheme="system"]) {
+    color-scheme: dark;
+    background: Canvas;
+  }
+
+  [data-color-scheme="system"] .public-toolbar {
+    --toolbar-ground: #0c1020;
+    --toolbar-border: rgba(230, 225, 210, 0.13);
+    --toolbar-mark: #ff6b8a;
+    --toolbar-credit: #a5abbf;
+    --toolbar-credit-hover: #a3b6f5;
+    --toolbar-button-fill: #141a2e;
+    --toolbar-button-border: rgba(230, 225, 210, 0.13);
+    --toolbar-button-label: #a3b6f5;
+    --toolbar-button-hover-fill: #1a2138;
+    --toolbar-focus-ring: #8fa6f0;
+    --toolbar-button-shadow: none;
+  }
+
+  /* The skip link takes the bar's dark Button fill, Button label, and Ring
+     tokens (docs/design/public-page-theme.md, "Tokens"). */
+  :root:has(.public-resume-page[data-color-scheme="system"]) a[href="#public-resume"]:focus {
+    background: #141a2e;
+    color: #a3b6f5;
+    outline-color: #8fa6f0;
+  }
+}

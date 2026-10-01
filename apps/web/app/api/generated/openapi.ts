@@ -2075,6 +2075,11 @@ export interface components {
             pageFormat: "a4" | "letter";
             /** @enum {string} */
             dateFormat: "MM/YYYY" | "Mon YYYY" | "YYYY";
+            /**
+             * @description Public page color scheme: light, dark, or follow the viewer's device. Absent means `light`.
+             * @enum {string}
+             */
+            colorScheme?: "light" | "dark" | "system";
         };
         AccountExport: {
             data: {
@@ -2129,7 +2134,7 @@ export interface components {
          *       "publicTitle": "Danny from aboutme.vn",
          *       "faviconEmoji": "🚀",
          *       "signInToView": false,
-         *       "schemaVersion": 4,
+         *       "schemaVersion": 5,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
          *     }
@@ -2173,7 +2178,7 @@ export interface components {
         /**
          * @description The resume document. Its shape is **not** restated here: it is governed by `packages/schema/resume.schema.json` at the version named by the `X-Resume-Schema-Version` header, and the generated client types come from `packages/schema/gen/ts`. Restating a 24-section, byte-bounded schema in this file would create a second source of truth for one contract and drift silently. This document owns the envelope, headers, statuses, and error shapes.
          * @example {
-         *       "schemaVersion": 4
+         *       "schemaVersion": 5
          *     }
          */
         ResumeDocument: Record<string, never>;
@@ -2789,11 +2794,11 @@ export interface components {
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
                  *         "signInToView": false,
-                 *         "schemaVersion": 4,
+                 *         "schemaVersion": 5,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
                  *         "document": {
-                 *           "schemaVersion": 4
+                 *           "schemaVersion": 5
                  *         }
                  *       }
                  *     }
@@ -2825,11 +2830,11 @@ export interface components {
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
                  *         "signInToView": false,
-                 *         "schemaVersion": 4,
+                 *         "schemaVersion": 5,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
                  *         "document": {
-                 *           "schemaVersion": 4
+                 *           "schemaVersion": 5
                  *         }
                  *       }
                  *     }
@@ -2855,7 +2860,8 @@ export interface components {
                  *             1,
                  *             2,
                  *             3,
-                 *             4
+                 *             4,
+                 *             5
                  *           ]
                  *         }
                  *       }
@@ -3057,7 +3063,7 @@ export interface components {
                  *         "details": {
                  *           "revision": "44",
                  *           "document": {
-                 *             "schemaVersion": 4
+                 *             "schemaVersion": 5
                  *           }
                  *         }
                  *       }
@@ -4574,7 +4580,7 @@ export interface components {
         ObjectETag: string;
         /**
          * @description The resume document version this response was emitted at. Absent from whole-resume deletion and from binary photo reads.
-         * @example 4
+         * @example 5
          */
         EmittedSchemaVersion: number;
         /**
@@ -5746,7 +5752,7 @@ export interface operations {
                     "Content-Disposition"?: "attachment; filename=\"aboutme-export.json\"";
                     /**
                      * @description Current emitted resume schema version.
-                     * @example 4
+                     * @example 5
                      */
                     "X-Resume-Schema-Version"?: string;
                     [name: string]: unknown;
@@ -6463,7 +6469,7 @@ export interface operations {
                      *           "publicTitle": "Danny from aboutme.vn",
                      *           "faviconEmoji": "🚀",
                      *           "signInToView": false,
-                     *           "schemaVersion": 4,
+                     *           "schemaVersion": 5,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
                      *         }
@@ -6556,11 +6562,11 @@ export interface operations {
                      *         "publicTitle": null,
                      *         "faviconEmoji": null,
                      *         "signInToView": false,
-                     *         "schemaVersion": 4,
+                     *         "schemaVersion": 5,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
                      *         "document": {
-                     *           "schemaVersion": 4
+                     *           "schemaVersion": 5
                      *         }
                      *       }
                      *     }

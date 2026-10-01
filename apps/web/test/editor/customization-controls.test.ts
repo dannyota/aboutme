@@ -50,6 +50,7 @@ const paths = [
   'sectionDisplay.language.style',
   'pageFormat',
   'dateFormat',
+  'colorScheme',
 ] as const;
 
 describe('customization fields', () => {
@@ -664,6 +665,7 @@ function schemaKind(node: SchemaNode): CustomizationField['kind'] {
 function recordWithEveryCustomizationLeaf(): ResumeRecord {
   const record = recordFor();
   record.current.document.customization.font.textAlign = 'left';
+  record.current.document.customization.colorScheme = 'light';
   record.current.document.customization.colors.accent = '#abcdef';
   record.current.document.customization.colors.surface = '#fedcba';
   // Unequal margins match no preset, so the per-axis fields show.

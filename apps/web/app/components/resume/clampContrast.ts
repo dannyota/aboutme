@@ -1,10 +1,10 @@
-interface RGB {
+export interface RGB {
   r: number;
   g: number;
   b: number;
 }
 
-interface OKLCH {
+export interface OKLCH {
   l: number;
   c: number;
   h: number;
@@ -63,7 +63,7 @@ export const contrastRatio = (first: string, second: string): number => {
 const minimumContrast = (color: string, surfaces: readonly string[]): number =>
   Math.min(...surfaces.map((surface) => contrastRatio(color, surface)));
 
-const rgbToOKLCH = (color: string): OKLCH => {
+export const rgbToOKLCH = (color: string): OKLCH => {
   const rgb = parseHex(color);
   const r = channelToLinear(rgb.r);
   const g = channelToLinear(rgb.g);
@@ -80,13 +80,14 @@ const rgbToOKLCH = (color: string): OKLCH => {
   };
 };
 
-const oklchToHex = ({ l, c, h }: OKLCH): string => {
+/** Gamma-encoded sRGB channels of an OKLCH color, unclamped. */
+export const oklchToRGB = ({ l, c, h }: OKLCH): RGB => {
   const labA = c * Math.cos(h);
   const labB = c * Math.sin(h);
   const lPrime = (l + 0.3963377774 * labA + 0.2158037573 * labB) ** 3;
   const mPrime = (l - 0.1055613458 * labA - 0.0638541728 * labB) ** 3;
   const sPrime = (l - 0.0894841775 * labA - 1.291485548 * labB) ** 3;
-  return toHex({
+  return {
     r: channelFromLinear(
       4.0767416621 * lPrime - 3.3077115913 * mPrime + 0.2309699292 * sPrime,
     ),
@@ -96,8 +97,10 @@ const oklchToHex = ({ l, c, h }: OKLCH): string => {
     b: channelFromLinear(
       -0.0041960863 * lPrime - 0.7034186147 * mPrime + 1.707614701 * sPrime,
     ),
-  });
+  };
 };
+
+export const oklchToHex = (color: OKLCH): string => toHex(oklchToRGB(color));
 
 export function clampAgainst(
   color: string,

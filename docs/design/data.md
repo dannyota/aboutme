@@ -178,10 +178,12 @@ persists the projected current shape with revision compare-and-swap (CAS).
 Background backfill compares the observed schema version and revision. It does
 not bump the revision, and it loses cleanly to any concurrent resume write.
 Adjacent up and down converters are explicit, validated at every step, and
-tested in both directions. The current release is document v4, and the server
-accepts and emits v1 to v4. It declares three lossy emissions, and every other
+tested in both directions. The current release is document v5, and the server
+accepts and emits v1 to v5. It declares four lossy emissions, and every other
 value must remain equal:
 
+- Emitting v1, v2, v3, or v4 drops v5's `customization.colorScheme`
+  ([public page theme](public-page-theme.md#versions-and-compatibility)).
 - Emitting v1, v2, or v3 drops v4's `customization.header.photoPosition` and
   every project entry's `subtitle`
   ([ADR 0013](../adr/0013-resume-header-and-contacts.md)).
@@ -195,13 +197,18 @@ Old-client mutations keep the stored font unless the operation explicitly
 targets that field. They always keep the stored `textAlign`, and each surviving
 detail's `display`, matched by its unique id. A v1 to v3 client write keeps the
 stored `photoPosition` while both documents have a header, and each surviving
-project entry's `subtitle`, matched by entry id. Retained types support
-compatibility testing; HTTP delta application may remain generic so handlers do
-not need one compiled code path per old version.
+project entry's `subtitle`, matched by entry id. A v1 to v4 client write always
+keeps the stored `colorScheme`, since every version has `customization`.
+Retained types support compatibility testing; HTTP delta application may remain
+generic so handlers do not need one compiled code path per old version.
 [ADR 0004](../adr/0004-resume-document-contract.md) records this boundary. A
 release that raises the document version cannot be rolled back once it has
 stored the new version; see the
 [production runbook](../runbooks/production.md#rollback).
+
+The public projection copies `customization.colorScheme`, so the public JSON and
+the server render agree. The frozen print snapshot drops it, so the PDF and
+print stay light.
 
 ## Schema and migrations
 

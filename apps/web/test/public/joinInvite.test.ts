@@ -7,6 +7,8 @@ import {
   JOIN_INVITE_BAR_TEXT_MIN_WIDTH,
   JOIN_INVITE_ENTRANCE,
   joinInviteContainerStyle,
+  joinInviteIsDark,
+  joinInvitePalette,
   joinInvitePlacement,
   recordJoinInviteClosed,
   startJoinInviteTiming,
@@ -241,6 +243,85 @@ describe('joinInviteContainerStyle', () => {
     expect(JOIN_INVITE_ENTRANCE.keyframes[0]).toEqual({
       opacity: 0,
       transform: 'translateY(8px)',
+    });
+  });
+});
+
+describe('join invite color scheme', () => {
+  // docs/design/public-page-theme.md, "Page bar > Tokens": the invite takes
+  // the bar's dark column on a dark page.
+  it('takes the dark column of the bar tokens', () => {
+    expect(joinInvitePalette(true)).toEqual({
+      surface: '#141A2E',
+      border: 'rgba(230, 225, 210, 0.13)',
+      text: '#A5ABBF',
+      shadow: 'none',
+      action: '#72A0FF',
+      onAction: '#071126',
+    });
+    expect(joinInvitePalette(false)).toEqual({
+      surface: '#FFFFFF',
+      border: '#E5E1D6',
+      text: '#5C6178',
+      shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+      action: '#1A5CEB',
+      onAction: '#FFFFFF',
+    });
+  });
+
+  it('draws the dark card and bar with the dark tokens', () => {
+    expect(joinInviteContainerStyle('card', true)).toMatchObject({
+      border: '1px solid rgba(230, 225, 210, 0.13)',
+      background: '#141A2E',
+      color: '#A5ABBF',
+      boxShadow: 'none',
+    });
+    expect(joinInviteContainerStyle('bar', true)).toMatchObject({
+      borderTop: '1px solid rgba(230, 225, 210, 0.13)',
+      background: '#141A2E',
+      color: '#A5ABBF',
+    });
+  });
+
+  it('keeps the light style when no scheme is passed', () => {
+    expect(joinInviteContainerStyle('card')).toEqual(
+      joinInviteContainerStyle('card', false),
+    );
+    expect(joinInviteContainerStyle('bar')).toEqual(
+      joinInviteContainerStyle('bar', false),
+    );
+  });
+
+  describe('reading the page scheme', () => {
+    const page = (scheme: string | null): Element => {
+      const root = document.createElement('main');
+      const inner = document.createElement('div');
+      inner.className = 'public-resume-page';
+      if (scheme !== null) inner.setAttribute('data-color-scheme', scheme);
+      root.append(inner);
+      return root;
+    };
+    const win = (matches: boolean) => ({
+      matchMedia: (query: string) => ({
+        matches: matches && query === '(prefers-color-scheme: dark)',
+      }),
+    }) as unknown as Window;
+
+    it('is dark for a dark page whatever the device prefers', () => {
+      expect(joinInviteIsDark(page('dark'), win(false))).toBe(true);
+    });
+
+    it('follows the device for a Match device page', () => {
+      expect(joinInviteIsDark(page('system'), win(true))).toBe(true);
+      expect(joinInviteIsDark(page('system'), win(false))).toBe(false);
+    });
+
+    it('is light for a light page, a missing page, or another value', () => {
+      expect(joinInviteIsDark(page(null), win(true))).toBe(false);
+      expect(joinInviteIsDark(page('light'), win(true))).toBe(false);
+      expect(joinInviteIsDark(page('bogus'), win(true))).toBe(false);
+      expect(joinInviteIsDark(document.createElement('main'), win(true)))
+        .toBe(false);
     });
   });
 });

@@ -68,7 +68,7 @@ func TestSourceCanonicalDocumentStripsServerPhoto(t *testing.T) {
 	if err != nil || none != nil || !bytes.Equal(canonical, plain) || bytes.Contains(canonical, []byte(`"photo"`)) {
 		t.Fatal("canonical source still names the server-owned photo")
 	}
-	for _, invalid := range [][]byte{[]byte(`{"schemaVersion":4}`), append(append([]byte(nil), withoutPhoto...), []byte(` {}`)...), bytes.Replace(withoutPhoto, []byte(`"content":`), []byte(`"unknown":1,"content":`), 1)} {
+	for _, invalid := range [][]byte{[]byte(`{"schemaVersion":5}`), append(append([]byte(nil), withoutPhoto...), []byte(` {}`)...), bytes.Replace(withoutPhoto, []byte(`"content":`), []byte(`"unknown":1,"content":`), 1)} {
 		if _, _, _, invalidErr := canonicalDocument(invalid); invalidErr == nil {
 			t.Fatal("accepted an invalid document")
 		}

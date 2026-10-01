@@ -82,10 +82,12 @@ export type CustomizationSetPath
     | 'sectionDisplay.skill.style'
     | 'sectionDisplay.language.style'
     | 'pageFormat'
-    | 'dateFormat';
+    | 'dateFormat'
+    | 'colorScheme';
 
 export type CustomizationUnsetPath
   = | 'font.textAlign'
+    | 'colorScheme'
     | 'colors.accent'
     | 'colors.surface'
     | 'spacing.pageMargin'

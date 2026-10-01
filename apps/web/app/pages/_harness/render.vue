@@ -121,7 +121,7 @@ if (isCorpus) {
     new Set(
       [
         'align', 'fixture', 'font', 'invite', 'mode', 'paper', 'print',
-        'repeat', 'template', 'zoom',
+        'repeat', 'scheme', 'template', 'zoom',
       ],
     ),
   );
@@ -251,6 +251,20 @@ if (isCorpus) {
     if (requestedAlign !== 'justify') badQuery();
     resolvedDocument.customization.font.textAlign = 'justify';
     withWrappingBody(resolvedDocument);
+  }
+  // A dark or Match device public page, as the owner's color scheme sets it
+  // (docs/design/public-page-theme.md). Presets never set it, so a cell asks
+  // for it after the template applies; only the public page shows it.
+  const requestedScheme = singleton('scheme');
+  if (requestedScheme !== undefined) {
+    if (
+      resolvedMode !== 'public'
+      || (requestedScheme !== 'dark' && requestedScheme !== 'system')
+    ) {
+      badQuery();
+    }
+    resolvedDocument.customization.colorScheme
+      = requestedScheme as Resume['customization']['colorScheme'];
   }
   // The public page measure is about line length, so its cells need body
   // text that wraps.

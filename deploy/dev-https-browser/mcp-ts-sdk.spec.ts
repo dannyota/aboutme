@@ -97,7 +97,7 @@ async function waitForFirstVisitHydration(page: Page): Promise<void> {
 
 function minimalWorkDocument(): Record<string, unknown> {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     personalDetails: { fullName: 'Bob Local', details: [] },
     content: {
       work: { sectionType: 'work', iconKey: 'briefcase', entries: [] },

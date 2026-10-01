@@ -9,6 +9,12 @@ Templates and components address roles, never the raw hex values. Every role is
 derived by `useResumeStyles`; the raw values in `customization.colors` are never
 mutated.
 
+A dark or `system` `customization.colorScheme` on the public page first maps the
+five authored colors to dark sources, then runs this same derivation and its
+floors once more. The
+[dark palette rule](../public-page-theme.md#dark-palette-rule) owns that
+mapping.
+
 | Role                      | Source                                                                         | Contrast target              |
 | ------------------------- | ------------------------------------------------------------------------------ | ---------------------------- |
 | `--color-surface`         | `colors.background`                                                            | — (it is the surface)        |

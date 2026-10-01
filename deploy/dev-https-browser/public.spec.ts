@@ -32,7 +32,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';
@@ -463,6 +463,9 @@ test('proves sign in to view gates a resume, admits a pass holder, and '
   await expect(anon).toHaveTitle(PAGE_TITLE);
   await expect(anon.locator('#public-gate h1')).toHaveText(PAGE_TITLE);
   await expect(anon.locator('#public-resume')).toHaveCount(0);
+  // The gate stays light whatever the owner's color scheme
+  // (docs/design/public-page-theme.md, "What stays light").
+  await expect(anon.locator('[data-color-scheme]')).toHaveCount(0);
   await expect(anon.locator('script')).toHaveCount(0);
   const gateBody = await anon.evaluate(() => document.body.innerHTML);
   expect(gateBody).not.toContain('Public proof resume');
@@ -750,6 +753,37 @@ test('proves a published resume hydrates in a real browser', async ({
     expect(detailWrite.status).toBe(200);
     expect(typeof detailWrite.revision).toBe('string');
 
+    // The owner picks the dark scheme. Only a v5 client can write it
+    // (docs/design/public-page-theme.md); the public page below must carry it.
+    stage('write-color-scheme');
+    const schemeCSRF = await freshCSRF(page);
+    const schemeWrite = await page.evaluate(async (input) => {
+      const response = await fetch(`/api/v1/resumes/${input.id}/customization`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': crypto.randomUUID(),
+          'If-Match': `"r${input.revision}"`,
+          'X-CSRF-Token': input.csrf,
+          'X-Resume-Schema-Version': input.schemaVersion,
+        },
+        body: JSON.stringify({
+          deltas: [{ op: 'set', path: 'colorScheme', value: 'dark' }],
+        }),
+      });
+      const body = await response.json().catch(() => null) as
+        { data?: { revision?: unknown } } | null;
+      return { status: response.status, revision: body?.data?.revision, body };
+    }, {
+      id: createdID,
+      revision: detailWrite.revision as string,
+      csrf: schemeCSRF,
+      schemaVersion: SCHEMA_VERSION,
+    });
+    expect(schemeWrite.status, JSON.stringify(schemeWrite.body)).toBe(200);
+    expect(typeof schemeWrite.revision).toBe('string');
+
     // Publish: the resume must already hold a live slug before any public
     // route will serve it.
     stage('publish');
@@ -778,7 +812,7 @@ test('proves a published resume hydrates in a real browser', async ({
       return { status: response.status, body };
     }, {
       id: createdID,
-      revision: detailWrite.revision as string,
+      revision: schemeWrite.revision as string,
       csrf,
       slug: publishedSlug,
       schemaVersion: SCHEMA_VERSION,
@@ -910,6 +944,27 @@ test('proves a published resume hydrates in a real browser', async ({
     await expect(download).toBeHidden();
     await publicPage.emulateMedia({ media: 'screen' });
     expect(response?.headers()['content-security-policy']).toContain("default-src 'none'");
+
+    // The dark scheme reaches the served page and leaves the PDF alone
+    // (docs/design/public-page-theme.md, "What stays light"). The PDF fetch
+    // above already returned 200 with application/pdf.
+    stage('public-color-scheme');
+    await expect(publicPage.locator('.public-resume-page'))
+      .toHaveAttribute('data-color-scheme', 'dark');
+    const darkPDF = await publicPage.evaluate(async (href) => {
+      const response = await fetch(href, { cache: 'no-store' });
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      return {
+        status: response.status,
+        type: response.headers.get('content-type'),
+        magic: String.fromCharCode(...bytes.slice(0, 5)),
+      };
+    }, `/api/v1/public/resumes/${publishedSlug}/pdf`);
+    expect(darkPDF).toEqual({
+      status: 200,
+      type: 'application/pdf',
+      magic: '%PDF-',
+    });
 
     // SSR markup is present before hydration runs.
     stage('public-ssr');

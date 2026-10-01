@@ -151,6 +151,7 @@ apps/web/app/components/resume/applyTemplate.ts
 apps/web/app/components/resume/brandIcons.ts
 apps/web/app/components/resume/clampContrast.ts
 apps/web/app/components/resume/contactHref.ts
+apps/web/app/components/resume/darkPalette.ts
 apps/web/app/components/resume/entryParts.ts
 apps/web/app/components/resume/formatDate.ts
 apps/web/app/components/resume/icons.ts
@@ -166,6 +167,7 @@ apps/web/app/components/resume/primitives/Photo.vue
 apps/web/app/components/resume/primitives/RichText.vue
 apps/web/app/components/resume/primitives/SectionHeading.vue
 apps/web/app/components/resume/resolveRenderModel.ts
+apps/web/app/components/resume/resumeColorScheme.css
 apps/web/app/components/resume/sections/CertificateSection.vue
 apps/web/app/components/resume/sections/CustomSection.vue
 apps/web/app/components/resume/sections/EducationSection.vue
@@ -501,8 +503,12 @@ apps/web/e2e/baselines/join-invite--vi--card--1920.png
 apps/web/e2e/baselines/modern-sidebar--full--continuous.png
 apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
 apps/web/e2e/baselines/public--classic-serif--2560.png
+apps/web/e2e/baselines/public--classic-serif--system--1440.png
+apps/web/e2e/baselines/public--creative-accent--dark--1440.png
+apps/web/e2e/baselines/public--executive-band--dark--1440.png
 apps/web/e2e/baselines/public--modern-sidebar--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--390.png
+apps/web/e2e/baselines/public--modern-sidebar--dark--390.png
 apps/web/e2e/baselines/sign-in-gate--en--google--failed--390.png
 apps/web/e2e/baselines/sign-in-gate--en--google--none--1280.png
 apps/web/e2e/baselines/sign-in-gate--en--google--none--390.png
@@ -664,6 +670,7 @@ packages/schema/gen/ts/v1/resume.ts
 packages/schema/gen/ts/v2/resume.ts
 packages/schema/gen/ts/v3/resume.ts
 packages/schema/gen/ts/v4/resume.ts
+packages/schema/gen/ts/v5/resume.ts
 packages/schema/package.json
 packages/schema/resume.schema.json
 packages/schema/samples/_filler.en.json
