@@ -788,6 +788,18 @@ f=$work/warm_timeout.calls
   { echo "warm_timeout: want the timed-out attempt plus one retry" >&2; exit 1; }
 grep -q "deployed v0.1.0" "$work/warm_timeout.out" || { echo "warm_timeout: deploy did not finish" >&2; exit 1; }
 
+# An unpublished warm resume answers 404 from the same Go, database, and Nuxt
+# path, so the deploy still finishes. A 404 from the homepage never passes.
+run_case warm_page_404 0 v0.1.0
+f=$work/warm_page_404.calls
+[[ $(count "$f" "https://aboutme.vn/danny") == 1 ]] ||
+  { echo "warm_page_404: want one warm attempt for /danny" >&2; exit 1; }
+grep -q "deployed v0.1.0" "$work/warm_page_404.out" ||
+  { echo "warm_page_404: deploy did not finish" >&2; exit 1; }
+DEPLOY_WARM_ATTEMPTS=2 run_case warm_home_404 fail v0.1.0
+grep -qF "warm-up: / did not answer 200" "$work/warm_home_404.out" ||
+  { echo "warm_home_404: no warm-up failure message" >&2; exit 1; }
+
 run_case first 0 v0.1.0 --first-deploy
 f=$work/first.calls
 before "$f" "--started-by deploy-db-setup" "--started-by deploy-migrate"

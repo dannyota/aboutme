@@ -175,15 +175,15 @@ caller's own credentials for `ec2:DescribeAddresses` and
 role's IAM list. The smoke checks require HSTS, a `Via` header naming CloudFront
 (`(CloudFront)`), and no `CF-Ray` on `https://aboutme.vn/`, and require that a
 direct request to the Elastic IP on 443 and 8443 time out. It warms
-`DEPLOY_WARM_PAGE` (default `/danny`; must stay a published resume page) and the
-homepage, since first requests after a restart can be slow on the
-CloudFront-to-origin path in a way `/healthz` misses, until each answers fast
-(`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run out. Smoke checks
-retry any failed answer, such as a 502 or 504 from CloudFront, a bounded number
-of times. The script requires the maintenance page's 503 response, checked
-through CloudFront, before a database task starts, and refuses to run while
-either task definition still maps host port 443 or 8443. Do not promise a
-bounded downtime window.
+`DEPLOY_WARM_PAGE` (default `/danny`; a 404 passes, since an unpublished resume
+runs the same path) and the homepage, since first requests after a restart can
+be slow on the CloudFront-to-origin path in a way `/healthz` misses, until each
+answers fast (`DEPLOY_WARM_FAST` seconds) or `DEPLOY_WARM_ATTEMPTS` run out.
+Smoke checks retry any failed answer, such as a 502 or 504 from CloudFront, a
+bounded number of times. The script requires the maintenance page's 503
+response, checked through CloudFront, before a database task starts, and refuses
+to run while either task definition still maps host port 443 or 8443. Do not
+promise a bounded downtime window.
 
 The deploy records the prior state of the site-down alarm actions and
 task-stopped rule before it changes either source. On success, it re-enables the
