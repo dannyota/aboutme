@@ -673,30 +673,22 @@ describe('AppShell', () => {
     },
   );
 
-  it('shows the mark-only logo below 64rem signed out, never signed in',
-    async () => {
-      meStatus = 401;
-      const signedOut = await mountShell('/');
+  it('shows the mark-only logo below 64rem in both states', async () => {
+    for (const status of [401, 200]) {
+      meStatus = status;
+      clearNuxtData();
+      const wrapper = await mountShell(status === 200 ? '/app/resumes' : '/');
       await flushPromises();
-      const logos = signedOut.findAll('[data-logo-size]');
-      expect(logos).toHaveLength(2);
+      const logos = wrapper.findAll('[data-logo-size]');
+      expect(logos, String(status)).toHaveLength(2);
       const [full, mark] = logos;
       expect(full?.find('[data-logo-part="wordmark"]').exists()).toBe(true);
       expect(full?.classes()).toContain('max-[64rem]:hidden');
       expect(mark?.find('[data-logo-part="wordmark"]').exists()).toBe(false);
       expect(mark?.classes()).toContain('min-[64rem]:hidden');
-      signedOut.unmount();
-
-      meStatus = 200;
-      clearNuxtData();
-      const signedIn = await mountShell();
-      await flushPromises();
-      const only = signedIn.findAll('[data-logo-size]');
-      expect(only).toHaveLength(1);
-      expect(only[0]?.find('[data-logo-part="wordmark"]').exists()).toBe(true);
-      expect(only[0]?.classes()).not.toContain('max-[64rem]:hidden');
-    },
-  );
+      wrapper.unmount();
+    }
+  });
 
   it('speaks Vietnamese for the MCP guide header link', async () => {
     meStatus = 401;
