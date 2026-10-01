@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h, nextTick, ref } from 'vue';
+import { createSSRApp, defineComponent, h, nextTick, ref } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 
 import {
@@ -103,7 +103,7 @@ describe('useShowcase', () => {
     async () => {
       const fetcher = vi.fn();
       vi.stubGlobal('fetch', fetcher);
-      const html = await renderToString(defineComponent({
+      const html = await renderToString(createSSRApp({
         setup() {
           const { view } = useShowcase(ref<ShowcaseQuery>({ page: 1 }));
           return () => h('p', view.value);
