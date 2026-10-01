@@ -59,7 +59,7 @@ export function usePublishShowcase(inputs: PublishShowcaseInputs) {
     const issue = inputs.issues.value.find(
       (candidate) => isShowcaseIssuePath(candidate.path),
     );
-    return issue === undefined ? null : issue.code as string;
+    return issue === undefined ? null : issue.code;
   });
 
   watch(inputs.issues, () => {

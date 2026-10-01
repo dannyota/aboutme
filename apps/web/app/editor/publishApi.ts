@@ -7,10 +7,7 @@ import { parseAcceptedResponse } from './resumeApi';
 import { parseCurrentDocument } from './documentValidation';
 import { compareRevision, parentETag, parseRevision } from './revision';
 
-/**
- * The showcase fields come from `lib/showcaseContract.ts` until the generated
- * client carries them; they are sent only when the owner changes them.
- */
+/** The showcase fields are sent only when the owner changes them. */
 export interface PublishCommand extends PublishShowcaseFields {
   readonly slug?: string;
   readonly live: boolean;
