@@ -6,9 +6,11 @@ they sign up. Each listing shows the resume's stored link-preview card and links
 to the public resume. Nothing about visitors is recorded.
 [ADR 0029](../adr/0029-community-showcase.md) records the decisions.
 
-Status: approved (2026-09-27), ready to build. The owner approved every choice
-marked **Owner approval** S1 to S13, listed with its recommendation in the
-[approvals](#owner-approvals) section, as written.
+Status: approved (2026-09-27) and built. The owner approved every choice marked
+**Owner approval** S1 to S13, listed with its recommendation in the
+[approvals](#owner-approvals) section, as written. The launch steps in
+[Empty state and launch](#empty-state-and-launch) and the legal dates in
+[Copy](#copy) happen at release.
 
 ## Opt-in
 
@@ -132,6 +134,10 @@ The operator reviews the public page and the card at the printed version. A key
 that changed since the list was printed makes `approve` and `decline` do nothing
 and say so. Output and logs carry slugs, keys, and versions only, never a name
 or headline.
+
+A review covers the whole public resume as it stands at approval time. A later
+body edit that leaves the review key unchanged keeps the listing without a new
+review; Report and the Terms cover what that edit adds.
 
 **What the operator approves:** a real person's resume in the listed language,
 the name matching the person, no impersonation, no illegal or offensive text or
