@@ -35,3 +35,9 @@ WHERE id = sqlc.arg(id)::uuid
 
 -- name: DeleteAccountUser :execrows
 DELETE FROM users WHERE id = sqlc.arg(id)::uuid;
+
+-- name: GetResumeOwnerBySlug :one
+-- Resolves the account that holds a current resume slug, for the operator
+-- deletion command (docs/design/showcase.md "Report and account deletion").
+-- A tombstoned slug has no resume row and so has no owner.
+SELECT id, user_id FROM resumes WHERE slug = sqlc.arg(slug)::text;
