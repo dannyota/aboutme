@@ -1,12 +1,17 @@
 import { CURRENT_VERSION } from '@aboutme/schema/released';
 
+import type { PublishShowcaseFields } from '../lib/showcaseContract';
 import type { AcceptedResume, EditorRuntime, Revision } from './types';
 import type { ServerValidationIssue, ValidatedStaleWinner } from './attempt';
 import { parseAcceptedResponse } from './resumeApi';
 import { parseCurrentDocument } from './documentValidation';
 import { compareRevision, parentETag, parseRevision } from './revision';
 
-export interface PublishCommand {
+/**
+ * The showcase fields come from `lib/showcaseContract.ts` until the generated
+ * client carries them; they are sent only when the owner changes them.
+ */
+export interface PublishCommand extends PublishShowcaseFields {
   readonly slug?: string;
   readonly live: boolean;
   readonly downloadEnabled: boolean;
@@ -242,6 +247,7 @@ const KNOWN_FAILURE_CODES = new Set<string>([
 const ISSUE_CODES = new Set([
   'required_for_live',
   'requires_live',
+  'requires_open_view',
   'invalid_format',
   'reserved',
   'required',

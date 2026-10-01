@@ -9,6 +9,8 @@ import type {
 } from '@aboutme/schema';
 import type { CURRENT_VERSION } from '@aboutme/schema/released';
 
+import type { OwnerShowcase } from '../lib/showcaseContract';
+
 export type Revision = string & { readonly __revision: unique symbol };
 export type ParentETag = string & { readonly __parentETag: unique symbol };
 
@@ -115,6 +117,12 @@ export interface ResumeMetadata {
   readonly publicTitle: string | null;
   /** The public page's tab icon emoji; null means the site icon. */
   readonly faviconEmoji: string | null;
+  /**
+   * The community showcase opt-in, owner reads only: null when off. A server
+   * that predates the showcase sends no key, and absence reads as off
+   * (docs/design/showcase.md, Data and contract).
+   */
+  readonly showcase?: OwnerShowcase | null;
   readonly schemaVersion: typeof CURRENT_VERSION;
   readonly createdAt: string;
   readonly updatedAt: string;

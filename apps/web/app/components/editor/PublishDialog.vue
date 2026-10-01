@@ -11,7 +11,15 @@ import {
   canonicalPublicPath,
   type PublishCommand,
 } from '../../editor/publishApi';
-import type { PublishControllerState } from '../../editor/publishController';
+import {
+  blockedMessage,
+  failureMessage,
+  issueMessage,
+} from '../../editor/publishMessages';
+import {
+  isShowcaseIssuePath,
+  usePublishShowcase,
+} from '../../editor/publishShowcase';
 import {
   changedPublicPageFields,
   defaultPublicTitle,
@@ -27,6 +35,7 @@ import { workspaceCopy } from '../../i18n/workspace';
 import PublishAccess from './PublishAccess.vue';
 import PublishPageFields from './PublishPageFields.vue';
 import PublishPreview from './PublishPreview.vue';
+import PublishShowcase from './PublishShowcase.vue';
 import type { ResumeRecord } from '../../stores/resumes';
 import { useCapabilities } from '../../composables/useCapabilities';
 
@@ -73,6 +82,13 @@ const busy = computed(
     || state.value.kind === 'saving'
     || state.value.kind === 'dispatching',
 );
+const showcase = usePublishShowcase({
+  live,
+  signInToView,
+  busy,
+  issues: computed(() =>
+    (state.value.kind === 'invalid' ? state.value.issues : [])),
+});
 const slugValid = computed(
   () =>
     (slug.value === '' && !live.value)
@@ -102,7 +118,8 @@ const pageFieldsValid = computed(() =>
 const listedIssues = computed(() =>
   state.value.kind === 'invalid'
     ? state.value.issues.filter((issue) =>
-        publicPageIssueField(issue.path) === null)
+        publicPageIssueField(issue.path) === null
+        && !isShowcaseIssuePath(issue.path))
     : []);
 const submitDisabled = computed(
   () =>
@@ -150,6 +167,7 @@ function syncMetadata(metadata: ResumeRecord['accepted']['metadata']): void {
   seoGeoEnabled.value = metadata.live && metadata.seoGeoEnabled;
   signInToView.value = metadata.signInToView;
   storedSignInToView.value = metadata.signInToView;
+  showcase.sync(metadata);
   slug.value = metadata.slug ?? '';
   storedPage.value = {
     publicTitle: metadata.publicTitle,
@@ -221,6 +239,7 @@ function command(): PublishCommand {
     ...(signInToView.value === storedSignInToView.value
       ? {}
       : { signInToView: signInToView.value }),
+    ...showcase.fields(),
   };
 }
 
@@ -280,38 +299,6 @@ function resetCopyState(): void {
     copyResetTimer = undefined;
   }
   copyState.value = 'idle';
-}
-
-function issueMessage(code: string): string {
-  switch (code) {
-    case 'required_for_live':
-    case 'requires_live':
-    case 'invalid_format':
-    case 'reserved':
-    case 'required':
-    case 'visible_entry_required':
-      return copy.value.issue[code];
-    default:
-      return copy.value.invalid;
-  }
-}
-
-function blockedMessage(
-  reason: Extract<PublishControllerState, { kind: 'blocked' }>['reason'],
-): string {
-  return copy.value.blocked[reason];
-}
-
-function failureMessage(code: string): string {
-  switch (code) {
-    case 'provider_disabled':
-    case 'provider_unavailable':
-    case 'csrf_rejected':
-    case 'save_failed':
-      return copy.value.failed[code];
-    default:
-      return copy.value.failed.generic;
-  }
 }
 
 onBeforeUnmount(resetCopyState);
@@ -426,6 +413,17 @@ onBeforeUnmount(resetCopyState);
           :label="copy.signInToView"
           :description="copy.signInToViewHelp"
         />
+        <PublishShowcase
+          :busy="busy"
+          :copy="copy"
+          :issue-code="showcase.issueCode.value"
+          :model-value="showcase.on.value"
+          :reason="showcase.reason.value"
+          :role="showcase.role.value"
+          :status="showcase.status.value"
+          @update:model-value="showcase.setEnabled"
+          @update:role="showcase.setRole"
+        />
       </fieldset>
 
       <div
@@ -526,7 +524,7 @@ onBeforeUnmount(resetCopyState);
         v-if="state.kind === 'blocked'"
         role="alert"
       >
-        {{ blockedMessage(state.reason) }}
+        {{ blockedMessage(copy, state.reason) }}
       </p>
       <div
         v-if="listedIssues.length > 0"
@@ -543,7 +541,7 @@ onBeforeUnmount(resetCopyState);
           :disabled="busy"
           @click="focusIssue(issue.path)"
         >
-          {{ issueMessage(issue.code) }}
+          {{ issueMessage(copy, issue.code) }}
         </Button>
       </div>
       <p
@@ -582,7 +580,7 @@ onBeforeUnmount(resetCopyState);
         v-if="state.kind === 'failed'"
         role="alert"
       >
-        {{ failureMessage(state.code) }}
+        {{ failureMessage(copy, state.code) }}
       </p>
 
       <div
