@@ -365,6 +365,10 @@ type Querier interface {
 	// not user-scoped, unlike product reads. It adds no write path.
 	GetResumeByID(ctx context.Context, id uuid.UUID) (Resume, error)
 	GetResumeForUser(ctx context.Context, arg GetResumeForUserParams) (Resume, error)
+	// Resolves the account that holds a current resume slug, for the operator
+	// deletion command (docs/design/showcase.md "Report and account deletion").
+	// A tombstoned slug has no resume row and so has no owner.
+	GetResumeOwnerBySlug(ctx context.Context, slug string) (GetResumeOwnerBySlugRow, error)
 	// A stored card is derived data (ADR 0014); every public read passes the
 	// live-state gate before it reads one.
 	GetResumePreviewCard(ctx context.Context, resumeID uuid.UUID) (GetResumePreviewCardRow, error)

@@ -80,6 +80,25 @@ func (q *Queries) GetAccountDeletionSessionForUpdate(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getResumeOwnerBySlug = `-- name: GetResumeOwnerBySlug :one
+SELECT id, user_id FROM resumes WHERE slug = $1::text
+`
+
+type GetResumeOwnerBySlugRow struct {
+	ID     uuid.UUID
+	UserID uuid.UUID
+}
+
+// Resolves the account that holds a current resume slug, for the operator
+// deletion command (docs/design/showcase.md "Report and account deletion").
+// A tombstoned slug has no resume row and so has no owner.
+func (q *Queries) GetResumeOwnerBySlug(ctx context.Context, slug string) (GetResumeOwnerBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getResumeOwnerBySlug, slug)
+	var i GetResumeOwnerBySlugRow
+	err := row.Scan(&i.ID, &i.UserID)
+	return i, err
+}
+
 const insertAccountDeletedAuditEvent = `-- name: InsertAccountDeletedAuditEvent :one
 INSERT INTO lifecycle_audit_events (id, kind, occurred_at, media_job_id)
 VALUES ($1::uuid, 'account_deleted', $2::timestamptz, NULL)
