@@ -4,9 +4,13 @@ export type PdfCopy = {
   readonly download: string;
   readonly downloading: string;
   readonly ariaDownload: (size: string) => string;
+  readonly openTab: string;
+  readonly openingTab: string;
+  /** Shown in place of the download wording for a save-required stop. */
+  readonly openSaveRequired: string;
   readonly error: Record<
     'save-required' | 'session-lost' | 'download-failed'
-    | 'temporarily-unavailable',
+    | 'temporarily-unavailable' | 'popup-blocked',
     string
   > & { readonly generic: string };
 };
@@ -16,11 +20,15 @@ export const pdfCopy: WorkspaceCopy<PdfCopy> = {
     download: 'Tải PDF',
     downloading: 'Đang tải PDF…',
     ariaDownload: (size) => `Tải PDF, ${size}`,
+    openTab: 'Mở PDF trong tab mới',
+    openingTab: 'Đang mở PDF…',
+    openSaveRequired: 'Lưu thay đổi trước khi mở PDF.',
     error: {
       'save-required': 'Lưu thay đổi trước khi tải PDF.',
       'session-lost': 'Phiên của bạn đã kết thúc. Đăng nhập lại.',
       'download-failed': 'Không thể tải PDF. Hãy thử lại.',
       'temporarily-unavailable': 'PDF tạm thời không khả dụng. Hãy thử lại.',
+      'popup-blocked': 'Trình duyệt chặn tab mới. Cho phép cửa sổ bật lên.',
       'generic': 'Không thể tải PDF. Hãy thử lại.',
     },
   },
@@ -28,11 +36,15 @@ export const pdfCopy: WorkspaceCopy<PdfCopy> = {
     download: 'Download PDF',
     downloading: 'Downloading PDF…',
     ariaDownload: (size) => `Download PDF, ${size}`,
+    openTab: 'Open PDF in new tab',
+    openingTab: 'Opening PDF…',
+    openSaveRequired: 'Save changes before opening PDF.',
     error: {
       'save-required': 'Save changes before downloading PDF.',
       'session-lost': 'Your session ended. Sign in again.',
       'download-failed': 'PDF download failed. Try again.',
       'temporarily-unavailable': 'PDF is temporarily unavailable. Try again.',
+      'popup-blocked': 'The browser blocked the tab. Allow pop-ups.',
       'generic': 'PDF download failed. Try again.',
     },
   },
