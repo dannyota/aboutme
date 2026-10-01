@@ -52,6 +52,12 @@ describe('print worker build', () => {
       const skipLink
         = /a\[href=(?:"#public-resume"|\\#public-resume)\]:not\(:focus\)/u;
       expect(readFileSync(css, 'utf8')).toMatch(skipLink);
+      // The owner's dark scheme rules live in a sibling stylesheet of the
+      // resume component; the same build must carry them, screen-only.
+      const scheme = readFileSync(css, 'utf8');
+      expect(scheme).toContain('--dark-color-surface');
+      expect(scheme).toContain('prefers-color-scheme');
+      expect(scheme).toContain('data-color-scheme');
       const source = readFileSync(worker, 'utf8').toLowerCase();
       expect(source).not.toContain('dompurify');
       expect(source).not.toContain('nested-script-tag-stripping-bypass');

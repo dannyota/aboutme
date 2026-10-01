@@ -80,9 +80,10 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
 }
 
 /**
- * Text alignment, the header photo position, and the page format belong to the
- * owner, not the preset (ADR 0013; paper follows where the owner
- * prints), so a template switch keeps the current values, or their absence. A
+ * Text alignment, the header photo position, the page format, and the public
+ * page color scheme belong to the owner, not the preset (ADR 0013; paper
+ * follows where the owner prints; docs/design/public-page-theme.md), so a
+ * template switch keeps the current values, or their absence. A
  * kept photo position under a preset with no header uses the default header,
  * which renders the same as no header.
  */
@@ -95,10 +96,16 @@ function withOwnerChoices(
   const photoPosition = current.header?.photoPosition;
   const { photoPosition: _presetPosition, ...header } = next.header
     ?? { align: 'left', detailsLayout: 'inline', iconStyle: 'outline' };
-  const { header: _presetHeader, ...rest } = next;
+  const {
+    header: _presetHeader,
+    colorScheme: _presetScheme,
+    ...rest
+  } = next;
+  const colorScheme = current.colorScheme;
   return {
     ...rest,
     pageFormat: current.pageFormat,
+    ...(colorScheme === undefined ? {} : { colorScheme }),
     font: textAlign === undefined ? font : { ...font, textAlign },
     ...(photoPosition !== undefined
       ? { header: { ...header, photoPosition } }

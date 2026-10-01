@@ -151,6 +151,7 @@ apps/web/app/components/resume/applyTemplate.ts
 apps/web/app/components/resume/brandIcons.ts
 apps/web/app/components/resume/clampContrast.ts
 apps/web/app/components/resume/contactHref.ts
+apps/web/app/components/resume/darkPalette.ts
 apps/web/app/components/resume/entryParts.ts
 apps/web/app/components/resume/formatDate.ts
 apps/web/app/components/resume/icons.ts
@@ -166,6 +167,7 @@ apps/web/app/components/resume/primitives/Photo.vue
 apps/web/app/components/resume/primitives/RichText.vue
 apps/web/app/components/resume/primitives/SectionHeading.vue
 apps/web/app/components/resume/resolveRenderModel.ts
+apps/web/app/components/resume/resumeColorScheme.css
 apps/web/app/components/resume/sections/CertificateSection.vue
 apps/web/app/components/resume/sections/CustomSection.vue
 apps/web/app/components/resume/sections/EducationSection.vue

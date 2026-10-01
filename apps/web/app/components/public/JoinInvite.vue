@@ -14,6 +14,8 @@ import {
   JOIN_INVITE_BAR_TEXT_MIN_WIDTH,
   JOIN_INVITE_ENTRANCE,
   joinInviteContainerStyle,
+  joinInviteIsDark,
+  joinInvitePalette,
   joinInvitePlacement,
   recordJoinInviteClosed,
   startJoinInviteTiming,
@@ -33,6 +35,7 @@ const props = defineProps<{
 const visible = ref(false);
 const placement = ref<JoinInvitePlacement>('bar');
 const viewportWidth = ref(0);
+const dark = ref(false);
 const container = ref<HTMLElement>();
 let stopTiming: (() => void) | null = null;
 
@@ -57,6 +60,13 @@ const regionLabel = computed(() => (
 function updatePlacement(): void {
   placement.value = joinInvitePlacement(props.root);
   viewportWidth.value = window.innerWidth;
+  dark.value = joinInviteIsDark(props.root);
+}
+
+// A Match device page follows the viewer's preference as it changes.
+let schemeQuery: MediaQueryList | undefined;
+function updateScheme(): void {
+  dark.value = joinInviteIsDark(props.root);
 }
 
 // Below 360 px the bar keeps only the button and the close button. This is
@@ -115,6 +125,8 @@ onMounted(() => {
   updatePlacement();
   window.addEventListener('resize', updatePlacement, { passive: true });
   window.addEventListener('keydown', onKeydown);
+  schemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+  schemeQuery?.addEventListener?.('change', updateScheme);
   stopTiming = startJoinInviteTiming(() => {
     visible.value = true;
     void nextTick(() => {
@@ -130,11 +142,13 @@ onBeforeUnmount(() => {
   restorePadding = null;
   window.removeEventListener('resize', updatePlacement);
   window.removeEventListener('keydown', onKeydown);
+  schemeQuery?.removeEventListener?.('change', updateScheme);
 });
 
 const containerStyle = computed(
-  () => joinInviteContainerStyle(placement.value),
+  () => joinInviteContainerStyle(placement.value, dark.value),
 );
+const mutedColor = computed(() => joinInvitePalette(dark.value).text);
 </script>
 
 <template>
@@ -154,7 +168,8 @@ const containerStyle = computed(
           type="button"
           :aria-label="closeLabel"
           style="width:32px;height:32px;border:none;background:transparent;
-            font-size:18px;line-height:1;color:#5C6178;cursor:pointer;"
+            font-size:18px;line-height:1;cursor:pointer;"
+          :style="{ color: mutedColor }"
           @click="close"
         >
           ×
@@ -194,7 +209,8 @@ const containerStyle = computed(
         :aria-label="closeLabel"
         style="flex-shrink:0;width:32px;height:32px;border:none;
           background:transparent;font-size:18px;line-height:1;
-          color:#5C6178;cursor:pointer;"
+          cursor:pointer;"
+        :style="{ color: mutedColor }"
         @click="close"
       >
         ×
