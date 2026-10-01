@@ -5,9 +5,9 @@ compact page bar in the application identity, and an owner-chosen color scheme
 that can show the resume on a dark ground. The PDF, print, and the link-preview
 card stay light in every case.
 
-Status: approved (2026-09-27), ready to build. The owner approved the direction:
-light by default, the owner chooses the scheme per resume, and viewers see the
-owner's choice. The dark scheme changes the white-sheet rule of
+Status: approved (2026-09-27) and built. The owner approved the direction: light
+by default, the owner chooses the scheme per resume, and viewers see the owner's
+choice. The dark scheme changes the white-sheet rule of
 [ADR 0020](../adr/0020-application-visual-identity.md) and adds document v5 to
 [ADR 0004](../adr/0004-resume-document-contract.md). Both records now carry the
 change as accepted (2026-09-27); the page bar needs no contract change.
@@ -204,7 +204,8 @@ and [data](data.md#document-versions)).
   the public projection copies it, so the hydrated page and its live refresh see
   the same value as the server render.
 - **Print snapshot.** The frozen print document drops the field, so the print
-  worker never receives a scheme. The paged renderer ignores it as well.
+  worker never receives a scheme. The print app, which the worker renders in
+  continuous mode, never passes a scheme to the renderer.
 - **Link-preview card.** The card envelope carries only the clamped accent, so
   the scheme cannot reach the card, and the card version does not change.
 - **Rollback.** Once a write stores v5, a release before it fails closed on that
@@ -311,9 +312,13 @@ Other rules:
 - A screen-only rule in the public page block of `ResumeDocument.vue` points
   each `--color-<role>` at its `--dark-color-<role>` under `dark`, and under
   `system` inside `@media (prefers-color-scheme: dark)`. On the public page the
-  rule also sets `color-scheme: dark` and the dark ground on the root through
-  `:root:has(.public-resume-page[data-color-scheme])`, so scrollbars and
-  overscroll match. It needs no script, so the first paint is already correct.
+  rule also sets `color-scheme: dark` and `background: Canvas` on the root
+  through `:root:has(.public-resume-page[data-color-scheme])`, so scrollbars and
+  overscroll turn dark. A root rule cannot read the page element's inline
+  colors, so the root takes the browser's dark Canvas, not the template's
+  ground. The page fills the viewport with its own ground (`min-height: 100vh`),
+  so Canvas shows only in overscroll. The rule needs no script, so the first
+  paint is already correct.
 - `light-dark()` is not used: Safari before 17.5 drops it, which would leave
   text black on the dark ground.
 - The page adds no `theme-color` meta; the HTML validator rejects it.
@@ -364,7 +369,7 @@ cases:
 
 | Output                                      | Why it stays light                                          |
 | ------------------------------------------- | ----------------------------------------------------------- |
-| PDF download and the owner's PDF            | The print snapshot drops the field; paged mode ignores it   |
+| PDF download and the owner's PDF            | Snapshot drops the field; the print app passes no scheme    |
 | Browser print of the public page            | The dark rule is screen-only; print uses the light roles    |
 | Link-preview card                           | The card envelope carries no scheme                         |
 | Sign-in gate page                           | aboutme chrome before the resume; its envelope is unchanged |
