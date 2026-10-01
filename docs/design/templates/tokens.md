@@ -64,8 +64,11 @@ schema's, not this document's.
 | `sectionDisplay.skill.style`    | enum: `text`, `tag`, `bar`, `dots`              | `text`                             | user, preset |
 | `sectionDisplay.language.style` | enum: `text`, `tag`, `bar`, `dots`              | `text`                             | user, preset |
 | `pageFormat`                    | enum: `a4`, `letter`                            | `a4`                               | user, preset |
-| `dateFormat`                    | enum: `MM/YYYY`, `Mon YYYY`, `YYYY`             | `MM/YYYY`                          | user, preset |
+| `dateFormat`                    | enum: `MM/YYYY`, `Mon YYYY`, `YYYY`             | `MM/YYYY`                          | user\*       |
 | `colorScheme`                   | enum: `light`, `dark`, `system`, **optional**   | absent (renders `light`)           | user         |
+
+\* A preset still carries `dateFormat`, because the replace is wholesale, but
+apply sets it from the resume language ([contract](contract.md) §3).
 
 `minimal.json` is a baseline document, not a declared default. A preset states
 the 15 required author-controlled leaves and its `layout.placement` rule, and

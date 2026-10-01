@@ -179,6 +179,7 @@ describe('template groups', () => {
           fixture.document.customization,
           preset,
           fixture.document.content,
+          fixture.metadata.lng,
         ),
       },
     };
@@ -242,12 +243,14 @@ describe('template groups', () => {
       captured.preApply.document.customization,
       preset,
       captured.preApply.document.content,
+      captured.preApply.metadata.lng,
     );
 
     expect(final.document.customization).toEqual(helperResult);
     expect(final.document.content).toEqual(captured.preApply.document.content);
     expect(captured.intendedFinal.document.content).toEqual(
       captured.preApply.document.content,
+      captured.preApply.metadata.lng,
     );
   });
 

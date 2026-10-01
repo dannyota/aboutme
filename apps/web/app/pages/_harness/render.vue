@@ -219,6 +219,8 @@ if (isCorpus) {
   }
 
   const resolvedDocument = resumeDocument ?? badQuery();
+  const renderLanguage: 'vi' | 'en'
+    = sampleLanguage ?? (fixture === 'full' ? 'en' : 'vi');
   // A gallery sample already wears its own template, settings and all
   // (documents.ts `galleryDocument`); applying the template again here would
   // reset the one setting a sample may override, its date format
@@ -234,6 +236,7 @@ if (isCorpus) {
       },
       template,
       resolvedDocument.content,
+      renderLanguage,
     );
   }
   // Every preset prints on A4 (colors.md §4), so a screenshot cell that
@@ -281,7 +284,7 @@ if (isCorpus) {
       ? undefined
       : await verifyFixedPhoto();
   context = {
-    lng: sampleLanguage ?? (fixture === 'full' ? 'en' : 'vi'),
+    lng: renderLanguage,
     mode: resolvedMode === 'public' ? 'continuous' : resolvedMode,
     ...(photoUrl === undefined ? {} : { photoUrl }),
   };

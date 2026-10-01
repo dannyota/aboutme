@@ -119,6 +119,7 @@ describe('template switches keep the photo position', () => {
         withPosition(document.customization, 'left'),
         preset,
         document.content,
+        'en',
       );
       expect(left.header?.photoPosition).toBe('left');
       // The preset's own header settings still apply.
@@ -130,6 +131,7 @@ describe('template switches keep the photo position', () => {
         withPosition(document.customization),
         preset,
         document.content,
+        'en',
       );
       expect(none.header?.photoPosition).toBeUndefined();
       expect(none.header === undefined)

@@ -39,10 +39,13 @@ describe('/app/new query', () => {
       .toMatchObject({ kind: 'sample', lng: 'en' });
   });
 
-  it('accepts any catalog template for a blank resume', () => {
-    expect(parseNewResumeQuery({ template: 'classic-serif' }, 'vi'))
-      .toMatchObject({ kind: 'template' });
-  });
+  it('accepts any catalog template for a blank resume, in the site language',
+    () => {
+      expect(parseNewResumeQuery({ template: 'classic-serif' }, 'vi'))
+        .toMatchObject({ kind: 'template', lng: 'vi' });
+      expect(parseNewResumeQuery({ template: 'classic-serif' }, 'en'))
+        .toMatchObject({ kind: 'template', lng: 'en' });
+    });
 
   it.each([
     [{}],
@@ -59,12 +62,29 @@ describe('/app/new query', () => {
 describe('starting documents', () => {
   it('starts a blank resume that wears each template', () => {
     for (const preset of TEMPLATES) {
-      const document = blankTemplateDocument(preset);
+      const document = blankTemplateDocument(preset, 'en');
       expect(document.content).toEqual({});
       expect(document.customization.font).toEqual(preset.customization.font);
       expect(document.customization.layout.sections)
         .toEqual({ main: [], sidebar: [] });
       expect(validateDocument(document as never), preset.id).toEqual([]);
+    }
+  });
+
+  it('starts a blank resume with the date format of its language', async () => {
+    const template = galleryTemplate('classic-serif')!;
+    const dateFormats = async (lng: 'vi' | 'en') =>
+      (await startDocument({ kind: 'template', template, lng })).customization
+        .dateFormat;
+    expect(await dateFormats('vi')).toBe('MM/YYYY');
+    expect(await dateFormats('en')).toBe('Mon YYYY');
+    for (const preset of TEMPLATES) {
+      expect(blankTemplateDocument(preset, 'vi').customization.dateFormat)
+        .toBe('MM/YYYY');
+      expect(blankTemplateDocument(preset, 'vi-VN').customization.dateFormat)
+        .toBe('MM/YYYY');
+      expect(blankTemplateDocument(preset, 'en').customization.dateFormat)
+        .toBe('Mon YYYY');
     }
   });
 
