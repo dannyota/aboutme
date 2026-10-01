@@ -309,14 +309,24 @@ Library, with Library's class: shown to every visitor and hidden below 640 px
 when signed in. It takes `aria-current="page"` on `/showcase`. On `/showcase`
 the shell's create button reads Create your resume, as on the Library.
 
-The signed-out header must still fit with every link and both account buttons.
-Cộng đồng needs about 88 px: the 390 px Library baseline leaves 34 px, and the
-English header overflows by 37 px at 704 px and 57 px at 768 px, where the theme
-toggle shows its label. From 56 rem the Open source link adds about 104 px more.
-So below 64 rem, signed out, the shell logo shows the mark alone (`AppLogo` with
-`markOnly`), which frees about 100 px, the way the editor top bar drops its
-wordmark. Sign in, Community, Connect AI, and the create button all stay.
-Signed-in headers keep the full logo.
+The signed-out header keeps Library, Community, Connect AI, Sign in, and the
+create button at every width where the design shows them. The English header is
+the widest: at 704 px its right group (locale names, theme button, Sign in, and
+Create your resume) measures 438 px, 522 px from 48 rem where the theme label
+appears. So below 64 rem the signed-out header is compact:
+
+| Part           | Below 64 rem              | From 64 rem            |
+| -------------- | ------------------------- | ---------------------- |
+| Logo           | Mark alone, never shrinks | Full logo              |
+| Locale toggle  | VI and EN                 | Tiếng Việt and English |
+| Theme button   | Icon alone                | Icon and label         |
+| Header gaps    | 8 px                      | 16 px                  |
+| Nav link sides | 8 px padding              | 10 px padding          |
+
+The Open source link shows from 72 rem, where the full header fits with it. The
+compact header needs about 680 px at 704 px, and the full header about 970 px at
+1024 px and 1065 px with Open source. Accessible names stay complete in the
+compact forms. The signed-in header is unchanged.
 
 ### Publish dialog block
 
@@ -428,4 +438,4 @@ page scroll:
 
 The finish review checks `/showcase` at 360, 390, 768, 1024, and 1440 px in both
 languages and both themes, and the signed-out header at 360, 390, 704, 768, 896,
-and 1024 px.
+1024, and 1152 px.
