@@ -31,8 +31,9 @@ const text = {
       + '(họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị trí bạn chọn, '
       + 'kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc '
       + 'bật Yêu cầu đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập '
-      + 'tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng bất kỳ ai '
-      + 'truy cập đều có thể xem và sao chép những gì trang hiển thị.',
+      + 'tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng '
+      + 'bất kỳ ai truy cập đều có thể xem và sao chép những gì trang '
+      + 'hiển thị.',
     content:
       'Nếu bạn bật Hiện trong trang Cộng đồng cho một CV, bạn cũng cho phép '
       + 'aboutme.vn hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí bạn chọn của '
