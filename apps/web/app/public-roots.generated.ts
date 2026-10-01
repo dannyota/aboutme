@@ -29,6 +29,7 @@ export const publicRootRoutes = [
   { root: 'register', dispatch: 'nuxt' },
   { root: 'reset-password', dispatch: 'nuxt' },
   { root: 'robots.txt', dispatch: 'go' },
+  { root: 'showcase', dispatch: 'nuxt' },
   { root: 'sitemap.xml', dispatch: 'go' },
   { root: 'templates', dispatch: 'nuxt' },
   { root: 'terms', dispatch: 'nuxt' },

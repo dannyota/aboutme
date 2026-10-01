@@ -8,7 +8,7 @@ import {
 } from '../app/public-roots.generated';
 
 describe('generated public-root registry', () => {
-  it('matches the immutable v10 source in authority order', () => {
+  it('matches the immutable v11 source in authority order', () => {
     expect(publicRootRoutes).toEqual([
       { root: '.well-known', dispatch: 'go' },
       { root: 'admin', dispatch: 'reserved' },
@@ -31,6 +31,7 @@ describe('generated public-root registry', () => {
       { root: 'register', dispatch: 'nuxt' },
       { root: 'reset-password', dispatch: 'nuxt' },
       { root: 'robots.txt', dispatch: 'go' },
+      { root: 'showcase', dispatch: 'nuxt' },
       { root: 'sitemap.xml', dispatch: 'go' },
       { root: 'templates', dispatch: 'nuxt' },
       { root: 'terms', dispatch: 'nuxt' },
@@ -38,7 +39,7 @@ describe('generated public-root registry', () => {
       { root: 'verify', dispatch: 'nuxt' },
       { root: 'verify-email', dispatch: 'nuxt' },
     ]);
-    expect(publicRootRoutes).toHaveLength(27);
+    expect(publicRootRoutes).toHaveLength(28);
   });
 
   it('reserves every registered root and no unknown root', () => {

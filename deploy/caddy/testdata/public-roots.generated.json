@@ -1,5 +1,5 @@
 {
-  "version": 10,
+  "version": 11,
   "roots": [
     {
       "root": ".well-known",
@@ -84,6 +84,10 @@
     {
       "root": "robots.txt",
       "dispatch": "go"
+    },
+    {
+      "root": "showcase",
+      "dispatch": "nuxt"
     },
     {
       "root": "sitemap.xml",

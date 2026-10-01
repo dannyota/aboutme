@@ -455,6 +455,12 @@ func TestRouteTable_CaddyRoutesEachPathClassToTheCorrectBackend(t *testing.T) {
 		{name: "guide_prefixed_slug", method: http.MethodGet, path: "/guide-me", want: wantGo},
 		{name: "guides_slug", method: http.MethodGet, path: "/guides", want: wantGo},
 		{name: "mcp_endpoint_still_go", method: http.MethodGet, path: "/mcp", want: wantGo},
+		// The community showcase is a fixed Nuxt root; only the exact root is
+		// reserved, so longer slugs still reach Go.
+		{name: "showcase_page", method: http.MethodGet, path: "/showcase", want: wantWeb},
+		{name: "showcase_markdown", method: http.MethodGet, path: "/showcase.md", want: wantWeb},
+		{name: "showcase_prefixed_slug", method: http.MethodGet, path: "/showcase-me", want: wantGo},
+		{name: "showcases_slug", method: http.MethodGet, path: "/showcases", want: wantGo},
 		{name: "unmatched_editor_route", method: http.MethodGet, path: "/resume/editor/summary", want: wantWeb},
 		{name: "nested_md_does_not_match_go", method: http.MethodGet, path: "/nested/path.md", want: wantWeb},
 		{name: "too_short_slug", method: http.MethodGet, path: "/abc", want: wantWeb},
