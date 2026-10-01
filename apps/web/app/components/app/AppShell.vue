@@ -52,6 +52,7 @@ const onTemplatesPath = computed(() =>
 // The MCP guide is public like the gallery (docs/design/mcp-guide.md
 // Navigation), so it renders for signed-out and signed-in visitors alike.
 const onGuidePath = computed(() => route.path === '/guide/mcp');
+const onShowcasePath = computed(() => route.path === '/showcase');
 const onResumesPath = computed(() => route.path.startsWith('/app/resumes'));
 const onViewsPath = computed(() => route.path.startsWith('/app/views'));
 const onSettingsPath = computed(
@@ -67,6 +68,7 @@ const onMarketingPath = computed(() => (
   || route.path === '/terms'
   || route.path === '/privacy'
   || route.path === '/verify'
+  || route.path === '/showcase'
   || route.path === '/guide/mcp'
   || TEMPLATE_PAGE_PATH.test(route.path)
 ));
@@ -79,10 +81,14 @@ const linkClass = cn(
   'aria-[current=page]:bg-accent aria-[current=page]:text-accent-foreground',
 );
 // On a signed-in phone the header cannot fit every link beside the locale
-// toggle and account menu, so Templates drops there; the home page still
-// links the gallery. Signed out, it is the header's only gallery link.
+// toggle and account menu, so Templates and Community drop there; the home
+// page still links the gallery. Signed out, they are the header's links.
 const templatesLinkClass = computed(() =>
   cn(linkClass, signedIn.value && 'max-sm:hidden'));
+// Signed out below 30rem, the logo shows the mark alone so both public links
+// fit beside the locale toggle (docs/design/ui/shell-and-editor.md). A
+// signed-in header keeps the full logo.
+const compactLogo = computed(() => !signedIn.value);
 // Signed out, the guide link shows from 44rem, the width where the account
 // buttons appear. Signed in, the signed-in bar also carries Resumes, Views,
 // and Settings, so it shows only from 64rem (docs/design/mcp-guide.md
@@ -107,7 +113,16 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
       class="flex items-center"
       to="/"
     >
-      <AppLogo size="sm" />
+      <AppLogo
+        :class="compactLogo && 'max-[30rem]:hidden'"
+        size="sm"
+      />
+      <AppLogo
+        v-if="compactLogo"
+        class="min-[30rem]:hidden"
+        mark-only
+        size="sm"
+      />
     </NuxtLink>
     <nav
       :aria-label="copy.primaryNavigation"
@@ -118,6 +133,11 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
         :class="templatesLinkClass"
         to="/templates"
       >{{ copy.templates }}</NuxtLink>
+      <NuxtLink
+        :aria-current="onShowcasePath ? 'page' : undefined"
+        :class="templatesLinkClass"
+        to="/showcase"
+      >{{ copy.community }}</NuxtLink>
       <NuxtLink
         :aria-current="onGuidePath ? 'page' : undefined"
         :class="guideLinkClass"

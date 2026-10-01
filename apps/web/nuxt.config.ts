@@ -305,6 +305,9 @@ export default defineNuxtConfig({
     // The account pages are client-rendered, so their first HTML is a shell
     // without head tags; this header keeps them out of search engines.
     '/app/**': { headers: { 'X-Robots-Tag': 'noindex' } },
+    // The community showcase is never indexed or followed
+    // (docs/design/showcase.md, Search engines and discovery).
+    '/showcase': { headers: { 'X-Robots-Tag': 'noindex, nofollow' } },
     '/app/resumes/**': { ssr: false },
     // The LinkedIn import page loads pdf.js only in the browser
     // (docs/design/linkedin-import.md).

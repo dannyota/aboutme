@@ -22,6 +22,7 @@ describe('workspace locale', () => {
     '/app/resumes//',
     '/app/settings/sessions',
     '/guide/mcp',
+    '/showcase',
     '/app/views',
     '/app/views/',
     '/app/views/resume-1',

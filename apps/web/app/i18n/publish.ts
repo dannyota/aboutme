@@ -2,6 +2,8 @@ import type {
   FaviconEmojiIssue,
   PublicTitleIssue,
 } from '../editor/publicPageMeta';
+import type { ShowcaseRole } from '../lib/showcaseContract';
+import { showcaseCopy } from './showcase';
 import type { WorkspaceCopy } from './workspace';
 
 type PublishBlockedReason
@@ -51,6 +53,26 @@ export type PublishPreviewCopy = {
   readonly caption: string;
 };
 
+/** The community showcase block (docs/design/showcase.md, Copy). */
+export type PublishShowcaseCopy = {
+  readonly label: string;
+  readonly help: string;
+  readonly needsPublic: string;
+  readonly needsOpenView: string;
+  readonly roleLabel: string;
+  readonly roleHint: string;
+  readonly noRole: string;
+  /** Role labels; the same as the showcase page's chips. */
+  readonly roles: Readonly<Record<ShowcaseRole, string>>;
+  readonly pending: string;
+  readonly listed: string;
+  readonly listedLink: string;
+  /** The Declined text up to the contact address, then what follows it. */
+  readonly declined: readonly [string, string];
+  readonly contact: string;
+  readonly issueOpenView: string;
+};
+
 export type PublishCopy = {
   readonly title: string;
   readonly description: string;
@@ -66,6 +88,7 @@ export type PublishCopy = {
   readonly discoveryOffForSignIn: string;
   readonly signInToView: string;
   readonly signInToViewHelp: string;
+  readonly showcase: PublishShowcaseCopy;
   readonly publish: string;
   readonly update: string;
   readonly unpublish: string;
@@ -127,6 +150,32 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     signInToView: 'Yêu cầu đăng nhập để xem',
     signInToViewHelp:
       'Người xem đăng nhập bằng Google hoặc LinkedIn. Bạn không thấy họ là ai.',
+    showcase: {
+      label: 'Hiện trong trang Cộng đồng',
+      help:
+        'Hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí của CV này tại '
+        + 'aboutme.vn/showcase sau khi chúng tôi duyệt. Ai cũng xem được '
+        + 'trang đó.',
+      needsPublic: 'Bật CV công khai để hiện trong trang Cộng đồng.',
+      needsOpenView: 'Không dùng được khi bật Yêu cầu đăng nhập để xem.',
+      roleLabel: 'Vị trí hiển thị',
+      roleHint: 'Tùy chọn. Giúp người xem lọc theo vị trí.',
+      noRole: 'Không chọn',
+      roles: showcaseCopy.vi.roles,
+      pending:
+        'Đang chờ duyệt. CV sẽ hiện trong trang Cộng đồng sau khi được '
+        + 'duyệt.',
+      listed: 'Đang hiện trong trang Cộng đồng.',
+      listedLink: 'Xem trang Cộng đồng',
+      declined: [
+        'CV này chưa được duyệt để hiện trong trang Cộng đồng. Nếu bạn đổi '
+        + 'họ tên, tiêu đề, ảnh, đường dẫn hoặc ngôn ngữ của CV, chúng tôi '
+        + 'sẽ duyệt lại. Nếu có câu hỏi, hãy gửi email đến ',
+        '.',
+      ],
+      contact: 'danny@aboutme.vn',
+      issueOpenView: 'Tùy chọn này cần tắt Yêu cầu đăng nhập để xem.',
+    },
     publish: 'Xuất bản',
     update: 'Cập nhật xuất bản',
     unpublish: 'Hủy xuất bản',
@@ -241,6 +290,33 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
     signInToView: 'Require sign-in to view',
     signInToViewHelp:
       'Viewers sign in with Google or LinkedIn. You do not see who they are.',
+    showcase: {
+      label: 'Show in the community showcase',
+      help:
+        'Shows this resume\'s preview image, template, language, and role '
+        + 'at aboutme.vn/showcase after we review it. Anyone can see that '
+        + 'page.',
+      needsPublic:
+        'Turn on Public resume to show it in the community showcase.',
+      needsOpenView: 'Not available while Require sign-in to view is on.',
+      roleLabel: 'Role shown',
+      roleHint: 'Optional. Lets visitors filter by role.',
+      noRole: 'None',
+      roles: showcaseCopy.en.roles,
+      pending:
+        'Waiting for review. The resume appears in the community showcase '
+        + 'once approved.',
+      listed: 'Shown in the community showcase.',
+      listedLink: 'View the showcase',
+      declined: [
+        'This resume was not approved for the community showcase. If you '
+        + 'change its name, headline, photo, link, or language, we review it '
+        + 'again. Questions: ',
+        '.',
+      ],
+      contact: 'danny@aboutme.vn',
+      issueOpenView: 'This option needs Require sign-in to view off.',
+    },
     publish: 'Publish',
     update: 'Update publication',
     unpublish: 'Unpublish',
