@@ -32,7 +32,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/public-proof.json';
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 const CUSTOM_LINK = 'https://orcid.example/0000-0001';
 const PAGE_TITLE = 'Danny from aboutme.vn';
 const PAGE_EMOJI = '\u{1F680}';
@@ -766,7 +766,7 @@ test('proves a published resume hydrates in a real browser', async ({
           'Idempotency-Key': crypto.randomUUID(),
           'If-Match': `"r${input.revision}"`,
           'X-CSRF-Token': input.csrf,
-          'X-Resume-Schema-Version': '5',
+          'X-Resume-Schema-Version': input.schemaVersion,
         },
         body: JSON.stringify({
           deltas: [{ op: 'set', path: 'colorScheme', value: 'dark' }],
@@ -779,6 +779,7 @@ test('proves a published resume hydrates in a real browser', async ({
       id: createdID,
       revision: detailWrite.revision as string,
       csrf: schemeCSRF,
+      schemaVersion: SCHEMA_VERSION,
     });
     expect(schemeWrite.status, JSON.stringify(schemeWrite.body)).toBe(200);
     expect(typeof schemeWrite.revision).toBe('string');

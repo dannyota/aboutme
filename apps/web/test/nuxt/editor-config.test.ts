@@ -15,7 +15,7 @@ describe('editor runtime prerequisites', () => {
   it(
     'loads the schema, Pinia, editor SPA rule, and renderer harness',
     async () => {
-      expect(currentSchema.$id).toBe('https://aboutme.vn/schema/resume/v4');
+      expect(currentSchema.$id).toBe('https://aboutme.vn/schema/resume/v5');
       expect(validateDocument).toBeTypeOf('function');
       expect(defineStore).toBeTypeOf('function');
       expect(workspaceTitles.vi.editor).toBe('CV · aboutme.vn');
