@@ -20,7 +20,6 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Trigger every alarm once and confirm its email arrives (AC-OPS-019, `PLANNED`).
 - Record one successful run of each of the five scheduled jobs. Evidence: `docs/architecture.md` production section.
 - Restore a snapshot to a temporary instance, verify the data, delete the instance (AC-OPS-018, `PLANNED`).
-- Review a week of CloudFront WAF counts, then set `waf_block = true` and apply. Evidence: `deploy/aws/prod/variables.tf` (`waf_block` defaults to `false`), [DDoS and WAF](../design/cloudfront-edge.md#ddos-and-waf).
 - Record the open CloudFront facts on the live distribution. Evidence: [CloudFront runbook](../runbooks/cloudfront.md#facts-to-verify).
 
 ## Before the public announcement

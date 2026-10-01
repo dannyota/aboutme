@@ -1,6 +1,6 @@
 # Deployment transparency (0.6.x)
 
-Status: planned; waiting for owner approvals A1 to A5 in [the design](../design/deployment-transparency/README.md#owner-approval) and acceptance of [ADR 0028](../adr/0028-deployment-transparency-observer.md). Three small releases, one feature each, in order. The owner put the Verify page in 0.6.1 with the [link previews](link-previews.md) card. The page reads the observer's document, so the manager confirms whether the release evidence and observer releases also ship in 0.6.1 or the page ships first and shows its unavailable state. Briefs repeat the writing rules: code, comments, tests, and living docs cite the design pages or ADR 0028, never this plan or its release names.
+Status: approved, ready to build. The owner approved A1 to A5 in [the design](../design/deployment-transparency/README.md#owner-approval) and accepted [ADR 0028](../adr/0028-deployment-transparency-observer.md) on 2026-09-27, and confirmed the build on 2026-10-01. Three small releases, one feature each, in order. The owner put the Verify page in 0.6.1 with the [link previews](link-previews.md) card. The page reads the observer's document, so the manager confirms whether the release evidence and observer releases also ship in 0.6.1 or the page ships first and shows its unavailable state. Briefs repeat the writing rules: code, comments, tests, and living docs cite the design pages or ADR 0028, never this plan or its release names.
 
 |Release|Outcome|Risk|
 |-|-|-|
@@ -10,7 +10,7 @@ Status: planned; waiting for owner approvals A1 to A5 in [the design](../design/
 
 ## Before any code
 
-1. Owner approves A1 to A5 and accepts ADR 0028; the manager updates the ADR status line and `docs/design/decisions.md`.
+1. Done 2026-09-27: the owner approved A1 to A5 and accepted ADR 0028.
 2. Owner settles the Kubernetes and Podman conflict for the Vietnam host (design README, "Kubernetes"). It blocks only the Vietnam observer, not these releases.
 
 ## Release evidence
