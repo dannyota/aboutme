@@ -136,7 +136,7 @@ px. It holds three lines:
 2. The lead, “CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.” or
    “Real resumes that aboutme.vn users published and chose to show here.”, 16 px
    `--muted-foreground`, at most 42 rem wide, 16 px under the h1.
-3. The order note, “CV mới thêm hiện trước.” or “Most recently added first.”, 14
+3. The order note, “CV thêm sớm nhất hiện trước.” or “Earliest added first.”, 14
    px `--muted-foreground`, 8 px under the lead.
 
 The band holds no focusable element.
