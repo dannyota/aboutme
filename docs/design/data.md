@@ -33,6 +33,7 @@ intended model, not replacement DDL.
 | `authentication_security_events` | Rejected non-increasing passkey counter values, retained for 180 days                                                     |
 | `resumes`                        | Owner, title, optional slug, publish flags, document version, revision, locale, and three JSON parts                      |
 | `resume_preview_cards`           | One per live resume: 16-hex card version, PNG of 1 to 524,288 bytes, render time; cascades with the resume                |
+| `resume_showcase`                | One per showcase opt-in: role, review key, card version, template ID, review result, first-listed time; cascades          |
 | `slug_tombstones`                | Released slug and release time only, no account link; deleted by the privacy sweep 180 days after release                 |
 | `idempotency_records`            | User, concrete operation identity, mutation key, semantic request fingerprint, stored response, expiry                    |
 | `idempotency_usage`              | One per-user retained-record and stored-response-byte counter maintained transactionally                                  |
@@ -55,6 +56,12 @@ reference for a later fleet ([ADR 0005](../adr/0005-database-migrations.md)).
 Server-owned relational rows use PostgreSQL UUIDv7 defaults, except the two TOTP
 tables described below. Client-generated UUIDs occur only inside resume
 documents as entry identifiers.
+
+`resume_showcase` is a publication setting, not document content. Go keeps its
+review key, card version, and template ID current inside every write to the
+resume. Turning the switch off, unpublishing, turning on sign in to view, and
+deleting the resume or account remove the row. The
+[showcase design](showcase.md#data-and-contract) owns its columns and checks.
 
 `media_deletion_jobs` is cleanup state, not media ownership. A transaction that
 removes a photo reference enqueues its validated exact key in the same commit.

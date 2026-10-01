@@ -63,13 +63,15 @@ a view count, or anything from the resume body.
 
 **Template.** The document stores no template identity
 ([template limits](templates/limitations.md)), so Go derives it: a resume
-matches a preset when its `customization`, without the five leaves a template
-apply keeps or resets for the owner (`pageFormat`, `dateFormat`,
-`font.textAlign`, `header.photoPosition`, `colorScheme`) and without
-`layout.sections`, equals the preset's `customization` without the same leaves,
-compared as canonical JSON. A committed generator builds the Go preset table
-from `packages/schema/templates/`, and a test fails when the table is stale. No
-match shows "Custom design" (**Owner approval** S4).
+matches a preset when its `customization` equals the preset's, compared as
+canonical JSON without five leaves and without placement. The five leaves are
+the four a template apply keeps for the owner (`pageFormat`, `font.textAlign`,
+`header.photoPosition`, `colorScheme`) and `dateFormat`, which apply resets and
+the owner may change after. Placement is `layout.sections` on the resume and
+`layout.placement` and `layout.sidebarSectionTypes` on the preset
+([template contract](templates/contract.md)). A committed generator builds the
+Go preset table from `packages/schema/templates/`, and a test fails when the
+table is stale. No match shows "Custom design" (**Owner approval** S4).
 
 **Language.** The primary subtag of the resume language: `vi`, `en`, or `other`.
 
@@ -102,10 +104,10 @@ The showcase is a page aboutme.vn curates, so a listing speaks for aboutme.vn
 more than a shared link does; at launch volumes a review costs minutes.
 
 **Review key.** Go computes a review key for each opted-in resume: the first 16
-hex digits of SHA-256 over the slug, the language, and the card envelope's
-scrubbed name, headline, photo storage key digest, and crop. It leaves out the
-card layout version and the accent, so a layout release or a color change does
-not send every listing back to review. A resume is listed only while its current
+hex digits of SHA-256 over the preview card inputs' slug, language, scrubbed
+name, headline, photo storage key digest, and crop. It leaves out the card
+layout version and the accent, so a layout release or a color change does not
+send every listing back to review. A resume is listed only while its current
 review key equals the approved one.
 
 **Keeping derived values current.** The showcase row holds the review key, the
