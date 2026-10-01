@@ -888,13 +888,10 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
   );
 });
 
-// The community showcase opt-in over the real stack. Approval runs only
-// through the out-of-band review command, which the browser harness cannot
-// reach, so this proof covers what needs no approval: the opt-in and its
-// Pending state, nothing listed without approval, the revocations that end
-// the opt-in, and the page and listing delivery rules
-// (docs/design/showcase.md "Opt-in", "Review", "Delivery, caching, and
-// revocation").
+// The community showcase opt-in over the real stack. Nothing is reviewed:
+// an opted-in, live resume with sign in to view off is listed at once, and
+// every revocation removes it from the next listing read
+// (docs/design/showcase.md "Opt-in", "Delivery, caching, and revocation").
 const SHOWCASE_LISTING_PATH = "/api/v1/public/showcase";
 
 function isPublishResponse(resumeID: string): (response: Response) => boolean {
@@ -1033,38 +1030,39 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
       .selectOption("backend");
     await submitPublishDialog(page, dialog, id);
 
-    // AC-SHOW-001, AC-SHOW-006: the opt-in alone lists nothing; the dialog
-    // shows Pending.
+    // AC-SHOW-001, AC-SHOW-006: the opt-in lists the resume at once; the
+    // dialog shows the Listed line.
     const status = dialog.getByTestId("publish-showcase-status");
-    await expect(status).toHaveAttribute("data-state", "pending");
-    await expect(status).toContainText("Waiting for review.");
+    await expect(status).toContainText("Shown in the community showcase.");
 
     publicContext = await browser.newContext();
     await installPublicGuards(publicContext, counters);
     const anonymous = await publicContext.newPage();
     pageDiagnosticsAttacher(counters, hooks)(anonymous);
-    const pending = await readListing(anonymous);
-    await expect(anonymous.locator('[data-state="empty"]')).toBeVisible();
-    expect(pending.slugs).toEqual([]);
+    const listed = await readListing(anonymous);
+    expect(listed.slugs).toContain(slug);
+    await expect(
+      anonymous.locator(`[data-showcase-slug="${slug}"]`),
+    ).toBeVisible();
+    await expect(anonymous.locator('[data-state="empty"]')).toHaveCount(0);
 
     // AC-SHOW-008, AC-SHOW-014: delivery rules of the page and the listing.
-    expect(pending.document.headers()["x-robots-tag"]).toBe(
-      "noindex, nofollow",
-    );
-    expect(Object.keys(await pending.document.allHeaders())).not.toContain(
+    expect(listed.document.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+    expect(Object.keys(await listed.document.allHeaders())).not.toContain(
       "set-cookie",
     );
     await expect(anonymous.locator('meta[name="robots"]')).toHaveAttribute(
       "content",
       "noindex, nofollow",
     );
-    expect(pending.listing.headers()["cache-control"]).toContain("no-store");
-    expect(Object.keys(await pending.listing.allHeaders())).not.toContain(
+    expect(listed.listing.headers()["cache-control"]).toContain("no-store");
+    expect(Object.keys(await listed.listing.allHeaders())).not.toContain(
       "set-cookie",
     );
     expect(await publicContext.cookies(ORIGIN)).toEqual([]);
 
-    // AC-SHOW-001: turning on sign in to view ends the opt-in.
+    // AC-SHOW-001, AC-SHOW-014: turning on sign in to view ends the opt-in
+    // and the next listing read omits the resume.
     await signInSwitch.press("Space");
     await expect(showcaseSwitch).not.toBeChecked();
     await expect(showcaseSwitch).toBeDisabled();
@@ -1084,7 +1082,8 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     await expect(dialog.getByTestId("publish-showcase-status")).toHaveCount(0);
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
 
-    // Turning sign in to view off leaves the switch off.
+    // Turning sign in to view off leaves the switch off and the resume
+    // unlisted (AC-SHOW-014).
     await signInSwitch.press("Space");
     await expect(signInSwitch).not.toBeChecked();
     await expect(showcaseSwitch).toBeEnabled();
@@ -1095,18 +1094,21 @@ test("proves the showcase opt-in, its revocations, and delivery rules", async ({
     dialog = await openPublishDialog(page);
     await expect(showcaseSwitch).toBeEnabled();
     await expect(showcaseSwitch).not.toBeChecked();
+    expect((await readListing(anonymous)).slugs).not.toContain(slug);
 
-    // AC-SHOW-001: unpublishing ends the opt-in; publishing again starts off.
+    // AC-SHOW-001, AC-SHOW-006: opting in again lists the resume at once;
+    // unpublishing ends the opt-in and publishing again starts off.
     await showcaseSwitch.press("Space");
     await expect(showcaseSwitch).toBeChecked();
     await submitPublishDialog(page, dialog, id);
-    await expect(dialog.getByTestId("publish-showcase-status")).toHaveAttribute(
-      "data-state",
-      "pending",
+    await expect(dialog.getByTestId("publish-showcase-status")).toContainText(
+      "Shown in the community showcase.",
     );
+    expect((await readListing(anonymous)).slugs).toContain(slug);
     await publicSwitch.press("Space");
     await expect(showcaseSwitch).toBeDisabled();
     await submitPublishDialog(page, dialog, id);
+    // AC-SHOW-014: unpublishing removes the resume from the next read.
     expect((await readListing(anonymous)).slugs).not.toContain(slug);
     await publicSwitch.press("Space");
     await expect(showcaseSwitch).toBeEnabled();
