@@ -43,7 +43,7 @@ export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
     description: 'CV thật do người dùng aboutme.vn chọn chia sẻ.',
     lead:
       'CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.',
-    orderNote: 'CV mới thêm hiện trước.',
+    orderNote: 'CV thêm sớm nhất hiện trước.',
     rolesLabel: galleryCopy.vi.rolesLabel,
     allRoles: galleryCopy.vi.allRoles,
     roles: { ...galleryCopy.vi.roles, other: 'Khác' },
@@ -74,7 +74,7 @@ export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
     description: 'Real resumes that aboutme.vn users chose to share.',
     lead:
       'Real resumes that aboutme.vn users published and chose to show here.',
-    orderNote: 'Most recently added first.',
+    orderNote: 'Earliest added first.',
     rolesLabel: galleryCopy.en.rolesLabel,
     allRoles: galleryCopy.en.allRoles,
     roles: { ...galleryCopy.en.roles, other: 'Other' },

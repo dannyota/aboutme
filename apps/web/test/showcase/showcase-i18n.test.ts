@@ -60,7 +60,7 @@ describe('showcase catalog', () => {
       lead:
         'Real resumes that aboutme.vn users published and chose to show '
         + 'here.',
-      orderNote: 'Most recently added first.',
+      orderNote: 'Earliest added first.',
       rolesLabel: 'Filter by role',
       allRoles: 'All roles',
       other: 'Other',
@@ -126,7 +126,7 @@ describe('showcase catalog', () => {
       description: 'CV thật do người dùng aboutme.vn chọn chia sẻ.',
       lead:
         'CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.',
-      orderNote: 'CV mới thêm hiện trước.',
+      orderNote: 'CV thêm sớm nhất hiện trước.',
       rolesLabel: 'Lọc theo vị trí',
       allRoles: 'Mọi vị trí',
       other: 'Khác',
