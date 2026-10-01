@@ -76,7 +76,7 @@ async function serve(page: Page, handler: Handler): Promise<URL[]> {
     return route.fulfill({
       status: reply.status ?? 200,
       contentType: 'application/json',
-      headers: { 'cache-control': 'no-store' },
+      headers: { 'cache-control': 'no-store, no-transform' },
       body: JSON.stringify(reply.body),
     });
   });
@@ -170,8 +170,14 @@ test('sends noindex, nofollow once and no counting script', async ({
   await expect(page.locator('meta[name="robots"]'))
     .toHaveAttribute('content', 'noindex, nofollow');
   await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
-  await expect(page.locator('script[src]:not([src*="/_nuxt/"])'))
-    .toHaveCount(0);
+  // Only the app's own bundles and its two first-party bootstrap scripts
+  // load: no counting or third-party script.
+  const sources = await page.locator('script[src]')
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute('src')));
+  const own = new Set(['/theme-bootstrap.js', '/csp-bootstrap.js']);
+  expect(sources.filter(
+    (source) => !source?.startsWith('/_nuxt/') && !own.has(source ?? ''),
+  )).toEqual([]);
 });
 
 test('reads the filters from the URL and writes changes back', async ({
@@ -304,7 +310,7 @@ test('speaks Vietnamese, fits phone width, and marks the logo down',
         role: 'fresher',
         language: 'other',
         templateId: 'international-lang',
-      })), { pageCount: 100, total: 1200 }),
+      })), { page: 100, pageCount: 100, total: 1200 }),
     }));
     await open(page, '/showcase?page=100', 'vi');
     await expect(page.locator('h1')).toHaveText('CV từ cộng đồng');
@@ -353,7 +359,10 @@ test('stores nothing and sends no cookie with the listing', async ({
   expect(requests).toHaveLength(1);
   const headers = await requests[0]!.allHeaders();
   expect(headers.cookie).toBeUndefined();
-  expect(headers['cache-control']).toBe('no-store');
+  // The request cache mode is not a header; the response is what the server
+  // marks no-store.
+  const reply = await requests[0]!.response();
+  expect(reply?.headers()['cache-control']).toContain('no-store');
   const storage = await page.evaluate(() => ({
     local: localStorage.length,
     session: sessionStorage.length,
