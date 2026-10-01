@@ -88,6 +88,10 @@ function commitEnum(field: CustomizationField, value: string | number): void {
     commitTextAlign(typed);
     return;
   }
+  if (field.path === 'colorScheme') {
+    commitColorScheme(typed);
+    return;
+  }
   if (typed === valueAt(field.path)) return;
   commit([{ op: 'set', path: field.path, value: typed }]);
 }
@@ -101,6 +105,19 @@ function commitTextAlign(value: string | number): void {
     }
   } else if (stored !== undefined) {
     commit([{ op: 'unset', path: 'font.textAlign' }]);
+  }
+}
+
+// Absent `colorScheme` means light (docs/design/public-page-theme.md), so
+// Light clears the key.
+function commitColorScheme(value: string | number): void {
+  const stored = valueAt('colorScheme');
+  if (value === 'dark' || value === 'system') {
+    if (stored !== value) {
+      commit([{ op: 'set', path: 'colorScheme', value }]);
+    }
+  } else if (stored !== undefined) {
+    commit([{ op: 'unset', path: 'colorScheme' }]);
   }
 }
 
@@ -329,6 +346,23 @@ function customizationValue(): Customization | undefined {
             @commit="commit"
           />
           <template v-else-if="group.id === 'colors'">
+            <SelectField
+              :id="fieldId('colorScheme')"
+              :error="localError('colorScheme') || undefined"
+              :hint="copy.controls.colorSchemeHint"
+              :label="labelFor('colorScheme')"
+              :model-value="typedDisplay('colorScheme', 'light')"
+              name="colorScheme"
+              :options="
+                valuesFor(fieldFor('colorScheme')!).map((value) => ({
+                  value,
+                  label: enumLabel(locale, 'colorScheme', value),
+                }))
+              "
+              @update:model-value="
+                commitEnum(fieldFor('colorScheme')!, $event)
+              "
+            />
             <div
               v-for="color in [
                 ['colors.primary', true],

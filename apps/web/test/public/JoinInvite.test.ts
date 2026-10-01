@@ -41,6 +41,35 @@ function mountInviteOnPage(measureRight: number) {
   return wrapper;
 }
 
+// A page root holding the public page element, with the scheme attribute the
+// public page writes and a stubbed device preference.
+function mountInviteOnScheme(scheme: string | null, prefersDark: boolean) {
+  const root = document.createElement('main');
+  const page = document.createElement('div');
+  page.className = 'public-resume-page';
+  if (scheme !== null) page.setAttribute('data-color-scheme', scheme);
+  root.append(page);
+  document.body.append(root);
+  window.matchMedia = ((query: string) => ({
+    matches: prefersDark && query.includes('prefers-color-scheme'),
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+  const wrapper = mount(JoinInvite, {
+    attachTo: document.body,
+    props: { lng: 'en', href: '/register', root },
+  });
+  mounted.push(wrapper);
+  return wrapper;
+}
+
+const cssColor = (property: 'background' | 'color', value: string): string => {
+  const reference = document.createElement('div');
+  reference.style[property] = value;
+  return reference.style[property];
+};
+
 beforeEach(() => {
   vi.useFakeTimers();
   window.localStorage.clear();
@@ -90,6 +119,40 @@ describe('JoinInvite', () => {
       .toBe('Lời mời tạo CV miễn phí');
     expect(vi_.text()).toContain('Tạo CV miễn phí');
     expect(vi_.get('a').attributes('href')).toBe('/login');
+  });
+
+  describe('page color scheme', () => {
+    const originalMatchMedia = window.matchMedia;
+    afterEach(() => {
+      window.matchMedia = originalMatchMedia;
+    });
+
+    async function shown(scheme: string | null, prefersDark: boolean) {
+      const wrapper = mountInviteOnScheme(scheme, prefersDark);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await wrapper.vm.$nextTick();
+      return wrapper;
+    }
+
+    it.each([
+      ['dark', false, '#141A2E', '#A5ABBF'],
+      ['dark', true, '#141A2E', '#A5ABBF'],
+      ['system', true, '#141A2E', '#A5ABBF'],
+      ['system', false, '#FFFFFF', '#5C6178'],
+      ['light', true, '#FFFFFF', '#5C6178'],
+      [null, true, '#FFFFFF', '#5C6178'],
+    ] as const)(
+      'follows a %s page when the device prefers dark: %s',
+      async (scheme, prefersDark, ground, text) => {
+        const wrapper = await shown(scheme, prefersDark);
+        const region = wrapper.get('[role="region"]').element as HTMLElement;
+        expect(region.style.background)
+          .toBe(cssColor('background', ground));
+        expect(region.style.color).toBe(cssColor('color', text));
+        const close = wrapper.get('button').element as HTMLElement;
+        expect(close.style.color).toBe(cssColor('color', text));
+      },
+    );
   });
 
   it('closes on the close button and persists it for this browser',

@@ -123,6 +123,56 @@ describe('public resume hydration', () => {
     expect(root.firstElementChild).toBe(original);
   });
 
+  it('hydrates a dark page and follows the scheme on a live revision',
+    async () => {
+      const dark = (revision: string, scheme: 'dark' | undefined) => {
+        const value = resume(revision);
+        (value.document.customization as Record<string, unknown>)
+          .colorScheme = scheme;
+        return value;
+      };
+      document.body.innerHTML = [
+        '<main id="public-resume" data-revision="1">',
+        await renderToString(createSSRApp({
+          render: () => h(PublicResumeApp, {
+            publicResume: dark('1', 'dark'),
+            homeHref: `${window.location.origin}/`,
+          }),
+        })),
+        '</main>',
+      ].join('');
+      const root = document.querySelector<HTMLElement>('#public-resume')!;
+      const page = () => root.querySelector('.public-resume-page');
+      expect(page()?.getAttribute('data-color-scheme')).toBe('dark');
+      await hydratePublicResume(
+        root,
+        'ada1',
+        '1',
+        async () => dark('1', 'dark'),
+      );
+      expect(page()?.getAttribute('data-color-scheme')).toBe('dark');
+
+      const source = new FakeEventSource();
+      const realtime = createPublicResumeRealtime({
+        root,
+        slug: 'ada1',
+        revision: '1',
+        read: async () => ({
+          kind: 'complete',
+          resume: dark('2', undefined),
+          etag: '"r2"',
+        }),
+        eventSourceFactory: () => source,
+        reload: vi.fn(),
+      });
+      realtime.start();
+      source.emitRevision('2');
+      await Promise.resolve();
+      await nextTick();
+      expect(page()?.hasAttribute('data-color-scheme')).toBe(false);
+      expect(root.innerHTML).not.toContain('--dark-color');
+    });
+
   it('keeps the canonical home href in the page credit on client renders',
     async () => {
       const canonical = document.createElement('link');

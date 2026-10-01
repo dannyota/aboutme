@@ -30,7 +30,8 @@ type EditorControlsCopy = {
 export type EditorControlId
   = | 'addSection' | 'addSectionTitle' | 'apply' | 'chooseOption'
     | 'colorInvalid'
-    | 'colorRemove' | 'cropHint' | 'cropInvalid' | 'cropPosition'
+    | 'colorRemove' | 'colorSchemeHint' | 'cropHint' | 'cropInvalid'
+    | 'cropPosition'
     | 'customSectionInvalidId' | 'customization' | 'deletePhoto'
     | 'deletePhotoDescription' | 'deletePhotoTitle' | 'deleteSection'
     | 'deleteSectionDescription' | 'deleteSectionTitle' | 'entryOrder'
@@ -131,18 +132,21 @@ export type EditorControlEnum
   = | 'a4'
     | 'bar'
     | 'center'
+    | 'dark'
     | 'dots'
     | 'header'
     | 'inline'
     | 'justify'
     | 'left'
     | 'letter'
+    | 'light'
     | 'none'
     | 'normal'
     | 'outline'
     | 'right'
     | 'sidebar'
     | 'stacked'
+    | 'system'
     | 'tag'
     | 'text'
     | 'titlecase'
@@ -157,6 +161,9 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       chooseOption: 'Chọn một trong các tùy chọn có sẵn.',
       colorInvalid: 'Nhập mã màu hex gồm sáu chữ số.',
       colorRemove: 'Xóa',
+      colorSchemeHint:
+        'Người xem thấy giao diện này trên trang công khai. PDF và bản in '
+        + 'luôn sáng.',
       removeSurfaceTarget: 'Xóa mục tiêu bề mặt',
       cropHint:
         'Kéo hình vuông để chọn phần hiển thị trên CV. '
@@ -316,6 +323,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       'font.family': 'Phông chữ',
       'font.baseSizePx': 'Cỡ chữ cơ bản (px)',
       'font.textAlign': 'Căn chỉnh văn bản',
+      'colorScheme': 'Giao diện trang web',
       'colors.primary': 'Màu chính',
       'colors.text': 'Màu chữ',
       'colors.background': 'Nền',
@@ -351,18 +359,21 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       a4: 'A4',
       bar: 'Thanh',
       center: 'Giữa',
+      dark: 'Tối',
       dots: 'Chấm',
       header: 'Đầu trang',
       inline: 'Ngang',
       justify: 'Căn đều',
       left: 'Trái',
       letter: 'Letter',
+      light: 'Sáng',
       none: 'Không',
       normal: 'Chuẩn',
       outline: 'Viền',
       right: 'Phải',
       sidebar: 'Cột bên',
       stacked: 'Xếp chồng',
+      system: 'Theo thiết bị',
       tag: 'Thẻ',
       text: 'Văn bản',
       titlecase: 'Viết hoa đầu từ',
@@ -407,6 +418,8 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       chooseOption: 'Choose one of the available options.',
       colorInvalid: 'Enter a six-digit hex color.',
       colorRemove: 'Remove',
+      colorSchemeHint:
+        'Readers see this on your public page. The PDF and print stay light.',
       removeSurfaceTarget: 'Remove surface target',
       cropHint:
         'Drag the square to choose what your resume shows. '
@@ -574,6 +587,7 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       'font.family': 'Font',
       'font.baseSizePx': 'Base size (px)',
       'font.textAlign': 'Text alignment',
+      'colorScheme': 'Web page theme',
       'colors.primary': 'Primary',
       'colors.text': 'Text',
       'colors.background': 'Background',
@@ -609,18 +623,21 @@ export const editorControlsCopy: WorkspaceCopy<EditorControlsCopy> = {
       a4: 'A4',
       bar: 'Bar',
       center: 'Center',
+      dark: 'Dark',
       dots: 'Dots',
       header: 'Header',
       inline: 'Inline',
       justify: 'Justify',
       left: 'Left',
       letter: 'Letter',
+      light: 'Light',
       none: 'None',
       normal: 'Normal',
       outline: 'Outline',
       right: 'Right',
       sidebar: 'Sidebar',
       stacked: 'Stacked',
+      system: 'Match device',
       tag: 'Tag',
       text: 'Text',
       titlecase: 'Titlecase',

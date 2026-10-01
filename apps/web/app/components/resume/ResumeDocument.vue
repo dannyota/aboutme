@@ -117,8 +117,8 @@ body:has(> #public-resume) {
  * tokens and typeface rather than the resume's own. It is the first child of
  * .public-resume-page, full width, with an inner row matching the resume
  * measure. The tokens below are the light column of the design's Tokens
- * table, taken from theme.css's :root (ADR 0020); the dark column and
- * data-color-scheme are a later release.
+ * table, taken from theme.css's :root (ADR 0020); the dark column is in
+ * resumeColorScheme.css.
  */
 .public-toolbar {
   --toolbar-ground: #f9f8f5;
@@ -131,6 +131,7 @@ body:has(> #public-resume) {
   --toolbar-button-label: #23399a;
   --toolbar-button-hover-fill: #eceef6;
   --toolbar-focus-ring: #26409c;
+  --toolbar-button-shadow: 0 1px 2px rgba(16, 27, 63, 0.06);
   box-sizing: border-box;
   /* The bottom rule is part of the bar's total height (48 px, 56 px on a
      touch screen), so the bottom padding is 1 px less than the top
@@ -236,7 +237,7 @@ body:has(> #public-resume) {
   font: 500 14px/20px "Be Vietnam Pro", system-ui, sans-serif;
   text-decoration: none;
   white-space: nowrap;
-  box-shadow: 0 1px 2px rgba(16, 27, 63, 0.06);
+  box-shadow: var(--toolbar-button-shadow);
 }
 
 .public-download svg {
@@ -639,3 +640,5 @@ body:has(> #public-resume) {
   }
 }
 </style>
+
+<style src="./resumeColorScheme.css"></style>

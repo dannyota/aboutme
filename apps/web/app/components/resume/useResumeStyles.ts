@@ -7,6 +7,7 @@ import {
   deriveLevelColors,
   mixInSRGB,
 } from './clampContrast';
+import { darkColors, isDarkBackground } from './darkPalette';
 import {
   resolvePageGeometry,
   type ResolvedPageGeometry,
@@ -47,17 +48,22 @@ const requiredClamp = (
   return result;
 };
 
+type ColorScheme = 'light' | 'dark';
+
 const colorRoles = (
   customization: Customization,
   surface: string,
+  scheme: ColorScheme = 'light',
 ): Record<string, string> => {
   const accent = customization.colors.accent ?? customization.colors.primary;
   // On a dark surface a clamped ink turns a muddy mid-tone that passes the
-  // ratio but reads faint, so an ink that fails outright goes near white.
-  const dark
-    = contrastRatio('#ffffff', surface) > contrastRatio('#000000', surface);
+  // ratio but reads faint, so an ink that fails outright goes near white. The
+  // dark scheme keeps every ink's hue instead: its clamp is the same search
+  // for every role (docs/design/public-page-theme.md, "Dark palette rule").
+  const darkSurface = scheme === 'light'
+    && contrastRatio('#ffffff', surface) > contrastRatio('#000000', surface);
   const ink = (color: string, lightInk: string): string =>
-    dark && contrastRatio(color, surface) < 4.5
+    darkSurface && contrastRatio(color, surface) < 4.5
       ? lightInk
       : requiredClamp(color, surface, 4.5);
   const heading = ink(customization.colors.primary, '#ffffff');
@@ -93,6 +99,14 @@ const colorRoles = (
   };
 };
 
+const darkRoles = (roles: Record<string, string>): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(roles).map(([name, value]) => [
+      name.replace('--color-', '--dark-color-'),
+      value,
+    ]),
+  );
+
 // Title case is an English convention. Vietnamese capitalizes only the first
 // word, so a Vietnamese resume keeps its headings as typed.
 const headingTransform = (
@@ -104,19 +118,54 @@ const headingTransform = (
   return lng.toLowerCase().split('-')[0] === 'vi' ? 'none' : 'capitalize';
 };
 
+/**
+ * The dark role set, keyed `--dark-color-<role>`, for every scope that carries
+ * roles. The role derivation is the light one, run on the dark source colors
+ * once per surface. A background that is already dark keeps the light
+ * derivation, so the dark scheme equals the light one there.
+ */
+function darkScopes(
+  tokens: ResumeStyleTokens,
+  target: SurfaceTarget,
+): { root: Record<string, string>; region?: Record<string, string> } {
+  const colors = darkColors(tokens.colors);
+  const scheme: ColorScheme
+    = isDarkBackground(tokens.colors) ? 'light' : 'dark';
+  const dark = { ...tokens, colors };
+  const pageSurface = colors.background;
+  const region = target === 'none'
+    ? undefined
+    : darkRoles(colorRoles(dark, colors.surface!, scheme));
+  return {
+    root: {
+      ...darkRoles(colorRoles(dark, pageSurface, scheme)),
+      '--dark-color-surface-header':
+        target === 'header' ? colors.surface! : pageSurface,
+      '--dark-color-surface-sidebar':
+        target === 'sidebar' ? colors.surface! : pageSurface,
+    },
+    ...(region === undefined ? {} : { region }),
+  };
+}
+
 export function useResumeStyles(
   tokens: ResumeStyleTokens,
   lng = 'en',
+  colorScheme?: 'dark' | 'system',
 ): ResumeStyles {
   const page = resolvePageGeometry(tokens);
   const target = effectiveSurfaceTarget(tokens);
   const pageSurface = tokens.colors.background;
+  const dark = colorScheme === undefined
+    ? undefined
+    : darkScopes(tokens, target);
   const root = {
     ...colorRoles(tokens, pageSurface),
     '--color-surface-header':
       target === 'header' ? tokens.colors.surface! : pageSurface,
     '--color-surface-sidebar':
       target === 'sidebar' ? tokens.colors.surface! : pageSurface,
+    ...dark?.root,
     '--font-family': resolveFontSelection(tokens.font.family).cssStack,
     '--fs-base': `${tokens.font.baseSizePx}px`,
     '--fs-name': `${tokens.font.baseSizePx * 2}px`,
@@ -175,10 +224,14 @@ export function useResumeStyles(
       ...colorRoles(tokens, tokens.colors.surface!),
       // A filled plate needs air between its edge and the name and details.
       '--header-padding': '1em 1.25em',
+      ...dark?.region,
     };
   }
   if (target === 'sidebar') {
-    styles.sidebar = colorRoles(tokens, tokens.colors.surface!);
+    styles.sidebar = {
+      ...colorRoles(tokens, tokens.colors.surface!),
+      ...dark?.region,
+    };
   }
   return styles;
 }

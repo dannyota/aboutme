@@ -21,6 +21,12 @@ export interface RenderContext {
    * keeps the default `'h1'`.
    */
   nameHeading?: 'h1' | 'p';
+  /**
+   * The owner's dark or Match device scheme. Only the public page and the
+   * editor's Web preview pass it; paged mode ignores it, so the PDF and print
+   * stay light (docs/design/public-page-theme.md, "What stays light").
+   */
+  colorScheme?: 'dark' | 'system';
 }
 
 export type ResumeRenderErrorCode
@@ -159,6 +165,10 @@ export function resolveRenderModel(
     pageFormat: customization.pageFormat,
     lng: context.lng,
     mode: context.mode,
-    styles: useResumeStyles(customization, context.lng),
+    styles: useResumeStyles(
+      customization,
+      context.lng,
+      context.mode === 'paged' ? undefined : context.colorScheme,
+    ),
   };
 }

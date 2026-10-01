@@ -77,6 +77,15 @@ const windowWidth = ref<number | null>(null);
 const projected = computed(() =>
   previewProjection(props.document, props.photoUrl),
 );
+// Web mode shows the owner's scheme, and Match device follows the editing
+// device's own preference through the CSS media query, never the editor's
+// theme. PDF mode shows the PDF, so it is always light
+// (docs/design/public-page-theme.md, "Editor preview").
+const colorScheme = computed<'dark' | 'system' | undefined>(() => {
+  if (previewMode.value !== 'web') return undefined;
+  const scheme = props.document.customization.colorScheme;
+  return scheme === 'dark' || scheme === 'system' ? scheme : undefined;
+});
 const context = computed(() => ({
   lng: props.lng,
   mode: previewMode.value === 'web'
@@ -86,6 +95,9 @@ const context = computed(() => ({
   // resume name is visual only, so the workspace keeps a single h1.
   nameHeading: 'p' as const,
   ...(props.photoUrl === undefined ? {} : { photoUrl: props.photoUrl }),
+  ...(colorScheme.value === undefined
+    ? {}
+    : { colorScheme: colorScheme.value }),
 }));
 let stopObserving: (() => void) | undefined;
 let resizeObserver: ResizeObserver | undefined;
@@ -381,6 +393,7 @@ onBeforeUnmount(() => {
           class="preview-sheet rounded-[var(--radius-sheet)] bg-white
             shadow-[var(--shadow-paper)]"
           :class="previewMode === 'web' ? 'overflow-hidden' : undefined"
+          :data-color-scheme="colorScheme"
           :data-scaled-width="
             previewMode === 'pdf' ? scaledWidth.toFixed(2) : undefined
           "

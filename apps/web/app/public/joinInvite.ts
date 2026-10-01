@@ -208,21 +208,61 @@ export const JOIN_INVITE_ENTRANCE = {
   options: { duration: 200, easing: 'ease-out' },
 } as const;
 
-// The public page bar's Button fill and Button border, and its Credit text
-// (docs/design/public-page-theme.md#tokens), light column: the public page's
-// dark scheme is not built yet.
-const SURFACE = '#FFFFFF';
-const BORDER = '#E5E1D6';
-export const JOIN_INVITE_TEXT_COLOR = '#5C6178';
+// The public page bar's Button fill, Button border, Credit text, and Button
+// shadow (docs/design/public-page-theme.md#tokens). The invite follows the
+// page's scheme with these, so a light card never sits on a dark page.
+interface JoinInvitePalette {
+  readonly surface: string;
+  readonly border: string;
+  readonly text: string;
+  readonly shadow: string;
+}
+
+const LIGHT_PALETTE: JoinInvitePalette = {
+  surface: '#FFFFFF',
+  border: '#E5E1D6',
+  text: '#5C6178',
+  shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+};
+
+const DARK_PALETTE: JoinInvitePalette = {
+  surface: '#141A2E',
+  border: 'rgba(230, 225, 210, 0.13)',
+  text: '#A5ABBF',
+  shadow: 'none',
+};
+
+export const JOIN_INVITE_TEXT_COLOR = LIGHT_PALETTE.text;
+
+export const joinInvitePalette = (dark: boolean): JoinInvitePalette =>
+  dark ? DARK_PALETTE : LIGHT_PALETTE;
+
+/**
+ * Whether the public page the invite sits on shows its dark roles: the
+ * page's `data-color-scheme` is `dark`, or `system` while the viewer prefers
+ * dark. Reads the viewer's preference in the browser only; nothing leaves it.
+ */
+export function joinInviteIsDark(
+  root: Element,
+  window_: Window = window,
+): boolean {
+  const scheme = root.querySelector('.public-resume-page')
+    ?.getAttribute('data-color-scheme');
+  if (scheme === 'dark') return true;
+  return scheme === 'system'
+    && window_.matchMedia?.('(prefers-color-scheme: dark)').matches === true;
+}
 
 /** Inline geometry: the public page loads no stylesheet for the invite. */
 export function joinInviteContainerStyle(
   placement: JoinInvitePlacement,
+  dark = false,
 ): Record<string, string | number> {
+  const palette = joinInvitePalette(dark);
   const shared = {
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    color: JOIN_INVITE_TEXT_COLOR,
+    background: palette.surface,
+    border: `1px solid ${palette.border}`,
+    color: palette.text,
     fontFamily: '"Be Vietnam Pro", Inter, system-ui, sans-serif',
     position: 'fixed',
     zIndex: 40,
@@ -236,7 +276,7 @@ export function joinInviteContainerStyle(
       width: '320px',
       borderRadius: '14px',
       padding: '16px',
-      boxShadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+      boxShadow: palette.shadow,
     };
   }
   return {
@@ -250,7 +290,7 @@ export function joinInviteContainerStyle(
     alignItems: 'center',
     gap: '8px',
     border: 'none',
-    borderTop: `1px solid ${BORDER}`,
+    borderTop: `1px solid ${palette.border}`,
     padding:
       '0 calc(12px + env(safe-area-inset-right)) '
       + 'env(safe-area-inset-bottom) calc(12px + env(safe-area-inset-left))',
