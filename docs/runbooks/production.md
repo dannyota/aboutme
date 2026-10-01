@@ -150,8 +150,8 @@ its release Caddy image before starting the service.
 
 ```sh
 bash deploy/aws/scripts/deploy.sh <tag> [--first-deploy]
-bash deploy/aws/scripts/deploy.sh --check-public-root <tag> guide
-bash deploy/aws/scripts/deploy.sh <tag> --require-free-root guide  # MCP guide
+bash deploy/aws/scripts/deploy.sh --check-public-root <tag> <root>
+bash deploy/aws/scripts/deploy.sh <tag> --require-free-root <root>  # a release adding a root (guide, showcase) runs both
 ```
 
 The script verifies the caller, assumes the operator then deploy role, reads the
