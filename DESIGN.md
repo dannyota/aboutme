@@ -22,7 +22,7 @@ chrome may frame the renderer but does not change its output.
 Vietnamese is the default site language. The language choice persists in the
 `aboutme-locale` cookie. Every application route renders in the chosen language:
 
-- `/`, `/privacy`, `/terms`, `/verify`, and `/guide/mcp`.
+- `/`, `/privacy`, `/terms`, `/verify`, `/guide/mcp`, and `/showcase`.
 - `/templates` and `/templates/{id}`.
 - `/login`, `/login/second-factor`, `/register`, `/forgot-password`,
   `/reset-password`, and `/verify-email`.
@@ -81,7 +81,7 @@ Each part holds whole sections of this spec.
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------- |
 | [Logo and seal](docs/design/ui/identity-and-seal.md)                           | Logo; Seal and state marks                                 |
 | [Typography and tokens](docs/design/ui/typography-and-tokens.md)               | Typography and tokens                                      |
-| [Landing and Library](docs/design/ui/landing-and-library.md)                   | Landing; Library                                           |
+| [Landing and Library](docs/design/ui/landing-and-library.md)                   | Landing; Library; Community showcase                       |
 | [Shell and editor](docs/design/ui/shell-and-editor.md)                         | Authenticated chrome and editor                            |
 | [Responsive and accessibility](docs/design/ui/responsive-and-accessibility.md) | Responsive behavior; Interaction and motion; Accessibility |
 
