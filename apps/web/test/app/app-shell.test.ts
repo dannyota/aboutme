@@ -639,6 +639,40 @@ describe('AppShell', () => {
     expect(community?.classes()).toContain('max-sm:hidden');
   });
 
+  it('compacts the signed-out header below 64rem, never the signed-in one',
+    async () => {
+      meStatus = 401;
+      setSiteLocale('en');
+      const signedOut = await mountShell('/');
+      await flushPromises();
+      expect(signedOut.get('header').classes()).toContain('max-lg:gap-2');
+      expect(signedOut.get('a[href="/"]').classes())
+        .toContain('shrink-0');
+      for (const href of ['/templates', '/showcase', '/guide/mcp']) {
+        const link = signedOut.findAll('a')
+          .find((a) => a.attributes('href') === href);
+        expect(link?.classes(), href).toContain('max-lg:px-2');
+      }
+      const locale = signedOut.get('[data-testid="landing-locale"]');
+      const labels = locale.findAll('button span');
+      expect(labels[0]?.classes()).toContain('lg:hidden');
+      expect(labels[1]?.classes()).toContain('lg:inline');
+      signedOut.unmount();
+
+      meStatus = 200;
+      clearNuxtData();
+      const signedIn = await mountShell('/app/resumes');
+      await flushPromises();
+      expect(signedIn.get('header').classes()).not.toContain('max-lg:gap-2');
+      const library = signedIn.findAll('a')
+        .find((a) => a.attributes('href') === '/templates');
+      expect(library?.classes()).not.toContain('max-lg:px-2');
+      const signedInLabels = signedIn
+        .get('[data-testid="landing-locale"]').findAll('button span');
+      expect(signedInLabels[0]?.classes()).toContain('sm:hidden');
+    },
+  );
+
   it('shows the mark-only logo below 64rem signed out, never signed in',
     async () => {
       meStatus = 401;
@@ -708,7 +742,7 @@ describe('AppShell', () => {
       'https://github.com/dannyota/aboutme',
     );
     expect(openSource.attributes('rel')).toBe('noopener noreferrer');
-    expect(openSource.classes()).toContain('max-[56rem]:hidden');
+    expect(openSource.classes()).toContain('max-[72rem]:hidden');
     signedOut.unmount();
 
     meStatus = 200;

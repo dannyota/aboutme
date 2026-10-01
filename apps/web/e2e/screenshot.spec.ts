@@ -566,16 +566,16 @@ async function describeHeader(page: Page): Promise<string> {
   });
 }
 
-// The header must not overflow at 704, 768, 896, or 1024px in either language,
-// signed in or out, and the Connect AI link shows exactly where
+// The header must not overflow at 704, 768, 896, 1024, or 1152px in either
+// language, signed in or out, and the Connect AI link shows exactly where
 // docs/design/mcp-guide.md, "Navigation", puts it: signed out, from 44rem
 // (704px); signed in, from 64rem (1024px), because the signed-in bar also
 // carries Resumes, Views, and Settings. /guide/mcp carries both states,
 // since the page reads no API and renders the same content either way.
-const HEADER_WIDTHS = [704, 768, 896, 1024] as const;
+const HEADER_WIDTHS = [704, 768, 896, 1024, 1152] as const;
 const GUIDE_LINK_VISIBLE_AT: Record<'in' | 'out', readonly number[]> = {
-  out: [704, 768, 896, 1024],
-  in: [1024],
+  out: [704, 768, 896, 1024, 1152],
+  in: [1024, 1152],
 };
 
 for (const locale of ['vi', 'en'] as const) {
@@ -613,6 +613,21 @@ for (const locale of ['vi', 'en'] as const) {
           overflow,
           overflow > 0 ? await describeHeader(page) : '',
         ).toBeLessThanOrEqual(0);
+
+        // The logo link never shrinks away, even in the compact header.
+        const logo = await page.locator('[data-testid="app-shell"] > a')
+          .first().boundingBox();
+        expect(logo?.width ?? 0).toBeGreaterThan(0);
+
+        // The Open source link shows signed out from 72rem (1152px), where
+        // the full header fits with it (docs/design/ui/landing-and-library.md,
+        // Navigation). The signed-in header never carries it.
+        const openSource = page.getByTestId('app-shell-open-source');
+        if (session === 'out' && width >= 1152) {
+          await expect(openSource).toBeVisible();
+        } else {
+          await expect(openSource).toBeHidden();
+        }
 
         const guideLink = page.locator('nav a[href="/guide/mcp"]');
         await expect(guideLink).toHaveCount(1);
