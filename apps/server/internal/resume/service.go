@@ -130,9 +130,9 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 	}
 	out := make([]Resume, len(rows))
 	for i, row := range rows {
-		r, err := s.projectRow(row)
-		if err != nil {
-			return nil, err
+		r, projectErr := s.projectRow(row)
+		if projectErr != nil {
+			return nil, projectErr
 		}
 		out[i] = r
 	}
