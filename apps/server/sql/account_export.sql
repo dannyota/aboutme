@@ -16,11 +16,17 @@ ORDER BY created_at, id;
 -- name: ListAccountExportResumes :many
 -- Carries sign_in_to_view with the other publish settings; the pass epoch
 -- never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
--- "Setting").
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
-    schema_version, revision, lng, personal_details, content, customization,
-    created_at, updated_at, public_title, favicon_emoji, sign_in_to_view
-FROM resumes
-WHERE user_id = $1
-ORDER BY created_at, id
+-- "Setting"). The showcase columns are null without an opt-in; the review
+-- keys only decide the exported state and never leave the server
+-- (docs/design/showcase.md "Privacy and abuse").
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled,
+    r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization,
+    r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view,
+    s.requested_at AS showcase_requested_at, s.role AS showcase_role,
+    s.review_key AS showcase_review_key, s.reviewed_key AS showcase_reviewed_key,
+    s.review_outcome AS showcase_review_outcome
+FROM resumes r
+LEFT JOIN resume_showcase s ON s.resume_id = r.id
+WHERE r.user_id = $1
+ORDER BY r.created_at, r.id
 LIMIT 4;
