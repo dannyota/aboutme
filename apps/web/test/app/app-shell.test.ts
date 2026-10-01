@@ -184,7 +184,9 @@ describe('AppShell', () => {
       const createAccount = wrapper.findAll('a')
         .find((link) => link.attributes('href') === '/register');
 
-      expect(signIn?.classes()).toContain('max-[44rem]:hidden');
+      // Sign in gives way first, below 56rem, so the Community and Connect AI
+      // links fit at 704 and 768px in English.
+      expect(signIn?.classes()).toContain('max-[56rem]:hidden');
       expect(createAccount?.classes()).toContain('max-[44rem]:hidden');
       wrapper.unmount();
     },

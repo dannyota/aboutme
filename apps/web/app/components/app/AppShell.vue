@@ -187,7 +187,7 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
-            hidePhoneAccountLinks && 'max-[44rem]:hidden',
+            hidePhoneAccountLinks && 'max-[56rem]:hidden',
           )"
           :to="signInLink"
         >{{ copy.signIn }}</NuxtLink>

@@ -341,50 +341,50 @@ describe('showcase filters in the URL', () => {
       .toBe('true');
   });
 
+  // Navigation settles asynchronously, so each step waits for the route.
+  async function expectQuery(query: Record<string, string>): Promise<void> {
+    await vi.waitFor(() => {
+      expect(useRouter().currentRoute.value.query).toEqual(query);
+    });
+  }
+
   it('writes a role change to the URL, drops page, and reloads', async () => {
     stubListing(page([item('ada-lovelace')]));
     const wrapper = await mountPage('/showcase?lang=en&page=3');
     await wrapper.get('[data-role="frontend"]').trigger('click');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ role: 'frontend', lang: 'en' });
-    expect(listingUrls().at(-1))
-      .toBe(`${LISTING_PATH}?role=frontend&lang=en`);
+    await expectQuery({ role: 'frontend', lang: 'en' });
+    await vi.waitFor(() => expect(listingUrls().at(-1))
+      .toBe(`${LISTING_PATH}?role=frontend&lang=en`));
     // A pressed chip stays pressed when pressed again.
+    const before = calls.length;
     await wrapper.get('[data-role="frontend"]').trigger('click');
     await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ role: 'frontend', lang: 'en' });
+    await expectQuery({ role: 'frontend', lang: 'en' });
+    expect(calls).toHaveLength(before);
   });
 
   it('clears a filter back to All', async () => {
     stubListing(page([item('ada-lovelace')]));
     const wrapper = await mountPage('/showcase?role=qa&lang=vi');
     await wrapper.get('[data-role="all"]').trigger('click');
+    await expectQuery({ lang: 'vi' });
     await wrapper.get('[data-lang="all"]').trigger('click');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query).toEqual({});
-    expect(listingUrls().at(-1)).toBe(LISTING_PATH);
+    await expectQuery({});
+    await vi.waitFor(() => expect(listingUrls().at(-1)).toBe(LISTING_PATH));
   });
 
   it('writes language and template changes to the URL', async () => {
     stubListing(page([item('ada-lovelace')]));
     const wrapper = await mountPage('/showcase?role=qa');
     await wrapper.get('[data-lang="en"]').trigger('click');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ role: 'qa', lang: 'en' });
+    await expectQuery({ role: 'qa', lang: 'en' });
     const select = wrapper.get('select');
     await select.setValue('custom');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ role: 'qa', lang: 'en', template: 'custom' });
-    expect(listingUrls().at(-1))
-      .toBe(`${LISTING_PATH}?role=qa&lang=en&template=custom`);
+    await expectQuery({ role: 'qa', lang: 'en', template: 'custom' });
+    await vi.waitFor(() => expect(listingUrls().at(-1))
+      .toBe(`${LISTING_PATH}?role=qa&lang=en&template=custom`));
     await select.setValue('');
-    await flushPromises();
-    expect(useRouter().currentRoute.value.query)
-      .toEqual({ role: 'qa', lang: 'en' });
+    await expectQuery({ role: 'qa', lang: 'en' });
   });
 
   it('offers All, the 20 presets by name, then Custom design', async () => {
