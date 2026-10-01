@@ -197,7 +197,7 @@ describe('publish showcase switch', () => {
   it('disables the switch but keeps its value while a request runs',
     async () => {
       await open(
-        { ...OPEN, ...showcase('pending') },
+        { ...OPEN, ...showcase('listed') },
         { kind: 'saving' } as PublishControllerState,
       );
       const control = dialog().get(switchSelector);
@@ -228,14 +228,6 @@ describe('publish showcase switch', () => {
 });
 
 describe('publish showcase status line', () => {
-  it.each(['en', 'vi'] as const)('shows pending in %s', async (lng) => {
-    locale.value = lng;
-    await open({ ...OPEN, ...showcase('pending') });
-    const status = dialog().get('[data-testid="publish-showcase-status"]');
-    expect(status.text()).toBe(publishCopy[lng].showcase.pending);
-    expect(status.find('a').exists()).toBe(false);
-  });
-
   it.each(['en', 'vi'] as const)('shows listed with its link in %s',
     async (lng) => {
       locale.value = lng;
@@ -249,18 +241,6 @@ describe('publish showcase status line', () => {
       expect(link.classes()).toContain('text-link');
     });
 
-  it.each(['en', 'vi'] as const)('shows declined with its mailto in %s',
-    async (lng) => {
-      locale.value = lng;
-      await open({ ...OPEN, ...showcase('declined') });
-      const copy = publishCopy[lng].showcase;
-      const status = dialog().get('[data-testid="publish-showcase-status"]');
-      expect(status.text())
-        .toBe(`${copy.declined[0]}danny@aboutme.vn${copy.declined[1]}`);
-      expect(status.get('a').attributes('href'))
-        .toBe('mailto:danny@aboutme.vn');
-    });
-
   it('shows no status line for a switch just turned on', async () => {
     await open(OPEN);
     await click(switchSelector);
@@ -270,14 +250,15 @@ describe('publish showcase status line', () => {
 
   it('hides the status line once the owner turns the switch off',
     async () => {
-      await open({ ...OPEN, ...showcase('pending') });
+      await open({ ...OPEN, ...showcase('listed') });
       await click(switchSelector);
       expect(dialog().find('[data-testid="publish-showcase-status"]').exists())
         .toBe(false);
     });
 
   it('updates the status from the published resource', async () => {
-    const { state } = await open({ ...OPEN, ...showcase('pending') });
+    const { state } = await open(OPEN);
+    await click(switchSelector);
     state.value = {
       kind: 'accepted',
       resume: acceptedFixture({
@@ -297,7 +278,7 @@ describe('publish showcase status line', () => {
 
 describe('publish showcase role', () => {
   it('lists None, the nine Library roles, then Other', async () => {
-    await open({ ...OPEN, ...showcase('pending') });
+    await open({ ...OPEN, ...showcase('listed') });
     const select = dialog().get(roleSelector);
     const labels = select.findAll('option').map((option) => option.text());
     const roles = showcaseCopy.en.roles;
@@ -326,7 +307,7 @@ describe('publish showcase role', () => {
 
   it('speaks Vietnamese for the role field', async () => {
     locale.value = 'vi';
-    await open({ ...OPEN, ...showcase('pending', 'other') });
+    await open({ ...OPEN, ...showcase('listed', 'other') });
     const select = dialog().get(roleSelector);
     expect(select.findAll('option')[0]!.text()).toBe('Không chọn');
     expect(select.findAll('option').at(-1)!.text()).toBe('Khác');
@@ -398,7 +379,7 @@ describe('publish showcase command', () => {
   it('sends an empty role to clear it', async () => {
     const { submit: send } = await open({
       ...OPEN,
-      ...showcase('pending', 'qa'),
+      ...showcase('listed', 'qa'),
     });
     await dialog().get(roleSelector).setValue('');
     await submit();
@@ -484,7 +465,7 @@ describe('publish showcase issues', () => {
 
   it('clears the issue when the owner changes a showcase control',
     async () => {
-      await open({ ...OPEN, ...showcase('pending') },
+      await open({ ...OPEN, ...showcase('listed') },
         invalid('requires_open_view'));
       expect(dialog().find('[data-testid="publish-showcase-issue"]').exists())
         .toBe(true);
@@ -495,7 +476,7 @@ describe('publish showcase issues', () => {
 
   it('lists the description, status, and issue ids on the switch in order',
     async () => {
-      await open({ ...OPEN, ...showcase('pending') },
+      await open({ ...OPEN, ...showcase('listed') },
         invalid('requires_open_view'));
       const describedBy = dialog().get(switchSelector)
         .attributes('aria-describedby')!.split(' ');

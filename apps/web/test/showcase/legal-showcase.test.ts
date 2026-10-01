@@ -20,7 +20,7 @@ const text = {
   vi: {
     collect:
       'Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi lưu '
-      + 'thời điểm bạn bật, vị trí bạn chọn, và kết quả duyệt.',
+      + 'thời điểm bạn bật và vị trí bạn chọn.',
     features:
       'Các tính năng tùy chọn (xuất bản CV công khai, cho phép lập chỉ mục, '
       + 'hiện CV trong trang Cộng đồng, kết nối trợ lý AI, đăng nhập bằng '
@@ -29,25 +29,21 @@ const text = {
       'Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ CV '
       + 'bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước của CV '
       + '(họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị trí bạn chọn, '
-      + 'kèm đường dẫn đến CV. Chúng tôi duyệt từng CV trước khi hiện, và '
-      + 'duyệt lại khi họ tên, tiêu đề, ảnh, đường dẫn hoặc ngôn ngữ của CV '
-      + 'thay đổi. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc bật Yêu cầu '
-      + 'đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập tức. Trang '
-      + 'Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng bất kỳ ai '
-      + 'truy cập đều có thể xem và sao chép những gì trang hiển thị.',
+      + 'kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc '
+      + 'bật Yêu cầu đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập '
+      + 'tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng '
+      + 'bất kỳ ai truy cập đều có thể xem và sao chép những gì trang '
+      + 'hiển thị.',
     content:
       'Nếu bạn bật Hiện trong trang Cộng đồng cho một CV, bạn cũng cho phép '
       + 'aboutme.vn hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí bạn chọn của '
       + 'CV đó trên trang Cộng đồng, cho đến khi bạn tắt tùy chọn này hoặc '
       + 'hủy xuất bản.',
-    use:
-      'Chúng tôi duyệt mọi CV trước khi hiện trong trang Cộng đồng và có '
-      + 'thể từ chối hoặc gỡ CV khỏi trang này.',
   },
   en: {
     collect:
       'Community showcase: if you turn it on for a resume, we store when you '
-      + 'turned it on, the role you picked, and our review result.',
+      + 'turned it on and the role you picked.',
     features:
       'Optional features (publishing, search and AI indexing, the community '
       + 'showcase, connected AI agents, Google or LinkedIn sign-in) run only '
@@ -57,9 +53,8 @@ const text = {
       + 'owners turn on Show in the community showcase. It shows the '
       + 'resume\'s preview image (your name, headline, and photo), its '
       + 'template, language, and the role you picked, with a link to the '
-      + 'resume. We review each resume before it appears, and again when its '
-      + 'name, headline, photo, link, or language changes. When you turn the '
-      + 'option off, unpublish, or turn on Require sign-in to view, the '
+      + 'resume. When you turn the option '
+      + 'off, unpublish, or turn on Require sign-in to view, the '
       + 'resume leaves the showcase right away. Search engines are asked not '
       + 'to index the showcase, but anyone who visits it can see and copy '
       + 'what it shows.',
@@ -68,9 +63,6 @@ const text = {
       + 'let aboutme.vn show its preview image, template, language, and the '
       + 'role you picked on the showcase page, until you turn it off or '
       + 'unpublish.',
-    use:
-      'We review every resume before it appears in the community showcase '
-      + 'and may decline or remove it.',
   },
 } as const;
 
@@ -122,10 +114,10 @@ describe.each(['vi', 'en'] as const)('showcase legal text (%s)', (lng) => {
     expect(paragraphs[2]).toContain(headings[lng].contentNext);
   });
 
-  it('adds the Terms review line before the existing after line', () => {
+  it('adds no showcase line under Acceptable use', () => {
     const after = section('terms', lng, headings[lng].use).after!;
-    expect(after).toHaveLength(2);
-    expect(after[0]).toBe(text[lng].use);
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatch(/^(Chúng tôi có thể gỡ|We may remove)/u);
   });
 });
 
