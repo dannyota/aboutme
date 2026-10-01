@@ -103,6 +103,8 @@ test('the server HTML holds the loading state and no listing', async ({
   const response = await request.get('/showcase');
   expect(response.status()).toBe(200);
   const html = await response.text();
+  expect(response.headers()['x-robots-tag']).toBe('noindex, nofollow');
+  expect(response.headers()['set-cookie']).toBeUndefined();
   expect(html).toContain('data-state="loading"');
   expect(html).toContain('aria-busy="true"');
   expect(html).toContain('<h1');
