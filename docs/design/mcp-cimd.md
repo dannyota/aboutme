@@ -16,16 +16,21 @@ client registration (DCR) stays, unchanged, as
 Claude registers a new DCR client on every fresh connection ([Claude connector
 authentication][claude-auth]). Each one costs a row, a registration under the
 shared egress bucket, and, after consent, one of the user's ten grants. With
-Client ID Metadata Documents (CIMD), every Claude Code user presents the same
-`client_id`, so a reconnect reuses one client and one grant per user, and
-registration traffic from Claude stops.
+Client ID Metadata Documents (CIMD), every user of one client presents the same
+`client_id`, so a reconnect reuses one client and one grant per user.
+
+Claude's documentation names Claude Code's client ID URL. It says the hosted
+apps use a document "that Anthropic hosts" but names no URL; that they send the
+claude.ai document in [Sources](#sources) is **unverified** until the owner
+proof.
 
 ## Sources
 
 - [MCP authorization specification][mcp-auth], 2025-11-25: authorization servers
   SHOULD support CIMD and MAY support DCR; clients prefer CIMD when the server
-  advertises it. Its CIMD security section requires the redirect host on the
-  consent screen and recommends a warning for loopback-only redirects.
+  advertises it. Its CIMD security section says authorization servers "MUST
+  clearly display the redirect URI hostname during authorization" and "SHOULD
+  display additional warnings for `localhost`-only redirect URIs".
 - [OAuth Client ID Metadata Document][cimd-02],
   `draft-ietf-oauth-client-id-metadata-document-02` (6 July 2026), the current
   revision. The MCP specification cites `-00`; the rules below follow `-02`,
@@ -39,6 +44,13 @@ registration traffic from Claude stops.
   `application/json`, `Cache-Control: public, max-age=300`, about 300 bytes,
   `token_endpoint_auth_method` `none`, and the redirects
   `http://localhost/callback` and `http://127.0.0.1/callback` with no port.
+- A document at `https://claude.ai/oauth/mcp-oauth-client-metadata`, fetched
+  2026-10-01 but not named in Claude's documentation: `client_name` `Claude`,
+  `application/json`, `Cache-Control: public, max-age=300`,
+  `token_endpoint_auth_method` `none`, the one redirect
+  `https://claude.ai/api/mcp/auth_callback`, and `grant_types`
+  `authorization_code`, `refresh_token`, and
+  `urn:ietf:params:oauth:grant-type:jwt-bearer`.
 
 ## Discovery
 
@@ -50,7 +62,7 @@ support, and every client while the flag is off, keeps using DCR.
 
 The server tells the two kinds of `client_id` apart by form. A value that starts
 with `https://` is a client ID URL. Any other value must be a canonical UUID, as
-DCR issues. Anything else is an unknown client. No value can be both.
+DCR issues. Anything else is an unknown client.
 
 ## Client ID URL rules
 
@@ -68,9 +80,16 @@ or the request fails with no network access:
    end in `.localhost`, `.local`, `.internal`, `.home.arpa`, or `.onion`, and is
    not `localhost`.
 
-Rules 3, 4, and 6 are stricter than the draft, which allows ports and queries.
-They remove port scanning through aboutme, keep one cache key per client, and
-give the consent screen a readable name (**Owner decision** C10).
+Departures from the draft:
+
+- Rules 3, 4, and 6 are stricter: the draft allows a port and says a query
+  "SHOULD NOT" appear. They remove port scanning through aboutme, keep one cache
+  key per client, and give the consent screen a readable name (**Owner
+  decision** C10).
+- The cache floor applies even to `no-store` and `no-cache` ([Cache](#cache)).
+  The draft says the server "SHOULD respect HTTP cache headers" but "MAY define
+  its own upper and/or lower bounds"; applying a floor to `no-store` stretches
+  that allowance (**Owner decision** C7).
 
 Comparison is byte for byte everywhere, as the draft requires: the document's
 `client_id`, the cache key, the stored column, and the `client_id` sent to the
@@ -108,10 +127,14 @@ provider client, or a proxy from the environment (`Proxy` is nil).
 2. **Check at connect.** The dialer's `Control` hook checks the socket's remote
    address again before connecting, as a second line if any code path skips
    step 1.
-3. **Refuse every non-global address.** Allowed addresses are global unicast
-   only, per the IANA special-purpose registries (RFC 6890 and updates). An
-   IPv4-mapped IPv6 address is unmapped and checked as IPv4. The refused set
-   includes at least:
+3. **Allow listed address space only.** An IPv4 address is allowed unless a
+   refused IPv4 range below holds it. An IPv6 address must sit in `2000::/3` and
+   outside every refused IPv6 range below; everything else is refused, including
+   the IPv4-compatible `::/96` (for example `::7f00:1`). An IPv4-mapped address
+   (`::ffff:0:0/96`) is unmapped and its embedded IPv4 address checked instead.
+   Go's `netip.Addr.IsGlobalUnicast` alone is not the check: it accepts `::/96`
+   addresses such as `::7f00:1`. The ranges follow the IANA special-purpose
+   registries (RFC 6890 and updates). The refused set includes at least:
 
 | Family | Refused ranges                                                                                                                                                                                                                                                                            |
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -142,18 +165,18 @@ and a config test proves it. No setting opens the guard in production.
 The body must be one JSON object with no duplicate member at any level, as DCR
 already requires. Members:
 
-| Member                       | Rule                                                                                                |
-| ---------------------------- | --------------------------------------------------------------------------------------------------- |
-| `client_id`                  | Required string, byte-for-byte equal to the URL                                                     |
-| `client_name`                | Required; the DCR bounds: 1 to 64 code points after NFC, no control characters                      |
-| `redirect_uris`              | Required; 1 to 5 entries, each passing the DCR redirect grammar                                     |
-| `token_endpoint_auth_method` | Required and exactly `none` (**Owner decision** C4)                                                 |
-| `grant_types`                | If present, a non-empty subset of `authorization_code` and `refresh_token`                          |
-| `response_types`             | If present, exactly `["code"]`                                                                      |
-| `scope`                      | If present, names only `resumes:read` and `resumes:write`; grants nothing                           |
-| `application_type`           | If present, `native` needs loopback redirects only and `web` needs `https` redirects only           |
-| `client_secret`, `jwks`      | `client_secret`, `client_secret_expires_at`, `jwks`, and `jwks_uri` make the document invalid       |
-| Any other member             | Ignored, never stored, never fetched; this covers `client_uri`, `logo_uri`, `policy_uri`, `tos_uri` |
+| Member                       | Rule                                                                                                           |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `client_id`                  | Required string, byte-for-byte equal to the URL                                                                |
+| `client_name`                | Required; the DCR bounds: 1 to 64 code points after NFC, no control characters                                 |
+| `redirect_uris`              | Required; 1 to 5 entries, each passing the DCR redirect grammar                                                |
+| `token_endpoint_auth_method` | Required and exactly `none` (**Owner decision** C4)                                                            |
+| `grant_types`                | If present, includes `authorization_code`; other values are ignored and never granted (**Owner decision** C11) |
+| `response_types`             | If present, exactly `["code"]`                                                                                 |
+| `scope`                      | If present, names only `resumes:read` and `resumes:write`; grants nothing                                      |
+| `application_type`           | If present, `native` needs loopback redirects only and `web` needs `https` redirects only                      |
+| `client_secret`, `jwks`      | `client_secret`, `client_secret_expires_at`, `jwks`, and `jwks_uri` make the document invalid                  |
+| Any other member             | Ignored, never stored, never fetched; this covers `client_uri`, `logo_uri`, `policy_uri`, `tos_uri`            |
 
 aboutme accepts public clients only. A document naming `private_key_jwt` or any
 secret-based method is invalid, because the server advertises only `none` and
@@ -180,10 +203,9 @@ C2). DCR clients keep exact matching, port included.
 | Token, refresh                        | URL client differs from the code's or refresh token's client                       | `400` `invalid_grant`                                        |
 | Token                                 | Any client authentication other than `none`                                        | Existing rejection, unchanged                                |
 
-A failed fetch means the redirect URI is untrusted, so the server cannot send an
-error back to the client, as RFC 6749 section 4.1.2.1 requires. The page text
-stays closed: the user learns the app could not be checked, not why. Logs carry
-the closed reason.
+A failed fetch leaves the redirect URI untrusted, so no error goes back to the
+client (RFC 6749 section 4.1.2.1). The page says only that the app could not be
+checked; logs carry the closed reason.
 
 ## Cache
 
@@ -191,24 +213,39 @@ The cache holds validated values, never the body: the URL, `client_name`, the
 redirect list, and the expiry. It lives in Go memory, holds at most 1,000
 entries, evicts the least recently used, and empties on restart.
 
-- Lifetime comes from `Cache-Control: max-age`, clamped to a floor of 5 minutes
-  and a ceiling of 1 hour. `no-store`, `no-cache`, a missing header, or another
-  directive gets the floor (**Owner decision** C7).
+- The cache is shared by every user, so it reads `Cache-Control` as an RFC 9111
+  shared cache does. The lifetime is `s-maxage` if present, else `max-age`,
+  clamped to a floor of 5 minutes and a ceiling of 1 hour. The floor alone
+  applies when the header is missing or malformed, has neither directive, or
+  holds `private`, `no-store`, or `no-cache`. So `private, max-age=3600` gets 5
+  minutes, `public, max-age=86400` gets 1 hour, and `Expires` is ignored
+  (**Owner decision** C7).
 - The floor bounds fetches per client to twelve an hour however the client sets
   its headers, and matches Claude Code's own `max-age=300`. The ceiling bounds
   how long a removed redirect URI or a replaced name stays in use.
-- No negative caching: the draft forbids caching errors and invalid documents. A
+- No negative caching: the draft says the server "MUST NOT cache error
+  responses" and "MUST NOT cache documents which are invalid or malformed". A
   per-URL fetch limit takes its place ([Rate limits](#rate-limits)).
 - An expired entry is refetched on the next authorization. If that fetch fails,
   the authorization fails; a stale entry is never served.
 
+**Which redirect list counts.** For a URL client, the authorization endpoint,
+the consent page, consent submission, and silent reauthorization each check the
+redirect URI against the current document: the cached entry, or a fresh fetch
+when the entry is missing or expired. The stored row's `redirect_uris` is a
+record of the last approved document and is never checked for a URL client. A
+code issued from an existing grant passes the same document check, so a grant
+cannot carry a redirect the document no longer lists. DCR clients keep checking
+their stored row.
+
 **When the document changes.** New values apply to the next authorization after
-the entry expires. A removed redirect URI stops matching then. Codes already
-issued stay valid for their 60 seconds, since each code binds its exact redirect
-URI. A grant and its refresh tokens do not depend on the document: they keep
-working when a redirect URI is removed, the name changes, or the document
-disappears, until the user revokes or the 30-day family ends (**Owner decision**
-C9). A new `client_name` reaches the stored client at the next approved consent.
+the entry expires. A removed redirect URI stops matching then, including for
+silent reauthorization. Codes already issued stay valid for their 60 seconds,
+since each code binds its exact redirect URI. A grant and its refresh tokens do
+not depend on the document: they keep working when a redirect URI is removed,
+the name changes, or the document disappears, until the user revokes or the
+30-day family ends (**Owner decision** C9). A new `client_name` reaches the
+stored client at the next approved consent.
 
 ## Consent
 
@@ -235,8 +272,11 @@ client with a loopback redirect, the server always shows consent instead
 (**Owner decision** C5). Every Claude Code user shares one `client_id` and its
 loopback redirects, so without this rule any local process could take a code
 silently by naming that `client_id` and its own port. A URL client with an
-`https` redirect keeps silent reauthorization: its code can only reach the
-document's own host.
+`https` redirect keeps silent reauthorization: its code can only reach a
+redirect the current document lists, on the client ID URL's own host. The
+claude.ai document in [Sources](#sources) fits that case: its one redirect is on
+`claude.ai`, the client ID URL's host, so it passes C3, and C5 leaves its silent
+reauthorization on.
 
 ## Stored clients
 
@@ -244,7 +284,8 @@ A URL client gets a row in `oauth_clients`, so codes, grants, and tokens keep
 their foreign keys and every token path stays the same:
 
 - A new nullable column `metadata_url` holds the URL, unique when present.
-  `client_name` and `redirect_uris` hold the last validated document's values.
+  `client_name` and `redirect_uris` hold the last approved document's values, as
+  a record; redirect checks use the document, not the row.
 - The row is created or updated only by an approved consent, which is signed in
   and CSRF-checked. An anonymous authorize request reads the cache and writes
   nothing.
@@ -271,9 +312,8 @@ owner approval for [Budgets](budgets.md) (**Owner decision** C7).
 | Fetches in total           | 600 an hour | Global; bounds aboutme as a request source         |
 | Concurrent fetches         | 4           | Process                                            |
 
-Authorization requests come from the user's browser, not from the client's
-egress, so the shared egress-range bucket of
-[rule 5](mcp-client-compatibility.md#5-registration-rate-from-shared-egress)
+Authorization requests come from the user's browser, so the egress-range bucket
+of [rule 5](mcp-client-compatibility.md#5-registration-rate-from-shared-egress)
 does not apply.
 
 ## Abuse cases
@@ -286,13 +326,11 @@ does not apply.
   URL and a loopback port it controls. The attacker must already run code on the
   user's computer. The loopback warning shows, and silent reauthorization is off
   for loopback redirects, so the user sees consent every time.
-- **A real client's URL with a foreign redirect.** The redirect must appear in
-  the real document, which the attacker does not control. It fails.
+- **A real client's URL with a foreign redirect.** It fails: the redirect must
+  appear in the real document.
 - **aboutme as a scanner or reflector.** Fetches reach only port 443 on global
   addresses, the user never sees the response body or the reason for a failure,
   and the global limit bounds total traffic.
-- **A slow or huge document.** The deadline, the byte cap, and the concurrency
-  cap bound the cost of one fetch.
 
 ## Data and privacy
 
@@ -311,12 +349,13 @@ notes, a fetch tells the client's operator that someone is signing in at aboutme
 around that time; the request carries nothing more. The privacy notice needs no
 change: the only stored data describes the client, not the user.
 
+**Size.** One additive migration adds the column (at most 256 bytes) and a
+partial unique index. The cache stays under 2 MiB, inside the Go memory cap.
+
 ## Older clients and loss
 
-DCR clients, their rows, grants, and tokens do not change. The Go SDK runner
-registers through DCR with no client ID URL configured; the existing Go SDK
-proof confirms it keeps that path once the metadata advertises CIMD (assumption
-until that proof runs).
+DCR clients, rows, grants, and tokens do not change. The Go SDK runner has no
+client ID URL, so it should keep DCR; its CI proof confirms it (assumption).
 
 Turning the flag off stops advertising CIMD and refuses new authorizations for
 URL clients. Token, refresh, and revocation keep serving existing URL clients,
@@ -329,12 +368,6 @@ A refresh naming a URL `client_id` then fails `invalid_grant`, so each
 URL-client user reconnects through DCR, as after other client-visible rollbacks.
 Removing the column would first delete URL-client rows, which cascades to their
 grants and tokens; that is a deliberate, separate change.
-
-## Size
-
-One additive migration: the column (at most 256 bytes) and a partial unique
-index. The cache holds at most 1,000 small entries, well under 2 MiB, inside the
-existing Go and Chromium memory cap. Each fetch reads at most 5,120 bytes.
 
 ## Release plan
 
@@ -364,8 +397,8 @@ for the flag. New `AC-MCP-*` rows in the traceability matrix follow approval.
 - Each URL rule rejects its neighbor without a network call: `http`, a port,
   `:443`, a query, a fragment, userinfo, `/`, a dot segment, an IP literal,
   uppercase, the canonical host, and each refused name suffix.
-- The guard refuses every listed range, including a hostname whose answer mixes
-  a public and a private address, and a mapped IPv4 address.
+- The guard refuses every listed range, `::7f00:1`, a mapped private IPv4
+  address, and a hostname whose answer mixes a public and a private address.
 - A redirect response, a non-200 status, a wrong type, a 5,121-byte body, and a
   slow body each fail closed with the `400` page.
 - The document rules reject a `client_id` mismatch, a missing or wrong
@@ -373,8 +406,12 @@ for the flag. New `AC-MCP-*` rows in the traceability matrix follow approval.
   redirects, and a duplicate member.
 - Loopback redirects match with any port for URL clients only; an `https`
   redirect on another host fails.
-- Cache lifetimes clamp to 5 minutes and 1 hour; a failed refetch is never
-  served stale; errors are not cached.
+- Cache lifetimes clamp to 5 minutes and 1 hour, `private, max-age=3600` gets 5
+  minutes, a failed refetch is never served stale, and errors are not cached.
+- After the document drops a redirect and the entry expires, silent
+  reauthorization with that redirect fails although the row still lists it.
+- A document whose `grant_types` adds `jwt-bearer` is accepted, and that grant
+  type stays refused at the token endpoint.
 - An anonymous authorize writes no row; an approved consent creates one; a
   reconnect reuses the grant.
 - A loopback URL client always reaches consent despite a live grant.
@@ -401,6 +438,7 @@ for the flag. New `AC-MCP-*` rows in the traceability matrix follow approval.
 | C8  | No reserved-name list and no "verified" mark                             | Leave out; revisit if impersonation appears              |
 | C9  | Grants survive document changes and removal                              | Yes; the draft leaves it to the server                   |
 | C10 | Refuse ports, queries, and IP literals in a client ID URL                | Yes; stricter than the draft, no known client needs them |
+| C11 | Ignore unknown `grant_types` values in a document, unlike DCR            | Yes; the claude.ai document lists `jwt-bearer`           |
 
 [claude-auth]: https://claude.com/docs/connectors/building/authentication
 [claude-lazy]: https://claude.com/docs/connectors/building/lazy-authentication
