@@ -4,9 +4,11 @@
 // against the closed version 1 schema, free of the identifiers the
 // sanitizer forbids, and not stale at the given time
 // (docs/design/deployment-transparency/README.md, "Run, freshness, and
-// staleness"). On success it prints one line per running image,
-// "<image> <digest> <version>", with "-" for a null version, so the caller
-// can verify each digest with gh attestation verify.
+// staleness"). It also fails unless the summary and every image's signature
+// and SBOM status are "verified", since the release check expects a fully
+// verified deployment. On success it prints one line per running image,
+// "<image> <digest> <version>", so the caller can verify each digest with
+// gh attestation verify.
 //
 // Usage: document-check -now <RFC 3339 time> <document.json
 package main
@@ -32,6 +34,12 @@ const maxBytes = 64 << 10
 // stale, whatever stale_after says.
 const maxAge = 600 * time.Second
 
+// maxSkew is how far -now may sit before observed_at. A larger gap means
+// the caller's time is wrong, which would hide a stale document.
+const maxSkew = 60 * time.Second
+
+const verified = "verified"
+
 func main() {
 	if err := run(os.Args[1:], os.Stdin, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "document-check:", err)
@@ -42,11 +50,19 @@ func main() {
 type document struct {
 	ObservedAt time.Time `json:"observed_at"`
 	StaleAfter time.Time `json:"stale_after"`
+	Summary    string    `json:"summary"`
 	Components []struct {
+		Name          string `json:"name"`
 		Image         string `json:"image"`
 		RunningImages []struct {
-			Digest  string  `json:"digest"`
-			Version *string `json:"version"`
+			Digest    string  `json:"digest"`
+			Version   *string `json:"version"`
+			Signature struct {
+				Status string `json:"status"`
+			} `json:"signature"`
+			SBOM struct {
+				Status string `json:"status"`
+			} `json:"sbom"`
 		} `json:"running_images"`
 	} `json:"components"`
 }
@@ -78,17 +94,26 @@ func run(args []string, in io.Reader, out io.Writer) error {
 	if err = json.Unmarshal(b, &doc); err != nil {
 		return fmt.Errorf("decode: %w", err)
 	}
+	if doc.ObservedAt.Sub(now) > maxSkew {
+		return fmt.Errorf("-now %s is before observed_at %s", now.Format(time.RFC3339), doc.ObservedAt.Format(time.RFC3339))
+	}
 	if now.After(doc.StaleAfter) || now.Sub(doc.ObservedAt) > maxAge {
 		return fmt.Errorf("document is stale: observed_at %s, stale_after %s, now %s",
 			doc.ObservedAt.Format(time.RFC3339), doc.StaleAfter.Format(time.RFC3339), now.Format(time.RFC3339))
 	}
+	if doc.Summary != verified {
+		return fmt.Errorf("summary is %q, not %q", doc.Summary, verified)
+	}
 	for _, c := range doc.Components {
 		for _, ri := range c.RunningImages {
-			v := "-"
-			if ri.Version != nil {
-				v = *ri.Version
+			if ri.Signature.Status != verified || ri.SBOM.Status != verified || ri.Version == nil {
+				return fmt.Errorf("%s %s is not fully verified: signature %q, sbom %q", c.Name, ri.Digest, ri.Signature.Status, ri.SBOM.Status)
 			}
-			if _, err = fmt.Fprintf(out, "%s %s %s\n", c.Image, ri.Digest, v); err != nil {
+		}
+	}
+	for _, c := range doc.Components {
+		for _, ri := range c.RunningImages {
+			if _, err = fmt.Fprintf(out, "%s %s %s\n", c.Image, ri.Digest, *ri.Version); err != nil {
 				return err
 			}
 		}

@@ -15,12 +15,14 @@
 # .dev/prod-checks/transparency/<UTC time>/ with a summary.txt of PASS and
 # FAIL lines; the exit status is 0 only when every check passed. It takes
 # the shared local-check lock without blocking, refuses below 8 GiB
-# available memory, and builds document-check inside a capped systemd scope.
+# available memory, and runs the whole check inside one capped systemd scope.
 #
 # Test-only environment variables; production never sets them:
 #   ABOUTME_LOCAL_CHECK_LOCK_PATH  scratch file used instead of the shared lock
 #   ABOUTME_MEMINFO_PATH           fixture used instead of /proc/meminfo
 #   ABOUTME_DOCUMENT_CHECK_BIN     prebuilt document-check; skips the build
+# ABOUTME_DOCUMENT_CHECK_SCOPED marks the second pass inside the capped
+# scope; the script sets it itself.
 # shellcheck disable=SC2317 # helpers run through check
 set -Eeuo pipefail
 
@@ -40,25 +42,38 @@ fail() {
 [ "$#" -eq 0 ] || fail 'usage: deployment-document-check.sh (no arguments)'
 [ "$(id -u)" -ne 0 ] || fail 'must not run as root'
 
-# --- Preflight -------------------------------------------------------------
+# --- Preflight and cap ------------------------------------------------------
 
-mem_available_kib=$(awk '/^MemAvailable:/{print $2}' "${ABOUTME_MEMINFO_PATH:-/proc/meminfo}")
-[[ $mem_available_kib =~ ^[0-9]+$ ]] || fail 'cannot read MemAvailable'
-[ "$mem_available_kib" -ge "$MEM_FLOOR_KIB" ] ||
-  fail 'fewer than 8 GiB MemAvailable; wait for headroom'
+# The first pass checks memory, takes the shared lock, and re-runs this
+# script inside one capped scope, so the whole process tree runs under the
+# cap (instructions/resources.md). The scoped pass inherits the locked
+# descriptor, so the lock holds until the scope ends.
+if [ -z "${ABOUTME_DOCUMENT_CHECK_SCOPED:-}" ]; then
+  mem_available_kib=$(awk '/^MemAvailable:/{print $2}' "${ABOUTME_MEMINFO_PATH:-/proc/meminfo}")
+  [[ $mem_available_kib =~ ^[0-9]+$ ]] || fail 'cannot read MemAvailable'
+  [ "$mem_available_kib" -ge "$MEM_FLOOR_KIB" ] ||
+    fail 'fewer than 8 GiB MemAvailable; wait for headroom'
 
-if [ -n "${ABOUTME_LOCAL_CHECK_LOCK_PATH:-}" ]; then
-  LOCK=$ABOUTME_LOCAL_CHECK_LOCK_PATH
-else
-  GIT_COMMON=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir) ||
-    fail 'cannot find the Git common directory'
-  LOCK=$GIT_COMMON/aboutme-local-check.lock
+  if [ -n "${ABOUTME_LOCAL_CHECK_LOCK_PATH:-}" ]; then
+    LOCK=$ABOUTME_LOCAL_CHECK_LOCK_PATH
+  else
+    GIT_COMMON=$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir) ||
+      fail 'cannot find the Git common directory'
+    LOCK=$GIT_COMMON/aboutme-local-check.lock
+  fi
+  [ ! -L "$LOCK" ] || fail 'the shared local-check lock is a symbolic link'
+  exec {LOCK_FD}>>"$LOCK"
+  flock -n "$LOCK_FD" || fail 'another local check holds the shared lock'
+
+  for tool in systemd-run timeout; do
+    command -v "$tool" >/dev/null || fail "$tool is not installed; the memory cap cannot be enforced"
+  done
+  exec env ABOUTME_DOCUMENT_CHECK_SCOPED=1 timeout 900 systemd-run --user --scope --quiet \
+    -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% \
+    bash "$REPO/scripts/deployment-document-check.sh"
 fi
-[ ! -L "$LOCK" ] || fail 'the shared local-check lock is a symbolic link'
-exec {LOCK_FD}>>"$LOCK"
-flock -o -n "$LOCK_FD" || fail 'another local check holds the shared lock'
 
-for tool in curl gh systemd-run timeout; do
+for tool in curl gh; do
   command -v "$tool" >/dev/null || fail "$tool is not installed"
 done
 gh auth status >/dev/null 2>&1 || fail 'gh is not signed in; run gh auth login'
@@ -104,9 +119,7 @@ else
   DOC_CHECK=$BUILD/document-check
   (
     cd "$REPO/deploy/observer"
-    GOWORK=off timeout 300 systemd-run --user --scope --quiet \
-      -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% \
-      go build -o "$DOC_CHECK" ./cmd/document-check
+    GOWORK=off timeout 300 go build -o "$DOC_CHECK" ./cmd/document-check
   ) >"$EVIDENCE/build.txt" 2>&1 || {
     record FAIL 'build document-check'
     finish
@@ -164,6 +177,12 @@ fetch_and_check() {
   check_headers "$label" "$hdr"
 
   date_value=$(header "$hdr" date)
+  # GNU date reads an empty string as midnight, so a missing Date header
+  # must fail here rather than judge staleness at the wrong time.
+  if [ -z "$date_value" ] || [[ $date_value == *$'\n'* ]]; then
+    record FAIL "$label one date header"
+    return
+  fi
   age=$(header "$hdr" age)
   age=${age:-0}
   if [[ $age =~ ^[0-9]+$ ]] && now=$(date -u -d "$date_value" +%s 2>/dev/null); then
@@ -187,13 +206,16 @@ done
 verify() { # verify <outfile> <image> <digest> <version> [extra args]
   local out=$1 image=$2 digest=$3 version=$4
   shift 4
-  timeout 120 gh attestation verify "oci://$image@$digest" \
+  env -u GH_DEBUG timeout 120 gh attestation verify "oci://$image@$digest" \
     --repo dannyota/aboutme --signer-workflow "$SIGNER" \
     --source-ref "refs/tags/$version" --deny-self-hosted-runners "$@" \
     >"$out" 2>&1
 }
 
 check 'apex lists at least one running image' [ -s "$EVIDENCE/apex.images" ]
+# The design says www serves the same object, so its images must match.
+check 'www lists the same images as apex' \
+  cmp -s "$EVIDENCE/apex.images" "$EVIDENCE/www.images"
 while read -r image digest version; do
   [ -n "$image" ] || continue
   tag=${digest#sha256:}

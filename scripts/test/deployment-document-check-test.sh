@@ -25,7 +25,19 @@ cp "$SCRIPT" "$REPO/scripts/deployment-document-check.sh"
 FIXTURE=$ROOT/deploy/observer/testdata/examples/verified.json
 [ -f "$FIXTURE" ] || fail 'the verified.json fixture is missing'
 
-printf '#!/usr/bin/env bash\nexit 99\n' >"$BIN/systemd-run"
+cat >"$BIN/systemd-run" <<'STUBEOF'
+#!/usr/bin/env bash
+# Records its arguments, drops the options, and runs the command.
+printf '%s\n' "$*" >>"$STUB/systemd-run.log"
+while [ "$#" -gt 0 ]; do
+  case $1 in
+  -p) shift 2 ;;
+  -*) shift ;;
+  *) break ;;
+  esac
+done
+exec "$@"
+STUBEOF
 cat >"$BIN/curl" <<'STUBEOF'
 #!/usr/bin/env bash
 # Copies the staged headers and body to the -D and -o files.
@@ -61,7 +73,11 @@ if [ -f "$STUB/dc-fail" ]; then
   echo 'document is stale' >&2
   exit 1
 fi
-cat "$STUB/dc-out"
+if [ -f "$STUB/dc-out-www" ] && [ "$(grep -c . "$STUB/dc.log")" -eq 2 ]; then
+  cat "$STUB/dc-out-www"
+else
+  cat "$STUB/dc-out"
+fi
 STUBEOF
 chmod 0755 "$BIN"/*
 
@@ -88,7 +104,7 @@ server: CloudFront
 
 # reset restores the all-passing stubs and a clean evidence directory.
 reset() {
-  rm -rf -- "$REPO/.dev" "$STUB"/*.log "$STUB"/*-fail "$STUB"/fail-*
+  rm -rf -- "$REPO/.dev" "$STUB"/*.log "$STUB"/*-fail "$STUB"/fail-* "$STUB/dc-out-www"
   printf '%s' "$GOOD_HEADERS" | sed 's/$/\r/' >"$STUB/headers"
   cp "$FIXTURE" "$STUB/body"
   printf '%s %s v0.6.5\n%s %s v0.6.5\n' "$IMAGE" "$D1" "$IMAGE" "$D2" >"$STUB/dc-out"
@@ -147,6 +163,8 @@ run_check
 summary | grep -q . || fail 'summary.txt is empty'
 if summary | grep -v '^PASS ' | grep -q .; then fail 'happy path has a non-PASS line'; fi
 grep -Fq 'evidence: ' <<<"$OUTPUT" || fail 'the evidence path was not printed'
+grep -Fxq -- '--user --scope --quiet -p MemoryMax=2G -p MemorySwapMax=0 -p CPUQuota=200% bash '"$REPO"'/scripts/deployment-document-check.sh' "$STUB/systemd-run.log" ||
+  fail 'the check did not run inside the capped scope'
 [ "$(grep -c . "$STUB/dc.log")" -eq 2 ] || fail 'document-check did not run once per URL'
 grep -Fxq -- '-now 2026-10-02T03:21:05Z' "$STUB/dc.log" ||
   fail 'now is not the Date header plus Age'
@@ -194,6 +212,19 @@ expect_fail 'missing allow-origin' 'access-control-allow-origin'
 reset
 : >"$STUB/dc-out"
 expect_fail 'no running images' 'at least one running image'
+
+reset
+grep -v '^date' <<<"$GOOD_HEADERS" >"$STUB/headers"
+expect_fail 'missing date' 'one date header'
+[ ! -f "$STUB/dc.log" ] || fail 'document-check ran without a Date header'
+
+reset
+printf '%s' "${GOOD_HEADERS/age: 5/age: soon}" >"$STUB/headers"
+expect_fail 'non-numeric age' 'date and age headers'
+
+reset
+printf '%s %s v0.6.5\n' "$IMAGE" "$D1" >"$STUB/dc-out-www"
+expect_fail 'www differs from apex' 'www lists the same images as apex'
 
 reset
 touch "$STUB/curl-fail"

@@ -37,17 +37,6 @@ func TestFreshDocumentListsEveryRunningImage(t *testing.T) {
 	}
 }
 
-func TestNullVersionPrintsDash(t *testing.T) {
-	out, err := check([]string{"-now", "2026-10-02T03:21:00Z"}, example(t, "unverified.json"))
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	want := "ghcr.io/dannyota/aboutme-caddy sha256:" + strings.Repeat("ab01", 16) + " -\n"
-	if !strings.HasSuffix(out, want) {
-		t.Errorf("output = %q, want it to end with %q", out, want)
-	}
-}
-
 func TestRejects(t *testing.T) {
 	verified := example(t, "verified.json")
 	// stale_after 20 minutes out still goes stale 600 seconds after
@@ -63,6 +52,10 @@ func TestRejects(t *testing.T) {
 		doc  []byte
 		want string
 	}{
+		{"unverified summary", []string{"-now", "2026-10-02T03:21:00Z"}, example(t, "unverified.json"), "summary"},
+		{"a component with no image", []string{"-now", "2026-10-02T03:21:00Z"}, example(t, "mismatch-missing-component.json"), "summary"},
+		{"sbom not found", []string{"-now", "2026-10-02T03:21:00Z"}, example(t, "sbom-not-found.json"), "sbom"},
+		{"-now well before observed_at", []string{"-now", "2026-10-02T03:18:59Z"}, verified, "before"},
 		{"past stale_after", []string{"-now", "2026-10-02T03:23:01Z"}, verified, "stale"},
 		{"over 600 seconds old", []string{"-now", "2026-10-02T03:30:01Z"}, lateStaleAfter, "stale"},
 		{"unknown schema version", []string{"-now", "2027-03-01T00:01:00Z"}, example(t, "future-version.json"), "schema"},
