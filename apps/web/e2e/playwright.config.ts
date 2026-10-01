@@ -91,6 +91,7 @@ export default defineConfig({
         'chrome.spec.ts',
         'verify.spec.ts',
         'showcase.spec.ts',
+        'showcase-baselines.spec.ts',
       ],
   timeout: 20_000,
   updateSnapshots: 'none',
