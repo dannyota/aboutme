@@ -503,8 +503,12 @@ apps/web/e2e/baselines/join-invite--vi--card--1920.png
 apps/web/e2e/baselines/modern-sidebar--full--continuous.png
 apps/web/e2e/baselines/modern-sidebar--vn-full--paged.png
 apps/web/e2e/baselines/public--classic-serif--2560.png
+apps/web/e2e/baselines/public--classic-serif--system--1440.png
+apps/web/e2e/baselines/public--creative-accent--dark--1440.png
+apps/web/e2e/baselines/public--executive-band--dark--1440.png
 apps/web/e2e/baselines/public--modern-sidebar--2560.png
 apps/web/e2e/baselines/public--modern-sidebar--390.png
+apps/web/e2e/baselines/public--modern-sidebar--dark--390.png
 apps/web/e2e/baselines/sign-in-gate--en--google--failed--390.png
 apps/web/e2e/baselines/sign-in-gate--en--google--none--1280.png
 apps/web/e2e/baselines/sign-in-gate--en--google--none--390.png
