@@ -312,7 +312,7 @@ test('speaks Vietnamese, fits phone width, and marks the logo down',
     expect(await overflow(page)).toBe(0);
     await expect(page.getByTestId('showcase-pager'))
       .toContainText('Trang 100/100');
-    // Below 30rem, signed out, the logo is the mark alone.
+    // Below 64rem, signed out, the logo is the mark alone.
     const logos = page.locator('[data-testid="app-shell"] [data-logo-size]');
     const shown = logos.filter({ visible: true });
     await expect(shown).toHaveCount(1);
@@ -322,7 +322,7 @@ test('speaks Vietnamese, fits phone width, and marks the logo down',
     await expect(community).toHaveAttribute('href', '/showcase');
   });
 
-test('keeps the full logo and header link from 30rem', async ({ page }) => {
+test('keeps the full logo and header link from 64rem', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await serve(page, () => ({ body: listing([item(1)]) }));
   await open(page, '/showcase');

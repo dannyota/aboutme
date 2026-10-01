@@ -85,9 +85,9 @@ const linkClass = cn(
 // page still links the gallery. Signed out, they are the header's links.
 const templatesLinkClass = computed(() =>
   cn(linkClass, signedIn.value && 'max-sm:hidden'));
-// Signed out below 30rem, the logo shows the mark alone so both public links
-// fit beside the locale toggle (docs/design/ui/shell-and-editor.md). A
-// signed-in header keeps the full logo.
+// Signed out below 64rem, the logo shows the mark alone so every link and
+// both account buttons fit (docs/design/ui/landing-and-library.md,
+// Navigation). A signed-in header keeps the full logo.
 const compactLogo = computed(() => !signedIn.value);
 // Signed out, the guide link shows from 44rem, the width where the account
 // buttons appear. Signed in, the signed-in bar also carries Resumes, Views,
@@ -114,12 +114,12 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
       to="/"
     >
       <AppLogo
-        :class="compactLogo && 'max-[30rem]:hidden'"
+        :class="compactLogo && 'max-[64rem]:hidden'"
         size="sm"
       />
       <AppLogo
         v-if="compactLogo"
-        class="min-[30rem]:hidden"
+        class="min-[64rem]:hidden"
         mark-only
         size="sm"
       />
@@ -187,7 +187,7 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
         <NuxtLink
           :class="cn(
             buttonVariants({ variant: 'ghost', size: 'sm' }),
-            hidePhoneAccountLinks && 'max-[56rem]:hidden',
+            hidePhoneAccountLinks && 'max-[44rem]:hidden',
           )"
           :to="signInLink"
         >{{ copy.signIn }}</NuxtLink>
