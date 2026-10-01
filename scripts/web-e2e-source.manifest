@@ -77,6 +77,7 @@ apps/web/app/components/editor/PublishAccess.vue
 apps/web/app/components/editor/PublishDialog.vue
 apps/web/app/components/editor/PublishPageFields.vue
 apps/web/app/components/editor/PublishPreview.vue
+apps/web/app/components/editor/PublishShowcase.vue
 apps/web/app/components/editor/SaveStatus.vue
 apps/web/app/components/editor/customization/ColorField.vue
 apps/web/app/components/editor/customization/CustomizationPanel.vue
@@ -183,6 +184,9 @@ apps/web/app/components/settings/PrivacySettings.vue
 apps/web/app/components/settings/ReauthPrompt.vue
 apps/web/app/components/settings/SecondFactorSettings.vue
 apps/web/app/components/settings/TotpSettings.vue
+apps/web/app/components/showcase/ShowcaseFilters.vue
+apps/web/app/components/showcase/ShowcasePager.vue
+apps/web/app/components/showcase/ShowcaseTile.vue
 apps/web/app/components/templates/SheetThumbnail.vue
 apps/web/app/components/templates/TemplateCard.vue
 apps/web/app/components/ui/alert-dialog/AlertDialog.vue
@@ -318,6 +322,7 @@ apps/web/app/composables/usePasswordAuth.ts
 apps/web/app/composables/useResizablePanel.ts
 apps/web/app/composables/useResumeEditor.ts
 apps/web/app/composables/useResumeList.ts
+apps/web/app/composables/useShowcase.ts
 apps/web/app/composables/useSiteSeo.ts
 apps/web/app/composables/useStamp.ts
 apps/web/app/composables/useTheme.ts
@@ -348,6 +353,8 @@ apps/web/app/editor/projections.ts
 apps/web/app/editor/publicPageMeta.ts
 apps/web/app/editor/publishApi.ts
 apps/web/app/editor/publishController.ts
+apps/web/app/editor/publishMessages.ts
+apps/web/app/editor/publishShowcase.ts
 apps/web/app/editor/reconcile.ts
 apps/web/app/editor/reducer.ts
 apps/web/app/editor/resumeApi.ts
@@ -369,6 +376,8 @@ apps/web/app/i18n/error.ts
 apps/web/app/i18n/guide.ts
 apps/web/app/i18n/identity-settings.ts
 apps/web/app/i18n/import.ts
+apps/web/app/i18n/legal-en.ts
+apps/web/app/i18n/legal-vi.ts
 apps/web/app/i18n/legal.ts
 apps/web/app/i18n/locale.ts
 apps/web/app/i18n/meta.ts
@@ -382,6 +391,7 @@ apps/web/app/i18n/second-factor-settings.ts
 apps/web/app/i18n/second-factor.ts
 apps/web/app/i18n/settings.ts
 apps/web/app/i18n/shell.ts
+apps/web/app/i18n/showcase.ts
 apps/web/app/i18n/templates.ts
 apps/web/app/i18n/verify.ts
 apps/web/app/i18n/views.ts
@@ -400,6 +410,8 @@ apps/web/app/landing/sampleContext.ts
 apps/web/app/landing/sampleResume.ts
 apps/web/app/landing/showcase.ts
 apps/web/app/landing/structuredData.ts
+apps/web/app/lib/showcaseContract.ts
+apps/web/app/lib/showcaseQuery.ts
 apps/web/app/lib/utils.ts
 apps/web/app/middleware/signed-in.global.ts
 apps/web/app/pages/_harness/justify-fixture.ts
@@ -423,6 +435,7 @@ apps/web/app/pages/login/second-factor.vue
 apps/web/app/pages/privacy.vue
 apps/web/app/pages/register.vue
 apps/web/app/pages/reset-password.vue
+apps/web/app/pages/showcase.vue
 apps/web/app/pages/templates/[id].vue
 apps/web/app/pages/templates/index.vue
 apps/web/app/pages/terms.vue
@@ -556,6 +569,7 @@ apps/web/e2e/print.spec.ts
 apps/web/e2e/sample-pages.spec.ts
 apps/web/e2e/samples.spec.ts
 apps/web/e2e/screenshot.spec.ts
+apps/web/e2e/showcase.spec.ts
 apps/web/e2e/sign-in-gate.spec.ts
 apps/web/e2e/support.ts
 apps/web/e2e/verify-support.ts
