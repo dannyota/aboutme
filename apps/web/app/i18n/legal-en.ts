@@ -43,8 +43,7 @@ export const legalEn: LegalCopy = {
           + 'while a resume is public, the preview image we make from it '
           + 'for link previews.',
           'Community showcase: if you turn it on for a resume, we store '
-          + 'when you turned it on, the role you picked, and our review '
-          + 'result.',
+          + 'when you turned it on and the role you picked.',
           'Sessions: the browser user-agent and IP address of each '
           + 'session, used for security. Settings → Sessions lists your '
           + 'signed-in devices. We delete the IP address and browser '
@@ -133,10 +132,8 @@ export const legalEn: LegalCopy = {
           + 'resumes whose owners turn on Show in the community '
           + 'showcase. It shows the resume\'s preview image (your name, '
           + 'headline, and photo), its template, language, and the role '
-          + 'you picked, with a link to the resume. We review each resume '
-          + 'before it appears, and again when its name, headline, photo, '
-          + 'link, or language changes. When you turn the option off, '
-          + 'unpublish, or turn on Require sign-in to view, the resume '
+          + 'you picked, with a link to the resume. When you turn the option '
+          + 'off, unpublish, or turn on Require sign-in to view, the resume '
           + 'leaves the showcase right away. Search engines are asked not '
           + 'to index the showcase, but anyone who visits it can see and '
           + 'copy what it shows.',
@@ -266,8 +263,6 @@ export const legalEn: LegalCopy = {
           'send spam, spread malware, or abuse the service or other people.',
         ],
         after: [
-          'We review every resume before it appears in the community '
-          + 'showcase and may decline or remove it.',
           'We may remove content or delete accounts that break these rules.',
         ],
       },
