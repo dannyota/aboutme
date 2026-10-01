@@ -326,7 +326,11 @@ appears. So below 64 rem the signed-out header is compact:
 The Open source link shows from 72 rem, where the full header fits with it. The
 compact header needs about 680 px at 704 px, and the full header about 970 px at
 1024 px and 1065 px with Open source. Accessible names stay complete in the
-compact forms. The signed-in header is unchanged.
+compact forms.
+
+The logo row alone also applies signed in: below 64 rem the signed-in header
+shows the mark alone too, because its nav with Community overflows a full logo
+by 68 px at 704 px. Every other compact row is signed-out only.
 
 ### Publish dialog block
 
