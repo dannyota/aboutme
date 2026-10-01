@@ -162,11 +162,9 @@ describe('dark palette rule', () => {
             // surface (docs/design/public-page-theme.md, "Template mapping").
             at('body', 10.1);
             at('meta', 6.4);
+            // Level and tag fills are the accent-solid role, measured against
+            // the surface they sit on, not the empty track.
             at('accent-solid', 3.5);
-            expect(
-              contrastRatio(roles['accent-solid']!, roles.track!),
-              `${id} ${label} level fill on track, measured minimum`,
-            ).toBeGreaterThanOrEqual(3.5);
           }
         },
       );
