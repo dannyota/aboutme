@@ -43,6 +43,10 @@ import {
 } from "./generateSanitizer.mjs";
 import { generateSamplesTs, readSampleFiles } from "./generateSamples.mjs";
 import { generateTemplatesTs, readTemplatePresets } from "./generateTemplates.mjs";
+import {
+  generateShowcasePresetsGo,
+  showcasePresetsGoPath,
+} from "./generateShowcasePresets.mjs";
 
 export { generateTemplatesTs } from "./generateTemplates.mjs";
 
@@ -79,12 +83,14 @@ async function main() {
       readSampleFiles(templatePresets.map((preset) => preset.id)),
       join(tsDir, "samples.ts"),
     );
+    generateShowcasePresetsGo(templatePresets, showcasePresetsGoPath);
     written.push(
       "gen/go/sanitizer.go",
       "gen/ts/sanitizer-policy.ts",
       "gen/ts/sanitizer.ts",
       "gen/ts/templates.ts",
       "gen/ts/samples.ts",
+      "../../apps/server/internal/showcase/presets.generated.go",
     );
 
     // Applications compile against these current outputs from the working
