@@ -10,6 +10,7 @@
 #                                     one-shot; no image, service, or schedule
 #                                     change (see fence.sh's fence_epoch_totp)
 #   deploy.sh --check-public-root <tag> <root>  audits one candidate root
+#   deploy.sh --account-delete <tag> show|confirm <slug> [user-id]  one-shot
 #   deploy.sh <tag> --require-free-root <root>  checks a root before release
 #
 # The operator role reads the fence and assumes the deploy role. A deploy holds
@@ -30,20 +31,15 @@ families=(app web maintenance migrate jobs db-setup)
 snapshot_tag_key=aboutme:created-by
 snapshot_tag_value=deploy.sh
 usage() {
-  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh <tag> --require-free-root <root> | deploy.sh --check-public-root <tag> <root> | deploy.sh --rollback <tag> | deploy.sh --activate <tag> | deploy.sh --totp-key-reencrypt <tag>" >&2
+  echo "usage: deploy.sh <tag> [--first-deploy] | deploy.sh <tag> --require-free-root <root> | deploy.sh --check-public-root <tag> <root> | deploy.sh --rollback <tag> | deploy.sh --activate <tag> | deploy.sh --totp-key-reencrypt <tag> | deploy.sh --account-delete <tag> show <slug> | confirm <slug> <user-id>" >&2
   exit 2
 }
-first=0
-rollback=0
-activate=0
-totp_reencrypt=0
-public_root_audit=0
-require_free_root=0
-public_root=""
+first=0 rollback=0 activate=0 totp_reencrypt=0 public_root_audit=0 require_free_root=0 account_delete=0 public_root="" account_delete_args=()
 case "$#:${1:-}:${2:-}" in
   2:--rollback:?*) rollback=1 tag=$2 ;;
   2:--activate:?*) activate=1 tag=$2 ;;
   2:--totp-key-reencrypt:?*) totp_reencrypt=1 tag=$2 ;;
+  [45]:--account-delete:?*) account_delete=1 tag=$2 account_delete_args=("${@:3}") ;;
   3:--check-public-root:?*) public_root_audit=1 tag=$2 public_root=$3 ;;
   1:[!-]*:) tag=$1 ;;
   2:[!-]*:--first-deploy) first=1 tag=$1 ;;
@@ -55,6 +51,7 @@ operation_kind=deploy
 ((!activate)) || operation_kind=activate
 ((!totp_reencrypt)) || operation_kind=totp_reencrypt
 ((!public_root_audit)) || operation_kind=public_root_check
+((!account_delete)) || operation_kind=account_delete
 
 # fd 9 is a fixed duplicate of the script's own stderr, made once, before
 # anything ever redirects fd 2 for a single read (notifications.sh's alarm
@@ -83,6 +80,9 @@ work=$(mktemp -d)
 # on_exit below replaces this trap with the full cleanup once it is defined.
 trap 'rm -rf "$work"' EXIT
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=account-delete.sh
+source "$script_dir/account-delete.sh"
+((!account_delete)) || account_delete_validate "${account_delete_args[@]}"
 # shellcheck source=fence.sh
 source "$script_dir/fence.sh"
 # shellcheck source=totp-reencrypt.sh
@@ -255,7 +255,7 @@ if ((totp_reencrypt)); then
   totp_reencrypt_run
   exit 0
 fi
-
+((!account_delete)) || account_delete_run
 if ((public_root_audit)); then
   fence_lock || exit 1
   public_root_check "$public_root"

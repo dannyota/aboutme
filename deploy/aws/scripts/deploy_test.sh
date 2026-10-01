@@ -68,6 +68,52 @@ if [[ $args == *"ecs describe-tasks"* && $args == *"deploy-public-root-check-"* 
   fi
   exit 0
 fi
+if [[ ${AD_ONLY:-0} == 1 ]]; then
+  log() { printf '[%s] %s %s\n' "${AWS_PROFILE:-none}" "$(basename "$0")" "$args" >>"$CALLS"; }
+  case $args in
+    *"ecs describe-task-definition"*aboutme-prod-jobs*)
+      log
+      printf '%s\n' '{"family":"aboutme-prod-jobs","networkMode":"bridge","requiresCompatibilities":["EC2"],"containerDefinitions":[{"name":"jobs","image":"unchanged","memory":256,"entryPoint":["/usr/local/bin/server"],"command":["idempotency-expiry-sweep"],"environment":[{"name":"DATABASE_URL","value":"postgres://aboutme_app@db/aboutme"}],"secrets":[{"name":"PGPASSWORD","valueFrom":"arn:aws:ssm:ap-southeast-1:1:parameter/aboutme/prod/db/app-password"}]}]}'
+      exit 0 ;;
+    *"ecs describe-task-definition"*"--task-definition arn:"*)
+      log
+      printf '{"family":"f","containerDefinitions":[{"name":"server","environment":[{"name":"DEPLOY_RELEASE_NUMBER","value":"%s"}]}]}\n' "${AD_APP_RELEASE:-1000}"
+      exit 0 ;;
+    *"ecs run-task"*"--started-by acctdel-"*)
+      log
+      [[ ${AD_RUN:-ok} == lost ]] && exit 255
+      echo "arn:aws:ecs:ap-southeast-1:1:task/aboutme-prod/adtask1"
+      exit 0 ;;
+    *"ecs wait tasks-stopped"*adtask1*)
+      log
+      [[ ${AD_WAIT:-ok} == fail ]] && exit 255
+      exit 0 ;;
+    *"ecs describe-tasks"*adtask1*)
+      log
+      if [[ $args == *lastStatus* ]]; then
+        [[ ${AD_WAIT:-ok} == fail ]] && echo RUNNING || echo STOPPED
+      else
+        echo "${AD_EXIT:-0}"
+      fi
+      exit 0 ;;
+    *"logs get-log-events"*)
+      log
+      tok=$(sed -nE 's/.*--next-token ([^ ]+).*/\1/p' <<<"$args")
+      first='{"message":"account user=0b1c2d3e-4f50-4617-8899-aabbccddeeff slugs=alpha-cv,beta-cv"},{"message":"esc\u001b[31mred"}'
+      end='{"message":"account-delete: end"}'
+      case "${AD_LOG:-ok}:$tok" in
+        ok:) printf '{"events":[%s,%s],"nextForwardToken":"f/1"}\n' "$first" "$end" ;;
+        nosentinel:) printf '{"events":[%s],"nextForwardToken":"f/1"}\n' "$first" ;;
+        split:) printf '{"events":[%s],"nextForwardToken":"f/1"}\n' "$first" ;;
+        split:f/1) printf '{"events":[%s],"nextForwardToken":"f/2"}\n' "$end" ;;
+        split:f/2) printf '{"events":[],"nextForwardToken":"f/2"}\n' ;;
+        ok:f/1 | nosentinel:f/1) printf '{"events":[],"nextForwardToken":"f/1"}\n' ;;
+        empty:*) printf '%s\n' '{"events":[]}' ;;
+        *) exit 255 ;;
+      esac
+      exit 0 ;;
+  esac
+fi
 exec "$STUB_DIR/bin/aws" "$@"
 STUB
 chmod +x "$work/root-bin/aws"
@@ -1686,6 +1732,126 @@ absent "$f" "REMOVE operation_id"
 absent "$f" "--started-by deploy-migrate"
 grep -qF "public-root check may still run; leave the operation lock closed; list tasks with started-by root-" "$work/require_free_root_lost_second.out" ||
   { echo "require_free_root_lost_second: missing lock-recovery direction" >&2; exit 1; }
+
+# --account-delete runs the server's account-delete command as a one-shot on
+# the jobs family at the live tag's provenance-checked server image. Argument
+# errors fail before any AWS call; the command array carries each argument as
+# its own element; the log is read with the caller's own login, never a role.
+for bad in "" "bogus" "show" "show alpha-cv extra" "show Bad_Slug" "show a" "show -bad-" "confirm alpha-cv" \
+  "confirm alpha-cv 0b1c2d3e-4f50-4617-8899-AABBCCDDEEFF" "confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeef" \
+  "confirm alpha-cv 0b1c2d3e4f5046178899aabbccddeeff" "confirm alpha-cv xyz" "confirm Bad_Slug 0b1c2d3e-4f50-4617-8899-aabbccddeeff" \
+  "confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff extra" "pending"; do
+  name="account_delete_invalid_${bad//[^a-z0-9A-Z]/_}"
+  # shellcheck disable=SC2086
+  AD_ONLY=1 run_case "$name" 2 --account-delete v0.1.0 $bad
+  absent "$work/$name.calls" "aws "
+done
+AD_ONLY=1 run_case account_delete_bad_tag fail --account-delete main show alpha-cv
+absent "$work/account_delete_bad_tag.calls" "aws "
+
+AD_ONLY=1 run_case account_delete_show 0 --account-delete v0.1.0 show alpha-cv
+f=$work/account_delete_show.calls
+grep -qF "account user=0b1c2d3e-4f50-4617-8899-aabbccddeeff slugs=alpha-cv,beta-cv" "$work/account_delete_show.out" ||
+  { echo "account_delete_show: log lines were not printed" >&2; exit 1; }
+absent "$work/account_delete_show.out" $'\033'
+absent "$work/account_delete_show.out" "account-delete: end"
+[[ $(count "$f" "$(policy server v0.1.0)") == 1 ]] ||
+  { echo "account_delete_show: server provenance was not verified" >&2; exit 1; }
+before "$f" "operation_checked_at=:s" "ecs register-task-definition"
+before "$f" "ecs register-task-definition" "--started-by acctdel-"
+before "$f" "--started-by acctdel-" "logs get-log-events"
+before "$f" "logs get-log-events" "REMOVE operation_id"
+absent "$f" "rds create-db-snapshot"
+absent "$f" "ecs update-service"
+absent "$f" "scheduler update-schedule"
+grep -qF -- '--overrides {"containerOverrides":[{"name":"jobs","command":["account-delete","show","alpha-cv"]}]}' "$f" ||
+  { echo "account_delete_show: missing jobs command override" >&2; exit 1; }
+grep -qF "[test-base] aws --region ap-southeast-1 logs get-log-events --log-group-name /aboutme/prod --log-stream-name jobs/jobs/adtask1" "$f" ||
+  { echo "account_delete_show: log was not read with the caller's login" >&2; exit 1; }
+absent "$f" "[fence-deploy] aws --region ap-southeast-1 logs"
+jq -e '.containerDefinitions[] | select(.name == "jobs")
+  | .image == "ghcr.io/dannyota/aboutme-server@sha256:'"$(printf '%064d' 1)"'"
+    and .command == ["idempotency-expiry-sweep"]
+    and (.environment | any(.name == "DEPLOY_RELEASE_TAG" and .value == "v0.1.0"))' \
+  "$work/last-registered.json" >/dev/null ||
+  { echo "account_delete_show: task did not keep the jobs configuration" >&2; exit 1; }
+
+AD_ONLY=1 run_case account_delete_confirm 0 --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+grep -qF -- '"command":["account-delete","confirm","alpha-cv","0b1c2d3e-4f50-4617-8899-aabbccddeeff"]' "$work/account_delete_confirm.calls" ||
+  { echo "account_delete_confirm: wrong command array" >&2; exit 1; }
+grep -qF "account-delete confirm done for v0.1.0" "$work/account_delete_confirm.out" ||
+  { echo "account_delete_confirm: no done message" >&2; exit 1; }
+
+# A non-zero task exit prints the task log, fails, and releases the lock.
+AD_ONLY=1 AD_EXIT=1 run_case account_delete_task_fails fail --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+grep -qF "account user=0b1c2d3e" "$work/account_delete_task_fails.out" ||
+  { echo "account_delete_task_fails: log was not printed" >&2; exit 1; }
+grep -qF "account-delete exited with 1" "$work/account_delete_task_fails.out" ||
+  { echo "account_delete_task_fails: no exit-code message" >&2; exit 1; }
+absent "$work/account_delete_task_fails.out" "done for"
+grep -qF "REMOVE operation_id" "$work/account_delete_task_fails.calls" ||
+  { echo "account_delete_task_fails: lock was not released" >&2; exit 1; }
+
+# A log without the end marker is incomplete, even when the task exited 0: the
+# lines read are printed, the read retries five times, and the script exits 1.
+for mode in empty fail nosentinel; do
+  AD_ONLY=1 AD_LOG=$mode DEPLOY_SMOKE_DELAY=0 run_case "account_delete_log_$mode" fail --account-delete v0.1.0 show alpha-cv
+  grep -qF "no end marker, so the result is incomplete; run show" "$work/account_delete_log_$mode.out" ||
+    { echo "account_delete_log_$mode: no incomplete-result message" >&2; exit 1; }
+  grep -qF "REMOVE operation_id" "$work/account_delete_log_$mode.calls" ||
+    { echo "account_delete_log_$mode: lock was not released" >&2; exit 1; }
+  absent "$work/account_delete_log_$mode.out" "done for"
+done
+grep -qF "account user=0b1c2d3e" "$work/account_delete_log_nosentinel.out" ||
+  { echo "account_delete_log_nosentinel: lines read were not printed" >&2; exit 1; }
+[[ $(count "$work/account_delete_log_nosentinel.calls" "logs get-log-events") == 10 ]] ||
+  { echo "account_delete_log_nosentinel: want five attempts of two pages" >&2; exit 1; }
+
+# The end marker can arrive on a later page; the token repeating ends the read.
+AD_ONLY=1 AD_LOG=split run_case account_delete_log_split 0 --account-delete v0.1.0 show alpha-cv
+[[ $(count "$work/account_delete_log_split.calls" "logs get-log-events") == 3 ]] ||
+  { echo "account_delete_log_split: want three pages" >&2; exit 1; }
+[[ $(count "$work/account_delete_log_split.calls" "--next-token f/1") == 1 ]] ||
+  { echo "account_delete_log_split: did not follow the first token" >&2; exit 1; }
+grep -qF "account user=0b1c2d3e" "$work/account_delete_log_split.out" ||
+  { echo "account_delete_log_split: first page was not printed" >&2; exit 1; }
+absent "$work/account_delete_log_split.out" "account-delete: end"
+
+# Exit 4 is not found and exit 5 is an owner mismatch: each prints the log,
+# passes its code through, never says done, and releases the lock.
+for pair in "4:not found:" "5:mismatch:"; do
+  code=${pair%%:*} text=${pair#*:} text=${text%:}
+  AD_ONLY=1 AD_EXIT=$code run_case "account_delete_exit_$code" "$code" --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+  grep -qF "account user=0b1c2d3e" "$work/account_delete_exit_$code.out" ||
+    { echo "account_delete_exit_$code: log was not printed" >&2; exit 1; }
+  grep -qF "$text" "$work/account_delete_exit_$code.out" ||
+    { echo "account_delete_exit_$code: no '$text' message" >&2; exit 1; }
+  grep -qF "nothing deleted" "$work/account_delete_exit_$code.out" ||
+    { echo "account_delete_exit_$code: no nothing-deleted message" >&2; exit 1; }
+  absent "$work/account_delete_exit_$code.out" "done for"
+  grep -qF "REMOVE operation_id" "$work/account_delete_exit_$code.calls" ||
+    { echo "account_delete_exit_$code: lock was not released" >&2; exit 1; }
+done
+
+# The running app must be the exact tag; the check runs under the lock.
+AD_ONLY=1 AD_APP_RELEASE=999 run_case account_delete_tag_mismatch fail --account-delete v0.1.0 show alpha-cv
+f=$work/account_delete_tag_mismatch.calls
+absent "$f" "ecs register-task-definition"
+absent "$f" "ecs run-task"
+grep -qF "REMOVE operation_id" "$f" ||
+  { echo "account_delete_tag_mismatch: lock was not released" >&2; exit 1; }
+grep -qF "is release 999, not v0.1.0" "$work/account_delete_tag_mismatch.out" ||
+  { echo "account_delete_tag_mismatch: no release-mismatch message" >&2; exit 1; }
+
+# A lost RunTask response or a failed waiter keeps the lock: the task may run.
+AD_ONLY=1 AD_RUN=lost run_case account_delete_lost_task fail --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+AD_ONLY=1 AD_WAIT=fail run_case account_delete_wait_fails fail --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+for case_ in account_delete_lost_task account_delete_wait_fails; do
+  absent "$work/$case_.calls" "REMOVE operation_id"
+  absent "$work/$case_.calls" "logs get-log-events"
+  grep -qF "the operation lock stays held until the task stops" "$work/$case_.out" ||
+    { echo "$case_: no held-lock message" >&2; exit 1; }
+done
 
 run_case usage 2
 
