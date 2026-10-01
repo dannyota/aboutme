@@ -98,9 +98,17 @@ if [[ ${SC_ONLY:-0} == 1 ]]; then
       exit 0 ;;
     *"logs get-log-events"*)
       log
-      case ${SC_LOG:-ok} in
-        ok) printf '%s\n' '{"events":[{"message":"slug=alpha-cv review=0123456789abcdef version=3"},{"message":"esc\u001b[31mred"}]}' ;;
-        empty) printf '%s\n' '{"events":[]}' ;;
+      tok=$(sed -nE 's/.*--next-token ([^ ]+).*/\1/p' <<<"$args")
+      first='{"message":"slug=alpha-cv review=0123456789abcdef version=3"},{"message":"esc\u001b[31mred"}'
+      end='{"message":"showcase-review: end"}'
+      case "${SC_LOG:-ok}:$tok" in
+        ok:) printf '{"events":[%s,%s],"nextForwardToken":"f/1"}\n' "$first" "$end" ;;
+        nosentinel:) printf '{"events":[%s],"nextForwardToken":"f/1"}\n' "$first" ;;
+        split:) printf '{"events":[%s],"nextForwardToken":"f/1"}\n' "$first" ;;
+        split:f/1) printf '{"events":[%s],"nextForwardToken":"f/2"}\n' "$end" ;;
+        split:f/2) printf '{"events":[],"nextForwardToken":"f/2"}\n' ;;
+        ok:f/1 | nosentinel:f/1) printf '{"events":[],"nextForwardToken":"f/1"}\n' ;;
+        empty:*) printf '%s\n' '{"events":[]}' ;;
         *) exit 255 ;;
       esac
       exit 0 ;;
@@ -1785,16 +1793,42 @@ grep -qF "showcase-review exited with 1" "$work/showcase_task_fails.out" ||
 grep -qF "REMOVE operation_id" "$work/showcase_task_fails.calls" ||
   { echo "showcase_task_fails: lock was not released" >&2; exit 1; }
 
-# An unreadable or empty log fails even when the task exited 0.
-for mode in empty fail; do
+# A log without the end marker is incomplete, even when the task exited 0: the
+# lines read are printed, the read retries five times, and the script exits 1.
+for mode in empty fail nosentinel; do
   SC_ONLY=1 SC_LOG=$mode DEPLOY_SMOKE_DELAY=0 run_case "showcase_log_$mode" fail --showcase-review v0.1.0 pending
-  grep -qF "could not read the task log" "$work/showcase_log_$mode.out" ||
-    { echo "showcase_log_$mode: no log failure message" >&2; exit 1; }
+  grep -qF "no end marker, so the result is incomplete; run show" "$work/showcase_log_$mode.out" ||
+    { echo "showcase_log_$mode: no incomplete-result message" >&2; exit 1; }
   grep -qF "REMOVE operation_id" "$work/showcase_log_$mode.calls" ||
     { echo "showcase_log_$mode: lock was not released" >&2; exit 1; }
+  absent "$work/showcase_log_$mode.out" "done for"
 done
-grep -qF "result is unknown; run show" "$work/showcase_log_empty.out" ||
-  { echo "showcase_log_empty: no unknown-result message" >&2; exit 1; }
+grep -qF "slug=alpha-cv review=0123456789abcdef version=3" "$work/showcase_log_nosentinel.out" ||
+  { echo "showcase_log_nosentinel: lines read were not printed" >&2; exit 1; }
+[[ $(count "$work/showcase_log_nosentinel.calls" "logs get-log-events") == 10 ]] ||
+  { echo "showcase_log_nosentinel: want five attempts of two pages" >&2; exit 1; }
+
+# The end marker can arrive on a later page; the token repeating ends the read.
+# The marker line itself is never printed.
+SC_ONLY=1 SC_LOG=split run_case showcase_log_split 0 --showcase-review v0.1.0 pending
+[[ $(count "$work/showcase_log_split.calls" "logs get-log-events") == 3 ]] ||
+  { echo "showcase_log_split: want three pages" >&2; exit 1; }
+[[ $(count "$work/showcase_log_split.calls" "--next-token f/1") == 1 ]] ||
+  { echo "showcase_log_split: did not follow the first token" >&2; exit 1; }
+grep -qF "slug=alpha-cv review=0123456789abcdef version=3" "$work/showcase_log_split.out" ||
+  { echo "showcase_log_split: first page was not printed" >&2; exit 1; }
+absent "$work/showcase_log_split.out" "showcase-review: end"
+absent "$work/showcase_pending.out" "showcase-review: end"
+
+# Exit 3 is a stale key: the log prints, nothing changed, and it never says done.
+SC_ONLY=1 SC_EXIT=3 run_case showcase_stale 3 --showcase-review v0.1.0 approve alpha-cv 0123456789abcdef
+grep -qF "slug=alpha-cv review=0123456789abcdef version=3" "$work/showcase_stale.out" ||
+  { echo "showcase_stale: log was not printed" >&2; exit 1; }
+grep -qF "nothing changed: the review key is stale; run pending again" "$work/showcase_stale.out" ||
+  { echo "showcase_stale: no stale message" >&2; exit 1; }
+absent "$work/showcase_stale.out" "done for"
+grep -qF "REMOVE operation_id" "$work/showcase_stale.calls" ||
+  { echo "showcase_stale: lock was not released" >&2; exit 1; }
 
 # The running app must be the exact tag; the check runs under the lock.
 SC_ONLY=1 SC_APP_RELEASE=999 run_case showcase_tag_mismatch fail --showcase-review v0.1.0 pending
