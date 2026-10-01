@@ -130,11 +130,11 @@ func TestShowcaseWithoutReviewMigrationDefaultAndIndex(t *testing.T) {
 	var definition string
 	if err := tx.QueryRow(ctx, `
 		SELECT indexdef FROM pg_indexes
-		WHERE schemaname = 'public' AND tablename = 'resume_showcase' AND indexname = 'resume_showcase_requested_idx'`,
+		WHERE schemaname = 'public' AND tablename = 'resume_showcase' AND indexname = 'resume_showcase_requested_asc_idx'`,
 	).Scan(&definition); err != nil {
 		t.Fatalf("read requested index: %v", err)
 	}
-	for _, want := range []string{"requested_at DESC", "resume_id DESC"} {
+	for _, want := range []string{"(requested_at, resume_id)"} {
 		if !strings.Contains(definition, want) {
 			t.Errorf("index definition %q lacks %q", definition, want)
 		}
@@ -155,7 +155,7 @@ func TestShowcaseWithoutReviewMigrationUpDownUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewProvider() error: %v", err)
 	}
-	const index = `SELECT count(*) FROM pg_indexes WHERE indexname = 'resume_showcase_requested_idx'`
+	const index = `SELECT count(*) FROM pg_indexes WHERE indexname = 'resume_showcase_requested_asc_idx'`
 	const withDefault = `SELECT count(*) FROM information_schema.columns
 		WHERE table_name = 'resume_showcase' AND column_name = 'review_key' AND column_default IS NOT NULL`
 	if _, err = provider.UpTo(ctx, 11); err != nil {

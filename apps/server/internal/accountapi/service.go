@@ -89,11 +89,17 @@ func New(deps Dependencies) (*Service, error) {
 		Clock: deps.Now, Key: api.CompositeKeyFunc(api.AccountKeyFunc, api.IPKeyFunc),
 		Logger: deps.Logger,
 	})
-	s.beginTx = deps.Pool.Begin
+	s.initDeletion()
+	return s, nil
+}
+
+// initDeletion sets the transaction, audit, and media queue hooks the deletion
+// path uses. Tests replace them to inject failures.
+func (s *Service) initDeletion() {
+	s.beginTx = s.pool.Begin
 	s.commitTx = func(ctx context.Context, tx pgx.Tx) error { return tx.Commit(ctx) }
 	s.newAuditID = uuid.NewV7
 	s.enqueueMediaJob = func(ctx context.Context, q *store.Queries, params store.EnqueueMediaDeletionJobParams) (int64, error) {
 		return q.EnqueueMediaDeletionJob(ctx, params)
 	}
-	return s, nil
 }

@@ -62,13 +62,20 @@ func main() {
 		if errors.As(err, &occupancyExit) {
 			os.Exit(occupancyExit.code)
 		}
+		var deleteExit accountDeleteExitError
+		if errors.As(err, &deleteExit) {
+			if deleteExit.message != "" {
+				fmt.Fprintln(os.Stderr, deleteExit.message)
+			}
+			os.Exit(deleteExit.code)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// dispatch routes the check-public-root and totp-key-reencrypt one-shot
-// commands to their entry points. It leaves every
+// dispatch routes the check-public-root, totp-key-reencrypt, and
+// account-delete one-shot commands to their entry points. It leaves every
 // other invocation, including the bare server, to runCommand
 // (privacy_command.go, privacy_jobs.go) unchanged.
 func dispatch(args []string) error {
@@ -77,6 +84,9 @@ func dispatch(args []string) error {
 	}
 	if len(args) > 0 && args[0] == totpKeyReencryptCommandName {
 		return runTOTPKeyReencrypt(args[1:])
+	}
+	if len(args) > 0 && args[0] == accountDeleteCommandName {
+		return runAccountDelete(args[1:])
 	}
 	return runCommand(args)
 }

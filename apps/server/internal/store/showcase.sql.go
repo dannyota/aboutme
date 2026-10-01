@@ -219,7 +219,7 @@ WHERE r.live = true
       OR ($3::text = 'custom' AND s.template_id IS NULL)
       OR s.template_id = $3::text
   )
-ORDER BY s.requested_at DESC, s.resume_id DESC
+ORDER BY s.requested_at ASC, s.resume_id ASC
 LIMIT $5::int OFFSET $4::int
 `
 

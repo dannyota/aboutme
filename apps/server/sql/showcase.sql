@@ -68,7 +68,7 @@ WHERE r.live = true
       OR (sqlc.narg(template)::text = 'custom' AND s.template_id IS NULL)
       OR s.template_id = sqlc.narg(template)::text
   )
-ORDER BY s.requested_at DESC, s.resume_id DESC
+ORDER BY s.requested_at ASC, s.resume_id ASC
 LIMIT sqlc.arg(page_size)::int OFFSET sqlc.arg(page_offset)::int;
 
 -- name: CountShowcase :one

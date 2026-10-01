@@ -78,7 +78,7 @@ func TestListChecksAllThreeListingConditions(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005, AC-SHOW-002: newest opt-in first, then resume ID; role,
+// AC-SHOW-005, AC-SHOW-002: oldest opt-in first, then resume ID; role,
 // language, and template filters combine; an item holds only its closed fields.
 func TestListOrderFiltersAndItems(t *testing.T) {
 	e := newFreshEnv(t)
@@ -106,12 +106,12 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 	unsetFixture := e.listed(t, unset, strp("other"))
 	e.setRequested(t, unsetFixture, base)
 
-	// Equal opt-in times fall back to the resume ID, newest ID first.
+	// Equal opt-in times fall back to the resume ID, smallest ID first.
 	tied := []fixture{styledFixture, otherFixture}
-	if tied[0].id.String() < tied[1].id.String() {
+	if tied[0].id.String() > tied[1].id.String() {
 		tied[0], tied[1] = tied[1], tied[0]
 	}
-	want := []string{unsetFixture.slug, tied[0].slug, tied[1].slug, oldestFixture.slug}
+	want := []string{oldestFixture.slug, tied[0].slug, tied[1].slug, unsetFixture.slug}
 	page := e.list(t, Filter{})
 	if got := slugsOf(page); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("order = %v, want %v", got, want)
@@ -188,9 +188,9 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005: an edit keeps the resume listed and in place, so editing never
-// moves a resume up. Turning the switch off and on again starts a new opt-in,
-// which moves it to the top.
+// AC-SHOW-005: the oldest opt-in is listed first. An edit keeps the resume
+// listed and in place. Turning the switch off and on again starts a new
+// opt-in, which moves it to the end.
 func TestListOrdersByOptInTime(t *testing.T) {
 	e := newFreshEnv(t)
 	editedSpec := defaultSpec()
@@ -198,8 +198,8 @@ func TestListOrdersByOptInTime(t *testing.T) {
 	e.setRequested(t, edited, e.now.Add(-48*time.Hour))
 	newer := e.listed(t, defaultSpec(), nil)
 	e.setRequested(t, newer, e.now.Add(-24*time.Hour))
-	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != newer.slug+","+edited.slug {
-		t.Fatalf("order = %v, want %s first", got, newer.slug)
+	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != edited.slug+","+newer.slug {
+		t.Fatalf("order = %v, want the older opt-in %s first", got, edited.slug)
 	}
 
 	editedSpec.name = "Grace Hopper"
@@ -208,8 +208,8 @@ func TestListOrdersByOptInTime(t *testing.T) {
 		t.Fatalf("change name: %v", err)
 	}
 	e.sync(t, edited.id)
-	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != newer.slug+","+edited.slug {
-		t.Fatalf("order after the edit = %v, want the edited resume still listed and last", got)
+	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != edited.slug+","+newer.slug {
+		t.Fatalf("order after the edit = %v, want the edited resume still first", got)
 	}
 
 	e.publish(t, PublishChange{ResumeID: edited.id, Enabled: false})
@@ -217,8 +217,8 @@ func TestListOrdersByOptInTime(t *testing.T) {
 		t.Fatalf("listing after the opt-out = %v, want only %s", got, newer.slug)
 	}
 	e.optIn(t, edited.id, nil)
-	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != edited.slug+","+newer.slug {
-		t.Fatalf("order after the new opt-in = %v, want %s first", got, edited.slug)
+	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != newer.slug+","+edited.slug {
+		t.Fatalf("order after the new opt-in = %v, want %s first and %s last", got, newer.slug, edited.slug)
 	}
 }
 

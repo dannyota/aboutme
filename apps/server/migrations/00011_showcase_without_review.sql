@@ -23,16 +23,16 @@ SET reviewed_key = NULL,
 ALTER TABLE resume_showcase
     ALTER COLUMN review_key SET DEFAULT '0000000000000000';
 
--- Serves the listing: newest opt-in first, then resume ID. The old partial
+-- Serves the listing: oldest opt-in first, then resume ID. The old partial
 -- index on first_listed_at stays until the unused columns go.
-CREATE INDEX resume_showcase_requested_idx
-    ON resume_showcase (requested_at DESC, resume_id DESC);
+CREATE INDEX resume_showcase_requested_asc_idx
+    ON resume_showcase (requested_at ASC, resume_id ASC);
 
 -- +goose Down
 SET LOCAL lock_timeout = '5s';
 
 -- Cannot restore deleted rows or cleared review results.
-DROP INDEX resume_showcase_requested_idx;
+DROP INDEX resume_showcase_requested_asc_idx;
 
 ALTER TABLE resume_showcase
     ALTER COLUMN review_key DROP DEFAULT;
