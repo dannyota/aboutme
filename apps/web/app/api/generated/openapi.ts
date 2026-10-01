@@ -1020,7 +1020,7 @@ export interface paths {
         };
         /**
          * List the community showcase
-         * @description Lists the resumes in the community showcase, newest first approval first, then resume ID, twelve to a page. A resume appears only while all five listing conditions hold: it is live, sign in to view is off, its owner opted in, the operator approved it, and the approved review key equals its current key. Go computes the page from committed state on every request, so a request admitted after an opt-out, unpublish, sign in to view, decline, rename, or delete commits omits the resume. The response is never cached and has no validator. The route reads no cookie and sets none, and it sends `X-Robots-Tag: noindex, nofollow`.
+         * @description Lists the resumes in the community showcase, newest opt-in first, then resume ID, twelve to a page. Nothing is reviewed: a resume appears while all three listing conditions hold: its owner opted in, it is live, and sign in to view is off. Go computes the page from committed state on every request, so a request admitted after an opt-out, unpublish, sign in to view, rename, or delete commits omits the resume. The response is never cached and has no validator. The route reads no cookie and sets none, and it sends `X-Robots-Tag: noindex, nofollow`.
          *
          *     Every query parameter is optional and may appear once. Any other parameter, a repeated parameter, an empty value, or a value outside its set is `400 request_invalid`. A page past the last one is `200` with no items and the real `pageCount`. Each item carries only the closed fields below: no contact detail, account identifier, date, or count. The separate limit is 60 requests a minute per client IP. See `docs/design/showcase.md` and `docs/adr/0029-community-showcase.md`.
          */
@@ -1831,7 +1831,7 @@ export interface components {
             faviconEmoji?: string;
             /** @description Require sign-in to view. Omitted keeps the stored value. Turning it on is a `disabled` publish issue while `SIGN_IN_TO_VIEW_ENABLED` is false; turning it off always works. Turning it on for an already-live resume revokes the old public state through the existing revocation fence and raises the resume's pass epoch, ending every earlier pass. Forces effective discovery off while on; the stored `seoGeoEnabled` value is kept. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
             signInToView?: boolean;
-            /** @description Show this resume in the community showcase. Omitted keeps the stored value. `true` needs `live` (`requires_live`) and sign in to view off (`requires_open_view`). A request that turns sign in to view on, or turns `live` off, ends the opt-in even when this field is omitted, and publishing again starts with it off. Turning it on starts a review; turning it off and on again starts a new one. Only the web app sets it: no MCP tool reads or changes it. See `docs/design/showcase.md`. */
+            /** @description Show this resume in the community showcase. Omitted keeps the stored value. `true` needs `live` (`requires_live`) and sign in to view off (`requires_open_view`). A request that turns sign in to view on, or turns `live` off, ends the opt-in even when this field is omitted, and publishing again starts with it off. Turning it on lists the resume at once; turning it off and on again starts a new opt-in, which lists it first. Only the web app sets it: no MCP tool reads or changes it. See `docs/design/showcase.md`. */
             showcaseEnabled?: boolean;
             /** @description The role shown with the listing: one of the `ShowcaseRole` values, or empty to clear it. Omitted keeps the stored value. Any other value is `invalid_format`, and a role is allowed only while the switch is on (`invalid_format`). */
             showcaseRole?: string;
@@ -2213,14 +2213,14 @@ export interface components {
          * @enum {string}
          */
         ShowcaseRole: "backend" | "frontend" | "mobile" | "devops" | "data-ai" | "qa" | "fresher" | "brse" | "security" | "other";
-        /** @description The owner's showcase state. `pending`: opted in and the current review key has no result. `listed`: the current key is approved and the resume is shown. `declined`: the current key was declined. */
+        /** @description The owner's showcase state. `listed`: the resume is opted in and shown. An opt-in exists only while the resume is live with sign in to view off, so this is the only state; a later state can join the enum. */
         ResumeShowcase: {
             /** @enum {string} */
-            state: "pending" | "listed" | "declined";
+            state: "listed";
             /** @description The role the owner picked for the listing, or null. */
             role: null | components["schemas"]["ShowcaseRole"];
         };
-        /** @description The account export's showcase state: the owner state plus when the opt-in was requested. Review keys never leave the server. */
+        /** @description The account export's showcase state: the owner state plus when the opt-in was requested. */
         AccountExportShowcase: components["schemas"]["ResumeShowcase"] & {
             /** Format: date-time */
             requestedAt: string;

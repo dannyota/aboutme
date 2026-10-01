@@ -164,7 +164,7 @@ type exportResume struct {
 	SignInToView bool `json:"signInToView"`
 	// Showcase is the community-showcase state, null without an opt-in
 	// (docs/design/showcase.md "Privacy and abuse"): the state, the role, and
-	// the request time. The review keys stay on the server.
+	// the request time.
 	Showcase      *exportShowcase `json:"showcase"`
 	Revision      string          `json:"revision"`
 	SchemaVersion int32           `json:"schemaVersion"`
@@ -183,11 +183,11 @@ type exportShowcase struct {
 
 // exportShowcaseOf reads the opt-in off an export row, nil without one.
 func exportShowcaseOf(row store.ListAccountExportResumesRow) *exportShowcase {
-	if row.ShowcaseRequestedAt == nil || row.ShowcaseReviewKey == nil {
+	if row.ShowcaseRequestedAt == nil {
 		return nil
 	}
 	return &exportShowcase{
-		State:       resume.ShowcaseStateOf(*row.ShowcaseReviewKey, row.ShowcaseReviewedKey, row.ShowcaseReviewOutcome),
+		State:       resume.ShowcaseListed,
 		Role:        row.ShowcaseRole,
 		RequestedAt: *row.ShowcaseRequestedAt,
 	}

@@ -14,29 +14,6 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-func TestShowcaseStateOf(t *testing.T) {
-	t.Parallel()
-	current, other := "0123456789abcdef", "fedcba9876543210"
-	approved, declined := "approved", "declined"
-	tests := []struct {
-		name        string
-		reviewedKey *string
-		outcome     *string
-		want        string
-	}{
-		{"no review", nil, nil, resume.ShowcasePending},
-		{"approved current key", &current, &approved, resume.ShowcaseListed},
-		{"declined current key", &current, &declined, resume.ShowcaseDeclined},
-		{"approved other key", &other, &approved, resume.ShowcasePending},
-		{"declined other key", &other, &declined, resume.ShowcasePending},
-	}
-	for _, test := range tests {
-		if got := resume.ShowcaseStateOf(current, test.reviewedKey, test.outcome); got != test.want {
-			t.Errorf("%s: state = %q, want %q", test.name, got, test.want)
-		}
-	}
-}
-
 // recordingSync records each showcase sync and what the transaction it runs in
 // can see.
 type recordingSync struct {
@@ -143,14 +120,14 @@ func TestDocumentWritesRunShowcaseSyncInTheSameTransaction(t *testing.T) {
 func insertTestShowcase(ctx context.Context, t *testing.T, pool *store.Pool, resumeID uuid.UUID, role *string) {
 	t.Helper()
 	if _, err := pool.Exec(ctx, `
-		INSERT INTO resume_showcase (resume_id, requested_at, role, review_key, card_version)
-		VALUES ($1, $2, $3, '0123456789abcdef', 'fedcba9876543210')`, resumeID, time.Now().UTC(), role); err != nil {
+		INSERT INTO resume_showcase (resume_id, requested_at, role, card_version)
+		VALUES ($1, $2, $3, 'fedcba9876543210')`, resumeID, time.Now().UTC(), role); err != nil {
 		t.Fatalf("insert showcase row: %v", err)
 	}
 }
 
-// AC-SHOW-001: the owner reads null without an opt-in and the state and role
-// with one, through Get, List, and the stale-revision winner.
+// AC-SHOW-001: the owner reads null without an opt-in and the listed state and
+// role with one, through Get, List, and the stale-revision winner.
 func TestStoreReadsCarryTheOwnersShowcase(t *testing.T) {
 	t.Parallel()
 	s, q, pool, ctx := newIntegrationStore(t)
@@ -172,8 +149,8 @@ func TestStoreReadsCarryTheOwnersShowcase(t *testing.T) {
 		t.Fatalf("Get(plain) showcase = %+v err=%v, want nil", got.Showcase, err)
 	}
 	got, err = s.Get(ctx, userID, optedIn.ID)
-	if err != nil || got.Showcase == nil || got.Showcase.State != resume.ShowcasePending || got.Showcase.Role == nil || *got.Showcase.Role != role {
-		t.Fatalf("Get(opted in) showcase = %+v err=%v, want pending backend", got.Showcase, err)
+	if err != nil || got.Showcase == nil || got.Showcase.State != resume.ShowcaseListed || got.Showcase.Role == nil || *got.Showcase.Role != role {
+		t.Fatalf("Get(opted in) showcase = %+v err=%v, want listed backend", got.Showcase, err)
 	}
 
 	listed, err := s.List(ctx, userID)
@@ -183,31 +160,14 @@ func TestStoreReadsCarryTheOwnersShowcase(t *testing.T) {
 	for _, item := range listed {
 		switch item.ID {
 		case optedIn.ID:
-			if item.Showcase == nil || item.Showcase.State != resume.ShowcasePending {
-				t.Errorf("List() opted in showcase = %+v, want pending", item.Showcase)
+			if item.Showcase == nil || item.Showcase.State != resume.ShowcaseListed {
+				t.Errorf("List() opted in showcase = %+v, want listed", item.Showcase)
 			}
 		case plain.ID:
 			if item.Showcase != nil {
 				t.Errorf("List() plain showcase = %+v, want nil", item.Showcase)
 			}
 		}
-	}
-
-	if _, err = pool.Exec(ctx, `
-		UPDATE resume_showcase SET reviewed_key = review_key, review_outcome = 'approved',
-			reviewed_at = now(), first_listed_at = now() WHERE resume_id = $1`, optedIn.ID); err != nil {
-		t.Fatalf("approve: %v", err)
-	}
-	got, err = s.Get(ctx, userID, optedIn.ID)
-	if err != nil || got.Showcase == nil || got.Showcase.State != resume.ShowcaseListed {
-		t.Fatalf("Get(approved) showcase = %+v err=%v, want listed", got.Showcase, err)
-	}
-	if _, err = pool.Exec(ctx, `UPDATE resume_showcase SET review_key = 'aaaaaaaaaaaaaaaa' WHERE resume_id = $1`, optedIn.ID); err != nil {
-		t.Fatalf("change key: %v", err)
-	}
-	got, err = s.Get(ctx, userID, optedIn.ID)
-	if err != nil || got.Showcase == nil || got.Showcase.State != resume.ShowcasePending {
-		t.Fatalf("Get(key changed) showcase = %+v err=%v, want pending", got.Showcase, err)
 	}
 
 	_, err = s.SaveDocument(ctx, userID, optedIn.ID, doc, optedIn.Revision+5)

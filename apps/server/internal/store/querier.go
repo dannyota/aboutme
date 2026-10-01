@@ -24,9 +24,6 @@ type Querier interface {
 	// GetTOTPCredentialForUpdate in this transaction.
 	AdvanceTOTPCredentialStep(ctx context.Context, arg AdvanceTOTPCredentialStepParams) (TotpCredential, error)
 	AdvanceUserAuthEpoch(ctx context.Context, id uuid.UUID) (User, error)
-	// Approves only while the named key is still the current review key. The
-	// first approval of an opt-in sets first_listed_at; later approvals keep it.
-	ApproveResumeShowcase(ctx context.Context, arg ApproveResumeShowcaseParams) (uuid.UUID, error)
 	// This system backfill intentionally does not change revision or updated_at:
 	// it persists the same projected document already served to readers. It is
 	// not user-scoped. See docs/adr/0004-resume-document-contract.md.
@@ -178,9 +175,6 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWebAuthnCeremony(ctx context.Context, arg CreateWebAuthnCeremonyParams) (WebauthnCeremony, error)
 	CreateWebAuthnCredential(ctx context.Context, arg CreateWebAuthnCredentialParams) (WebauthnCredential, error)
-	// Declines only while the named key is still the current review key. It keeps
-	// first_listed_at: a later approval of a changed key does not move the resume up.
-	DeclineResumeShowcase(ctx context.Context, arg DeclineResumeShowcaseParams) (uuid.UUID, error)
 	DeleteAccountUser(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteAuthenticationSecurityEventsPage(ctx context.Context, arg DeleteAuthenticationSecurityEventsPageParams) (int64, error)
 	DeleteCompletedMediaJobsPage(ctx context.Context, arg DeleteCompletedMediaJobsPageParams) (int64, error)
@@ -377,9 +371,7 @@ type Querier interface {
 	// Community showcase queries (docs/design/showcase.md, ADR 0029). The
 	// resume_showcase row exists only while the opt-in does.
 	GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
-	GetResumeShowcaseBySlug(ctx context.Context, slug string) (GetResumeShowcaseBySlugRow, error)
-	// Locks the opt-in row so a derived-value write and an operator review
-	// serialize: a review that names a key the write just replaced matches no row.
+	// Locks the opt-in row so concurrent derived-value writes serialize.
 	GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error)
 	// The "view" OAuth callback's re-read: live state, slug, the sign-in switch,
 	// and the pass epoch, by resume ID, with no user scoping since the callback
@@ -445,7 +437,8 @@ type Querier interface {
 	// Records the unlink's kind and time only: no user, provider, or identity.
 	InsertIdentityUnlinkedAuditEvent(ctx context.Context, occurredAt time.Time) error
 	InsertPasskeyCounterSecurityEvent(ctx context.Context, arg InsertPasskeyCounterSecurityEventParams) (AuthenticationSecurityEvent, error)
-	// A new opt-in starts with no review result and no first-listed time.
+	// review_key and the other review columns are unused; the insert leaves them
+	// to their defaults (docs/design/showcase.md "Data and contract").
 	InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error
 	// Refresh rotation (M3). Every identity field -- family, client, user, grant,
 	// and family expiry -- is read from the predecessor row rather than trusted
@@ -465,8 +458,7 @@ type Querier interface {
 	ListAccountExportProviders(ctx context.Context, userID uuid.UUID) ([]string, error)
 	// Carries sign_in_to_view with the other publish settings; the pass epoch
 	// never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
-	// "Setting"). The showcase columns are null without an opt-in; the review
-	// keys only decide the exported state and never leave the server
+	// "Setting"). The showcase columns are null without an opt-in
 	// (docs/design/showcase.md "Privacy and abuse").
 	ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error)
 	// Discovery bytes contain only eligible slugs in raw byte order. The
@@ -518,17 +510,14 @@ type Querier interface {
 	// columns they're compared against. Ordered newest-created first, with id
 	// as a deterministic tiebreaker for equal creation times.
 	ListLiveSessionsForUser(ctx context.Context, arg ListLiveSessionsForUserParams) ([]Session, error)
-	// Opted in with no review result for the current key.
-	ListPendingResumeShowcases(ctx context.Context) ([]ListPendingResumeShowcasesRow, error)
 	ListResumeIDsBelowSchemaVersion(ctx context.Context, arg ListResumeIDsBelowSchemaVersionParams) ([]uuid.UUID, error)
 	ListResumeShareSignals(ctx context.Context, arg ListResumeShareSignalsParams) ([]ListResumeShareSignalsRow, error)
 	ListResumeShowcaseIDs(ctx context.Context) ([]uuid.UUID, error)
 	ListResumeShowcasesForUser(ctx context.Context, userID uuid.UUID) ([]ResumeShowcase, error)
 	ListResumeViewDays(ctx context.Context, arg ListResumeViewDaysParams) ([]ListResumeViewDaysRow, error)
 	ListResumesForUser(ctx context.Context, userID uuid.UUID) ([]Resume, error)
-	// The public listing. One statement checks all five listing conditions: the
-	// opt-in row exists, the review result is approved, the approved key equals
-	// the current key, the resume is live, and sign in to view is off. It reads
+	// The public listing. One statement checks all three listing conditions: the
+	// opt-in row exists, the resume is live, and sign in to view is off. It reads
 	// committed state on every call; nothing caches it. The page needs only the
 	// personal details (for the card's image text), so it reads no other document
 	// part; schema_version tells the caller whether those details are current.
