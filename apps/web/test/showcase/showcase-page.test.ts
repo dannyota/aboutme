@@ -373,6 +373,30 @@ describe('showcase filters in the URL', () => {
     await vi.waitFor(() => expect(listingUrls().at(-1)).toBe(LISTING_PATH));
   });
 
+  it('builds a second change on the first while the router settles',
+    async () => {
+      stubListing(page([item('ada-lovelace')]));
+      const wrapper = await mountPage('/showcase?role=qa&lang=vi');
+      const router = useRouter();
+      const spied = router.replace as unknown as {
+        getMockImplementation(): ((to: never) => Promise<unknown>) | undefined;
+        mockImplementation(impl: (to: never) => Promise<unknown>): void;
+      };
+      const settle = spied.getMockImplementation()!;
+      // Navigation lands late, as it can on a slow device.
+      spied.mockImplementation(async (to) => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return settle(to);
+      });
+      try {
+        await wrapper.get('[data-role="all"]').trigger('click');
+        await wrapper.get('[data-lang="all"]').trigger('click');
+        await expectQuery({});
+      } finally {
+        spied.mockImplementation(settle);
+      }
+    });
+
   it('writes language and template changes to the URL', async () => {
     stubListing(page([item('ada-lovelace')]));
     const wrapper = await mountPage('/showcase?role=qa');

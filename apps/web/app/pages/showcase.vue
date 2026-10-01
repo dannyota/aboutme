@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, watch } from 'vue';
 
 import EmptyState from '@/components/app/EmptyState.vue';
 import StatusBanner from '@/components/app/StatusBanner.vue';
@@ -26,11 +26,14 @@ const { authState } = useAuth();
 const { passwordRegistration } = useCapabilities();
 const copy = computed(() => showcaseCopy[locale.value]);
 const query = computed(() => parseShowcaseQuery(route.query));
-const filters = computed<Filters>(() => ({
+// A change shows at once, before the router settles, so a second change made
+// in that gap builds on the first instead of on the old URL.
+const pending = shallowRef<Filters | null>(null);
+const filters = computed<Filters>(() => pending.value ?? {
   role: query.value.role,
   lang: query.value.lang,
   template: query.value.template,
-}));
+});
 const { view, listing, retrying, settled, retry } = useShowcase(query);
 
 const results = ref<HTMLElement | null>(null);
@@ -54,11 +57,17 @@ const showPager = computed(() => (
 
 // A filter change replaces the URL query, drops `page`, and keeps focus on
 // the control.
-function onFilters(next: Filters): void {
-  void router.replace({
-    path: '/showcase',
-    query: showcaseRouteQuery({ ...next, page: 1 }),
-  });
+async function onFilters(next: Filters): Promise<void> {
+  pending.value = next;
+  try {
+    await router.replace({
+      path: '/showcase',
+      query: showcaseRouteQuery({ ...next, page: 1 }),
+    });
+  } finally {
+    // A newer change owns `pending`; only the latest one releases it.
+    if (pending.value === next) pending.value = null;
+  }
 }
 
 // After Previous or Next: scroll the results to the top, then focus the first
