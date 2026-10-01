@@ -86,6 +86,8 @@ const colorScheme = computed<'dark' | 'system' | undefined>(() => {
   const scheme = props.document.customization.colorScheme;
   return scheme === 'dark' || scheme === 'system' ? scheme : undefined;
 });
+// A scheme page paints its own ground to the rounded corners, so a white sheet
+// base would fringe them (docs/design/public-page-theme.md, "Editor preview").
 const context = computed(() => ({
   lng: props.lng,
   mode: previewMode.value === 'web'
@@ -390,9 +392,12 @@ onBeforeUnmount(() => {
         :class="previewMode === 'web' ? 'w-full' : 'mx-auto w-fit'"
       >
         <div
-          class="preview-sheet rounded-[var(--radius-sheet)] bg-white
+          class="preview-sheet rounded-[var(--radius-sheet)]
             shadow-[var(--shadow-paper)]"
-          :class="previewMode === 'web' ? 'overflow-hidden' : undefined"
+          :class="[
+            colorScheme === undefined ? 'bg-white' : undefined,
+            previewMode === 'web' ? 'overflow-hidden' : undefined,
+          ]"
           :data-color-scheme="colorScheme"
           :data-scaled-width="
             previewMode === 'pdf' ? scaledWidth.toFixed(2) : undefined

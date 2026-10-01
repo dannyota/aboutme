@@ -48,6 +48,14 @@
     --toolbar-focus-ring: #8fa6f0;
     --toolbar-button-shadow: none;
   }
+
+  /* The skip link takes the bar's dark Button fill, Button label, and Ring
+     tokens (docs/design/public-page-theme.md, "Tokens"). */
+  :root:has(.public-resume-page[data-color-scheme="dark"]) a[href="#public-resume"]:focus {
+    background: #141a2e;
+    color: #a3b6f5;
+    outline-color: #8fa6f0;
+  }
 }
 
 @media screen and (prefers-color-scheme: dark) {
@@ -84,5 +92,13 @@
     --toolbar-button-hover-fill: #1a2138;
     --toolbar-focus-ring: #8fa6f0;
     --toolbar-button-shadow: none;
+  }
+
+  /* The skip link takes the bar's dark Button fill, Button label, and Ring
+     tokens (docs/design/public-page-theme.md, "Tokens"). */
+  :root:has(.public-resume-page[data-color-scheme="system"]) a[href="#public-resume"]:focus {
+    background: #141a2e;
+    color: #a3b6f5;
+    outline-color: #8fa6f0;
   }
 }

@@ -209,13 +209,17 @@ export const JOIN_INVITE_ENTRANCE = {
 } as const;
 
 // The public page bar's Button fill, Button border, Credit text, and Button
-// shadow (docs/design/public-page-theme.md#tokens). The invite follows the
-// page's scheme with these, so a light card never sits on a dark page.
+// shadow (docs/design/public-page-theme.md#tokens), plus the application
+// primary action fill and its label (DESIGN.md, "Join invite"). The invite
+// follows the page's scheme with these, so a light card never sits on a dark
+// page.
 interface JoinInvitePalette {
   readonly surface: string;
   readonly border: string;
   readonly text: string;
   readonly shadow: string;
+  readonly action: string;
+  readonly onAction: string;
 }
 
 const LIGHT_PALETTE: JoinInvitePalette = {
@@ -223,6 +227,8 @@ const LIGHT_PALETTE: JoinInvitePalette = {
   border: '#E5E1D6',
   text: '#5C6178',
   shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+  action: '#1A5CEB',
+  onAction: '#FFFFFF',
 };
 
 const DARK_PALETTE: JoinInvitePalette = {
@@ -230,6 +236,8 @@ const DARK_PALETTE: JoinInvitePalette = {
   border: 'rgba(230, 225, 210, 0.13)',
   text: '#A5ABBF',
   shadow: 'none',
+  action: '#72A0FF',
+  onAction: '#071126',
 };
 
 export const JOIN_INVITE_TEXT_COLOR = LIGHT_PALETTE.text;

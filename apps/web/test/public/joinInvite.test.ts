@@ -256,12 +256,16 @@ describe('join invite color scheme', () => {
       border: 'rgba(230, 225, 210, 0.13)',
       text: '#A5ABBF',
       shadow: 'none',
+      action: '#72A0FF',
+      onAction: '#071126',
     });
     expect(joinInvitePalette(false)).toEqual({
       surface: '#FFFFFF',
       border: '#E5E1D6',
       text: '#5C6178',
       shadow: '0 1px 2px rgba(16, 27, 63, 0.06)',
+      action: '#1A5CEB',
+      onAction: '#FFFFFF',
     });
   });
 

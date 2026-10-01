@@ -148,6 +148,10 @@ onBeforeUnmount(() => {
 const containerStyle = computed(
   () => joinInviteContainerStyle(placement.value, dark.value),
 );
+const actionStyle = computed(() => {
+  const palette = joinInvitePalette(dark.value);
+  return { background: palette.action, color: palette.onAction };
+});
 const mutedColor = computed(() => joinInvitePalette(dark.value).text);
 </script>
 
@@ -181,9 +185,9 @@ const mutedColor = computed(() => joinInvitePalette(dark.value).text);
       <a
         :href="href"
         style="display:block;width:100%;height:40px;line-height:40px;
-          text-align:center;border-radius:10px;background:#1A5CEB;
-          color:#FFFFFF;text-decoration:none;font-weight:500;
-          box-sizing:border-box;"
+          text-align:center;border-radius:10px;
+          text-decoration:none;font-weight:500;box-sizing:border-box;"
+        :style="actionStyle"
         @click="onFollow"
       >{{ buttonText }}</a>
     </template>
@@ -200,8 +204,8 @@ const mutedColor = computed(() => joinInvitePalette(dark.value).text);
         :href="href"
         style="flex-shrink:0;display:inline-flex;align-items:center;
           margin-left:auto;height:36px;padding:0 12px;border-radius:10px;
-          background:#1A5CEB;
-          color:#FFFFFF;text-decoration:none;font-weight:500;font-size:14px;"
+          text-decoration:none;font-weight:500;font-size:14px;"
+        :style="actionStyle"
         @click="onFollow"
       >{{ buttonText }}</a>
       <button
