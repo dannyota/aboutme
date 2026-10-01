@@ -43,6 +43,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/resumeapi"
+	"github.com/dannyota/aboutme/apps/server/internal/showcase"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
@@ -66,16 +67,19 @@ func main() {
 	}
 }
 
-// dispatch routes the check-public-root and totp-key-reencrypt one-shot
-// commands to their entry points. It leaves every other invocation,
-// including the bare server, to runCommand (privacy_command.go,
-// privacy_jobs.go) unchanged.
+// dispatch routes the check-public-root, totp-key-reencrypt, and
+// showcase-review one-shot commands to their entry points. It leaves every
+// other invocation, including the bare server, to runCommand
+// (privacy_command.go, privacy_jobs.go) unchanged.
 func dispatch(args []string) error {
 	if len(args) > 0 && args[0] == checkPublicRootCommandName {
 		return runCheckPublicRoot(args[1:])
 	}
 	if len(args) > 0 && args[0] == totpKeyReencryptCommandName {
 		return runTOTPKeyReencrypt(args[1:])
+	}
+	if len(args) > 0 && args[0] == showcaseReviewCommandName {
+		return runShowcaseReview(args[1:])
 	}
 	return runCommand(args)
 }
@@ -135,6 +139,17 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("create public reader: %w", err)
 	}
+	showcaseService, err := showcase.New(showcase.Dependencies{DB: pool, Reader: reader, Projector: projector, Logger: logger})
+	if err != nil {
+		return fmt.Errorf("create showcase service: %w", err)
+	}
+	// Showcase rows follow the current scrub rules, presets, and card layout
+	// from the first request on (docs/design/showcase.md "Review").
+	recomputed, skipped, err := showcaseService.RecomputeAll(ctx)
+	if err != nil {
+		return fmt.Errorf("recompute showcase rows: %w", err)
+	}
+	logger.Info("showcase rows recomputed", "recomputed", recomputed, "skipped", skipped)
 	cache, err := publiccache.New(128, time.Minute, time.Now)
 	if err != nil {
 		return fmt.Errorf("create public cache: %w", err)
@@ -203,7 +218,7 @@ func run() error {
 		PublicOrigin: runtime.PublicOrigin, AppDigest: runtime.AppDigest, RendererDigest: runtime.RendererDigest,
 		Live: streams.PublicHandler(), PrintQueue: printQueue,
 		TrustedProxies: api.TrustedProxies(cfg.TrustedProxyCIDRs), Clock: time.Now, Logger: logger,
-		Cards: cards.public, Views: views.counter,
+		Cards: cards.public, Views: views.counter, Showcase: showcaseService,
 		ViewPassKey: viewPassKey, GateProviders: signInToViewGateProviders(cfg), JoinInviteTarget: joinInviteTarget(cfg),
 	})
 	if err != nil {
@@ -223,7 +238,7 @@ func run() error {
 		},
 	})
 	resumeService := resumeapi.New(
-		resume.NewStore(pool, projector),
+		resume.NewStore(pool, projector, resume.WithShowcaseSync(showcaseService)),
 		resume.NewIdempotencyStore(pool),
 		projector,
 		blobs,
@@ -236,6 +251,7 @@ func run() error {
 			RecoveryPool:        pool,
 			PrintQueue:          printQueue,
 			SignInToViewEnabled: cfg.SignInToViewEnabled,
+			Showcase:            showcaseService,
 		},
 	)
 	agentRoutes, err := newAgentAccessRoutes(ctx, cfg, pool, queries, resumeService, sessionManager)
