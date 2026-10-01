@@ -513,11 +513,12 @@ useHead(computed(() => ({
 </template>
 
 <style scoped>
-/* The stage takes the zoomed sheet's size explicitly and centers itself:
+/* The stage takes the scaled sheet's size explicitly and centers itself:
    on phones the chip row below can make the figure wider than the sheet,
-   and WebKit does not shrink a zoomed child's contribution to its parent,
    so a stage sized by its content left the ghost wider than the sheet and
-   the pair off center. */
+   the pair off center. The sheet scales with a transform, never `zoom`,
+   which WebKit renders with enlarged text (print.md §1). The scale follows
+   the viewport width, so it stays in CSS rather than in ScaledSheet's prop. */
 .landing-stage {
   --sheet-zoom: 0.39;
   width: calc(210mm * var(--sheet-zoom));
@@ -528,7 +529,8 @@ useHead(computed(() => ({
   width: 210mm;
   height: 297mm;
   overflow: hidden;
-  zoom: var(--sheet-zoom);
+  transform: scale(var(--sheet-zoom));
+  transform-origin: 0 0;
 }
 
 @media (min-width: 28rem) {
