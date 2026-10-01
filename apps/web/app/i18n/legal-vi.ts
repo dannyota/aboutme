@@ -46,7 +46,8 @@ export const legalVi: LegalCopy = {
           + 'lưu thời điểm bạn bật, vị trí bạn chọn, và kết quả duyệt.',
           'Phiên đăng nhập: thông tin trình duyệt (user-agent) và địa chỉ '
           + 'IP của từng phiên, dùng cho bảo mật. Mục Cài đặt → Thiết bị đã '
-          + 'đăng nhập liệt kê các thiết bị đang đăng nhập. Chúng tôi xóa địa chỉ IP và '
+          + 'đăng nhập liệt kê các thiết bị đang đăng nhập. Chúng tôi '
+          + 'xóa địa chỉ IP và '
           + 'thông tin trình duyệt ghi nhận cho một lần đăng nhập trong '
           + 'vòng 90 ngày kể từ lần đăng nhập đó. Việc duy trì phiên đăng '
           + 'nhập không kéo dài thời hạn này.',
@@ -167,7 +168,8 @@ export const legalVi: LegalCopy = {
           + 'việc gửi email qua Amazon SES. Amazon CloudFront (mạng máy '
           + 'chủ toàn cầu của Amazon Web Services) phân phối trang web; '
           + 'CloudFront và AWS WAF xử lý địa chỉ IP và thông tin trình '
-          + 'duyệt của bạn để chặn tấn công và nhận diện bot. Amazon Route 53 cung cấp dịch vụ '
+          + 'duyệt của bạn để chặn tấn công và nhận diện bot. Amazon '
+          + 'Route 53 cung cấp dịch vụ '
           + 'DNS. '
           + 'Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
           + 'tài khoản của bạn. Nếu bạn đăng nhập bằng LinkedIn, LinkedIn '
@@ -197,7 +199,8 @@ export const legalVi: LegalCopy = {
         paragraphs: [
           'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xóa CV, và xóa tài '
           + 'khoản. Chúng tôi giữ tài khoản, CV và ảnh của bạn cho đến khi '
-          + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ và nội dung CV của bạn; ảnh và '
+          + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ và '
+          + 'nội dung CV của bạn; ảnh và '
           + 'lịch sử phiên đăng nhập xin liên hệ qua email.',
           'Khi bạn xóa tài khoản:',
         ],

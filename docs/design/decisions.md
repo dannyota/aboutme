@@ -39,10 +39,10 @@ record.
 
 ## Remaining gates
 
-| Gate                                                   | Owner                                     | Due                            |
-| ------------------------------------------------------ | ----------------------------------------- | ------------------------------ |
-| Per-asset font license, notice, and Reserved Font Name | Integration owner                         | Whenever a font asset is added |
-| Privacy and disclosure text                            | Human owner approves agent-reviewed text  | Before the public announcement |
+| Gate                                                   | Owner                                    | Due                            |
+| ------------------------------------------------------ | ---------------------------------------- | ------------------------------ |
+| Per-asset font license, notice, and Reserved Font Name | Integration owner                        | Whenever a font asset is added |
+| Privacy and disclosure text                            | Human owner approves agent-reviewed text | Before the public announcement |
 
 The font gate stays per asset because it is a legal check on exact bytes.
 [ADR 0025](../adr/0025-single-host-production.md) is the production approval;

@@ -27,9 +27,9 @@ event and alert and remains queued until a terminal outcome is recorded.
 
 Public delivery and discovery disclosures are product requirements. The owner
 approves the agent-reviewed legal wording, and any jurisdiction-specific
-data-residency obligations are settled, before the public announcement. Design documents do not claim
-that a named law has been satisfied merely because infrastructure is in one
-region.
+data-residency obligations are settled, before the public announcement. Design
+documents do not claim that a named law has been satisfied merely because
+infrastructure is in one region.
 
 ### Account export and deletion
 
