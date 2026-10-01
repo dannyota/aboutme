@@ -200,23 +200,19 @@ finishes, or a HUP, INT, or TERM exit before that wait starts, restores both
 sources at once when they were enabled. Database, capacity, Scheduler, and host
 recovery alarms stay active throughout. SIGKILL, host loss, and shell death skip
 cleanup. Before retrying after one of those failures, use the recorded
-`deployment notification states` line from the deploy output. If the recorded
-task-stopped rule was `ENABLED`, run:
+`deployment notification states` line from the deploy output. Run the first
+command if the recorded task-stopped rule was `ENABLED`, and the second if the
+recorded site-down actions were `True`:
 
 ```sh
 aws events enable-rule --region ap-southeast-1 --name aboutme-prod-task-stopped
-```
-
-If the recorded site-down actions were `True`, run:
-
-```sh
 aws cloudwatch enable-alarm-actions --region us-east-1 \
   --alarm-names aboutme-prod-site-down
 ```
 
-Leave either source unchanged when its recorded state was `DISABLED` or `False`.
-If the deploy output is unavailable, do not change either source until the
-operator establishes its prior state from operational evidence.
+Leave a source unchanged when its recorded state was `DISABLED` or `False`. If
+the deploy output is unavailable, change neither until the operator establishes
+its prior state from operational evidence.
 
 Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
 deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes
@@ -225,14 +221,14 @@ release snapshots of `aboutme-prod` more than 27 days old by
 deletes only manual, available snapshots whose names match
 `aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and that carry the tag, plus the untagged
 `aboutme-prod-v0-1-1-202609171438`. Automated backups, the final snapshot, and
-any other snapshot stay. The job's result reports counts; its log names each
-deleted or failed snapshot and the AWS error code of a failed delete. Scheduler
-retries a failed task start twice. Like every job schedule, it runs only after a
-deploy enables it.
+any other snapshot stay. The result reports counts; the log names each deleted
+or failed snapshot and a failed delete's AWS error code. Scheduler retries a
+failed task start twice. It runs only after a deploy enables its schedule.
 
 To keep a release snapshot longer, copy it without the tag and under a name the
-job does not match, then delete the copy when it is no longer needed. A kept
-copy is outside the 30-day backup promise in the privacy policy.
+job does not match (`copy-db-snapshot` copies no tags unless given
+`--copy-tags`), then delete the copy when it is no longer needed. A kept copy is
+outside the 30-day backup promise in the privacy policy.
 
 ```sh
 aws rds copy-db-snapshot --region ap-southeast-1 \
@@ -240,24 +236,28 @@ aws rds copy-db-snapshot --region ap-southeast-1 \
   --target-db-snapshot-identifier keep-<release-snapshot>
 ```
 
-`copy-db-snapshot` copies no tags unless given `--copy-tags`.
-
 A failure before the migration task starts brings the previous `app` revision up
 beside `maintenance`, confirms it, stops `maintenance`, and restores the job
 schedules' earlier state, then exits non-zero. Once the script requests
-`migrate`, it leaves the maintenance page up and keeps `app` and the job
-schedules stopped: the request can succeed even when the client loses its
-response, and Goose can commit an earlier migration before a later one fails.
-Fix forward with a new release, or restore the snapshot the deploy took. On
-`--first-deploy`, a failure keeps maintenance up and retries the app stop,
-confirming every task stopped. It leaves every job schedule disabled, because
-`db-setup` may not have created usable application state.
+`migrate`, it keeps maintenance up and `app` and the job schedules stopped: the
+request can succeed when the client loses its response, and Goose can commit an
+earlier migration before a later one fails. Fix forward with a new release, or
+restore the deploy's snapshot. On `--first-deploy`, a failure keeps maintenance
+up, retries the app stop until every task has stopped, and leaves every job
+schedule disabled, because `db-setup` may not have created usable state.
 
 If the script reports that a database task may still be running, it leaves the
-maintenance page, the app, and the schedules exactly as they are: check that
-task with `aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and
-when it has stopped, rerun the deploy. Enabled schedules always point at the
-released `jobs` revision.
+maintenance page, the app, and the schedules exactly as they are: check the task
+with `aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it
+has stopped, rerun the deploy. Enabled schedules always point at the released
+`jobs` revision.
+
+Two recovery paths leave a service unconfirmed, print what to check by hand, and
+exit non-zero. If maintenance cannot be confirmed, on a first deploy or after a
+migration request, the new app keeps running so port 8443 has a listener. If the
+previous app does not start, it prints
+`could not confirm that the previous app started` and scales it to 0 with
+maintenance up, or leaves both as they are when maintenance is unconfirmed too.
 
 ## Rollback
 
