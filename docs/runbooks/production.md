@@ -220,15 +220,15 @@ operator establishes its prior state from operational evidence.
 
 Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
 deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes
-release snapshots of `aboutme-prod` more than 27 days old by
-`SnapshotCreateTime`, so none reaches 30 days even after one missed run. It
-deletes only manual, available snapshots whose names match
-`aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and that carry the tag, plus the untagged
-`aboutme-prod-v0-1-1-202609171438`. Automated backups, the final snapshot, and
-any other snapshot stay. The job's result reports counts; its log names each
-deleted or failed snapshot and the AWS error code of a failed delete. Scheduler
-retries a failed task start twice. Like every job schedule, it runs only after a
-deploy enables it.
+release snapshots of `aboutme-prod` more than 27 days old, or beyond the newest
+30, by `SnapshotCreateTime`, so none reaches 30 days even after one missed run
+and the AWS limit of 100 manual snapshots holds. It deletes only manual,
+available snapshots whose names match `aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and
+that carry the tag, plus the untagged `aboutme-prod-v0-1-1-202609171438`.
+Automated backups, the final snapshot, and any other snapshot stay. The job's
+result reports counts; its log names each deleted or failed snapshot and the AWS
+error code of a failed delete. Scheduler retries a failed task start twice. Like
+every job schedule, it runs only after a deploy enables it.
 
 To keep a release snapshot longer, copy it without the tag and under a name the
 job does not match, then delete the copy when it is no longer needed. A kept
