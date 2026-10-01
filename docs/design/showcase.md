@@ -131,9 +131,11 @@ one-shot task the deploy script starts out of band
    tombstoned or unknown slug.
 2. `confirm <slug> <user-id>` checks again, inside the deletion transaction,
    that the slug's owner is that user ID. A mismatch deletes nothing. A match
-   deletes the account through the self-delete path from Settings: media,
-   sessions, grants, OAuth tokens, showcase rows, and public pages go at once,
-   and each slug becomes a tombstone that blocks reuse for 180 days.
+   deletes the account through the self-delete path: media, sessions, grants,
+   OAuth tokens, showcase rows, and public pages go, and each slug becomes a
+   tombstone for 180 days. New public requests return `404` at once; responses
+   already admitted finish
+   ([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
 Output and the one audit log line per run carry only the user ID, slugs, action,
 outcome, and time; never an email, name, headline, IP address, or session data.
@@ -267,15 +269,15 @@ N2; the N5 row awaits the owner). The "updated" date becomes the release date.
 | What we collect, new item after Content                 | Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi lưu thời điểm bạn bật và vị trí bạn chọn.                                                                                                                                                                                                                                                                                                                                                                                 | Community showcase: if you turn it on for a resume, we store when you turned it on and the role you picked.                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Why we use your data, optional features list            | (xuất bản CV công khai, cho phép lập chỉ mục, hiện CV trong trang Cộng đồng, kết nối trợ lý AI, đăng nhập bằng Google hoặc LinkedIn)                                                                                                                                                                                                                                                                                                                                                      | (publishing, search and AI indexing, the community showcase, connected AI agents, Google or LinkedIn sign-in)                                                                                                                                                                                                                                                                                                                                                                                               |
 | Public only by your choice, new last paragraph          | Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị trí bạn chọn, kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc bật Yêu cầu đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng bất kỳ ai truy cập đều có thể xem và sao chép những gì trang hiển thị. | The community showcase (aboutme.vn/showcase) lists only resumes whose owners turn on Show in the community showcase. It shows the resume's preview image (your name, headline, and photo), its template, language, and the role you picked, with a link to the resume. When you turn the option off, unpublish, or turn on Require sign-in to view, the resume leaves the showcase right away. Search engines are asked not to index the showcase, but anyone who visits it can see and copy what it shows. |
-| Your controls, new item after the deletion records (N5) | Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản, chúng tôi giữ bản ghi gồm mã tài khoản, đường dẫn các CV của tài khoản đó và thời điểm xóa trong tối đa 180 ngày.                                                                                                                                                                                                                                                                                                                  | If we delete an account for a breach of these Terms, we keep a record of the account ID, the web addresses of its resumes, and the time, for up to 180 days.                                                                                                                                                                                                                                                                                                                                                |
+| Your controls, new item after the deletion records (N5) | Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản dịch vụ của chúng tôi, chúng tôi giữ bản ghi gồm mã tài khoản, đường dẫn các CV của tài khoản đó và thời điểm xóa trong tối đa 180 ngày.                                                                                                                                                                                                                                                                                            | If we delete an account for a breach of our Terms of Service, we keep a record of the account ID, the web addresses of its resumes, and the time, for up to 180 days.                                                                                                                                                                                                                                                                                                                                       |
 
 ### Terms of Service
 
 The Terms add no showcase line under Acceptable use. Its existing line, "We may
 remove content or delete accounts that break these rules.", covers the showcase
-and operator deletion. Termination promises an email and time to export before
-acting on a breach unless it is serious or the law requires otherwise. The
-command sends no email, so the operator deletes only in those two cases.
+and operator deletion. Termination promises notice unless a breach is serious or
+the law requires otherwise, and the command sends none, so the operator deletes
+only then.
 
 | Section                                     | Vietnamese                                                                                                                                                                                                               | English                                                                                                                                                                                                           |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -379,9 +381,8 @@ unchanged.
 query parsing, no cookie reads, and closed output fields; the page renders every
 value as escaped text and loads images only from its own origin under the
 existing app CSP. The showcase adds no privileged route. Its one operator
-command is `account-delete`, which runs out of band with database credentials as
-ADR 0003 requires, prints no contact data, and deletes only after `confirm`
-names the user ID that `show` printed.
+command, `account-delete`, runs out of band as ADR 0003 requires and prints no
+contact data.
 
 ## Rejected
 
@@ -394,7 +395,6 @@ names the user ID that `show` printed.
 | A first-page thumbnail of the resume    | A new stored artifact and render per edit; its text can show contact details in the body          |
 | Owner-chosen template label             | Goes stale after a template switch and can be wrong; derivation is exact                          |
 | Order by views or recent edits          | Publishes owner-only counts, or rewards edits made only to move up                                |
-| Newest opt-in first                     | Turning the switch off and on would move a resume to the top                                      |
 | Indexable showcase                      | Would index names of people who left SEO off; showing only SEO-on resumes to crawlers is cloaking |
 | Showcase implies SEO on                 | Couples two choices the owner makes separately                                                    |
 | A cached or server-rendered listing     | Needs a discovery-style fence for mutable names; per-request reads meet ADR 0010 without one      |
@@ -408,8 +408,7 @@ decision of 2026-10-01 superseded S6 and S7 and changed S5, S10, and S11; their
 rows say how. That decision reads: "no review; an opted-in, published resume
 that passes the automatic rules is listed directly, no pending state, no approve
 or decline; Report and the Terms stay; abuse is handled by Report, then blocking
-the account". It settles N1 and N2. A second decision that day settled N3 and
-N4.
+the account". It settles N1 and N2; a later one that day settled N3 and N4.
 
 | ID  | Decision                                                                                                                      | Owner decision (2026-09-27)                                                    |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -445,6 +444,7 @@ on again, which lists the resume. No review result stays stored.
 **N5.** The Privacy Policy says a record of an account deletion holds only the
 event type and time, and that a slug tombstone is not linked to the account. The
 `account-delete` audit line holds the user ID and the account's slugs for 180
-days, so the policy promises less than aboutme keeps. Recommendation: add the
-row marked N5 in [Privacy Policy](#privacy-policy). An audit line without the
-user ID and slugs could not tie a deletion to its report.
+days, and CloudTrail event history keeps the task's command arguments (user ID
+and slug) for 90 days, so the policy promises less than aboutme keeps.
+Recommendation: add the N5 row in [Privacy Policy](#privacy-policy); the audit
+needs the user ID and slugs to tie a deletion to its report.
