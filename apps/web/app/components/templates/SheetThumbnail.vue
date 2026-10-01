@@ -10,6 +10,7 @@ import type { Resume } from '@aboutme/schema';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import ResumeDocument from '../resume/ResumeDocument.vue';
+import ScaledSheet from '../resume/ScaledSheet.vue';
 
 const props = defineProps<{
   readonly document?: Resume;
@@ -37,9 +38,7 @@ const box = computed(() => props.width === undefined
     });
 const visible = computed(() =>
   near.value && props.document !== undefined && width.value !== undefined);
-const page = computed(() => ({
-  zoom: String((width.value ?? SHEET_WIDTH) / SHEET_WIDTH),
-}));
+const scale = computed(() => (width.value ?? SHEET_WIDTH) / SHEET_WIDTH);
 const context = computed(() => ({
   lng: props.lng,
   mode: 'continuous' as const,
@@ -85,17 +84,20 @@ onBeforeUnmount(() => {
     inert
     :style="box"
   >
-    <div
+    <ScaledSheet
       v-if="visible"
-      class="sheet-thumbnail__page"
-      data-sheet-thumbnail-render
-      :style="page"
+      :scale="scale"
     >
-      <ResumeDocument
-        :context="context"
-        :document="document!"
-      />
-    </div>
+      <div
+        class="sheet-thumbnail__page"
+        data-sheet-thumbnail-render
+      >
+        <ResumeDocument
+          :context="context"
+          :document="document!"
+        />
+      </div>
+    </ScaledSheet>
   </div>
 </template>
 

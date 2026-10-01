@@ -11,9 +11,13 @@ import type { TemplatePreset } from '@aboutme/schema/templates';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import ResumeDocument from '../../resume/ResumeDocument.vue';
+import ScaledSheet from '../../resume/ScaledSheet.vue';
 import { applyTemplate } from '../../resume/applyTemplate';
 import { sampleContext } from '../../../landing/sampleContext';
 import { sampleResume } from '../../../landing/sampleResume';
+
+/** An A4 sheet at 0.18 is 143 × 202 CSS pixels, the box in the template. */
+const SCALE = 0.18;
 
 const props = defineProps<{ readonly preset: Readonly<TemplatePreset> }>();
 
@@ -56,25 +60,27 @@ onBeforeUnmount(() => observer?.disconnect());
     data-template-thumbnail
     inert
   >
-    <div
+    <ScaledSheet
       v-if="visible"
-      class="template-thumbnail__page"
-      data-template-thumbnail-render
+      :scale="SCALE"
     >
-      <ResumeDocument
-        :context="sampleContext"
-        :document="document"
-      />
-    </div>
+      <div
+        class="template-thumbnail__page"
+        data-template-thumbnail-render
+      >
+        <ResumeDocument
+          :context="sampleContext"
+          :document="document"
+        />
+      </div>
+    </ScaledSheet>
   </div>
 </template>
 
 <style scoped>
-/* An A4 sheet at 0.18 is 143 × 202 CSS pixels, the box above. */
 .template-thumbnail__page {
   width: 210mm;
   min-height: 297mm;
-  zoom: 0.18;
   pointer-events: none;
 }
 </style>
