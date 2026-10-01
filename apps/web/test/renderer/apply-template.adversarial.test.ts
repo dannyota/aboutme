@@ -452,8 +452,11 @@ describe('template switches set the date format from the language', () => {
 
   it('does not drop months under a preset that prints only the year', () => {
     // The preset carries `YYYY`; the language format wins.
-    expect(preset('keep').customization.dateFormat).toBe('YYYY');
-    expect(dateFormatOf('vi')).not.toBe('YYYY');
-    expect(dateFormatOf('en')).not.toBe('YYYY');
+    const yearOnly = preset('keep');
+    yearOnly.customization.dateFormat = 'YYYY';
+    expect(applyTemplate(current, yearOnly, content, 'vi').dateFormat)
+      .toBe('MM/YYYY');
+    expect(applyTemplate(current, yearOnly, content, 'en').dateFormat)
+      .toBe('Mon YYYY');
   });
 });
