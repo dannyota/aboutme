@@ -41,10 +41,11 @@ application deploys and needed only when the observer changes.
 
 After a deploy or an observer update, the manager runs
 `bash scripts/deployment-document-check.sh` from the release worktree. It checks
-the headers, schema, and freshness of the apex and `www` documents, then
-verifies the provenance and SBOM attestation of every running image digest. It
-exits 0 only when every check passes. Evidence and a `summary.txt` land in
-`.dev/prod-checks/transparency/<UTC time>/`.
+the headers, schema, and freshness of the apex and `www` documents, requires a
+`verified` summary and the same images on both, then verifies the provenance and
+SBOM attestation of every running image digest itself. It exits 0 only when
+every check passes; during a rollout it fails until the rollout ends. Evidence
+and a `summary.txt` land in `.dev/prod-checks/transparency/<UTC time>/`.
 
 ## Failures
 
