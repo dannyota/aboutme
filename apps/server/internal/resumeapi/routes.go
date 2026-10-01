@@ -52,6 +52,9 @@ type Options struct {
 	// switch on (SIGN_IN_TO_VIEW_ENABLED); turning it off is always allowed
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
 	SignInToViewEnabled bool
+	// Showcase applies a publish request's community-showcase state in the
+	// publish transaction. Nil is for tests that never opt a resume in.
+	Showcase ShowcasePublisher
 }
 
 // Service owns the authenticated resume HTTP surface and its write-safety
@@ -80,6 +83,7 @@ type Service struct {
 	transactionOrderHook       func(string)
 	publishPreflightOrderHook  func(string)
 	signInToViewEnabled        bool
+	showcase                   ShowcasePublisher
 }
 
 type resumeBoundary interface {
@@ -142,6 +146,7 @@ func New(store *resume.Store, idem *resume.IdempotencyStore, proj *docmigrate.Pr
 		pdfAdmission:               newOwnerPDFAdmission(opts),
 		slugAttempts:               limiter,
 		signInToViewEnabled:        opts.SignInToViewEnabled,
+		showcase:                   opts.Showcase,
 	}
 }
 

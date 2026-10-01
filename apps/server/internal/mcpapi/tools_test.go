@@ -61,6 +61,30 @@ func TestResponseDataStripsSignInToView(t *testing.T) {
 	}
 }
 
+// TestResponseDataStripsShowcase proves the community showcase state never
+// reaches an agent: no tool reads or changes it, even though the REST resume
+// response carries it (docs/design/showcase.md "Opt-in"; AC-SHOW-001).
+func TestResponseDataStripsShowcase(t *testing.T) {
+	body := []byte(`{"data":{"id":"018f5b6a-9a3e-7c21-8b1e-000000000010","revision":"1","showcase":{"state":"listed","role":"backend"}}}`)
+	data, err := responseData(body)
+	if err != nil {
+		t.Fatalf("responseData() error: %v", err)
+	}
+	if _, present := data["showcase"]; present {
+		t.Fatalf("responseData() = %#v, must not carry showcase", data)
+	}
+	if data["id"] != "018f5b6a-9a3e-7c21-8b1e-000000000010" || data["revision"] != "1" {
+		t.Fatalf("responseData() = %#v, want every other field preserved", data)
+	}
+	resumes := []map[string]any{{"id": "a", "showcase": nil}, {"id": "b", "showcase": map[string]any{"state": "pending"}}}
+	for _, resume := range resumes {
+		stripAgentOnlyFields(resume)
+		if _, present := resume["showcase"]; present {
+			t.Fatalf("resume = %#v, must not carry showcase", resume)
+		}
+	}
+}
+
 // TestStripAgentOnlyFieldsAppliesToEachListedResume proves list_resumes
 // strips signInToView from every element, not only the first, since it
 // decodes a distinct envelope shape from responseData's single-object case.
