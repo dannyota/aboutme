@@ -1,10 +1,16 @@
 package showcase
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/dannyota/aboutme/apps/server/internal/resume"
+	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
 func pendingSlugs(t *testing.T, e *env) map[string]PendingItem {
@@ -140,5 +146,68 @@ func TestShowReportsTheState(t *testing.T) {
 	}
 	if state.State != "listed" || state.Outcome == nil || state.FirstListedAt == nil {
 		t.Fatalf("Show() after approval = %+v, want listed", state)
+	}
+}
+
+// AC-SHOW-006: an edit in progress holds the row lock. An approve of the old
+// key waits, and once the edit commits with a new key it matches nothing and
+// the resume stays pending.
+func TestApproveWaitsForAnEditThatChangesTheKey(t *testing.T) {
+	e := newEnv(t)
+	spec := defaultSpec()
+	f := e.addResume(t, spec)
+	e.optIn(t, f.id, nil)
+	old, _ := e.showcaseRow(t, f.id)
+
+	tx, err := e.pool.Begin(e.ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() {
+		if rollbackErr := tx.Rollback(context.Background()); rollbackErr != nil && !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+			t.Errorf("rollback: %v", rollbackErr)
+		}
+	})
+	if _, err = store.New(tx).GetResumeShowcaseForUpdate(e.ctx, f.id); err != nil {
+		t.Fatalf("lock row: %v", err)
+	}
+
+	type result struct {
+		applied bool
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		applied, approveErr := e.reviewer.Approve(e.ctx, f.slug, old.ReviewKey)
+		done <- result{applied, approveErr}
+	}()
+	select {
+	case early := <-done:
+		t.Fatalf("Approve returned %+v while the edit held the row", early)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	spec.name = "Grace Hopper"
+	personal, _, _ := spec.parts(t)
+	if _, err = tx.Exec(e.ctx, `UPDATE resumes SET personal_details = $2 WHERE id = $1`, f.id, personal); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	if err = e.service.SyncTx(e.ctx, store.New(tx), f.id); err != nil {
+		t.Fatalf("SyncTx() error: %v", err)
+	}
+	if err = tx.Commit(e.ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	got := <-done
+	if got.err != nil || got.applied {
+		t.Fatalf("Approve = %+v after the edit committed, want it to match nothing", got)
+	}
+	row, _ := e.showcaseRow(t, f.id)
+	if row.ReviewKey == old.ReviewKey || row.ReviewOutcome != nil {
+		t.Fatalf("row = %+v, want a new key and no review", row)
+	}
+	if state := resume.ShowcaseStateOf(row.ReviewKey, row.ReviewedKey, row.ReviewOutcome); state != resume.ShowcasePending {
+		t.Fatalf("state = %s, want pending", state)
 	}
 }

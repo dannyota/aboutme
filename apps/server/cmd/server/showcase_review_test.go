@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -125,10 +126,70 @@ func runReview(t *testing.T, pool *pgxpool.Pool, args ...string) string {
 	}
 	var output bytes.Buffer
 	reviewer := showcase.NewReviewer(pool, func() time.Time { return time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC) })
-	if err = runShowcaseReviewCommand(t.Context(), reviewer, command, &output); err != nil {
+	var stale showcaseStaleExitError
+	if err = runShowcaseReviewCommand(t.Context(), reviewer, command, &output); err != nil && !errors.As(err, &stale) {
 		t.Fatalf("run %v: %v", args, err)
 	}
 	return output.String()
+}
+
+// runReviewWithEnd runs a command the way the one-shot task does and returns
+// its output and error.
+func runReviewWithEnd(t *testing.T, pool *pgxpool.Pool, args ...string) (string, error) {
+	t.Helper()
+	command, err := parseShowcaseReviewCommand(args)
+	if err != nil {
+		t.Fatalf("parse %v: %v", args, err)
+	}
+	var output bytes.Buffer
+	err = runShowcaseReviewWithEnd(t.Context(), showcase.NewReviewer(pool, nil), command, &output)
+	return output.String(), err
+}
+
+// AC-SHOW-006: a stale key exits with code 3 and keeps its line, and every
+// finished run ends with the sentinel line.
+func TestShowcaseReviewExitCodeAndEndLine(t *testing.T) {
+	dsn := testutil.RequireMigratedTestDatabaseURL(t)
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(pool.Close)
+	f := seedReviewResume(t, pool)
+
+	for _, args := range [][]string{{"pending"}, {"show", f.slug}} {
+		output, runErr := runReviewWithEnd(t, pool, args...)
+		if runErr != nil || !strings.HasSuffix(output, "\n"+showcaseReviewEnd+"\n") {
+			t.Fatalf("%v = %q, %v, want success ending with the sentinel", args, output, runErr)
+		}
+	}
+	stale, runErr := runReviewWithEnd(t, pool, "approve", f.slug, reviewHexB)
+	var staleExit showcaseStaleExitError
+	if !errors.As(runErr, &staleExit) {
+		t.Fatalf("stale approve error = %v, want the stale exit error", runErr)
+	}
+	if !strings.Contains(stale, "stale: ") || !strings.Contains(stale, "nothing changed\n") || !strings.HasSuffix(stale, "\n"+showcaseReviewEnd+"\n") {
+		t.Fatalf("stale output = %q", stale)
+	}
+	if showcaseStaleExitCode != 3 {
+		t.Fatalf("stale exit code = %d, want 3", showcaseStaleExitCode)
+	}
+	approved, runErr := runReviewWithEnd(t, pool, "approve", f.slug, reviewHexA)
+	if runErr != nil || approved != "approved "+f.slug+" "+reviewHexA+"\n"+showcaseReviewEnd+"\n" {
+		t.Fatalf("approve = %q, %v", approved, runErr)
+	}
+}
+
+func TestShowcaseReviewUsageErrorPrintsNoEndLine(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	err := executeShowcaseReview(context.Background(), showcaseReviewCommand{action: "pending"}, func(string) string { return "" }, &output)
+	if err == nil || strings.Contains(output.String(), showcaseReviewEnd) {
+		t.Fatalf("configuration failure = %v with output %q, want an error and no end line", err, output.String())
+	}
+	if _, parseErr := parseShowcaseReviewCommand([]string{"bogus"}); parseErr == nil {
+		t.Fatal("a usage error parsed")
+	}
 }
 
 func requireNoPersonalText(t *testing.T, label, output string) {
