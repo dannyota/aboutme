@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"testing"
@@ -15,7 +16,12 @@ import (
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
 
+	"github.com/dannyota/aboutme/apps/server/internal/accountapi"
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
+	"github.com/dannyota/aboutme/apps/server/internal/publicapi"
+	"github.com/dannyota/aboutme/apps/server/internal/publiccache"
+	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
+	"github.com/dannyota/aboutme/apps/server/internal/realtime"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
@@ -311,4 +317,52 @@ func TestAccountDeleteConfirmDeletesTheAccount(t *testing.T) {
 	// The slugs now count as tombstoned: a second run finds nothing.
 	_, _, err = a.run(t, accountDeleteArgs{confirm: true, slug: a.slugs[0], userID: a.userID})
 	assertExit(t, err, accountDeleteNotFoundExitCode)
+}
+
+func TestReportAccountDeleteUnknownOutcomeExits3WithoutEndLine(t *testing.T) {
+	t.Parallel()
+	var out, diag bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&diag, nil))
+	args := accountDeleteArgs{confirm: true, slug: "valid-slug", userID: uuid.New()}
+	err := reportAccountDelete(&out, logger, args, accountapi.Account{}, fmt.Errorf("wrapped: %w", accountapi.ErrOutcomeUnknown))
+	assertExit(t, err, accountDeleteUnknownExitCode)
+	if want := "result unknown: run show valid-slug\n"; out.String() != want {
+		t.Fatalf("stdout = %q, want %q", out.String(), want)
+	}
+	if !strings.Contains(diag.String(), `"outcome":"unknown"`) {
+		t.Fatalf("log = %q, want the unknown outcome", diag.String())
+	}
+}
+
+func TestEvictDiscoveryOnDeleteDropsOnlyDiscoveryEntries(t *testing.T) {
+	t.Parallel()
+	cache, err := publiccache.New(8, time.Minute, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sitemap := publiccache.Key{RouteClass: publicapi.DiscoveryRouteClass, Representation: publicstate.RepresentationSitemap, Variant: "default", Generation: 1}
+	page := publiccache.Key{RouteClass: "resume", Representation: publicstate.RepresentationMarkdown, Variant: "default", Generation: 1}
+	put := func() {
+		cache.Put(sitemap, publiccache.Value{Status: 200, Body: []byte("sitemap")})
+		cache.Put(page, publiccache.Value{Status: 200, Body: []byte("page")})
+	}
+	var forwarded []realtime.Change
+	observe := evictDiscoveryOnDelete(cache, func(c realtime.Change) { forwarded = append(forwarded, c) })
+
+	put()
+	observe(realtime.Change{ResumeID: uuid.New(), Revision: 2})
+	if _, ok := cache.Get(sitemap); !ok {
+		t.Fatal("an update evicted the sitemap")
+	}
+	observe(realtime.Change{ResumeID: uuid.New(), Revision: 3, Deleted: true})
+	if _, ok := cache.Get(sitemap); ok {
+		t.Fatal("a delete left the cached sitemap")
+	}
+	if _, ok := cache.Get(page); !ok {
+		t.Fatal("a delete evicted a non-discovery entry")
+	}
+	if len(forwarded) != 2 {
+		t.Fatalf("forwarded %d changes, want 2", len(forwarded))
+	}
+	evictDiscoveryOnDelete(cache, nil)(realtime.Change{Deleted: true})
 }

@@ -34,6 +34,7 @@ const (
 	accountDeleteEndLine     = "account-delete: end"
 
 	accountDeleteUsageExitCode    = 2
+	accountDeleteUnknownExitCode  = 3
 	accountDeleteNotFoundExitCode = 4
 	accountDeleteMismatchExitCode = 5
 )
@@ -74,7 +75,7 @@ func parseAccountDeleteArgs(args []string) (accountDeleteArgs, error) {
 	}
 	if parsed.confirm {
 		id, err := uuid.Parse(args[2])
-		if err != nil || id.String() != strings.ToLower(args[2]) {
+		if err != nil || id.String() != args[2] {
 			return accountDeleteArgs{}, usage
 		}
 		parsed.userID = id
@@ -135,6 +136,20 @@ func executeAccountDelete(ctx context.Context, args accountDeleteArgs, getenv fu
 	} else {
 		account, err = service.AccountBySlug(ctx, args.slug)
 	}
+	if err != nil && !errors.Is(err, accountapi.ErrSlugNotFound) && !errors.Is(err, accountapi.ErrSlugMismatch) && !errors.Is(err, accountapi.ErrOutcomeUnknown) {
+		return failed(err)
+	}
+	return reportAccountDelete(output, logger, args, account, err)
+}
+
+// reportAccountDelete writes the result of one run and returns its exit
+// status. A lost commit answer exits 3 with no end line: the account may be
+// deleted, and show tells.
+func reportAccountDelete(output io.Writer, logger *slog.Logger, args accountDeleteArgs, account accountapi.Account, err error) error {
+	action := "show"
+	if args.confirm {
+		action = "confirm"
+	}
 	switch {
 	case errors.Is(err, accountapi.ErrSlugNotFound):
 		logger.Info(accountDeleteCommandName, "action", action, "outcome", "not_found", "slugs", []string{args.slug})
@@ -143,8 +158,12 @@ func executeAccountDelete(ctx context.Context, args accountDeleteArgs, getenv fu
 		logger.Info(accountDeleteCommandName, "action", action, "outcome", "mismatch", "user", args.userID.String(), "slugs", []string{args.slug})
 		return accountDeleteResult(output, accountDeleteMismatchExitCode,
 			fmt.Sprintf("mismatch: %s is not owned by %s; nothing deleted", args.slug, args.userID))
-	case err != nil:
-		return failed(err)
+	case errors.Is(err, accountapi.ErrOutcomeUnknown):
+		logger.Error(accountDeleteCommandName, "action", action, "outcome", "unknown", "user", args.userID.String(), "slugs", []string{args.slug})
+		if _, writeErr := fmt.Fprintf(output, "result unknown: run show %s\n", args.slug); writeErr != nil {
+			return errors.New("account-delete result could not be written")
+		}
+		return accountDeleteExitError{code: accountDeleteUnknownExitCode}
 	}
 	line := fmt.Sprintf("user=%s slugs=%s", account.UserID, strings.Join(account.Slugs, ","))
 	outcome := "shown"

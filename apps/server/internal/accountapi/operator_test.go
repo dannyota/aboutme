@@ -316,3 +316,52 @@ func equalStrings(a, b []string) bool {
 	}
 	return true
 }
+
+// A lost commit answer is not a rollback: when the follow-up read still finds
+// the user the result is unknown, not "nothing deleted".
+func TestDeleteAccountBySlugReportsUnknownCommitOutcome(t *testing.T) {
+	f := newOperatorFixture(t)
+	f.service.commitTx = func(ctx context.Context, tx pgx.Tx) error {
+		if err := tx.Rollback(ctx); err != nil {
+			return err
+		}
+		return errors.New("connection reset")
+	}
+	if _, err := f.service.DeleteAccountBySlug(f.ctx, f.slugs[0], f.user.ID); !errors.Is(err, ErrOutcomeUnknown) {
+		t.Fatalf("error = %v, want ErrOutcomeUnknown", err)
+	}
+	f.assertNothingDeleted(t)
+}
+
+// When the commit lands but its answer is lost, the absent user proves it.
+func TestDeleteAccountBySlugProvesCommitAfterLostAnswer(t *testing.T) {
+	f := newOperatorFixture(t)
+	f.service.commitTx = func(ctx context.Context, tx pgx.Tx) error {
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+		return errors.New("connection reset")
+	}
+	account, err := f.service.DeleteAccountBySlug(f.ctx, f.slugs[0], f.user.ID)
+	if err != nil || account.UserID != f.user.ID {
+		t.Fatalf("DeleteAccountBySlug = %+v, %v, want the committed deletion", account, err)
+	}
+	if _, err := f.queries.GetUserByID(f.ctx, f.user.ID); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("user lookup = %v, want no rows", err)
+	}
+}
+
+// One field decides the path: a request needs a session or a reported slug,
+// never both and never neither.
+func TestDeletionRequestNeedsExactlyOneAuthority(t *testing.T) {
+	f := newOperatorFixture(t)
+	for name, req := range map[string]deletionRequest{
+		"both":    {userID: f.user.ID, session: &store.Session{ID: uuid.New(), UserID: f.user.ID}, reportedSlug: f.slugs[0]},
+		"neither": {userID: f.user.ID},
+	} {
+		if _, err := f.service.deleteAccountForUser(f.ctx, req); !errors.Is(err, errDeletionRequestInvalid) {
+			t.Errorf("%s: error = %v, want errDeletionRequestInvalid", name, err)
+		}
+	}
+	f.assertNothingDeleted(t)
+}

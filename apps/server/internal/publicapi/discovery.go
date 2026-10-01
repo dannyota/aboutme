@@ -12,6 +12,9 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
+// DiscoveryRouteClass is the cache route class of the discovery documents.
+const DiscoveryRouteClass publiccache.RouteClass = "discovery"
+
 // DiscoveryDependencies contains dependencies for discovery documents.
 type DiscoveryDependencies struct {
 	Store        store.PublicDiscoveryQueries
@@ -44,7 +47,7 @@ func NewRobotsHandler(dependencies DiscoveryDependencies) (http.Handler, error) 
 		if !publicGetOrHead(w, request) {
 			return
 		}
-		key := publiccache.Key{RouteClass: "discovery", Representation: publicstate.RepresentationRobots, Variant: "default", FormatVersion: publicformat.RobotsFormatVersion, AppDigest: dependencies.AppDigest}
+		key := publiccache.Key{RouteClass: DiscoveryRouteClass, Representation: publicstate.RepresentationRobots, Variant: "default", FormatVersion: publicformat.RobotsFormatVersion, AppDigest: dependencies.AppDigest}
 		if cached, ok := dependencies.Cache.Get(key); ok {
 			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
 			return
@@ -73,7 +76,7 @@ func newDiscoveryHandler(dependencies DiscoveryDependencies, representation publ
 			return
 		}
 		defer lease.Release()
-		key := publiccache.Key{RouteClass: "discovery", Representation: representation, Variant: "default", Generation: generation, FormatVersion: version, AppDigest: dependencies.AppDigest}
+		key := publiccache.Key{RouteClass: DiscoveryRouteClass, Representation: representation, Variant: "default", Generation: generation, FormatVersion: version, AppDigest: dependencies.AppDigest}
 		if cached, ok := dependencies.Cache.Get(key); ok {
 			SelectedResponse{Status: cached.Status, Header: cached.Header, Body: cached.Body}.ServeHTTP(w, request)
 			return
