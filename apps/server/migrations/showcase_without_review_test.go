@@ -97,6 +97,10 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	if n := mustQueryInt(ctx, t, db, stored); n != 0 {
 		t.Errorf("rows with a stored review result = %d, want 0", n)
 	}
+	const keyed = `SELECT count(*) FROM resume_showcase WHERE review_key <> '0000000000000000'`
+	if n := mustQueryInt(ctx, t, db, keyed); n != 0 {
+		t.Errorf("rows with a stored review key = %d, want 0", n)
+	}
 	if n := mustQueryInt(ctx, t, db, previousListing); n != 0 {
 		t.Errorf("rows the previous release lists after the migration = %d, want 0", n)
 	}
