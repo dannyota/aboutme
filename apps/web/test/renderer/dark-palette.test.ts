@@ -158,6 +158,15 @@ describe('dark palette rule', () => {
               `${id} ${label} tag label`,
             ).toBeGreaterThanOrEqual(4.5);
             at('rule', 1.5);
+            // The measured minimums across all twenty presets on every
+            // surface (docs/design/public-page-theme.md, "Template mapping").
+            at('body', 10.1);
+            at('meta', 6.4);
+            at('accent-solid', 3.5);
+            expect(
+              contrastRatio(roles['accent-solid']!, roles.track!),
+              `${id} ${label} level fill on track, measured minimum`,
+            ).toBeGreaterThanOrEqual(3.5);
           }
         },
       );

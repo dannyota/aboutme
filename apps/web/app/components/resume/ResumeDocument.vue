@@ -52,6 +52,15 @@ const rootStyle = computed<CSSProperties>(() => ({
 
 <style>
 /*
+ * The owner's color scheme rules live in a sibling file. The print worker
+ * loads only this block (PrintResumeApp imports index 0), so the file is
+ * inlined here rather than linked as a second `<style src>` block. These
+ * rules are !important or more specific than the light ones, so their place
+ * in the cascade does not matter.
+ */
+@import './resumeColorScheme.css';
+
+/*
  * The public page shell's skip link, rendered outside the resume by the public
  * render worker. The public page loads this stylesheet with the resume CSS.
  * The link stays out of view until keyboard focus reaches it.
@@ -640,5 +649,3 @@ body:has(> #public-resume) {
   }
 }
 </style>
-
-<style src="./resumeColorScheme.css"></style>
