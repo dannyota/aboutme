@@ -123,7 +123,7 @@ func TestWireVersion_CurrentClientSetsAndUnsetsPhotoPosition(t *testing.T) {
 	for _, position := range []schema.PhotoPosition{schema.PhotoPositionLeft, schema.Right, schema.Top} {
 		set := resumeRequest(t, h, http.MethodPatch, path,
 			`{"deltas":[{"op":"set","path":"header.photoPosition","value":"`+string(position)+`"}]}`,
-			revision, uuid.New(), "4")
+			revision, uuid.New(), "5")
 		if set.status != http.StatusOK {
 			t.Fatalf("set photoPosition %s = %d %s", position, set.status, set.body)
 		}
@@ -137,14 +137,14 @@ func TestWireVersion_CurrentClientSetsAndUnsetsPhotoPosition(t *testing.T) {
 	for _, bad := range []string{`"bottom"`, `"Left"`, `""`, `1`, `null`} {
 		rejected := resumeRequest(t, h, http.MethodPatch, path,
 			`{"deltas":[{"op":"set","path":"header.photoPosition","value":`+bad+`}]}`,
-			revision, uuid.New(), "4")
+			revision, uuid.New(), "5")
 		if rejected.status == http.StatusOK || rejected.status >= http.StatusInternalServerError {
 			t.Fatalf("photoPosition %s = %d %s, want a client error", bad, rejected.status, rejected.body)
 		}
 	}
 
 	unset := resumeRequest(t, h, http.MethodPatch, path,
-		`{"deltas":[{"op":"unset","path":"header.photoPosition"}]}`, revision, uuid.New(), "4")
+		`{"deltas":[{"op":"unset","path":"header.photoPosition"}]}`, revision, uuid.New(), "5")
 	if unset.status != http.StatusOK {
 		t.Fatalf("unset photoPosition = %d %s", unset.status, unset.body)
 	}
@@ -275,7 +275,7 @@ func TestWireVersion_CurrentClientSetsAndClearsProjectSubtitle(t *testing.T) {
 	id, revision := seedProjectSubtitles(t, h)
 	path := apiResumePath + "/" + id.String() + "/entries/projects"
 	set := resumeRequest(t, h, http.MethodPatch, path,
-		`{"entry":{"id":"`+v4ProjectKept+`","subtitle":"TypeScript"}}`, revision, uuid.New(), "4")
+		`{"entry":{"id":"`+v4ProjectKept+`","subtitle":"TypeScript"}}`, revision, uuid.New(), "5")
 	if set.status != http.StatusOK {
 		t.Fatalf("set subtitle = %d %s", set.status, set.body)
 	}
@@ -284,7 +284,7 @@ func TestWireVersion_CurrentClientSetsAndClearsProjectSubtitle(t *testing.T) {
 		t.Fatalf("stored subtitle = %s, want TypeScript", subtitleOf(entries[0]))
 	}
 	cleared := resumeRequest(t, h, http.MethodPatch, path,
-		`{"entry":{"id":"`+v4ProjectKept+`"}}`, revision, uuid.New(), "4")
+		`{"entry":{"id":"`+v4ProjectKept+`"}}`, revision, uuid.New(), "5")
 	if cleared.status != http.StatusOK {
 		t.Fatalf("clear subtitle = %d %s", cleared.status, cleared.body)
 	}

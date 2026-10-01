@@ -1,9 +1,9 @@
 // Code generated from resume.schema.json. DO NOT EDIT.
 
 /**
- * Document-shape version. This schema validates version 4 only; see docs/design/data.md#document-versions.
+ * Document-shape version. This schema validates version 5 only; see docs/design/data.md#document-versions.
  */
-export type SchemaVersion = 4;
+export type SchemaVersion = 5;
 export type Uuid = string;
 /**
  * Draft section selected by sectionType. Only sectionType and entries are required. See docs/design/data.md#resume-aggregate.
@@ -379,4 +379,8 @@ export interface Customization {
   };
   pageFormat: "a4" | "letter";
   dateFormat: "MM/YYYY" | "Mon YYYY" | "YYYY";
+  /**
+   * Public page color scheme: light, dark, or follow the viewer's device. Absent means light. See docs/design/public-page-theme.md.
+   */
+  colorScheme?: "light" | "dark" | "system";
 }

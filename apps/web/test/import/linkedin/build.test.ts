@@ -336,7 +336,7 @@ describe('buildDocument and checkDocument', () => {
 describe('requestBytes', () => {
   it('counts UTF-8 bytes of the exact create request body', () => {
     const document = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       personalDetails: {
         fullName: 'Nguyễn Văn Mẫu',
         headline: '',
