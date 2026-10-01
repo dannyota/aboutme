@@ -528,6 +528,17 @@ export default defineComponent({
   display: grid;
   gap: 24px;
   justify-content: center;
+
+  /*
+   * Chromium on Linux rounds each glyph advance to a whole pixel when
+   * hinting is on, which is the default in a user's browser. The PDF is
+   * laid out with --font-render-hinting=none (docs/design/templates/print.md),
+   * so its advances keep fractions. geometricPrecision makes Blink use
+   * subpixel positioning and no hinting here too, so lines wrap where the
+   * PDF wraps. It is a no-op where the platform already positions
+   * subpixel, and it applies to the preview only.
+   */
+  text-rendering: geometricPrecision;
 }
 
 .resume-page {
