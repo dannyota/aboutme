@@ -9,7 +9,7 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
 |[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup (v0.6.26); view counts shipped in v0.6.4|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
-|[showcase.md](showcase.md)|Community showcase ([ADR 0029](../adr/0029-community-showcase.md), proposed), waiting for owner approvals|
+|[showcase.md](showcase.md)|Community showcase ([ADR 0029](../adr/0029-community-showcase.md)); the follow-up lists opted-in resumes without review|
 |[backlog.md](backlog.md)|Open follow-ups and launch gates|
 |[traceability/](traceability/README.md)|Acceptance-criterion ownership and evidence|
 
