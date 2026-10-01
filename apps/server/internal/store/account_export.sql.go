@@ -72,39 +72,50 @@ func (q *Queries) ListAccountExportProviders(ctx context.Context, userID uuid.UU
 }
 
 const listAccountExportResumes = `-- name: ListAccountExportResumes :many
-SELECT id, user_id, title, slug, live, download_enabled, seo_geo_enabled,
-    schema_version, revision, lng, personal_details, content, customization,
-    created_at, updated_at, public_title, favicon_emoji, sign_in_to_view
-FROM resumes
-WHERE user_id = $1
-ORDER BY created_at, id
+SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled,
+    r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization,
+    r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view,
+    s.requested_at AS showcase_requested_at, s.role AS showcase_role,
+    s.review_key AS showcase_review_key, s.reviewed_key AS showcase_reviewed_key,
+    s.review_outcome AS showcase_review_outcome
+FROM resumes r
+LEFT JOIN resume_showcase s ON s.resume_id = r.id
+WHERE r.user_id = $1
+ORDER BY r.created_at, r.id
 LIMIT 4
 `
 
 type ListAccountExportResumesRow struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	Title           string
-	Slug            *string
-	Live            bool
-	DownloadEnabled bool
-	SEOGeoEnabled   bool
-	SchemaVersion   int32
-	Revision        int64
-	Lng             *string
-	PersonalDetails json.RawMessage
-	Content         json.RawMessage
-	Customization   json.RawMessage
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	PublicTitle     *string
-	FaviconEmoji    *string
-	SignInToView    bool
+	ID                    uuid.UUID
+	UserID                uuid.UUID
+	Title                 string
+	Slug                  *string
+	Live                  bool
+	DownloadEnabled       bool
+	SEOGeoEnabled         bool
+	SchemaVersion         int32
+	Revision              int64
+	Lng                   *string
+	PersonalDetails       json.RawMessage
+	Content               json.RawMessage
+	Customization         json.RawMessage
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	PublicTitle           *string
+	FaviconEmoji          *string
+	SignInToView          bool
+	ShowcaseRequestedAt   *time.Time
+	ShowcaseRole          *string
+	ShowcaseReviewKey     *string
+	ShowcaseReviewedKey   *string
+	ShowcaseReviewOutcome *string
 }
 
 // Carries sign_in_to_view with the other publish settings; the pass epoch
 // never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
-// "Setting").
+// "Setting"). The showcase columns are null without an opt-in; the review
+// keys only decide the exported state and never leave the server
+// (docs/design/showcase.md "Privacy and abuse").
 func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error) {
 	rows, err := q.db.Query(ctx, listAccountExportResumes, userID)
 	if err != nil {
@@ -133,6 +144,11 @@ func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID
 			&i.PublicTitle,
 			&i.FaviconEmoji,
 			&i.SignInToView,
+			&i.ShowcaseRequestedAt,
+			&i.ShowcaseRole,
+			&i.ShowcaseReviewKey,
+			&i.ShowcaseReviewedKey,
+			&i.ShowcaseReviewOutcome,
 		); err != nil {
 			return nil, err
 		}

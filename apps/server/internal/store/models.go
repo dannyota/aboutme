@@ -248,6 +248,19 @@ type ResumeShareSignalDay struct {
 	Fetches  int32
 }
 
+type ResumeShowcase struct {
+	ResumeID      uuid.UUID
+	RequestedAt   time.Time
+	Role          *string
+	ReviewKey     string
+	CardVersion   string
+	TemplateID    *string
+	ReviewedKey   *string
+	ReviewOutcome *string
+	ReviewedAt    *time.Time
+	FirstListedAt *time.Time
+}
+
 type ResumeViewDay struct {
 	ResumeID   uuid.UUID
 	Day        pgtype.Date
