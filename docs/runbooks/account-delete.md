@@ -59,11 +59,18 @@ Control characters and non-ASCII bytes are dropped before printing.
 7. Run `show <slug>` again. It must exit 4 with `not found`, because the slug is
    now a tombstone. Do the same for the other slugs of the account.
 
+A response the server admitted before the commit finishes sending, and a live
+stream ends. The server drops its cached sitemap and `llms.txt` on the deletion
+notification ([ADR 0010](../adr/0010-public-artifact-revocation.md), as
+amended), so the next request sees the account gone.
+
 ## What is kept
 
 The task log keeps one audit line per run with the action, outcome, user ID,
-slugs, and time, for 180 days with the server logs. A slug tombstone is not
-linked to the account, and the deletion removes the rest.
+slugs, and time, for 180 days with the server logs. CloudTrail event history
+keeps the RunTask command arguments, which hold the user ID and the slug, for 90
+days. A slug tombstone is not linked to the account, and the deletion removes
+the rest.
 
 ## Failures
 
@@ -72,8 +79,14 @@ linked to the account, and the deletion removes the rest.
   deleted. Nothing was deleted.
 - Exit 5 means the slug is not owned by that user ID. Nothing was deleted. Run
   `show <slug>` again and use the user ID it prints.
+- Exit 3 means the server could not tell whether the commit succeeded. The
+  script prints the task log, then `result unknown: run show <slug> to confirm`,
+  and exits 3 without waiting for an end line. Run `show <slug>`: exit 4 with
+  `not found` means the account is deleted, and a printed `account` line means
+  it still exists, so run `confirm` again.
 - Any other non-zero task exit prints the task log, then exits 1 with the exit
-  code. The deletion is one transaction, so a failed run deleted nothing.
+  code, again without waiting for an end line. The server rolled the transaction
+  back, so an exit 1 run deleted nothing.
 - Every run that reaches the database ends its log with the line
   `account-delete: end`. The script reads the log from the start, follows pages
   until the token repeats, and retries up to five times. It never prints that
