@@ -37,6 +37,15 @@ digest as `observer_image_digest` in `prod.tfvars` and its backup, so a function
 OpenTofu ever recreates starts on the same image. Updates are separate from
 application deploys and needed only when the observer changes.
 
+## Production check
+
+After a deploy or an observer update, the manager runs
+`bash scripts/deployment-document-check.sh` from the release worktree. It checks
+the headers, schema, and freshness of the apex and `www` documents, then
+verifies the provenance and SBOM attestation of every running image digest. It
+exits 0 only when every check passes. Evidence and a `summary.txt` land in
+`.dev/prod-checks/transparency/<UTC time>/`.
+
 ## Failures
 
 - **`aboutme-prod-observer-errors` or `-stopped` mails the owner.** Read the
