@@ -84,8 +84,13 @@ not configuration: the design fixes one observer to one site.
   Schema in `schema/`.
 - `internal/publish`: writes the document and the verification cache to one S3
   (or S3-compatible) bucket.
+- `internal/leakscan`: the forbidden identifier patterns. The leak test and
+  `cmd/document-check` share them.
 - `cmd/observer`: the three subcommands, environment configuration, and the
   wiring that builds one adapter, one verifier, and one publisher per process.
+- `cmd/document-check`: checks a fetched copy of the live document (size,
+  schema, forbidden patterns, staleness) and lists its running images. The
+  production check script runs it; it is not part of the image.
 
 ## Tests
 
