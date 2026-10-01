@@ -42,6 +42,7 @@ const localizedPaths: ReadonlySet<string> = new Set([
   '/privacy',
   '/terms',
   '/verify',
+  '/showcase',
   '/guide/mcp',
   '/app/settings/sessions',
   '/authorize',

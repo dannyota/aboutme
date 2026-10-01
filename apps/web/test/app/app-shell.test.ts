@@ -556,6 +556,7 @@ describe('AppShell', () => {
     ['/terms', 'Create your resume'],
     ['/privacy', 'Create your resume'],
     ['/verify', 'Create your resume'],
+    ['/showcase', 'Create your resume'],
     ['/guide/mcp', 'Create your resume'],
     ['/login', 'Create account'],
     ['/register', 'Create account'],
@@ -572,7 +573,7 @@ describe('AppShell', () => {
   });
 
   it(
-    'links the MCP guide directly after Library with aria-current on it',
+    'links the MCP guide directly after Community with aria-current on it',
     async () => {
       meStatus = 401;
       setSiteLocale('en');
@@ -583,7 +584,8 @@ describe('AppShell', () => {
       const libraryIndex = labels.indexOf('Library');
       const guideIndex = labels.indexOf('Connect AI');
       expect(libraryIndex).toBeGreaterThanOrEqual(0);
-      expect(guideIndex).toBe(libraryIndex + 1);
+      expect(labels[libraryIndex + 1]).toBe('Community');
+      expect(guideIndex).toBe(libraryIndex + 2);
       const guideLink = anchors[guideIndex]!;
       expect(guideLink.attributes('href')).toBe('/guide/mcp');
       expect(guideLink.attributes('aria-current')).toBe('page');
@@ -593,6 +595,72 @@ describe('AppShell', () => {
       const other = elsewhere.findAll('a')
         .find((a) => a.attributes('href') === '/guide/mcp');
       expect(other?.attributes('aria-current')).toBeUndefined();
+    },
+  );
+
+  it.each([
+    ['en', 'Community'],
+    ['vi', 'Cộng đồng'],
+  ] as const)(
+    'links the community showcase after Library in %s',
+    async (nextLocale, label) => {
+      meStatus = 401;
+      setSiteLocale(nextLocale);
+      const wrapper = await mountShell('/templates');
+      await flushPromises();
+      const anchors = wrapper.findAll('a');
+      const hrefs = anchors.map((a) => a.attributes('href'));
+      const community = anchors.find(
+        (a) => a.attributes('href') === '/showcase',
+      );
+      expect(community?.text().trim()).toBe(label);
+      expect(hrefs.indexOf('/showcase')).toBe(hrefs.indexOf('/templates') + 1);
+      expect(community?.attributes('aria-current')).toBeUndefined();
+      expect(community?.classes()).not.toContain('max-sm:hidden');
+    },
+  );
+
+  it('marks the Community link current on /showcase', async () => {
+    meStatus = 401;
+    setSiteLocale('en');
+    const wrapper = await mountShell('/showcase');
+    await flushPromises();
+    const community = wrapper.findAll('a')
+      .find((a) => a.attributes('href') === '/showcase');
+    expect(community?.attributes('aria-current')).toBe('page');
+  });
+
+  it('hides the Community link on phones when signed in', async () => {
+    meStatus = 200;
+    const wrapper = await mountShell();
+    await flushPromises();
+    const community = wrapper.findAll('a')
+      .find((a) => a.attributes('href') === '/showcase');
+    expect(community?.classes()).toContain('max-sm:hidden');
+  });
+
+  it('shows the mark-only logo below 30rem signed out, never signed in',
+    async () => {
+      meStatus = 401;
+      const signedOut = await mountShell('/');
+      await flushPromises();
+      const logos = signedOut.findAll('[data-logo-size]');
+      expect(logos).toHaveLength(2);
+      const [full, mark] = logos;
+      expect(full?.find('[data-logo-part="wordmark"]').exists()).toBe(true);
+      expect(full?.classes()).toContain('max-[30rem]:hidden');
+      expect(mark?.find('[data-logo-part="wordmark"]').exists()).toBe(false);
+      expect(mark?.classes()).toContain('min-[30rem]:hidden');
+      signedOut.unmount();
+
+      meStatus = 200;
+      clearNuxtData();
+      const signedIn = await mountShell();
+      await flushPromises();
+      const only = signedIn.findAll('[data-logo-size]');
+      expect(only).toHaveLength(1);
+      expect(only[0]?.find('[data-logo-part="wordmark"]').exists()).toBe(true);
+      expect(only[0]?.classes()).not.toContain('max-[30rem]:hidden');
     },
   );
 
