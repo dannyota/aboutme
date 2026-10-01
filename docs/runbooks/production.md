@@ -323,8 +323,8 @@ The same fence and lock gate TOTP enrollment at a second, higher floor (numeric
 4007). [The TOTP keys runbook](totp-keys.md) covers the flag-off deploy, floor
 activation, flag enablement, key rotation, the `aboutme-prod-totp-unavailable`
 alarm, and the production proofs for that release.
-[Sign in to view](sign-in-to-view.md) covers the same sequence at a third floor
-(numeric 6026). [Showcase review](showcase-review.md) runs listing reviews.
+[The sign in to view runbook](sign-in-to-view.md) covers the same sequence at a
+third floor (numeric 6026).
 
 The one-time bootstrap, before the first fence-aware deploy: set
 `operator_principal_arn` in the ignored `prod.tfvars` to the owner's `aws login`
