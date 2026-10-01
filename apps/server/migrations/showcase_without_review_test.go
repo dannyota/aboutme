@@ -63,6 +63,8 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	stale := seedShowcaseRow(ctx, t, db, userID, "nr-stale", showcaseHexB, "approved", "x")
 	declined := seedShowcaseRow(ctx, t, db, userID, "nr-declined", showcaseHexA, "declined", "")
 	declinedAfterListing := seedShowcaseRow(ctx, t, db, userID, "nr-declined-listed", showcaseHexA, "declined", "x")
+	// Declined for an older key: the previous UI showed this one as pending.
+	declinedOlderKey := seedShowcaseRow(ctx, t, db, userID, "nr-declined-old", showcaseHexB, "declined", "")
 
 	const previousListing = `SELECT count(*) FROM resume_showcase WHERE review_outcome = 'approved' AND reviewed_key = review_key`
 	if n := mustQueryInt(ctx, t, db, previousListing); n != 1 {
@@ -85,7 +87,7 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 			t.Errorf("%s row was deleted, want kept", name)
 		}
 	}
-	for name, id := range map[string]uuid.UUID{"declined": declined, "declined after listing": declinedAfterListing} {
+	for name, id := range map[string]uuid.UUID{"declined": declined, "declined after listing": declinedAfterListing, "declined for an older key": declinedOlderKey} {
 		if present(id) {
 			t.Errorf("%s row was kept, want deleted", name)
 		}
