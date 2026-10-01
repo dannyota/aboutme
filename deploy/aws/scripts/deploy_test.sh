@@ -1734,7 +1734,7 @@ for bad in "" "bogus" "pending extra" "show" "show Bad_Slug" "show a" "show -bad
   "decline alpha-cv xyz" "approve alpha-cv 0123456789abcdef extra" "show alpha-cv 0123456789abcdef"; do
   name="showcase_invalid_${bad//[^a-z0-9A-Z]/_}"
   # shellcheck disable=SC2086
-  SC_ONLY=1 run_case "$name" fail --showcase-review v0.1.0 $bad
+  SC_ONLY=1 run_case "$name" 2 --showcase-review v0.1.0 $bad
   absent "$work/$name.calls" "aws "
 done
 SC_ONLY=1 run_case showcase_bad_tag fail --showcase-review main pending
