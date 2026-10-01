@@ -70,19 +70,24 @@ func removeV3Fields(value map[string]any) error {
 }
 
 // productionEmissionLossPolicy permits exactly the declared losses of an
-// older emission: v4's photoPosition and project subtitles for any older
-// target, v3's display and textAlign for v2 and v1, plus the v1 font fallback
-// for v1. Everything else must survive unchanged.
+// older emission: v5's colorScheme for any older target, v4's photoPosition and
+// project subtitles for v3 and older, v3's display and textAlign for v2 and v1,
+// plus the v1 font fallback for v1. Everything else must survive unchanged.
 func productionEmissionLossPolicy(current, emitted, restored json.RawMessage, target int32) error {
-	if target < 1 || target > 3 {
+	if target < 1 || target > 4 {
 		return fmt.Errorf("no declared loss for target version %d", target)
 	}
 	currentValue, err := decodeDocumentValue(current)
 	if err != nil {
 		return fmt.Errorf("decoding current document: %w", err)
 	}
-	if removeErr := removeV4Fields(currentValue); removeErr != nil {
+	if removeErr := removeV5Fields(currentValue); removeErr != nil {
 		return fmt.Errorf("current document: %w", removeErr)
+	}
+	if target < 4 {
+		if removeErr := removeV4Fields(currentValue); removeErr != nil {
+			return fmt.Errorf("current document: %w", removeErr)
+		}
 	}
 	if target < 3 {
 		if removeErr := removeV3Fields(currentValue); removeErr != nil {

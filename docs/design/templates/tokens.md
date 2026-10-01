@@ -33,8 +33,8 @@ is the same in every template by construction.
 
 ## 2. Customization leaves
 
-The complete document `customization` has 27 leaves: 25 author-controlled and 2
-derived placement arrays. Ten leaves are optional. Ranges and enums are the
+The complete document `customization` has 28 leaves: 26 author-controlled and 2
+derived placement arrays. Eleven leaves are optional. Ranges and enums are the
 schema's, not this document's.
 
 | Token                           | Type                                            | Baseline (`fixtures/minimal.json`) | Owner        |
@@ -65,6 +65,7 @@ schema's, not this document's.
 | `sectionDisplay.language.style` | enum: `text`, `tag`, `bar`, `dots`              | `text`                             | user, preset |
 | `pageFormat`                    | enum: `a4`, `letter`                            | `a4`                               | user, preset |
 | `dateFormat`                    | enum: `MM/YYYY`, `Mon YYYY`, `YYYY`             | `MM/YYYY`                          | user, preset |
+| `colorScheme`                   | enum: `light`, `dark`, `system`, **optional**   | absent (renders `light`)           | user         |
 
 `minimal.json` is a baseline document, not a declared default. A preset states
 the 15 required author-controlled leaves and its `layout.placement` rule, and
@@ -82,6 +83,13 @@ Two structures have grouped requirements. `spacing.pageMargin` requires both `x`
 and `y` once present. `customization.header` requires `align`, `detailsLayout`,
 and `iconStyle` together, while `photoPosition` remains optional. A margin or a
 header missing any required child is invalid rather than partially defaulted.
+
+`colorScheme` sets the screen scheme of the public page and the editor's Web
+preview: `system` follows each viewer's `prefers-color-scheme`. The PDF and
+print always render light. A template switch keeps the user's choice, so presets
+do not set it. The
+[public page theme](../public-page-theme.md#color-scheme-setting) owns its
+rendering.
 
 `customization.header` is the **resume header**: name, headline, photo, and
 contact details (`contract.md` §5.1). `customization.heading` is the **section

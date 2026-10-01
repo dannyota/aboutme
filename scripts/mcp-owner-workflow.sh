@@ -394,7 +394,7 @@ sign_out() {
 }
 
 source_document() {
-  printf '%s' '{"schemaVersion":4,"personalDetails":{"fullName":"Lan Fixture","headline":"Fictional platform engineer","details":[]},"content":{"work":{"sectionType":"work","displayName":"Experience","iconKey":"briefcase","entries":[]}},'
+  printf '%s' '{"schemaVersion":5,"personalDetails":{"fullName":"Lan Fixture","headline":"Fictional platform engineer","details":[]},"content":{"work":{"sectionType":"work","displayName":"Experience","iconKey":"briefcase","entries":[]}},'
   printf '%s' '"customization":{"font":{"family":"inter","baseSizePx":14},"colors":{"primary":"#1a1a1a","text":"#1a1a1a","background":"#ffffff"},"spacing":{"sectionGap":16,"entryGap":8,"lineHeight":1.4},"heading":{"style":"normal","showRule":false},'
   printf '%s' '"layout":{"columns":1,"sections":{"main":["work"],"sidebar":[]}},"sectionDisplay":{"skill":{"style":"text"},"language":{"style":"text"}},"pageFormat":"a4","dateFormat":"MM/YYYY"}}'
 }

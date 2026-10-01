@@ -30,16 +30,16 @@ import (
 )
 
 // --- synthetic two-version projector (see docmigrate_test.go for the
-// rationale: v5 is the immutable v4 schema retargeted, so a projected
+// rationale: v6 is the immutable v5 schema retargeted, so a projected
 // document still strict-decodes into the CURRENT Go types) ---
 
-const pjNextPrefix = "v5! "
+const pjNextPrefix = "v6! "
 
 func pjReleasedRawSchema(t *testing.T) []byte {
 	t.Helper()
-	released, err := schema.ReleasedSchemaFor(4)
+	released, err := schema.ReleasedSchemaFor(5)
 	if err != nil {
-		t.Fatalf("schema.ReleasedSchemaFor(4): %v", err)
+		t.Fatalf("schema.ReleasedSchemaFor(5): %v", err)
 	}
 	return released.RawSchema
 }
@@ -52,7 +52,7 @@ func pjDerivedNextSchema(t *testing.T) []byte {
 	if err := dec.Decode(&doc); err != nil {
 		t.Fatalf("decode released schema: %v", err)
 	}
-	doc["$id"] = "https://aboutme.vn/schema/resume/v5"
+	doc["$id"] = "https://aboutme.vn/schema/resume/v6"
 	defs, ok := doc["$defs"].(map[string]any)
 	if !ok {
 		t.Fatal("released schema has no $defs object")
@@ -61,10 +61,10 @@ func pjDerivedNextSchema(t *testing.T) []byte {
 	if !ok {
 		t.Fatal("released schema has no $defs/schemaVersion object")
 	}
-	schemaVersion["const"] = json.Number("5")
+	schemaVersion["const"] = json.Number("6")
 	out, err := json.Marshal(doc)
 	if err != nil {
-		t.Fatalf("encode derived v5 schema: %v", err)
+		t.Fatalf("encode derived v6 schema: %v", err)
 	}
 	return out
 }
@@ -135,16 +135,16 @@ func pjSyntheticProjector(t *testing.T) *docmigrate.Projector {
 	t.Helper()
 	p, err := docmigrate.NewProjector(
 		map[int32]docmigrate.AdjacentConverters{
-			4: {Up: pjHeadlineConverter(t, 5, true), Down: pjHeadlineConverter(t, 4, false)},
+			5: {Up: pjHeadlineConverter(t, 6, true), Down: pjHeadlineConverter(t, 5, false)},
 		},
 		map[int32]docmigrate.ValidateFunc{
-			4: pjValidator(t, pjReleasedRawSchema(t)),
-			5: pjValidator(t, pjDerivedNextSchema(t)),
+			5: pjValidator(t, pjReleasedRawSchema(t)),
+			6: pjValidator(t, pjDerivedNextSchema(t)),
 		},
-		[]int32{4, 5}, []int32{4, 5}, 5,
+		[]int32{5, 6}, []int32{5, 6}, 6,
 	)
 	if err != nil {
-		t.Fatalf("NewProjector(synthetic v5): %v", err)
+		t.Fatalf("NewProjector(synthetic v6): %v", err)
 	}
 	return p
 }
@@ -237,8 +237,8 @@ func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T
 		t.Fatalf("Create() error: %v", err)
 	}
 	before := pjSnapshot(ctx, t, pool, created.ID)
-	if before.SchemaVersion != 4 {
-		t.Fatalf("seeded schema_version = %d, want 4 (the row must be BELOW the projector's current)", before.SchemaVersion)
+	if before.SchemaVersion != 5 {
+		t.Fatalf("seeded schema_version = %d, want 5 (the row must be BELOW the projector's current)", before.SchemaVersion)
 	}
 
 	got, err := s.Get(ctx, userID, created.ID)
@@ -249,11 +249,11 @@ func TestStore_Integration_Get_ProjectsOldVersionRow_WithoutWriting(t *testing.T
 	if want := pjNextPrefix + stored; pjHeadline(t, got.Doc) != want {
 		t.Errorf("Get().Doc headline = %q, want %q (the read did not project)", pjHeadline(t, got.Doc), want)
 	}
-	if got.Doc.SchemaVersion != 5 {
-		t.Errorf("Get().Doc.SchemaVersion = %d, want 5 (the projector's current version)", got.Doc.SchemaVersion)
+	if got.Doc.SchemaVersion != 6 {
+		t.Errorf("Get().Doc.SchemaVersion = %d, want 6 (the projector's current version)", got.Doc.SchemaVersion)
 	}
-	if got.StoredSchemaVersion != 4 {
-		t.Errorf("Get().StoredSchemaVersion = %d, want 4 (the row's own version, before projection)", got.StoredSchemaVersion)
+	if got.StoredSchemaVersion != 5 {
+		t.Errorf("Get().StoredSchemaVersion = %d, want 5 (the row's own version, before projection)", got.StoredSchemaVersion)
 	}
 
 	pjAssertRowUntouched(t, before, pjSnapshot(ctx, t, pool, created.ID), "after Get")

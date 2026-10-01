@@ -46,7 +46,7 @@ describe('renderer plain fields', () => {
     'escapes every renderable plain-text slot as text with no active URL',
     async () => {
       const document: Resume = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         personalDetails: {
           fullName: hostile,
           headline: hostile,

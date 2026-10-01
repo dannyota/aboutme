@@ -664,6 +664,7 @@ packages/schema/gen/ts/v1/resume.ts
 packages/schema/gen/ts/v2/resume.ts
 packages/schema/gen/ts/v3/resume.ts
 packages/schema/gen/ts/v4/resume.ts
+packages/schema/gen/ts/v5/resume.ts
 packages/schema/package.json
 packages/schema/resume.schema.json
 packages/schema/samples/_filler.en.json

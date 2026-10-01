@@ -65,7 +65,7 @@ func TestCustomizationAllowlistMatchesEmbeddedSchema(t *testing.T) {
 		})
 	}
 
-	for _, path := range []string{"colors.accent", "colors.surface", "layout.surfaceTarget"} {
+	for _, path := range []string{"colors.accent", "colors.surface", "layout.surfaceTarget", "colorScheme"} {
 		if _, ok := fixedCustomizationAllowlist.Set[path]; !ok {
 			t.Errorf("optional leaf %q missing from set allowlist", path)
 		}
@@ -84,6 +84,49 @@ func cloneCustomizationAllowlist(source customizationAllowlist) customizationAll
 		clone.Unset[path] = struct{}{}
 	}
 	return clone
+}
+
+func TestCustomizationSetsAndUnsetsColorScheme(t *testing.T) {
+	t.Parallel()
+
+	document := customizationTestDocument(t)
+	for _, scheme := range []string{"light", "dark", "system"} {
+		got, err := applyCustomizationDeltas(document, []customizationDelta{
+			{Op: customizationSet, Path: "colorScheme", Value: json.RawMessage(`"` + scheme + `"`)},
+		})
+		if err != nil {
+			t.Fatalf("set colorScheme %s: %v", scheme, err)
+		}
+		var typed schema.Resume
+		if err := json.Unmarshal(got, &typed); err != nil {
+			t.Fatalf("decode typed result: %v", err)
+		}
+		if typed.Customization.ColorScheme == nil || string(*typed.Customization.ColorScheme) != scheme {
+			t.Fatalf("colorScheme = %v, want %s", typed.Customization.ColorScheme, scheme)
+		}
+		if err := resume.ValidateForStore(typed); err != nil {
+			t.Fatalf("document with colorScheme %s is invalid: %v", scheme, err)
+		}
+	}
+
+	set, err := applyCustomizationDeltas(document, []customizationDelta{
+		{Op: customizationSet, Path: "colorScheme", Value: json.RawMessage(`"dark"`)},
+		{Op: customizationUnset, Path: "colorScheme"},
+	})
+	if err != nil {
+		t.Fatalf("set then unset colorScheme: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(set, &decoded); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	customization, ok := decoded["customization"].(map[string]any)
+	if !ok {
+		t.Fatalf("customization = %T, want object", decoded["customization"])
+	}
+	if _, exists := customization["colorScheme"]; exists {
+		t.Error("colorScheme remains present after unset")
+	}
 }
 
 func TestCustomizationDeniedPathsRejectWholeBatch(t *testing.T) {

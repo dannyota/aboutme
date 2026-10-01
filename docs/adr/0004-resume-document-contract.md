@@ -1,7 +1,6 @@
 # 0004: Resume document validation, code generation, order, and versions
 
 Status: Accepted (2026-08-01, 2026-08-02, 2026-08-12, 2026-09-19, 2026-09-27).
-Document v5 below is accepted.
 
 ## Context
 
@@ -79,14 +78,19 @@ shape for input and output while storage stays current. A new schema version
 updates the manifest, schemas, converters, generated types, tests, OpenAPI
 examples, and consumers in one reviewed change.
 
-The server accepts and emits v1 to v4; v4 is current. Down-emission is lossless
-except for these declared losses:
+The server accepts and emits v1 to v5; v5 is current. v5 adds the optional
+`customization.colorScheme`, an enum of `light`, `dark`, and `system`; absent
+means `light`, and ADR 0020 owns what it renders. Up-conversion from v4 adds
+nothing: a v4 document is a v5 document without the leaf. Down-emission is
+lossless except for these declared losses, and each emission also takes the
+losses of every newer row:
 
 | Emitted | Loss                                                                                 |
 | ------- | ------------------------------------------------------------------------------------ |
 | v1      | A v2 font catalog ID that v1 cannot represent emits the entry's explicit v1 fallback |
 | v2      | Detail `display` and `customization.font.textAlign` are dropped                      |
 | v3      | `customization.header.photoPosition` and every project `subtitle` are dropped        |
+| v4      | `customization.colorScheme` is dropped                                               |
 
 An older client write never erases a field it cannot express:
 
@@ -99,16 +103,6 @@ An older client write never erases a field it cannot express:
   the written document have a header; removing the header removes it. Each
   project entry that survives keeps its stored `subtitle`, matched by entry id;
   an added entry gets none.
-
-### Document v5
-
-v5 adds one optional leaf, `customization.colorScheme`, an enum of `light`,
-`dark`, and `system`; absent means `light`. ADR 0020 owns what it renders. Once
-built, the server accepts and emits v1 to v5 and v5 is current.
-
-- Up from v4 adds nothing: a v4 document is a v5 document without the leaf.
-- Emitting v4 drops `customization.colorScheme`. It is v5's one declared loss,
-  and it composes with the older losses in the table above.
 - A v1 to v4 write keeps the stored `colorScheme` unconditionally, because
   `customization` exists in every version.
 

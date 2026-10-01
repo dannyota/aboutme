@@ -79,6 +79,48 @@ func TestFromOwnerFreezesVisibleSanitizedDocumentAndInlinePhoto(t *testing.T) {
 	}
 }
 
+func TestSnapshotsDropColorScheme(t *testing.T) {
+	name, lng, slug := "Ada", "en", "ada"
+	dark := schema.Dark
+	owner := resume.Resume{ID: uuid.MustParse(testResumeID), Revision: 7, Lng: &lng, Slug: &slug, Doc: schema.Resume{
+		SchemaVersion:   schema.CurrentVersion,
+		PersonalDetails: schema.PersonalDetails{FullName: &name},
+		Content:         map[string]schema.Section{},
+		Customization:   schema.Customization{ColorScheme: &dark},
+	}}
+	origin, err := publicresume.ParsePublicOrigin("https://resume.example", "production")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projected, err := publicresume.Project(owner, origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if projected.Document.Customization.ColorScheme == nil {
+		t.Fatal("the public projection must carry colorScheme for the print snapshot to drop")
+	}
+	fromOwner, err := FromOwner(owner, nil, "")
+	if err != nil {
+		t.Fatalf("FromOwner: %v", err)
+	}
+	fromPublic, err := FromPublic(publicresume.Snapshot{ResumeID: owner.ID, Revision: owner.Revision, Public: projected}, nil, "")
+	if err != nil {
+		t.Fatalf("FromPublic: %v", err)
+	}
+	for source, envelope := range map[string]Envelope{"owner": fromOwner, "public": fromPublic} {
+		payload, marshalErr := Marshal(envelope)
+		if marshalErr != nil {
+			t.Fatalf("%s Marshal: %v", source, marshalErr)
+		}
+		if bytes.Contains(payload, []byte("colorScheme")) {
+			t.Fatalf("%s snapshot carries a color scheme: %s", source, payload)
+		}
+	}
+	if projected.Document.Customization.ColorScheme == nil {
+		t.Fatal("freezing the print snapshot changed the public projection")
+	}
+}
+
 func TestFromPublicFreezesAdmittedGeneration(t *testing.T) {
 	name, lng, slug, rich := "Ada", "en", "ada", "<strong>safe</strong>"
 	labelDisplay, justify, left, stack := schema.Label, schema.Justify, schema.PhotoPositionLeft, "Go"

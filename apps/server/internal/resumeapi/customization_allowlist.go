@@ -38,12 +38,12 @@ var fixedCustomizationAllowlist = customizationAllowlist{
 		"header.align": {}, "header.detailsLayout": {}, "header.iconStyle": {},
 		"header.photoPosition": {}, "layout.columns": {}, "layout.surfaceTarget": {},
 		"sectionDisplay.skill.style": {}, "sectionDisplay.language.style": {},
-		"pageFormat": {}, "dateFormat": {},
+		"pageFormat": {}, "dateFormat": {}, "colorScheme": {},
 	},
 	Unset: customizationPathSet{
 		"font.textAlign": {}, "colors.accent": {}, "colors.surface": {},
 		"spacing.pageMargin": {}, "header": {}, "header.photoPosition": {},
-		"layout.surfaceTarget": {},
+		"layout.surfaceTarget": {}, "colorScheme": {},
 	},
 }
 
@@ -63,6 +63,7 @@ var customizationSetValueKinds = map[string]customizationValueKind{
 	"sectionDisplay.skill.style":    customizationString,
 	"sectionDisplay.language.style": customizationString,
 	"pageFormat":                    customizationString, "dateFormat": customizationString,
+	"colorScheme": customizationString,
 }
 
 func init() {

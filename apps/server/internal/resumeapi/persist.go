@@ -311,6 +311,9 @@ func (s *Service) applyAtWireVersion(current schema.Resume, version int32,
 	if version < 4 {
 		keepV4Fields(&doc, current)
 	}
+	if version < 5 {
+		keepV5Fields(&doc, current)
+	}
 	return s.prepareDocumentForPersistence(doc)
 }
 
@@ -356,4 +359,12 @@ func keepV4Fields(doc *schema.Resume, current schema.Resume) {
 			section.ProjectEntries[index].Subtitle = subtitles[section.ProjectEntries[index].ID]
 		}
 	}
+}
+
+// keepV5Fields restores what a v1 to v4 client cannot express: the stored
+// color scheme. It copies the leaf unconditionally, because customization
+// exists in every version and no parent can disappear.
+// See docs/design/public-page-theme.md.
+func keepV5Fields(doc *schema.Resume, current schema.Resume) {
+	doc.Customization.ColorScheme = current.Customization.ColorScheme
 }
