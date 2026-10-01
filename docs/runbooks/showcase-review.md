@@ -12,6 +12,16 @@ A resume appears in the showcase only while its current review key equals the
 approved one. A new opt-in, and any change to the name, headline, photo, link,
 or language, sends it back to `pending`.
 
+## Before the first release
+
+The release that claims the `showcase` root needs both public-root checks to
+pass first. Use the release tag as `<tag>`:
+
+```sh
+bash deploy/aws/scripts/deploy.sh --check-public-root <tag> showcase
+bash deploy/aws/scripts/deploy.sh <tag> --require-free-root showcase
+```
+
 ## Run a review command
 
 Run from the repository root, with the owner's login, at the tag the app runs:
