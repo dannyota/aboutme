@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  updated: 'Cập nhật lần cuối ngày 26/09/2026',
+  updated: 'Cập nhật lần cuối ngày 01/10/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
