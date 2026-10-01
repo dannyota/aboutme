@@ -1833,6 +1833,25 @@ for pair in "4:not found:" "5:mismatch:"; do
     { echo "account_delete_exit_$code: lock was not released" >&2; exit 1; }
 done
 
+# Exit 3 means the commit outcome is unknown and exit 1 is another failure:
+# neither prints an end line, so each reads the log once, never says done, and
+# releases the lock.
+AD_ONLY=1 AD_EXIT=3 run_case account_delete_exit_3 3 --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+AD_ONLY=1 AD_EXIT=1 run_case account_delete_exit_1 1 --account-delete v0.1.0 confirm alpha-cv 0b1c2d3e-4f50-4617-8899-aabbccddeeff
+for code in 1 3; do
+  f=$work/account_delete_exit_$code
+  grep -qF "account user=0b1c2d3e" "$f.out" ||
+    { echo "account_delete_exit_$code: log was not printed" >&2; exit 1; }
+  absent "$f.out" "done for"
+  absent "$f.out" "no end marker"
+  [[ $(count "$f.calls" "logs get-log-events") == 2 ]] ||
+    { echo "account_delete_exit_$code: want one pass of two pages" >&2; exit 1; }
+  grep -qF "REMOVE operation_id" "$f.calls" ||
+    { echo "account_delete_exit_$code: lock was not released" >&2; exit 1; }
+done
+grep -qF "result unknown: run show <slug> to confirm" "$work/account_delete_exit_3.out" ||
+  { echo "account_delete_exit_3: no unknown-result message" >&2; exit 1; }
+
 # The running app must be the exact tag; the check runs under the lock.
 AD_ONLY=1 AD_APP_RELEASE=999 run_case account_delete_tag_mismatch fail --account-delete v0.1.0 show alpha-cv
 f=$work/account_delete_tag_mismatch.calls
