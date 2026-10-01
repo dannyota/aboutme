@@ -212,6 +212,7 @@ export async function renderGoldenCell(cell) {
       },
       preset,
       startingDocument.content,
+      localeForFixture('full'),
     ),
   };
   /**
