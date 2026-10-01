@@ -4,6 +4,7 @@ import {
   test,
   type BrowserContext,
   type ConsoleMessage,
+  type Locator,
   type Page,
   type Request,
   type Response,
@@ -885,4 +886,249 @@ test("proves native HTTPS publish, discovery, and revocation", async ({
     })}\n`,
     { flag: "wx", mode: 0o600 },
   );
+});
+
+// The community showcase opt-in over the real stack. Approval runs only
+// through the out-of-band review command, which the browser harness cannot
+// reach, so this proof covers what needs no approval: the opt-in and its
+// Pending state, nothing listed without approval, the revocations that end
+// the opt-in, and the page and listing delivery rules
+// (docs/design/showcase.md "Opt-in", "Review", "Delivery, caching, and
+// revocation").
+const SHOWCASE_LISTING_PATH = "/api/v1/public/showcase";
+
+function isPublishResponse(resumeID: string): (response: Response) => boolean {
+  return (response) =>
+    response.request().method() === "POST" &&
+    new URL(response.url()).pathname === `/api/v1/resumes/${resumeID}/publish`;
+}
+
+async function submitPublishDialog(
+  page: Page,
+  dialog: Locator,
+  resumeID: string,
+): Promise<void> {
+  const accepted = page.waitForResponse(isPublishResponse(resumeID));
+  await dialog.locator('[data-action="publish-submit"]').press("Enter");
+  expect((await accepted).status()).toBe(200);
+}
+
+async function openPublishDialog(page: Page) {
+  await page.locator('[data-action="publish"]').press("Enter");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+// readListing opens /showcase and reads the listing from the page's own
+// request. It returns the document and listing responses and the slugs listed.
+async function readListing(
+  page: Page,
+): Promise<{ document: Response; listing: Response; slugs: string[] }> {
+  const read = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === SHOWCASE_LISTING_PATH &&
+      response.request().method() === "GET",
+  );
+  const document = await page.goto("/showcase");
+  if (document === null) throw new Error("showcase document is unavailable");
+  const listing = await read;
+  expect(document.status()).toBe(200);
+  expect(listing.status()).toBe(200);
+  const body = (await listing.json()) as { items?: { slug?: string }[] };
+  expect(Array.isArray(body.items)).toBe(true);
+  return {
+    document,
+    listing,
+    slugs: (body.items ?? []).map((item) => item.slug ?? ""),
+  };
+}
+
+test("proves the showcase opt-in, its revocations, and delivery rules", async ({
+  browser,
+  context,
+  page,
+}) => {
+  await pinEnglish(context);
+  const counters = newDiagnosticCounters();
+  const slug = `showcase-${crypto.randomUUID().slice(0, 8)}`;
+  let resumeID: string | undefined;
+  let loggedIn = false;
+  let publicContext: BrowserContext | undefined;
+  const hooks = {
+    countConsoleError: (message: ConsoleMessage): boolean =>
+      !isExpectedAnonymousMeConsole(message.text(), message.location().url),
+  };
+  await installPublicGuards(context, counters);
+  pageDiagnosticsAttacher(counters, hooks)(page);
+
+  try {
+    await page.goto("/login");
+    await waitForHydration(page);
+    await page.getByRole("textbox", { name: "Email" }).fill(SEED_EMAIL);
+    await page
+      .getByRole("textbox", { name: "Password", exact: true })
+      .fill(SEED_PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(
+      (url) => url.origin === ORIGIN && url.pathname === "/app/resumes",
+    );
+    loggedIn = true;
+
+    const created = await createBlankResume(
+      page,
+      `Showcase proof ${crypto.randomUUID()}`,
+      undefined,
+      (accepted) => {
+        resumeID = accepted.metadata.id;
+      },
+    );
+    resumeID = created.metadata.id;
+    const id = resumeID;
+    await page.locator('[data-action="open-document"]').press("Enter");
+    await page.getByLabel("Full name").fill("Showcase proof resume");
+    await page.getByLabel("Full name").press("Tab");
+    await expect(page.getByTestId("save-status")).toContainText("Saved");
+    await page.locator('[data-action="open-structure"]').press("Enter");
+    await page.locator('[data-action="section-type"]').selectOption("work");
+    await page
+      .getByTestId("section-create-form")
+      .locator('[data-action="create"]')
+      .press("Enter");
+    await expect(page.getByTestId("save-status")).toContainText("Saved");
+    await page.locator('[data-outline-key="work"]').press("Enter");
+    await page.locator('[data-action="add-entry"]').press("Enter");
+    const entry = page.locator("[data-entry-id]");
+    await expect(entry).toHaveCount(1);
+    await entry.getByLabel("Job title").fill("Engineer");
+    await entry.getByLabel("Job title").press("Tab");
+    await entry.getByLabel("Employer", { exact: true }).fill("Example Corp");
+    await entry.getByLabel("Employer", { exact: true }).press("Tab");
+    await expect(page.getByTestId("save-status")).toContainText("Saved");
+    await page.locator('[data-action="open-document"]').press("Enter");
+
+    // AC-SHOW-001: the switch is off by default and needs a public resume.
+    let dialog = await openPublishDialog(page);
+    await dialog.getByLabel("Slug", { exact: true }).fill(slug);
+    const showcaseSwitch = dialog.getByLabel("Show in the community showcase", {
+      exact: true,
+    });
+    const publicSwitch = dialog.getByLabel("Public resume", { exact: true });
+    const signInSwitch = dialog.getByLabel("Require sign-in to view", {
+      exact: true,
+    });
+    const description = dialog.getByTestId("publish-showcase-description");
+    await expect(showcaseSwitch).not.toBeChecked();
+    await expect(showcaseSwitch).toBeDisabled();
+    await expect(description).toContainText(
+      "Turn on Public resume to show it in the community showcase.",
+    );
+    await publicSwitch.press("Space");
+    await expect(showcaseSwitch).toBeEnabled();
+    await expect(showcaseSwitch).not.toBeChecked();
+    await showcaseSwitch.press("Space");
+    await expect(showcaseSwitch).toBeChecked();
+    await dialog
+      .locator('[data-action="publish-showcase-role"]')
+      .selectOption("backend");
+    await submitPublishDialog(page, dialog, id);
+
+    // AC-SHOW-001, AC-SHOW-006: the opt-in alone lists nothing; the dialog
+    // shows Pending.
+    const status = dialog.getByTestId("publish-showcase-status");
+    await expect(status).toHaveAttribute("data-state", "pending");
+    await expect(status).toContainText("Waiting for review.");
+
+    publicContext = await browser.newContext();
+    await installPublicGuards(publicContext, counters);
+    const anonymous = await publicContext.newPage();
+    pageDiagnosticsAttacher(counters, hooks)(anonymous);
+    const pending = await readListing(anonymous);
+    await expect(anonymous.locator('[data-state="empty"]')).toBeVisible();
+    expect(pending.slugs).toEqual([]);
+
+    // AC-SHOW-008, AC-SHOW-014: delivery rules of the page and the listing.
+    expect(pending.document.headers()["x-robots-tag"]).toBe(
+      "noindex, nofollow",
+    );
+    expect(Object.keys(await pending.document.allHeaders())).not.toContain(
+      "set-cookie",
+    );
+    await expect(anonymous.locator('meta[name="robots"]')).toHaveAttribute(
+      "content",
+      "noindex, nofollow",
+    );
+    expect(pending.listing.headers()["cache-control"]).toContain("no-store");
+    expect(Object.keys(await pending.listing.allHeaders())).not.toContain(
+      "set-cookie",
+    );
+    expect(await publicContext.cookies(ORIGIN)).toEqual([]);
+
+    // AC-SHOW-001: turning on sign in to view ends the opt-in.
+    await signInSwitch.press("Space");
+    await expect(showcaseSwitch).not.toBeChecked();
+    await expect(showcaseSwitch).toBeDisabled();
+    await expect(description).toContainText(
+      "Not available while Require sign-in to view is on.",
+    );
+    await submitPublishDialog(page, dialog, id);
+    await page.reload();
+    await waitForHydration(page);
+    dialog = await openPublishDialog(page);
+    await expect(signInSwitch).toBeChecked();
+    await expect(showcaseSwitch).not.toBeChecked();
+    await expect(showcaseSwitch).toBeDisabled();
+    await expect(description).toContainText(
+      "Not available while Require sign-in to view is on.",
+    );
+    await expect(dialog.getByTestId("publish-showcase-status")).toHaveCount(0);
+    expect((await readListing(anonymous)).slugs).not.toContain(slug);
+
+    // Turning sign in to view off leaves the switch off.
+    await signInSwitch.press("Space");
+    await expect(signInSwitch).not.toBeChecked();
+    await expect(showcaseSwitch).toBeEnabled();
+    await expect(showcaseSwitch).not.toBeChecked();
+    await submitPublishDialog(page, dialog, id);
+    await page.reload();
+    await waitForHydration(page);
+    dialog = await openPublishDialog(page);
+    await expect(showcaseSwitch).toBeEnabled();
+    await expect(showcaseSwitch).not.toBeChecked();
+
+    // AC-SHOW-001: unpublishing ends the opt-in; publishing again starts off.
+    await showcaseSwitch.press("Space");
+    await expect(showcaseSwitch).toBeChecked();
+    await submitPublishDialog(page, dialog, id);
+    await expect(dialog.getByTestId("publish-showcase-status")).toHaveAttribute(
+      "data-state",
+      "pending",
+    );
+    await publicSwitch.press("Space");
+    await expect(showcaseSwitch).toBeDisabled();
+    await submitPublishDialog(page, dialog, id);
+    expect((await readListing(anonymous)).slugs).not.toContain(slug);
+    await publicSwitch.press("Space");
+    await expect(showcaseSwitch).toBeEnabled();
+    await expect(showcaseSwitch).not.toBeChecked();
+    await submitPublishDialog(page, dialog, id);
+    await expect(dialog.getByTestId("publish-showcase-status")).toHaveCount(0);
+    await page.reload();
+    await waitForHydration(page);
+    dialog = await openPublishDialog(page);
+    await expect(publicSwitch).toBeChecked();
+    await expect(showcaseSwitch).not.toBeChecked();
+    expect((await readListing(anonymous)).slugs).not.toContain(slug);
+  } finally {
+    if (publicContext !== undefined) await publicContext.close();
+    if (resumeID !== undefined && loggedIn) {
+      await page.goto(`${ORIGIN}/app/resumes`);
+      await deleteRecordedResume(page, resumeID);
+    }
+  }
+
+  expect(counters.certificateErrors).toBe(0);
+  expect(counters.consoleErrors).toBe(0);
+  expect(counters.externalRequests).toBe(0);
+  expect(counters.pageErrors).toBe(0);
 });
