@@ -1011,6 +1011,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/showcase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the community showcase
+         * @description Lists the resumes in the community showcase, newest first approval first, then resume ID, twelve to a page. A resume appears only while all five listing conditions hold: it is live, sign in to view is off, its owner opted in, the operator approved it, and the approved review key equals its current key. Go computes the page from committed state on every request, so a request admitted after an opt-out, unpublish, sign in to view, decline, rename, or delete commits omits the resume. The response is never cached and has no validator. The route reads no cookie and sets none, and it sends `X-Robots-Tag: noindex, nofollow`.
+         *
+         *     Every query parameter is optional and may appear once. Any other parameter, a repeated parameter, an empty value, or a value outside its set is `400 request_invalid`. A page past the last one is `200` with no items and the real `pageCount`. Each item carries only the closed fields below: no contact detail, account identifier, date, or count. The separate limit is 60 requests a minute per client IP. See `docs/design/showcase.md` and `docs/adr/0029-community-showcase.md`.
+         */
+        get: operations["getPublicShowcase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        /**
+         * Read community showcase headers
+         * @description Performs the same admission, parsing, and query as GET. It sends the GET status and headers, including Content-Length, but no body bytes.
+         */
+        head: operations["headPublicShowcase"];
+        patch?: never;
+        trace?: never;
+    };
     "/public/resumes/{slug}/views/start": {
         parameters: {
             query?: never;
@@ -1805,12 +1831,16 @@ export interface components {
             faviconEmoji?: string;
             /** @description Require sign-in to view. Omitted keeps the stored value. Turning it on is a `disabled` publish issue while `SIGN_IN_TO_VIEW_ENABLED` is false; turning it off always works. Turning it on for an already-live resume revokes the old public state through the existing revocation fence and raises the resume's pass epoch, ending every earlier pass. Forces effective discovery off while on; the stored `seoGeoEnabled` value is kept. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
             signInToView?: boolean;
+            /** @description Show this resume in the community showcase. Omitted keeps the stored value. `true` needs `live` (`requires_live`) and sign in to view off (`requires_open_view`). A request that turns sign in to view on, or turns `live` off, ends the opt-in even when this field is omitted, and publishing again starts with it off. Turning it on starts a review; turning it off and on again starts a new one. Only the web app sets it: no MCP tool reads or changes it. See `docs/design/showcase.md`. */
+            showcaseEnabled?: boolean;
+            /** @description The role shown with the listing: one of the `ShowcaseRole` values, or empty to clear it. Omitted keeps the stored value. Any other value is `invalid_format`, and a role is allowed only while the switch is on (`invalid_format`). */
+            showcaseRole?: string;
         };
         /** @description One deterministic semantic publish-policy issue. */
         PublishValidationIssue: {
             path: string;
             /** @enum {string} */
-            code: "required_for_live" | "requires_live" | "invalid_format" | "reserved" | "required" | "visible_entry_required" | "too_long" | "invalid_characters" | "invalid_emoji" | "disabled";
+            code: "required_for_live" | "requires_live" | "requires_open_view" | "invalid_format" | "reserved" | "required" | "visible_entry_required" | "too_long" | "invalid_characters" | "invalid_emoji" | "disabled";
             message: string;
         };
         /** @description The standard Error envelope narrowed to `publish_invalid` issue details. Its outer shape and required code/message fields are the same API-wide error family. */
@@ -2104,6 +2134,7 @@ export interface components {
             linkedProviders: ("google" | "github" | "linkedin")[];
         };
         AccountExportResume: components["schemas"]["ResumeSummary"] & {
+            showcase?: null | components["schemas"]["AccountExportShowcase"];
             document: components["schemas"]["AccountExportDocument"];
             photo: components["schemas"]["AccountExportPhoto"];
         };
@@ -2134,6 +2165,10 @@ export interface components {
          *       "publicTitle": "Danny from aboutme.vn",
          *       "faviconEmoji": "🚀",
          *       "signInToView": false,
+         *       "showcase": {
+         *         "state": "listed",
+         *         "role": "backend"
+         *       },
          *       "schemaVersion": 5,
          *       "createdAt": "2026-08-01T09:00:00Z",
          *       "updatedAt": "2026-08-11T18:20:00Z"
@@ -2164,12 +2199,72 @@ export interface components {
             faviconEmoji: string | null;
             /** @description Whether viewers must sign in with Google or LinkedIn before this resume shows. Never part of the document and never changes the rendered resume. See `docs/design/viewer-analytics/sign-in-to-view.md`. */
             signInToView: boolean;
+            /** @description The community showcase state of this resume: `null` while the resume is not opted in. Owner-only. It is never part of the document, the public resume JSON, or any MCP tool. See `docs/design/showcase.md`. */
+            showcase: null | components["schemas"]["ResumeShowcase"];
             /** @description Document version this response was emitted at. Equal to the `X-Resume-Schema-Version` response header. */
             schemaVersion: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /**
+         * @description The closed role list of the community showcase: the nine Library roles plus Other.
+         * @enum {string}
+         */
+        ShowcaseRole: "backend" | "frontend" | "mobile" | "devops" | "data-ai" | "qa" | "fresher" | "brse" | "security" | "other";
+        /** @description The owner's showcase state. `pending`: opted in and the current review key has no result. `listed`: the current key is approved and the resume is shown. `declined`: the current key was declined. */
+        ResumeShowcase: {
+            /** @enum {string} */
+            state: "pending" | "listed" | "declined";
+            /** @description The role the owner picked for the listing, or null. */
+            role: null | components["schemas"]["ShowcaseRole"];
+        };
+        /** @description The account export's showcase state: the owner state plus when the opt-in was requested. Review keys never leave the server. */
+        AccountExportShowcase: components["schemas"]["ResumeShowcase"] & {
+            /** Format: date-time */
+            requestedAt: string;
+        };
+        /** @description One listing. The card image is `/api/v1/public/resumes/{slug}/og/{cardVersion}.png`; `imageText` is its alt text and follows the card's image-text rule, so it holds no contact detail. */
+        ShowcaseItem: {
+            slug: string;
+            cardVersion: string;
+            imageText: string;
+            /**
+             * @description The primary subtag of the resume language.
+             * @enum {string}
+             */
+            language: "vi" | "en" | "other";
+            /** @description The preset ID the resume's design matches exactly, or null for a custom design. */
+            templateId: string | null;
+            role: null | components["schemas"]["ShowcaseRole"];
+        };
+        /**
+         * @description One page of the community showcase. This body has no `data` envelope.
+         * @example {
+         *       "items": [
+         *         {
+         *           "slug": "ada-lovelace",
+         *           "cardVersion": "0123456789abcdef",
+         *           "imageText": "Ada Lovelace · Backend engineer",
+         *           "language": "en",
+         *           "templateId": "ats-plain",
+         *           "role": "backend"
+         *         }
+         *       ],
+         *       "page": 1,
+         *       "pageCount": 1,
+         *       "total": 1
+         *     }
+         */
+        ShowcaseListing: {
+            items: components["schemas"]["ShowcaseItem"][];
+            /** @description The requested page. */
+            page: number;
+            /** @description Pages for the current filters; 0 when nothing matches. */
+            pageCount: number;
+            /** @description Listings that match the current filters. */
+            total: number;
         };
         /** @description A resume summary plus its whole document. */
         Resume: components["schemas"]["ResumeSummary"] & {
@@ -2794,6 +2889,7 @@ export interface components {
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
                  *         "signInToView": false,
+                 *         "showcase": null,
                  *         "schemaVersion": 5,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-11T18:20:00Z",
@@ -2830,6 +2926,7 @@ export interface components {
                  *         "publicTitle": "Danny from aboutme.vn",
                  *         "faviconEmoji": "🚀",
                  *         "signInToView": false,
+                 *         "showcase": null,
                  *         "schemaVersion": 5,
                  *         "createdAt": "2026-08-01T09:00:00Z",
                  *         "updatedAt": "2026-08-12T09:05:00Z",
@@ -3539,6 +3636,100 @@ export interface components {
                 [name: string]: unknown;
             };
             content?: never;
+        };
+        /** @description One page of the community showcase. */
+        PublicShowcaseRead: {
+            headers: {
+                "Cache-Control": components["headers"]["ShowcaseNoStore"];
+                "X-Robots-Tag": components["headers"]["ShowcaseRobots"];
+                "Content-Length": components["headers"]["RepresentationContentLength"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ShowcaseListing"];
+            };
+        };
+        /** @description `request_invalid`: an unknown, repeated, empty, or out-of-set query parameter, a body, or a content encoding. */
+        PublicShowcaseBadRequest: {
+            headers: {
+                "Cache-Control": components["headers"]["ShowcaseNoStore"];
+                "X-Robots-Tag": components["headers"]["ShowcaseRobots"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "request_invalid",
+                 *         "message": "request is invalid"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `method_not_allowed`: the route accepts only GET and HEAD. */
+        PublicShowcaseMethodNotAllowed: {
+            headers: {
+                /** @description Methods this path serves. */
+                Allow?: "GET, HEAD";
+                "Cache-Control": components["headers"]["ShowcaseNoStore"];
+                "X-Robots-Tag": components["headers"]["ShowcaseRobots"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "method_not_allowed",
+                 *         "message": "method is not allowed"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The 60-per-minute client IP budget of the listing is exhausted. */
+        PublicShowcaseRateLimited: {
+            headers: {
+                "Cache-Control": components["headers"]["ShowcaseNoStore"];
+                "X-Robots-Tag": components["headers"]["ShowcaseRobots"];
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "rate_limited",
+                 *         "message": "too many requests; retry later"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `temporarily_unavailable`: the listing could not be read. */
+        PublicShowcaseUnavailable: {
+            headers: {
+                "Cache-Control": components["headers"]["ShowcaseNoStore"];
+                "X-Robots-Tag": components["headers"]["ShowcaseRobots"];
+                /** @description Whole seconds to wait before retrying. */
+                "Retry-After"?: 1;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "error": {
+                 *         "code": "temporarily_unavailable",
+                 *         "message": "service temporarily unavailable"
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["Error"];
+            };
         };
         /** @description `request_invalid`: after public admission, the conditional header is repeated, comma-folded, weak, wildcard, whitespace-padded, or otherwise malformed. No ETag is sent. */
         PublicBadRequest: {
@@ -4421,6 +4612,14 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Show only listings with this role. May appear once. */
+        ShowcaseRoleFilter: components["schemas"]["ShowcaseRole"];
+        /** @description Show only listings whose resume language is this. May appear once. */
+        ShowcaseLanguageFilter: "vi" | "en";
+        /** @description Show only listings of this template: a preset ID, or `custom` for a design that matches no preset. May appear once. */
+        ShowcaseTemplateFilter: string;
+        /** @description The page to read, from 1 to 100, in canonical form. Defaults to 1. */
+        ShowcasePage: number;
         /**
          * @description Why this OAuth transaction is being started. `GET` serves `login` (the default) and `view`. An absent or unrecognized value is treated as `login`; `link` and `reauth` are the only exceptions and return `405` with `Allow: POST`.
          *
@@ -4556,6 +4755,10 @@ export interface components {
     };
     requestBodies: never;
     headers: {
+        /** @description The showcase listing is computed per request and never stored. */
+        ShowcaseNoStore: "no-store, no-transform";
+        /** @description The showcase is never indexed. */
+        ShowcaseRobots: "noindex, nofollow";
         /** @description View counting responses are never stored. */
         ViewNoStore: "no-store, no-transform";
         /**
@@ -6469,6 +6672,7 @@ export interface operations {
                      *           "publicTitle": "Danny from aboutme.vn",
                      *           "faviconEmoji": "🚀",
                      *           "signInToView": false,
+                     *           "showcase": null,
                      *           "schemaVersion": 5,
                      *           "createdAt": "2026-08-01T09:00:00Z",
                      *           "updatedAt": "2026-08-11T18:20:00Z"
@@ -6562,6 +6766,7 @@ export interface operations {
                      *         "publicTitle": null,
                      *         "faviconEmoji": null,
                      *         "signInToView": false,
+                     *         "showcase": null,
                      *         "schemaVersion": 5,
                      *         "createdAt": "2026-08-12T09:00:00Z",
                      *         "updatedAt": "2026-08-12T09:00:00Z",
@@ -8000,6 +8205,56 @@ export interface operations {
             405: components["responses"]["PublicMethodNotAllowed"];
             429: components["responses"]["PublicArtifactRateLimited"];
             503: components["responses"]["PublicUnavailable"];
+        };
+    };
+    getPublicShowcase: {
+        parameters: {
+            query?: {
+                /** @description Show only listings with this role. May appear once. */
+                role?: components["parameters"]["ShowcaseRoleFilter"];
+                /** @description Show only listings whose resume language is this. May appear once. */
+                lang?: components["parameters"]["ShowcaseLanguageFilter"];
+                /** @description Show only listings of this template: a preset ID, or `custom` for a design that matches no preset. May appear once. */
+                template?: components["parameters"]["ShowcaseTemplateFilter"];
+                /** @description The page to read, from 1 to 100, in canonical form. Defaults to 1. */
+                page?: components["parameters"]["ShowcasePage"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicShowcaseRead"];
+            400: components["responses"]["PublicShowcaseBadRequest"];
+            405: components["responses"]["PublicShowcaseMethodNotAllowed"];
+            429: components["responses"]["PublicShowcaseRateLimited"];
+            503: components["responses"]["PublicShowcaseUnavailable"];
+        };
+    };
+    headPublicShowcase: {
+        parameters: {
+            query?: {
+                /** @description Show only listings with this role. May appear once. */
+                role?: components["parameters"]["ShowcaseRoleFilter"];
+                /** @description Show only listings whose resume language is this. May appear once. */
+                lang?: components["parameters"]["ShowcaseLanguageFilter"];
+                /** @description Show only listings of this template: a preset ID, or `custom` for a design that matches no preset. May appear once. */
+                template?: components["parameters"]["ShowcaseTemplateFilter"];
+                /** @description The page to read, from 1 to 100, in canonical form. Defaults to 1. */
+                page?: components["parameters"]["ShowcasePage"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["PublicShowcaseRead"];
+            400: components["responses"]["PublicShowcaseBadRequest"];
+            405: components["responses"]["PublicShowcaseMethodNotAllowed"];
+            429: components["responses"]["PublicShowcaseRateLimited"];
+            503: components["responses"]["PublicShowcaseUnavailable"];
         };
     };
     startPublicResumeView: {

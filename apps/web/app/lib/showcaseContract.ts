@@ -1,8 +1,9 @@
-// The community showcase's wire shapes: the public listing and the owner's
-// publish fields (docs/design/showcase.md, Delivery and Data and contract).
-// Everything here mirrors the OpenAPI contract by hand. When the generated
-// client carries these shapes, replace the types below with aliases of the
-// generated ones and keep the constants.
+// The community showcase's wire shapes come from the generated client; this
+// module adds the runtime constants and strict parsers around them
+// (docs/design/showcase.md, Delivery and Data and contract).
+import type { components } from '../api/generated/openapi';
+
+type Schemas = components['schemas'];
 
 /**
  * The ten roles: the nine Library role chips in chip order, then Other. A
@@ -19,8 +20,8 @@ export const SHOWCASE_ROLES = [
   'brse',
   'security',
   'other',
-] as const;
-export type ShowcaseRole = (typeof SHOWCASE_ROLES)[number];
+] as const satisfies readonly ShowcaseRole[];
+export type ShowcaseRole = Schemas['ShowcaseRole'];
 
 /** The listing's language filter; an item may also be `other`. */
 export const SHOWCASE_FILTER_LANGUAGES = ['vi', 'en'] as const;
@@ -34,35 +35,21 @@ export const SHOWCASE_CUSTOM_TEMPLATE = 'custom';
 
 export const SHOWCASE_LISTING_PATH = '/api/v1/public/showcase';
 
-export interface ShowcaseItem {
-  readonly slug: string;
-  readonly cardVersion: string;
-  readonly imageText: string;
-  readonly language: ShowcaseItemLanguage;
-  readonly templateId: string | null;
-  readonly role: string | null;
-}
-
-export interface ShowcaseListing {
-  readonly items: readonly ShowcaseItem[];
-  readonly page: number;
-  readonly pageCount: number;
-  readonly total: number;
-}
+export type ShowcaseItem = Readonly<Schemas['ShowcaseItem']>;
+export type ShowcaseListing = Readonly<
+  Omit<Schemas['ShowcaseListing'], 'items'>
+  & { items: readonly ShowcaseItem[] }
+>;
 
 /** The owner resume resource's `showcase` field: null when off. */
-export type OwnerShowcaseState = 'pending' | 'listed' | 'declined';
-export interface OwnerShowcase {
-  readonly state: OwnerShowcaseState;
-  readonly role: string | null;
-}
+export type OwnerShowcase = Readonly<Schemas['ResumeShowcase']>;
+export type OwnerShowcaseState = OwnerShowcase['state'];
 
 /** The publish request's optional showcase fields; omitted keeps them. */
-export interface PublishShowcaseFields {
-  readonly showcaseEnabled?: boolean;
-  /** Empty clears the role. */
-  readonly showcaseRole?: string;
-}
+export type PublishShowcaseFields = Pick<
+  Schemas['PublishResumeRequest'],
+  'showcaseEnabled' | 'showcaseRole'
+>;
 
 export function isShowcaseRole(value: unknown): value is ShowcaseRole {
   return SHOWCASE_ROLES.some((role) => role === value);
@@ -91,6 +78,7 @@ function parseItem(value: unknown): ShowcaseItem {
   ) {
     throw new Error('invalid showcase item');
   }
+  // A role this build does not know shows no chip.
   // Only the closed fields survive, so nothing else reaches the DOM.
   return Object.freeze({
     slug: value.slug,
@@ -98,7 +86,7 @@ function parseItem(value: unknown): ShowcaseItem {
     imageText: value.imageText,
     language: value.language,
     templateId: value.templateId,
-    role: value.role,
+    role: isShowcaseRole(value.role) ? value.role : null,
   });
 }
 
@@ -133,5 +121,8 @@ export function parseOwnerShowcase(value: unknown): OwnerShowcase | null {
   ) {
     return null;
   }
-  return Object.freeze({ state: value.state, role: value.role ?? null });
+  return Object.freeze({
+    state: value.state,
+    role: isShowcaseRole(value.role) ? value.role : null,
+  });
 }

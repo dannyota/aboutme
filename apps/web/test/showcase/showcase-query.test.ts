@@ -142,6 +142,16 @@ describe('showcase contract', () => {
     ]);
   });
 
+  it('shows no chip for a role this build does not know', () => {
+    const listing = parseShowcaseListing({
+      items: [{ ...item, role: 'astronaut' }],
+      page: 1,
+      pageCount: 1,
+      total: 1,
+    });
+    expect(listing.items[0]!.role).toBeNull();
+  });
+
   it.each([
     ['no items', { page: 1, pageCount: 1, total: 0 }],
     ['a string page', { items: [], page: '1', pageCount: 1, total: 0 }],
