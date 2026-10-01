@@ -57,7 +57,7 @@ This is the reason for
 | Processing                                | Basis                                                                                                                                                                                                                                                                                                                                                                                                       |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Anonymous counts                          | The stored result is not personal data. The IP address and user agent are processed in memory to serve the page, apply rate limits, and form the day's network key, then dropped. **Unverified:** no consent-free case in Law Article 19(1) names this; the design reads transient processing whose only output is a count as needing no consent. The notice discloses it either way (Law Article 4(1)(a)). |
-| Sign-in verification in `sign_in` resumes | The viewer's own request to view the resume (Law Article 19(1)(d)); no consent record is kept, because nothing about the viewer is stored. The request asks for scope `openid` only, so aboutme receives an account identifier and no name or email, and drops it in the same request |
+| Sign-in verification in `sign_in` resumes | The viewer's own request to view the resume (Law Article 19(1)(d)); no consent record is kept, because nothing about the viewer is stored. The request asks for scope `openid` only, so aboutme receives an account identifier and no name or email, and drops it in the same request                                                                                                                       |
 | Pass cookie                               | Needed to give the viewer the access they asked for; the gate text says it is set                                                                                                                                                                                                                                                                                                                           |
 
 ## Sign-in gate text
@@ -79,13 +79,13 @@ gate renders.
 Law Article 3(3) keeps data only as long as its purpose needs; Law Article
 14(1)(b) deletes it when the purpose ends.
 
-| Data                              | Kept                                                |
-| --------------------------------- | --------------------------------------------------- |
-| IP address and user agent         | In memory for the request                           |
-| Network key and day key           | In memory until the end of the Asia/Ho_Chi_Minh day |
-| Daily counts and share signals    | 400 days, then the privacy sweep deletes them       |
-| Provider account ID (sign-in)     | Not kept: dropped in the callback request           |
-| Pass cookie (sign-in)             | 7 days, in the viewer's browser only                |
+| Data                           | Kept                                                |
+| ------------------------------ | --------------------------------------------------- |
+| IP address and user agent      | In memory for the request                           |
+| Network key and day key        | In memory until the end of the Asia/Ho_Chi_Minh day |
+| Daily counts and share signals | 400 days, then the privacy sweep deletes them       |
+| Provider account ID (sign-in)  | Not kept: dropped in the callback request           |
+| Pass cookie (sign-in)          | 7 days, in the viewer's browser only                |
 
 ## Assessments
 
@@ -93,9 +93,9 @@ A data protection impact assessment covers aboutme's processing and is updated
 when a new processing purpose arises (Law Articles 21(1) and 22(1); Decree
 Articles 19 and 20(1)(a)). Viewer analytics stores no viewer data, so no release
 waits on an assessment; the owner adds the transient counting and sign-in
-verification to the DPIA and cross-border assessment that are prepared after
-the move to Vietnam and before real users (Law Article 20(2); Decree Article
-18). The dossiers stay out of this public repository.
+verification to the DPIA and cross-border assessment that are prepared after the
+move to Vietnam and before real users (Law Article 20(2); Decree Article 18).
+The dossiers stay out of this public repository.
 
 ## Privacy notice changes
 
@@ -107,7 +107,7 @@ never implies tracking.
 | --------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | View counts     | What we collect  | New item: "Views of public resumes: we count views and keep only daily totals. To tell people from bots, your IP address and browser details are used only in server memory and discarded the same day, and your browser solves a small computing task. Counting uses no cookie." |
 | View counts     | What we don't do | Replace "No analytics or tracking scripts." with "No third-party analytics or advertising trackers. We count views of public resumes only as described above."                                                                                                                    |
-| Sign in to view | What we collect  | New item: "If a resume owner requires sign-in to view: Google or LinkedIn confirms your account. We ask only for sign-in, not your name or email, so we receive only an account ID from the provider, and we discard it during that sign-in. The owner is not told who you are."                                                                                                  |
+| Sign in to view | What we collect  | New item: "If a resume owner requires sign-in to view: Google or LinkedIn confirms your account. We ask only for sign-in, not your name or email, so we receive only an account ID from the provider, and we discard it during that sign-in. The owner is not told who you are."  |
 | Sign in to view | Cookies          | Add the pass cookie, which lets you view that resume for 7 days, and the join-invite `localStorage` entry.                                                                                                                                                                        |
 
 Vietnamese for the view-counts rows: "Lượt xem CV công khai: chúng tôi đếm lượt

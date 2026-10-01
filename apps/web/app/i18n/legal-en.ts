@@ -163,7 +163,8 @@ export const legalEn: LegalCopy = {
           + 'and email sending through Amazon SES. Amazon CloudFront '
           + '(the global network of Amazon Web Services) delivers the '
           + 'site; CloudFront and AWS WAF process your IP address and '
-          + 'browser details to block attacks and detect bots. Amazon Route 53 provides '
+          + 'browser details to block attacks and detect bots. Amazon '
+          + 'Route 53 provides '
           + 'DNS. If you sign in with Google, Google (United '
           + 'States) verifies your account. If you sign in with '
           + 'LinkedIn, LinkedIn (United States) verifies your account. '
@@ -190,8 +191,9 @@ export const legalEn: LegalCopy = {
         heading: 'Your controls',
         paragraphs: [
           'You can export your account data, edit or delete your '
-          + 'resumes, and delete your account. We keep your account, resumes, and '
-          + 'photos until you delete them or your account. The export holds your '
+          + 'resumes, and delete your account. We keep your account, '
+          + 'resumes, and photos until you delete them or your account. '
+          + 'The export holds your '
           + 'profile and resume content; email us for photos or session '
           + 'history.',
           'When you delete your account:',
