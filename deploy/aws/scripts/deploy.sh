@@ -669,9 +669,10 @@ edge_origin_closed "$smoke_ip" 8443 || exit 1
 # first requests after a restart can be slow on the CloudFront-to-origin path,
 # which /healthz does not exercise, so request a public resume page (Go, the
 # database, and the Nuxt render) and the homepage (Nuxt) until each answers
-# 200 quickly, within a bounded number of attempts.
-warm_path() { # path
-  local path=$1 attempts=${DEPLOY_WARM_ATTEMPTS:-8} fast=${DEPLOY_WARM_FAST:-3} \
+# quickly, within a bounded number of attempts. The resume page may also answer
+# 404 (unpublished): that runs the same path. Any other status keeps retrying.
+warm_path() { # path [accepted codes]
+  local path=$1 ok=${2:-200} attempts=${DEPLOY_WARM_ATTEMPTS:-8} fast=${DEPLOY_WARM_FAST:-3} \
     timeout=${DEPLOY_WARM_TIMEOUT:-30} attempt out code time_total
   for ((attempt = 1; attempt <= attempts; attempt++)); do
     if out=$(curl -s -o /dev/null -m "$timeout" -w '%{http_code} %{time_total}' "https://aboutme.vn$path"); then
@@ -683,7 +684,7 @@ warm_path() { # path
     fi
     say "warm: $path $code in $time_total s"
     # Compare as a float with awk, not bash arithmetic, which is integer-only.
-    if [[ $code == 200 ]] && awk -v t="$time_total" -v f="$fast" 'BEGIN { exit !(t < f) }'; then
+    if [[ " $ok " == *" $code "* ]] && awk -v t="$time_total" -v f="$fast" 'BEGIN { exit !(t < f) }'; then
       return 0
     fi
     ((attempt == attempts)) || sleep "$smoke_delay"
@@ -691,9 +692,8 @@ warm_path() { # path
   say "warm-up: $path did not answer 200 within $fast s in $attempts attempts (last: $code in $time_total s)"
   return 1
 }
-for path in "${DEPLOY_WARM_PAGE:-/danny}" /; do
-  warm_path "$path" || exit 1
-done
+warm_path "${DEPLOY_WARM_PAGE:-/danny}" "200 404" || exit 1
+warm_path / || exit 1
 say "site up"
 
 restore_deploy_notifications 1 || { say "notification restoration failed after the deploy"; exit 1; }
