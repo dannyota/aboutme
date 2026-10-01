@@ -7,8 +7,9 @@ to the public resume. Nothing about visitors is recorded.
 [ADR 0029](../adr/0029-community-showcase.md) records the decisions.
 
 Status: approved (2026-09-27) and built; amended 2026-10-01, when the owner
-removed review. An eligible opt-in is listed at once, and abuse is handled by
-Report and the Terms. The amendment is built; release waits for N3 and N4 in the
+removed review. An eligible opt-in is listed at once. Abuse is handled by
+Report, then the operator deletes the account. The owner decided N3 and N4 on
+2026-10-01; release waits for N5, the legal text for operator deletion, in the
 [approvals](#owner-approvals) section. The legal dates in [Copy](#copy) change
 at release.
 
@@ -88,10 +89,10 @@ with the Library's labels.
 
 ## Order and filters
 
-Listings are ordered newest first by the opt-in time, then by resume ID (**Owner
-approval** S5, as changed by N4). Editing never moves a resume up. Turning the
-switch off and on again does, because it starts a new opt-in. There is no
-popularity order: view counts are owner-only
+Listings are ordered oldest opt-in first: `requested_at ASC, resume_id ASC`
+(**Owner approval** S5, as changed by N4). Editing never moves a resume. Turning
+the switch off and on again moves it to the end, because it starts a new opt-in.
+There is no popularity order: view counts are owner-only
 ([ADR 0022](../adr/0022-viewer-privacy-and-counting.md)), and ordering by them
 would publish them.
 
@@ -107,9 +108,8 @@ MB of card images, usually about 1.5 MB.
 ## Derived values and reports
 
 Nothing is reviewed. A resume is listed while its opt-in exists, it is live, and
-sign in to view is off. The owner chose on 2026-10-01 to list every opt-in at
-once. The showcase is a page aboutme.vn hosts, so abuse stands as its content
-until someone reports it.
+sign in to view is off. The showcase is a page aboutme.vn hosts, so abuse stands
+as its content until someone reports it.
 
 **Keeping derived values current.** The showcase row holds the current card
 version and the derived template ID. Every committed write to an opted-in resume
@@ -117,14 +117,27 @@ version and the derived template ID. Every committed write to an opted-in resume
 through the one resume write boundary. At start, Go recomputes them for every
 row, so a changed preset or card layout applies after a deploy.
 
-**Reports.** Each tile's Report link opens an email to `danny@aboutme.vn` with
-the subject "Report showcase: {slug}". aboutme stores nothing about the
-reporter. The operator handles a report that shows a breach of the Terms by
-blocking the account under the Terms, which ends every listing of that account.
+**Report, then the operator deletes the account.** Each tile's Report link opens
+an email to `danny@aboutme.vn` with the subject "Report showcase: {slug}".
+aboutme stores nothing about the reporter. When a report shows a serious breach
+of the Terms, or the law requires action, the operator deletes the account that
+owns the reported slug (**Owner approval** N3; see
+[Terms of Service](#terms-of-service)). It runs `server account-delete`, a
+one-shot task the deploy script starts out of band
+([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)):
 
-**Known gap.** Account blocking is not built. Until it is, the operator has no
-supported way to take a reported listing down; the listing stays until its owner
-turns the switch off, unpublishes, or deletes the resume.
+1. `show <slug>` is read-only. It prints the user ID that owns the resume
+   holding the slug and every current slug of that account, or "not found" for a
+   tombstoned or unknown slug.
+2. `confirm <slug> <user-id>` checks again, inside the deletion transaction,
+   that the slug's owner is that user ID. A mismatch deletes nothing. A match
+   deletes the account through the self-delete path from Settings: media,
+   sessions, grants, OAuth tokens, showcase rows, and public pages go at once,
+   and each slug becomes a tombstone that blocks reuse for 180 days.
+
+Output and the one audit log line per run carry only the user ID, slugs, action,
+outcome, and time; never an email, name, headline, IP address, or session data.
+The task log keeps that line with the server logs for 180 days.
 
 ## Search engines and discovery
 
@@ -218,7 +231,7 @@ for publish and "CV" for resume, as the rest of the product does.
 | Title and h1      | CV từ cộng đồng                                                                                   | Community resumes                                                                                    |
 | Meta description  | CV thật do người dùng aboutme.vn chọn chia sẻ.                                                    | Real resumes that aboutme.vn users chose to share.                                                   |
 | Lead              | CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.                                     | Real resumes that aboutme.vn users published and chose to show here.                                 |
-| Order note        | CV mới thêm hiện trước.                                                                           | Most recently added first.                                                                           |
+| Order note        | CV thêm sớm nhất hiện trước.                                                                      | Earliest added first.                                                                                |
 | Role filter label | Lọc theo vị trí                                                                                   | Filter by role                                                                                       |
 | All roles         | Mọi vị trí                                                                                        | All roles                                                                                            |
 | Language label    | Ngôn ngữ của CV                                                                                   | Resume language                                                                                      |
@@ -247,18 +260,22 @@ your resumes".
 ### Privacy Policy
 
 Text in `legal-vi.ts` and `legal-en.ts` (**Owner approval** S11, as changed by
-N2). The "updated" date becomes the release date.
+N2; the N5 row awaits the owner). The "updated" date becomes the release date.
 
-| Section                                        | Vietnamese                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | English                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| What we collect, new item after Content        | Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi lưu thời điểm bạn bật và vị trí bạn chọn.                                                                                                                                                                                                                                                                                                                                                                                 | Community showcase: if you turn it on for a resume, we store when you turned it on and the role you picked.                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Why we use your data, optional features list   | (xuất bản CV công khai, cho phép lập chỉ mục, hiện CV trong trang Cộng đồng, kết nối trợ lý AI, đăng nhập bằng Google hoặc LinkedIn)                                                                                                                                                                                                                                                                                                                                                      | (publishing, search and AI indexing, the community showcase, connected AI agents, Google or LinkedIn sign-in)                                                                                                                                                                                                                                                                                                                                                                                               |
-| Public only by your choice, new last paragraph | Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị trí bạn chọn, kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc bật Yêu cầu đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng bất kỳ ai truy cập đều có thể xem và sao chép những gì trang hiển thị. | The community showcase (aboutme.vn/showcase) lists only resumes whose owners turn on Show in the community showcase. It shows the resume's preview image (your name, headline, and photo), its template, language, and the role you picked, with a link to the resume. When you turn the option off, unpublish, or turn on Require sign-in to view, the resume leaves the showcase right away. Search engines are asked not to index the showcase, but anyone who visits it can see and copy what it shows. |
+| Section                                                 | Vietnamese                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | English                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What we collect, new item after Content                 | Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi lưu thời điểm bạn bật và vị trí bạn chọn.                                                                                                                                                                                                                                                                                                                                                                                 | Community showcase: if you turn it on for a resume, we store when you turned it on and the role you picked.                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Why we use your data, optional features list            | (xuất bản CV công khai, cho phép lập chỉ mục, hiện CV trong trang Cộng đồng, kết nối trợ lý AI, đăng nhập bằng Google hoặc LinkedIn)                                                                                                                                                                                                                                                                                                                                                      | (publishing, search and AI indexing, the community showcase, connected AI agents, Google or LinkedIn sign-in)                                                                                                                                                                                                                                                                                                                                                                                               |
+| Public only by your choice, new last paragraph          | Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị trí bạn chọn, kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, hủy xuất bản, hoặc bật Yêu cầu đăng nhập để xem, CV rời khỏi trang Cộng đồng ngay lập tức. Trang Cộng đồng không cho công cụ tìm kiếm lập chỉ mục, nhưng bất kỳ ai truy cập đều có thể xem và sao chép những gì trang hiển thị. | The community showcase (aboutme.vn/showcase) lists only resumes whose owners turn on Show in the community showcase. It shows the resume's preview image (your name, headline, and photo), its template, language, and the role you picked, with a link to the resume. When you turn the option off, unpublish, or turn on Require sign-in to view, the resume leaves the showcase right away. Search engines are asked not to index the showcase, but anyone who visits it can see and copy what it shows. |
+| Your controls, new item after the deletion records (N5) | Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản, chúng tôi giữ bản ghi gồm mã tài khoản, đường dẫn các CV của tài khoản đó và thời điểm xóa trong tối đa 180 ngày.                                                                                                                                                                                                                                                                                                                  | If we delete an account for a breach of these Terms, we keep a record of the account ID, the web addresses of its resumes, and the time, for up to 180 days.                                                                                                                                                                                                                                                                                                                                                |
 
 ### Terms of Service
 
 The Terms add no showcase line under Acceptable use. Its existing line, "We may
-remove content or delete accounts that break these rules.", covers the showcase.
+remove content or delete accounts that break these rules.", covers the showcase
+and operator deletion. Termination promises an email and time to export before
+acting on a breach unless it is serious or the law requires otherwise. The
+command sends no email, so the operator deletes only in those two cases.
 
 | Section                                     | Vietnamese                                                                                                                                                                                                               | English                                                                                                                                                                                                           |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -281,11 +298,11 @@ remove content or delete accounts that break these rules.", covers the showcase.
   referrer kept.
 - **Abuse.** Nothing checks a listing before it appears. Spam, impersonation,
   offensive content, and other people's data are handled after a report: the
-  operator blocks the account under the Terms. Account blocking is not built
-  (see [Known gap](#derived-values-and-reports)). Accounts need a verified email
-  and hold at most three resumes, which bounds bulk opt-ins.
+  operator deletes the account ([Report](#derived-values-and-reports)). Accounts
+  need a verified email and hold at most three resumes, which bounds bulk
+  opt-ins.
 - **Minors.** The Terms require age 16 and say an account that belongs to a
-  younger person is deleted; a report starts that.
+  younger person is deleted; a report starts the same deletion.
 - **Retention.** The opt-in row, with its opt-in time and role, exists only
   while the opt-in does. It is deleted on opt-out, unpublish, sign in to view,
   and resume or account deletion. Nothing about an ended opt-in is kept.
@@ -321,8 +338,7 @@ document changes.
 schema. It never edits 00010 and only adds a default and an index, besides the
 row changes (**Owner approval** N1):
 
-1. Delete every row whose `review_outcome` is `declined`. Those owners see the
-   switch off and may turn it on again, which lists the resume.
+1. Delete every row whose `review_outcome` is `declined` (see N1 below).
 2. Set `reviewed_key`, `review_outcome`, `reviewed_at`, and `first_listed_at` to
    null on every remaining row. Pending and approved opt-ins are then listed in
    opt-in order, and no review result stays stored.
@@ -362,18 +378,23 @@ unchanged.
 **Security.** The listing route is unauthenticated `GET` and `HEAD` with strict
 query parsing, no cookie reads, and closed output fields; the page renders every
 value as escaped text and loads images only from its own origin under the
-existing app CSP. The showcase adds no operator command and no privileged route.
+existing app CSP. The showcase adds no privileged route. Its one operator
+command is `account-delete`, which runs out of band with database credentials as
+ADR 0003 requires, prints no contact data, and deletes only after `confirm`
+names the user ID that `show` printed.
 
 ## Rejected
 
 | Option                                  | Why not                                                                                           |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | Review before listing                   | Delays every opt-in and costs operator time; the owner chose Report and the Terms instead         |
-| A hide command for reported listings    | A second takedown path beside account blocking; the owner chose to block the account              |
+| Account blocking                        | New account state and checks on every route; the owner chose to delete the account instead        |
+| A hide command for reported listings    | A second takedown path; the owner chose to delete the account for a breach                        |
 | An in-app review queue for the operator | ADR 0003 forbids an operator surface in the public app                                            |
 | A first-page thumbnail of the resume    | A new stored artifact and render per edit; its text can show contact details in the body          |
 | Owner-chosen template label             | Goes stale after a template switch and can be wrong; derivation is exact                          |
 | Order by views or recent edits          | Publishes owner-only counts, or rewards edits made only to move up                                |
+| Newest opt-in first                     | Turning the switch off and on would move a resume to the top                                      |
 | Indexable showcase                      | Would index names of people who left SEO off; showing only SEO-on resumes to crawlers is cloaking |
 | Showcase implies SEO on                 | Couples two choices the owner makes separately                                                    |
 | A cached or server-rendered listing     | Needs a discovery-style fence for mutable names; per-request reads meet ADR 0010 without one      |
@@ -387,7 +408,8 @@ decision of 2026-10-01 superseded S6 and S7 and changed S5, S10, and S11; their
 rows say how. That decision reads: "no review; an opted-in, published resume
 that passes the automatic rules is listed directly, no pending state, no approve
 or decline; Report and the Terms stay; abuse is handled by Report, then blocking
-the account". It settles N1 and N2.
+the account". It settles N1 and N2. A second decision that day settled N3 and
+N4.
 
 | ID  | Decision                                                                                                                      | Owner decision (2026-09-27)                                                    |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -395,7 +417,7 @@ the account". It settles N1 and N2.
 | S2  | Tile shows the stored preview card, template, language, optional role, and Report; no contact, slug text, date, or count      | Approved; a page thumbnail can follow later as its own decision                |
 | S3  | Owner picks an optional role from the nine Library roles plus Other                                                           | Approved                                                                       |
 | S4  | Template derived by exact token match, else "Custom design"                                                                   | Approved                                                                       |
-| S5  | Newest first by first approval; filters role, language, template in the URL; no popularity order                              | Approved; since 2026-10-01 ordered by opt-in time (N4)                         |
+| S5  | Newest first by first approval; filters role, language, template in the URL; no popularity order                              | Approved; since 2026-10-01 oldest opt-in first (N4)                            |
 | S6  | Review before listing through an out-of-band command; re-review when the review key changes; Report by email                  | Approved; superseded 2026-10-01: no review, Report by email stays              |
 | S7  | No operator notice at launch and no promised review time in the copy                                                          | Approved; superseded 2026-10-01: nothing to review                             |
 | S8  | `/showcase` noindex and nofollow, outside sitemap and `llms.txt`; SEO and GEO switch unchanged                                | Approved                                                                       |
@@ -411,39 +433,18 @@ Choices that follow from the 2026-10-01 decision:
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
 | N1  | Migration 00011 deletes declined opt-ins, lists pending ones at deploy without review, and clears every stored review result                                 | Decided 2026-10-01 by that decision |
 | N2  | Legal edits only delete review claims: the review sentences, "our review result" in what we collect, the Terms showcase line; release date; no advance email | Decided 2026-10-01 by that decision |
-| N3  | Release while account blocking is not built, so a reported listing has no takedown until it is                                                               | **Pending**                         |
-| N4  | Order by opt-in time, so turning the switch off and on moves a resume to the top                                                                             | **Pending**                         |
+| N3  | No account blocking; abuse ends in deleting the account that owns the reported slug, by the out-of-band `account-delete` command                             | Decided 2026-10-01 by the owner     |
+| N4  | Order by oldest opt-in first, `requested_at ASC, resume_id ASC`; turning the switch off and on moves a resume to the end                                     | Decided 2026-10-01 by the owner     |
+| N5  | Privacy Policy discloses the record an operator deletion keeps (text in [Privacy Policy](#privacy-policy))                                                   | **Pending**                         |
 
 **N1.** Every row with a `declined` result is deleted, whatever key it was
 declined for. That includes rows declined for an older review key, which the
 previous UI showed as `pending`. Their owners see the switch off and may turn it
 on again, which lists the resume. No review result stays stored.
 
-**N3.** A reported listing stays up until its owner ends the opt-in. Options:
-
-1. Hold the release until account blocking ships.
-2. Release with a minimal out-of-band command that deletes one opt-in row by
-   slug. The effect equals the owner's opt-out: the owner sees the switch off
-   and may turn it on again. It needs no new state, no operator surface in the
-   public app (ADR 0003), and no Terms change, since the Terms already allow
-   removing content.
-3. Release with a deploy-set flag that empties the listing for everyone until
-   the operator clears it.
-
-Recommendation: option 2. Option 1 delays a finished feature on an unrelated
-build; option 3 hides every owner for one report and needs a deploy each time.
-Option 2 removes one listing at once and can go when account blocking ships.
-Choosing it changes the "A hide command" line in [Rejected](#rejected).
-
-**N4.** An owner can turn the switch off and on to return to the top. Options:
-
-1. Accept it, and revisit if owners abuse it.
-2. Limit off-to-on toggles per account, for example 3 a day, in the existing
-   [ADR 0007](../adr/0007-bounded-rate-limiter.md) bounded limiter with an
-   account key. Its buckets live in memory, so the limit stores nothing and a
-   restart resets it. ADR 0007 and [budgets](budgets.md) gain the budget, whose
-   one-day window exceeds the one-hour longest window ADR 0007 states, and the
-   dialog gains one message for a refused toggle.
-
-Recommendation: option 1. Option 2 adds a budget, an ADR edit, and copy for
-abuse not yet seen, and can follow later without a schema change.
+**N5.** The Privacy Policy says a record of an account deletion holds only the
+event type and time, and that a slug tombstone is not linked to the account. The
+`account-delete` audit line holds the user ID and the account's slugs for 180
+days, so the policy promises less than aboutme keeps. Recommendation: add the
+row marked N5 in [Privacy Policy](#privacy-policy). An audit line without the
+user ID and slugs could not tie a deletion to its report.

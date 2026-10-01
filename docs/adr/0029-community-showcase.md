@@ -2,8 +2,9 @@
 
 Status: Accepted (2026-09-27; amended 2026-10-01). The owner approved the
 choices marked **Owner approval** in the
-[showcase design](../design/showcase.md). The 2026-10-01 decision settled N1 and
-N2; N3 and N4 await the owner, and the release waits for them.
+[showcase design](../design/showcase.md). The owner decisions of 2026-10-01
+settled N1 to N4; the release waits for N5, the privacy text for operator
+deletion.
 
 ## Context
 
@@ -27,15 +28,18 @@ document stores no template identity.
    UI, never by an agent tool.
 2. **Listed without review.** A resume is listed while its opt-in exists, it is
    live, and sign in to view is off. Nothing is reviewed before listing or after
-   an edit. Each tile has a Report link that opens an email; the operator
-   handles a breach by blocking the account under the Terms. Go keeps the card
+   an edit. Each tile has a Report link that opens an email. For a serious
+   breach of the Terms, or when the law requires it, the operator deletes the
+   account that owns the reported slug through the self-delete path, by the
+   out-of-band `account-delete` command that ADR 0003 allows. Go keeps the card
    version and derived template current inside every resume write transaction.
 3. **What a listing holds.** The stored card at its versioned URL, the derived
    template, the resume language, and an optional owner-chosen role from a
    closed list. No contact detail, date, count, or body text.
-4. **Order and filters without tracking.** Newest first by opt-in time. Filters
-   for role, language, and template live in the URL. The page sets no cookie,
-   uses no browser storage, and runs no counting script.
+4. **Order and filters without tracking.** Oldest opt-in first
+   (`requested_at ASC, resume_id ASC`). Filters for role, language, and template
+   live in the URL. The page sets no cookie, uses no browser storage, and runs
+   no counting script.
 5. **Never indexed.** `/showcase` is `noindex, nofollow` and outside the sitemap
    and `llms.txt`. A resume's SEO and GEO switch keeps its meaning.
 6. **Uncached listing.** The browser reads the listing from a Go route that
@@ -51,7 +55,9 @@ document stores no template identity.
 | Option                               | Why not                                                                                |
 | ------------------------------------ | -------------------------------------------------------------------------------------- |
 | Review before listing                | Delays every opt-in and costs operator time; Report and the Terms handle abuse instead |
-| A hide command for reported listings | A second takedown path beside account blocking                                         |
+| Account blocking                     | The owner chose account deletion; blocking adds state every route must check           |
+| A hide command for reported listings | The owner chose account deletion as the one takedown                                   |
+| Newest opt-in first                  | Turning the switch off and on would move a resume to the top                           |
 | In-app review or takedown page       | Adds the operator surface ADR 0003 rules out                                           |
 | Resume first-page thumbnail          | A new stored artifact rendered per edit; the body can hold contact details             |
 | Popularity order                     | Publishes view counts that ADR 0022 keeps owner-only                                   |
@@ -61,9 +67,9 @@ document stores no template identity.
 ## Consequences
 
 - Abuse can stand on a page aboutme.vn hosts until someone reports it and the
-  operator blocks the account. Account blocking is not built yet; until it is, a
-  reported listing has no takedown.
-- Turning the switch off and on moves a resume to the top of the order.
+  operator deletes the account. A lesser breach gets no takedown, since the
+  Terms promise notice the command does not send.
+- Turning the switch off and on moves a resume to the end of the order.
 - One more public read route; each request costs one indexed query of at most 12
   rows and one count. It has its own per-IP rate limit.
 - An open showcase tab keeps old tiles until reload; new requests and every card
@@ -82,3 +88,5 @@ document stores no template identity.
 - Amended (2026-10-01): owner decision 2026-10-01: no review. An eligible opt-in
   is listed at once, abuse is handled by Report and account blocking under the
   Terms, and the out-of-band review command is removed.
+- Amended (2026-10-01): owner decision 2026-10-01: oldest opt-in first; abuse
+  handled by account deletion.
