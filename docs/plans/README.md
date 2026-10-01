@@ -8,9 +8,8 @@ Plans hold open work only. A plan is deleted when its work ships; Git keeps it. 
 |-|-|
 |[v0.5-roadmap.md](v0.5-roadmap.md)|Active release order|
 |[link-previews.md](link-previews.md)|Link previews, releases 0.6.0 and 0.6.1 (card, publish-panel preview, and the Verify page)|
-|[linkedin.md](linkedin.md)|LinkedIn import from Save to PDF (0.6.6), approved; waiting for the owner's shape report|
 |[viewer-analytics.md](viewer-analytics.md)|Sign in to view and the join popup (v0.6.26); view counts shipped in v0.6.4|
-|[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0028](../adr/0028-deployment-transparency-observer.md)), waiting for owner approvals|
+|[deployment-transparency.md](deployment-transparency.md)|Deployment transparency: SBOMs, observer, verify page ([ADR 0028](../adr/0028-deployment-transparency-observer.md)), approved, building|
 |[vietnam-production.md](vietnam-production.md)|Move production to GreenNode and Bizfly in Vietnam ([ADR 0027](../adr/0027-vietnam-hosted-production.md))|
 |[public-page-theme.md](public-page-theme.md)|Public page bar and light/dark theme|
 |[showcase.md](showcase.md)|Community showcase ([ADR 0029](../adr/0029-community-showcase.md), proposed), waiting for owner approvals|
