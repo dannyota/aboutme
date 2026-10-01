@@ -529,6 +529,43 @@ test.describe('guide page pixel baselines', () => {
   }
 });
 
+/**
+ * Describes the shell and its direct children, the nav's, and the right-side
+ * group's: tag, test id or text, computed display, and width in pixels.
+ */
+async function describeHeader(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>(
+      '[data-testid="app-shell"]',
+    )!;
+    const line = (element: Element): string => {
+      const box = element.getBoundingClientRect();
+      const name = element.getAttribute('data-testid')
+        ?? (element.textContent ?? '').trim().replace(/\s+/gu, ' ')
+          .slice(0, 24);
+      const style = getComputedStyle(element);
+      return `${element.tagName.toLowerCase()} "${name}" `
+        + `display=${style.display} width=${box.width.toFixed(1)}`;
+    };
+    const rows = [
+      `shell clientWidth=${shell.clientWidth} `
+      + `scrollWidth=${shell.scrollWidth} `
+      + `viewport=${document.documentElement.clientWidth}`,
+    ];
+    const walk = (parent: Element, label: string): void => {
+      for (const child of parent.children) {
+        rows.push(`${label}${line(child)}`);
+      }
+    };
+    walk(shell, 'shell > ');
+    const nav = shell.querySelector('nav');
+    if (nav !== null) walk(nav, 'nav > ');
+    const right = shell.querySelector(':scope > div');
+    if (right !== null) walk(right, 'right > ');
+    return `\n${rows.join('\n')}`;
+  });
+}
+
 // The header must not overflow at 704, 768, 896, or 1024px in either language,
 // signed in or out, and the Connect AI link shows exactly where
 // docs/design/mcp-guide.md, "Navigation", puts it: signed out, from 44rem
@@ -570,7 +607,12 @@ for (const locale of ['vi', 'en'] as const) {
 
         const overflow = await shell.evaluate((element) =>
           element.scrollWidth - element.clientWidth);
-        expect(overflow).toBeLessThanOrEqual(0);
+        // A failure lists every part of the header with its width, so the
+        // message names what overflows without a trace artifact.
+        expect(
+          overflow,
+          overflow > 0 ? await describeHeader(page) : '',
+        ).toBeLessThanOrEqual(0);
 
         const guideLink = page.locator('nav a[href="/guide/mcp"]');
         await expect(guideLink).toHaveCount(1);
