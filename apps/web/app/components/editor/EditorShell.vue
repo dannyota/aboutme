@@ -489,6 +489,7 @@ async function discardAndSignIn(): Promise<void> {
         :active="narrowRegion === 'preview'"
         :document="document"
         :lng="record.current.metadata.lng"
+        :pdf-controller="actions.downloadPdf"
         :photo-read="record.photoRead"
         :photo-url="photoUrl"
         :zoom="zoom"

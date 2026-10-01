@@ -169,6 +169,7 @@ function downloadController(): PdfDownloadController {
   return {
     state: computed(() => ({ kind: 'idle' })),
     download: vi.fn(),
+    openInTab: vi.fn(),
     dispose: vi.fn(),
   };
 }
