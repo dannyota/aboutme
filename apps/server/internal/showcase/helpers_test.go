@@ -198,13 +198,12 @@ func snapshotOf(t *testing.T, spec rowSpec) publicresume.Snapshot {
 
 // env is a live-database fixture for the showcase service.
 type env struct {
-	ctx      context.Context
-	pool     *pgxpool.Pool
-	queries  *store.Queries
-	reader   *publicresume.Reader
-	service  *Service
-	reviewer *Reviewer
-	now      time.Time
+	ctx     context.Context
+	pool    *pgxpool.Pool
+	queries *store.Queries
+	reader  *publicresume.Reader
+	service *Service
+	now     time.Time
 }
 
 // newEnv opens the shared test database. Its rows are shared with parallel
@@ -239,7 +238,7 @@ func openEnv(t *testing.T, dsn string) *env {
 	}
 	return &env{
 		ctx: ctx, pool: pool, queries: queries, reader: reader, service: service,
-		reviewer: NewReviewer(pool, func() time.Time { return now }), now: now,
+		now: now,
 	}
 }
 
@@ -316,25 +315,12 @@ func (e *env) sync(t *testing.T, resumeID uuid.UUID) {
 	}
 }
 
-// approve approves the current key of the resume's slug.
-func (e *env) approve(t *testing.T, f fixture) {
-	t.Helper()
-	row, err := e.queries.GetResumeShowcase(e.ctx, f.id)
-	if err != nil {
-		t.Fatalf("read showcase row: %v", err)
-	}
-	applied, err := e.reviewer.Approve(e.ctx, f.slug, row.ReviewKey)
-	if err != nil || !applied {
-		t.Fatalf("Approve() = %t, %v", applied, err)
-	}
-}
-
-// listed adds a resume, opts it in, and approves it.
+// listed adds a resume and opts it in. Nothing is reviewed, so it is listed at
+// once.
 func (e *env) listed(t *testing.T, spec rowSpec, role *string) fixture {
 	t.Helper()
 	f := e.addResume(t, spec)
 	e.optIn(t, f.id, role)
-	e.approve(t, f)
 	return f
 }
 
