@@ -12,8 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -24,6 +22,7 @@ import (
 	awsecs "github.com/aws/aws-sdk-go-v2/service/ecs"
 
 	"github.com/dannyota/aboutme/deploy/observer/internal/document"
+	"github.com/dannyota/aboutme/deploy/observer/internal/leakscan"
 	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
 	"github.com/dannyota/aboutme/deploy/observer/internal/platform/ecs"
 	"github.com/dannyota/aboutme/deploy/observer/internal/platform/kubernetes"
@@ -224,28 +223,6 @@ func build(t *testing.T, imgs []platform.Image, info platform.Info) []byte {
 	return b
 }
 
-var (
-	allowedHex = regexp.MustCompile(`sha256:[0-9a-f]{64}|\b[0-9a-f]{40}\b`)
-	timestamp  = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`)
-	forbidden  = map[string]*regexp.Regexp{
-		"12-digit number":   regexp.MustCompile(`\d{12}`),
-		"arn":               regexp.MustCompile(`(?i)arn:`),
-		"IPv4 address":      regexp.MustCompile(`\b\d{1,3}(\.\d{1,3}){3}\b`),
-		"IPv6 address":      regexp.MustCompile(`(?i)\b[0-9a-f]{0,4}(:[0-9a-f]{0,4}){2,7}\b`),
-		"availability zone": regexp.MustCompile(`\b[a-z]{2}(-gov)?-[a-z]+-\d[a-z]\b`),
-		"32-hex ID":         regexp.MustCompile(`(?i)[0-9a-f]{32}`),
-		"UUID":              regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`),
-	}
-	scheme      = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://`)
-	urlPrefixes = []string{
-		"https://aboutme.vn\"",
-		"https://github.com/dannyota/aboutme\"",
-		"https://github.com/dannyota/aboutme/",
-		"https://api.github.com/repos/dannyota/aboutme/attestations/",
-		"https://search.sigstore.dev/?logIndex=",
-	}
-)
-
 // reporter is the part of testing.TB the leak checks use, so a test can
 // record their failures without failing itself.
 type reporter interface {
@@ -271,19 +248,8 @@ func assertNoLeak(t reporter, b []byte) {
 			t.Errorf("canary %q reached the document", c)
 		}
 	}
-	// Digests, commits, and timestamps are allowed values; strip them before
-	// looking for identifiers hidden inside other strings.
-	scrubbed := timestamp.ReplaceAllString(allowedHex.ReplaceAllString(s, "HEX"), "TIME")
-	for name, re := range forbidden {
-		if m := re.FindString(scrubbed); m != "" {
-			t.Errorf("document holds a %s: %q", name, m)
-		}
-	}
-	for _, loc := range scheme.FindAllStringIndex(s, -1) {
-		rest := s[loc[0]:]
-		if !slices.ContainsFunc(urlPrefixes, func(p string) bool { return strings.HasPrefix(rest, p) }) {
-			t.Errorf("document holds a URL outside the allowed prefixes: %.80q", rest)
-		}
+	for _, f := range leakscan.Find(b) {
+		t.Errorf("document %s", f)
 	}
 }
 
