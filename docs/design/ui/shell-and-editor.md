@@ -7,21 +7,24 @@ the [visual design](../../../DESIGN.md).
 
 The shared application shell is a card-colored bar with a bottom border, its
 content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
-Library link for every visitor, followed by a link to the
-[MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
-public like the Library link. Signed-out navigation adds an Open source link to
-the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button, and
-a primary create button. The create button reads Create your resume on the home
-page, the Library, template pages, Terms, Privacy, and the MCP guide, and Create
-account elsewhere. On localized routes, both account buttons hide below 44 rem,
-where the page's own links take over. Signed-in navigation also shows Resumes,
-Settings, and an account menu. The account menu contains Settings, theme
-switching, and Log out. On signed-in screens below 640 px, the direct Library
-and Settings links are hidden; Settings remains in the account menu. The guide
-link hides below 44 rem signed out and below 64 rem signed in, where the
-signed-in bar also carries Resumes, Views, and Settings. On localized routes,
-the shell adds the Vietnamese and English toggle. Below 640 px its visible
-labels shorten to VI and EN while their accessible names remain complete.
+Library link for every visitor, then a Community link (“Cộng đồng”) to the
+[community showcase](landing-and-library.md#community-showcase), then a link to
+the [MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
+public like the Library link. Below 30 rem, signed out, the logo shows the mark
+alone so both public links fit. Signed-out navigation adds an Open source link
+to the GitHub repository from 56 rem, the theme toggle, a ghost Sign in button,
+and a primary create button. The create button reads Create your resume on the
+home page, the Library, template pages, the showcase, Terms, Privacy, and the
+MCP guide, and Create account elsewhere. On localized routes, both account
+buttons hide below 44 rem, where the page's own links take over. Signed-in
+navigation also shows Resumes, Settings, and an account menu. The account menu
+contains Settings, theme switching, and Log out. On signed-in screens below 640
+px, the direct Library, Community, and Settings links are hidden; Settings
+remains in the account menu. The guide link hides below 44 rem signed out and
+below 64 rem signed in, where the signed-in bar also carries Resumes, Views, and
+Settings. On localized routes, the shell adds the Vietnamese and English toggle.
+Below 640 px its visible labels shorten to VI and EN while their accessible
+names remain complete.
 
 The six account pages (sign in, second factor, create account, forgot password,
 reset password, and verify email) share `AuthLayout`. Below 1024 px they are a
@@ -98,10 +101,12 @@ gives the count or a no-match message.
 
 The publish dialog is a scrollable modal with the `aboutme.vn/` slug prefix. It
 presents optional fields for the browser-tab title and emoji icon, followed by
-the three switches with explanations. PDF download and SEO and GEO are disabled
-until Public resume is enabled. The primary action is Publish, Unpublish, or
-Update publication according to the current state. Success shows the seal,
-public link, and Copy link.
+the Public resume, PDF download, SEO and GEO, and, when offered, Require sign-in
+to view switches with explanations, then the
+[showcase block](landing-and-library.md#publish-dialog-block). PDF download and
+SEO and GEO are disabled until Public resume is enabled. The primary action is
+Publish, Unpublish, or Update publication according to the current state.
+Success shows the seal, public link, and Copy link.
 
 Settings is a narrow, left-aligned page divided by top rules. Signed-in devices
 show the device description, relative last-seen time, This device, and Log out
