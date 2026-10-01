@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Resume } from '@aboutme/schema';
-import { computed } from 'vue';
+import { computed, provide } from 'vue';
 
 import type { components } from '../../api/generated/openapi';
 import LayoutColumns from '../resume/LayoutColumns.vue';
 import ResumeHeader from '../resume/ResumeHeader.vue';
+import { ResumeLngKey } from '../resume/formatDate';
 import { resolveRenderModel } from '../resume/resolveRenderModel';
 import '../resume/ResumeDocument.vue?vue&type=style&index=0&lang.css';
 
@@ -48,6 +49,7 @@ const model = computed(() => resolveRenderModel(document.value, {
     ? {}
     : { photoUrl: props.document.personalDetails.photo.url }),
 }));
+provide(ResumeLngKey, computed(() => model.value.lng));
 
 const rootStyle = computed(() => ({
   ...model.value.styles.root,

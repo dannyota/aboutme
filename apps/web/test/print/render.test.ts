@@ -47,6 +47,52 @@ describe('print page title', () => {
   });
 });
 
+describe('resume language in shared renderers', () => {
+  const viEnvelope = () => {
+    const envelope = printEnvelope();
+    envelope.lng = 'vi';
+    envelope.document = JSON.parse(readFileSync(
+      new URL(
+        '../../../../packages/schema/fixtures/full.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ));
+    envelope.document.customization.dateFormat = 'Mon YYYY';
+    return envelope;
+  };
+
+  it('prints Vietnamese dates in the private print document', async () => {
+    const envelope = viEnvelope();
+    const body = await renderToString(createSSRApp({
+      render: () => h(PrintResumeApp, {
+        document: envelope.document,
+        lng: envelope.lng,
+      }),
+    }));
+    expect(body).toContain('thg 3 2022 – Hiện tại');
+    expect(body).not.toContain('Mar 2022');
+  });
+
+  it('prints Vietnamese dates on the public page', async () => {
+    const envelope = viEnvelope();
+    const body = await renderToString(createSSRApp({
+      render: () => h(PublicResumeApp, {
+        publicResume: {
+          slug: 'vi-dates',
+          revision: envelope.revision,
+          lng: envelope.lng,
+          downloadEnabled: false,
+          document: envelope.document,
+        },
+        homeHref: 'https://aboutme.example/',
+      }),
+    }));
+    expect(body).toContain('thg 3 2022 – Hiện tại');
+    expect(body).not.toContain('Mar 2022');
+  });
+});
+
 describe('private print Vue document', () => {
   it('keeps exact shared-renderer parity with public SSR', async () => {
     const envelope = printEnvelope();
