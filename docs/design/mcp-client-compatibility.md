@@ -113,8 +113,8 @@ ceiling of 600 an hour. The list is deployment configuration, not code, and an
 address outside it keeps today's limit. The idle-client sweep already removes a
 registration with no grant after 24 hours. Token and tool limits do not change.
 
-CIMD would remove registration for Claude entirely, but it needs a server-side
-fetch of client-supplied URLs with SSRF controls.
+CIMD would remove registration for clients that send a metadata document, but it
+needs a server-side fetch of client-supplied URLs with SSRF controls.
 [MCP Client ID Metadata Documents](mcp-cimd.md) holds that design, a proposal
 awaiting owner decisions.
 
