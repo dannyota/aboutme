@@ -28,6 +28,7 @@ const files = [
   "gen/ts/sanitizer.ts",
   "gen/ts/templates.ts",
   "gen/ts/samples.ts",
+  "../../apps/server/internal/showcase/presets.generated.go",
   ...released.flatMap((entry) => [
     `${entry.goPackage}/resume.go`,
     `${entry.goPackage}/rawschema.go`,

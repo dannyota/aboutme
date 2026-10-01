@@ -37,21 +37,26 @@ const resumeCap = 3
 // before encodeParts produces the stored jsonb values. See
 // docs/design/data.md for write ownership.
 type Store struct {
-	pool *store.Pool
-	q    *store.Queries
-	proj *docmigrate.Projector
-	now  func() time.Time
+	pool     *store.Pool
+	q        *store.Queries
+	proj     *docmigrate.Projector
+	now      func() time.Time
+	showcase ShowcaseSync
 }
 
 // NewStore builds a Store backed by pool. proj converts stored documents to
 // its declared current version on read.
-func NewStore(pool *store.Pool, proj *docmigrate.Projector) *Store {
-	return &Store{
+func NewStore(pool *store.Pool, proj *docmigrate.Projector, options ...StoreOption) *Store {
+	s := &Store{
 		pool: pool,
 		q:    store.New(pool),
 		proj: proj,
 		now:  time.Now,
 	}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 // Create validates doc, then in one transaction: locks the owner's users
@@ -216,6 +221,9 @@ func (s *Store) afterCASMiss(ctx context.Context, qtx *store.Queries, userID, id
 	}
 	current, err := s.projectRow(row)
 	if err != nil {
+		return err
+	}
+	if err = attachShowcase(ctx, qtx, &current); err != nil {
 		return err
 	}
 	return &RevisionMismatchError{CurrentRevision: row.Revision, Current: current}
