@@ -35,6 +35,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [Font catalog](fonts.md)                                               | Font license gate, provenance, coverage, and fallback          |
 | Other   | [MCP owner workflow](mcp-owner-workflow.md)                            | Official-SDK client run that copies one resume into Vietnamese |
 | Other   | [MCP client compatibility](mcp-client-compatibility.md)                | OAuth rules Claude and TypeScript SDK clients need             |
+| Other   | [MCP Client ID Metadata Documents](mcp-cimd.md)                        | Proposal: HTTPS URL client IDs, fetch, SSRF guard, and cache   |
 | Other   | [MCP guide](mcp-guide.md)                                              | Public page on connecting an AI assistant through MCP          |
 | Other   | [MCP guide copy](mcp-guide-copy.md)                                    | Vietnamese and English text of the MCP guide                   |
 | Other   | [Templates](templates/README.md)                                       | Preset data, tokens, colors, geometry, and print behavior      |
