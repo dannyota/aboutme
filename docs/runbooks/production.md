@@ -214,16 +214,16 @@ Leave a source unchanged when its recorded state was `DISABLED` or `False`. If
 the deploy output is unavailable, change neither until the operator establishes
 its prior state from operational evidence.
 
-Each release snapshot is tagged `aboutme:created-by=deploy.sh`. The script never
-deletes a snapshot. The daily `release-snapshot-sweep` job (20:00 UTC) deletes
-release snapshots of `aboutme-prod` more than 27 days old by
-`SnapshotCreateTime`, so none reaches 30 days even after one missed run. It
-deletes only manual, available snapshots whose names match
-`aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and that carry the tag, plus the untagged
-`aboutme-prod-v0-1-1-202609171438`. Automated backups, the final snapshot, and
-any other snapshot stay. The result reports counts; the log names each deleted
-or failed snapshot and a failed delete's AWS error code. Scheduler retries a
-failed task start twice. It runs only after a deploy enables its schedule.
+Each release snapshot is tagged `aboutme:created-by=deploy.sh`; the script never
+deletes one. The daily `release-snapshot-sweep` job (20:00 UTC) deletes release
+snapshots of `aboutme-prod` more than 27 days old by `SnapshotCreateTime`, so
+none reaches 30 days even after one missed run. It deletes only manual,
+available snapshots whose names match `aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and
+that carry the tag, plus the untagged `aboutme-prod-v0-1-1-202609171438`.
+Automated backups, the final snapshot, and any other snapshot stay. The result
+reports counts; the log names each deleted or failed snapshot and a failed
+delete's error code. Scheduler retries a failed task start twice. Like every job
+schedule, it runs only after a deploy enables it.
 
 To keep a release snapshot longer, copy it without the tag and under a name the
 job does not match (`copy-db-snapshot` copies no tags unless given
@@ -243,19 +243,19 @@ schedules' earlier state, then exits non-zero. Once the script requests
 request can succeed when the client loses its response, and Goose can commit an
 earlier migration before a later one fails. Fix forward with a new release, or
 restore the deploy's snapshot. On `--first-deploy`, a failure keeps maintenance
-up, retries the app stop until every task has stopped, and leaves every job
-schedule disabled, because `db-setup` may not have created usable state.
+up, stops the app and confirms every task stopped, and leaves the job schedules
+disabled, since `db-setup` may not have made usable state.
 
-If the script reports that a database task may still be running, it leaves the
-maintenance page, the app, and the schedules exactly as they are: check the task
-with `aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it
-has stopped, rerun the deploy. Enabled schedules always point at the released
-`jobs` revision.
+If the script reports a possibly running database task, it leaves maintenance,
+the app, and the schedules as they are: check it with
+`aws ecs describe-tasks --cluster aboutme-prod --tasks <arn>`, and when it has
+stopped, rerun the deploy. Enabled schedules use the released `jobs` revision.
 
 Two recovery paths leave a service unconfirmed, print what to check by hand, and
 exit non-zero. If maintenance cannot be confirmed, on a first deploy or after a
-migration request, the new app keeps running so port 8443 has a listener. If the
-previous app does not start, it prints
+migration request, the app stays as it is (running only if its start was
+requested) and is not scaled down, so a running app still answers on port 8443.
+If the previous app cannot be confirmed, it prints
 `could not confirm that the previous app started` and scales it to 0 with
 maintenance up, or leaves both as they are when maintenance is unconfirmed too.
 
