@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { TEMPLATES } from "../gen/ts/templates";
 import { generateTemplatesTs } from "../scripts/generate.mjs";
+import { showcaseMatchForm } from "../scripts/generateShowcasePresets.mjs";
 
 const root = new URL("..", import.meta.url).pathname;
 const templatesDir = join(root, "templates");
@@ -142,5 +143,32 @@ describe("template registry", () => {
     expect(readFileSync(outFile, "utf8")).toContain(
       'readonly surfaceTarget?: "none" | "header" | "sidebar" | "experimental";',
     );
+  });
+
+  // docs/design/showcase.md "What a listing shows": the showcase match form
+  // drops the five leaves a template apply keeps or resets and the preset's
+  // placement, and a preset without a header cannot be matched.
+  it("builds the showcase match form without the owner leaves and placement", () => {
+    const preset = TEMPLATES.find((candidate) => candidate.id === "modern-sidebar");
+    expect(preset).toBeDefined();
+    const form = JSON.parse(showcaseMatchForm(preset));
+    expect(form.pageFormat).toBeUndefined();
+    expect(form.dateFormat).toBeUndefined();
+    expect(form.colorScheme).toBeUndefined();
+    expect(form.font.textAlign).toBeUndefined();
+    expect(form.header.photoPosition).toBeUndefined();
+    expect(form.layout.placement).toBeUndefined();
+    expect(form.layout.sidebarSectionTypes).toBeUndefined();
+    expect(form.layout.columns).toBe(preset?.customization.layout.columns);
+    expect(form.layout.surfaceTarget).toBe("sidebar");
+    expect(form.colors.surface).toBe(preset?.customization.colors.surface);
+  });
+
+  it("rejects a preset without a header for the showcase", () => {
+    const preset = structuredClone(
+      TEMPLATES.find((candidate) => candidate.id === "ats-plain"),
+    ) as Record<string, any>;
+    delete preset.customization.header;
+    expect(() => showcaseMatchForm(preset)).toThrow(/must define header/);
   });
 });

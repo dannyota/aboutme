@@ -685,6 +685,8 @@ describe("Phase 5A publish and public wire contract", () => {
       "publicTitle",
       "faviconEmoji",
       "signInToView",
+      "showcaseEnabled",
+      "showcaseRole",
     ]);
     // The page settings are optional strings: omitted keeps them, and a null
     // is malformed rather than a clear.
@@ -695,6 +697,12 @@ describe("Phase 5A publish and public wire contract", () => {
     // (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
     expect(request.properties.signInToView.type).toBe("boolean");
     expect(request.required).not.toContain("signInToView");
+    // The community showcase fields are optional too: omitted keeps the
+    // stored value (docs/design/showcase.md "Data and contract").
+    expect(request.properties.showcaseEnabled.type).toBe("boolean");
+    expect(request.properties.showcaseRole.type).toBe("string");
+    expect(request.required).not.toContain("showcaseEnabled");
+    expect(request.required).not.toContain("showcaseRole");
     expect(request.properties.slug).toMatchObject({
       type: "string",
       minLength: 1,
@@ -709,6 +717,7 @@ describe("Phase 5A publish and public wire contract", () => {
     expect(issue.properties.code.enum).toEqual([
       "required_for_live",
       "requires_live",
+      "requires_open_view",
       "invalid_format",
       "reserved",
       "required",
@@ -1011,5 +1020,125 @@ describe("Phase 5A publish and public wire contract", () => {
     ]) {
       expect(doc.paths[proseOnly]).toBeUndefined();
     }
+  });
+});
+
+describe("community showcase contract", () => {
+  it("serves the uncached listing at GET and HEAD with closed query parameters", () => {
+    const path = doc.paths["/public/showcase"];
+    expect(path.get.operationId).toBe("getPublicShowcase");
+    expect(path.head.operationId).toBe("headPublicShowcase");
+    expect(path.get.security).toEqual([]);
+    expect(path.get.parameters.map((p: { $ref: string }) => p.$ref)).toEqual([
+      "#/components/parameters/ShowcaseRoleFilter",
+      "#/components/parameters/ShowcaseLanguageFilter",
+      "#/components/parameters/ShowcaseTemplateFilter",
+      "#/components/parameters/ShowcasePage",
+    ]);
+    expect(Object.keys(path.get.responses)).toEqual([
+      "200",
+      "400",
+      "405",
+      "429",
+      "503",
+    ]);
+    expect(path.head.responses).toEqual(path.get.responses);
+    expect(path.get.description).toMatch(/never cached/);
+    expect(path.get.description).toMatch(/noindex, nofollow/);
+
+    const parameters = doc.components.parameters;
+    for (const name of [
+      "ShowcaseRoleFilter",
+      "ShowcaseLanguageFilter",
+      "ShowcaseTemplateFilter",
+      "ShowcasePage",
+    ]) {
+      expect(parameters[name].in).toBe("query");
+      expect(parameters[name].required).toBe(false);
+    }
+    expect(parameters.ShowcaseLanguageFilter.schema.enum).toEqual(["vi", "en"]);
+    expect(parameters.ShowcasePage.schema).toMatchObject({
+      type: "integer",
+      minimum: 1,
+      maximum: 100,
+    });
+  });
+
+  it("sends no-store and noindex on every listing response", () => {
+    const responses = doc.components.responses;
+    for (const name of [
+      "PublicShowcaseRead",
+      "PublicShowcaseBadRequest",
+      "PublicShowcaseMethodNotAllowed",
+      "PublicShowcaseRateLimited",
+      "PublicShowcaseUnavailable",
+    ]) {
+      expect(responses[name].headers["Cache-Control"].$ref).toBe(
+        "#/components/headers/ShowcaseNoStore",
+      );
+      expect(responses[name].headers["X-Robots-Tag"].$ref).toBe(
+        "#/components/headers/ShowcaseRobots",
+      );
+      expect(responses[name].headers.ETag).toBeUndefined();
+      expect(responses[name].headers["Set-Cookie"]).toBeUndefined();
+    }
+    expect(doc.components.headers.ShowcaseNoStore.schema.const).toBe(
+      "no-store, no-transform",
+    );
+    expect(doc.components.headers.ShowcaseRobots.schema.const).toBe(
+      "noindex, nofollow",
+    );
+  });
+
+  it("defines the closed listing page and item", () => {
+    const schemas = doc.components.schemas;
+    const listing = schemas.ShowcaseListing;
+    expect(listing.additionalProperties).toBe(false);
+    expect(listing.required).toEqual(["items", "page", "pageCount", "total"]);
+    expect(listing.properties.items.maxItems).toBe(12);
+
+    const item = schemas.ShowcaseItem;
+    expect(item.additionalProperties).toBe(false);
+    expect(item.required).toEqual([
+      "slug",
+      "cardVersion",
+      "imageText",
+      "language",
+      "templateId",
+      "role",
+    ]);
+    expect(Object.keys(item.properties)).toEqual(item.required);
+    expect(item.properties.language.enum).toEqual(["vi", "en", "other"]);
+    expect(schemas.ShowcaseRole.enum).toEqual([
+      "backend",
+      "frontend",
+      "mobile",
+      "devops",
+      "data-ai",
+      "qa",
+      "fresher",
+      "brse",
+      "security",
+      "other",
+    ]);
+  });
+
+  it("adds the owner showcase state, null when off, and keeps it off the public resume", () => {
+    const schemas = doc.components.schemas;
+    expect(schemas.ResumeSummary.required).toContain("showcase");
+    expect(schemas.ResumeSummary.properties.showcase.anyOf).toEqual([
+      { type: "null" },
+      { $ref: "#/components/schemas/ResumeShowcase" },
+    ]);
+    expect(schemas.ResumeShowcase.required).toEqual(["state", "role"]);
+    expect(schemas.ResumeShowcase.properties.state.enum).toEqual([
+      "pending",
+      "listed",
+      "declined",
+    ]);
+    expect(schemas.PublicResume.properties.showcase).toBeUndefined();
+    expect(schemas.AccountExportShowcase.allOf[1].required).toEqual([
+      "requestedAt",
+    ]);
   });
 });

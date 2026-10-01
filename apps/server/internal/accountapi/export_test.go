@@ -740,3 +740,87 @@ func (m *exportTestGatedMedia) Delete(ctx context.Context, key string) error {
 func (m *exportTestGatedMedia) ListPage(ctx context.Context, prefix, cursor string, limit int) ([]media.Object, string, error) {
 	return m.delegate.ListPage(ctx, prefix, cursor, limit)
 }
+
+// AC-SHOW-015: the export carries each resume's showcase state, role, and
+// request time, null without an opt-in, and never a review key.
+func TestExportRouteIncludesTheShowcaseState(t *testing.T) {
+	h := newExportTestHarness(t)
+	listed := h.insertResume(t, "listed", false, nil)
+	pending := h.insertResume(t, "pending", false, nil)
+	plain := h.insertResume(t, "plain", false, nil)
+	requested := time.Date(2026, 9, 28, 9, 30, 0, 0, time.UTC)
+	const currentKey, otherKey, version = "aaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbb", "cccccccccccccccc"
+	backend, approved, declined, current, other := "backend", "approved", "declined", currentKey, otherKey
+	seed := func(id uuid.UUID, role, reviewedKey, outcome *string) {
+		t.Helper()
+		var reviewedAt, firstListed *time.Time
+		if outcome != nil {
+			reviewedAt = &requested
+		}
+		if outcome != nil && *outcome == approved {
+			firstListed = &requested
+		}
+		if _, err := h.pool.Exec(h.ctx, `
+			INSERT INTO resume_showcase (resume_id, requested_at, role, review_key, card_version, reviewed_key, review_outcome, reviewed_at, first_listed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			id, requested, role, currentKey, version, reviewedKey, outcome, reviewedAt, firstListed); err != nil {
+			t.Fatalf("seed showcase row: %v", err)
+		}
+	}
+	seed(listed.ID, &backend, &current, &approved)
+	seed(pending.ID, nil, &other, &approved)
+
+	type exportedShowcase struct {
+		State       string  `json:"state"`
+		Role        *string `json:"role"`
+		RequestedAt string  `json:"requestedAt"`
+	}
+	export := func() (map[uuid.UUID]*exportedShowcase, []byte) {
+		t.Helper()
+		response := h.request(t, http.MethodGet, ExportPath, nil)
+		if response.Code != http.StatusOK {
+			t.Fatalf("status = %d body=%s", response.Code, response.Body.String())
+		}
+		var output struct {
+			Data struct {
+				Resumes []struct {
+					ID       uuid.UUID         `json:"id"`
+					Showcase *exportedShowcase `json:"showcase"`
+				} `json:"resumes"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &output); err != nil {
+			t.Fatalf("decode export: %v", err)
+		}
+		byID := map[uuid.UUID]*exportedShowcase{}
+		for _, exported := range output.Data.Resumes {
+			byID[exported.ID] = exported.Showcase
+		}
+		return byID, response.Body.Bytes()
+	}
+
+	byID, body := export()
+	if got := byID[listed.ID]; got == nil || got.State != "listed" || got.Role == nil || *got.Role != "backend" || got.RequestedAt != "2026-09-28T09:30:00Z" {
+		t.Errorf("listed resume showcase = %+v, want listed backend requested 2026-09-28T09:30:00Z", got)
+	}
+	if got := byID[pending.ID]; got == nil || got.State != "pending" || got.Role != nil || got.RequestedAt != "2026-09-28T09:30:00Z" {
+		t.Errorf("pending resume showcase = %+v, want pending with no role", got)
+	}
+	if got, present := byID[plain.ID]; !present || got != nil {
+		t.Errorf("resume without an opt-in showcase = %+v present %t, want null", got, present)
+	}
+	for _, internal := range []string{currentKey, otherKey, version} {
+		if bytes.Contains(body, []byte(internal)) {
+			t.Errorf("the export holds the internal showcase value %q", internal)
+		}
+	}
+
+	if _, err := h.pool.Exec(h.ctx, `
+		UPDATE resume_showcase SET reviewed_key = review_key, review_outcome = $2 WHERE resume_id = $1`, listed.ID, declined); err != nil {
+		t.Fatalf("decline: %v", err)
+	}
+	byID, _ = export()
+	if got := byID[listed.ID]; got == nil || got.State != "declined" {
+		t.Errorf("declined resume showcase = %+v, want declined", got)
+	}
+}

@@ -110,7 +110,14 @@ func (s *Store) GetTx(ctx context.Context, qtx *store.Queries, userID, id uuid.U
 		}
 		return Resume{}, fmt.Errorf("resume: get: %w", err)
 	}
-	return s.projectRow(row)
+	got, err := s.projectRow(row)
+	if err != nil {
+		return Resume{}, err
+	}
+	if err = attachShowcase(ctx, qtx, &got); err != nil {
+		return Resume{}, err
+	}
+	return got, nil
 }
 
 // ListTx is List's transaction-scoped mirror: every resume userID owns,
@@ -123,11 +130,14 @@ func (s *Store) ListTx(ctx context.Context, qtx *store.Queries, userID uuid.UUID
 	}
 	out := make([]Resume, len(rows))
 	for i, row := range rows {
-		r, err := s.projectRow(row)
-		if err != nil {
-			return nil, err
+		r, projectErr := s.projectRow(row)
+		if projectErr != nil {
+			return nil, projectErr
 		}
 		out[i] = r
+	}
+	if err = attachShowcases(ctx, qtx, userID, out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -163,6 +173,9 @@ func (s *Store) SaveDocumentTx(ctx context.Context, qtx *store.Queries, userID, 
 			return 0, fmt.Errorf("resume: save document: %w", err)
 		}
 		return 0, s.afterCASMiss(ctx, qtx, userID, id)
+	}
+	if err = s.syncShowcaseTx(ctx, qtx, id); err != nil {
+		return 0, fmt.Errorf("resume: save document: %w", err)
 	}
 	return newRevision, nil
 }
@@ -211,6 +224,9 @@ func (s *Store) SaveMetadataAndDocumentTx(ctx context.Context, qtx *store.Querie
 			return 0, fmt.Errorf("resume: save metadata and document: %w", err)
 		}
 		return 0, s.afterCASMiss(ctx, qtx, userID, id)
+	}
+	if err = s.syncShowcaseTx(ctx, qtx, id); err != nil {
+		return 0, fmt.Errorf("resume: save metadata and document: %w", err)
 	}
 	return newRevision, nil
 }

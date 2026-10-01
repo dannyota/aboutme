@@ -161,7 +161,11 @@ type exportResume struct {
 	// SignInToView is the publish switch, carried with the other publish
 	// settings; the pass epoch never leaves the server
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
-	SignInToView  bool            `json:"signInToView"`
+	SignInToView bool `json:"signInToView"`
+	// Showcase is the community-showcase state, null without an opt-in
+	// (docs/design/showcase.md "Privacy and abuse"): the state, the role, and
+	// the request time. The review keys stay on the server.
+	Showcase      *exportShowcase `json:"showcase"`
 	Revision      string          `json:"revision"`
 	SchemaVersion int32           `json:"schemaVersion"`
 	Lng           string          `json:"lng"`
@@ -169,6 +173,24 @@ type exportResume struct {
 	UpdatedAt     time.Time       `json:"updatedAt"`
 	Document      json.RawMessage `json:"document"`
 	Photo         *exportPhoto    `json:"photo"`
+}
+
+type exportShowcase struct {
+	State       string    `json:"state"`
+	Role        *string   `json:"role"`
+	RequestedAt time.Time `json:"requestedAt"`
+}
+
+// exportShowcaseOf reads the opt-in off an export row, nil without one.
+func exportShowcaseOf(row store.ListAccountExportResumesRow) *exportShowcase {
+	if row.ShowcaseRequestedAt == nil || row.ShowcaseReviewKey == nil {
+		return nil
+	}
+	return &exportShowcase{
+		State:       resume.ShowcaseStateOf(*row.ShowcaseReviewKey, row.ShowcaseReviewedKey, row.ShowcaseReviewOutcome),
+		Role:        row.ShowcaseRole,
+		RequestedAt: *row.ShowcaseRequestedAt,
+	}
 }
 
 type exportPhoto struct {
@@ -230,6 +252,7 @@ func (s *Service) exportAttachment(ctx context.Context, userID uuid.UUID) ([]byt
 			PublicTitle:     row.PublicTitle,
 			FaviconEmoji:    row.FaviconEmoji,
 			SignInToView:    row.SignInToView,
+			Showcase:        exportShowcaseOf(row),
 			Revision:        strconv.FormatInt(row.Revision, 10),
 			SchemaVersion:   s.projector.CurrentVersion(),
 			Lng:             projectExportLanguage(row.Lng),

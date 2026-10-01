@@ -87,6 +87,9 @@ func (op publishOperation) Run(ctx context.Context, qtx *store.Queries, mutation
 			return mutationRunResult{}, generationErr
 		}
 	}
+	if showcaseErr := op.service.applyShowcaseTx(ctx, qtx, current.ID, state, validated.Effective); showcaseErr != nil {
+		return mutationRunResult{}, showcaseErr
+	}
 	row, err := op.service.resumes.GetTx(ctx, qtx, mutation.UserID, updated.ID)
 	if err != nil {
 		return mutationRunResult{}, err
@@ -200,10 +203,12 @@ func (s *Service) preflightPublishSlugAvailability(ctx context.Context, resumeID
 }
 
 func currentPublishOf(current resume.Resume) currentPublish {
+	showcaseEnabled, showcaseRole := currentShowcase(current)
 	return currentPublish{
 		Slug: current.Slug, Live: current.Live, DownloadEnabled: current.DownloadEnabled,
 		SEOGeoEnabled: current.SEOGeoEnabled, PublicTitle: current.PublicTitle,
 		FaviconEmoji: current.FaviconEmoji, SignInToView: current.SignInToView, Revision: current.Revision,
+		ShowcaseEnabled: showcaseEnabled, ShowcaseRole: showcaseRole,
 	}
 }
 
