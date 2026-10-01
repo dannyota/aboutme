@@ -6,17 +6,17 @@ exercised at the environment that owns the risk.
 
 ## Privacy lifecycle
 
-| Concern          | Intended behavior                                                                                                                                    |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Account deletion | Recent reauthentication; transactionally revoke sessions, identities, resumes, public generations, and media references; retain slug tombstones      |
-| Media deletion   | Enqueue exact keys with reference revocation; deny access immediately; target physical removal within 24 hours; audit, alert, and retry overdue work |
-| Export           | A JSON bundle of the account's resume documents and related portable data                                                                            |
-| Session metadata | IP and user agent are redacted two days before the session's absolute expiry, so no later than 90 days after sign-in; rotation never extends it      |
-| Slug tombstones  | Hold no account link; deleted by the privacy sweep 180 days after release                                                                            |
-| Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                        |
-| Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                  |
-| Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                    |
-| Backups          | Automated backups and release snapshots expire after 30 days; disclosures distinguish this delay from live access and private-object deletion        |
+| Concern          | Intended behavior                                                                                                                                                                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account deletion | Recent reauthentication, except the operator's out-of-band `account-delete` command ([showcase](showcase.md#derived-values-and-reports), ADR 0003); transactionally revoke sessions, identities, resumes, public generations, and media references; retain slug tombstones |
+| Media deletion   | Enqueue exact keys with reference revocation; deny access immediately; target physical removal within 24 hours; audit, alert, and retry overdue work                                                                                                                       |
+| Export           | A JSON bundle of the account's resume documents and related portable data                                                                                                                                                                                                  |
+| Session metadata | IP and user agent are redacted two days before the session's absolute expiry, so no later than 90 days after sign-in; rotation never extends it                                                                                                                            |
+| Slug tombstones  | Hold no account link; deleted by the privacy sweep 180 days after release                                                                                                                                                                                                  |
+| Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                                                                                                                                              |
+| Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                                                                                                                                        |
+| Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                                                                                                                                          |
+| Backups          | Automated backups and release snapshots expire after 30 days; disclosures distinguish this delay from live access and private-object deletion                                                                                                                              |
 
 Account and resume delete APIs may succeed once reference revocation and every
 applicable deletion job commit together. Object-storage latency does not extend

@@ -1,6 +1,6 @@
 # 0010: Public artifacts pass a live-state gate before reuse
 
-Status: Accepted (2026-08-12).
+Status: Accepted (2026-08-12; amended 2026-10-01).
 
 ## Context
 
@@ -108,10 +108,27 @@ serves (ADR 0026). A second replica needs the durable publication transitions of
 the [scaling design](../design/scaling/transitions.md), which keep the distinct
 non-draining and revoking behavior.
 
+The operator `account-delete` command
+([showcase design](../design/showcase.md#derived-values-and-reports)) is the one
+exception to the fence rule. It runs in its own process, so it cannot reach the
+server's in-memory fences or leases. It commits the account deletion without
+them and without advancing the durable discovery generation, which would leave
+the server's fences on a generation the database no longer holds. After its
+commit:
+
+- every new public request returns the ordinary `404` at once, because every
+  public read starts from the database;
+- a response admitted before the commit finishes sending;
+- an open live-update stream ends through the deleted-resume notification; and
+- the server drops its cached `/sitemap.xml` and `/llms.txt` when it sees that
+  notification.
+
 ## Consequences
 
 - Unpublish, delete, and rename have immediate public effect at the cost of an
   origin authorization check for every public reuse.
+- An operator account deletion lets responses admitted before its commit finish,
+  which a fenced deletion would cancel.
 - The edge may store public bytes and answer a validated `304`, but it cannot
   absorb a request without revalidation. Production's edge caches only hashed
   `/_nuxt/*` assets and passes public representations through uncached, which is
@@ -137,3 +154,6 @@ transitions for two replicas; the single-replica launch (former ADRs 0036
 and 0038) returned to the in-process fence. Former ADR 0055 (2026-09-26)
 exempted the stored link-preview card from the 60-second cache limit. Former ADR
 0054 (2026-09-25) set the production edge to cache only `/_nuxt/*`.
+
+Amended (2026-10-01): the operator `account-delete` command deletes an account
+without the in-process fences; new requests still return `404` at once.
