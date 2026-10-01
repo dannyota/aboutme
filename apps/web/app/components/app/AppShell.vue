@@ -87,11 +87,11 @@ const templatesLinkClass = computed(() => cn(
   linkClass,
   signedIn.value ? 'max-sm:hidden' : 'max-lg:px-2',
 ));
-// Signed out below 64rem the header is compact so every link and both
-// account buttons fit: the logo is the mark alone and never shrinks, header
-// gaps are 8px, nav link sides are 8px, the locale toggle shows VI and EN,
-// and the theme button is an icon (docs/design/ui/landing-and-library.md,
-// Navigation). A signed-in header is unchanged.
+// Below 64rem the logo is the mark alone in both states, and it never
+// shrinks. Signed out, the header is also compact so every link and both
+// account buttons fit: header gaps are 8px, nav link sides are 8px, the
+// locale toggle shows VI and EN, and the theme button is an icon
+// (docs/design/ui/landing-and-library.md, Navigation).
 const compactLogo = computed(() => !signedIn.value);
 const headerClass = computed(() => cn(
   'flex min-h-14 items-center gap-4 border-b border-border bg-card',
@@ -122,11 +122,10 @@ const viewsLinkClass = cn(linkClass, 'max-sm:hidden');
       to="/"
     >
       <AppLogo
-        :class="compactLogo && 'max-[64rem]:hidden'"
+        class="max-[64rem]:hidden"
         size="sm"
       />
       <AppLogo
-        v-if="compactLogo"
         class="min-[64rem]:hidden"
         mark-only
         size="sm"
