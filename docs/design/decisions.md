@@ -35,7 +35,7 @@ record.
 | [0026](../adr/0026-replica-scaling.md)                          | Accepted | One serving replica; the scaling design returns before a second                                                                     | [Scaling](scaling/README.md)                                                                                                |
 | [0027](../adr/0027-vietnam-hosted-production.md)                | Accepted | Vietnam-hosted production on GreenNode and Bizfly; AWS becomes test only                                                            | [Vietnam production](vietnam-production.md)                                                                                 |
 | [0028](../adr/0028-deployment-transparency-observer.md)         | Accepted | An off-host observer publishes running digests checked against signed provenance; `/verify` shows them                              | [Deployment transparency](deployment-transparency/README.md)                                                                |
-| [0029](../adr/0029-community-showcase.md)                       | Accepted | Opt-in, reviewed showcase of published resumes; uncached listing; never indexed                                                     | [Community showcase](showcase.md)                                                                                           |
+| [0029](../adr/0029-community-showcase.md)                       | Accepted | Opt-in showcase of published resumes, listed without review; uncached listing; never indexed                                        | [Community showcase](showcase.md)                                                                                           |
 
 ## Remaining gates
 
