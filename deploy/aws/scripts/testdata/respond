@@ -185,6 +185,8 @@ case "$cmd $args" in
         if ((n == 1)); then printf '502 0.2'
         elif ((n == 2)); then printf '200 5.0'
         else printf '200 0.4'; fi ;;
+      warm_page_404) if [[ $path == /danny ]]; then printf '404 0.2'; else printf '200 0.4'; fi ;;
+      warm_home_404) if [[ $path == / ]]; then printf '404 0.2'; else printf '200 0.4'; fi ;;
       warm_never_fast | cleanup_wait_signal | cleanup_rule_killed) printf '200 5.0' ;;
       warm_timeout)
         if ((n == 1)); then exit 28; else printf '200 0.4'; fi ;;
