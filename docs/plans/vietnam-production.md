@@ -17,6 +17,7 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 9. Move the support mailbox: create the Bizfly Business Email mailbox and import Google Workspace mail.
 10. At cutover: run the SSM-to-host secret pipe, approve the DNS switch at Cloudflare, and later the NS change at the `.vn` registrar.
 11. Once the cutover is verified: approve the AWS real-data deletion and cancel Google Workspace.
+12. After the cutover and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. The public announcement waits for the cutover.
 
 ## Owner approvals (recommendation first)
 
