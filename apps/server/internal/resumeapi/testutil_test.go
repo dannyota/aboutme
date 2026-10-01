@@ -19,10 +19,12 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/auth"
 	"github.com/dannyota/aboutme/apps/server/internal/media"
 	"github.com/dannyota/aboutme/apps/server/internal/media/mediatest"
+	"github.com/dannyota/aboutme/apps/server/internal/publicresume"
 	"github.com/dannyota/aboutme/apps/server/internal/publicstate"
 	"github.com/dannyota/aboutme/apps/server/internal/renderjob"
 	"github.com/dannyota/aboutme/apps/server/internal/resume"
 	"github.com/dannyota/aboutme/apps/server/internal/resume/docmigrate"
+	"github.com/dannyota/aboutme/apps/server/internal/showcase"
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 	"github.com/dannyota/aboutme/apps/server/internal/testutil"
 )
@@ -51,6 +53,7 @@ type resumeAPITestHarness struct {
 	pool      *store.Pool
 	queries   *store.Queries
 	resumes   *resume.Store
+	showcase  *showcase.Service
 	service   *Service
 	handler   http.Handler
 	server    *httptest.Server
@@ -93,7 +96,6 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 	t.Cleanup(func() { pool.Close(context.Background()) })
 	queries := store.New(pool)
 	projector := docmigrate.NewIdentityProjector()
-	resumeStore := resume.NewStore(pool, projector)
 	idempotency := resume.NewIdempotencyStore(pool)
 	blobs := newResumeAPITestMediaBackend(ctx, t)
 	manager := auth.NewSessionManager(queries)
@@ -107,6 +109,24 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 		pool.Close(context.Background())
 		t.Fatalf("create public coordinator: %v", err)
 	}
+	origin, err := publicresume.ParsePublicOrigin(resumeAPITestOrigin, "production")
+	if err != nil {
+		pool.Close(context.Background())
+		t.Fatalf("parse public origin: %v", err)
+	}
+	reader, err := publicresume.NewReader(publicresume.ReaderDependencies{
+		Store: queries, Projector: projector, Coordinator: coordinator, Origin: origin,
+	})
+	if err != nil {
+		pool.Close(context.Background())
+		t.Fatalf("create public reader: %v", err)
+	}
+	showcaseService, err := showcase.New(showcase.Dependencies{DB: pool, Reader: reader, Projector: projector})
+	if err != nil {
+		pool.Close(context.Background())
+		t.Fatalf("create showcase service: %v", err)
+	}
+	resumeStore := resume.NewStore(pool, projector, resume.WithShowcaseSync(showcaseService))
 	renderer := &resumeAPITestPrintRenderer{}
 	printQueue, err := renderjob.New(renderjob.Config{Renderer: renderer})
 	if err != nil {
@@ -146,11 +166,12 @@ func newResumeAPITestHarness(t *testing.T) *resumeAPITestHarness {
 		Coordinator:    coordinator,
 		RecoveryPool:   pool,
 		PrintQueue:     printQueue,
+		Showcase:       showcaseService,
 	})
 	handler := api.New(slog.New(slog.NewTextHandler(io.Discard, nil)), pool, api.Options{}, nil, service.RegisterRoutes)
 	server := httptest.NewServer(handler)
 	h := &resumeAPITestHarness{
-		ctx: ctx, pool: pool, queries: queries, resumes: resumeStore, service: service, handler: handler,
+		ctx: ctx, pool: pool, queries: queries, resumes: resumeStore, showcase: showcaseService, service: service, handler: handler,
 		server: server, client: server.Client(), userID: user.ID,
 		session:   session,
 		cookie:    &http.Cookie{Name: "__Host-session", Value: rawSession},

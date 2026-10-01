@@ -50,10 +50,18 @@ type resumeSummaryJSON struct {
 	// SignInToView is the sign-in-to-view publish switch
 	// (docs/design/viewer-analytics/sign-in-to-view.md "Setting"). The pass
 	// epoch never leaves the server.
-	SignInToView  bool      `json:"signInToView"`
-	SchemaVersion int32     `json:"schemaVersion"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	SignInToView bool `json:"signInToView"`
+	// Showcase is the owner's community-showcase state, null while the resume
+	// is not opted in (docs/design/showcase.md "Opt-in").
+	Showcase      *resumeShowcaseJSON `json:"showcase"`
+	SchemaVersion int32               `json:"schemaVersion"`
+	CreatedAt     time.Time           `json:"createdAt"`
+	UpdatedAt     time.Time           `json:"updatedAt"`
+}
+
+type resumeShowcaseJSON struct {
+	State string  `json:"state"`
+	Role  *string `json:"role"`
 }
 
 type resumeJSON struct {
@@ -140,12 +148,16 @@ func parseResumePathID(r *http.Request) (uuid.UUID, *clientError) {
 	return id, nil
 }
 func makeResumeSummary(row resume.Resume, version int32) resumeSummaryJSON {
+	var showcase *resumeShowcaseJSON
+	if row.Showcase != nil {
+		showcase = &resumeShowcaseJSON{State: row.Showcase.State, Role: row.Showcase.Role}
+	}
 	return resumeSummaryJSON{
 		ID: row.ID, Title: row.Title, Lng: projectResumeLanguage(row.Lng),
 		Revision: strconv.FormatInt(row.Revision, 10), Live: row.Live, Slug: row.Slug,
 		DownloadEnabled: row.DownloadEnabled, SEOGeoEnabled: row.SEOGeoEnabled,
 		PublicTitle: row.PublicTitle, FaviconEmoji: row.FaviconEmoji,
-		SignInToView:  row.SignInToView,
+		SignInToView: row.SignInToView, Showcase: showcase,
 		SchemaVersion: version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
 }

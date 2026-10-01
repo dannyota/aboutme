@@ -32,6 +32,11 @@ type publishInput struct {
 	PublicTitle     optionalText
 	FaviconEmoji    optionalText
 	SignInToView    optionalBool
+	// ShowcaseEnabled and ShowcaseRole are the community-showcase opt-in and
+	// role; absent keeps the stored value (docs/design/showcase.md "Data and
+	// contract"). An empty role clears it.
+	ShowcaseEnabled optionalBool
+	ShowcaseRole    optionalText
 }
 
 type currentPublish struct {
@@ -47,7 +52,14 @@ type currentPublish struct {
 	// stored value), computed in resumes_publish.go before validatePublish
 	// runs (docs/design/viewer-analytics/sign-in-to-view.md "Setting").
 	SignInToView bool
-	Revision     int64
+	// ShowcaseEnabled and ShowcaseRole are the community-showcase opt-in and
+	// the owner's role. For the current state they come from the showcase row
+	// (on while a row exists). For the validated result they are the final
+	// state after the request, with the live and sign-in-to-view rules applied
+	// (docs/design/showcase.md "Opt-in").
+	ShowcaseEnabled bool
+	ShowcaseRole    *string
+	Revision        int64
 }
 
 type publishPrepared struct {
@@ -85,7 +97,7 @@ func decodePublish(body io.Reader) (publishInput, error) {
 	}
 	for name := range fields {
 		switch name {
-		case "slug", "live", "downloadEnabled", "seoGeoEnabled", "publicTitle", "faviconEmoji", "signInToView":
+		case "slug", "live", "downloadEnabled", "seoGeoEnabled", "publicTitle", "faviconEmoji", "signInToView", "showcaseEnabled", "showcaseRole":
 		default:
 			return publishInput{}, &publishShapeError{Field: "body"}
 		}
@@ -126,6 +138,15 @@ func decodePublish(body io.Reader) (publishInput, error) {
 		return publishInput{}, signInErr
 	}
 	input.SignInToView = signInToView
+	showcaseEnabled, showcaseErr := decodePublishOptionalBool(fields, "showcaseEnabled")
+	if showcaseErr != nil {
+		return publishInput{}, showcaseErr
+	}
+	showcaseRole, roleErr := decodePublishOptionalText(fields, "showcaseRole")
+	if roleErr != nil {
+		return publishInput{}, roleErr
+	}
+	input.ShowcaseEnabled, input.ShowcaseRole = showcaseEnabled, showcaseRole
 	return input, nil
 }
 

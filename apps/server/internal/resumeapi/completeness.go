@@ -65,6 +65,9 @@ func validatePublish(source schema.Resume, current currentPublish, input publish
 	if effective.Live {
 		issues = append(issues, completenessIssues(source)...)
 	}
+	showcaseEnabled, showcaseRole, showcaseIssues := resolveShowcase(current, effective, input)
+	effective.ShowcaseEnabled, effective.ShowcaseRole = showcaseEnabled, showcaseRole
+	issues = append(issues, showcaseIssues...)
 
 	return publishPrepared{
 		Effective:   effective,
