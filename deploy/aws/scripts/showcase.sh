@@ -29,18 +29,33 @@ showcase_validate() { # subcommand [args...]
 
 # The deploy and operator roles cannot read CloudWatch Logs, so the owner's own
 # login reads the task log; it never assumes either role and never writes.
-showcase_log() { # task id -> prints the task's log lines on stdout
-  local stream=jobs/jobs/$1 out attempt
+# Every run that reaches the database ends stdout with this exact line, so a
+# log without it is incomplete (lag, a missed page, or an early failure).
+showcase_end_marker="showcase-review: end"
+
+# Reads the stream from the start, following nextForwardToken until the token
+# repeats, and retries up to five times for a log still being delivered. Prints
+# the lines read, never the marker line. Returns 1 when the marker never
+# appeared; what was read is still printed.
+showcase_log() { # task id
+  local stream=jobs/jobs/$1 attempt page token next buf="" pages
   for ((attempt = 1; attempt <= 5; attempt++)); do
-    out=$(aws --region "$region" logs get-log-events --log-group-name "$showcase_log_group" \
-      --log-stream-name "$stream" --start-from-head --output json 2>/dev/null |
-      jq -r '.events[].message' 2>/dev/null | LC_ALL=C tr -cd '\11\12\40-\176') || out=""
-    if [[ -n $out ]]; then
-      printf '%s\n' "$out"
+    buf="" token="" pages=0
+    while ((pages++ < 50)); do
+      page=$(aws --region "$region" logs get-log-events --log-group-name "$showcase_log_group" \
+        --log-stream-name "$stream" --start-from-head --output json ${token:+--next-token "$token"} 2>/dev/null) || break
+      buf+=$(jq -r '.events[].message' <<<"$page" 2>/dev/null | LC_ALL=C tr -cd '\11\12\40-\176')$'\n' || true
+      next=$(jq -r '.nextForwardToken // empty' <<<"$page" 2>/dev/null) || break
+      [[ -n $next && $next != "$token" ]] || break
+      token=$next
+    done
+    if grep -qxF "$showcase_end_marker" <<<"$buf"; then
+      grep -vxF "$showcase_end_marker" <<<"$buf" | grep -v '^$' || true
       return 0
     fi
     ((attempt == 5)) || sleep "${DEPLOY_SMOKE_DELAY:-3}"
   done
+  grep -v '^$' <<<"$buf" || true
   return 1
 }
 
@@ -113,12 +128,13 @@ showcase_run() {
   code=$(aws_ ecs describe-tasks --cluster "$cluster" --tasks "$task" \
     --query 'tasks[0].containers[?name==`jobs`].exitCode | [0]' --output text) || code=unknown
 
-  if ! showcase_log "${task##*/}"; then
-    say "could not read the task log $showcase_log_group jobs/jobs/${task##*/}"
-    [[ $code == 0 ]] && say "the task exited 0 but its result is unknown; run show <slug> to confirm"
-    exit 1
-  fi
-  [[ $code == 0 ]] || { say "showcase-review exited with $code"; exit 1; }
+  local complete=1
+  showcase_log "${task##*/}" || complete=0
+  case $code in
+    0) ((complete)) || { say "the task log has no end marker, so the result is incomplete; run show <slug> to confirm"; exit 1; } ;;
+    3) say "nothing changed: the review key is stale; run pending again"; exit 3 ;;
+    *) say "showcase-review exited with $code"; exit 1 ;;
+  esac
   say "showcase-review ${showcase_args[0]} done for $tag"
   exit 0
 }

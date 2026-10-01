@@ -36,9 +36,9 @@ task stops.
 
 The deploy and operator roles cannot read CloudWatch Logs, so the script reads
 the task log with the owner's own login (`/aboutme/prod`, stream
-`jobs/jobs/<task id>`) and prints it. The output holds slugs, review keys, card
-versions, dates, and states only, never a name or headline. Control characters
-and non-ASCII bytes are dropped before printing.
+`jobs/jobs/<task id>`) and prints it without the end line. The output holds
+slugs, review keys, card versions, dates, and states only, never a name or
+headline. Control characters and non-ASCII bytes are dropped before printing.
 
 ## Approve or decline
 
@@ -64,18 +64,26 @@ Approve only a listing that meets all of these:
 - No sign that the resume belongs to someone under 16 (the Terms age).
 
 A key that changed since `pending` printed makes `approve` and `decline` change
-nothing and say so. Run `pending` again and review the new card. `decline`
-removes a listed resume from the showcase at once and keeps it out until the
-review key changes and a new review approves it. To take down content that
-breaks the Terms, run `decline` with the current key from `show`.
+nothing, print `stale: ... nothing changed`, and exit 3. Run `pending` again and
+review the new card. `decline` removes a listed resume from the showcase at once
+and keeps it out until the review key changes and a new review approves it. To
+take down content that breaks the Terms, run `decline` with the current key from
+`show`.
 
 ## Failures
 
 - A usage or argument error exits 2 before any AWS call.
-- A non-zero task exit prints the task log, then exits 1 with the exit code.
-- If the task exits 0 but its log is empty or unreadable, the script exits 1 and
-  says the result is unknown. Run `show <slug>` before repeating an `approve` or
-  `decline`.
+- Exit 3 means a stale key. The script prints the task log, then
+  `nothing changed: the review key is stale; run pending again`. Nothing was
+  approved or declined.
+- Any other non-zero task exit prints the task log, then exits 1 with the exit
+  code.
+- Every run that reaches the database ends its log with the line
+  `showcase-review: end`. The script reads the log from the start, follows pages
+  until the token repeats, and retries up to five times. It never prints that
+  line. If the line never appears, the script prints what it read, says the
+  result is incomplete, and exits 1, even when the task exited 0. Run
+  `show <slug>` before repeating an `approve` or `decline`.
 - If RunTask fails or its response is lost, or ECS cannot confirm the task
   stopped, the script leaves the operation lock closed, because the task may
   still run. The message names the `started-by` value
