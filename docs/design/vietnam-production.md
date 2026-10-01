@@ -131,7 +131,7 @@ Rootful Podman runs every container from systemd Quadlet units:
 
 | Unit                  | Network            | Runs                                           |
 | --------------------- | ------------------ | ---------------------------------------------- |
-| `aboutme-caddy`       | host               | Caddy on 443; always                           |
+| `aboutme-caddy`       | host               | Caddy on 80, 443; always                       |
 | `aboutme-server`      | host               | Go on `127.0.0.1:8080`; always                 |
 | `aboutme-web`         | bridge `aboutme`   | Nuxt, published on `127.0.0.1:3000`; always    |
 | `aboutme-maintenance` | host               | Maintenance Caddy; deploy and recovery only    |
@@ -296,14 +296,14 @@ order:
 3. Pull images by digest while the old release serves.
 4. Run a pgBackRest incremental backup annotated with the tag.
 5. Stop the job timers and the app-down check. Start maintenance beside Caddy
-   (both bind 443 with `SO_REUSEPORT`), then stop Caddy and the server.
+   (both bind 80 and 443 with `SO_REUSEPORT`), then stop Caddy and the server.
 6. Require the marked 503 through vCDN.
 7. Run `db-setup` with `--first-deploy`; otherwise run `migrate` and require
    exit 0.
 8. Restart web at the new digest, start the server and Caddy beside maintenance,
    wait for `/readyz` on Go at `127.0.0.1:8080` from the host, not only through
-   vCDN, so the check cannot pass on the old process or a cache. Then stop
-   maintenance and prove it stopped.
+   vCDN, so the check cannot pass on a vCDN cache or on the maintenance unit.
+   Then stop maintenance and prove it stopped.
 9. Start the timers and resume the app-down check.
 10. Smoke through vCDN: health, TLS, and security headers. From the host, a
     request without the edge secret gets 403. Release the lock.
