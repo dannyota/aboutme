@@ -133,10 +133,11 @@ px. It holds three lines:
 
 1. The h1, “CV từ cộng đồng” or “Community resumes”, in the Library h1 classes
    (30 px, 48 px from 640 px, bold, -0.02em).
-2. The lead, 16 px `--muted-foreground`, at most 42 rem wide, 16 px under the
-   h1.
-3. The order note, “CV mới được duyệt hiện trước.” or “Newest approved first.”,
-   14 px `--muted-foreground`, 8 px under the lead.
+2. The lead, “CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.” or
+   “Real resumes that aboutme.vn users published and chose to show here.”, 16 px
+   `--muted-foreground`, at most 42 rem wide, 16 px under the h1.
+3. The order note, “CV mới thêm hiện trước.” or “Most recently added first.”, 14
+   px `--muted-foreground`, 8 px under the lead.
 
 The band holds no focusable element.
 
@@ -345,7 +346,7 @@ In order:
 1. **Switch.** `SwitchField`, `name="showcaseEnabled"`,
    `data-action="publish-showcase"`, labeled “Hiện trong trang Cộng đồng” or
    “Show in the community showcase”.
-2. **Status line**, when shown (below).
+2. **Listed line**, when shown (below).
 3. **Issue line**, when shown (below).
 4. **Role field**, while the switch is on and enabled: `SelectField` labeled “Vị
    trí hiển thị” or “Role shown”, hint “Tùy chọn. Giúp người xem lọc theo vị
@@ -367,9 +368,9 @@ first matching row:
 | Otherwise                  | Enabled              | Help text             |
 
 - Help: “Hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí của CV này tại
-  aboutme.vn/showcase sau khi chúng tôi duyệt. Ai cũng xem được trang đó.” or
-  “Shows this resume's preview image, template, language, and role at
-  aboutme.vn/showcase after we review it. Anyone can see that page.”
+  aboutme.vn/showcase. Ai cũng xem được trang đó.” or “Shows this resume's
+  preview image, template, language, and role at aboutme.vn/showcase. Anyone can
+  see that page.”
 - Needs public: “Bật CV công khai để hiện trong trang Cộng đồng.” or “Turn on
   Public resume to show it in the community showcase.”
 - Needs open view: “Không dùng được khi bật Yêu cầu đăng nhập để xem.” or “Not
@@ -382,24 +383,18 @@ The description keeps full `--muted-foreground`, never dimmed with the disabled
 switch, so the reason stays legible. The dialog never sends
 `showcaseEnabled: true` while the switch is disabled.
 
-**Status line.** A 14 px paragraph in `--foreground`, shown only while the
-stored opt-in exists, the switch is on and enabled, and no request is running.
-It follows the stored `showcase.state`, and a successful publish updates it from
-the returned resource. It is plain text with no mark, since the seal stays
-reserved for the public state:
+**Listed line.** A 14 px paragraph in `--foreground`, shown only while the
+stored opt-in exists, the switch is on and enabled, and no request is running. A
+stored opt-in is always listed, so the line has one form: “Đang hiện trong trang
+Cộng đồng.” or “Shown in the community showcase.”, a space, then the link “Xem
+trang Cộng đồng” or “View the showcase” to `/showcase` in the same tab, `--link`
+text, underlined, as the dialog's public link is. It is plain text with no mark,
+since the seal stays reserved for the public state. A successful publish updates
+it from the returned resource.
 
-- `pending`: “Đang chờ duyệt. CV sẽ hiện trong trang Cộng đồng sau khi được
-  duyệt.” or “Waiting for review. The resume appears in the community showcase
-  once approved.”
-- `listed`: “Đang hiện trong trang Cộng đồng.” or “Shown in the community
-  showcase.”, a space, then the link “Xem trang Cộng đồng” or “View the
-  showcase” to `/showcase` in the same tab, `--link` text, underlined, as the
-  dialog's public link is.
-- `declined`: the Declined text from the showcase design, with
-  `danny@aboutme.vn` as a `mailto:` link in the same `--link` style.
-
-A switch the owner just turned on shows no status line until the publish
-succeeds; one just turned off hides it.
+A switch the owner just turned on shows no Listed line until the publish
+succeeds; one just turned off hides it. When the line is absent it leaves no
+gap: the issue line or the role field takes its place.
 
 **Issue line.** A publish issue on `showcaseEnabled` or `showcaseRole` shows at
 the block, not in the dialog's issue list, the way tab-title issues show at
@@ -408,7 +403,7 @@ owner changes a showcase control. `requires_open_view` reads “Tùy chọn này
 tắt Yêu cầu đăng nhập để xem.” or “This option needs Require sign-in to view
 off.”; `requires_live` uses the dialog's existing text for that code.
 
-The switch's `aria-describedby` lists the description, the status line, and the
+The switch's `aria-describedby` lists the description, the Listed line, and the
 issue line, in that order, whichever are present.
 
 ### Accessibility and fit
@@ -417,7 +412,7 @@ Focus order on `/showcase`: the shell, the role row (one stop), the language row
 (one stop), the template select, then per tile the tile link and its Report
 link, then Previous and Next, then the footer. Retry or the empty action takes
 the grid's place when shown. In the dialog: the sign-in switch, the showcase
-switch, the status link when present, then the role select.
+switch, the Listed link when present, then the role select.
 
 Contrast uses only token pairs the theme tests already check in both themes:
 `--foreground` and `--muted-foreground` on `--card` and `--surface-blue`,
@@ -438,7 +433,7 @@ page scroll:
 - The pager moves the status to its own line below 641 px, because “Trang
   trước”, “Trang 100/100”, and “Trang sau” need about 375 px in one row.
 - In the dialog the indented role select is about 270 px wide at 390 px, enough
-  for “Fresher/Intern”; the Declined text wraps.
+  for “Fresher/Intern”.
 
 The finish review checks `/showcase` at 360, 390, 768, 1024, and 1440 px in both
 languages and both themes, and the signed-out header at 360, 390, 704, 768, 896,
