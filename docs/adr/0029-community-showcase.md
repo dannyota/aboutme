@@ -2,7 +2,8 @@
 
 Status: Accepted (2026-09-27; amended 2026-10-01). The owner approved the
 choices marked **Owner approval** in the
-[showcase design](../design/showcase.md); N1 to N4 await the owner.
+[showcase design](../design/showcase.md). The 2026-10-01 decision settled N1 and
+N2; N3 and N4 await the owner, and the release waits for them.
 
 ## Context
 
@@ -39,8 +40,9 @@ document stores no template identity.
    and `llms.txt`. A resume's SEO and GEO switch keeps its meaning.
 6. **Uncached listing.** The browser reads the listing from a Go route that
    computes it from committed state on every request with `no-store`. A request
-   admitted after an opt-out, unpublish, rename, or delete succeeds cannot
-   receive the old listing, which meets ADR 0010 without a fence.
+   admitted after an opt-out, unpublish, sign in to view, rename, or delete
+   succeeds cannot receive the old listing, which meets ADR 0010 without a
+   fence.
 7. **Route.** `/showcase` joins the public-root registry with Nuxt dispatch. The
    migration refuses to run while a resume holds that slug.
 

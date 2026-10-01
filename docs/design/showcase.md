@@ -8,9 +8,9 @@ to the public resume. Nothing about visitors is recorded.
 
 Status: approved (2026-09-27) and built; amended 2026-10-01, when the owner
 removed review. An eligible opt-in is listed at once, and abuse is handled by
-Report and the Terms. The build of the amendment waits for choices N1 to N4 in
-the [approvals](#owner-approvals) section. The legal dates in [Copy](#copy)
-change at release.
+Report and the Terms. The amendment is built; release waits for N3 and N4 in the
+[approvals](#owner-approvals) section. The legal dates in [Copy](#copy) change
+at release.
 
 ## Opt-in
 
@@ -61,8 +61,12 @@ A listing is one tile (**Owner approval** S2):
 4. A Report link.
 
 The whole tile except Report links to `/{slug}` in the same tab with
-`rel="nofollow"`. A tile never shows a contact detail, the slug as text, a date,
-a view count, or anything from the resume body.
+`rel="nofollow"`. A tile never shows a contact detail, a date, a view count, or
+anything from the resume body. The tile's own text (meta line, role chip, and
+Report) never shows the slug. The slug still reaches the visitor in three ways:
+the card image prints `aboutme.vn/{slug}`, the image's `alt` text is
+`aboutme.vn/{slug}` when the card has no name, and the Report link's accessible
+label reads "Report resume {slug} by email".
 
 **Template.** The document stores no template identity
 ([template limits](templates/limitations.md)), so Go derives it: a resume
@@ -379,8 +383,11 @@ existing app CSP. The showcase adds no operator command and no privileged route.
 
 Each item needs the owner's answer; the last column records it. The owner
 approved S1 to S13 on 2026-09-27, as each recommendation reads. The owner
-decision of 2026-10-01 (no review) superseded S6 and S7 and changed S5, S10, and
-S11; their rows say how.
+decision of 2026-10-01 superseded S6 and S7 and changed S5, S10, and S11; their
+rows say how. That decision reads: "no review; an opted-in, published resume
+that passes the automatic rules is listed directly, no pending state, no approve
+or decline; Report and the Terms stay; abuse is handled by Report, then blocking
+the account". It settles N1 and N2.
 
 | ID  | Decision                                                                                                                      | Owner decision (2026-09-27)                                                    |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -398,11 +405,45 @@ S11; their rows say how.
 | S12 | Each resume of an account may be listed on its own, never grouped                                                             | Approved                                                                       |
 | S13 | Twelve listings per page, lazy card images                                                                                    | Approved                                                                       |
 
-Choices that follow from the 2026-10-01 decision, each with its recommendation:
+Choices that follow from the 2026-10-01 decision:
 
-| ID  | Decision                                                                                                                                                             | Owner decision |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| N1  | Migration 00011 ends declined opt-ins, lists pending ones at deploy without review, and clears every stored review result                                            | Pending        |
-| N2  | Privacy Policy and Terms: delete the review sentences, drop "our review result" from what we collect, delete the Terms showcase line; release date; no advance email | Pending        |
-| N3  | Ship with account blocking not built, so a reported listing has no takedown until it is; recommended: release account blocking before this change reaches production | Pending        |
-| N4  | Order by opt-in time; turning the switch off and on moves a resume to the top; accept, and revisit if owners abuse it                                                | Pending        |
+| ID  | Decision                                                                                                                                                     | Owner decision                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| N1  | Migration 00011 deletes declined opt-ins, lists pending ones at deploy without review, and clears every stored review result                                 | Decided 2026-10-01 by that decision |
+| N2  | Legal edits only delete review claims: the review sentences, "our review result" in what we collect, the Terms showcase line; release date; no advance email | Decided 2026-10-01 by that decision |
+| N3  | Release while account blocking is not built, so a reported listing has no takedown until it is                                                               | **Pending**                         |
+| N4  | Order by opt-in time, so turning the switch off and on moves a resume to the top                                                                             | **Pending**                         |
+
+**N1.** Every row with a `declined` result is deleted, whatever key it was
+declined for. That includes rows declined for an older review key, which the
+previous UI showed as `pending`. Their owners see the switch off and may turn it
+on again, which lists the resume. No review result stays stored.
+
+**N3.** A reported listing stays up until its owner ends the opt-in. Options:
+
+1. Hold the release until account blocking ships.
+2. Release with a minimal out-of-band command that deletes one opt-in row by
+   slug. The effect equals the owner's opt-out: the owner sees the switch off
+   and may turn it on again. It needs no new state, no operator surface in the
+   public app (ADR 0003), and no Terms change, since the Terms already allow
+   removing content.
+3. Release with a deploy-set flag that empties the listing for everyone until
+   the operator clears it.
+
+Recommendation: option 2. Option 1 delays a finished feature on an unrelated
+build; option 3 hides every owner for one report and needs a deploy each time.
+Option 2 removes one listing at once and can go when account blocking ships.
+Choosing it changes the "A hide command" line in [Rejected](#rejected).
+
+**N4.** An owner can turn the switch off and on to return to the top. Options:
+
+1. Accept it, and revisit if owners abuse it.
+2. Limit off-to-on toggles per account, for example 3 a day, in the existing
+   [ADR 0007](../adr/0007-bounded-rate-limiter.md) bounded limiter with an
+   account key. Its buckets live in memory, so the limit stores nothing and a
+   restart resets it. ADR 0007 and [budgets](budgets.md) gain the budget, whose
+   one-day window exceeds the one-hour longest window ADR 0007 states, and the
+   dialog gains one message for a refused toggle.
+
+Recommendation: option 1. Option 2 adds a budget, an ADR edit, and copy for
+abuse not yet seen, and can follow later without a schema change.
