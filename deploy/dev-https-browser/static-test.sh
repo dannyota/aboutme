@@ -48,7 +48,7 @@ for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
 for file in \
-  packages/publicroots/public-roots.v10.json \
+  packages/publicroots/public-roots.v11.json \
   packages/publicroots/app-build-sources.v1.json \
   packages/publicroots/renderer-build-sources.v1.json \
   deploy/caddy/public-roots.generated.caddy; do

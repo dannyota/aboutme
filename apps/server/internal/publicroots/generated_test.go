@@ -10,7 +10,7 @@ func TestReservedAPI(t *testing.T) {
 	}
 }
 
-// wantRoutes is the v10 registry in authority order. It is written by hand so
+// wantRoutes is the v11 registry in authority order. It is written by hand so
 // a regenerated generated.go that silently drops, reorders, or reclassifies a
 // root fails here instead of shipping.
 var wantRoutes = []Route{
@@ -35,6 +35,7 @@ var wantRoutes = []Route{
 	{Root: "register", Dispatch: DispatchNuxt},
 	{Root: "reset-password", Dispatch: DispatchNuxt},
 	{Root: "robots.txt", Dispatch: DispatchGo},
+	{Root: "showcase", Dispatch: DispatchNuxt},
 	{Root: "sitemap.xml", Dispatch: DispatchGo},
 	{Root: "templates", Dispatch: DispatchNuxt},
 	{Root: "terms", Dispatch: DispatchNuxt},
@@ -43,7 +44,7 @@ var wantRoutes = []Route{
 	{Root: "verify-email", Dispatch: DispatchNuxt},
 }
 
-func TestRoutesMatchTheV10Authority(t *testing.T) {
+func TestRoutesMatchTheV11Authority(t *testing.T) {
 	t.Parallel()
 
 	if len(Routes) != len(wantRoutes) {
@@ -217,5 +218,32 @@ func TestGuideRootIsNuxtAndUnclaimable(t *testing.T) {
 	}
 	if mcpDispatch != DispatchGo {
 		t.Errorf("mcp dispatches to %q, want %q", mcpDispatch, DispatchGo)
+	}
+}
+
+// TestShowcaseRootIsNuxtAndUnclaimable proves the Nuxt community showcase page
+// owns the "showcase" root, so it cannot be claimed as a resume slug.
+func TestShowcaseRootIsNuxtAndUnclaimable(t *testing.T) {
+	t.Parallel()
+
+	found := false
+	for _, route := range Routes {
+		if route.Root == "showcase" {
+			found = true
+			if route.Dispatch != DispatchNuxt {
+				t.Errorf("showcase dispatches to %q, want %q", route.Dispatch, DispatchNuxt)
+			}
+		}
+	}
+	if !found {
+		t.Error("showcase is missing from the registry")
+	}
+	if ValidSlug("showcase") {
+		t.Error(`ValidSlug("showcase") = true, want false for a reserved root`)
+	}
+	for _, slug := range []string{"showcase-me", "my-showcase", "showcases"} {
+		if !ValidSlug(slug) {
+			t.Errorf("ValidSlug(%q) = false, want true: only the exact root is reserved", slug)
+		}
 	}
 }
