@@ -52,7 +52,7 @@ interface OwnerRequestResult {
 }
 
 const ORIGIN = 'https://localhost:20443';
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 
 export function uniqueTitle(): string {
   return `Editor proof ${crypto.randomUUID()}`;

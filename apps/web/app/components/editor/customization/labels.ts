@@ -54,6 +54,7 @@ export const FIELD_GROUPS = [
     id: 'colors',
     hook: 'Colors',
     paths: [
+      'colorScheme',
       'colors.primary',
       'colors.text',
       'colors.background',

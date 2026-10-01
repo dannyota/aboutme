@@ -40,7 +40,7 @@ const withTextAlign = (textAlign: unknown) => {
 
 describe("document v3 contact link display", () => {
   it("is the current version", () => {
-    expect(minimal().schemaVersion).toBe(4);
+    expect(minimal().schemaVersion).toBe(5);
     expect(validate(minimal()), ajv.errorsText(validate.errors)).toBe(true);
   });
 

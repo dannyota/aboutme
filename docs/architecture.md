@@ -176,7 +176,7 @@ reduced-motion behavior stay on the shared accessible component boundary.
 The relational domain and transaction primitives back the complete private
 resume HTTP surface. The implemented boundary provides:
 
-- immutable resume schemas v1 through v4, retained generated types, explicit
+- immutable resume schemas v1 through v5, retained generated types, explicit
   adjacent converters, and released/accepted/emitted version registries;
 - hand-written, append-only Goose migrations as the sole relational schema
   source, with the frozen baseline described in

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { TEMPLATES } from '@aboutme/schema/templates';
 
 import {
@@ -169,7 +169,12 @@ test.describe('renderer screenshot subset', () => {
 });
 
 interface PublicCell {
+  // The viewer's emulated color preference, set before the page loads.
+  readonly colorPreference?: 'dark' | 'light';
   readonly name: string;
+  // The owner's color scheme (docs/design/public-page-theme.md); a light
+  // page sets none.
+  readonly scheme?: 'dark' | 'system';
   readonly template: string;
   readonly width: number;
 }
@@ -192,6 +197,34 @@ const PUBLIC_CELLS: readonly PublicCell[] = [
     template: 'modern-sidebar',
     width: 390,
   },
+  // The dark and Match device schemes (docs/design/public-page-theme.md,
+  // "Baselines and tests"): a plain, a tinted-sidebar, and a tinted-band
+  // template, plus a Match device page under a dark preference.
+  {
+    name: 'public--modern-sidebar--dark--390.png',
+    scheme: 'dark',
+    template: 'modern-sidebar',
+    width: 390,
+  },
+  {
+    name: 'public--creative-accent--dark--1440.png',
+    scheme: 'dark',
+    template: 'creative-accent',
+    width: 1440,
+  },
+  {
+    name: 'public--executive-band--dark--1440.png',
+    scheme: 'dark',
+    template: 'executive-band',
+    width: 1440,
+  },
+  {
+    colorPreference: 'dark',
+    name: 'public--classic-serif--system--1440.png',
+    scheme: 'system',
+    template: 'classic-serif',
+    width: 1440,
+  },
 ];
 
 test.describe('public page measure', () => {
@@ -199,9 +232,13 @@ test.describe('public page measure', () => {
     test(cell.name, async ({ page }, testInfo) => {
       await page.setViewportSize({ width: cell.width, height: 900 });
       const external = await denyExternalRequests(page);
+      if (cell.colorPreference !== undefined) {
+        await page.emulateMedia({ colorScheme: cell.colorPreference });
+      }
       const response = await page.goto(
         `/_harness/render?fixture=vn-full&template=${cell.template}`
-        + '&mode=public',
+        + '&mode=public'
+        + (cell.scheme === undefined ? '' : `&scheme=${cell.scheme}`),
       );
       expect(response?.ok()).toBe(true);
       await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
@@ -258,11 +295,18 @@ test.describe('public page measure', () => {
         // Centred, with the page background on both sides.
         const left = geometry.measure.left;
         const right = cell.width - geometry.measure.right;
-        expect(left).toBeGreaterThan(400);
+        // The 400 px floor is tuned for 2560; a 1440 page has less room
+        // beside the measure but still shows the page background on both sides.
+        if (cell.width === 2560) expect(left).toBeGreaterThan(400);
+        else expect(left).toBeGreaterThan(0);
         expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
         expect(geometry.lines).toBeGreaterThan(1);
-        expect(geometry.charsPerLine).toBeGreaterThanOrEqual(88);
-        expect(geometry.charsPerLine).toBeLessThanOrEqual(112);
+        // The band depends on the template's typeface and is tuned on the
+        // 2560 cells, not on width.
+        if (cell.width === 2560) {
+          expect(geometry.charsPerLine).toBeGreaterThanOrEqual(88);
+          expect(geometry.charsPerLine).toBeLessThanOrEqual(112);
+        }
       }
       await page.emulateMedia({ media: 'print' });
       await expect(page.locator('.public-toolbar')).toBeHidden();
@@ -270,6 +314,129 @@ test.describe('public page measure', () => {
       await verifyScreenshot(page, cell.name, testInfo);
     });
   }
+});
+
+// What a public page paints with its colors: the resume article, the header
+// (a tinted band shows its own ground), and the page bar.
+interface PublicSurfaces {
+  readonly article: string;
+  readonly bar: string;
+  readonly header: string;
+  readonly rootScheme: string;
+  readonly schemeAttribute: string | null;
+}
+
+async function openPublic(
+  page: Page,
+  template: string,
+  scheme: 'dark' | 'system' | undefined,
+): Promise<void> {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const response = await page.goto(
+    `/_harness/render?fixture=vn-full&template=${template}&mode=public`
+    + (scheme === undefined ? '' : `&scheme=${scheme}`),
+  );
+  expect(response?.ok()).toBe(true);
+  await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+  // The public render worker's page loads no theme bootstrap, but every Nuxt
+  // page head here does, and it writes an inline `color-scheme: light` on the
+  // root. Drop it so the harness matches the public page.
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('color-scheme');
+  });
+}
+
+async function readSurfaces(page: Page): Promise<PublicSurfaces> {
+  return page.evaluate(() => {
+    const paint = (selector: string): string => {
+      const element = document.querySelector(selector);
+      if (element === null) throw new Error(`Missing ${selector}`);
+      return getComputedStyle(element).backgroundColor;
+    };
+    return {
+      article: paint('.resume-document'),
+      bar: paint('.public-toolbar'),
+      header: paint('.resume-header'),
+      rootScheme: getComputedStyle(document.documentElement).colorScheme,
+      schemeAttribute: document
+        .querySelector('.public-resume-page')
+        ?.getAttribute('data-color-scheme') ?? null,
+    };
+  });
+}
+
+// The scheme CSS is screen only and keys off the owner's choice plus, for
+// Match device, the viewer's preference (docs/design/public-page-theme.md,
+// "What stays light"). These checks compare computed colors across renders,
+// so they need no baseline.
+test.describe('public page color scheme', () => {
+  for (const template of ['classic-serif', 'executive-band']) {
+    test(`a dark ${template} page turns dark on screen and light in print`,
+      async ({ page }) => {
+        await openPublic(page, template, undefined);
+        const light = await readSurfaces(page);
+        expect(light.schemeAttribute).toBeNull();
+
+        await openPublic(page, template, 'dark');
+        const dark = await readSurfaces(page);
+        expect(dark.schemeAttribute).toBe('dark');
+        expect(dark.article).not.toBe(light.article);
+        if (template === 'executive-band') {
+          // A tinted band shows its own dark ground.
+          expect(dark.header).not.toBe(light.header);
+        }
+        // The page bar takes its dark ground; the light page keeps the
+        // light one.
+        expect(light.bar).toBe('rgb(249, 248, 245)');
+        expect(dark.bar).toBe('rgb(12, 16, 32)');
+        expect(dark.rootScheme).toBe('dark');
+
+        await page.emulateMedia({ media: 'print' });
+        const printed = await readSurfaces(page);
+        expect(printed.article).toBe(light.article);
+        expect(printed.header).toBe(light.header);
+        expect(printed.rootScheme).not.toBe('dark');
+      });
+  }
+
+  test('a Match device page follows the viewer preference', async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await openPublic(page, 'classic-serif', undefined);
+    const light = await readSurfaces(page);
+    await openPublic(page, 'classic-serif', 'dark');
+    const dark = await readSurfaces(page);
+
+    await openPublic(page, 'classic-serif', 'system');
+    const matchLight = await readSurfaces(page);
+    expect(matchLight.schemeAttribute).toBe('system');
+    expect(matchLight.article).toBe(light.article);
+    expect(matchLight.bar).toBe(light.bar);
+    expect(matchLight.rootScheme).not.toBe('dark');
+
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const matchDark = await readSurfaces(page);
+    expect(matchDark.article).toBe(dark.article);
+    expect(matchDark.header).toBe(dark.header);
+    expect(matchDark.bar).toBe(dark.bar);
+    expect(matchDark.rootScheme).toBe('dark');
+
+    // Print stays light whatever the viewer prefers.
+    await page.emulateMedia({ media: 'print' });
+    expect((await readSurfaces(page)).article).toBe(light.article);
+  });
+
+  test('a light page ignores a dark viewer preference', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await openPublic(page, 'classic-serif', undefined);
+    const light = await readSurfaces(page);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const preferred = await readSurfaces(page);
+    expect(preferred.schemeAttribute).toBeNull();
+    expect(preferred.article).toBe(light.article);
+    expect(preferred.bar).toBe(light.bar);
+  });
 });
 
 interface GuideCell {

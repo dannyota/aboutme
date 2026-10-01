@@ -302,6 +302,74 @@ describe('public page measure and PDF download', () => {
   });
 });
 
+describe('owner color scheme', () => {
+  // docs/design/public-page-theme.md, "How it reaches the page": dark and
+  // Match device pages carry the attribute and the dark roles; light pages,
+  // whether absent or stored, carry neither.
+  const withScheme = (scheme: unknown) => {
+    const value = request();
+    (value.publicResume.document.customization as Record<string, unknown>)
+      .colorScheme = scheme;
+    return value;
+  };
+  const pageTag = (html: string): string =>
+    /<div class="public-resume-page"[^>]*>/u.exec(html)?.[0] ?? '';
+
+  it('marks a dark page and writes its dark roles inline', async () => {
+    const html = await renderPublicResume(withScheme('dark'), VERSIONS);
+    expect(pageTag(html)).toContain(
+      '<div class="public-resume-page" data-columns="1" '
+      + 'data-color-scheme="dark" style="',
+    );
+    expect(html).toMatch(/--dark-color-surface:#[0-9a-f]{6};/u);
+    expect(html).toMatch(/--dark-color-heading:#[0-9a-f]{6};/u);
+  });
+
+  it('marks a Match device page the same way', async () => {
+    const html = await renderPublicResume(withScheme('system'), VERSIONS);
+    expect(pageTag(html)).toContain('data-color-scheme="system"');
+    expect(html).toMatch(/--dark-color-surface:#[0-9a-f]{6};/u);
+  });
+
+  it('keeps an absent or light scheme free of the attribute and roles',
+    async () => {
+      for (const scheme of [undefined, 'light']) {
+        const html = await renderPublicResume(withScheme(scheme), VERSIONS);
+        expect(html, String(scheme)).not.toContain('data-color-scheme');
+        expect(html, String(scheme)).not.toContain('--dark-color');
+      }
+    });
+
+  it('never writes a value outside the two fixed words', async () => {
+    const html = await renderPublicResume(
+      withScheme('dark" onload="x'),
+      VERSIONS,
+    );
+    expect(html).not.toContain('data-color-scheme');
+    expect(html).not.toContain('onload');
+  });
+
+  it('changes only colors: the markup and text match the light page',
+    async () => {
+      const light = await renderPublicResume(withScheme(undefined), VERSIONS);
+      const dark = await renderPublicResume(withScheme('dark'), VERSIONS);
+      const stripped = dark
+        .replace(' data-color-scheme="dark"', '')
+        .replace(/--dark-color-[a-z-]+:#[0-9a-f]{6};/gu, '');
+      expect(stripped).toBe(light);
+    });
+
+  it('keeps the light roles beside the dark ones for print', async () => {
+    const light = await renderPublicResume(withScheme(undefined), VERSIONS);
+    const dark = await renderPublicResume(withScheme('dark'), VERSIONS);
+    for (const role of ['surface', 'heading', 'body', 'link']) {
+      const match = new RegExp(`--color-${role}:#[0-9a-f]{6};`, 'u')
+        .exec(light)![0];
+      expect(dark).toContain(match);
+    }
+  });
+});
+
 describe('JSON-LD sameAs parity with the Go validator', () => {
   // The public HTML validator requires this script to byte-equal Go's
   // publicformat.JSONLD output. Both suites read the same corpus.

@@ -15,7 +15,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = '/evidence/transport-proof.json';
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 
 interface TransportResult {
   acceptedETag: string;

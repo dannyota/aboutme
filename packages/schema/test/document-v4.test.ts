@@ -13,11 +13,11 @@ const root = new URL("..", import.meta.url).pathname;
 const read = (name: string) =>
   JSON.parse(readFileSync(join(root, name), "utf8"));
 const ajv = addFormats(new Ajv2020({ allErrors: true, strict: true }));
-const validate = ajv.compile(read("resume.schema.json"));
+const validate = ajv.compile(read("resume.v4.schema.json"));
 const validateV3 = ajv.compile(read("resume.v3.schema.json"));
 
 const withPosition = (photoPosition: unknown) => {
-  const document = read("fixtures/minimal.json");
+  const document = read("fixtures/v4/minimal.json");
   document.customization.header = {
     align: "left",
     detailsLayout: "inline",
@@ -28,7 +28,7 @@ const withPosition = (photoPosition: unknown) => {
 };
 
 const withProjectSubtitle = (subtitle: unknown) => {
-  const document = read("fixtures/minimal.json");
+  const document = read("fixtures/v4/minimal.json");
   document.content.projects = {
     sectionType: "project",
     entries: [
@@ -45,7 +45,7 @@ const withProjectSubtitle = (subtitle: unknown) => {
 
 describe("document v4 header photo position", () => {
   it("is version 4", () => {
-    expect(read("fixtures/minimal.json").schemaVersion).toBe(4);
+    expect(read("fixtures/v4/minimal.json").schemaVersion).toBe(4);
   });
 
   it("accepts top, left, and right", () => {

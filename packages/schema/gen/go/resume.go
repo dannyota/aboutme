@@ -15,9 +15,12 @@ type Resume struct {
 
 // Resume presentation settings. See docs/design/templates/README.md.
 type Customization struct {
-	Colors     Colors     `json:"colors"`
-	DateFormat DateFormat `json:"dateFormat"`
-	Font       Font       `json:"font"`
+	// Public page color scheme: light, dark, or follow the viewer's device. Absent means light.
+	// See docs/design/public-page-theme.md.
+	ColorScheme *ColorScheme `json:"colorScheme,omitempty"`
+	Colors      Colors       `json:"colors"`
+	DateFormat  DateFormat   `json:"dateFormat"`
+	Font        Font         `json:"font"`
 	// Optional presentation of the top resume header containing the photo, fullName, headline,
 	// and contacts. It is distinct from customization.heading, which styles section headings.
 	// See docs/design/templates/contract.md.
@@ -290,6 +293,16 @@ type CustomEntry struct {
 	Title       *string    `json:"title,omitempty"`
 	TitleLink   *string    `json:"titleLink,omitempty"`
 }
+
+// Public page color scheme: light, dark, or follow the viewer's device. Absent means light.
+// See docs/design/public-page-theme.md.
+type ColorScheme string
+
+const (
+	Dark   ColorScheme = "dark"
+	Light  ColorScheme = "light"
+	System ColorScheme = "system"
+)
 
 type DateFormat string
 

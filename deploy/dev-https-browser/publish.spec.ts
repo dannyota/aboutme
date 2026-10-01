@@ -32,7 +32,7 @@ import {
 
 const ORIGIN = ALLOWED_ORIGIN;
 const EVIDENCE_PATH = "/evidence/publish-proof.json";
-const SCHEMA_VERSION = "4";
+const SCHEMA_VERSION = "5";
 const SEED_EMAIL = "dev@aboutme.invalid";
 const SEED_PASSWORD = "aboutme-dev-password-1";
 

@@ -63,13 +63,13 @@ a view count, or anything from the resume body.
 
 **Template.** The document stores no template identity
 ([template limits](templates/limitations.md)), so Go derives it: a resume
-matches a preset when its `customization`, without the four leaves a template
+matches a preset when its `customization`, without the five leaves a template
 apply keeps or resets for the owner (`pageFormat`, `dateFormat`,
-`font.textAlign`, `header.photoPosition`) and without `layout.sections`, equals
-the preset's `customization` without the same leaves, compared as canonical
-JSON. A committed generator builds the Go preset table from
-`packages/schema/templates/`, and a test fails when the table is stale. No match
-shows "Custom design" (**Owner approval** S4).
+`font.textAlign`, `header.photoPosition`, `colorScheme`) and without
+`layout.sections`, equals the preset's `customization` without the same leaves,
+compared as canonical JSON. A committed generator builds the Go preset table
+from `packages/schema/templates/`, and a test fails when the table is stale. No
+match shows "Custom design" (**Owner approval** S4).
 
 **Language.** The primary subtag of the resume language: `vi`, `en`, or `other`.
 

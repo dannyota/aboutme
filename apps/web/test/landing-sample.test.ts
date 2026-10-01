@@ -19,7 +19,7 @@ describe('landing sample resume', () => {
   it('is a schema-valid compiled-in document for the owner', () => {
     expect(validate(sampleResume), ajv.errorsText(validate.errors)).toBe(true);
     expect(validateDocument(sampleResume)).toEqual([]);
-    expect(sampleResume.schemaVersion).toBe(4);
+    expect(sampleResume.schemaVersion).toBe(5);
     expect(sampleResume.personalDetails.fullName).toBe('Danny');
     expect(sampleLink).toBe('/danny');
   });

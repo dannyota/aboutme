@@ -52,6 +52,7 @@ const paths = [
   'sectionDisplay.language.style',
   'pageFormat',
   'dateFormat',
+  'colorScheme',
 ] as const satisfies readonly CustomizationSetPath[];
 
 const schema = currentSchema as ResumeSchema;

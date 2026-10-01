@@ -38,8 +38,8 @@ Public resume chrome follows the resume language: Vietnamese resumes show “T�
 bằng aboutme.vn” and “Tải PDF”; other languages show “Built with aboutme.vn” and
 “Download PDF”. Resume content and renderer labels follow the resume's own
 language, independent of the site language. The
-[public page spec](docs/design/public-page-theme.md) sets the planned page bar
-and the owner's color scheme.
+[public page spec](docs/design/public-page-theme.md) specifies the page bar and
+the owner's color scheme.
 
 ## Visual direction
 
@@ -53,7 +53,11 @@ canvas, the seal logo, the stamp, and the tokens.
   CSS gradients on the body background under `data-ui="app"`, scroll with the
   page, and never animate.
 - The resume is a whole white sheet with a neutral paper shadow. It stays white
-  in dark theme and never takes an Aurora token, gradient, radius, or shadow.
+  in the application's dark theme and never takes an Aurora token, gradient,
+  radius, or shadow. Only the owner's Dark or Match device
+  [color scheme](docs/design/public-page-theme.md#dark-palette-rule) shows it on
+  a dark ground, derived by the dark palette rule, on the public page and the
+  editor's Web preview. The PDF, print, and the link-preview card stay light.
 - Blue leads: actions, links, focus, and `/verify`'s verified state. There are
   two ink blues: `--primary` fills and `--link` colors text. Indigo, jade, and
   ochre support templates, customization, and features. A section uses a few,

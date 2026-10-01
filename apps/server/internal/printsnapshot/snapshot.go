@@ -60,12 +60,14 @@ func FromOwner(source resume.Resume, photo []byte, contentType string) (Envelope
 	if err != nil {
 		return Envelope{}, err
 	}
+	document := publicresume.ProjectDocument(source.Doc, photoURL)
+	document.Customization = cloneCustomization(document.Customization)
 	envelope := Envelope{
 		Version:  1,
 		ResumeID: source.ID.String(),
 		Revision: strconv.FormatInt(source.Revision, 10),
 		Lng:      projectLanguage(source.Lng),
-		Document: publicresume.ProjectDocument(source.Doc, photoURL),
+		Document: document,
 	}
 	if _, err := Marshal(envelope); err != nil {
 		return Envelope{}, err
@@ -363,8 +365,12 @@ func cloneHeader(source *schema.HeaderClass) *schema.HeaderClass {
 	return out
 }
 
+// cloneCustomization copies the customization for the frozen print document.
+// It drops colorScheme: the print worker renders the light page and never
+// sees a scheme (docs/design/public-page-theme.md).
 func cloneCustomization(source schema.Customization) schema.Customization {
 	out := source
+	out.ColorScheme = nil
 	out.Font.TextAlign = clonePointer(source.Font.TextAlign)
 	out.Colors.Accent = clonePointer(source.Colors.Accent)
 	out.Colors.Surface = clonePointer(source.Colors.Surface)

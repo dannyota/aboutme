@@ -21,6 +21,13 @@ export interface RenderContext {
    * keeps the default `'h1'`.
    */
   nameHeading?: 'h1' | 'p';
+  /**
+   * The owner's dark or Match device scheme. Only the public page and the
+   * editor's Web preview pass it. The PDF stays light because the print
+   * snapshot drops the stored field and PrintResumeApp never passes a scheme
+   * (docs/design/public-page-theme.md, "What stays light").
+   */
+  colorScheme?: 'dark' | 'system';
 }
 
 export type ResumeRenderErrorCode
@@ -159,6 +166,10 @@ export function resolveRenderModel(
     pageFormat: customization.pageFormat,
     lng: context.lng,
     mode: context.mode,
-    styles: useResumeStyles(customization, context.lng),
+    styles: useResumeStyles(
+      customization,
+      context.lng,
+      context.mode === 'paged' ? undefined : context.colorScheme,
+    ),
   };
 }

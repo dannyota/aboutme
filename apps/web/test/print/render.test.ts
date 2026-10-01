@@ -7,6 +7,7 @@ import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { describe, expect, it } from 'vitest';
 
+import PrintResumeApp from '../../app/components/print/PrintResumeApp.vue';
 import PublicResumeApp from '../../app/components/public/PublicResumeApp.vue';
 import { PRINT_FAILURE } from '../../server/utils/print/envelope';
 import {
@@ -105,6 +106,23 @@ describe('private print Vue document', () => {
       );
     },
   );
+
+  it('keeps the PDF light when the stored customization is dark', async () => {
+    // docs/design/public-page-theme.md, "What stays light": the print
+    // snapshot drops the field and PrintResumeApp never passes a scheme.
+    const envelope = printEnvelope();
+    (envelope.document.customization as unknown as Record<string, unknown>)
+      .colorScheme = 'dark';
+    const body = await renderToString(createSSRApp({
+      render: () => h(PrintResumeApp, {
+        document: envelope.document,
+        lng: envelope.lng,
+      }),
+    }));
+    expect(body).toContain('class="resume-document"');
+    expect(body).not.toContain('--dark-color');
+    expect(body).not.toContain('data-color-scheme');
+  });
 
   it('uses the decoded photo only as explicit renderer context', async () => {
     const envelope = printEnvelope();

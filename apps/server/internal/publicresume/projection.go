@@ -206,6 +206,7 @@ func cloneCustomization(source schema.Customization) schema.Customization {
 	out.Font.TextAlign = clonePointer(source.Font.TextAlign)
 	out.Colors.Accent = clonePointer(source.Colors.Accent)
 	out.Colors.Surface = clonePointer(source.Colors.Surface)
+	out.ColorScheme = clonePointer(source.ColorScheme)
 	out.Header = cloneHeader(source.Header)
 	out.Layout.SurfaceTarget = clonePointer(source.Layout.SurfaceTarget)
 	out.Layout.Sections.Main = cloneStrings(source.Layout.Sections.Main)

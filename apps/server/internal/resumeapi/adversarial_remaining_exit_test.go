@@ -328,7 +328,7 @@ func TestWireVersion_FailsClosed(t *testing.T) {
 		name  string
 		value string
 	}{
-		{name: "undeclared", value: "5"},
+		{name: "undeclared", value: "6"},
 		{name: "non-numeric", value: "future"},
 		{name: "negative", value: "-1"},
 		{name: "zero", value: "0"},

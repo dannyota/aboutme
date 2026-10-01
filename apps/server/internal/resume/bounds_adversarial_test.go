@@ -545,7 +545,7 @@ func adversarialBoundsLayoutItemsCase(column string) adversarialBoundsCase {
 
 func adversarialBoundsBaseDocument() map[string]any {
 	return map[string]any{
-		"schemaVersion":   4,
+		"schemaVersion":   5,
 		"personalDetails": map[string]any{},
 		"content":         map[string]any{},
 		"customization": map[string]any{

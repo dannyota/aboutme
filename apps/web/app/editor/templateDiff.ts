@@ -101,6 +101,7 @@ function isUnsetPath(
   return (
     intended === undefined
     && (path === 'font.textAlign'
+      || path === 'colorScheme'
       || path === 'colors.accent'
       || path === 'colors.surface'
       || path === 'spacing.pageMargin'
