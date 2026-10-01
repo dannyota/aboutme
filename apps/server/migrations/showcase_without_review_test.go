@@ -15,10 +15,14 @@ import (
 )
 
 // seedShowcaseRow inserts a resume and its showcase row through plain SQL at
-// schema version 10, with the review columns as given.
-func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, userID uuid.UUID, slug, reviewedKey, outcome, firstListed string) uuid.UUID {
+// schema version 10, with the review columns as given. Each row gets its own
+// user, because an account holds at most three resumes.
+func seedShowcaseRow(ctx context.Context, t *testing.T, db *sql.DB, slug, reviewedKey, outcome, firstListed string) uuid.UUID {
 	t.Helper()
-	var resumeID uuid.UUID
+	var userID, resumeID uuid.UUID
+	if err := db.QueryRowContext(ctx, `INSERT INTO users (email, name) VALUES ($1, 'Showcase') RETURNING id`, uuid.NewString()+"@example.com").Scan(&userID); err != nil {
+		t.Fatalf("insert user for %s: %v", slug, err)
+	}
 	if err := db.QueryRowContext(ctx, `
 		INSERT INTO resumes (user_id, title, slug, live, schema_version, revision, personal_details, content, customization)
 		VALUES ($1, 'Seed', $2, true, 1, 1, '{}'::jsonb, '{}'::jsonb, '{}'::jsonb) RETURNING id`, userID, slug).Scan(&resumeID); err != nil {
@@ -54,17 +58,13 @@ func TestShowcaseWithoutReviewMigrationClearsReviewState(t *testing.T) {
 	if _, err = provider.UpTo(ctx, 10); err != nil {
 		t.Fatalf("UpTo(10) error: %v", err)
 	}
-	var userID uuid.UUID
-	if err = db.QueryRowContext(ctx, `INSERT INTO users (email, name) VALUES ($1, 'Showcase') RETURNING id`, uuid.NewString()+"@example.com").Scan(&userID); err != nil {
-		t.Fatalf("insert user: %v", err)
-	}
-	pending := seedShowcaseRow(ctx, t, db, userID, "nr-pending", "", "", "")
-	approved := seedShowcaseRow(ctx, t, db, userID, "nr-approved", showcaseHexA, "approved", "x")
-	stale := seedShowcaseRow(ctx, t, db, userID, "nr-stale", showcaseHexB, "approved", "x")
-	declined := seedShowcaseRow(ctx, t, db, userID, "nr-declined", showcaseHexA, "declined", "")
-	declinedAfterListing := seedShowcaseRow(ctx, t, db, userID, "nr-declined-listed", showcaseHexA, "declined", "x")
+	pending := seedShowcaseRow(ctx, t, db, "nr-pending", "", "", "")
+	approved := seedShowcaseRow(ctx, t, db, "nr-approved", showcaseHexA, "approved", "x")
+	stale := seedShowcaseRow(ctx, t, db, "nr-stale", showcaseHexB, "approved", "x")
+	declined := seedShowcaseRow(ctx, t, db, "nr-declined", showcaseHexA, "declined", "")
+	declinedAfterListing := seedShowcaseRow(ctx, t, db, "nr-declined-listed", showcaseHexA, "declined", "x")
 	// Declined for an older key: the previous UI showed this one as pending.
-	declinedOlderKey := seedShowcaseRow(ctx, t, db, userID, "nr-declined-old", showcaseHexB, "declined", "")
+	declinedOlderKey := seedShowcaseRow(ctx, t, db, "nr-declined-old", showcaseHexB, "declined", "")
 
 	const previousListing = `SELECT count(*) FROM resume_showcase WHERE review_outcome = 'approved' AND reviewed_key = review_key`
 	if n := mustQueryInt(ctx, t, db, previousListing); n != 1 {
