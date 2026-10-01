@@ -302,8 +302,8 @@ order:
    exit 0.
 8. Restart web at the new digest, start the server and Caddy beside maintenance,
    wait for `/readyz` on Go at `127.0.0.1:8080` from the host, not only through
-   vCDN, so the check cannot pass on a vCDN cache or on the maintenance unit.
-   Then stop maintenance and prove it stopped.
+   vCDN, so the result does not depend on a cache or on which Caddy takes the
+   connection. Then stop maintenance and prove it stopped.
 9. Start the timers and resume the app-down check.
 10. Smoke through vCDN: health, TLS, and security headers. From the host, a
     request without the edge secret gets 403. Release the lock.
