@@ -529,15 +529,15 @@ test.describe('guide page pixel baselines', () => {
   }
 });
 
-// The header must not overflow at 704, 768, or 1024px in either language,
+// The header must not overflow at 704, 768, 896, or 1024px in either language,
 // signed in or out, and the Connect AI link shows exactly where
 // docs/design/mcp-guide.md, "Navigation", puts it: signed out, from 44rem
 // (704px); signed in, from 64rem (1024px), because the signed-in bar also
 // carries Resumes, Views, and Settings. /guide/mcp carries both states,
 // since the page reads no API and renders the same content either way.
-const HEADER_WIDTHS = [704, 768, 1024] as const;
+const HEADER_WIDTHS = [704, 768, 896, 1024] as const;
 const GUIDE_LINK_VISIBLE_AT: Record<'in' | 'out', readonly number[]> = {
-  out: [704, 768, 1024],
+  out: [704, 768, 896, 1024],
   in: [1024],
 };
 

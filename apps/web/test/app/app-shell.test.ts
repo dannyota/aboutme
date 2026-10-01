@@ -184,9 +184,7 @@ describe('AppShell', () => {
       const createAccount = wrapper.findAll('a')
         .find((link) => link.attributes('href') === '/register');
 
-      // Sign in gives way first, below 56rem, so the Community and Connect AI
-      // links fit at 704 and 768px in English.
-      expect(signIn?.classes()).toContain('max-[56rem]:hidden');
+      expect(signIn?.classes()).toContain('max-[44rem]:hidden');
       expect(createAccount?.classes()).toContain('max-[44rem]:hidden');
       wrapper.unmount();
     },
@@ -641,7 +639,7 @@ describe('AppShell', () => {
     expect(community?.classes()).toContain('max-sm:hidden');
   });
 
-  it('shows the mark-only logo below 30rem signed out, never signed in',
+  it('shows the mark-only logo below 64rem signed out, never signed in',
     async () => {
       meStatus = 401;
       const signedOut = await mountShell('/');
@@ -650,9 +648,9 @@ describe('AppShell', () => {
       expect(logos).toHaveLength(2);
       const [full, mark] = logos;
       expect(full?.find('[data-logo-part="wordmark"]').exists()).toBe(true);
-      expect(full?.classes()).toContain('max-[30rem]:hidden');
+      expect(full?.classes()).toContain('max-[64rem]:hidden');
       expect(mark?.find('[data-logo-part="wordmark"]').exists()).toBe(false);
-      expect(mark?.classes()).toContain('min-[30rem]:hidden');
+      expect(mark?.classes()).toContain('min-[64rem]:hidden');
       signedOut.unmount();
 
       meStatus = 200;
@@ -662,7 +660,7 @@ describe('AppShell', () => {
       const only = signedIn.findAll('[data-logo-size]');
       expect(only).toHaveLength(1);
       expect(only[0]?.find('[data-logo-part="wordmark"]').exists()).toBe(true);
-      expect(only[0]?.classes()).not.toContain('max-[30rem]:hidden');
+      expect(only[0]?.classes()).not.toContain('max-[64rem]:hidden');
     },
   );
 
