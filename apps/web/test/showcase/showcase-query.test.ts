@@ -179,10 +179,10 @@ describe('showcase contract', () => {
   it('reads the owner resource field, null when absent or unknown', () => {
     expect(parseOwnerShowcase({ state: 'listed', role: 'qa' }))
       .toEqual({ state: 'listed', role: 'qa' });
-    expect(parseOwnerShowcase({ state: 'pending', role: null }))
-      .toEqual({ state: 'pending', role: null });
-    expect(parseOwnerShowcase({ state: 'declined' }))
-      .toEqual({ state: 'declined', role: null });
+    expect(parseOwnerShowcase({ state: 'listed' }))
+      .toEqual({ state: 'listed', role: null });
+    expect(parseOwnerShowcase({ state: 'pending', role: null })).toBeNull();
+    expect(parseOwnerShowcase({ state: 'declined' })).toBeNull();
     expect(parseOwnerShowcase(null)).toBeNull();
     expect(parseOwnerShowcase(undefined)).toBeNull();
     expect(parseOwnerShowcase({ state: 'off', role: null })).toBeNull();

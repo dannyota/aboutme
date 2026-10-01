@@ -64,12 +64,8 @@ export type PublishShowcaseCopy = {
   readonly noRole: string;
   /** Role labels; the same as the showcase page's chips. */
   readonly roles: Readonly<Record<ShowcaseRole, string>>;
-  readonly pending: string;
   readonly listed: string;
   readonly listedLink: string;
-  /** The Declined text up to the contact address, then what follows it. */
-  readonly declined: readonly [string, string];
-  readonly contact: string;
   readonly issueOpenView: string;
 };
 
@@ -154,26 +150,15 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
       label: 'Hiện trong trang Cộng đồng',
       help:
         'Hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí của CV này tại '
-        + 'aboutme.vn/showcase sau khi chúng tôi duyệt. Ai cũng xem được '
-        + 'trang đó.',
+        + 'aboutme.vn/showcase. Ai cũng xem được trang đó.',
       needsPublic: 'Bật CV công khai để hiện trong trang Cộng đồng.',
       needsOpenView: 'Không dùng được khi bật Yêu cầu đăng nhập để xem.',
       roleLabel: 'Vị trí hiển thị',
       roleHint: 'Tùy chọn. Giúp người xem lọc theo vị trí.',
       noRole: 'Không chọn',
       roles: showcaseCopy.vi.roles,
-      pending:
-        'Đang chờ duyệt. CV sẽ hiện trong trang Cộng đồng sau khi được '
-        + 'duyệt.',
       listed: 'Đang hiện trong trang Cộng đồng.',
       listedLink: 'Xem trang Cộng đồng',
-      declined: [
-        'CV này chưa được duyệt để hiện trong trang Cộng đồng. Nếu bạn đổi '
-        + 'họ tên, tiêu đề, ảnh, đường dẫn hoặc ngôn ngữ của CV, chúng tôi '
-        + 'sẽ duyệt lại. Nếu có câu hỏi, hãy gửi email đến ',
-        '.',
-      ],
-      contact: 'danny@aboutme.vn',
       issueOpenView: 'Tùy chọn này cần tắt Yêu cầu đăng nhập để xem.',
     },
     publish: 'Xuất bản',
@@ -294,8 +279,7 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
       label: 'Show in the community showcase',
       help:
         'Shows this resume\'s preview image, template, language, and role '
-        + 'at aboutme.vn/showcase after we review it. Anyone can see that '
-        + 'page.',
+        + 'at aboutme.vn/showcase. Anyone can see that page.',
       needsPublic:
         'Turn on Public resume to show it in the community showcase.',
       needsOpenView: 'Not available while Require sign-in to view is on.',
@@ -303,18 +287,8 @@ export const publishCopy: WorkspaceCopy<PublishCopy> = {
       roleHint: 'Optional. Lets visitors filter by role.',
       noRole: 'None',
       roles: showcaseCopy.en.roles,
-      pending:
-        'Waiting for review. The resume appears in the community showcase '
-        + 'once approved.',
       listed: 'Shown in the community showcase.',
       listedLink: 'View the showcase',
-      declined: [
-        'This resume was not approved for the community showcase. If you '
-        + 'change its name, headline, photo, link, or language, we review it '
-        + 'again. Questions: ',
-        '.',
-      ],
-      contact: 'danny@aboutme.vn',
       issueOpenView: 'This option needs Require sign-in to view off.',
     },
     publish: 'Publish',

@@ -43,7 +43,7 @@ export const legalVi: LegalCopy = {
           + 'đang công khai, ảnh xem trước chúng tôi tạo từ CV đó để hiển '
           + 'thị khi đường dẫn được chia sẻ.',
           'Trang Cộng đồng: nếu bạn bật tùy chọn này cho một CV, chúng tôi '
-          + 'lưu thời điểm bạn bật, vị trí bạn chọn, và kết quả duyệt.',
+          + 'lưu thời điểm bạn bật và vị trí bạn chọn.',
           'Phiên đăng nhập: thông tin trình duyệt (user-agent) và địa chỉ '
           + 'IP của từng phiên, dùng cho bảo mật. Settings → Sessions liệt '
           + 'kê các thiết bị đang đăng nhập. Chúng tôi xóa địa chỉ IP và '
@@ -137,9 +137,7 @@ export const legalVi: LegalCopy = {
           'Trang Cộng đồng (aboutme.vn/showcase) chỉ hiện những CV mà chủ '
           + 'CV bật Hiện trong trang Cộng đồng. Trang này hiện ảnh xem trước '
           + 'của CV (họ tên, tiêu đề và ảnh của bạn), mẫu, ngôn ngữ và vị '
-          + 'trí bạn chọn, kèm đường dẫn đến CV. Chúng tôi duyệt từng CV '
-          + 'trước khi hiện, và duyệt lại khi họ tên, tiêu đề, ảnh, đường '
-          + 'dẫn hoặc ngôn ngữ của CV thay đổi. Khi bạn tắt tùy chọn này, '
+          + 'trí bạn chọn, kèm đường dẫn đến CV. Khi bạn tắt tùy chọn này, '
           + 'hủy xuất bản, hoặc bật Yêu cầu đăng nhập để xem, CV rời khỏi '
           + 'trang Cộng đồng ngay lập tức. Trang Cộng đồng không cho công cụ '
           + 'tìm kiếm lập chỉ mục, nhưng bất kỳ ai truy cập đều có thể xem '
@@ -273,8 +271,6 @@ export const legalVi: LegalCopy = {
           + 'hay người khác.',
         ],
         after: [
-          'Chúng tôi duyệt mọi CV trước khi hiện trong trang Cộng đồng và '
-          + 'có thể từ chối hoặc gỡ CV khỏi trang này.',
           'Chúng tôi có thể gỡ nội dung hoặc xóa tài khoản vi phạm các quy '
           + 'tắc này.',
         ],
