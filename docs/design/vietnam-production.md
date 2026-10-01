@@ -144,8 +144,13 @@ The trust boundaries match today's host:
 - Only Caddy and Go share the host loopback, and Go trusts only `127.0.0.1`.
 - Nuxt has its own network namespace and reaches only Go's print listener on the
   `aboutme` bridge gateway, where the one-use capability applies.
-- `aboutme-caddy` and `aboutme-maintenance` conflict in systemd, and the deploy
-  script proves one stopped before it starts the other.
+- `aboutme-caddy` and `aboutme-maintenance` do not conflict. A deploy runs them
+  side by side on ports 80 and 443 with `SO_REUSEPORT`, which Linux allows only
+  for sockets of one effective user, so both run as the same user. They share
+  one Caddy storage directory. Either process then answers an ACME HTTP-01
+  challenge for the other's order and they do not race to issue; with separate
+  storage, each would order its own certificate and a challenge could reach the
+  process that did not order it, so issuance fails or hits rate limits.
 - One-shot containers reach PostgreSQL only through the mounted socket; only
   media jobs get outbound network, for vStorage.
 - Chromium keeps its sandbox and its blocked proxy; the probe checks the user
@@ -296,7 +301,9 @@ order:
 7. Run `db-setup` with `--first-deploy`; otherwise run `migrate` and require
    exit 0.
 8. Restart web at the new digest, start the server and Caddy beside maintenance,
-   wait for `/readyz`, then stop maintenance and prove it stopped.
+   wait for `/readyz` on Go at `127.0.0.1:8080` from the host, not only through
+   vCDN, so the check cannot pass on the old process or a cache. Then stop
+   maintenance and prove it stopped.
 9. Start the timers and resume the app-down check.
 10. Smoke through vCDN: health, TLS, and security headers. From the host, a
     request without the edge secret gets 403. Release the lock.
