@@ -289,7 +289,11 @@ The filter rows stay visible in the empty state.
 
 **No match.** One line, “Không có CV nào khớp với bộ lọc này.” or “No resume
 matches these filters.”, 15 px `--muted-foreground`, `role="status"`, the same
-treatment as the Library's no-match line. No pager.
+treatment as the Library's no-match line. No pager, except past the end.
+
+**Past the end.** A `page` above `pageCount` gets `200` with empty items and the
+real `pageCount`. The page shows the no-match line and the pager, where only
+Previous is a link.
 
 **Load failed.** `StatusBanner` with `kind="error"`, full grid width, holding
 “Không tải được danh sách. Hãy thử lại.” or “Could not load the list. Try
@@ -302,7 +306,8 @@ the tiles. A rate-limited or `400` response shows this state too.
 
 The shell adds **Cộng đồng** / **Community**, a link to `/showcase`, right after
 Library, with Library's class: shown to every visitor and hidden below 640 px
-when signed in. It takes `aria-current="page"` on `/showcase`.
+when signed in. It takes `aria-current="page"` on `/showcase`. On `/showcase`
+the shell's create button reads Create your resume, as on the Library.
 
 The signed-out phone header must still fit. The 390 px Library baseline leaves
 about 34 px between Thư viện and the locale toggle, and Cộng đồng needs about 88
