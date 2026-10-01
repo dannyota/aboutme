@@ -267,7 +267,7 @@ func TestDeleteAccountBySlugRefusesSlugThatMovedBeforeCommit(t *testing.T) {
 			t.Errorf("begin move: %v", err)
 			return
 		}
-		defer func() { _ = tx.Rollback(f.ctx) }()
+		defer rollbackUnlessClosed(t, tx)()
 		if _, err = tx.Exec(f.ctx, `UPDATE resumes SET slug = NULL, live = false WHERE slug = $1`, reported); err != nil {
 			t.Errorf("clear slug: %v", err)
 			return
