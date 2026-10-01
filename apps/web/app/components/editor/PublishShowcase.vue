@@ -120,7 +120,7 @@ const roleOptions = computed(() => [
     </p>
     <SelectField
       v-if="modelValue && reason === null"
-      class="publish-showcase-role ml-10"
+      class="publish-showcase-role ml-10 mt-2"
       :control-attrs="{ 'data-action': 'publish-showcase-role' }"
       :disabled="busy"
       :hint="showcase.roleHint"
