@@ -24,7 +24,21 @@ const (
 	showcaseNone = "-"
 )
 
-var errShowcaseReviewUsage = errors.New("usage: server showcase-review {pending|approve <slug> <key>|decline <slug> <key>|show <slug>}")
+// Exit codes: 0 the command ran, 1 a failure or a usage error, 3 approve or
+// decline matched nothing because the key is stale or the resume has no
+// request. Every run that reaches the database ends its stdout with
+// showcaseReviewEnd, so a reader can tell a complete log from a partial one.
+const (
+	showcaseStaleExitCode = 3
+	showcaseReviewEnd     = "showcase-review: end"
+)
+
+// showcaseStaleExitError reports a stale review key through the exit code.
+type showcaseStaleExitError struct{}
+
+func (showcaseStaleExitError) Error() string { return "showcase review key is stale" }
+
+var errShowcaseReviewUsage = errors.New("usage: server showcase-review {pending|approve <slug> <key>|decline <slug> <key>|show <slug>}; exit 3 means a stale key")
 
 // showcaseReviewCommand is one parsed operator review command
 // (docs/design/showcase.md "Review"). Its output and logs carry slugs, keys,
@@ -90,7 +104,21 @@ func executeShowcaseReview(ctx context.Context, command showcaseReviewCommand, g
 		defer cancel()
 		pool.Close(cleanupCtx)
 	}()
-	return runShowcaseReviewCommand(ctx, showcase.NewReviewer(pool, time.Now), command, output)
+	return runShowcaseReviewWithEnd(ctx, showcase.NewReviewer(pool, time.Now), command, output)
+}
+
+// runShowcaseReviewWithEnd runs the command and, on success and on a stale
+// key, prints the final sentinel line. A failure prints nothing more.
+func runShowcaseReviewWithEnd(ctx context.Context, reviewer *showcase.Reviewer, command showcaseReviewCommand, output io.Writer) error {
+	err := runShowcaseReviewCommand(ctx, reviewer, command, output)
+	var stale showcaseStaleExitError
+	if err != nil && !errors.As(err, &stale) {
+		return err
+	}
+	if _, writeErr := fmt.Fprintln(output, showcaseReviewEnd); writeErr != nil {
+		return writeResult(writeErr)
+	}
+	return err
 }
 
 // runShowcaseReviewCommand runs one parsed command against reviewer and prints
@@ -139,7 +167,10 @@ func printReviewResult(output io.Writer, verb string, applied bool, err error, c
 	}
 	if !applied {
 		_, writeErr := fmt.Fprintf(output, "stale: %s is not the current review key of %s, or it has no showcase request; nothing changed\n", command.key, command.slug)
-		return writeResult(writeErr)
+		if writeErr != nil {
+			return writeResult(writeErr)
+		}
+		return showcaseStaleExitError{}
 	}
 	_, writeErr := fmt.Fprintf(output, "%s %s %s\n", verb, command.slug, command.key)
 	return writeResult(writeErr)

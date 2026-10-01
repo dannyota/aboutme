@@ -62,6 +62,10 @@ func main() {
 		if errors.As(err, &occupancyExit) {
 			os.Exit(occupancyExit.code)
 		}
+		var staleExit showcaseStaleExitError
+		if errors.As(err, &staleExit) {
+			os.Exit(showcaseStaleExitCode)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
