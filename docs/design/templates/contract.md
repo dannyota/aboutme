@@ -97,15 +97,20 @@ A template design must respect these rules:
   including one whose only sections are custom sections with UUID keys.
 - The preset shape is **not** the document's `customization` shape: it adds
   `layout.placement`/`sidebarSectionTypes` and omits `layout.sections`.
-  `applyTemplate(currentCustomization, preset, content)` is a pure function
-  returning either a complete, schema-valid `customization` or a typed
+  `applyTemplate(currentCustomization, preset, content, language)` is a pure
+  function returning either a complete, schema-valid `customization` or a typed
   validation error.
 - A preset must supply every one of the eight required `customization` keys,
   including `pageFormat` and `dateFormat`, because the replace is wholesale.
-  Applying a template therefore resets the date format. It keeps the owner's
-  `pageFormat`, as it keeps `font.textAlign` and `header.photoPosition`: paper
-  follows where the owner prints, so a preset's `pageFormat` only seeds a resume
-  started from it. See
+  Apply then sets `dateFormat` from the resume language, not the preset:
+  `MM/YYYY` when the language's primary subtag is `vi`, `Mon YYYY` otherwise,
+  including no language. The language is record metadata (`resumes.lng` in
+  [Data](../data.md)), so `applyTemplate` takes it as an input. A resume started
+  from a template gets the same language-derived format. This is the
+  vi-or-English rule of §5.4 and [Dates](../vietnam-tech-resumes.md#dates).
+  Apply keeps the owner's `pageFormat`, as it keeps `font.textAlign` and
+  `header.photoPosition`: paper follows where the owner prints, so a preset's
+  `pageFormat` only seeds a resume started from it. See
   [Known contract limits](limitations.md#9-known-contract-limits).
 - Apply also keeps the owner's `colorScheme`, or its absence, as it keeps
   `font.textAlign` and `header.photoPosition`. A preset never sets it.

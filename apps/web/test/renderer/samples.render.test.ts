@@ -13,6 +13,7 @@ import { renderToString } from 'vue/server-renderer';
 import { describe, expect, it } from 'vitest';
 
 import { applyTemplate } from '../../app/components/resume/applyTemplate';
+import { dateFormatForLanguage } from '../../app/components/resume/formatDate';
 import { PaginationMeasureKey } from '../../app/components/resume/measure';
 import ResumeDocument from '../../app/components/resume/ResumeDocument.vue';
 import { syntheticMeasure } from './synthetic-measure';
@@ -45,15 +46,15 @@ describe('gallery samples', () => {
         sample.customization,
         preset,
         sample.content,
+        lng,
       );
       const { dateFormat: appliedDateFormat, ...appliedRest } = applied;
       const { dateFormat: _sampleDateFormat, ...sampleRest }
         = sample.customization;
       expect(appliedRest).toEqual(sampleRest);
-      // A template switch always sets its own date format (formatDate.ts,
-      // applyTemplate.ts); a sample keeps its language's format only until
-      // its reader picks a different template.
-      expect(appliedDateFormat).toBe(preset.customization.dateFormat);
+      // A template switch sets the language's date format, not the
+      // preset's (docs/design/templates/contract.md §3).
+      expect(appliedDateFormat).toBe(dateFormatForLanguage(lng));
     },
   );
 
@@ -79,6 +80,7 @@ describe('gallery samples', () => {
           document.customization,
           preset,
           document.content,
+          lng,
         );
         const html = await render(document, lng, 'paged');
         expect(html, preset.id).toContain(filler.personalDetails.fullName!);

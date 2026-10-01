@@ -20,7 +20,12 @@ export type NewResumeRequest
     readonly template: GalleryTemplate;
     readonly lng: SampleLanguage;
   }
-  | { readonly kind: 'template'; readonly template: GalleryTemplate }
+  | {
+    readonly kind: 'template';
+    readonly template: GalleryTemplate;
+    /** The language the new resume is created with: the site language. */
+    readonly lng: string;
+  }
   | { readonly kind: 'invalid' };
 
 type Query = Readonly<Record<string, unknown>>;
@@ -49,11 +54,17 @@ export function parseNewResumeQuery(
   const template = galleryTemplate(single(query, 'template') ?? '');
   return template === undefined
     ? { kind: 'invalid' }
-    : { kind: 'template', template };
+    : { kind: 'template', template, lng: siteLanguage };
 }
 
-/** A blank resume that already wears a template. */
-export function blankTemplateDocument(preset: TemplatePreset): Resume {
+/**
+ * A blank resume that already wears a template, with the date format of the
+ * language it is created with.
+ */
+export function blankTemplateDocument(
+  preset: TemplatePreset,
+  lng: string,
+): Resume {
   const { placement: _placement, sidebarSectionTypes: _types, ...layout }
     = preset.customization.layout;
   const base = {
@@ -64,7 +75,7 @@ export function blankTemplateDocument(preset: TemplatePreset): Resume {
     schemaVersion: CURRENT_VERSION,
     personalDetails: { details: [] },
     content: {},
-    customization: applyTemplate(base, preset, {}),
+    customization: applyTemplate(base, preset, {}, lng),
   } as Resume;
 }
 
@@ -73,7 +84,7 @@ export async function startDocument(
   request: Exclude<NewResumeRequest, { kind: 'invalid' }>,
 ): Promise<Resume> {
   if (request.kind === 'template') {
-    return blankTemplateDocument(request.template.preset);
+    return blankTemplateDocument(request.template.preset, request.lng);
   }
   const sample = await loadSample(request.template.id, request.lng);
   if (sample === undefined) {

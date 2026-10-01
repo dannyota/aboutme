@@ -163,6 +163,9 @@ describe('gallery documents', () => {
       expect(filler.isSample).toBe(false);
       expect(filler.document.customization.font)
         .toEqual(classic.preset.customization.font);
+      expect(filler.document.customization.dateFormat).toBe('Mon YYYY');
+      const vi = await galleryDocument(classic, 'vi');
+      expect(vi.document.customization.dateFormat).toBe('MM/YYYY');
     });
 });
 

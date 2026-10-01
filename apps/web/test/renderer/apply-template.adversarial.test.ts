@@ -180,7 +180,7 @@ describe('applyTemplate adversarial placement contract', () => {
     () => {
       const currentBefore = structuredClone(current);
       const contentBefore = structuredClone(content);
-      const result = applyTemplate(current, preset('keep'), content);
+      const result = applyTemplate(current, preset('keep'), content, 'en');
 
       expect(result.layout.sections).toEqual(current.layout.sections);
       expect(result.font.family).toBe('source-sans-3');
@@ -194,6 +194,7 @@ describe('applyTemplate adversarial placement contract', () => {
       current,
       preset('byType', ['language', 'skill']),
       content,
+      'en',
     );
 
     expect(result.layout.sections).toEqual({
@@ -209,6 +210,7 @@ describe('applyTemplate adversarial placement contract', () => {
         current,
         preset('byType', ['skill', 'language']),
         reversed,
+        'en',
       ).layout.sections,
     ).toEqual({
       main: ['workA', 'customA', 'workB'],
@@ -235,7 +237,9 @@ describe('applyTemplate adversarial placement contract', () => {
   ])('rejects invalid current placement: %s', (_name, sections) => {
     const invalid = structuredClone(current);
     invalid.layout.sections = sections;
-    expect(() => applyTemplate(invalid, preset('keep'), content)).toThrowError(
+    expect(
+      () => applyTemplate(invalid, preset('keep'), content, 'en'),
+    ).toThrowError(
       expect.objectContaining({ code: 'invalid_current_placement' }),
     );
   });
@@ -248,7 +252,9 @@ describe('applyTemplate adversarial placement contract', () => {
       'byType',
       selectors as unknown as readonly ('skill' | 'language')[],
     );
-    expect(() => applyTemplate(current, invalidPreset, content)).toThrowError(
+    expect(
+      () => applyTemplate(current, invalidPreset, content, 'en'),
+    ).toThrowError(
       expect.objectContaining({ code: 'invalid_preset_placement' }),
     );
   });
@@ -265,9 +271,9 @@ describe('applyTemplate adversarial placement contract', () => {
         },
       },
     };
-    expect(() => applyTemplate(current, invalidPreset, content)).toThrow(
-      TemplateApplyError,
-    );
+    expect(
+      () => applyTemplate(current, invalidPreset, content, 'en'),
+    ).toThrow(TemplateApplyError);
   });
 
   it('rejects an unknown preset placement', () => {
@@ -283,7 +289,9 @@ describe('applyTemplate adversarial placement contract', () => {
         },
       },
     };
-    expect(() => applyTemplate(current, invalidPreset, content)).toThrowError(
+    expect(
+      () => applyTemplate(current, invalidPreset, content, 'en'),
+    ).toThrowError(
       expect.objectContaining({ code: 'invalid_preset_placement' }),
     );
   });
@@ -292,7 +300,8 @@ describe('applyTemplate adversarial placement contract', () => {
     const empty = structuredClone(current);
     empty.layout.sections = { main: [], sidebar: [] };
     expect(
-      applyTemplate(empty, preset('byType', ['skill']), {}).layout.sections,
+      applyTemplate(empty, preset('byType', ['skill']), {}, 'en').layout
+        .sections,
     ).toEqual({ main: [], sidebar: [] });
   });
 
@@ -330,6 +339,7 @@ describe('applyTemplate adversarial placement contract', () => {
         propertyCurrent,
         propertyPresetForCase,
         propertyContent,
+        'en',
       );
 
       const expectedSidebar: string[] = [];
@@ -365,7 +375,8 @@ describe('applyTemplate adversarial placement contract', () => {
       );
       // Paper follows where the owner prints, not the template.
       expect(result.pageFormat).toBe(propertyCurrent.pageFormat);
-      expect(result.dateFormat).toBe(presetCustomization.dateFormat);
+      // The date format follows the language, not the preset.
+      expect(result.dateFormat).toBe('Mon YYYY');
       if (presetCustomization.header !== undefined) {
         expect(result.header).toEqual(presetCustomization.header);
       }
@@ -390,6 +401,7 @@ describe('template switches keep the page format', () => {
       { ...current, pageFormat: 'letter' },
       preset('keep'),
       {},
+      'en',
     );
     expect(onLetter.pageFormat).toBe('letter');
     const target = preset('keep');
@@ -397,10 +409,9 @@ describe('template switches keep the page format', () => {
       { ...current, dateFormat: 'Mon YYYY' },
       target,
       {},
+      'en',
     );
     expect(onA4.pageFormat).toBe('a4');
-    // The date format still comes from the preset.
-    expect(onA4.dateFormat).toBe(target.customization.dateFormat);
   });
 
   it('ships every preset on A4, the paper its readers print on', () => {
@@ -408,5 +419,41 @@ describe('template switches keep the page format', () => {
       TEMPLATES.filter((template) =>
         template.customization.pageFormat !== 'a4').map(({ id }) => id),
     ).toEqual([]);
+  });
+});
+
+describe('template switches set the date format from the language', () => {
+  const dateFormatOf = (
+    language: string | null | undefined,
+    start: Customization = current,
+  ): Customization['dateFormat'] =>
+    applyTemplate(start, preset('keep'), content, language).dateFormat;
+
+  it.each([
+    ['vi', 'MM/YYYY'],
+    ['vi-VN', 'MM/YYYY'],
+    ['VI-vn', 'MM/YYYY'],
+    ['en', 'Mon YYYY'],
+    ['en-US', 'Mon YYYY'],
+    ['fr', 'Mon YYYY'],
+    ['', 'Mon YYYY'],
+    [null, 'Mon YYYY'],
+    [undefined, 'Mon YYYY'],
+  ] as const)('language %j gives %s', (language, expected) => {
+    expect(dateFormatOf(language)).toBe(expected);
+  });
+
+  it('replaces an owner\'s own choice', () => {
+    expect(dateFormatOf('en', { ...current, dateFormat: 'YYYY' }))
+      .toBe('Mon YYYY');
+    expect(dateFormatOf('vi', { ...current, dateFormat: 'YYYY' }))
+      .toBe('MM/YYYY');
+  });
+
+  it('does not drop months under a preset that prints only the year', () => {
+    // The preset carries `YYYY`; the language format wins.
+    expect(preset('keep').customization.dateFormat).toBe('YYYY');
+    expect(dateFormatOf('vi')).not.toBe('YYYY');
+    expect(dateFormatOf('en')).not.toBe('YYYY');
   });
 });

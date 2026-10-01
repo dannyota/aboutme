@@ -175,11 +175,11 @@ describe('applyTemplate keeps the color scheme', () => {
     (_id, preset) => {
       for (const scheme of ['light', 'dark', 'system'] as const) {
         const stored = withScheme(fixture.customization, scheme);
-        expect(applyTemplate(stored, preset, content).colorScheme)
+        expect(applyTemplate(stored, preset, content, 'en').colorScheme)
           .toBe(scheme);
       }
       const absent = withScheme(fixture.customization);
-      expect('colorScheme' in applyTemplate(absent, preset, content))
+      expect('colorScheme' in applyTemplate(absent, preset, content, 'en'))
         .toBe(false);
     },
   );
@@ -194,6 +194,7 @@ describe('applyTemplate keeps the color scheme', () => {
       withScheme(fixture.customization),
       withPresetScheme,
       content,
+      'en',
     );
     expect('colorScheme' in next).toBe(false);
   });
@@ -202,7 +203,7 @@ describe('applyTemplate keeps the color scheme', () => {
     for (const preset of TEMPLATES) {
       for (const scheme of [undefined, 'dark', 'system'] as const) {
         const current = withScheme(fixture.customization, scheme);
-        const intended = applyTemplate(current, preset, content);
+        const intended = applyTemplate(current, preset, content, 'en');
         expect(
           diffCustomization(current, intended)
             .filter(({ path }) => path === 'colorScheme'),
