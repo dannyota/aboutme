@@ -62,17 +62,13 @@ func main() {
 		if errors.As(err, &occupancyExit) {
 			os.Exit(occupancyExit.code)
 		}
-		var staleExit showcaseStaleExitError
-		if errors.As(err, &staleExit) {
-			os.Exit(showcaseStaleExitCode)
-		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-// dispatch routes the check-public-root, totp-key-reencrypt, and
-// showcase-review one-shot commands to their entry points. It leaves every
+// dispatch routes the check-public-root and totp-key-reencrypt one-shot
+// commands to their entry points. It leaves every
 // other invocation, including the bare server, to runCommand
 // (privacy_command.go, privacy_jobs.go) unchanged.
 func dispatch(args []string) error {
@@ -81,9 +77,6 @@ func dispatch(args []string) error {
 	}
 	if len(args) > 0 && args[0] == totpKeyReencryptCommandName {
 		return runTOTPKeyReencrypt(args[1:])
-	}
-	if len(args) > 0 && args[0] == showcaseReviewCommandName {
-		return runShowcaseReview(args[1:])
 	}
 	return runCommand(args)
 }
@@ -148,7 +141,8 @@ func run() error {
 		return fmt.Errorf("create showcase service: %w", err)
 	}
 	// Showcase rows follow the current scrub rules, presets, and card layout
-	// from the first request on (docs/design/showcase.md "Review").
+	// from the first request on (docs/design/showcase.md "Derived values and
+	// reports").
 	recomputed, skipped, err := showcaseService.RecomputeAll(ctx)
 	if err != nil {
 		return fmt.Errorf("recompute showcase rows: %w", err)

@@ -76,7 +76,7 @@ func TestResponseDataStripsShowcase(t *testing.T) {
 	if data["id"] != "018f5b6a-9a3e-7c21-8b1e-000000000010" || data["revision"] != "1" {
 		t.Fatalf("responseData() = %#v, want every other field preserved", data)
 	}
-	resumes := []map[string]any{{"id": "a", "showcase": nil}, {"id": "b", "showcase": map[string]any{"state": "pending"}}}
+	resumes := []map[string]any{{"id": "a", "showcase": nil}, {"id": "b", "showcase": map[string]any{"state": "listed"}}}
 	for _, resume := range resumes {
 		stripAgentOnlyFields(resume)
 		if _, present := resume["showcase"]; present {

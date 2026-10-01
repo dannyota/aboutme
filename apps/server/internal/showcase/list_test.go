@@ -27,40 +27,35 @@ func (e *env) list(t *testing.T, filter Filter) Page {
 	return page
 }
 
-// setFirstListed pins the first-listed time the order depends on.
-func (e *env) setFirstListed(t *testing.T, f fixture, at time.Time) {
+// setRequested pins the opt-in time the order depends on.
+func (e *env) setRequested(t *testing.T, f fixture, at time.Time) {
 	t.Helper()
-	if _, err := e.pool.Exec(e.ctx, `UPDATE resume_showcase SET first_listed_at = $2 WHERE resume_id = $1`, f.id, at); err != nil {
-		t.Fatalf("set first listed: %v", err)
+	if _, err := e.pool.Exec(e.ctx, `UPDATE resume_showcase SET requested_at = $2 WHERE resume_id = $1`, f.id, at); err != nil {
+		t.Fatalf("set requested: %v", err)
 	}
 }
 
-// AC-SHOW-014: the listing checks all five conditions on every request: the
-// opt-in row, an approved result, an approved key equal to the current key, a
-// live resume, and sign in to view off.
-func TestListChecksAllFiveListingConditions(t *testing.T) {
+// AC-SHOW-014: an opted-in, live resume with sign in to view off is listed at
+// once, with no review step.
+func TestListShowsAnOptInAtOnce(t *testing.T) {
+	e := newFreshEnv(t)
+	f := e.addResume(t, defaultSpec())
+	if got := slugsOf(e.list(t, Filter{})); len(got) != 0 {
+		t.Fatalf("listing before the opt-in = %v, want empty", got)
+	}
+	e.optIn(t, f.id, strp("backend"))
+	page := e.list(t, Filter{})
+	if got := slugsOf(page); len(got) != 1 || got[0] != f.slug || page.Total != 1 {
+		t.Fatalf("listing after the opt-in = %v total %d, want only %s", got, page.Total, f.slug)
+	}
+}
+
+// AC-SHOW-014: the listing checks all three conditions on every request: the
+// opt-in row, a live resume, and sign in to view off. Each one alone excludes.
+func TestListChecksAllThreeListingConditions(t *testing.T) {
 	e := newFreshEnv(t)
 	shown := e.listed(t, defaultSpec(), nil)
 	noRow := e.addResume(t, defaultSpec())
-
-	pending := e.addResume(t, defaultSpec())
-	e.optIn(t, pending.id, nil)
-
-	declined := e.addResume(t, defaultSpec())
-	e.optIn(t, declined.id, nil)
-	declinedRow, _ := e.showcaseRow(t, declined.id)
-	if done, err := e.reviewer.Decline(e.ctx, declined.slug, declinedRow.ReviewKey); err != nil || !done {
-		t.Fatalf("Decline() = %t, %v", done, err)
-	}
-
-	staleSpec := defaultSpec()
-	staleKey := e.listed(t, staleSpec, nil)
-	staleSpec.name = "Grace Hopper"
-	personal, _, _ := staleSpec.parts(t)
-	if _, err := e.pool.Exec(e.ctx, `UPDATE resumes SET personal_details = $2 WHERE id = $1`, staleKey.id, personal); err != nil {
-		t.Fatalf("change name: %v", err)
-	}
-	e.sync(t, staleKey.id)
 
 	// The next two rows bypass the transactions that delete the row, so only
 	// the listing query itself keeps them out.
@@ -75,15 +70,15 @@ func TestListChecksAllFiveListingConditions(t *testing.T) {
 
 	page := e.list(t, Filter{})
 	if got := slugsOf(page); len(got) != 1 || got[0] != shown.slug {
-		t.Fatalf("listing = %v, want only %s (no row %s, pending %s, declined %s, stale key %s, unpublished %s, gated %s)",
-			got, shown.slug, noRow.slug, pending.slug, declined.slug, staleKey.slug, unpublished.slug, gated.slug)
+		t.Fatalf("listing = %v, want only %s (no row %s, unpublished %s, gated %s)",
+			got, shown.slug, noRow.slug, unpublished.slug, gated.slug)
 	}
 	if page.Total != 1 || page.PageCount != 1 || page.Page != 1 {
 		t.Fatalf("page = %+v, want total 1 on page 1 of 1", page)
 	}
 }
 
-// AC-SHOW-005, AC-SHOW-002: newest first approval first, then resume ID; role,
+// AC-SHOW-005, AC-SHOW-002: newest opt-in first, then resume ID; role,
 // language, and template filters combine; an item holds only its closed fields.
 func TestListOrderFiltersAndItems(t *testing.T) {
 	e := newFreshEnv(t)
@@ -93,25 +88,25 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 	oldest := defaultSpec()
 	oldest.lng = "vi"
 	oldestFixture := e.listed(t, oldest, strp("backend"))
-	e.setFirstListed(t, oldestFixture, base.Add(-72*time.Hour))
+	e.setRequested(t, oldestFixture, base.Add(-72*time.Hour))
 
 	styled := defaultSpec()
 	styled.lng = "en-US"
 	styled.customization = appliedCustomization(t, files[0], []string{}, []string{})
 	styledFixture := e.listed(t, styled, strp("frontend"))
-	e.setFirstListed(t, styledFixture, base.Add(-24*time.Hour))
+	e.setRequested(t, styledFixture, base.Add(-24*time.Hour))
 
 	other := defaultSpec()
 	other.lng = "fr"
 	otherFixture := e.listed(t, other, nil)
-	e.setFirstListed(t, otherFixture, base.Add(-24*time.Hour))
+	e.setRequested(t, otherFixture, base.Add(-24*time.Hour))
 
 	unset := defaultSpec()
 	unset.lng = ""
 	unsetFixture := e.listed(t, unset, strp("other"))
-	e.setFirstListed(t, unsetFixture, base)
+	e.setRequested(t, unsetFixture, base)
 
-	// Equal first-listed times fall back to the resume ID, newest ID first.
+	// Equal opt-in times fall back to the resume ID, newest ID first.
 	tied := []fixture{styledFixture, otherFixture}
 	if tied[0].id.String() < tied[1].id.String() {
 		tied[0], tied[1] = tied[1], tied[0]
@@ -193,15 +188,16 @@ func TestListOrderFiltersAndItems(t *testing.T) {
 	}
 }
 
-// AC-SHOW-005: a re-approval after an edit keeps the first-listed time, so
-// editing never moves a resume up.
-func TestListKeepsTheFirstApprovalOrderAcrossReapproval(t *testing.T) {
+// AC-SHOW-005: an edit keeps the resume listed and in place, so editing never
+// moves a resume up. Turning the switch off and on again starts a new opt-in,
+// which moves it to the top.
+func TestListOrdersByOptInTime(t *testing.T) {
 	e := newFreshEnv(t)
 	editedSpec := defaultSpec()
 	edited := e.listed(t, editedSpec, nil)
-	e.setFirstListed(t, edited, e.now.Add(-48*time.Hour))
+	e.setRequested(t, edited, e.now.Add(-48*time.Hour))
 	newer := e.listed(t, defaultSpec(), nil)
-	e.setFirstListed(t, newer, e.now.Add(-24*time.Hour))
+	e.setRequested(t, newer, e.now.Add(-24*time.Hour))
 	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != newer.slug+","+edited.slug {
 		t.Fatalf("order = %v, want %s first", got, newer.slug)
 	}
@@ -212,16 +208,17 @@ func TestListKeepsTheFirstApprovalOrderAcrossReapproval(t *testing.T) {
 		t.Fatalf("change name: %v", err)
 	}
 	e.sync(t, edited.id)
-	if got := slugsOf(e.list(t, Filter{})); len(got) != 1 || got[0] != newer.slug {
-		t.Fatalf("listing after the edit = %v, want only %s", got, newer.slug)
-	}
-	e.approve(t, edited)
-	row, _ := e.showcaseRow(t, edited.id)
-	if row.FirstListedAt == nil || !row.FirstListedAt.Equal(e.now.Add(-48*time.Hour)) {
-		t.Fatalf("first_listed_at = %v after the re-approval, want the first approval's", row.FirstListedAt)
-	}
 	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != newer.slug+","+edited.slug {
-		t.Fatalf("order after the re-approval = %v, want %s first", got, newer.slug)
+		t.Fatalf("order after the edit = %v, want the edited resume still listed and last", got)
+	}
+
+	e.publish(t, PublishChange{ResumeID: edited.id, Enabled: false})
+	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != newer.slug {
+		t.Fatalf("listing after the opt-out = %v, want only %s", got, newer.slug)
+	}
+	e.optIn(t, edited.id, nil)
+	if got := slugsOf(e.list(t, Filter{})); strings.Join(got, ",") != edited.slug+","+newer.slug {
+		t.Fatalf("order after the new opt-in = %v, want %s first", got, edited.slug)
 	}
 }
 
@@ -231,7 +228,7 @@ func TestListPagesTwelveAtATime(t *testing.T) {
 	e := newFreshEnv(t)
 	for i := range 13 {
 		f := e.listed(t, defaultSpec(), nil)
-		e.setFirstListed(t, f, e.now.Add(-time.Duration(i)*time.Hour))
+		e.setRequested(t, f, e.now.Add(-time.Duration(i)*time.Hour))
 	}
 	first := e.list(t, Filter{Page: 1})
 	if len(first.Items) != 12 || first.Page != 1 || first.PageCount != 2 || first.Total != 13 {
@@ -363,22 +360,13 @@ func waitFor(t *testing.T, condition func() bool) {
 	}
 }
 
-// AC-SHOW-014: a decline, an opt-out, or an unpublish that commits while
+// AC-SHOW-014: an opt-out, an unpublish, or sign in to view that commits while
 // listing requests are in flight takes effect for every request admitted
 // after it, because nothing is cached.
 func TestListOmitsAResumeAfterARevocationCommits(t *testing.T) {
 	e := newFreshEnv(t)
 	stays := e.listed(t, defaultSpec(), nil)
 
-	t.Run("decline", func(t *testing.T) {
-		f := e.listed(t, defaultSpec(), nil)
-		row, _ := e.showcaseRow(t, f.id)
-		revokeWhileListing(t, e, f.slug, func() {
-			if done, err := e.reviewer.Decline(e.ctx, f.slug, row.ReviewKey); err != nil || !done {
-				t.Errorf("Decline() = %t, %v", done, err)
-			}
-		})
-	})
 	t.Run("opt out", func(t *testing.T) {
 		f := e.listed(t, defaultSpec(), nil)
 		revokeWhileListing(t, e, f.slug, func() {

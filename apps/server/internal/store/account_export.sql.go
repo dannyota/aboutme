@@ -75,9 +75,7 @@ const listAccountExportResumes = `-- name: ListAccountExportResumes :many
 SELECT r.id, r.user_id, r.title, r.slug, r.live, r.download_enabled, r.seo_geo_enabled,
     r.schema_version, r.revision, r.lng, r.personal_details, r.content, r.customization,
     r.created_at, r.updated_at, r.public_title, r.favicon_emoji, r.sign_in_to_view,
-    s.requested_at AS showcase_requested_at, s.role AS showcase_role,
-    s.review_key AS showcase_review_key, s.reviewed_key AS showcase_reviewed_key,
-    s.review_outcome AS showcase_review_outcome
+    s.requested_at AS showcase_requested_at, s.role AS showcase_role
 FROM resumes r
 LEFT JOIN resume_showcase s ON s.resume_id = r.id
 WHERE r.user_id = $1
@@ -86,35 +84,31 @@ LIMIT 4
 `
 
 type ListAccountExportResumesRow struct {
-	ID                    uuid.UUID
-	UserID                uuid.UUID
-	Title                 string
-	Slug                  *string
-	Live                  bool
-	DownloadEnabled       bool
-	SEOGeoEnabled         bool
-	SchemaVersion         int32
-	Revision              int64
-	Lng                   *string
-	PersonalDetails       json.RawMessage
-	Content               json.RawMessage
-	Customization         json.RawMessage
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
-	PublicTitle           *string
-	FaviconEmoji          *string
-	SignInToView          bool
-	ShowcaseRequestedAt   *time.Time
-	ShowcaseRole          *string
-	ShowcaseReviewKey     *string
-	ShowcaseReviewedKey   *string
-	ShowcaseReviewOutcome *string
+	ID                  uuid.UUID
+	UserID              uuid.UUID
+	Title               string
+	Slug                *string
+	Live                bool
+	DownloadEnabled     bool
+	SEOGeoEnabled       bool
+	SchemaVersion       int32
+	Revision            int64
+	Lng                 *string
+	PersonalDetails     json.RawMessage
+	Content             json.RawMessage
+	Customization       json.RawMessage
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	PublicTitle         *string
+	FaviconEmoji        *string
+	SignInToView        bool
+	ShowcaseRequestedAt *time.Time
+	ShowcaseRole        *string
 }
 
 // Carries sign_in_to_view with the other publish settings; the pass epoch
 // never leaves the server (docs/design/viewer-analytics/sign-in-to-view.md
-// "Setting"). The showcase columns are null without an opt-in; the review
-// keys only decide the exported state and never leave the server
+// "Setting"). The showcase columns are null without an opt-in
 // (docs/design/showcase.md "Privacy and abuse").
 func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID) ([]ListAccountExportResumesRow, error) {
 	rows, err := q.db.Query(ctx, listAccountExportResumes, userID)
@@ -146,9 +140,6 @@ func (q *Queries) ListAccountExportResumes(ctx context.Context, userID uuid.UUID
 			&i.SignInToView,
 			&i.ShowcaseRequestedAt,
 			&i.ShowcaseRole,
-			&i.ShowcaseReviewKey,
-			&i.ShowcaseReviewedKey,
-			&i.ShowcaseReviewOutcome,
 		); err != nil {
 			return nil, err
 		}
