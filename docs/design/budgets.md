@@ -35,6 +35,8 @@ admission bound; the [scaling contract](scaling/README.md) and
 | Owner PDF requests per account and IP                    | ≤ 10/min                                            | Owner PDF route                                          |
 | Public artifact requests / render misses per IP          | ≤ 300/min / 20/min                                  | Public artifact routes                                   |
 | Public artifact cache                                    | ≤ 128 entries, 32 MiB bodies, 60 s TTL              | Shared public cache                                      |
+| Showcase listing requests per IP                         | ≤ 60/min                                            | Showcase route limiter                                   |
+| Showcase listings per page / page number                 | 12 / 1 to 100                                       | Showcase route                                           |
 | pgx pool size                                            | ≤ 20 per app task; 12 once a second replica serves  | pgx pool configuration                                   |
 | SSE concurrent connections per task                      | ≤ 2000                                              | SSE transport; local churn measurement                   |
 | SSE file descriptors headroom                            | ≥ 25% below ulimit                                  | SSE transport; local churn measurement                   |
@@ -186,6 +188,9 @@ Notes on rows whose reason is not obvious:
   overflow of [ADR 0007](../adr/0007-bounded-rate-limiter.md). Resume read and
   write limits leave room for several editor tabs above the one-second autosave
   cadence. Operation counts per request are separate from the 256 KiB body cap.
+- **Showcase.** The listing limiter keeps the ADR 0007 overflow. Card images
+  count against the public artifact limit, so one showcase page uses 12 of the
+  300 a minute ([showcase](showcase.md#delivery-caching-and-revocation)).
 - **Registration egress ranges.** An address inside a deployment-configured
   range (`OAUTH_REGISTER_EGRESS_CIDRS`, starting with Anthropic's published
   `160.79.104.0/21`) shares that range's 120-an-hour bucket instead of the

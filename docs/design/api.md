@@ -63,12 +63,13 @@ behavior that contract changes must keep.
 | `PATCH /resumes/{id}/structure`                                       | Atomic section create, delete, move, or reorder                  |
 | `PATCH /resumes/{id}/personal-details`, `PATCH .../customization`     | Personal details and allowlisted customization deltas            |
 | `POST/GET/PATCH/DELETE /resumes/{id}/photo`                           | Owner-only photo upload, read, crop, replace, and delete         |
-| `POST /resumes/{id}/publish`                                          | Slug, publish controls, public title, and favicon                |
+| `POST /resumes/{id}/publish`                                          | Slug, publish controls, showcase opt-in, title, and favicon      |
 | `GET /resumes/{id}/pdf`                                               | Owner PDF                                                        |
 | `GET /events`, `GET /live/{slug}`                                     | Authenticated and public SSE invalidation streams                |
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`      | Live-gated public document and photo                             |
 | `GET /public/resumes/{slug}/pdf`                                      | Live and download-gated public PDF                               |
 | `GET /public/resumes/{slug}/og/{version}.png`, `.../og.png`           | Live-gated stored preview card and its `og.png` alias; ADR 0014  |
+| `GET /public/showcase`                                                | Uncached listing of reviewed showcase resumes; ADR 0029          |
 | `GET /oauth/consent`, `POST /oauth/consent`                           | Agent consent read and the approve/deny decision                 |
 | `GET /me/agents`, `DELETE /me/agents/{grantId}`                       | Connected-agent list and grant revocation                        |
 | `GET /me/export`, `DELETE /me`                                        | Data export and recent-reauthenticated account deletion          |
@@ -99,6 +100,25 @@ second-factor errors. The
 [authenticator-app contract](totp-second-factor-contract.md) owns the TOTP
 routes. Every second-factor route sends exact
 `Cache-Control: no-store, no-transform` on success and error.
+
+### Community showcase
+
+`GET /public/showcase` is unauthenticated `GET` and `HEAD`. It accepts only the
+optional `role`, `lang`, `template`, and `page` query parameters, each at most
+once; anything else is `400 request_invalid`. It returns at most 12 items per
+page as `{ items, page, pageCount, total }` and reads and sets no cookie. Unlike
+the public resume reads, it sends `Cache-Control: no-store` and no ETag: Go
+computes it from committed state on every request, so it needs no revocation
+fence.
+
+`PublishResumeRequest` gains optional `showcaseEnabled` and `showcaseRole`;
+omitted keeps the stored value. `showcaseEnabled: true` needs `live`
+(`requires_live`) and sign in to view off (the new issue `requires_open_view`).
+`showcaseRole` is allowed only with the switch on; a role outside the closed
+list is `invalid_format`. The owner resume resource gains `showcase`: `null`
+when off, otherwise `{ state, role }`. The public resume JSON and MCP tools are
+unchanged. The [showcase design](showcase.md#delivery-caching-and-revocation)
+owns the exact query, item, and field rules.
 
 ### Photo intake
 

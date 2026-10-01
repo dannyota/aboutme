@@ -35,6 +35,7 @@ without publishing an account profile.
 | Export              | Owner PDF; optional public PDF                                                                           |
 | Agent access        | Remote Model Context Protocol (MCP) endpoint; editor parity minus publish; account-wide consent scopes   |
 | Viewer analytics    | Owner-only view counts; viewer detail only with consent or sign-in                                       |
+| Community showcase  | Opt-in, reviewed listing of live resumes at `/showcase`; never indexed ([showcase](showcase.md))         |
 | Mobile              | Deferred until the deployed web v1; the API and document format remain language-neutral                  |
 
 Out of v1: cover letters, a job tracker, first-party AI writing features, custom
@@ -79,15 +80,16 @@ any route may claim it, and drift between the registry, OpenAPI root paths, the
 Nuxt page manifest, or generated dispatch fails the build.
 
 The registry keys one row per literal top-level segment; finer paths dispatch
-inside the owning router. `packages/publicroots/public-roots.v10.json` holds the
+inside the owning router. `packages/publicroots/public-roots.v11.json` holds the
 exact roots. `admin`, `people`, and `u` are reserved for future use with no
 handler ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
 `guide` is reserved for the [MCP guide](mcp-guide.md) at `/guide/mcp` and any
-later page under `/guide/`. The dotted and underscore-prefixed roots cannot pass
-the slug grammar but stay in the registry so dispatch and reservation parity
-remain exhaustive. Dynamic `/{slug}` and `/{slug}.md` routes add no rows.
-Framework-generated paths that are not fixed product or infrastructure routes
-fall through to Nuxt outside the registry.
+later page under `/guide/`. `showcase` dispatches to the Nuxt
+[community showcase](showcase.md#route-and-navigation) page. The dotted and
+underscore-prefixed roots cannot pass the slug grammar but stay in the registry
+so dispatch and reservation parity remain exhaustive. Dynamic `/{slug}` and
+`/{slug}.md` routes add no rows. Framework-generated paths that are not fixed
+product or infrastructure routes fall through to Nuxt outside the registry.
 
 `/authorize` is the Nuxt consent page and `/oauth/authorize` is the Go endpoint
 that validates a request before redirecting to it. They are different roots, so
@@ -104,11 +106,17 @@ rationale.
 ## Publish controls
 
 Publishing is a human action taken in the web UI. The publish dialog exposes
-three independent choices:
+these choices:
 
 1. **Public resume** controls whether any public representation exists.
 2. **PDF download** controls the public PDF. The owner can always export a PDF.
 3. **SEO and GEO** controls indexing and discovery surfaces. It defaults off.
+4. **Require sign-in to view** puts a sign-in gate before the resume
+   ([sign in to view](viewer-analytics/sign-in-to-view.md)). It defaults off.
+5. **Show in the community showcase** lists the resume on `/showcase` after
+   review, with an optional role from a closed list. It defaults off and can be
+   on only while the resume is live with sign in to view off
+   ([community showcase](showcase.md#opt-in)).
 
 It also sets two optional page details: the browser-tab title (default
 `<full name> — Resume`) and one emoji shown as the page icon (default none).
@@ -122,6 +130,7 @@ Both are public, like the slug
 | Live, discovery enabled  | HTML, structured data, markdown, sitemap, and `llms.txt` discovery surfaces are available                                                       |
 | Download enabled         | The public PDF route is available and the public page links it; otherwise the route returns `404` and the page shows no link                    |
 | Preview card             | Stored 1200 by 630 PNG with name, headline, and photo, never contact details; live only, independent of download and discovery; ADR 0014        |
+| Showcase on              | Listed on `/showcase` only while the operator-approved review key is current; never changes indexing; ADR 0029                                  |
 
 The sitemap lists `/`, `/privacy`, `/terms`, `/templates`, and each
 `/templates/{id}` page, then every discoverable resume. `llms.txt` follows the
