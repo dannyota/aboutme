@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  updated: 'Last updated October 1, 2026',
+  updated: 'Last updated October 2, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
   verifyLink: 'Verify',
@@ -202,6 +202,9 @@ export const legalEn: LegalCopy = {
           + 'that; they are used only for disaster recovery.',
           'Records of account deletions and provider unlinks, holding only '
           + 'the event type and time, are kept for up to 180 days.',
+          'If we delete an account for a breach of our Terms of Service, we '
+          + 'keep a record of the account ID, the web addresses of its '
+          + 'resumes, and the time, for up to 180 days.',
         ],
       },
       {

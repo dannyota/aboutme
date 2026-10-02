@@ -9,9 +9,9 @@ to the public resume. Nothing about visitors is recorded.
 Status: approved (2026-09-27) and built; amended 2026-10-01, when the owner
 removed review. An eligible opt-in is listed at once. Abuse is handled by
 Report, then the operator deletes the account. The owner decided N3 and N4 on
-2026-10-01; release waits for N5, the legal text for operator deletion, in the
-[approvals](#owner-approvals) section. The legal dates in [Copy](#copy) change
-at release.
+2026-10-01 and N5, the legal text for operator deletion, on 2026-10-02 (see
+[approvals](#owner-approvals)). The legal dates in [Copy](#copy) change at
+release.
 
 ## Opt-in
 
@@ -262,7 +262,7 @@ your resumes".
 ### Privacy Policy
 
 Text in `legal-vi.ts` and `legal-en.ts` (**Owner approval** S11, as changed by
-N2; the N5 row awaits the owner). The "updated" date becomes the release date.
+N2, and N5 approved 2026-10-02). The "updated" date becomes the release date.
 
 | Section                                                 | Vietnamese                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | English                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -434,7 +434,7 @@ Choices that follow from the 2026-10-01 decision:
 | N2  | Legal edits only delete review claims: the review sentences, "our review result" in what we collect, the Terms showcase line; release date; no advance email | Decided 2026-10-01 by that decision |
 | N3  | No account blocking; abuse ends in deleting the account that owns the reported slug, by the out-of-band `account-delete` command                             | Decided 2026-10-01 by the owner     |
 | N4  | Order by oldest opt-in first, `requested_at ASC, resume_id ASC`; turning the switch off and on moves a resume to the end                                     | Decided 2026-10-01 by the owner     |
-| N5  | Privacy Policy discloses the record an operator deletion keeps (text in [Privacy Policy](#privacy-policy))                                                   | **Pending**                         |
+| N5  | Privacy Policy discloses the record an operator deletion keeps (text in [Privacy Policy](#privacy-policy))                                                   | Approved 2026-10-02                 |
 
 **N1.** Every row with a `declined` result is deleted, whatever key it was
 declined for. That includes rows declined for an older review key, which the

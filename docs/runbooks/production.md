@@ -222,8 +222,8 @@ AWS limit of 100 manual snapshots holds. It deletes only manual, available
 snapshots whose names match `aboutme-prod-v<tag>-<YYYYMMDDHHMM>` and that carry
 the tag, plus the untagged `aboutme-prod-v0-1-1-202609171438`. Automated
 backups, the final snapshot, and other snapshots stay. The log names each
-deleted or failed snapshot and a failed delete's error code. Scheduler retries
-a failed start twice; the job runs only after a deploy enables it.
+deleted or failed snapshot and a failed delete's error code. Scheduler retries a
+failed start twice; the job runs only after a deploy enables it.
 
 To keep a release snapshot longer, copy it without the tag and under a name the
 job does not match (`copy-db-snapshot` copies no tags unless given
