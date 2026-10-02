@@ -46,8 +46,8 @@ export const legalEn: LegalCopy = {
           + 'when you turned it on, the role you picked, and our review '
           + 'result.',
           'Sessions: the browser user-agent and IP address of each '
-          + 'session, used for security. Settings → Sessions lists your '
-          + 'signed-in devices. We delete the IP address and browser '
+          + 'session, used for security. Settings → Signed-in devices lists '
+          + 'your signed-in devices. We delete the IP address and browser '
           + '(user agent) recorded for a sign-in no later than 90 days '
           + 'after that sign-in. Staying signed in does not extend this.',
           'Second factor: your passkey public keys, your authenticator-'
@@ -72,8 +72,10 @@ export const legalEn: LegalCopy = {
           + 'discarded the same day, and your browser solves a small '
           + 'computing task. Counting uses no cookie.',
           'If a resume owner requires sign-in to view: Google or '
-          + 'LinkedIn confirms your account, and we discard your name '
-          + 'and email at once. The owner is not told who you are.',
+          + 'LinkedIn confirms your account. We ask only for sign-in, not '
+          + 'your name or email, so we receive only an account ID from the '
+          + 'provider, and we discard it during that sign-in. The owner is '
+          + 'not told who you are.',
         ],
       },
       {
@@ -87,6 +89,13 @@ export const legalEn: LegalCopy = {
           + 'Google or LinkedIn sign-in) run only when you turn them on, '
           + 'and you can turn them off at any time. You can end the '
           + 'agreement by deleting your account.',
+          'Viewers of public resumes need no account. When you open a '
+          + 'public resume, we use your IP address and browser details to '
+          + 'serve the page, stop abuse, and keep bots out of the view '
+          + 'count. The result is only a daily total that describes no '
+          + 'one. If the owner requires sign-in to view, you choose to '
+          + 'sign in to ask to view that resume; we process the account '
+          + 'ID only to answer that request.',
         ],
       },
       {
@@ -101,11 +110,14 @@ export const legalEn: LegalCopy = {
           + 'sign-in for five minutes, to remember your theme and '
           + 'language, and, when a resume owner requires sign-in to '
           + 'view, to let you view that resume for 7 days.',
-          'Browser local storage is used only to remember the page to '
-          + 'return to after you verify your email (for up to 24 hours), '
-          + 'your chosen preview mode (PDF or web) in the resume editor, '
-          + 'and whether you closed the free-resume invite (for up to '
-          + '90 days).',
+          'Browser storage is used only to remember: the page to return '
+          + 'to after you verify your email (for up to 24 hours); the '
+          + 'preview mode (PDF or web), zoom, and editor panel width you '
+          + 'chose in the resume editor; whether you closed the '
+          + 'free-resume invite (for up to 90 days); and, for the current '
+          + 'browser session only (sessionStorage), when a public resume '
+          + 'page last reloaded itself, to stop reload loops. None of '
+          + 'this is sent to our servers.',
         ],
       },
       {
@@ -123,8 +135,9 @@ export const legalEn: LegalCopy = {
           + 'While a resume is public, anyone who can see it can save '
           + 'or screenshot it. By default, viewers can also download '
           + 'the resume\'s PDF; you can turn this off. Avoid putting '
-          + 'sensitive personal data, such as ID numbers, health '
-          + 'information, or religion, in a public resume.',
+          + 'sensitive personal data, such as ID numbers or ID card '
+          + 'images, health information, religion, or political views, '
+          + 'in a public resume.',
           'When anyone shares your public link in a chat app or social '
           + 'network, that service fetches the page\'s title, summary, and '
           + 'preview image (your name, headline, and photo), and may keep '
@@ -149,7 +162,9 @@ export const legalEn: LegalCopy = {
           + '(ap-southeast-1): the database, its backups, photo storage, '
           + 'and email sending through Amazon SES. Amazon CloudFront '
           + '(the global network of Amazon Web Services) delivers the '
-          + 'site and processes your IP address. Amazon Route 53 provides '
+          + 'site; CloudFront and AWS WAF process your IP address and '
+          + 'browser details to block attacks and detect bots. Amazon '
+          + 'Route 53 provides '
           + 'DNS. If you sign in with Google, Google (United '
           + 'States) verifies your account. If you sign in with '
           + 'LinkedIn, LinkedIn (United States) verifies your account. '
@@ -167,7 +182,8 @@ export const legalEn: LegalCopy = {
           + 'resumes and, with write access, create, edit, or delete '
           + 'resumes and photos. It cannot publish or unpublish, but '
           + 'deleting a published resume takes its link down. Content the '
-          + 'agent reads goes to the AI service you chose. You can revoke '
+          + 'agent reads goes to the AI service you chose, which may be '
+          + 'outside Vietnam. You decide this transfer. You can revoke '
           + 'access at any time in Settings.',
         ],
       },
@@ -175,7 +191,9 @@ export const legalEn: LegalCopy = {
         heading: 'Your controls',
         paragraphs: [
           'You can export your account data, edit or delete your '
-          + 'resumes, and delete your account. The export holds your '
+          + 'resumes, and delete your account. We keep your account, '
+          + 'resumes, and photos until you delete them or your account. '
+          + 'The export holds your '
           + 'profile and resume content; email us for photos or session '
           + 'history.',
           'When you delete your account:',
@@ -201,13 +219,25 @@ export const legalEn: LegalCopy = {
       {
         heading: 'Your rights',
         paragraphs: [
-          'You have the right to know about, access, correct, and delete '
-          + 'your personal data, to object to or restrict processing, '
+          'You have the right to know how your personal data is '
+          + 'processed; to consent, refuse, or withdraw consent; to view, '
+          + 'correct, or ask us to correct it; to ask for a copy, '
+          + 'deletion, or restricted processing, and to object to '
+          + 'processing; to ask us to take measures to protect your data; '
           + 'and to complain, report, sue, and claim damages as the law '
-          + 'allows. You can do most of this yourself in Settings; send '
-          + 'other requests to the address below. We reply within 2 '
-          + 'working days and complete requests within the legal '
-          + 'deadlines.',
+          + 'allows. You can export your data, edit or delete resumes, '
+          + 'and delete your account yourself in Settings. Send other '
+          + 'requests to the address below; if a request concerns an '
+          + 'account, send it from that account\'s email address so we '
+          + 'can verify it. We reply within 2 working days. We let you '
+          + 'view, correct, or get a copy of your data within 10 days; '
+          + 'delete data within 20 days; and handle requests to restrict, '
+          + 'object, withdraw consent, or take protective measures within '
+          + '15 days. If a request needs more time, we tell you why and '
+          + 'extend only once, within the limits the law allows.',
+          'If an incident exposes or loses your personal data, we report '
+          + 'it to the data protection authority of the Ministry of '
+          + 'Public Security as the law requires, and we email you.',
         ],
       },
       {
@@ -331,8 +361,12 @@ export const legalEn: LegalCopy = {
         paragraphs: [
           'When these terms change, we update this page and its date. If '
           + 'a change is material, we will email you at least 15 days '
-          + 'before it applies. If you keep using the service after a '
-          + 'change takes effect, you accept the updated terms.',
+          + 'before it applies. If you do not agree, you can export your '
+          + 'data and delete your account before that date. If you keep '
+          + 'using the service after a change takes effect, you accept '
+          + 'the updated terms. If a change needs your consent under the '
+          + 'law, we will ask for it separately; continued use does not '
+          + 'count as consent.',
         ],
         contactLabel: 'Contact',
       },

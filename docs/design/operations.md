@@ -25,11 +25,11 @@ target is measured from reference revocation. A breach creates a lifecycle audit
 event and alert and remains queued until a terminal outcome is recorded.
 [ADR 0009](../adr/0009-private-media-delivery.md) owns this boundary.
 
-Public delivery and discovery disclosures are product requirements. The final
-legal wording and any jurisdiction-specific data-residency obligations require
-qualified counsel before the public announcement. Design documents do not claim
-that a named law has been satisfied merely because infrastructure is in one
-region.
+Public delivery and discovery disclosures are product requirements. The owner
+approves the agent-reviewed legal wording, and any jurisdiction-specific
+data-residency obligations are settled, before the public announcement. Design
+documents do not claim that a named law has been satisfied merely because
+infrastructure is in one region.
 
 ### Account export and deletion
 
