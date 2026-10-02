@@ -420,7 +420,7 @@ onBeforeUnmount(resetCopyState);
           :model-value="showcase.on.value"
           :reason="showcase.reason.value"
           :role="showcase.role.value"
-          :status="showcase.status.value"
+          :listed="showcase.listed.value"
           @update:model-value="showcase.setEnabled"
           @update:role="showcase.setRole"
         />

@@ -1,7 +1,10 @@
 # 0029: Community showcase of opted-in resumes
 
-Status: Accepted (2026-09-27). The owner approved every choice marked **Owner
-approval** (S1 to S13) in the [showcase design](../design/showcase.md).
+Status: Accepted (2026-09-27; amended 2026-10-01). The owner approved the
+choices marked **Owner approval** in the
+[showcase design](../design/showcase.md). The owner decisions of 2026-10-01
+settled N1 to N4; the release waits for N5, the privacy text for operator
+deletion.
 
 ## Context
 
@@ -23,56 +26,67 @@ document stores no template identity.
    view off. Unpublish, sign in to view, and deletion end it in the same
    transaction; publishing again starts with it off. It is set only in the web
    UI, never by an agent tool.
-2. **Review before listing.** A resume is listed only while its review key, a
-   hash of the slug, language, and the card's scrubbed name, headline, and
-   photo, equals a key the operator approved. Go keeps the key current inside
-   every resume write transaction. The operator reviews through an out-of-band
-   server command started as a one-shot production task, so the public app gains
-   no privileged route.
+2. **Listed without review.** A resume is listed while its opt-in exists, it is
+   live, and sign in to view is off. Nothing is reviewed before listing or after
+   an edit. Each tile has a Report link that opens an email. For a serious
+   breach of the Terms, or when the law requires it, the operator deletes the
+   account that owns the reported slug through the self-delete path, by the
+   out-of-band `account-delete` command that ADR 0003 allows. Go keeps the card
+   version and derived template current inside every resume write transaction.
 3. **What a listing holds.** The stored card at its versioned URL, the derived
    template, the resume language, and an optional owner-chosen role from a
    closed list. No contact detail, date, count, or body text.
-4. **Order and filters without tracking.** Newest first by first approval.
-   Filters for role, language, and template live in the URL. The page sets no
-   cookie, uses no browser storage, and runs no counting script.
+4. **Order and filters without tracking.** Oldest opt-in first
+   (`requested_at ASC, resume_id ASC`). Filters for role, language, and template
+   live in the URL. The page sets no cookie, uses no browser storage, and runs
+   no counting script.
 5. **Never indexed.** `/showcase` is `noindex, nofollow` and outside the sitemap
    and `llms.txt`. A resume's SEO and GEO switch keeps its meaning.
 6. **Uncached listing.** The browser reads the listing from a Go route that
    computes it from committed state on every request with `no-store`. A request
-   admitted after an opt-out, unpublish, decline, rename, or delete succeeds
-   cannot receive the old listing, which meets ADR 0010 without a fence.
+   admitted after an opt-out, unpublish, sign in to view, rename, or delete
+   succeeds cannot receive the old listing, which meets ADR 0010 without a
+   fence.
 7. **Route.** `/showcase` joins the public-root registry with Nuxt dispatch. The
    migration refuses to run while a resume holds that slug.
 
 ## Rejected
 
-| Option                                   | Why not                                                                                   |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Listed at once, with report and takedown | aboutme.vn curates the page, so abuse would stand as its content until someone reports it |
-| In-app review queue                      | Adds the operator surface ADR 0003 rules out                                              |
-| Resume first-page thumbnail              | A new stored artifact rendered per edit; the body can hold contact details                |
-| Popularity order                         | Publishes view counts that ADR 0022 keeps owner-only                                      |
-| Indexable showcase                       | Would index people who left SEO off                                                       |
-| Cached or aggregate-fenced listing       | Needs a discovery-style fence for mutable names; a per-request read needs none            |
+| Option                               | Why not                                                                                |
+| ------------------------------------ | -------------------------------------------------------------------------------------- |
+| Review before listing                | Delays every opt-in and costs operator time; Report and the Terms handle abuse instead |
+| Account blocking                     | The owner chose account deletion; blocking adds state every route must check           |
+| A hide command for reported listings | The owner chose account deletion as the one takedown                                   |
+| Newest opt-in first                  | Turning the switch off and on would move a resume to the top                           |
+| In-app review or takedown page       | Adds the operator surface ADR 0003 rules out                                           |
+| Resume first-page thumbnail          | A new stored artifact rendered per edit; the body can hold contact details             |
+| Popularity order                     | Publishes view counts that ADR 0022 keeps owner-only                                   |
+| Indexable showcase                   | Would index people who left SEO off                                                    |
+| Cached or aggregate-fenced listing   | Needs a discovery-style fence for mutable names; a per-request read needs none         |
 
 ## Consequences
 
-- The operator must review each opt-in, and again after a name, headline, photo,
-  slug, or language change. A review backlog delays listing, never exposure.
-- A card layout release or a color change does not reset reviews; the review key
-  leaves both out.
+- Abuse can stand on a page aboutme.vn hosts until someone reports it and the
+  operator deletes the account. A lesser breach gets no takedown, since the
+  Terms promise notice the command does not send.
+- Turning the switch off and on moves a resume to the end of the order.
 - One more public read route; each request costs one indexed query of at most 12
   rows and one count. It has its own per-IP rate limit.
 - An open showcase tab keeps old tiles until reload; new requests and every card
   and resume fetch follow the current state.
-- Operators must not add an in-app review page later without superseding
-  ADR 0003.
-- A rollback leaves the table unused and the page gone; no data is lost, and
-  `showcase` becomes claimable as a slug on the older release.
-- The privacy notice and terms gain the text in the design; the next regular
-  impact-assessment update notes the showcase.
+- Operators must not add an in-app review or takedown page later without
+  superseding ADR 0003.
+- Removing review keeps the schema expand-only: the release before it still
+  runs, lists nothing, and never lists a resume the new rules would not.
+- The privacy notice and terms carry the text in the design, with no review
+  claim; the next regular impact-assessment update notes the showcase.
 
 ## History
 
 - Accepted (2026-09-27): the owner approved S1 to S13 in the showcase design as
   written, including the privacy and terms text and no advance email (S11).
+- Amended (2026-10-01): owner decision 2026-10-01: no review. An eligible opt-in
+  is listed at once, abuse is handled by Report and account blocking under the
+  Terms, and the out-of-band review command is removed.
+- Amended (2026-10-01): owner decision 2026-10-01: oldest opt-in first; abuse
+  handled by account deletion.

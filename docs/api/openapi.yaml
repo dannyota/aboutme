@@ -3357,14 +3357,13 @@ paths:
       security: []
       summary: List the community showcase
       description: >-
-        Lists the resumes in the community showcase, newest first approval
-        first, then resume ID, twelve to a page. A resume appears only while
-        all five listing conditions hold: it is live, sign in to view is off,
-        its owner opted in, the operator approved it, and the approved review
-        key equals its current key. Go computes the page from committed
+        Lists the resumes in the community showcase, oldest opt-in first,
+        then resume ID, twelve to a page. Nothing is reviewed: a resume appears
+        while all three listing conditions hold: its owner opted in, it is
+        live, and sign in to view is off. Go computes the page from committed
         state on every request, so a request admitted after an opt-out,
-        unpublish, sign in to view, decline, rename, or delete commits omits
-        the resume. The response is never cached and has no validator. The
+        unpublish, sign in to view, rename, or delete commits omits the
+        resume. The response is never cached and has no validator. The
         route reads no cookie and sets none, and it sends
         `X-Robots-Tag: noindex, nofollow`.
 
@@ -7105,9 +7104,9 @@ components:
             view off (`requires_open_view`). A request that turns sign in to
             view on, or turns `live` off, ends the opt-in even when this field
             is omitted, and publishing again starts with it off. Turning it on
-            starts a review; turning it off and on again starts a new one.
-            Only the web app sets it: no MCP tool reads or changes it. See
-            `docs/design/showcase.md`.
+            lists the resume at once; turning it off and on again starts a new
+            opt-in, which lists it first. Only the web app sets it: no MCP tool
+            reads or changes it. See `docs/design/showcase.md`.
         showcaseRole:
           type: string
           description: >-
@@ -8127,14 +8126,14 @@ components:
     ResumeShowcase:
       type: object
       description: >-
-        The owner's showcase state. `pending`: opted in and the current
-        review key has no result. `listed`: the current key is approved and
-        the resume is shown. `declined`: the current key was declined.
+        The owner's showcase state. `listed`: the resume is opted in and
+        shown. An opt-in exists only while the resume is live with sign in to
+        view off, so this is the only state; a later state can join the enum.
       required: [state, role]
       properties:
         state:
           type: string
-          enum: [pending, listed, declined]
+          enum: [listed]
         role:
           anyOf:
             - type: "null"
@@ -8143,7 +8142,7 @@ components:
     AccountExportShowcase:
       description: >-
         The account export's showcase state: the owner state plus when the
-        opt-in was requested. Review keys never leave the server.
+        opt-in was requested.
       allOf:
         - $ref: "#/components/schemas/ResumeShowcase"
         - type: object

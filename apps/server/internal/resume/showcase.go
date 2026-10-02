@@ -11,15 +11,10 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// Showcase states the owner sees (docs/design/showcase.md "Opt-in").
-const (
-	// ShowcasePending means the current review key has no review result.
-	ShowcasePending = "pending"
-	// ShowcaseListed means the current review key is approved.
-	ShowcaseListed = "listed"
-	// ShowcaseDeclined means the current review key was declined.
-	ShowcaseDeclined = "declined"
-)
+// ShowcaseListed is the only owner-visible showcase state: an opt-in exists
+// only while its resume is live with sign in to view off, so it is always
+// shown (docs/design/showcase.md "Opt-in").
+const ShowcaseListed = "listed"
 
 // Showcase is the owner's community-showcase state for one resume. A resume
 // that is not opted in has none (nil).
@@ -28,21 +23,8 @@ type Showcase struct {
 	Role  *string
 }
 
-// ShowcaseStateOf derives the owner-visible state of an opt-in from its
-// current review key and its review result. A result for any key other than
-// the current one is no result.
-func ShowcaseStateOf(reviewKey string, reviewedKey, outcome *string) string {
-	if outcome == nil || reviewedKey == nil || *reviewedKey != reviewKey {
-		return ShowcasePending
-	}
-	if *outcome == "approved" {
-		return ShowcaseListed
-	}
-	return ShowcaseDeclined
-}
-
 func showcaseOf(row store.ResumeShowcase) *Showcase {
-	return &Showcase{State: ShowcaseStateOf(row.ReviewKey, row.ReviewedKey, row.ReviewOutcome), Role: row.Role}
+	return &Showcase{State: ShowcaseListed, Role: row.Role}
 }
 
 // ShowcaseSync keeps the showcase row's derived values current inside a

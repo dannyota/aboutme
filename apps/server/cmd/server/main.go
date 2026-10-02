@@ -62,9 +62,12 @@ func main() {
 		if errors.As(err, &occupancyExit) {
 			os.Exit(occupancyExit.code)
 		}
-		var staleExit showcaseStaleExitError
-		if errors.As(err, &staleExit) {
-			os.Exit(showcaseStaleExitCode)
+		var deleteExit accountDeleteExitError
+		if errors.As(err, &deleteExit) {
+			if deleteExit.message != "" {
+				fmt.Fprintln(os.Stderr, deleteExit.message)
+			}
+			os.Exit(deleteExit.code)
 		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -72,7 +75,7 @@ func main() {
 }
 
 // dispatch routes the check-public-root, totp-key-reencrypt, and
-// showcase-review one-shot commands to their entry points. It leaves every
+// account-delete one-shot commands to their entry points. It leaves every
 // other invocation, including the bare server, to runCommand
 // (privacy_command.go, privacy_jobs.go) unchanged.
 func dispatch(args []string) error {
@@ -82,8 +85,8 @@ func dispatch(args []string) error {
 	if len(args) > 0 && args[0] == totpKeyReencryptCommandName {
 		return runTOTPKeyReencrypt(args[1:])
 	}
-	if len(args) > 0 && args[0] == showcaseReviewCommandName {
-		return runShowcaseReview(args[1:])
+	if len(args) > 0 && args[0] == accountDeleteCommandName {
+		return runAccountDelete(args[1:])
 	}
 	return runCommand(args)
 }
@@ -148,7 +151,8 @@ func run() error {
 		return fmt.Errorf("create showcase service: %w", err)
 	}
 	// Showcase rows follow the current scrub rules, presets, and card layout
-	// from the first request on (docs/design/showcase.md "Review").
+	// from the first request on (docs/design/showcase.md "Derived values and
+	// reports").
 	recomputed, skipped, err := showcaseService.RecomputeAll(ctx)
 	if err != nil {
 		return fmt.Errorf("recompute showcase rows: %w", err)
@@ -194,7 +198,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	hub, err := realtime.NewHub(realtime.Config{Observe: cards.observe()})
+	hub, err := realtime.NewHub(realtime.Config{Observe: evictDiscoveryOnDelete(cache, cards.observe())})
 	if err != nil {
 		return fmt.Errorf("create realtime hub: %w", err)
 	}

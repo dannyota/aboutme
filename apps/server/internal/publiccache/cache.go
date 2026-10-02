@@ -104,6 +104,17 @@ func (c *Cache) Put(key Key, value Value) {
 	c.bodyBytes += len(value.Body)
 }
 
+// RemoveRouteClass drops every entry of one route class.
+func (c *Cache) RemoveRouteClass(class RouteClass) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key, entry := range c.entries {
+		if key.RouteClass == class {
+			c.remove(key, entry)
+		}
+	}
+}
+
 // Purge removes expired entries.
 func (c *Cache) Purge() {
 	now := c.now()

@@ -3,15 +3,12 @@ import { computed, useId } from 'vue';
 
 import SelectField from '@/components/app/SelectField.vue';
 import SwitchField from '@/components/app/SwitchField.vue';
-import {
-  type OwnerShowcaseState,
-  SHOWCASE_ROLES,
-} from '@/lib/showcaseContract';
+import { SHOWCASE_ROLES } from '@/lib/showcaseContract';
 import type { PublishCopy } from '../../i18n/publish';
 import type { ShowcaseBlockReason } from '../../editor/publishShowcase';
 
 // The community showcase block of the publish dialog: the switch, its
-// description, the review status, a showcase issue, and the optional role
+// description, the Listed line, a showcase issue, and the optional role
 // (docs/design/ui/landing-and-library.md, Publish dialog block).
 const props = defineProps<{
   /** What the switch shows; false while it is disabled. */
@@ -20,7 +17,8 @@ const props = defineProps<{
   /** Why the switch is disabled, if it is. */
   readonly reason: ShowcaseBlockReason | null;
   readonly busy: boolean;
-  readonly status: OwnerShowcaseState | null;
+  /** Whether the stored opt-in exists and the Listed line shows. */
+  readonly listed: boolean;
   /** The server's showcase issue code, when one is showing. */
   readonly issueCode: string | null;
   readonly copy: PublishCopy;
@@ -51,7 +49,7 @@ const issueMessage = computed(() => {
 });
 const describedBy = computed(() => [
   helpId,
-  ...(props.status === null ? [] : [statusId]),
+  ...(props.listed ? [statusId] : []),
   ...(issueMessage.value === null ? [] : [issueId]),
 ].join(' '));
 const roleOptions = computed(() => [
@@ -85,29 +83,17 @@ const roleOptions = computed(() => [
       {{ description }}
     </p>
     <p
-      v-if="status !== null"
+      v-if="listed"
       :id="statusId"
       class="ml-10 text-sm text-foreground"
       data-testid="publish-showcase-status"
-      :data-state="status"
     >
-      <template v-if="status === 'pending'">
-        {{ showcase.pending }}
-      </template>
-      <template v-else-if="status === 'listed'">
-        {{ showcase.listed }}
-        <a
-          class="text-link underline underline-offset-4"
-          data-action="publish-showcase-link"
-          href="/showcase"
-        >{{ showcase.listedLink }}</a>
-      </template>
-      <template v-else>
-        {{ showcase.declined[0] }}<a
-          class="text-link underline underline-offset-4"
-          :href="`mailto:${showcase.contact}`"
-        >{{ showcase.contact }}</a>{{ showcase.declined[1] }}
-      </template>
+      {{ showcase.listed }}
+      <a
+        class="text-link underline underline-offset-4"
+        data-action="publish-showcase-link"
+        href="/showcase"
+      >{{ showcase.listedLink }}</a>
     </p>
     <p
       v-if="issueMessage !== null"

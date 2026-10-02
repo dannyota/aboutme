@@ -1,10 +1,8 @@
 // Package showcase implements the community showcase: the opt-in row, the
-// review key, the derived template, the operator review commands, the startup
-// recompute, and the uncached public listing. See docs/design/showcase.md and
-// docs/adr/0029-community-showcase.md.
+// derived card version and template, the startup recompute, and the uncached
+// public listing. Nothing is reviewed before listing. See
+// docs/design/showcase.md and docs/adr/0029-community-showcase.md.
 package showcase
-
-import "regexp"
 
 // Roles is the closed role list: the nine Library roles plus Other.
 var Roles = []string{
@@ -41,8 +39,3 @@ func ValidTemplateFilter(template string) bool {
 	}
 	return false
 }
-
-var keyPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
-
-// ValidKey reports whether key has the exact review key or card version form.
-func ValidKey(key string) bool { return keyPattern.MatchString(key) }

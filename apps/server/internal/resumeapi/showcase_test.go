@@ -8,13 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	schema "github.com/dannyota/aboutme/packages/schema/gen/go"
-
-	"github.com/dannyota/aboutme/apps/server/internal/showcase"
 )
 
 func TestDecodePublishShowcaseFields(t *testing.T) {
@@ -224,7 +223,6 @@ type showcasePublishEnv struct {
 	slug     string
 	path     string
 	revision int64
-	reviewer *showcase.Reviewer
 }
 
 func newShowcasePublishEnv(t *testing.T) *showcasePublishEnv {
@@ -238,7 +236,6 @@ func newShowcasePublishEnv(t *testing.T) *showcasePublishEnv {
 	return &showcasePublishEnv{
 		h: h, id: created.ID, slug: "show-" + uuid.NewString()[:8],
 		path: apiResumePath + "/" + created.ID.String() + "/publish", revision: created.Revision,
-		reviewer: showcase.NewReviewer(h.pool, nil),
 	}
 }
 
@@ -261,28 +258,16 @@ func (e *showcasePublishEnv) publishOK(t *testing.T, body string) showcaseResume
 	return decodeShowcaseBody(t, response.body)
 }
 
-func (e *showcasePublishEnv) row(t *testing.T) (found bool, reviewKey string, reviewedKey, outcome *string) {
+func (e *showcasePublishEnv) row(t *testing.T) (found bool, requestedAt time.Time) {
 	t.Helper()
 	row, err := e.h.queries.GetResumeShowcase(e.h.ctx, e.id)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, "", nil, nil
+		return false, time.Time{}
 	}
 	if err != nil {
 		t.Fatalf("read showcase row: %v", err)
 	}
-	return true, row.ReviewKey, row.ReviewedKey, row.ReviewOutcome
-}
-
-func (e *showcasePublishEnv) approve(t *testing.T) {
-	t.Helper()
-	found, key, _, _ := e.row(t)
-	if !found {
-		t.Fatal("approve: no showcase row")
-	}
-	applied, err := e.reviewer.Approve(e.h.ctx, e.slug, key)
-	if err != nil || !applied {
-		t.Fatalf("approve = %t, %v", applied, err)
-	}
+	return true, row.RequestedAt
 }
 
 func publishBody(slug string, fields string) string {
@@ -293,19 +278,18 @@ func publishBody(slug string, fields string) string {
 	return body + "}"
 }
 
-// AC-SHOW-001, AC-SHOW-003, AC-SHOW-006: opting in starts a review, omitted
+// AC-SHOW-001, AC-SHOW-003, AC-SHOW-005: opting in lists at once, omitted
 // fields keep the state, and every ending path deletes the row, so publishing
 // again and opting in again start from nothing.
 func TestPublishShowcaseLifecycle(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 
-	pending := env.publishOK(t, publishBody(env.slug, `"showcaseEnabled":true,"showcaseRole":"backend"`))
-	pending.requireState(t, "pending", "backend")
-	if found, _, reviewed, outcome := env.row(t); !found || reviewed != nil || outcome != nil {
-		t.Fatalf("new opt-in = found %t reviewed %v outcome %v, want a row with no review", found, reviewed, outcome)
+	listed := env.publishOK(t, publishBody(env.slug, `"showcaseEnabled":true,"showcaseRole":"backend"`))
+	listed.requireState(t, "listed", "backend")
+	exists, firstRequested := env.row(t)
+	if !exists {
+		t.Fatal("no showcase row after the opt-in")
 	}
-
-	env.approve(t)
 	stored, err := env.h.resumes.Get(env.h.ctx, env.h.userID, env.id)
 	if err != nil || stored.Showcase == nil || stored.Showcase.State != "listed" {
 		t.Fatalf("stored showcase = %+v err=%v, want listed", stored.Showcase, err)
@@ -314,32 +298,36 @@ func TestPublishShowcaseLifecycle(t *testing.T) {
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false}`).requireState(t, "listed", "backend")
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseRole":"qa"}`).requireState(t, "listed", "qa")
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseRole":""}`).requireState(t, "listed", "")
+	if found, requested := env.row(t); !found || !requested.Equal(firstRequested) {
+		t.Fatalf("after role changes found %t requested %v, want the first opt-in time %v", found, requested, firstRequested)
+	}
 
 	// Turning sign in to view on ends the opt-in although the field is omitted.
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"signInToView":true}`).requireState(t, "", "")
-	if found, _, _, _ := env.row(t); found {
+	if found, _ := env.row(t); found {
 		t.Fatal("sign in to view left the showcase row")
 	}
 	// Turning it off again does not bring the opt-in back.
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"signInToView":false}`).requireState(t, "", "")
 
-	// Opt in, review, opt out, opt in: the second request is a new review.
-	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":true}`).requireState(t, "pending", "")
-	env.approve(t)
+	// Opt in, opt out, opt in: the second request is a new opt-in.
+	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":true}`).requireState(t, "listed", "")
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":false}`).requireState(t, "", "")
-	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":true}`).requireState(t, "pending", "")
-	if found, _, reviewed, outcome := env.row(t); !found || reviewed != nil || outcome != nil {
-		t.Fatalf("second opt-in = found %t reviewed %v outcome %v, want no review carried over", found, reviewed, outcome)
+	if found, _ := env.row(t); found {
+		t.Fatal("opt-out left the showcase row")
+	}
+	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false,"showcaseEnabled":true}`).requireState(t, "listed", "")
+	if found, requested := env.row(t); !found || requested.Before(firstRequested) {
+		t.Fatalf("second opt-in = found %t requested %v, want a new row no older than %v", found, requested, firstRequested)
 	}
 
 	// Unpublishing ends the opt-in, and publishing again starts with it off.
-	env.approve(t)
 	env.publishOK(t, `{"live":false,"downloadEnabled":false,"seoGeoEnabled":false}`).requireState(t, "", "")
-	if found, _, _, _ := env.row(t); found {
+	if found, _ := env.row(t); found {
 		t.Fatal("unpublish left the showcase row")
 	}
 	env.publishOK(t, `{"live":true,"downloadEnabled":false,"seoGeoEnabled":false}`).requireState(t, "", "")
-	if found, _, _, _ := env.row(t); found {
+	if found, _ := env.row(t); found {
 		t.Fatal("republish created a showcase row")
 	}
 }
@@ -355,7 +343,7 @@ func TestOwnerResumeCarriesShowcase(t *testing.T) {
 
 	env.publishOK(t, publishBody(env.slug, `"showcaseEnabled":true,"showcaseRole":"frontend"`))
 	got = env.h.request(t, http.MethodGet, apiResumePath+"/"+env.id.String(), nil, true, false)
-	decodeShowcaseBody(t, got.body).requireState(t, "pending", "frontend")
+	decodeShowcaseBody(t, got.body).requireState(t, "listed", "frontend")
 
 	list := env.h.request(t, http.MethodGet, apiResumePath, nil, true, false)
 	var envelope struct {
@@ -365,7 +353,7 @@ func TestOwnerResumeCarriesShowcase(t *testing.T) {
 		t.Fatalf("decode list: %v (%s)", err, list.body)
 	}
 	var listed map[string]any
-	if err := json.Unmarshal(envelope.Data[0]["showcase"], &listed); err != nil || listed["state"] != "pending" || listed["role"] != "frontend" {
+	if err := json.Unmarshal(envelope.Data[0]["showcase"], &listed); err != nil || listed["state"] != "listed" || listed["role"] != "frontend" {
 		t.Fatalf("listed showcase = %v err=%v", listed, err)
 	}
 }
@@ -425,7 +413,7 @@ func TestPublishShowcaseIssues(t *testing.T) {
 	} {
 		assertResumeTestError(t, env.publish(t, body), http.StatusBadRequest, "request_invalid")
 	}
-	if found, _, _, _ := env.row(t); found {
+	if found, _ := env.row(t); found {
 		t.Fatal("a rejected publish left a showcase row")
 	}
 	stored, err := env.h.resumes.Get(env.h.ctx, env.h.userID, env.id)
@@ -435,7 +423,7 @@ func TestPublishShowcaseIssues(t *testing.T) {
 }
 
 // AC-SHOW-006: an idempotent replay returns the stored response and does not
-// run the publish again, so a review made since stays.
+// run the publish again, so a change made since stays.
 func TestPublishShowcaseIdempotentReplay(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 	key := uuid.NewString()
@@ -444,36 +432,30 @@ func TestPublishShowcaseIdempotentReplay(t *testing.T) {
 	if first.status != http.StatusOK {
 		t.Fatalf("publish = %d %s", first.status, first.body)
 	}
-	decodeShowcaseBody(t, first.body).requireState(t, "pending", "devops")
+	decodeShowcaseBody(t, first.body).requireState(t, "listed", "devops")
 
-	found, reviewKey, _, _ := env.row(t)
-	if !found {
-		t.Fatal("no showcase row after the opt-in")
+	if _, err := env.h.pool.Exec(env.h.ctx, `UPDATE resume_showcase SET role = 'qa' WHERE resume_id = $1`, env.id); err != nil {
+		t.Fatalf("change role: %v", err)
 	}
-	if declined, err := env.reviewer.Decline(env.h.ctx, env.slug, reviewKey); err != nil || !declined {
-		t.Fatalf("decline = %t, %v", declined, err)
-	}
-
 	replay := env.h.mutationRequest(t, http.MethodPost, env.path, strings.NewReader(body), env.revision, key)
 	if replay.status != first.status || string(replay.body) != string(first.body) {
 		t.Fatalf("replay = %d %s, want the first response %d %s", replay.status, replay.body, first.status, first.body)
 	}
-	found, _, reviewed, outcome := env.row(t)
-	if !found || reviewed == nil || outcome == nil || *outcome != "declined" {
-		t.Fatalf("after replay = found %t reviewed %v outcome %v, want the decline kept", found, reviewed, outcome)
+	row, err := env.h.queries.GetResumeShowcase(env.h.ctx, env.id)
+	if err != nil || row.Role == nil || *row.Role != "qa" {
+		t.Fatalf("after replay row = %+v err=%v, want the later role kept", row, err)
 	}
 }
 
-// AC-SHOW-006: a document write to an opted-in resume recomputes the review key
-// and card version in the same transaction, so a change to what the listing
-// shows sends the resume back to review while a color change keeps it listed.
+// AC-SHOW-006: a document write to an opted-in resume recomputes the card
+// version in the same transaction, and the resume stays listed with its opt-in
+// time.
 func TestDocumentWritesRecomputeShowcase(t *testing.T) {
 	env := newShowcasePublishEnv(t)
 	env.publishOK(t, publishBody(env.slug, `"showcaseEnabled":true`))
-	env.approve(t)
 	h := env.h
 
-	readRow := func() (reviewKey, cardVersion string, state string) {
+	readRow := func() (cardVersion string, requestedAt time.Time, state string) {
 		t.Helper()
 		row, err := h.queries.GetResumeShowcase(h.ctx, env.id)
 		if err != nil {
@@ -483,7 +465,7 @@ func TestDocumentWritesRecomputeShowcase(t *testing.T) {
 		if err != nil || resumed.Showcase == nil {
 			t.Fatalf("get resume = %+v err=%v", resumed.Showcase, err)
 		}
-		return row.ReviewKey, row.CardVersion, resumed.Showcase.State
+		return row.CardVersion, row.RequestedAt, resumed.Showcase.State
 	}
 	patch := func(suffix, body string) {
 		t.Helper()
@@ -497,27 +479,23 @@ func TestDocumentWritesRecomputeShowcase(t *testing.T) {
 		}
 	}
 
-	key0, version0, state := readRow()
+	version0, requested0, state := readRow()
 	if state != "listed" {
 		t.Fatalf("state = %q, want listed", state)
 	}
 
-	// A color change moves the card version and keeps the review key.
 	patch("/customization", `{"deltas":[{"op":"set","path":"colors.accent","value":"#336699"}]}`)
-	key1, version1, state := readRow()
-	if key1 != key0 || version1 == version0 || state != "listed" {
-		t.Fatalf("after color change key %s->%s version %s->%s state %s, want same key, new version, listed", key0, key1, version0, version1, state)
+	version1, requested1, state := readRow()
+	if version1 == version0 || state != "listed" || !requested1.Equal(requested0) {
+		t.Fatalf("after color change version %s->%s state %s requested %v->%v, want a new version, listed, same opt-in time", version0, version1, state, requested0, requested1)
 	}
 
-	// A name change moves both and sends the resume back to review.
 	patch("/personal-details", `{"fullName":"Grace Hopper"}`)
-	key2, version2, state := readRow()
-	if key2 == key1 || version2 == version1 || state != "pending" {
-		t.Fatalf("after name change key %s->%s version %s->%s state %s, want new key, new version, pending", key1, key2, version1, version2, state)
+	version2, requested2, state := readRow()
+	if version2 == version1 || state != "listed" || !requested2.Equal(requested0) {
+		t.Fatalf("after name change version %s->%s state %s, want a new version and listed", version1, version2, state)
 	}
 
-	// A photo upload does too.
-	env.approve(t)
 	current, err := h.resumes.Get(h.ctx, h.userID, env.id)
 	if err != nil {
 		t.Fatalf("get resume: %v", err)
@@ -526,9 +504,9 @@ func TestDocumentWritesRecomputeShowcase(t *testing.T) {
 	if upload.status != http.StatusOK {
 		t.Fatalf("photo upload = %d %s", upload.status, upload.body)
 	}
-	key3, version3, state := readRow()
-	if key3 == key2 || version3 == version2 || state != "pending" {
-		t.Fatalf("after photo key %s->%s version %s->%s state %s, want new key, new version, pending", key2, key3, version2, version3, state)
+	version3, _, state := readRow()
+	if version3 == version2 || state != "listed" {
+		t.Fatalf("after photo version %s->%s state %s, want a new version and listed", version2, version3, state)
 	}
 }
 
