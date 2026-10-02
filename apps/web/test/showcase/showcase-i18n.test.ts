@@ -59,8 +59,8 @@ describe('showcase catalog', () => {
       description: 'Real resumes that aboutme.vn users chose to share.',
       lead:
         'Real resumes that aboutme.vn users published and chose to show '
-        + 'here. We review each one first.',
-      orderNote: 'Newest approved first.',
+        + 'here.',
+      orderNote: 'Earliest added first.',
       rolesLabel: 'Filter by role',
       allRoles: 'All roles',
       other: 'Other',
@@ -125,9 +125,8 @@ describe('showcase catalog', () => {
       title: 'CV từ cộng đồng',
       description: 'CV thật do người dùng aboutme.vn chọn chia sẻ.',
       lead:
-        'CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây. '
-        + 'Mỗi CV được duyệt trước khi hiện.',
-      orderNote: 'CV mới được duyệt hiện trước.',
+        'CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.',
+      orderNote: 'CV thêm sớm nhất hiện trước.',
       rolesLabel: 'Lọc theo vị trí',
       allRoles: 'Mọi vị trí',
       other: 'Khác',
@@ -170,7 +169,7 @@ describe('showcase catalog', () => {
     expect(copy.label).toBe('Show in the community showcase');
     expect(copy.help).toBe(
       'Shows this resume\'s preview image, template, language, and role at '
-      + 'aboutme.vn/showcase after we review it. Anyone can see that page.',
+      + 'aboutme.vn/showcase. Anyone can see that page.',
     );
     expect(copy.roleLabel).toBe('Role shown');
     expect(copy.roleHint).toBe('Optional. Lets visitors filter by role.');
@@ -182,17 +181,8 @@ describe('showcase catalog', () => {
     expect(copy.needsOpenView).toBe(
       'Not available while Require sign-in to view is on.',
     );
-    expect(copy.pending).toBe(
-      'Waiting for review. The resume appears in the community showcase '
-      + 'once approved.',
-    );
     expect(copy.listed).toBe('Shown in the community showcase.');
     expect(copy.listedLink).toBe('View the showcase');
-    expect(`${copy.declined[0]}${copy.contact}${copy.declined[1]}`).toBe(
-      'This resume was not approved for the community showcase. If you '
-      + 'change its name, headline, photo, link, or language, we review it '
-      + 'again. Questions: danny@aboutme.vn.',
-    );
     expect(copy.issueOpenView).toBe(
       'This option needs Require sign-in to view off.',
     );
@@ -203,8 +193,7 @@ describe('showcase catalog', () => {
     expect(copy.label).toBe('Hiện trong trang Cộng đồng');
     expect(copy.help).toBe(
       'Hiện ảnh xem trước, mẫu, ngôn ngữ và vị trí của CV này tại '
-      + 'aboutme.vn/showcase sau khi chúng tôi duyệt. Ai cũng xem được '
-      + 'trang đó.',
+      + 'aboutme.vn/showcase. Ai cũng xem được trang đó.',
     );
     expect(copy.roleLabel).toBe('Vị trí hiển thị');
     expect(copy.roleHint).toBe('Tùy chọn. Giúp người xem lọc theo vị trí.');
@@ -216,17 +205,8 @@ describe('showcase catalog', () => {
     expect(copy.needsOpenView).toBe(
       'Không dùng được khi bật Yêu cầu đăng nhập để xem.',
     );
-    expect(copy.pending).toBe(
-      'Đang chờ duyệt. CV sẽ hiện trong trang Cộng đồng sau khi được '
-      + 'duyệt.',
-    );
     expect(copy.listed).toBe('Đang hiện trong trang Cộng đồng.');
     expect(copy.listedLink).toBe('Xem trang Cộng đồng');
-    expect(`${copy.declined[0]}${copy.contact}${copy.declined[1]}`).toBe(
-      'CV này chưa được duyệt để hiện trong trang Cộng đồng. Nếu bạn đổi '
-      + 'họ tên, tiêu đề, ảnh, đường dẫn hoặc ngôn ngữ của CV, chúng tôi sẽ '
-      + 'duyệt lại. Nếu có câu hỏi, hãy gửi email đến danny@aboutme.vn.',
-    );
     expect(copy.issueOpenView).toBe(
       'Tùy chọn này cần tắt Yêu cầu đăng nhập để xem.',
     );

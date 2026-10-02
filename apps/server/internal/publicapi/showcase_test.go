@@ -355,14 +355,6 @@ func TestShowcaseResponseNeverCarriesContactValues(t *testing.T) {
 	if err = tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
-	row, err := queries.GetResumeShowcase(ctx, resumeID)
-	if err != nil {
-		t.Fatalf("read showcase row: %v", err)
-	}
-	if applied, approveErr := showcase.NewReviewer(pool, nil).Approve(ctx, slug, row.ReviewKey); approveErr != nil || !applied {
-		t.Fatalf("Approve() = %t, %v", applied, approveErr)
-	}
-
 	handler := newTestShowcaseHandler(service, nil)
 	response := serveShowcase(handler, showcaseRequest(t, http.MethodGet, showcasePath))
 	if response.Code != http.StatusOK {

@@ -43,7 +43,6 @@ export type ShowcaseListing = Readonly<
 
 /** The owner resume resource's `showcase` field: null when off. */
 export type OwnerShowcase = Readonly<Schemas['ResumeShowcase']>;
-export type OwnerShowcaseState = OwnerShowcase['state'];
 
 /** The publish request's optional showcase fields; omitted keeps them. */
 export type PublishShowcaseFields = Pick<
@@ -114,8 +113,7 @@ export function parseShowcaseListing(value: unknown): ShowcaseListing {
 export function parseOwnerShowcase(value: unknown): OwnerShowcase | null {
   if (
     !isRecord(value)
-    || (value.state !== 'pending' && value.state !== 'listed'
-      && value.state !== 'declined')
+    || value.state !== 'listed'
     || (value.role !== null && value.role !== undefined
       && typeof value.role !== 'string')
   ) {

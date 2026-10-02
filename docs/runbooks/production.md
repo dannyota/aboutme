@@ -324,7 +324,7 @@ The same fence and lock gate TOTP enrollment at a second, higher floor (numeric
 activation, flag enablement, key rotation, the `aboutme-prod-totp-unavailable`
 alarm, and the production proofs for that release.
 [Sign in to view](sign-in-to-view.md) covers the same sequence at a third floor
-(numeric 6026). [Showcase review](showcase-review.md) runs listing reviews.
+(numeric 6026). [Account delete](account-delete.md) removes an abusive account.
 
 The one-time bootstrap, before the first fence-aware deploy: set
 `operator_principal_arn` in the ignored `prod.tfvars` to the owner's `aws login`

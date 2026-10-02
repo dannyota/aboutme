@@ -53,10 +53,10 @@ type Page struct {
 }
 
 // List reads one page of the listing from committed state. One statement
-// checks all five listing conditions (the opt-in row, an approved result, an
-// approved key equal to the current key, a live resume, sign in to view off),
-// and nothing caches it, so a request admitted after an opt-out, unpublish,
-// sign in to view, decline, rename, or delete commits cannot list the resume.
+// checks all three listing conditions (the opt-in row, a live resume, sign in
+// to view off), and nothing caches it, so a request admitted after an opt-out,
+// unpublish, sign in to view, rename, or delete commits cannot list the
+// resume. Oldest opt-in comes first.
 func (s *Service) List(ctx context.Context, filter Filter) (Page, error) {
 	queries := store.New(s.db)
 	total, err := queries.CountShowcase(ctx, store.CountShowcaseParams{

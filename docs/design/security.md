@@ -177,6 +177,11 @@ attribute.
 Session revoke and agent-grant revoke need only a live current-epoch session and
 no recent proof, because ending sessions only reduces access.
 
+The operator's out-of-band `account-delete` command
+([showcase design](showcase.md#derived-values-and-reports)) deletes an account
+without recent reauth. It runs with database credentials outside the public app,
+as [ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) allows.
+
 Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
 Logout-everywhere revokes all sessions. Password reset revokes every session and
 creates none; password add/change revokes every session and creates one fresh

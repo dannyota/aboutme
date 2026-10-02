@@ -1131,11 +1131,7 @@ describe("community showcase contract", () => {
       { $ref: "#/components/schemas/ResumeShowcase" },
     ]);
     expect(schemas.ResumeShowcase.required).toEqual(["state", "role"]);
-    expect(schemas.ResumeShowcase.properties.state.enum).toEqual([
-      "pending",
-      "listed",
-      "declined",
-    ]);
+    expect(schemas.ResumeShowcase.properties.state.enum).toEqual(["listed"]);
     expect(schemas.PublicResume.properties.showcase).toBeUndefined();
     expect(schemas.AccountExportShowcase.allOf[1].required).toEqual([
       "requestedAt",

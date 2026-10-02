@@ -69,7 +69,7 @@ behavior that contract changes must keep.
 | `GET /public/resumes/{slug}`, `GET /public/resumes/{slug}/photo`      | Live-gated public document and photo                             |
 | `GET /public/resumes/{slug}/pdf`                                      | Live and download-gated public PDF                               |
 | `GET /public/resumes/{slug}/og/{version}.png`, `.../og.png`           | Live-gated stored preview card and its `og.png` alias; ADR 0014  |
-| `GET /public/showcase`                                                | Uncached listing of reviewed showcase resumes; ADR 0029          |
+| `GET /public/showcase`                                                | Uncached listing of opted-in showcase resumes; ADR 0029          |
 | `GET /oauth/consent`, `POST /oauth/consent`                           | Agent consent read and the approve/deny decision                 |
 | `GET /me/agents`, `DELETE /me/agents/{grantId}`                       | Connected-agent list and grant revocation                        |
 | `GET /me/export`, `DELETE /me`                                        | Data export and recent-reauthenticated account deletion          |
@@ -116,9 +116,10 @@ omitted keeps the stored value. `showcaseEnabled: true` needs `live`
 (`requires_live`) and sign in to view off (the new issue `requires_open_view`).
 `showcaseRole` is allowed only with the switch on; a role outside the closed
 list is `invalid_format`. The owner resume resource gains `showcase`: `null`
-when off, otherwise `{ state, role }`. The public resume JSON and MCP tools are
-unchanged. The [showcase design](showcase.md#delivery-caching-and-revocation)
-owns the exact query, item, and field rules.
+when off, otherwise `{ state, role }` with `state` always `listed`; nothing is
+reviewed. The public resume JSON and MCP tools are unchanged. The
+[showcase design](showcase.md#delivery-caching-and-revocation) owns the exact
+query, item, and field rules.
 
 ### Photo intake
 

@@ -3,7 +3,6 @@ import { computed, type ComputedRef, ref, type Ref, watch } from 'vue';
 import {
   isShowcaseRole,
   type OwnerShowcase,
-  type OwnerShowcaseState,
   type PublishShowcaseFields,
 } from '../lib/showcaseContract';
 import type { ServerValidationIssue } from './attempt';
@@ -46,12 +45,10 @@ export function usePublishShowcase(inputs: PublishShowcaseInputs) {
     const value = stored.value?.role ?? null;
     return isShowcaseRole(value) ? value : '';
   });
-  // The stored state shows only while it describes what the owner sees.
-  const status = computed<OwnerShowcaseState | null>(() => (
-    stored.value !== null && on.value && !inputs.busy.value
-      ? stored.value.state
-      : null
-  ));
+  // The Listed line shows only while it describes what the owner sees.
+  const listed = computed(
+    () => stored.value !== null && on.value && !inputs.busy.value,
+  );
   // The server's showcase issue for the last request, until the owner
   // changes a showcase control.
   const issueCode = computed<string | null>(() => {
@@ -99,7 +96,7 @@ export function usePublishShowcase(inputs: PublishShowcaseInputs) {
     on,
     role,
     reason,
-    status,
+    listed,
     issueCode,
     sync,
     setEnabled,

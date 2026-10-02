@@ -13,34 +13,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const approveResumeShowcase = `-- name: ApproveResumeShowcase :one
-UPDATE resume_showcase AS s
-SET reviewed_key = s.review_key,
-    review_outcome = 'approved',
-    reviewed_at = $1::timestamptz,
-    first_listed_at = COALESCE(s.first_listed_at, $1::timestamptz)
-FROM resumes AS r
-WHERE r.id = s.resume_id
-  AND r.slug = $2::text
-  AND s.review_key = $3::text
-RETURNING s.resume_id
-`
-
-type ApproveResumeShowcaseParams struct {
-	ReviewedAt time.Time
-	Slug       string
-	ReviewKey  string
-}
-
-// Approves only while the named key is still the current review key. The
-// first approval of an opt-in sets first_listed_at; later approvals keep it.
-func (q *Queries) ApproveResumeShowcase(ctx context.Context, arg ApproveResumeShowcaseParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, approveResumeShowcase, arg.ReviewedAt, arg.Slug, arg.ReviewKey)
-	var resume_id uuid.UUID
-	err := row.Scan(&resume_id)
-	return resume_id, err
-}
-
 const countShowcase = `-- name: CountShowcase :one
 SELECT count(*)::bigint
 FROM resume_showcase s
@@ -49,9 +21,7 @@ CROSS JOIN LATERAL (
     SELECT (CASE lower(split_part(coalesce(r.lng, ''), '-', 1))
         WHEN 'vi' THEN 'vi' WHEN 'en' THEN 'en' ELSE 'other' END)::text AS language
 ) AS l
-WHERE s.review_outcome = 'approved'
-  AND s.reviewed_key = s.review_key
-  AND r.live = true
+WHERE r.live = true
   AND r.sign_in_to_view = false
   AND ($1::text IS NULL OR s.role = $1::text)
   AND ($2::text IS NULL OR l.language = $2::text)
@@ -73,33 +43,6 @@ func (q *Queries) CountShowcase(ctx context.Context, arg CountShowcaseParams) (i
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
-}
-
-const declineResumeShowcase = `-- name: DeclineResumeShowcase :one
-UPDATE resume_showcase AS s
-SET reviewed_key = s.review_key,
-    review_outcome = 'declined',
-    reviewed_at = $1::timestamptz
-FROM resumes AS r
-WHERE r.id = s.resume_id
-  AND r.slug = $2::text
-  AND s.review_key = $3::text
-RETURNING s.resume_id
-`
-
-type DeclineResumeShowcaseParams struct {
-	ReviewedAt time.Time
-	Slug       string
-	ReviewKey  string
-}
-
-// Declines only while the named key is still the current review key. It keeps
-// first_listed_at: a later approval of a changed key does not move the resume up.
-func (q *Queries) DeclineResumeShowcase(ctx context.Context, arg DeclineResumeShowcaseParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, declineResumeShowcase, arg.ReviewedAt, arg.Slug, arg.ReviewKey)
-	var resume_id uuid.UUID
-	err := row.Scan(&resume_id)
-	return resume_id, err
 }
 
 const deleteResumeShowcase = `-- name: DeleteResumeShowcase :execrows
@@ -141,53 +84,13 @@ func (q *Queries) GetResumeShowcase(ctx context.Context, resumeID uuid.UUID) (Re
 	return i, err
 }
 
-const getResumeShowcaseBySlug = `-- name: GetResumeShowcaseBySlug :one
-SELECT r.slug, s.role, s.review_key, s.card_version, s.template_id, s.reviewed_key,
-       s.review_outcome, s.requested_at, s.reviewed_at, s.first_listed_at
-FROM resume_showcase s
-JOIN resumes r ON r.id = s.resume_id
-WHERE r.slug = $1::text
-`
-
-type GetResumeShowcaseBySlugRow struct {
-	Slug          *string
-	Role          *string
-	ReviewKey     string
-	CardVersion   string
-	TemplateID    *string
-	ReviewedKey   *string
-	ReviewOutcome *string
-	RequestedAt   time.Time
-	ReviewedAt    *time.Time
-	FirstListedAt *time.Time
-}
-
-func (q *Queries) GetResumeShowcaseBySlug(ctx context.Context, slug string) (GetResumeShowcaseBySlugRow, error) {
-	row := q.db.QueryRow(ctx, getResumeShowcaseBySlug, slug)
-	var i GetResumeShowcaseBySlugRow
-	err := row.Scan(
-		&i.Slug,
-		&i.Role,
-		&i.ReviewKey,
-		&i.CardVersion,
-		&i.TemplateID,
-		&i.ReviewedKey,
-		&i.ReviewOutcome,
-		&i.RequestedAt,
-		&i.ReviewedAt,
-		&i.FirstListedAt,
-	)
-	return i, err
-}
-
 const getResumeShowcaseForUpdate = `-- name: GetResumeShowcaseForUpdate :one
 SELECT resume_id, requested_at, role, review_key, card_version, template_id, reviewed_key, review_outcome, reviewed_at, first_listed_at FROM resume_showcase
 WHERE resume_id = $1
 FOR UPDATE
 `
 
-// Locks the opt-in row so a derived-value write and an operator review
-// serialize: a review that names a key the write just replaced matches no row.
+// Locks the opt-in row so concurrent derived-value writes serialize.
 func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.UUID) (ResumeShowcase, error) {
 	row := q.db.QueryRow(ctx, getResumeShowcaseForUpdate, resumeID)
 	var i ResumeShowcase
@@ -207,10 +110,10 @@ func (q *Queries) GetResumeShowcaseForUpdate(ctx context.Context, resumeID uuid.
 }
 
 const insertResumeShowcase = `-- name: InsertResumeShowcase :exec
-INSERT INTO resume_showcase (resume_id, requested_at, role, review_key, card_version, template_id)
+INSERT INTO resume_showcase (resume_id, requested_at, role, card_version, template_id)
 VALUES (
     $1, $2, $3,
-    $4, $5, $6
+    $4, $5
 )
 `
 
@@ -218,63 +121,21 @@ type InsertResumeShowcaseParams struct {
 	ResumeID    uuid.UUID
 	RequestedAt time.Time
 	Role        *string
-	ReviewKey   string
 	CardVersion string
 	TemplateID  *string
 }
 
-// A new opt-in starts with no review result and no first-listed time.
+// review_key and the other review columns are unused; the insert leaves them
+// to their defaults (docs/design/showcase.md "Data and contract").
 func (q *Queries) InsertResumeShowcase(ctx context.Context, arg InsertResumeShowcaseParams) error {
 	_, err := q.db.Exec(ctx, insertResumeShowcase,
 		arg.ResumeID,
 		arg.RequestedAt,
 		arg.Role,
-		arg.ReviewKey,
 		arg.CardVersion,
 		arg.TemplateID,
 	)
 	return err
-}
-
-const listPendingResumeShowcases = `-- name: ListPendingResumeShowcases :many
-SELECT r.slug, s.review_key, s.card_version, s.requested_at
-FROM resume_showcase s
-JOIN resumes r ON r.id = s.resume_id
-WHERE s.review_outcome IS NULL OR s.reviewed_key IS DISTINCT FROM s.review_key
-ORDER BY s.requested_at, s.resume_id
-`
-
-type ListPendingResumeShowcasesRow struct {
-	Slug        *string
-	ReviewKey   string
-	CardVersion string
-	RequestedAt time.Time
-}
-
-// Opted in with no review result for the current key.
-func (q *Queries) ListPendingResumeShowcases(ctx context.Context) ([]ListPendingResumeShowcasesRow, error) {
-	rows, err := q.db.Query(ctx, listPendingResumeShowcases)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListPendingResumeShowcasesRow
-	for rows.Next() {
-		var i ListPendingResumeShowcasesRow
-		if err := rows.Scan(
-			&i.Slug,
-			&i.ReviewKey,
-			&i.CardVersion,
-			&i.RequestedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listResumeShowcaseIDs = `-- name: ListResumeShowcaseIDs :many
@@ -349,9 +210,7 @@ CROSS JOIN LATERAL (
     SELECT (CASE lower(split_part(coalesce(r.lng, ''), '-', 1))
         WHEN 'vi' THEN 'vi' WHEN 'en' THEN 'en' ELSE 'other' END)::text AS language
 ) AS l
-WHERE s.review_outcome = 'approved'
-  AND s.reviewed_key = s.review_key
-  AND r.live = true
+WHERE r.live = true
   AND r.sign_in_to_view = false
   AND ($1::text IS NULL OR s.role = $1::text)
   AND ($2::text IS NULL OR l.language = $2::text)
@@ -360,7 +219,7 @@ WHERE s.review_outcome = 'approved'
       OR ($3::text = 'custom' AND s.template_id IS NULL)
       OR s.template_id = $3::text
   )
-ORDER BY s.first_listed_at DESC, s.resume_id DESC
+ORDER BY s.requested_at ASC, s.resume_id ASC
 LIMIT $5::int OFFSET $4::int
 `
 
@@ -383,9 +242,8 @@ type ListShowcaseRow struct {
 	Language        string
 }
 
-// The public listing. One statement checks all five listing conditions: the
-// opt-in row exists, the review result is approved, the approved key equals
-// the current key, the resume is live, and sign in to view is off. It reads
+// The public listing. One statement checks all three listing conditions: the
+// opt-in row exists, the resume is live, and sign in to view is off. It reads
 // committed state on every call; nothing caches it. The page needs only the
 // personal details (for the card's image text), so it reads no other document
 // part; schema_version tells the caller whether those details are current.
@@ -426,26 +284,19 @@ func (q *Queries) ListShowcase(ctx context.Context, arg ListShowcaseParams) ([]L
 
 const updateResumeShowcaseDerived = `-- name: UpdateResumeShowcaseDerived :exec
 UPDATE resume_showcase
-SET review_key = $1,
-    card_version = $2,
-    template_id = $3
-WHERE resume_id = $4
+SET card_version = $1,
+    template_id = $2
+WHERE resume_id = $3
 `
 
 type UpdateResumeShowcaseDerivedParams struct {
-	ReviewKey   string
 	CardVersion string
 	TemplateID  *string
 	ResumeID    uuid.UUID
 }
 
 func (q *Queries) UpdateResumeShowcaseDerived(ctx context.Context, arg UpdateResumeShowcaseDerivedParams) error {
-	_, err := q.db.Exec(ctx, updateResumeShowcaseDerived,
-		arg.ReviewKey,
-		arg.CardVersion,
-		arg.TemplateID,
-		arg.ResumeID,
-	)
+	_, err := q.db.Exec(ctx, updateResumeShowcaseDerived, arg.CardVersion, arg.TemplateID, arg.ResumeID)
 	return err
 }
 

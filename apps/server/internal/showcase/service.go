@@ -60,11 +60,11 @@ func New(dependencies Dependencies) (*Service, error) {
 	}, nil
 }
 
-// SyncTx recomputes the review key, card version, and template ID of an
-// opted-in resume inside the caller's write transaction. A resume without a
-// showcase row is left untouched. It locks the row, so an operator review of a
-// key this write replaces matches nothing. A row whose resume is no longer
-// live, or requires sign in to view, is deleted: neither state may be listed.
+// SyncTx recomputes the card version and template ID of an opted-in resume
+// inside the caller's write transaction. A resume without a showcase row is
+// left untouched. It locks the row, so concurrent writes serialize. A row whose
+// resume is no longer live, or requires sign in to view, is deleted: neither
+// state may be listed.
 func (s *Service) SyncTx(ctx context.Context, qtx *store.Queries, resumeID uuid.UUID) error {
 	if _, err := qtx.GetResumeShowcaseForUpdate(ctx, resumeID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -88,7 +88,7 @@ func (s *Service) syncLockedTx(ctx context.Context, qtx *store.Queries, resumeID
 		return nil
 	}
 	if updateErr := qtx.UpdateResumeShowcaseDerived(ctx, store.UpdateResumeShowcaseDerivedParams{
-		ResumeID: resumeID, ReviewKey: derived.ReviewKey, CardVersion: derived.CardVersion, TemplateID: derived.TemplateID,
+		ResumeID: resumeID, CardVersion: derived.CardVersion, TemplateID: derived.TemplateID,
 	}); updateErr != nil {
 		return fmt.Errorf("showcase: update derived values: %w", updateErr)
 	}
@@ -137,9 +137,9 @@ type PublishChange struct {
 // PublishTx applies a publish request's showcase state inside the publish
 // transaction, after the resume row holds its new publish settings. Turning
 // the switch off, or leaving a resume that is not live or requires sign in to
-// view, deletes the row; turning it on inserts a row with no review result,
-// so a later opt-in always starts a new review. A row that stays on keeps its
-// review result and takes the new role and derived values.
+// view, deletes the row; turning it on inserts a row with a new opt-in time, so
+// a later opt-in lists the resume first. A row that stays on keeps its opt-in
+// time and takes the new role and derived values.
 func (s *Service) PublishTx(ctx context.Context, qtx *store.Queries, change PublishChange) error {
 	_, err := qtx.GetResumeShowcaseForUpdate(ctx, change.ResumeID)
 	exists := err == nil
@@ -171,7 +171,7 @@ func (s *Service) PublishTx(ctx context.Context, qtx *store.Queries, change Publ
 	}
 	if insertErr := qtx.InsertResumeShowcase(ctx, store.InsertResumeShowcaseParams{
 		ResumeID: change.ResumeID, RequestedAt: s.now(), Role: change.Role,
-		ReviewKey: derived.ReviewKey, CardVersion: derived.CardVersion, TemplateID: derived.TemplateID,
+		CardVersion: derived.CardVersion, TemplateID: derived.TemplateID,
 	}); insertErr != nil {
 		return fmt.Errorf("showcase: insert row: %w", insertErr)
 	}
@@ -180,7 +180,7 @@ func (s *Service) PublishTx(ctx context.Context, qtx *store.Queries, change Publ
 
 // RecomputeAll recomputes the derived values of every showcase row, each in its
 // own transaction, so a changed scrub rule, preset, or card layout applies after
-// a deploy (docs/design/showcase.md "Review"). A row whose resume cannot be
+// a deploy (docs/design/showcase.md "Derived values and reports"). A row whose resume cannot be
 // projected keeps its stored values, which cannot list it: that resume is not
 // served either. It returns how many rows it recomputed and how many it
 // skipped.
