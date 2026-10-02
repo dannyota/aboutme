@@ -165,11 +165,11 @@ describe('TemplatePanel', () => {
       props: { actions: actionsFor(applyTemplate), record },
     });
 
-    const preset = TEMPLATES.find(
-      (candidate) =>
-        candidate.customization.dateFormat
-        !== record.current.document.customization.dateFormat,
-    )!;
+    // The fixture is an English resume on `MM/YYYY`, so every template
+    // would change its date format to `Mon YYYY`.
+    expect(record.current.metadata.lng).toBe('en');
+    expect(record.current.document.customization.dateFormat).toBe('MM/YYYY');
+    const preset = TEMPLATES[0]!;
     expect(wrapper.get(`[data-template="${preset.id}"]`).text()).toContain(
       'Date format will change.',
     );
@@ -773,20 +773,45 @@ describe('page format on a template switch', () => {
     () => {
       const current = acceptedFixture();
       current.document.customization.pageFormat = 'letter';
+      current.document.customization.dateFormat = 'Mon YYYY';
       const wrapper = mount(TemplatePanel, {
         props: {
           actions: actionsFor(vi.fn()),
           record: recordFor(current),
         },
       });
-      const same = TEMPLATES.find(
-        (candidate) =>
-          candidate.customization.dateFormat
-          === current.document.customization.dateFormat,
-      )!;
-      expect(wrapper.get(`[data-template="${same.id}"]`).text())
-        .not.toMatch(/format will change/u);
+      for (const candidate of TEMPLATES) {
+        expect(wrapper.get(`[data-template="${candidate.id}"]`).text())
+          .not.toMatch(/format will change/u);
+      }
     });
+});
+
+describe('date format warning', () => {
+  function warnedTemplates(
+    lng: string,
+    dateFormat: 'MM/YYYY' | 'Mon YYYY' | 'YYYY',
+  ): number {
+    const current = acceptedFixture();
+    current.metadata = { ...current.metadata, lng };
+    current.document.customization.dateFormat = dateFormat;
+    const wrapper = mount(TemplatePanel, {
+      props: { actions: actionsFor(vi.fn()), record: recordFor(current) },
+    });
+    const count = wrapper.findAll('[data-template]').filter((card) =>
+      card.text().includes('Date format will change.')).length;
+    wrapper.unmount();
+    return count;
+  }
+
+  it('shows only when the language format differs from the current one', () => {
+    expect(warnedTemplates('vi', 'MM/YYYY')).toBe(0);
+    expect(warnedTemplates('vi-VN', 'MM/YYYY')).toBe(0);
+    expect(warnedTemplates('en', 'Mon YYYY')).toBe(0);
+    expect(warnedTemplates('vi', 'Mon YYYY')).toBe(TEMPLATES.length);
+    expect(warnedTemplates('en', 'MM/YYYY')).toBe(TEMPLATES.length);
+    expect(warnedTemplates('en', 'YYYY')).toBe(TEMPLATES.length);
+  });
 });
 
 function recordFor(current = acceptedFixture()): ResumeRecord {

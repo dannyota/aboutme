@@ -278,6 +278,13 @@ describe('buildDocument and checkDocument', () => {
     expect(checkDocument(document, review, choices)).toEqual({ ok: true });
   });
 
+  it('sets the date format of the English import language', () => {
+    const review = buildReview(fullParsedProfile(), makeUuid());
+    const document = buildDocument(review, defaultChoices(review));
+
+    expect(document.customization.dateFormat).toBe('Mon YYYY');
+  });
+
   it('leaves a deselected section out of the document', () => {
     const review = buildReview(fullParsedProfile(), makeUuid());
     const choices = defaultChoices(review);

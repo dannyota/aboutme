@@ -19,8 +19,10 @@ import {
   stepPreviewZoom,
   writeStoredPreviewZoom,
 } from '../../editor/previewZoom';
+import type { PdfDownloadController } from '../../editor/pdfDownload';
 import type { PhotoReadState } from '../../stores/resumes';
 import { Button } from '../ui/button';
+import PDFOpenButton from './PDFOpenButton.vue';
 import PreviewZoomControls from './PreviewZoomControls.vue';
 import ResumeDocument from '../resume/ResumeDocument.vue';
 import ScaledSheet from '../resume/ScaledSheet.vue';
@@ -61,6 +63,8 @@ const props = withDefaults(defineProps<{
   readonly photoUrl?: string;
   readonly photoRead?: PhotoReadState;
   readonly active?: boolean;
+  /** Adds the new-tab PDF button to PDF mode when given. */
+  readonly pdfController?: PdfDownloadController;
 }>(), { zoom: 'fit', active: true });
 const emit = defineEmits<{
   pages: [count: number];
@@ -445,6 +449,10 @@ onBeforeUnmount(() => {
             </svg>
             {{ pageCountText }}
           </p>
+          <PDFOpenButton
+            v-if="previewMode === 'pdf' && pdfController !== undefined"
+            :controller="pdfController"
+          />
           <p
             v-if="photoStatus !== ''"
             class="text-sm text-muted-foreground"

@@ -193,11 +193,11 @@ describe('applyTemplate keeps text alignment (ADR 0013)', () => {
     'carries justify over and keeps absence absent for %s',
     (_id, preset) => {
       const justified = withAlign(fixture.customization, 'justify');
-      expect(applyTemplate(justified, preset, content).font.textAlign)
+      expect(applyTemplate(justified, preset, content, 'en').font.textAlign)
         .toBe('justify');
 
       const unset = withAlign(fixture.customization);
-      expect('textAlign' in applyTemplate(unset, preset, content).font)
+      expect('textAlign' in applyTemplate(unset, preset, content, 'en').font)
         .toBe(false);
     },
   );
@@ -215,6 +215,7 @@ describe('applyTemplate keeps text alignment (ADR 0013)', () => {
       withAlign(fixture.customization),
       withPresetAlign,
       content,
+      'en',
     );
     expect('textAlign' in next.font).toBe(false);
   });

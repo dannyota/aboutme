@@ -1,6 +1,6 @@
 # 0012: A template preset carries a placement rule with one total order
 
-Status: Accepted (2026-08-02, 2026-08-12).
+Status: Accepted (2026-08-02, 2026-08-12, 2026-10-01).
 
 ## Context
 
@@ -28,8 +28,15 @@ meaning of a user-created custom section.
 A preset does not carry section keys. It carries a placement rule, and
 `applyTemplate` computes `layout.sections` as a total function of the document's
 current placement and content keys. Applying a template replaces the rest of
-`customization` wholesale, except the owner settings that ADR 0013 names, and
-never changes `content`.
+`customization` wholesale and never changes `content`, with two kinds of
+exception:
+
+- **Kept:** the owner's `pageFormat`, `colorScheme`, `font.textAlign`, and
+  `header.photoPosition`, or their absence. ADR 0013 names the last two.
+- **Derived:** `dateFormat` follows the resume language, `MM/YYYY` for a `vi`
+  primary subtag and `Mon YYYY` otherwise, never the preset's value.
+
+[Template contract](../design/templates/contract.md) §3 holds the exact rules.
 
 The current visual order is `layout.sections.main` followed by
 `layout.sections.sidebar`, the same linear order the renderer uses for one
@@ -78,3 +85,6 @@ semantics.
 - Former ADR 0008 (2026-08-02): placement rule instead of a section list.
 - Former ADR 0021 (2026-08-12): the total order, validation, and custom-section
   rule. Both unchanged in substance.
+- 2026-10-01: the apply exceptions are listed here. The kept settings were
+  already in the design; the language-derived `dateFormat` is the owner's new
+  rule, replacing the preset's value.

@@ -31,6 +31,7 @@ describe('template diffs', () => {
       current,
       preset,
       acceptedFixture().document.content,
+      'en',
     );
 
     expect(diffCustomization(current, intended)).not.toContainEqual(

@@ -35,8 +35,24 @@ const WORDS: Readonly<Record<'en' | 'vi', DateWords>> = {
   },
 };
 
+// The renderer knows two languages: a resume is Vietnamese when its primary
+// subtag is `vi` (`vi`, `vi-VN`, any case), and English otherwise, including
+// when it has no language.
+const isVietnamese = (lng: string | null | undefined): boolean =>
+  lng?.toLowerCase().split('-')[0] === 'vi';
+
 const wordsFor = (lng: string): DateWords =>
-  lng.toLowerCase().split('-')[0] === 'vi' ? WORDS.vi : WORDS.en;
+  isVietnamese(lng) ? WORDS.vi : WORDS.en;
+
+/**
+ * The date format a resume language starts with: `MM/YYYY` for Vietnamese,
+ * `Mon YYYY` otherwise (docs/design/templates/contract.md §3).
+ */
+export function dateFormatForLanguage(
+  lng: string | null | undefined,
+): DateFormat {
+  return isVietnamese(lng) ? 'MM/YYYY' : 'Mon YYYY';
+}
 
 export function formatYearMonth(
   value: YearMonth,

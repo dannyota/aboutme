@@ -5,6 +5,7 @@ import { mockNuxtImport } from '@nuxt/test-utils/runtime';
 
 import PDFDownloadButton from
   '../../app/components/editor/PDFDownloadButton.vue';
+import PDFOpenButton from '../../app/components/editor/PDFOpenButton.vue';
 import {
   createPdfDownloadController,
   MAX_PDF_DOWNLOAD_BYTES,
@@ -431,6 +432,176 @@ describe('PDF download', () => {
     });
 });
 
+describe('PDF in a new tab', () => {
+  it('opens the tab inside the click, then shows the fetched bytes in it',
+    async () => {
+      const order: string[] = [];
+      const context = setup({
+        flush: async () => {
+          order.push('flush');
+        },
+        fetcher: async () => {
+          order.push('fetch');
+          return pdfResponse([new Uint8Array([1, 2, 3])]);
+        },
+      });
+      context.openTab.mockImplementation(() => {
+        order.push('open');
+        return context.tab;
+      });
+
+      const pending = context.controller.openInTab();
+      expect(order[0]).toBe('open');
+      await pending;
+
+      expect(order).toEqual(['open', 'flush', 'fetch']);
+      expect(context.tab.navigate).toHaveBeenCalledWith('blob:pdf');
+      expect(context.tab.close).not.toHaveBeenCalled();
+      expect(context.download).not.toHaveBeenCalled();
+      expect(context.controller.state.value).toEqual({ kind: 'idle' });
+    });
+
+  it('keeps the object URL until the tab has loaded it', async () => {
+    vi.useFakeTimers();
+    try {
+      const context = setup();
+      await context.controller.openInTab();
+      expect(context.revokeObjectURL).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(60_000);
+      expect(context.revokeObjectURL).toHaveBeenCalledWith('blob:pdf');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports a blocked tab and sends no request', async () => {
+    const context = setup();
+    context.openTab.mockReturnValue(null as never);
+
+    const state = await context.controller.openInTab();
+
+    expect(state).toEqual({ kind: 'error', code: 'popup-blocked' });
+    expect(context.fetcher).not.toHaveBeenCalled();
+  });
+
+  it('opens no tab when the session is gone', async () => {
+    const context = setup();
+    context.user.value = null;
+
+    const state = await context.controller.openInTab();
+
+    expect(state).toEqual({ kind: 'error', code: 'session-lost' });
+    expect(context.openTab).not.toHaveBeenCalled();
+  });
+
+  it.each([429, 503])('closes the tab and reports a %i', async (status) => {
+    const context = setup({
+      fetcher: async () => new Response('{}', { status }),
+    });
+
+    const state = await context.controller.openInTab();
+
+    expect(state).toEqual({ kind: 'error', code: 'temporarily-unavailable' });
+    expect(context.tab.close).toHaveBeenCalledOnce();
+    expect(context.tab.navigate).not.toHaveBeenCalled();
+  });
+
+  it('closes the tab when changes could not be saved', async () => {
+    const record = acceptedRecord();
+    const context = setup({
+      record,
+      flush: async () => {
+        record.pending = [{}] as never;
+      },
+    });
+
+    const state = await context.controller.openInTab();
+
+    expect(state).toEqual({ kind: 'error', code: 'save-required' });
+    expect(context.tab.close).toHaveBeenCalledOnce();
+    expect(context.fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['en', 'Open PDF in new tab', 'Opening PDF…'],
+    ['vi', 'Mở PDF trong tab mới', 'Đang mở PDF…'],
+  ] as const)('labels the %s button for idle and pending', async (
+    nextLocale,
+    idle,
+    pendingLabel,
+  ) => {
+    locale.value = nextLocale;
+    const state = ref<{ kind: string }>({ kind: 'idle' });
+    const wrapper = mount(PDFOpenButton, {
+      props: {
+        controller: {
+          state,
+          download: vi.fn(),
+          openInTab: vi.fn(),
+          dispose: vi.fn(),
+        },
+      } as never,
+    });
+    const button = wrapper.get('[data-action="open-pdf"]');
+
+    expect(button.text()).toBe(idle);
+    expect(button.attributes('disabled')).toBeUndefined();
+    state.value = { kind: 'pending' };
+    await nextTick();
+    expect(button.text()).toBe(pendingLabel);
+    expect(button.attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('opens on click', async () => {
+    locale.value = 'en';
+    const openInTab = vi.fn();
+    const wrapper = mount(PDFOpenButton, {
+      props: {
+        controller: {
+          state: ref({ kind: 'idle' }),
+          download: vi.fn(),
+          openInTab,
+          dispose: vi.fn(),
+        },
+      } as never,
+    });
+
+    await wrapper.get('[data-action="open-pdf"]').trigger('click');
+
+    expect(openInTab).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
+  it.each([
+    ['en', 'save-required', 'Save changes before opening PDF.'],
+    ['vi', 'save-required', 'Lưu thay đổi trước khi mở PDF.'],
+    ['en', 'temporarily-unavailable',
+      'PDF is temporarily unavailable. Try again.'],
+    ['vi', 'temporarily-unavailable',
+      'PDF tạm thời không khả dụng. Hãy thử lại.'],
+    ['en', 'popup-blocked',
+      'The browser blocked the tab. Allow pop-ups.'],
+    ['vi', 'popup-blocked',
+      'Trình duyệt chặn tab mới. Cho phép cửa sổ bật lên.'],
+  ] as const)('renders %s copy for %s', (nextLocale, code, text) => {
+    locale.value = nextLocale;
+    const wrapper = mount(PDFOpenButton, {
+      props: {
+        controller: {
+          state: ref({ kind: 'error', code }),
+          download: vi.fn(),
+          openInTab: vi.fn(),
+          dispose: vi.fn(),
+        },
+      } as never,
+    });
+
+    expect(wrapper.get('[data-open-pdf-status]').text()).toBe(text);
+    wrapper.unmount();
+  });
+});
+
 function setup(
   overrides: {
     record?: ReturnType<typeof acceptedRecord>;
@@ -446,6 +617,8 @@ function setup(
   const createObjectURL = vi.fn(() => 'blob:pdf');
   const revokeObjectURL = vi.fn();
   const download = vi.fn();
+  const tab = { navigate: vi.fn(), close: vi.fn() };
+  const openTab = vi.fn(() => tab);
   const controller = createPdfDownloadController({
     resumeId,
     record: computed(() => record.value),
@@ -458,14 +631,17 @@ function setup(
     createObjectURL,
     revokeObjectURL,
     download,
+    openTab,
   });
   return {
     controller,
     createObjectURL,
     download,
     fetcher,
+    openTab,
     record,
     revokeObjectURL,
+    tab,
     user,
   };
 }

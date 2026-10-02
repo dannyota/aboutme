@@ -277,10 +277,17 @@ snapshot because the prior app is not proven against the changed database.
 If the new app may have started but never reached steady state, recovery scales
 it back to zero; `maintenance`, already running beside it, stays up. A service
 confirmation that finds the wrong revision, more or fewer than one task, or a
-container not yet running is treated the same as an unconfirmed wait. A healthy
-new app stays up when only schedule enablement fails; the script reports each
-schedule that still needs repair. A failed first deploy leaves maintenance up
-because no prior app exists.
+container not yet running is treated the same as an unconfirmed wait. Two
+recovery paths leave a service unconfirmed. If `maintenance` cannot be confirmed
+on a first deploy or after a migration request, recovery leaves `app` as it is,
+running only if its start was requested, and does not scale it down, so a
+running app still answers on port 8443. If the previous `app` cannot be
+confirmed after a restart, recovery scales it to zero and keeps `maintenance`
+up; when `maintenance` cannot be confirmed either, it leaves both services as
+they are. Each case prints what to check by hand, and the script exits non-zero.
+A healthy new app stays up when only schedule enablement fails; the script
+reports each schedule that still needs repair. A failed first deploy leaves
+maintenance up because no prior app exists.
 
 `deploy.sh --rollback <tag>` redeploys earlier server, web, and app digests
 without migrating, through the same handoff, and keeps the current maintenance
