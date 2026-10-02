@@ -196,19 +196,16 @@ jobs:
         run: make operational-test-browser
       - if: ${{ !cancelled() }}
         name: npm audit (repository root)
-        run: npm audit --omit=dev --audit-level=high
+        run: bash scripts/npm-audit.sh .
       - if: ${{ !cancelled() }}
         name: npm audit (apps/web)
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: apps/web
+        run: bash scripts/npm-audit.sh apps/web
       - if: ${{ !cancelled() }}
         name: npm audit (packages/schema)
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: packages/schema
+        run: bash scripts/npm-audit.sh packages/schema
       - if: ${{ !cancelled() }}
         name: npm audit (deploy/dev-https-browser)
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: deploy/dev-https-browser
+        run: bash scripts/npm-audit.sh deploy/dev-https-browser
       - if: ${{ !cancelled() }}
         name: Wait for the deploy-script static tests
         run: bash scripts/ci-background.sh wait deploy-tests

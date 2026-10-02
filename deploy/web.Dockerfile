@@ -29,6 +29,12 @@ RUN npm --prefix apps/web ci
 
 RUN npm --prefix apps/web run build
 
+# .github/npm-audit-exceptions.json excepts the node-forge advisory only
+# because node-forge (reached through listhen) never ships. Fail the build if
+# either appears in the output, so that exception cannot go stale unnoticed.
+RUN test -d apps/web/.output \
+    && ! find apps/web/.output \( -ipath '*node-forge*' -o -ipath '*listhen*' \) | grep -q .
+
 # ---- runtime ----
 # Nitro's node-server preset (Nuxt's default) bundles its own dependencies
 # into .output/, so the runtime stage needs no node_modules install.
