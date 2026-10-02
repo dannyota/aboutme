@@ -1,0 +1,7 @@
+[
+  {
+    "id": "GHSA-86w9-cpqp-85rv",
+    "expires": "2026-11-01",
+    "reason": "node-forge reaches only the Nuxt dev server and build (listhen); absent from the shipped .output; no fixed release"
+  }
+]

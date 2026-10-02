@@ -6,6 +6,7 @@ Code rules and the checks each change area needs. Implementers, qa, reviewers, a
 - Follow Google Go and TypeScript style with `gofmt`/`goimports` and the configured ESLint. Tests inject clocks, randomness, and UUIDs and pin renderer inputs. Never retry a flaky test into a pass.
 - Never hand-edit generated files; change the source and regenerate. Migrations are append-only; roll back with a forward migration and grant `aboutme_app` explicitly ([ADR 0005](../docs/adr/0005-database-migrations.md)).
 - A contract change updates schema or OpenAPI sources, generated clients, tests, examples, design docs, and traceability in one change.
+- `npm audit` runs through `scripts/npm-audit.sh`: any high or critical advisory fails unless `.github/npm-audit-exceptions.json` lists its GHSA ID with a `reason` and an `expires` date. An expired entry fails every run; remove it or renew it with a new reason.
 - Do not weaken security controls: least privilege, strict input bounds, versioned sanitizing, CSRF and Origin checks, `__Host-` cookies, route-specific rate limits, CSP, secret-free logs.
 
 The table names required verification, not commands every worker must run locally. Use GitHub CI for these gates. Locally, run formatting and the static [pre-push check](resources.md#pre-push-check) before every push; any other test, build, linter, or browser execution must follow [resources](resources.md). Reuse completed evidence when code has not changed.

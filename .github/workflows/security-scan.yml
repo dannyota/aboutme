@@ -54,19 +54,16 @@ jobs:
         with:
           node-version: 24.21.0
       - name: repository root
-        run: npm audit --omit=dev --audit-level=high
+        run: bash scripts/npm-audit.sh .
       - if: ${{ !cancelled() }}
         name: apps/web
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: apps/web
+        run: bash scripts/npm-audit.sh apps/web
       - if: ${{ !cancelled() }}
         name: packages/schema
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: packages/schema
+        run: bash scripts/npm-audit.sh packages/schema
       - if: ${{ !cancelled() }}
         name: deploy/dev-https-browser
-        run: npm audit --omit=dev --audit-level=high
-        working-directory: deploy/dev-https-browser
+        run: bash scripts/npm-audit.sh deploy/dev-https-browser
       - if: failure()
         run: echo "### npm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
 
