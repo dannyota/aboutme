@@ -40,7 +40,8 @@ jobs:
   # deploy-script test run in the background beside the other steps.
   # `npm audit` needs no install: every manifest ships a package-lock.json,
   # and npm reads it directly. It fails on a high or critical advisory in a
-  # production dependency; --omit=dev drops devDependencies, which never
+  # production dependency, unless .github/npm-audit-exceptions.json lists it
+  # (scripts/npm-audit.sh); --omit=dev drops devDependencies, which never
   # ship.
   contracts:
     runs-on: ubuntu-latest
