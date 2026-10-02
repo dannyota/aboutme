@@ -1,9 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  dateFormatForLanguage,
   formatDateRange,
   formatYearMonth,
 } from '../../app/components/resume/formatDate';
+
+describe('language date format', () => {
+  it.each([
+    ['vi', 'MM/YYYY'],
+    ['vi-VN', 'MM/YYYY'],
+    ['VI', 'MM/YYYY'],
+    ['en', 'Mon YYYY'],
+    ['en-GB', 'Mon YYYY'],
+    ['vie', 'Mon YYYY'],
+    ['', 'Mon YYYY'],
+    [null, 'Mon YYYY'],
+    [undefined, 'Mon YYYY'],
+  ] as const)('%j starts with %s', (lng, expected) => {
+    expect(dateFormatForLanguage(lng)).toBe(expected);
+  });
+});
 
 describe('fixed date formatting', () => {
   it.each([

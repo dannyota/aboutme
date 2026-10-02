@@ -24,6 +24,7 @@ mobile, Claude Code, and Cowork:
   uses `http://localhost:PORT/callback` on an ephemeral port.
 - Claude uses DCR when the server does not advertise Client ID Metadata
   Documents (CIMD), and registers a new client on each fresh connection.
+  [MCP Client ID Metadata Documents](mcp-cimd.md) proposes CIMD support.
 - Refresh errors must be `invalid_grant`. Traffic comes from `160.79.104.0/21`.
 
 The [TypeScript SDK source][ts-auth] on `main` shows the request shapes. This
@@ -112,9 +113,10 @@ ceiling of 600 an hour. The list is deployment configuration, not code, and an
 address outside it keeps today's limit. The idle-client sweep already removes a
 registration with no grant after 24 hours. Token and tool limits do not change.
 
-CIMD would remove registration for Claude entirely, but it needs a server-side
-fetch of client-supplied URLs with SSRF controls. It is deferred to its own
-design.
+CIMD would remove registration for clients that send a metadata document, but it
+needs a server-side fetch of client-supplied URLs with SSRF controls.
+[MCP Client ID Metadata Documents](mcp-cimd.md) holds that design, a proposal
+awaiting owner decisions.
 
 ### 6. Where approval returns
 

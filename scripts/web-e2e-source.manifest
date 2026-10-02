@@ -71,6 +71,7 @@ apps/web/app/components/editor/EntryCard.vue
 apps/web/app/components/editor/ErrorSummary.vue
 apps/web/app/components/editor/InspectorPanel.vue
 apps/web/app/components/editor/PDFDownloadButton.vue
+apps/web/app/components/editor/PDFOpenButton.vue
 apps/web/app/components/editor/PanelResizeHandle.vue
 apps/web/app/components/editor/PreviewZoomControls.vue
 apps/web/app/components/editor/PublishAccess.vue

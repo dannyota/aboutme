@@ -137,6 +137,7 @@ export function captureTemplateGroup(
     input.current.document.customization,
     input.preset,
     input.current.document.content,
+    input.current.metadata.lng,
   );
   const intendedFinal: ResumeSnapshot = {
     ...input.current,

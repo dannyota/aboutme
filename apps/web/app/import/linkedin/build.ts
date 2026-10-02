@@ -391,6 +391,9 @@ function selectedContent(
   return result;
 }
 
+/** The language an imported resume is created with. */
+const IMPORT_LANGUAGE = 'en';
+
 /**
  * The reviewed choices as a resume document: `blankTemplateDocument` of the
  * gallery's first template, filled with the chosen personal details and
@@ -405,7 +408,7 @@ export function buildDocument(
   if (template === undefined) {
     throw new Error(`unknown gallery template "${review.template.id}"`);
   }
-  const base = blankTemplateDocument(template.preset);
+  const base = blankTemplateDocument(template.preset, IMPORT_LANGUAGE);
 
   const content: Content = {};
   for (const [key, entries] of selectedContent(review, choices)) {
@@ -424,7 +427,12 @@ export function buildDocument(
       sections: { main: Object.keys(content), sidebar: [] },
     },
   };
-  const customization = applyTemplate(current, template.preset, content);
+  const customization = applyTemplate(
+    current,
+    template.preset,
+    content,
+    IMPORT_LANGUAGE,
+  );
 
   const details: PersonalDetail[] = selectedDetails(review, choices).map(
     (detail): PersonalDetail => ({
@@ -449,7 +457,7 @@ export function buildDocument(
 /** UTF-8 bytes of the JSON body the create request sends. */
 export function requestBytes(title: string, document: Resume): number {
   return new TextEncoder().encode(
-    JSON.stringify({ title, lng: 'en', document }),
+    JSON.stringify({ title, lng: IMPORT_LANGUAGE, document }),
   ).length;
 }
 

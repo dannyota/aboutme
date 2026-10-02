@@ -31,6 +31,7 @@ const document = computed(() => ({
     sampleResume.customization,
     props.preset,
     sampleResume.content,
+    sampleContext.lng,
   ),
 }));
 

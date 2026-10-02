@@ -42,6 +42,7 @@ function applyModernSidebar(document: Resume): Resume {
     },
     modernSidebar,
     document.content,
+    'vi',
   );
   return document;
 }

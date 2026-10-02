@@ -36,6 +36,7 @@ export async function galleryDocument(
         filler.customization,
         template.preset,
         filler.content,
+        lng,
       ),
     },
     lng,

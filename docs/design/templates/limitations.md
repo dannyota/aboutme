@@ -17,12 +17,16 @@ in [ADR 0004](../../adr/0004-resume-document-contract.md).
    of leaving it out:_ every preset must reuse the fixed renderer structure.
    Adding a timeline, a new region, or other structural template requires a
    later document release rather than a new JSON file.
-2. **Template apply resets `dateFormat`.** It is a regional preference, not
-   visual design, but ADR 0012's wholesale replace covers it. `pageFormat` is
-   the exception: paper follows where the owner prints, so a switch keeps it, as
-   it keeps `font.textAlign`, `header.photoPosition`, and `colorScheme`, and
-   every preset ships on A4. _Cost of leaving it out:_ a switch can change how
-   dates read. The editor warns before apply when the date format changes.
+2. **Template apply resets `dateFormat` to the language format.** ADR 0012's
+   wholesale replace covers the field, and apply sets it from the resume
+   language: `MM/YYYY` for a `vi` primary subtag, `Mon YYYY` otherwise
+   ([template contract](contract.md) §3). A preset's own `dateFormat` never
+   decides it. `pageFormat` is the exception: paper follows where the owner
+   prints, so a switch keeps it, as it keeps `font.textAlign`,
+   `header.photoPosition`, and `colorScheme`, and every preset ships on A4.
+   _Cost of leaving it out:_ a switch drops an owner's own choice, such as
+   `YYYY`. The editor warns before apply when the language format differs from
+   the current `dateFormat`.
 3. **No photo visibility control.** A photo lives in `personalDetails.photo`;
    nothing in `customization` can suppress it, and §3 has no `showPhoto` flag.
    An ATS-oriented or photo-free template must therefore still render a photo

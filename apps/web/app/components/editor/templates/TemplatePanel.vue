@@ -26,6 +26,7 @@ import type { ResumeRecord } from '../../../stores/resumes';
 import TemplatePartialDialog from './TemplatePartialDialog.vue';
 import TemplateThumbnail from './TemplateThumbnail.vue';
 import { defaultSectionNames } from '../sectionTypes';
+import { dateFormatForLanguage } from '../../resume/formatDate';
 import { galleryTemplate } from '../../../templates/catalog';
 import { matchesTemplateSearch } from '../../../templates/search';
 import type { ResumeSnapshot } from '../../../editor/types';
@@ -190,13 +191,13 @@ function status(): string {
   }
 }
 
-// A switch keeps the owner's page format, so only the date format can change.
-function hasFormatWarning(preset: Readonly<TemplatePreset>): boolean {
-  const customization = record.value?.current.document.customization;
-  return (
-    customization !== undefined
-    && preset.customization.dateFormat !== customization.dateFormat
-  );
+// A switch keeps the owner's page format and sets the date format from the
+// resume language, so only the date format can change.
+function hasFormatWarning(): boolean {
+  const current = record.value?.current;
+  if (current === undefined) return false;
+  return dateFormatForLanguage(current.metadata.lng)
+    !== current.document.customization.dateFormat;
 }
 
 function hasBaseSizeWarning(preset: Readonly<TemplatePreset>): boolean {
@@ -319,7 +320,7 @@ function assertNever(value: never): never {
                 :aria-label="copy.templateWarnings"
                 class="text-xs text-muted-foreground"
               >
-                <li v-if="hasFormatWarning(preset)">
+                <li v-if="hasFormatWarning()">
                   {{ copy.templateFormatWarning }}
                 </li>
                 <li v-if="hasBaseSizeWarning(preset)">

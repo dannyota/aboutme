@@ -4,6 +4,8 @@ import type {
   TemplatePreset,
 } from '@aboutme/schema/templates';
 
+import { dateFormatForLanguage } from './formatDate';
+
 export type TemplateApplyErrorCode
   = | 'invalid_current_placement'
     | 'invalid_preset_placement';
@@ -85,11 +87,13 @@ function validateSelectors(preset: TemplatePreset): readonly SectionType[] {
  * follows where the owner prints; docs/design/public-page-theme.md), so a
  * template switch keeps the current values, or their absence. A
  * kept photo position under a preset with no header uses the default header,
- * which renders the same as no header.
+ * which renders the same as no header. The date format follows the resume
+ * language, never the preset (docs/design/templates/contract.md §3).
  */
 function withOwnerChoices(
   current: Customization,
   next: Customization,
+  language: string | null | undefined,
 ): Customization {
   const { textAlign: _presetAlign, ...font } = next.font;
   const textAlign = current.font.textAlign;
@@ -105,6 +109,7 @@ function withOwnerChoices(
   return {
     ...rest,
     pageFormat: current.pageFormat,
+    dateFormat: dateFormatForLanguage(language),
     ...(colorScheme === undefined ? {} : { colorScheme }),
     font: textAlign === undefined ? font : { ...font, textAlign },
     ...(photoPosition !== undefined
@@ -117,10 +122,12 @@ export function applyTemplate(
   current: Customization,
   preset: TemplatePreset,
   content: Content,
+  language: string | null | undefined,
 ): Customization {
   return withOwnerChoices(
     current,
     presetCustomization(current, preset, content),
+    language,
   );
 }
 
