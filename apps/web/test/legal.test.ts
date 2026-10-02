@@ -79,6 +79,24 @@ describe('privacy and terms pages', () => {
       'Không dùng công cụ phân tích hay mã theo dõi quảng cáo của bên thứ '
       + 'ba. Chúng tôi chỉ đếm lượt xem CV công khai như mô tả ở trên.',
     );
+    expect(wrapper.text()).toContain(
+      'nên chỉ nhận một mã định danh tài khoản do nhà cung cấp cấp, và xóa '
+      + 'mã đó ngay trong lần đăng nhập.',
+    );
+    expect(wrapper.text()).not.toContain('xóa ngay tên và email');
+    expect(wrapper.text()).toContain(
+      'Người xem CV công khai không cần tài khoản.',
+    );
+    expect(wrapper.text()).toContain(
+      'mức thu phóng và độ rộng khung chỉnh sửa bạn chọn',
+    );
+    expect(wrapper.text()).toContain('sessionStorage');
+    expect(wrapper.text()).toContain('Mục Cài đặt → Thiết bị đã đăng nhập');
+    expect(wrapper.text()).not.toContain('Settings');
+    expect(wrapper.text()).toContain('trong vòng 20 ngày');
+    expect(wrapper.text()).toContain(
+      'Nếu xảy ra sự cố làm lộ hoặc mất dữ liệu cá nhân của bạn',
+    );
     const operator = wrapper.get('[data-testid="legal-operator"]');
     expect(operator.text()).toBe(
       'aboutme.vn do Danny, một cá nhân, vận hành phi thương mại tại Việt '
@@ -148,6 +166,25 @@ describe('privacy and terms pages', () => {
       'No third-party analytics or advertising trackers. We count views '
       + 'of public resumes only as described above.',
     );
+    expect(wrapper.text()).toContain(
+      'so we receive only an account ID from the provider, and we discard '
+      + 'it during that sign-in.',
+    );
+    expect(wrapper.text()).not.toContain('discard your name and email');
+    expect(wrapper.text()).toContain(
+      'Viewers of public resumes need no account.',
+    );
+    expect(wrapper.text()).toContain(
+      'preview mode (PDF or web), zoom, and editor panel width',
+    );
+    expect(wrapper.text()).toContain('(sessionStorage)');
+    expect(wrapper.text()).toContain(
+      'Settings → Signed-in devices lists your signed-in devices.',
+    );
+    expect(wrapper.text()).toContain('delete data within 20 days');
+    expect(wrapper.text()).toContain(
+      'If an incident exposes or loses your personal data',
+    );
     expect(wrapper.text()).toContain('Your rights');
     expect(wrapper.text()).toContain('Why we use your data');
     expect(wrapper.get('[data-testid="legal-operator"]').text()).toBe(
@@ -164,6 +201,9 @@ describe('privacy and terms pages', () => {
     expect(title(vietnamese)).toBe('Điều khoản sử dụng');
     expect(vietnamese.text()).toContain('Bạn phải từ 16 tuổi trở lên.');
     expect(vietnamese.text()).toContain('pháp luật Việt Nam');
+    expect(vietnamese.text()).toContain(
+      'việc tiếp tục sử dụng không được coi là đồng ý',
+    );
 
     setSiteLocale('en');
     const en = await mountSuspended(TermsPage);
@@ -174,6 +214,7 @@ describe('privacy and terms pages', () => {
     );
     expect(en.text()).toContain('except for backup copies until they expire');
     expect(en.text()).toContain('governed by the laws of Vietnam');
+    expect(en.text()).toContain('continued use does not count as consent');
     expect(
       en.get('a[href="https://github.com/dannyota/aboutme"]').text(),
     ).toBe('Source code on GitHub');
