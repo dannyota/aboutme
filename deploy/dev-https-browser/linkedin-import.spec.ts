@@ -287,6 +287,7 @@ async function writeFailureEvidence(
 interface RedactedConsoleMessage {
   readonly type: string;
   readonly pathname: string;
+  readonly text: string;
 }
 
 // Resume ids are UUIDs; the Nuxt build-meta poll's id is an opaque hash
@@ -304,6 +305,32 @@ function redactPathname(pathname: string): string {
     return `/_nuxt/builds/meta/${ID_PLACEHOLDER}.json`;
   }
   return pathname.replace(UUID_SEGMENT, ID_PLACEHOLDER);
+}
+
+// Failure evidence is a public CI artifact, so message text is reduced to its
+// first line, stripped of everything that could identify a host, account, or
+// credential, and cut to a fixed length. Redaction runs before truncation so
+// a cut never leaves half of a secret behind. Order matters: URLs and
+// scheme-less host paths go first, then emails, ids, and long opaque runs.
+const EVIDENCE_TEXT_LIMIT = 200;
+const URL_IN_TEXT = /[a-z][a-z0-9+.-]*:\/\/\S*/giu;
+const HOST_PATH_IN_TEXT =
+  /\/?(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:\/\S*)?/giu;
+const EMAIL_IN_TEXT = /[^\s@<>"']+@[^\s@<>"']+/gu;
+const OPAQUE_RUN = /[A-Za-z0-9_+/=.-]{20,}/gu;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/gu;
+
+function redactEvidenceText(text: string): string {
+  const firstLine = text.split(/\r?\n/u, 1)[0] ?? '';
+  return firstLine
+    .replace(URL_IN_TEXT, '{url}')
+    .replace(HOST_PATH_IN_TEXT, '{url}')
+    .replace(EMAIL_IN_TEXT, '{email}')
+    .replace(UUID_SEGMENT, ID_PLACEHOLDER)
+    .replace(OPAQUE_RUN, '{token}')
+    .replace(CONTROL_CHARS, ' ')
+    .slice(0, EVIDENCE_TEXT_LIMIT);
 }
 
 // pathnameOf never throws: failure evidence is best-effort, and a console
@@ -610,6 +637,7 @@ for (const engine of ['chromium', 'webkit'] as const) {
           unexpectedConsoleMessages.push({
             pathname: pathnameOf(message.location().url),
             type: message.type(),
+            text: redactEvidenceText(message.text()),
           });
         },
         onPageError: (error) => {
@@ -699,7 +727,13 @@ for (const engine of ['chromium', 'webkit'] as const) {
       try {
         await writeFailureEvidence(
           `/evidence/linkedin-import-failure-${engine}.json`, stageAtFailure,
-          { engine, unexpectedConsoleMessages },
+          {
+            engine,
+            thrownError: redactEvidenceText(
+              error instanceof Error ? error.message : String(error),
+            ),
+            unexpectedConsoleMessages,
+          },
         );
       } catch {
         stage('failure-evidence-write-failed');
