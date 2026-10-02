@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  updated: 'Cập nhật lần cuối ngày 01/10/2026',
+  updated: 'Cập nhật lần cuối ngày 02/10/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
@@ -209,6 +209,9 @@ export const legalVi: LegalCopy = {
           + 'sau đó, và chỉ dùng để khôi phục sau sự cố.',
           'Bản ghi về việc xóa tài khoản và gỡ liên kết nhà cung cấp (chỉ '
           + 'gồm loại sự kiện và thời điểm) được giữ tối đa 180 ngày.',
+          'Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản dịch vụ, '
+          + 'chúng tôi giữ bản ghi gồm mã tài khoản, đường dẫn các CV của '
+          + 'tài khoản đó và thời điểm xóa trong tối đa 180 ngày.',
         ],
       },
       {

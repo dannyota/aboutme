@@ -34,7 +34,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 01/10/2026',
+      'Cập nhật lần cuối ngày 02/10/2026',
     );
     expect(wrapper.text()).toContain('mã băm Argon2id');
     expect(wrapper.text()).toContain('Singapore (ap-southeast-1)');
@@ -114,7 +114,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated October 1, 2026',
+      'Last updated October 2, 2026',
     );
     expect(wrapper.text()).toContain(
       'We delete the IP address and browser (user agent) recorded for a '
