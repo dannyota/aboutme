@@ -31,9 +31,14 @@ RUN npm --prefix apps/web run build
 
 # .github/npm-audit-exceptions.json excepts the node-forge advisory only
 # because node-forge (reached through listhen) never ships. Fail the build if
-# either appears in the output, so that exception cannot go stale unnoticed.
-RUN test -d apps/web/.output \
-    && ! find apps/web/.output \( -ipath '*node-forge*' -o -ipath '*listhen*' \) | grep -q .
+# either name appears in the output as a path or in file contents, or if the
+# output is missing, so that exception cannot go stale unnoticed. Package
+# manifests are skipped in the content scan: other packages list listhen as a
+# dev dependency, and a shipped listhen would still show up as a path.
+RUN set -e; out=apps/web/.output; test -f "$out/server/index.mjs"; \
+    hits=$(find "$out" \( -ipath '*node-forge*' -o -ipath '*listhen*' \)); \
+    if [ -n "$hits" ]; then printf '%s\n' "$hits"; exit 1; fi; \
+    rc=0; grep -rliE --exclude=package.json 'node-forge|listhen' "$out" || rc=$?; [ "$rc" -eq 1 ]
 
 # ---- runtime ----
 # Nitro's node-server preset (Nuxt's default) bundles its own dependencies
