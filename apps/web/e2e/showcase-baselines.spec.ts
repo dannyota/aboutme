@@ -11,8 +11,10 @@ import {
 
 // Pixel baselines for the community showcase (/showcase) with a stubbed
 // listing: twelve tiles and a pager over three pages, and the empty state,
-// in both languages and themes at phone and desktop width, signed out. The
-// card images are stored card baselines, so the tiles hold real card art.
+// in both languages and themes at phone and desktop width, signed out. Five
+// more cases cover the open filter sheet, three active filters, and the
+// tablet width (docs/design/ui/showcase.md). The card images are stored card
+// baselines, so the tiles hold real card art.
 
 const ORIGIN = 'http://127.0.0.1:20092';
 const CARDS = [
@@ -58,99 +60,173 @@ const FILLED = {
 };
 const EMPTY = { items: [], page: 1, pageCount: 0, total: 0 };
 
-const STATES = [
-  { name: 'filled', path: '/showcase?page=2', body: FILLED },
-  { name: 'empty', path: '/showcase', body: EMPTY },
-] as const;
-const LOCALES = ['vi', 'en'] as const;
-const THEMES = ['light', 'dark'] as const;
-const WIDTHS = [390, 1440] as const;
+const FILTERED_PATH = '/showcase?role=backend&lang=vi'
+  + '&template=engineer-compact&page=2';
 
-for (const state of STATES) {
-  for (const locale of LOCALES) {
-    for (const theme of THEMES) {
-      for (const width of WIDTHS) {
-        const title = `showcase ${state.name} ${locale} ${theme} ${width}px `
-          + 'matches baseline';
-        test(title, async ({ page }, testInfo) => {
-          await page.setViewportSize({ width, height: 900 });
-          await mockSignedOutSession(page);
-          await page.route(/\/api\/v1\/public\/showcase(?:\?.*)?$/u, (route) =>
-            route.fulfill({
-              status: 200,
-              contentType: 'application/json',
-              headers: { 'cache-control': 'no-store, no-transform' },
-              body: JSON.stringify(state.body),
-            }));
-          await page.route(
-            /\/api\/v1\/public\/resumes\/resume-(\d+)\/og\/[0-9a-f]{16}\.png$/u,
-            async (route) => {
-              const index = Number(
-                /resume-(\d+)/u.exec(route.request().url())?.[1] ?? '0',
-              );
-              const file = CARDS[index % CARDS.length]!;
-              await route.fulfill({
-                status: 200,
-                contentType: 'image/png',
-                body: await readFile(resolve(
-                  import.meta.dirname,
-                  'baselines',
-                  `${file}.png`,
-                )),
-              });
-            },
-          );
-          await page.context().addCookies([
-            { name: 'aboutme-locale', value: locale, url: ORIGIN },
-            { name: 'aboutme-theme', value: theme, url: ORIGIN },
-          ]);
+interface Case {
+  readonly name: 'filled' | 'empty' | 'sheet' | 'filtered';
+  readonly path: string;
+  readonly body: typeof FILLED | typeof EMPTY;
+  readonly locale: 'vi' | 'en';
+  readonly theme: 'light' | 'dark';
+  readonly width: number;
+}
 
-          const response = await page.goto(state.path);
-          expect(response?.status()).toBe(200);
-          await page.addStyleTag({
-            content: '*, *::before, *::after { transition: none !important; '
-              + 'animation: none !important; }',
-          });
-          await expect(page.getByTestId('app-shell')).toBeVisible();
-          await expect(page.locator(`[data-state="${
-            state.name === 'filled' ? 'list' : 'empty'}"]`)).toBeVisible();
-          await page.evaluate(() => document.fonts.ready);
-
-          if (state.name === 'filled') {
-            await expect(page.locator('[data-showcase-slug]'))
-              .toHaveCount(12);
-            // Grow the viewport to the page and load every lazy card, so the
-            // capture never depends on scroll or decode timing.
-            const height = await page.evaluate(() =>
-              document.documentElement.scrollHeight);
-            await page.setViewportSize({ width, height });
-            await page.locator('img[loading="lazy"]').evaluateAll(
-              (images) => {
-                for (const image of images) {
-                  (image as HTMLImageElement).loading = 'eager';
-                }
-              },
-            );
-            await waitForImages(page);
-          }
-          await page.evaluate(() => new Promise<void>((done) => {
-            requestAnimationFrame(() => requestAnimationFrame(() => done()));
-          }));
-
-          const overflow = await page.evaluate(() =>
-            document.documentElement.scrollWidth
-            - document.documentElement.clientWidth);
-          expect(overflow).toBe(0);
-
-          await verifyScreenshot(
-            page,
-            `showcase--${state.name}--${locale}--${theme}--${width}.png`,
-            testInfo,
-            undefined,
-            CHROME_PIXEL_TOLERANCE,
-          );
-        });
+const CASES: Case[] = [];
+for (const [name, path, body] of [
+  ['filled', '/showcase?page=2', FILLED],
+  ['empty', '/showcase', EMPTY],
+] as const) {
+  for (const locale of ['vi', 'en'] as const) {
+    for (const theme of ['light', 'dark'] as const) {
+      for (const width of [390, 1440]) {
+        CASES.push({ name, path, body, locale, theme, width });
       }
     }
   }
+}
+CASES.push(
+  {
+    name: 'sheet',
+    path: '/showcase?page=2',
+    body: FILLED,
+    locale: 'vi',
+    theme: 'dark',
+    width: 390,
+  },
+  {
+    name: 'sheet',
+    path: '/showcase?page=2',
+    body: FILLED,
+    locale: 'en',
+    theme: 'light',
+    width: 390,
+  },
+  {
+    name: 'filtered',
+    path: FILTERED_PATH,
+    body: FILLED,
+    locale: 'vi',
+    theme: 'dark',
+    width: 390,
+  },
+  {
+    name: 'filtered',
+    path: FILTERED_PATH,
+    body: FILLED,
+    locale: 'en',
+    theme: 'light',
+    width: 1440,
+  },
+  {
+    name: 'filled',
+    path: '/showcase?page=2',
+    body: FILLED,
+    locale: 'vi',
+    theme: 'light',
+    width: 768,
+  },
+);
+
+for (const { name, path, body, locale, theme, width } of CASES) {
+  const title = `showcase ${name} ${locale} ${theme} ${width}px `
+    + 'matches baseline';
+  test(title, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await mockSignedOutSession(page);
+    await page.route(/\/api\/v1\/public\/showcase(?:\?.*)?$/u, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'cache-control': 'no-store, no-transform' },
+        body: JSON.stringify(body),
+      }));
+    await page.route(
+      /\/api\/v1\/public\/resumes\/resume-(\d+)\/og\/[0-9a-f]{16}\.png$/u,
+      async (route) => {
+        const index = Number(
+          /resume-(\d+)/u.exec(route.request().url())?.[1] ?? '0',
+        );
+        const file = CARDS[index % CARDS.length]!;
+        await route.fulfill({
+          status: 200,
+          contentType: 'image/png',
+          body: await readFile(resolve(
+            import.meta.dirname,
+            'baselines',
+            `${file}.png`,
+          )),
+        });
+      },
+    );
+    await page.context().addCookies([
+      { name: 'aboutme-locale', value: locale, url: ORIGIN },
+      { name: 'aboutme-theme', value: theme, url: ORIGIN },
+    ]);
+
+    const response = await page.goto(path);
+    expect(response?.status()).toBe(200);
+    await page.addStyleTag({
+      content: '*, *::before, *::after { transition: none !important; '
+        + 'animation: none !important; }',
+    });
+    await expect(page.getByTestId('app-shell')).toBeVisible();
+    await expect(page.locator(`[data-state="${
+      name === 'empty' ? 'empty' : 'list'}"]`)).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+
+    if (name !== 'empty') {
+      await expect(page.locator('[data-showcase-slug]')).toHaveCount(12);
+      // Load every lazy card, so the capture never depends on scroll or
+      // decode timing.
+      await page.locator('img[loading="lazy"]').evaluateAll((images) => {
+        for (const image of images) {
+          (image as HTMLImageElement).loading = 'eager';
+        }
+      });
+      await waitForImages(page);
+    }
+    if (name === 'filled' || name === 'filtered') {
+      // Grow the viewport to the page, so the capture holds every tile.
+      const height = await page.evaluate(() =>
+        document.documentElement.scrollHeight);
+      await page.setViewportSize({ width, height });
+    }
+    if (name === 'sheet') {
+      // The sheet is a fixed overlay, so the viewport keeps its phone height.
+      await page.locator('[data-action="showcase-filters-open"]').click();
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByTestId('showcase-filter-sheet')).toBeVisible();
+      // Wait for the slide to end: the sheet's box holds still over frames.
+      await page.getByRole('dialog').evaluate((node) =>
+        new Promise<void>((done) => {
+          let last = node.getBoundingClientRect().top;
+          let still = 0;
+          const frame = () => {
+            const top = node.getBoundingClientRect().top;
+            still = top === last ? still + 1 : 0;
+            last = top;
+            if (still >= 3) done();
+            else requestAnimationFrame(frame);
+          };
+          requestAnimationFrame(frame);
+        }));
+    }
+    await page.evaluate(() => new Promise<void>((done) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => done()));
+    }));
+
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth
+      - document.documentElement.clientWidth);
+    expect(overflow).toBe(0);
+
+    await verifyScreenshot(
+      page,
+      `showcase--${name}--${locale}--${theme}--${width}.png`,
+      testInfo,
+      undefined,
+      CHROME_PIXEL_TOLERANCE,
+    );
+  });
 }
