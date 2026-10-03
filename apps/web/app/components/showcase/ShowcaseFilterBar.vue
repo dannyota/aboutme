@@ -178,7 +178,8 @@ defineExpose({
     flex: none;
     grid-area: count;
     align-self: end;
-    justify-self: end;
+    justify-self: stretch;
+    text-align: right;
   }
 
   .showcase-filters-button {
