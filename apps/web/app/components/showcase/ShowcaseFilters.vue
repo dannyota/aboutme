@@ -184,7 +184,7 @@ function onTemplate(value: string): void {
   width: 100%;
 }
 
-.showcase-option {
+.showcase-filters :deep(.showcase-option) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -197,25 +197,29 @@ function onTemplate(value: string): void {
   transition: background-color 150ms, border-color 150ms;
 }
 
-.showcase-option:not([data-state="on"]):hover {
+.showcase-filters :deep(.showcase-option:not([data-state="on"]):hover) {
   background: var(--surface-indigo);
 }
 
-.showcase-option[aria-pressed="true"],
-.showcase-option[data-state="on"] {
+.showcase-filters :deep(.showcase-option[aria-pressed="true"]),
+.showcase-filters :deep(.showcase-option[data-state="on"]) {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
   font-weight: 600;
 }
 
-.showcase-option:focus-visible {
+.showcase-filters :deep(.showcase-option:focus-visible) {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
+/* The options render inside reka's ToggleGroupItem, which does not carry
+   this component's scope id when the sheet mounts in the browser, so every
+   option rule reaches it through :deep(). */
+
 /* Sheet: role pills wrap, language options share three columns. */
-.showcase-filters--sheet .showcase-options--roles .showcase-option {
+.showcase-filters--sheet .showcase-options--roles :deep(.showcase-option) {
   height: 40px;
   padding: 0 14px;
   border-radius: 9999px;
@@ -226,7 +230,7 @@ function onTemplate(value: string): void {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.showcase-filters--sheet .showcase-options--languages .showcase-option {
+.showcase-filters--sheet .showcase-options--languages :deep(.showcase-option) {
   min-height: 44px;
   padding: 0 6px;
   border-radius: 10px;
@@ -242,7 +246,7 @@ function onTemplate(value: string): void {
   gap: 2px;
 }
 
-.showcase-filters--rail .showcase-option {
+.showcase-filters--rail :deep(.showcase-option) {
   justify-content: flex-start;
   height: 36px;
   padding: 0 12px;
@@ -253,20 +257,20 @@ function onTemplate(value: string): void {
   text-align: left;
 }
 
-.showcase-filters--rail .showcase-option:not([data-state="on"]):hover {
+.showcase-filters--rail :deep(.showcase-option:not([data-state="on"]):hover) {
   background: var(--muted);
 }
 
-.showcase-filters--rail .showcase-option[aria-pressed="true"],
-.showcase-filters--rail .showcase-option[data-state="on"] {
+.showcase-filters--rail :deep(.showcase-option[aria-pressed="true"]),
+.showcase-filters--rail :deep(.showcase-option[data-state="on"]) {
   border-color: transparent;
   background: var(--accent);
   color: var(--foreground);
   font-weight: 600;
 }
 
-.showcase-filters--rail .showcase-option[aria-pressed="true"]::after,
-.showcase-filters--rail .showcase-option[data-state="on"]::after {
+.showcase-filters--rail :deep(.showcase-option[aria-pressed="true"]::after),
+.showcase-filters--rail :deep(.showcase-option[data-state="on"]::after) {
   content: "";
   width: 8px;
   height: 8px;
