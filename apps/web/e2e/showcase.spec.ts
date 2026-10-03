@@ -761,14 +761,24 @@ test('the filter bar sticks and no ancestor sets overflow', async ({
 // A tile link, Report, or pager link focused with the keyboard never rests
 // under the sticky bar (docs/design/ui/showcase.md "Sticky bar"; WCAG 2.4.11).
 async function expectClearOfBar(page: Page): Promise<void> {
+  // The poll reads "clear" or a description of what is wrong, so a failure
+  // names the focused element and both boxes.
   await expect.poll(() => page.evaluate(() => {
     const active = document.activeElement;
     const bar = document.querySelector('[data-testid="showcase-filter-bar"]');
-    if (active === null || bar === null) return -1;
+    if (active === null || bar === null) return 'no focus or no bar';
     const box = active.getBoundingClientRect();
-    if (box.bottom > window.innerHeight) return -1;
-    return Math.round(box.top - bar.getBoundingClientRect().bottom);
-  })).toBeGreaterThanOrEqual(0);
+    const barBottom = bar.getBoundingClientRect().bottom;
+    if (box.top >= barBottom && box.bottom <= window.innerHeight) {
+      return 'clear';
+    }
+    const name = `${active.tagName.toLowerCase()}`
+      + `[${active.getAttribute('data-action') ?? ''}]`
+      + `${active.hasAttribute('data-showcase-tile') ? '[tile]' : ''}`;
+    return `${name} top ${box.top} bottom ${box.bottom}; bar bottom `
+      + `${barBottom}; viewport ${window.innerHeight}; scrollY `
+      + `${window.scrollY}`;
+  })).toBe('clear');
 }
 
 for (const width of [390, 768]) {
@@ -873,7 +883,11 @@ test('the invite button opens sign-in when registration is off', async ({
     .toHaveAttribute('href', '/login');
 });
 
-interface ShiftSource { readonly node: Node | null }
+interface ShiftSource {
+  readonly node: Node | null;
+  readonly previousRect: DOMRectReadOnly;
+  readonly currentRect: DOMRectReadOnly;
+}
 interface ShiftEntry extends PerformanceEntry {
   readonly hadRecentInput: boolean;
   readonly sources: readonly ShiftSource[];
@@ -905,7 +919,16 @@ for (const width of [390, 1440]) {
                 const inside = element?.closest(
                   `[data-testid="${region}"]`,
                 );
-                if (inside) hits.push(region);
+                if (inside) {
+                  // Name the moved node and both boxes, so a failure says
+                  // what moved and by how much.
+                  const box = (rect: DOMRectReadOnly): string =>
+                    `${rect.x},${rect.y} ${rect.width}x${rect.height}`;
+                  const tag = element?.tagName.toLowerCase() ?? 'text';
+                  hits.push(`${region} ${tag} `
+                    + `${box(source.previousRect)} -> `
+                    + `${box(source.currentRect)}`);
+                }
               }
             }
           }
