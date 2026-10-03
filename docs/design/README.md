@@ -52,6 +52,7 @@ Current behavior lives in code, deployment configuration, and
 | Other   | [UI: logo and seal](ui/identity-and-seal.md)                           | Logo, public seal, and state marks                             |
 | Other   | [UI: typography and tokens](ui/typography-and-tokens.md)               | Chrome type, color tokens, spacing, radius, buttons, dialogs   |
 | Other   | [UI: landing and Library](ui/landing-and-library.md)                   | Landing page and template Library layout                       |
+| Other   | [UI: showcase page](ui/showcase.md)                                    | Community showcase layout, filters, tiles, and states          |
 | Other   | [UI: shell and editor](ui/shell-and-editor.md)                         | App shell, account pages, resume list, editor, and settings    |
 | Other   | [UI: responsive and accessibility](ui/responsive-and-accessibility.md) | Narrow editor layouts, motion, and accessibility               |
 
