@@ -17,8 +17,10 @@ import { registerCapabilities } from '../support/capabilities';
 import { setSiteLocale } from '../support/locale';
 import { holdSignedOutRedirects } from '../support/signedOutRedirects';
 
-// The community showcase page: states, URL filters, tiles, pager, and the
-// privacy rules (docs/design/showcase.md; AC-SHOW-002, 005, 008, 013, 014).
+// The community showcase page: states, URL filters, count line, filter bar
+// and sheet, active-filter chips, tiles, invite card, pager, and the privacy
+// rules (docs/design/showcase.md; docs/design/ui/showcase.md; AC-SHOW-002,
+// 005, 008, 013, 014).
 
 mockNuxtImport('navigateTo', () => vi.fn());
 registerCapabilities({ providerLogin: false, agentAccess: false });
@@ -122,11 +124,86 @@ function page(items: ShowcaseItem[], extra: object = {}) {
 // A page left mounted would keep reacting to later route changes.
 const mounted: { unmount(): void }[] = [];
 
-async function mountPage(route = '/showcase') {
-  const wrapper = await mountSuspended(ShowcasePage, { route });
+/** `attach` puts the page in the document, which focus checks need. */
+async function mountPage(route = '/showcase', attach = false) {
+  const wrapper = await mountSuspended(
+    ShowcasePage,
+    attach ? { route, attachTo: document.body } : { route },
+  );
   mounted.push(wrapper);
   await flushPromises();
   return wrapper;
+}
+
+/**
+ * Stubs `matchMedia`: the 1024 px query follows `set`, every other query
+ * does not match. The page's `useMediaQuery` watcher listens for changes.
+ */
+function stubViewport(initialWide: boolean) {
+  let wide = initialWide;
+  const listeners = new Set<(event: { matches: boolean }) => void>();
+  vi.stubGlobal('matchMedia', (query: string) => {
+    const tracked = query.includes('1024px');
+    return {
+      media: query,
+      onchange: null,
+      get matches() {
+        return tracked && wide;
+      },
+      addEventListener: (_type: string, listener: never) => {
+        if (tracked) listeners.add(listener);
+      },
+      removeEventListener: (_type: string, listener: never) => {
+        listeners.delete(listener);
+      },
+      addListener: (listener: never) => {
+        if (tracked) listeners.add(listener);
+      },
+      removeListener: (listener: never) => {
+        listeners.delete(listener);
+      },
+      dispatchEvent: () => true,
+    };
+  });
+  return {
+    set(next: boolean): void {
+      wide = next;
+      for (const listener of [...listeners]) listener({ matches: next });
+    },
+  };
+}
+
+let viewport = stubViewport(false);
+
+function sheetElement(): HTMLElement | null {
+  return document.body.querySelector<HTMLElement>(
+    '[data-testid="showcase-filter-sheet"]',
+  );
+}
+
+function bodyElement(selector: string): HTMLElement {
+  const found = document.body.querySelector<HTMLElement>(selector);
+  if (found === null) throw new Error(`missing ${selector}`);
+  return found;
+}
+
+/** Focuses the Filters button, as a click does, then opens the sheet. */
+async function openSheet(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+  const button = wrapper.get('[data-action="showcase-filters-open"]');
+  (button.element as HTMLElement).focus();
+  await button.trigger('click');
+  await flushPromises();
+  await vi.waitFor(() => expect(sheetElement()).not.toBeNull());
+}
+
+async function expectQuery(query: Record<string, string>): Promise<void> {
+  await vi.waitFor(() => {
+    expect(useRouter().currentRoute.value.query).toEqual(query);
+  });
+}
+
+function countText(wrapper: Awaited<ReturnType<typeof mountPage>>): string {
+  return wrapper.get('[data-testid="showcase-count"]').text();
 }
 
 function listingUrls(): string[] {
@@ -135,6 +212,7 @@ function listingUrls(): string[] {
 
 beforeEach(() => {
   setSiteLocale('en');
+  viewport = stubViewport(false);
   clearNuxtData();
   meStatus = 401;
   holdSignedOutRedirects();
@@ -152,20 +230,23 @@ afterEach(() => {
 });
 
 describe('showcase page states', () => {
-  it('renders the heading, lead, and note in both languages', async () => {
-    stubListing(page([item('ada-lovelace')]));
-    for (const locale of ['en', 'vi'] as const) {
-      setSiteLocale(locale);
-      const copy = showcaseCopy[locale];
-      const wrapper = await mountPage();
-      const header = wrapper.get('[data-testid="showcase-header"]');
-      expect(header.get('h1').text()).toBe(copy.title);
-      expect(header.text()).toContain(copy.lead);
-      expect(header.text()).toContain(copy.orderNote);
-      expect(header.find('a, button, input, select').exists()).toBe(false);
-      wrapper.unmount();
-    }
-  });
+  it(
+    'renders the heading and lead in both languages, with no band',
+    async () => {
+      stubListing(page([item('ada-lovelace')]));
+      for (const locale of ['en', 'vi'] as const) {
+        setSiteLocale(locale);
+        const copy = showcaseCopy[locale];
+        const wrapper = await mountPage();
+        const header = wrapper.get('[data-testid="showcase-header"]');
+        expect(header.get('h1').text()).toBe(copy.title);
+        expect(header.get('p').text()).toBe(copy.lead);
+        expect(header.find('a, button, input, select').exists()).toBe(false);
+        expect(header.classes()).not.toContain('bg-surface-blue');
+        wrapper.unmount();
+      }
+    },
+  );
 
   it('shows the busy loading grid with six skeletons until items arrive',
     async () => {
@@ -245,7 +326,8 @@ describe('showcase page states', () => {
     const wrapper = await mountPage('/showcase?role=qa');
     const line = wrapper.get('[data-state="no-match"]');
     expect(line.text()).toBe(showcaseCopy.en.noMatch);
-    expect(line.attributes('role')).toBe('status');
+    // The count line is the live region; the line adds no second one.
+    expect(line.attributes('role')).toBeUndefined();
     expect(wrapper.find('[data-testid="showcase-pager"]').exists()).toBe(false);
   });
 
@@ -342,12 +424,6 @@ describe('showcase filters in the URL', () => {
   });
 
   // Navigation settles asynchronously, so each step waits for the route.
-  async function expectQuery(query: Record<string, string>): Promise<void> {
-    await vi.waitFor(() => {
-      expect(useRouter().currentRoute.value.query).toEqual(query);
-    });
-  }
-
   it('writes a role change to the URL, drops page, and reloads', async () => {
     stubListing(page([item('ada-lovelace')]));
     const wrapper = await mountPage('/showcase?lang=en&page=3');
@@ -441,7 +517,12 @@ describe('showcase filters in the URL', () => {
         'fresher', 'brse', 'security', 'other',
       ]);
       const languages = wrapper.get('[data-testid="showcase-languages"]');
-      expect(languages.attributes('aria-label')).toBe('Resume language');
+      const headings = wrapper.get('[data-testid="showcase-filter-rail"]')
+        .findAll('.showcase-filters__heading');
+      expect(headings.map((heading) => heading.text()))
+        .toEqual(['Role', 'Resume language']);
+      expect(languages.attributes('aria-labelledby'))
+        .toBe(headings[1]!.attributes('id'));
       expect(languages.findAll('[data-lang]').map(
         (chip) => chip.text(),
       )).toEqual(['All languages', 'Vietnamese', 'English']);
@@ -506,12 +587,19 @@ describe('showcase tiles', () => {
     expect(image.attributes('width')).toBe('1200');
     expect(image.attributes('height')).toBe('630');
     expect(tile.find('b').exists()).toBe(false);
-    // Meta line, role chip, Report: nothing else, and no slug as text.
-    expect(link.get('.showcase-tile__line').text())
-      .toBe('Engineer Compact·Vietnamese');
+    // Role chip and language on one row, then the template, then the footer
+    // with the slug as plain text outside the tile link (S14).
+    expect(link.get('.showcase-tile__line').text()).toBe('Data/AIVietnamese');
     expect(link.get('[data-showcase-role]').text()).toBe('Data/AI');
-    expect(tile.text()).toBe('Engineer Compact·VietnameseData/AIReport');
-    expect(tile.text()).not.toContain('ada-lovelace');
+    expect(link.get('.showcase-tile__template').text())
+      .toBe('Engineer Compact');
+    expect(link.text()).not.toContain('ada-lovelace');
+    const slug = tile.get('.showcase-tile__slug');
+    expect(slug.text()).toBe('aboutme.vn/ada-lovelace');
+    expect(slug.element.tagName).toBe('SPAN');
+    expect(link.element.contains(slug.element)).toBe(false);
+    expect(tile.text())
+      .toBe('Data/AIVietnameseEngineer Compactaboutme.vn/ada-lovelace');
     expect(tile.text()).not.toMatch(/@|\+\d|\d{4}/);
   });
 
@@ -521,7 +609,7 @@ describe('showcase tiles', () => {
     ]));
     const tile = (await mountPage()).get('[data-showcase-slug]');
     expect(tile.get('[data-showcase-tile]').text())
-      .toBe('Custom design·Other language');
+      .toBe('Other languageCustom design');
     expect(tile.find('[data-showcase-role]').exists()).toBe(false);
   });
 
@@ -530,7 +618,9 @@ describe('showcase tiles', () => {
       stubListing(page([item('ada-lovelace')]));
       const en = await mountPage();
       const report = en.get('[data-action="showcase-report"]');
-      expect(report.text()).toBe('Report');
+      // An icon link: the name is its aria-label, with no visible text.
+      expect(report.text()).toBe('');
+      expect(report.find('svg').attributes('aria-hidden')).toBe('true');
       expect(report.attributes('aria-label'))
         .toBe('Report resume ada-lovelace by email');
       expect(report.attributes('href')).toBe(
@@ -545,7 +635,7 @@ describe('showcase tiles', () => {
       setSiteLocale('vi');
       const vi = await mountPage();
       const viReport = vi.get('[data-action="showcase-report"]');
-      expect(viReport.text()).toBe('Báo cáo');
+      expect(viReport.text()).toBe('');
       expect(viReport.attributes('aria-label'))
         .toBe('Báo cáo CV ada-lovelace qua email');
       expect(viReport.attributes('href')).toBe(
@@ -619,9 +709,13 @@ describe('showcase privacy', () => {
       const root = join(process.cwd(), 'app');
       const files = [
         'pages/showcase.vue',
-        'components/showcase/ShowcaseTile.vue',
+        'components/showcase/ShowcaseActiveFilters.vue',
+        'components/showcase/ShowcaseFilterBar.vue',
+        'components/showcase/ShowcaseFilterSheet.vue',
         'components/showcase/ShowcaseFilters.vue',
+        'components/showcase/ShowcaseInvite.vue',
         'components/showcase/ShowcasePager.vue',
+        'components/showcase/ShowcaseTile.vue',
         'composables/useShowcase.ts',
         'lib/showcaseContract.ts',
         'lib/showcaseQuery.ts',
@@ -631,4 +725,596 @@ describe('showcase privacy', () => {
         expect(text, file).not.toMatch(FORBIDDEN);
       }
     });
+});
+
+describe('showcase count line', () => {
+  it.each([
+    ['en', 12, '12 resumes · earliest added first'],
+    ['en', 1, '1 resume · earliest added first'],
+    ['en', 0, '0 resumes · earliest added first'],
+    ['en', 1234, '1,234 resumes · earliest added first'],
+    ['vi', 12, '12 CV · sớm nhất trước'],
+    ['vi', 1, '1 CV · sớm nhất trước'],
+    ['vi', 1234, '1.234 CV · sớm nhất trước'],
+  ] as const)('reads the listing total in %s for %i', async (
+    locale,
+    total,
+    text,
+  ) => {
+    setSiteLocale(locale);
+    stubListing(page([item('ada-lovelace')], { total }));
+    const wrapper = await mountPage();
+    expect(countText(wrapper)).toBe(text);
+  });
+
+  it('is the polite live region and bolds only the count', async () => {
+    stubListing(page([item('ada-lovelace')], { total: 7 }));
+    const wrapper = await mountPage();
+    const line = wrapper.get('[data-testid="showcase-count"]');
+    expect(line.element.tagName).toBe('P');
+    expect(line.attributes('role')).toBe('status');
+    expect(line.attributes('aria-atomic')).toBe('true');
+    expect(line.get('strong').text()).toBe('7 resumes');
+  });
+
+  it('shows a skeleton only before the first total', async () => {
+    stubListing({ hold: true });
+    const wrapper = await mountPage();
+    const line = wrapper.get('[data-testid="showcase-count"]');
+    expect(line.find('[data-slot="skeleton"]').exists()).toBe(true);
+    expect(line.text()).toBe('');
+  });
+
+  it('keeps the last text while a new load runs', async () => {
+    stubListing(page([item('ada-lovelace')], { total: 5 }), { hold: true });
+    const wrapper = await mountPage();
+    expect(countText(wrapper)).toBe('5 resumes · earliest added first');
+    await wrapper.get('[data-role="qa"]').trigger('click');
+    await expectQuery({ role: 'qa' });
+    await vi.waitFor(() => expect(wrapper.find('[data-state="loading"]')
+      .exists()).toBe(true));
+    const line = wrapper.get('[data-testid="showcase-count"]');
+    expect(line.text()).toBe('5 resumes · earliest added first');
+    expect(line.find('[data-slot="skeleton"]').exists()).toBe(false);
+  });
+
+  it('keeps the last text when a later load fails', async () => {
+    stubListing(page([item('ada-lovelace')], { total: 5 }), { fail: true });
+    const wrapper = await mountPage();
+    await wrapper.get('[data-role="qa"]').trigger('click');
+    await expectQuery({ role: 'qa' });
+    await vi.waitFor(() => expect(wrapper.find('[data-state="failed"]')
+      .exists()).toBe(true));
+    expect(countText(wrapper)).toBe('5 resumes · earliest added first');
+  });
+
+  it('names only the order when the first load fails', async () => {
+    stubListing({ fail: true });
+    const wrapper = await mountPage();
+    expect(countText(wrapper)).toBe(showcaseCopy.en.countNoTotal);
+    expect(wrapper.get('[data-testid="showcase-count"]')
+      .find('[data-slot="skeleton"]').exists()).toBe(false);
+  });
+
+  it('reads 0 for a filter with no match', async () => {
+    stubListing(page([], { pageCount: 0 }));
+    const wrapper = await mountPage('/showcase?role=qa');
+    expect(countText(wrapper)).toBe('0 resumes · earliest added first');
+  });
+});
+
+describe('showcase filter bar and rail', () => {
+  it('holds the bar, the rail, and the shared fields in the server HTML',
+    async () => {
+      stubListing({ hold: true });
+      const wrapper = await mountPage();
+      const bar = wrapper.get('[data-testid="showcase-filter-bar"]');
+      expect(bar.find('[data-testid="showcase-count"]').exists()).toBe(true);
+      const rail = wrapper.get('[data-testid="showcase-filter-rail"]');
+      expect(rail.element.tagName).toBe('ASIDE');
+      expect(rail.attributes('aria-label')).toBe('Filters');
+      expect(rail.find('[data-testid="showcase-filters"]').exists())
+        .toBe(true);
+      // No role row outside the rail, and none in the bar.
+      expect(bar.find('[data-testid="showcase-roles"]').exists()).toBe(false);
+    });
+
+  it('shows the Filters button with no badge while no filter is on',
+    async () => {
+      stubListing(page([item('ada-lovelace')]));
+      const wrapper = await mountPage();
+      const button = wrapper.get('[data-action="showcase-filters-open"]');
+      expect(button.text()).toBe('Filters');
+      expect(button.attributes('aria-label')).toBeUndefined();
+      expect(button.attributes('aria-haspopup')).toBe('dialog');
+      expect(button.attributes('aria-expanded')).toBe('false');
+      expect(wrapper.find('[data-testid="showcase-filters-badge"]').exists())
+        .toBe(false);
+      expect(wrapper.find('[data-testid="showcase-active-filters"]').exists())
+        .toBe(false);
+    });
+
+  it.each([
+    ['en', '/showcase?role=qa', '1', 'Filters, 1 active'],
+    ['en', '/showcase?role=qa&lang=vi', '2', 'Filters, 2 active'],
+    ['en', '/showcase?role=qa&lang=vi&template=custom', '3',
+      'Filters, 3 active'],
+    ['vi', '/showcase?template=custom', '1', 'Bộ lọc, 1 đang bật'],
+    ['vi', '/showcase?role=wizard&page=3', undefined, undefined],
+  ] as const)('counts the filters on for %s %s', async (
+    locale,
+    route,
+    badge,
+    name,
+  ) => {
+    setSiteLocale(locale);
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage(route);
+    const button = wrapper.get('[data-action="showcase-filters-open"]');
+    expect(button.attributes('aria-label')).toBe(name);
+    const badgeElement = wrapper.find('[data-testid="showcase-filters-badge"]');
+    if (badge === undefined) {
+      expect(badgeElement.exists()).toBe(false);
+      return;
+    }
+    expect(badgeElement.text()).toBe(badge);
+    expect(badgeElement.attributes('aria-hidden')).toBe('true');
+    // The name starts with the visible label (WCAG 2.5.3).
+    expect(name!.startsWith(button.text().replace(badge, '').trim()))
+      .toBe(true);
+  });
+
+  it('reads the rail from the URL and changes filters from it', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase?role=qa');
+    const rail = wrapper.get('[data-testid="showcase-filter-rail"]');
+    expect(rail.get('[data-role="qa"]').attributes('aria-pressed'))
+      .toBe('true');
+    await rail.get('[data-lang="en"]').trigger('click');
+    await expectQuery({ role: 'qa', lang: 'en' });
+  });
+});
+
+describe('showcase filter sheet', () => {
+  it('opens a modal dialog named Filters with every filter', async () => {
+    stubListing(page([item('ada-lovelace')], { total: 12 }));
+    const wrapper = await mountPage('/showcase', true);
+    expect(sheetElement()).toBeNull();
+    await openSheet(wrapper);
+    const sheet = sheetElement()!;
+    expect(sheet.getAttribute('role')).toBe('dialog');
+    const title = document.getElementById(
+      sheet.getAttribute('aria-labelledby')!,
+    );
+    expect(title?.textContent?.trim()).toBe('Filters');
+    expect(title?.tagName).toBe('H2');
+    expect(sheet.querySelectorAll('[data-testid="showcase-roles"] [data-role]'))
+      .toHaveLength(11);
+    expect(sheet.querySelectorAll(
+      '[data-testid="showcase-languages"] [data-lang]',
+    )).toHaveLength(3);
+    const options = sheet.querySelectorAll('select[name="template"] option');
+    expect(options).toHaveLength(22);
+    expect(options[0]!.textContent?.trim()).toBe('All templates');
+    expect(options[21]!.textContent?.trim()).toBe('Custom design');
+    expect(sheet.querySelector('[data-action="showcase-filters-clear"]')
+      ?.textContent?.trim()).toBe('Clear filters');
+    expect(sheet.querySelector('[data-action="showcase-filters-apply"]')
+      ?.textContent?.trim()).toBe('Show 12 resumes');
+    expect(wrapper.get('[data-action="showcase-filters-open"]')
+      .attributes('aria-expanded')).toBe('true');
+  });
+
+  it('draws its own close button and not the built-in one', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase', true);
+    await openSheet(wrapper);
+    const buttons = [...sheetElement()!.querySelectorAll('button')];
+    const closers = buttons.filter(
+      (button) => button.getAttribute('aria-label') === 'Close'
+        || button.textContent?.trim() === 'Close',
+    );
+    expect(closers).toHaveLength(1);
+    expect(closers[0]!.getAttribute('data-action'))
+      .toBe('showcase-filters-close');
+    expect(closers[0]!.textContent?.trim()).toBe('');
+    await vi.waitFor(() => expect(document.activeElement).toBe(closers[0]));
+  });
+
+  it('keeps the sheet ids apart from the rail ids', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase', true);
+    await openSheet(wrapper);
+    const ids = [...document.body.querySelectorAll(
+      '[data-testid="showcase-filters"] [id]',
+    )].map((element) => element.id);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('closes on Escape and returns focus to the Filters button', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase', true);
+    await openSheet(wrapper);
+    sheetElement()!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await flushPromises();
+    expect(sheetElement()).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(
+      wrapper.get('[data-action="showcase-filters-open"]').element,
+    ));
+  });
+
+  it('closes from its close button and returns focus', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase', true);
+    await openSheet(wrapper);
+    bodyElement('[data-action="showcase-filters-close"]').click();
+    await flushPromises();
+    expect(sheetElement()).toBeNull();
+    await vi.waitFor(() => expect(document.activeElement).toBe(
+      wrapper.get('[data-action="showcase-filters-open"]').element,
+    ));
+  });
+
+  it('applies a change at once and closes with the filters kept', async () => {
+    stubListing(page([item('ada-lovelace')], { total: 12 }));
+    const wrapper = await mountPage('/showcase?page=2', true);
+    await openSheet(wrapper);
+    bodyElement('[data-testid="showcase-filter-sheet"] [data-role="qa"]')
+      .click();
+    await expectQuery({ role: 'qa' });
+    await vi.waitFor(() => expect(listingUrls().at(-1))
+      .toBe(`${LISTING_PATH}?role=qa`));
+    expect(sheetElement()).not.toBeNull();
+    bodyElement('[data-action="showcase-filters-apply"]').click();
+    await flushPromises();
+    expect(sheetElement()).toBeNull();
+    await expectQuery({ role: 'qa' });
+    expect(wrapper.get('[data-action="showcase-filters-open"]')
+      .attributes('aria-label')).toBe('Filters, 1 active');
+  });
+
+  it('labels Show results with the total, one resume, then loading',
+    async () => {
+      stubListing(page([item('ada-lovelace')], { total: 1 }), { hold: true });
+      const wrapper = await mountPage('/showcase', true);
+      await openSheet(wrapper);
+      const apply = (): string => bodyElement(
+        '[data-action="showcase-filters-apply"]',
+      ).textContent!.trim();
+      expect(apply()).toBe('Show 1 resume');
+      bodyElement('[data-testid="showcase-filter-sheet"] [data-lang="vi"]')
+        .click();
+      await expectQuery({ lang: 'vi' });
+      await vi.waitFor(() => expect(apply()).toBe('Show results'));
+    });
+
+  it('formats the Show results total in Vietnamese', async () => {
+    setSiteLocale('vi');
+    stubListing(page([item('ada-lovelace')], { total: 1234 }));
+    const wrapper = await mountPage('/showcase', true);
+    await openSheet(wrapper);
+    expect(bodyElement('[data-action="showcase-filters-apply"]')
+      .textContent!.trim()).toBe('Xem 1.234 CV');
+    expect(bodyElement('[data-action="showcase-filters-clear"]')
+      .textContent!.trim()).toBe('Xóa bộ lọc');
+  });
+
+  it('clears every filter, keeps the sheet open, and keeps focus', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage(
+      '/showcase?role=qa&lang=vi&template=custom',
+      true,
+    );
+    await openSheet(wrapper);
+    const clear = bodyElement('[data-action="showcase-filters-clear"]');
+    clear.focus();
+    clear.click();
+    await expectQuery({});
+    await flushPromises();
+    expect(sheetElement()).not.toBeNull();
+    expect(document.activeElement).toBe(clear);
+    expect(wrapper.find('[data-testid="showcase-filters-badge"]').exists())
+      .toBe(false);
+  });
+
+  it('mirrors the count line in its own status region while open',
+    async () => {
+      stubListing(page([item('ada-lovelace')], { total: 3 }));
+      const wrapper = await mountPage('/showcase', true);
+      await openSheet(wrapper);
+      const status = bodyElement('[data-testid="showcase-sheet-status"]');
+      expect(status.getAttribute('role')).toBe('status');
+      expect(status.getAttribute('aria-atomic')).toBe('true');
+      expect(status.textContent!.trim()).toBe(countText(wrapper));
+      expect(status.textContent!.trim())
+        .toBe('3 resumes · earliest added first');
+      bodyElement('[data-action="showcase-filters-close"]').click();
+      await flushPromises();
+      expect(document.body.querySelector(
+        '[data-testid="showcase-sheet-status"]',
+      )).toBeNull();
+    });
+
+  it('closes when the viewport reaches 1024 px and focuses the rail',
+    async () => {
+      stubListing(page([item('ada-lovelace')]));
+      const wrapper = await mountPage('/showcase?role=qa', true);
+      await openSheet(wrapper);
+      viewport.set(true);
+      await flushPromises();
+      expect(sheetElement()).toBeNull();
+      await vi.waitFor(() => expect(document.activeElement).toBe(
+        wrapper.get('[data-testid="showcase-filter-rail"] [data-role="qa"]')
+          .element,
+      ));
+    });
+});
+
+describe('showcase active filters', () => {
+  const ROUTE = '/showcase?role=backend&lang=vi&template=custom';
+
+  function chips(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+    return wrapper.get('[data-testid="showcase-active-filters"]')
+      .findAll('[data-action="showcase-filter-remove"]');
+  }
+
+  it('lists one chip per filter in order, then Clear all', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage(ROUTE);
+    const group = wrapper.get('[data-testid="showcase-active-filters"]');
+    expect(group.attributes('role')).toBe('group');
+    expect(group.attributes('aria-label')).toBe('Active filters');
+    expect(chips(wrapper).map((chip) => chip.attributes('data-filter')))
+      .toEqual(['role', 'lang', 'template']);
+    expect(chips(wrapper).map((chip) => chip.attributes('aria-label')))
+      .toEqual([
+        'Backend, remove filter',
+        'Vietnamese, remove filter',
+        'Custom design, remove filter',
+      ]);
+    expect(chips(wrapper).map((chip) => chip.text()))
+      .toEqual(['Backend', 'Vietnamese', 'Custom design']);
+    expect(group.get('[data-action="showcase-filters-clear-all"]').text())
+      .toBe('Clear all');
+    // It is the first row of the results area.
+    expect(wrapper.get('[data-testid="showcase-results"]').element
+      .firstElementChild).toBe(group.element);
+  });
+
+  it('names a preset template and speaks Vietnamese', async () => {
+    setSiteLocale('vi');
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase?template=engineer-compact');
+    const [chip] = chips(wrapper);
+    expect(chip!.text()).toBe('Engineer Compact');
+    expect(chip!.attributes('aria-label'))
+      .toBe('Engineer Compact, gỡ bộ lọc');
+    expect(wrapper.get('[data-action="showcase-filters-clear-all"]').text())
+      .toBe('Xóa hết');
+  });
+
+  it('removes one filter and focuses the next chip', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage(ROUTE, true);
+    (chips(wrapper)[0]!.element as HTMLElement).focus();
+    await chips(wrapper)[0]!.trigger('click');
+    await expectQuery({ lang: 'vi', template: 'custom' });
+    await vi.waitFor(() => expect(document.activeElement)
+      .toBe(chips(wrapper)[0]!.element));
+    expect(chips(wrapper)[0]!.attributes('data-filter')).toBe('lang');
+  });
+
+  it('focuses the previous chip after removing the last one', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage(ROUTE, true);
+    await chips(wrapper)[2]!.trigger('click');
+    await expectQuery({ role: 'backend', lang: 'vi' });
+    await vi.waitFor(() => expect(document.activeElement)
+      .toBe(chips(wrapper)[1]!.element));
+  });
+
+  it('focuses the Filters button below 1024 px after the last chip',
+    async () => {
+      stubListing(page([item('ada-lovelace')]));
+      const wrapper = await mountPage('/showcase?lang=en', true);
+      await chips(wrapper)[0]!.trigger('click');
+      await expectQuery({});
+      await vi.waitFor(() => expect(document.activeElement).toBe(
+        wrapper.get('[data-action="showcase-filters-open"]').element,
+      ));
+      expect(wrapper.find('[data-testid="showcase-active-filters"]').exists())
+        .toBe(false);
+    });
+
+  it('focuses the rail\'s pressed Role option from 1024 px', async () => {
+    viewport = stubViewport(true);
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase?lang=en', true);
+    await chips(wrapper)[0]!.trigger('click');
+    await expectQuery({});
+    await vi.waitFor(() => expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="showcase-filter-rail"] [data-role="all"]')
+        .element,
+    ));
+  });
+
+  it('removes a role chip and focuses All roles from 1024 px', async () => {
+    viewport = stubViewport(true);
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase?role=qa', true);
+    await chips(wrapper)[0]!.trigger('click');
+    await expectQuery({});
+    await vi.waitFor(() => {
+      const all = wrapper.get(
+        '[data-testid="showcase-filter-rail"] [data-role="all"]',
+      );
+      expect(all.attributes('aria-pressed')).toBe('true');
+      expect(document.activeElement).toBe(all.element);
+    });
+  });
+
+  it('clears every filter with Clear all and moves focus', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage(ROUTE, true);
+    await wrapper.get('[data-action="showcase-filters-clear-all"]')
+      .trigger('click');
+    await expectQuery({});
+    await vi.waitFor(() => expect(document.activeElement).toBe(
+      wrapper.get('[data-action="showcase-filters-open"]').element,
+    ));
+    expect(wrapper.find('[data-testid="showcase-active-filters"]').exists())
+      .toBe(false);
+  });
+});
+
+describe('showcase report link', () => {
+  it('shows the Report tooltip on focus', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const wrapper = await mountPage('/showcase', true);
+    const report = wrapper.get('[data-action="showcase-report"]');
+    expect(report.element.closest('[data-showcase-tile]')).toBeNull();
+    (report.element as HTMLElement).focus();
+    await vi.waitFor(() => expect(
+      document.body.querySelector('[data-slot="tooltip-content"]')
+        ?.textContent,
+    ).toContain('Report'));
+  });
+
+  it('puts the tile link and Report in order as separate tab stops',
+    async () => {
+      stubListing(page([item('ada-lovelace')]));
+      const wrapper = await mountPage();
+      const stops = wrapper.get('[data-showcase-slug]')
+        .findAll('a[href]').map((link) => (
+          link.attributes('data-showcase-tile') !== undefined
+            ? 'tile'
+            : link.attributes('data-action')
+        ));
+      expect(stops).toEqual(['tile', 'showcase-report']);
+    });
+});
+
+describe('showcase invite card', () => {
+  async function listWith(route = '/showcase') {
+    stubListing(page([item('ada-lovelace'), item('grace-hopper')]));
+    return mountPage(route);
+  }
+
+  it('ends the grid in the list state and is not a tile', async () => {
+    const wrapper = await listWith();
+    const grid = wrapper.get('[data-state="list"]');
+    const invite = grid.get('[data-testid="showcase-invite"]');
+    expect(grid.element.lastElementChild).toBe(invite.element);
+    expect(invite.element.tagName).toBe('LI');
+    expect(invite.attributes('data-showcase-slug')).toBeUndefined();
+    expect(invite.find('[data-showcase-tile]').exists()).toBe(false);
+    expect(wrapper.findAll('[data-showcase-tile]')).toHaveLength(2);
+    expect(invite.get('h2').text()).toBe('Want your resume here?');
+    expect(invite.get('p').text()).toBe(
+      'When you publish, turn on Show in the community showcase. You can '
+      + 'turn it off any time.',
+    );
+  });
+
+  it('shows on every page of the list', async () => {
+    stubListing(page(
+      [item('ada-lovelace')],
+      { page: 2, pageCount: 3, total: 30 },
+    ));
+    const wrapper = await mountPage('/showcase?page=2');
+    expect(wrapper.find('[data-testid="showcase-invite"]').exists())
+      .toBe(true);
+  });
+
+  it('links signed-out visitors to registration', async () => {
+    const wrapper = await listWith();
+    const button = wrapper.get('[data-action="showcase-invite-create"]');
+    expect(button.attributes('href')).toBe('/register');
+    expect(button.text()).toBe('Create a free resume');
+  });
+
+  it('links signed-out visitors to sign-in when registration is closed',
+    async () => {
+      registerCapabilities({
+        providerLogin: false,
+        agentAccess: false,
+        passwordRegistration: false,
+      });
+      try {
+        const wrapper = await listWith();
+        await vi.waitFor(() => expect(
+          wrapper.get('[data-action="showcase-invite-create"]')
+            .attributes('href'),
+        ).toBe('/login'));
+      } finally {
+        registerCapabilities({ providerLogin: false, agentAccess: false });
+      }
+    });
+
+  it('links a signed-in visitor to their resumes, with the same label',
+    async () => {
+      meStatus = 200;
+      const wrapper = await listWith();
+      await vi.waitFor(() => {
+        const button = wrapper.get('[data-action="showcase-invite-create"]');
+        expect(button.attributes('href')).toBe('/app/resumes');
+        expect(button.text()).toBe('Create a free resume');
+      });
+    });
+
+  it('speaks Vietnamese', async () => {
+    setSiteLocale('vi');
+    const wrapper = await listWith();
+    const invite = wrapper.get('[data-testid="showcase-invite"]');
+    expect(invite.get('h2').text()).toBe('Muốn CV của bạn ở đây?');
+    expect(invite.get('a').text()).toBe('Tạo CV miễn phí');
+  });
+
+  const OTHER_STATES: [string, Reply[], string][] = [
+    ['loading', [{ hold: true }], '/showcase'],
+    ['empty', [page([], { pageCount: 0 })], '/showcase'],
+    ['no-match', [page([], { pageCount: 0 })], '/showcase?role=qa'],
+    ['failed', [{ fail: true }], '/showcase'],
+  ];
+
+  it.each(OTHER_STATES)('is absent in the %s state', async (
+    _name,
+    replies,
+    route,
+  ) => {
+    stubListing(...replies);
+    const wrapper = await mountPage(route);
+    expect(wrapper.find('[data-testid="showcase-invite"]').exists())
+      .toBe(false);
+  });
+});
+
+describe('showcase page frame', () => {
+  it('pads the root scroller below the sticky bar while mounted', async () => {
+    stubListing(page([item('ada-lovelace')]));
+    const app = await mountSuspended(AppRoot, { route: '/showcase' });
+    mounted.push(app);
+    await flushPromises();
+    await vi.waitFor(() => expect(document.documentElement.classList
+      .contains('showcase-scroll-padding')).toBe(true));
+    app.unmount();
+    await vi.waitFor(() => expect(document.documentElement.classList
+      .contains('showcase-scroll-padding')).toBe(false));
+  });
+
+  it('sets the 68 px scroll padding only below 1024 px', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'app/pages/showcase.vue'),
+      'utf8',
+    );
+    const rule = new RegExp([
+      '@media \\(width < 1024px\\) \\{\\s+',
+      'html\\.showcase-scroll-padding \\{\\s+',
+      'scroll-padding-top: 68px;',
+    ].join(''), 'u');
+    expect(source).toMatch(rule);
+  });
 });

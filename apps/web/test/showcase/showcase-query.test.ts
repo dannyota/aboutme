@@ -8,6 +8,8 @@ import {
   showcaseCardUrl,
 } from '../../app/lib/showcaseContract';
 import {
+  activeFilterCount,
+  activeFilterList,
   hasFilters,
   parseShowcaseQuery,
   showcaseRouteQuery,
@@ -16,7 +18,7 @@ import {
 import { GALLERY, ROLES } from '../../app/templates/catalog';
 
 // The filters live in the page URL (AC-SHOW-005); an unknown value counts as
-// All and is never sent (docs/design/ui/landing-and-library.md).
+// All and is never sent (docs/design/ui/showcase.md, Bottom sheet).
 
 const presetId = GALLERY[0]!.id;
 
@@ -94,6 +96,37 @@ describe('showcase query', () => {
     });
     expect(showcaseSearch(query)).toBe('role=qa');
     expect(Object.keys(showcaseRouteQuery(query))).toEqual(['role']);
+  });
+});
+
+describe('active filters', () => {
+  it('lists the filters that are on in chip order', () => {
+    expect(activeFilterList({
+      template: 'custom',
+      lang: 'vi',
+      role: 'qa',
+    })).toEqual([
+      { kind: 'role', value: 'qa' },
+      { kind: 'lang', value: 'vi' },
+      { kind: 'template', value: 'custom' },
+    ]);
+    expect(activeFilterList({ lang: 'en' }))
+      .toEqual([{ kind: 'lang', value: 'en' }]);
+    expect(activeFilterList({})).toEqual([]);
+  });
+
+  it.each([
+    [{}, 0],
+    [{ role: 'qa' as const }, 1],
+    [{ role: 'qa' as const, template: presetId }, 2],
+    [{ role: 'other' as const, lang: 'vi' as const, template: 'custom' }, 3],
+  ])('counts %j as %i', (filters, count) => {
+    expect(activeFilterCount(filters)).toBe(count);
+  });
+
+  it('counts only known filters read from the URL', () => {
+    const query = parseShowcaseQuery({ role: 'wizard', lang: 'qa' });
+    expect(activeFilterCount(query)).toBe(0);
   });
 });
 

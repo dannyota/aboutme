@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 
 import SelectField from '@/components/app/SelectField.vue';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -13,15 +13,24 @@ import {
 import type { ShowcaseFilters } from '@/lib/showcaseQuery';
 import { GALLERY } from '@/templates/catalog';
 
-// The role row, the language row, and the template select. A change emits
-// the whole next filter set; the page writes it to the URL
-// (docs/design/ui/landing-and-library.md, Community showcase, Filters).
+// The role group, the language group, and the template select, shared by the
+// bottom sheet and the left rail (docs/design/ui/showcase.md, Filters below
+// 1024 px and Rail from 1024 px). A change emits the whole next filter set;
+// the page writes it to the URL. Element ids come from useId(), so the rail
+// and an open sheet never share one.
 const props = defineProps<{
   readonly filters: ShowcaseFilters;
   readonly locale: Locale;
+  readonly layout: 'sheet' | 'rail';
 }>();
 const emit = defineEmits<{ change: [filters: ShowcaseFilters] }>();
 const copy = computed(() => showcaseCopy[props.locale]);
+const uid = useId();
+const roleHeadingId = `showcase-role-heading-${uid}`;
+const languageHeadingId = `showcase-language-heading-${uid}`;
+const templateId = `showcase-template-${uid}`;
+const orientation = computed(() =>
+  props.layout === 'rail' ? 'vertical' : undefined);
 
 const templateOptions = computed(() => [
   { value: '', label: copy.value.allTemplates },
@@ -32,7 +41,7 @@ const templateOptions = computed(() => [
 ]);
 
 // Reka's single toggle group emits undefined when the pressed item is
-// pressed again; a chip stays selected, like a radio.
+// pressed again; an option stays selected, like a radio.
 function onRole(value: unknown): void {
   if (value === undefined) return;
   const role = SHOWCASE_ROLES.find((known) => known === value);
@@ -56,21 +65,30 @@ function onTemplate(value: string): void {
 </script>
 
 <template>
-  <div data-testid="showcase-filters">
-    <div
-      class="showcase-scroll -mx-4 mt-8 overflow-x-auto px-4 sm:mx-0 sm:px-0"
-    >
+  <div
+    class="showcase-filters"
+    :class="`showcase-filters--${layout}`"
+    data-testid="showcase-filters"
+  >
+    <div class="showcase-filters__group">
+      <p
+        :id="roleHeadingId"
+        class="showcase-filters__heading"
+      >
+        {{ copy.roleHeading }}
+      </p>
       <ToggleGroup
         :aria-label="copy.rolesLabel"
-        class="flex w-max items-center gap-2"
+        class="showcase-options showcase-options--roles"
         data-testid="showcase-roles"
         :model-value="filters.role ?? 'all'"
+        :orientation="orientation"
         :spacing="2"
         type="single"
         @update:model-value="onRole"
       >
         <ToggleGroupItem
-          class="showcase-chip"
+          class="showcase-option"
           data-role="all"
           value="all"
         >
@@ -79,7 +97,7 @@ function onTemplate(value: string): void {
         <ToggleGroupItem
           v-for="role in SHOWCASE_ROLES"
           :key="role"
-          class="showcase-chip"
+          class="showcase-option"
           :data-role="role"
           :value="role"
         >
@@ -87,63 +105,90 @@ function onTemplate(value: string): void {
         </ToggleGroupItem>
       </ToggleGroup>
     </div>
-    <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-3">
-      <div class="showcase-scroll max-w-full overflow-x-auto">
-        <ToggleGroup
-          :aria-label="copy.languageLabel"
-          class="flex w-max items-center gap-2"
-          data-testid="showcase-languages"
-          :model-value="filters.lang ?? 'all'"
-          :spacing="2"
-          type="single"
-          @update:model-value="onLanguage"
+    <div class="showcase-filters__group">
+      <p
+        :id="languageHeadingId"
+        class="showcase-filters__heading"
+      >
+        {{ copy.languageLabel }}
+      </p>
+      <ToggleGroup
+        :aria-labelledby="languageHeadingId"
+        class="showcase-options showcase-options--languages"
+        data-testid="showcase-languages"
+        :model-value="filters.lang ?? 'all'"
+        :orientation="orientation"
+        :spacing="2"
+        type="single"
+        @update:model-value="onLanguage"
+      >
+        <ToggleGroupItem
+          class="showcase-option"
+          data-lang="all"
+          value="all"
         >
-          <ToggleGroupItem
-            class="showcase-chip"
-            data-lang="all"
-            value="all"
-          >
-            {{ copy.allLanguages }}
-          </ToggleGroupItem>
-          <ToggleGroupItem
-            v-for="lang in SHOWCASE_FILTER_LANGUAGES"
-            :key="lang"
-            class="showcase-chip"
-            :data-lang="lang"
-            :value="lang"
-          >
-            {{ copy.languages[lang] }}
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-      <SelectField
-        class="showcase-template flex items-center gap-2 max-[640px]:w-full"
-        :label="copy.templateLabel"
-        :model-value="filters.template ?? ''"
-        name="template"
-        :options="templateOptions"
-        @update:model-value="onTemplate"
-      />
+          {{ copy.allLanguages }}
+        </ToggleGroupItem>
+        <ToggleGroupItem
+          v-for="lang in SHOWCASE_FILTER_LANGUAGES"
+          :key="lang"
+          class="showcase-option"
+          :data-lang="lang"
+          :value="lang"
+        >
+          {{ copy.languages[lang] }}
+        </ToggleGroupItem>
+      </ToggleGroup>
     </div>
+    <SelectField
+      :id="templateId"
+      class="showcase-template"
+      :control-attrs="{ name: 'template' }"
+      :label="copy.templateLabel"
+      :model-value="filters.template ?? ''"
+      name="template"
+      :options="templateOptions"
+      @update:model-value="onTemplate"
+    />
   </div>
 </template>
 
 <style scoped>
-.showcase-scroll {
-  scrollbar-width: none;
+.showcase-filters {
+  display: grid;
+  gap: 20px;
 }
 
-.showcase-scroll::-webkit-scrollbar {
-  display: none;
+.showcase-filters--rail {
+  gap: 24px;
 }
 
-.showcase-chip {
+.showcase-filters__group {
+  display: grid;
+  gap: 8px;
+}
+
+.showcase-filters__heading,
+.showcase-template :deep(label) {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.showcase-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.showcase-option {
   display: inline-flex;
   align-items: center;
-  height: 2.25rem;
-  padding: 0 1rem;
+  justify-content: center;
   border: 1px solid var(--border);
-  border-radius: 9999px;
   background: var(--card);
   color: var(--foreground);
   font-size: 0.875rem;
@@ -152,31 +197,97 @@ function onTemplate(value: string): void {
   transition: background-color 150ms, border-color 150ms;
 }
 
-.showcase-chip:not([aria-pressed="true"]):not([data-state="on"]):hover {
+.showcase-option:not([data-state="on"]):hover {
   background: var(--surface-indigo);
 }
 
-.showcase-chip[aria-pressed="true"],
-.showcase-chip[data-state="on"] {
+.showcase-option[aria-pressed="true"],
+.showcase-option[data-state="on"] {
   border-color: var(--primary);
   background: var(--primary);
   color: var(--primary-foreground);
+  font-weight: 600;
 }
 
-.showcase-chip:focus-visible {
+.showcase-option:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-.showcase-template :deep([data-slot="native-select-wrapper"]) {
-  min-width: 12rem;
-  max-width: 16rem;
+/* Sheet: role pills wrap, language options share three columns. */
+.showcase-filters--sheet .showcase-options--roles .showcase-option {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 9999px;
 }
 
-@media (width <= 640px) {
-  .showcase-template :deep([data-slot="native-select-wrapper"]) {
-    flex: 1;
-    max-width: none;
-  }
+.showcase-filters--sheet .showcase-options--languages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.showcase-filters--sheet .showcase-options--languages .showcase-option {
+  min-height: 44px;
+  padding: 0 6px;
+  border-radius: 10px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}
+
+/* Rail: both groups are lists of 36 px rows. */
+.showcase-filters--rail .showcase-options {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+
+.showcase-filters--rail .showcase-option {
+  justify-content: flex-start;
+  height: 36px;
+  padding: 0 12px;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+  font-weight: 400;
+  text-align: left;
+}
+
+.showcase-filters--rail .showcase-option:not([data-state="on"]):hover {
+  background: var(--muted);
+}
+
+.showcase-filters--rail .showcase-option[aria-pressed="true"],
+.showcase-filters--rail .showcase-option[data-state="on"] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.showcase-filters--rail .showcase-option[aria-pressed="true"]::after,
+.showcase-filters--rail .showcase-option[data-state="on"]::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 9999px;
+  background: var(--primary);
+}
+
+.showcase-template {
+  gap: 8px;
+}
+
+.showcase-template :deep([data-slot="native-select-wrapper"]) {
+  width: 100%;
+}
+
+.showcase-filters--sheet .showcase-template :deep(select) {
+  height: 44px;
+}
+
+.showcase-filters--rail .showcase-template :deep(select) {
+  height: 40px;
 }
 </style>

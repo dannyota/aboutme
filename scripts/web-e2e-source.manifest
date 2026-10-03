@@ -185,7 +185,11 @@ apps/web/app/components/settings/PrivacySettings.vue
 apps/web/app/components/settings/ReauthPrompt.vue
 apps/web/app/components/settings/SecondFactorSettings.vue
 apps/web/app/components/settings/TotpSettings.vue
+apps/web/app/components/showcase/ShowcaseActiveFilters.vue
+apps/web/app/components/showcase/ShowcaseFilterBar.vue
+apps/web/app/components/showcase/ShowcaseFilterSheet.vue
 apps/web/app/components/showcase/ShowcaseFilters.vue
+apps/web/app/components/showcase/ShowcaseInvite.vue
 apps/web/app/components/showcase/ShowcasePager.vue
 apps/web/app/components/showcase/ShowcaseTile.vue
 apps/web/app/components/templates/SheetThumbnail.vue
