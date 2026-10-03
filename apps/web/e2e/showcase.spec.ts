@@ -769,7 +769,9 @@ async function expectClearOfBar(page: Page): Promise<void> {
     if (active === null || bar === null) return 'no focus or no bar';
     const box = active.getBoundingClientRect();
     const barBottom = bar.getBoundingClientRect().bottom;
-    if (box.top >= barBottom && box.bottom <= window.innerHeight) {
+    // Layout boxes are fractional while scroll offsets are whole pixels, so
+    // an element scrolled flush to the bottom edge can end up to 1 px past it.
+    if (box.top >= barBottom && box.bottom < window.innerHeight + 1) {
       return 'clear';
     }
     const name = `${active.tagName.toLowerCase()}`

@@ -193,7 +193,9 @@ for (const { name, path, body, locale, theme, width } of CASES) {
       await page.setViewportSize({ width, height });
     }
     if (name === 'sheet') {
-      // The sheet is a fixed overlay, so the viewport keeps its phone height.
+      // The sheet is a fixed overlay: a phone-height viewport, captured
+      // without the full page, shows it as a visitor sees it.
+      await page.setViewportSize({ width, height: 844 });
       await page.locator('[data-action="showcase-filters-open"]').click();
       await expect(page.getByRole('dialog')).toBeVisible();
       await expect(page.getByTestId('showcase-filter-sheet')).toBeVisible();
@@ -227,6 +229,7 @@ for (const { name, path, body, locale, theme, width } of CASES) {
       testInfo,
       undefined,
       CHROME_PIXEL_TOLERANCE,
+      name !== 'sheet',
     );
   });
 }
