@@ -8,8 +8,8 @@ the [visual design](../../../DESIGN.md).
 The shared application shell is a card-colored bar with a bottom border, its
 content held to a 76 rem column. It has the 24 px `AppLogo`, linked home, and a
 Library link for every visitor, then a Community link (“Cộng đồng”) to the
-[community showcase](landing-and-library.md#community-showcase), then a link to
-the [MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
+[community showcase](showcase.md), then a link to the
+[MCP guide](../mcp-guide.md) (“Kết nối AI” or “Connect AI”) at `/guide/mcp`,
 public like the Library link. Below 64 rem the logo shows the mark alone, signed
 in or out. Below 64 rem the signed-out header is also compact, with VI and EN
 and an icon-only theme button, so every link and both account buttons fit
