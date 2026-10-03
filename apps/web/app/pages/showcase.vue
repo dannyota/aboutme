@@ -83,6 +83,18 @@ const countText = computed(() => {
 const countHead = computed(() => (
   lastTotal.value === null ? '' : copy.value.countHead(lastTotal.value)
 ));
+// A filter change that keeps the total leaves the count text as it was, so a
+// screen reader would hear nothing. `announceKey` keys the text node in each
+// live region; it goes up when a filter change's load settles, which replaces
+// the node and announces the same text again. A pager move never marks it
+// (docs/design/ui/showcase.md, Count line and Sheet status).
+const announceKey = ref(0);
+const announcePending = ref(false);
+watch(settled, () => {
+  if (!announcePending.value) return;
+  announcePending.value = false;
+  announceKey.value += 1;
+});
 // The sheet's Show results label: the live total once loaded.
 const sheetTotal = computed(() => (
   view.value === 'loading' || listing.value === null
@@ -127,6 +139,11 @@ function onSheetCloseAutoFocus(event: Event): void {
 // A filter change replaces the URL query, drops `page`, and keeps focus on
 // the control.
 async function onFilters(next: Filters): Promise<void> {
+  const current = filters.value;
+  if (next.role !== current.role || next.lang !== current.lang
+    || next.template !== current.template) {
+    announcePending.value = true;
+  }
   pending.value = next;
   try {
     await router.replace({
@@ -207,11 +224,14 @@ useHead(computed(() => ({
         ref="bar"
         v-model:open="sheetOpen"
         :active-count="activeCount"
+        :announce-key="announceKey"
         :head="countHead"
         :locale="locale"
+        :tail="copy.countTail"
         :text="countText"
       >
         <ShowcaseFilterSheet
+          :announce-key="announceKey"
           :filters="filters"
           :locale="locale"
           :status="countText"

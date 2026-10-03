@@ -18,12 +18,17 @@ const props = defineProps<{
   readonly open: boolean;
   /** The count line text; empty before the first load (a skeleton). */
   readonly text: string;
-  /** The leading part of `text` shown bold, such as "1,234 resumes". */
+  /** The bold lead, such as "1,234 resumes"; empty before any total. */
   readonly head: string;
+  /** The order note after the head and ` · `; unused when `head` is empty. */
+  readonly tail: string;
+  /** Changes when a filter change settles, so the region announces again. */
+  readonly announceKey: number;
   readonly activeCount: number;
 }>();
 const emit = defineEmits<{ 'update:open': [open: boolean] }>();
 const copy = computed(() => showcaseCopy[props.locale]);
+const tailText = computed(() => ` · ${props.tail}`);
 const bar = ref<HTMLElement | null>(null);
 
 defineExpose({
@@ -57,12 +62,16 @@ defineExpose({
             align-top"
           data-slot="skeleton"
         />
-        <template v-else>
-          <strong
-            v-if="head !== ''"
-            class="showcase-count__head"
-          >{{ head }}</strong>{{ text.slice(head.length) }}
-        </template>
+        <span
+          v-else
+          :key="announceKey"
+        >
+          <template v-if="head !== ''">
+            <strong class="showcase-count__head">{{ head }}</strong>{{
+              tailText }}
+          </template>
+          <template v-else>{{ text }}</template>
+        </span>
       </p>
       <SheetTrigger as-child>
         <Button

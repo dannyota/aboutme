@@ -244,13 +244,14 @@ describe('showcase catalog', () => {
     expect(vi.countHead(1)).toBe('1 CV');
     expect(vi.countHead(1234567)).toBe('1.234.567 CV');
     expect(vi.countLine(0)).toBe('0 CV · sớm nhất trước');
-    // The bold head is the start of the line, so the page can split it.
+    // The line is the head, a middle dot, and the tail: one source.
     for (const copy of [en, vi]) {
-      expect(copy.countLine(42).startsWith(copy.countHead(42))).toBe(true);
+      expect(copy.countLine(42))
+        .toBe(`${copy.countHead(42)} · ${copy.countTail}`);
     }
   });
 
-  it('has no order note: the count line carries the order', () => {
+  it('carries the order only in the count line', () => {
     expect('orderNote' in showcaseCopy.en).toBe(false);
     expect('orderNote' in showcaseCopy.vi).toBe(false);
   });

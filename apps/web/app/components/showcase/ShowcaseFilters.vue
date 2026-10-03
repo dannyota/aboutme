@@ -26,7 +26,6 @@ const props = defineProps<{
 const emit = defineEmits<{ change: [filters: ShowcaseFilters] }>();
 const copy = computed(() => showcaseCopy[props.locale]);
 const uid = useId();
-const roleHeadingId = `showcase-role-heading-${uid}`;
 const languageHeadingId = `showcase-language-heading-${uid}`;
 const templateId = `showcase-template-${uid}`;
 const orientation = computed(() =>
@@ -72,7 +71,6 @@ function onTemplate(value: string): void {
   >
     <div class="showcase-filters__group">
       <p
-        :id="roleHeadingId"
         class="showcase-filters__heading"
       >
         {{ copy.roleHeading }}

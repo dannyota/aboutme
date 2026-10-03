@@ -214,6 +214,12 @@ test('lists tiles with lazy card images under the app CSP', async ({
   await expect(first.getByRole('link', {
     name: 'Report resume resume-1 by email',
   })).toBeVisible();
+  // The Report link keeps a 40 by 40 px target (docs/design/ui/showcase.md,
+  // Tile footer).
+  const report = await first.locator('[data-action="showcase-report"]')
+    .first().boundingBox();
+  expect(report!.width).toBeGreaterThanOrEqual(40);
+  expect(report!.height).toBeGreaterThanOrEqual(40);
   // The footer row shows the slug as plain text outside the tile link
   // (docs/design/ui/showcase.md "Footer row").
   await expect(first.getByText('aboutme.vn/resume-1', { exact: true }))
@@ -568,6 +574,29 @@ test('opens the filter sheet on a phone and keeps focus inside it', async ({
   await expect(dialog).toHaveCount(0);
   await expect(page).toHaveURL(/\/showcase$/u);
   expect(await overflow(page)).toBe(0);
+});
+
+// The suite runs with reduced motion, so the global rule caps the sheet's
+// slide (docs/design/ui/showcase.md, Motion).
+test('opens the filter sheet with no animation under reduced motion', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await serve(page, () => ({ body: listing([item(1)]) }));
+  await open(page, '/showcase');
+  await filtersButton(page).click();
+  const content = page.locator('[data-slot="sheet-content"]');
+  await expect(content).toBeVisible();
+  const longest = await content.evaluate((node) => {
+    const seconds = (value: string): number => (
+      value.endsWith('ms')
+        ? Number.parseFloat(value) / 1000
+        : Number.parseFloat(value)
+    );
+    return Math.max(...getComputedStyle(node).animationDuration.split(',')
+      .map((part) => seconds(part.trim())));
+  });
+  expect(longest).toBeLessThanOrEqual(0.001);
 });
 
 test('closes the filter sheet with its own close button', async ({ page }) => {

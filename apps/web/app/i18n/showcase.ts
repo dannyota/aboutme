@@ -65,6 +65,14 @@ function englishCount(total: number): string {
   return `${NUMBER_FORMAT.en.format(total)} ${noun}`;
 }
 
+/** "1.234 CV". */
+function viCountHead(total: number): string {
+  return `${NUMBER_FORMAT.vi.format(total)} CV`;
+}
+
+const VI_COUNT_TAIL = 'sớm nhất trước';
+const EN_COUNT_TAIL = 'earliest added first';
+
 export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
   vi: {
     navLabel: 'Cộng đồng',
@@ -72,10 +80,9 @@ export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
     description: 'CV thật do người dùng aboutme.vn chọn chia sẻ.',
     lead:
       'CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.',
-    countHead: (total) => `${NUMBER_FORMAT.vi.format(total)} CV`,
-    countTail: 'sớm nhất trước',
-    countLine: (total) =>
-      `${NUMBER_FORMAT.vi.format(total)} CV · sớm nhất trước`,
+    countHead: viCountHead,
+    countTail: VI_COUNT_TAIL,
+    countLine: (total) => `${viCountHead(total)} · ${VI_COUNT_TAIL}`,
     countNoTotal: 'Sớm nhất trước',
     filters: 'Bộ lọc',
     filtersActive: (count) => `Bộ lọc, ${count} đang bật`,
@@ -123,8 +130,8 @@ export const showcaseCopy: Record<Locale, ShowcaseCopy> = {
     lead:
       'Real resumes that aboutme.vn users published and chose to show here.',
     countHead: englishCount,
-    countTail: 'earliest added first',
-    countLine: (total) => `${englishCount(total)} · earliest added first`,
+    countTail: EN_COUNT_TAIL,
+    countLine: (total) => `${englishCount(total)} · ${EN_COUNT_TAIL}`,
     countNoTotal: 'Earliest added first',
     filters: 'Filters',
     filtersActive: (count) => `Filters, ${count} active`,
