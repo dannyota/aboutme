@@ -303,6 +303,8 @@ export async function verifyScreenshot(
   testInfo: TestInfo,
   locator?: Locator,
   maxChangedPixels = 0,
+  /** False captures only the viewport, as for a fixed overlay. */
+  fullPage = true,
 ): Promise<void> {
   const options = {
     animations: 'disabled',
@@ -311,7 +313,7 @@ export async function verifyScreenshot(
     type: 'png',
   } as const;
   const bytes = locator === undefined
-    ? await page.screenshot({ ...options, fullPage: true })
+    ? await page.screenshot({ ...options, fullPage })
     : await locator.screenshot(options);
   await writeFile(testInfo.outputPath(filename), bytes);
   if (testInfo.config.updateSnapshots !== 'none') {
