@@ -24,6 +24,8 @@ const props = defineProps<{
   readonly total: number | null;
   /** The count line text, mirrored in the sheet's own status region. */
   readonly status: string;
+  /** Changes when a filter change settles, so the region announces again. */
+  readonly announceKey: number;
 }>();
 const emit = defineEmits<{
   'change': [filters: Filters];
@@ -108,7 +110,7 @@ const applyLabel = computed(() => (
       data-testid="showcase-sheet-status"
       role="status"
     >
-      {{ status }}
+      <span :key="announceKey">{{ status }}</span>
     </p>
   </SheetContent>
 </template>

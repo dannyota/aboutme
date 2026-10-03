@@ -796,6 +796,63 @@ describe('showcase count line', () => {
       .find('[data-slot="skeleton"]').exists()).toBe(false);
   });
 
+  // A change that keeps the total leaves the text as it was; the keyed node
+  // is replaced so the live region announces the same text again
+  // (docs/design/ui/showcase.md, Count line).
+  describe('announcing a change with the same total', () => {
+    function textNode(wrapper: Awaited<ReturnType<typeof mountPage>>) {
+      return wrapper.get('[data-testid="showcase-count"] > span').element;
+    }
+
+    async function settleLoad(
+      wrapper: Awaited<ReturnType<typeof mountPage>>,
+    ): Promise<void> {
+      await vi.waitFor(() => expect(calls).toHaveLength(2));
+      await vi.waitFor(() => expect(wrapper.find('[data-state="loading"]')
+        .exists()).toBe(false));
+      await flushPromises();
+    }
+
+    it('replaces the text node after a filter change settles', async () => {
+      const reply = page([item('ada-lovelace')], { total: 5, pageCount: 2 });
+      stubListing(reply, reply);
+      const wrapper = await mountPage();
+      const before = textNode(wrapper);
+      await wrapper.get('[data-role="qa"]').trigger('click');
+      await settleLoad(wrapper);
+      expect(countText(wrapper)).toBe('5 resumes · earliest added first');
+      expect(textNode(wrapper)).not.toBe(before);
+    });
+
+    it('keeps the text node through a pager move', async () => {
+      const reply = page([item('ada-lovelace')], { total: 5, pageCount: 2 });
+      stubListing(reply, reply);
+      const wrapper = await mountPage();
+      const before = textNode(wrapper);
+      await wrapper.get('[data-action="showcase-next"]').trigger('click');
+      await settleLoad(wrapper);
+      expect(textNode(wrapper)).toBe(before);
+    });
+
+    it('replaces the sheet status node the same way', async () => {
+      const reply = page([item('ada-lovelace')], { total: 5, pageCount: 2 });
+      stubListing(reply, reply);
+      const wrapper = await mountPage('/showcase', true);
+      await openSheet(wrapper);
+      const status = () => bodyElement(
+        '[data-testid="showcase-sheet-status"] > span',
+      );
+      const before = status();
+      bodyElement(
+        '[data-testid="showcase-filter-sheet"] [data-role="qa"]',
+      ).click();
+      await settleLoad(wrapper);
+      expect(status().textContent!.trim())
+        .toBe('5 resumes · earliest added first');
+      expect(status()).not.toBe(before);
+    });
+  });
+
   it('reads 0 for a filter with no match', async () => {
     stubListing(page([], { pageCount: 0 }));
     const wrapper = await mountPage('/showcase?role=qa');
