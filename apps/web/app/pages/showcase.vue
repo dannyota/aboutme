@@ -374,6 +374,7 @@ useHead(computed(() => ({
 
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  align-content: start;
   gap: var(--showcase-gap);
   margin-top: 16px;
   container-type: inline-size;
@@ -437,7 +438,9 @@ useHead(computed(() => ({
 
   .showcase-wrap {
     display: grid;
-    grid-template-columns: 256px minmax(0, 1fr) auto;
+    /* The count column keeps a fixed minimum, so the count line's box does
+       not move when its text replaces the first-load skeleton. */
+    grid-template-columns: 256px minmax(0, 1fr) minmax(18rem, auto);
     grid-template-areas:
       "header header count"
       "rail results results";
