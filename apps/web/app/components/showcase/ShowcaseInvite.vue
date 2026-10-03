@@ -25,7 +25,7 @@ const buttonClass = cn(
     class="showcase-invite"
     data-testid="showcase-invite"
   >
-    <h2 class="text-lg font-bold text-foreground">
+    <h2 class="text-lg font-bold text-balance text-foreground">
       {{ copy.inviteTitle }}
     </h2>
     <p class="text-[15px] text-muted-foreground">

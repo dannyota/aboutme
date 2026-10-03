@@ -109,16 +109,31 @@ describe('shared filter fields', () => {
   });
 
   it('gives the rail and the sheet copies different element ids', async () => {
-    const rail = await mountFields('rail');
-    const sheet = await mountFields('sheet');
-    const ids = (wrapper: typeof rail): string[] => wrapper
-      .findAll('[id]').map((element) => element.attributes('id')!);
-    const railIds = ids(rail);
+    // One app holds both copies, as the page does: useId() numbers them per
+    // app, so two separate mounts would both start at the same id.
+    const Both = defineComponent({
+      setup() {
+        return () => h('div', [
+          h('div', { 'data-copy': 'rail' }, [h(ShowcaseFilters, {
+            filters: {}, layout: 'rail', locale: 'en',
+          })]),
+          h('div', { 'data-copy': 'sheet' }, [h(ShowcaseFilters, {
+            filters: {}, layout: 'sheet', locale: 'en',
+          })]),
+        ]);
+      },
+    });
+    const wrapper = await mountSuspended(Both);
+    mounted.push(wrapper);
+    const ids = (copy: string): string[] => wrapper
+      .findAll(`[data-copy="${copy}"] [id]`)
+      .map((element) => element.attributes('id')!);
+    const railIds = ids('rail');
     expect(railIds.length).toBeGreaterThan(0);
-    for (const id of ids(sheet)) expect(railIds).not.toContain(id);
+    for (const id of ids('sheet')) expect(railIds).not.toContain(id);
     // The label points at its own select.
-    const label = sheet.get('label');
-    expect(label.attributes('for'))
+    const sheet = wrapper.get('[data-copy="sheet"]');
+    expect(sheet.get('label').attributes('for'))
       .toBe(sheet.get('select').attributes('id'));
   });
 });

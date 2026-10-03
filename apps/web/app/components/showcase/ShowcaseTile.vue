@@ -176,6 +176,7 @@ const imageFailed = ref(false);
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-height: 24px;
 }
 
 .showcase-tile__role {
