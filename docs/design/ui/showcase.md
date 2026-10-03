@@ -23,11 +23,11 @@ too. Inside `main`, the page wrapper holds, in DOM order: the header, the filter
 bar, the rail, and the results area.
 
 - Below 1024 px the wrapper is plain block flow and the rail is `display: none`.
-- From 1024 px the wrapper is a grid with columns `256px minmax(0, 1fr) auto`, a
-  32 px column gap, a 28 px row gap, and the areas `"header header count"` and
-  `"rail results results"`. The filter bar takes `display: contents`, so its
-  count line lands in the `count` area, and its Filters button is
-  `display: none`.
+- From 1024 px the wrapper is a grid with columns
+  `256px minmax(0, 1fr) minmax(18rem, auto)`, a 32 px column gap, a 28 px row
+  gap, and the areas `"header header count"` and `"rail results results"`. The
+  filter bar takes `display: contents`, so its count line lands in the `count`
+  area, and its Filters button is `display: none`.
 
 ## Header
 
@@ -56,8 +56,9 @@ It is the page's polite live region (`role="status"`, `aria-atomic="true"`), so
 a rail or chip change announces the new line once.
 
 Below 1024 px it takes the sticky bar's free width, left of the Filters button.
-From 1024 px it sits at the right end of the header row (`justify-self: end`,
-`align-self: end`).
+From 1024 px it fills the count column, at least 18 rem wide, with right-aligned
+text at the bottom of the header row, so its box does not move when the text
+replaces the skeleton.
 
 | State                    | Count line                                      |
 | ------------------------ | ----------------------------------------------- |
@@ -241,8 +242,9 @@ A rail change applies as a sheet change does; focus stays on the control.
 
 The results area (`data-testid="showcase-results"`) is a one-column grid: the
 active-filter row, the state element, then the pager, with a 16 px row gap (20
-px from 1024 px). It carries `container-type: inline-size`. Below 1024 px it
-starts 16 px under the bar.
+px from 1024 px). It carries `container-type: inline-size` and
+`align-content: start`, so the active-filter row stays at the top while the grid
+is shorter than the rail. Below 1024 px it starts 16 px under the bar.
 
 Tiles sit in a `ul` grid that stretches each tile to its row's height:
 
