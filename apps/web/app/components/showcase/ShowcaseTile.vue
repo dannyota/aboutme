@@ -1,6 +1,13 @@
 <script setup lang="ts">
+import { Flag } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { Locale } from '@/i18n/locale';
 import { showcaseCopy } from '@/i18n/showcase';
 import {
@@ -10,10 +17,12 @@ import {
 } from '@/lib/showcaseContract';
 import { galleryTemplate } from '@/templates/catalog';
 
-// One listing: the stored preview card, a meta line, the optional role, and
-// a Report link. It shows only the closed item fields, always as text, and
-// never a contact detail, the slug, a date, or a count
-// (docs/design/showcase.md, What a listing shows).
+// One listing: the stored preview card, a meta block (optional role chip and
+// language, then the template), and a footer row outside the tile link with
+// the slug as plain text (S14) and the Report icon link. It shows only the
+// closed item fields, always as text, and never a contact detail, a date, or
+// a per-listing count (docs/design/showcase.md, What a listing shows;
+// docs/design/ui/showcase.md, Tile).
 const props = defineProps<{
   readonly item: ShowcaseItem;
   readonly locale: Locale;
@@ -62,29 +71,40 @@ const imageFailed = ref(false);
       </span>
       <span class="showcase-tile__meta">
         <span class="showcase-tile__line">
-          <span class="showcase-tile__template">{{ templateName }}</span>
           <span
-            aria-hidden="true"
-            class="showcase-tile__dot"
-          >·</span>
+            v-if="roleLabel !== null"
+            class="showcase-tile__role"
+            data-showcase-role
+          >{{ roleLabel }}</span>
           <span class="showcase-tile__language">{{
             copy.languages[item.language]
           }}</span>
         </span>
-        <span
-          v-if="roleLabel !== null"
-          class="showcase-tile__role"
-          data-showcase-role
-        >{{ roleLabel }}</span>
+        <span class="showcase-tile__template">{{ templateName }}</span>
       </span>
     </NuxtLink>
-    <div class="showcase-tile__report">
-      <a
-        :aria-label="copy.reportLabel(item.slug)"
-        class="showcase-tile__report-link"
-        data-action="showcase-report"
-        :href="reportHref"
-      >{{ copy.report }}</a>
+    <div class="showcase-tile__footer">
+      <span class="showcase-tile__slug">aboutme.vn/{{ item.slug }}</span>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger as-child>
+            <a
+              :aria-label="copy.reportLabel(item.slug)"
+              class="showcase-tile__report-link"
+              data-action="showcase-report"
+              :href="reportHref"
+            >
+              <Flag
+                aria-hidden="true"
+                class="size-[18px]"
+              />
+            </a>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            {{ copy.report }}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   </li>
 </template>
@@ -94,7 +114,7 @@ const imageFailed = ref(false);
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-dialog);
   background: var(--card);
   box-shadow: var(--shadow-product);
   transition: transform 200ms ease-out;
@@ -114,9 +134,9 @@ const imageFailed = ref(false);
   }
 }
 
-.showcase-tile__link,
-.showcase-tile__report-link {
-  border-radius: var(--radius);
+.showcase-tile__link {
+  display: block;
+  border-radius: var(--radius-dialog);
 }
 
 .showcase-tile__link:focus-visible,
@@ -125,16 +145,12 @@ const imageFailed = ref(false);
   outline-offset: 2px;
 }
 
-.showcase-tile__link {
-  display: block;
-}
-
 .showcase-tile__image {
   display: block;
   aspect-ratio: 1200 / 630;
   overflow: hidden;
   border-bottom: 1px solid var(--border);
-  border-radius: 9px 9px 0 0;
+  border-radius: 13px 13px 0 0;
   background: var(--muted);
 }
 
@@ -152,56 +168,70 @@ const imageFailed = ref(false);
 .showcase-tile__meta {
   display: grid;
   gap: 8px;
-  padding: 12px 16px 0;
+  padding: 12px 16px 4px;
 }
 
 .showcase-tile__line {
-  font-size: 0.875rem;
-  line-height: 1.4;
-}
-
-.showcase-tile__template {
-  color: var(--foreground);
-  font-weight: 500;
-}
-
-.showcase-tile__dot {
-  margin: 0 6px;
-  color: var(--muted-foreground);
-}
-
-.showcase-tile__language {
-  color: var(--muted-foreground);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .showcase-tile__role {
-  justify-self: start;
-  padding: 2px 10px;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
   border-radius: 9999px;
   background: var(--surface-blue);
   color: var(--foreground);
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
-.showcase-tile__report {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: auto;
-  padding: 4px 8px 8px;
-}
-
-.showcase-tile__report-link {
-  display: inline-flex;
-  align-items: center;
-  height: 2rem;
-  padding: 0 8px;
+.showcase-tile__language {
   color: var(--muted-foreground);
   font-size: 0.875rem;
 }
 
-.showcase-tile__report-link:hover {
+.showcase-tile__template {
   color: var(--foreground);
-  text-decoration: underline;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.showcase-tile__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding: 4px 8px 8px 16px;
+}
+
+.showcase-tile__slug {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.showcase-tile__report-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  color: var(--muted-foreground);
+}
+
+.showcase-tile__report-link:hover {
+  background: var(--accent);
+  color: var(--foreground);
 }
 </style>

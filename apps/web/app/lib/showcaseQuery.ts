@@ -1,6 +1,7 @@
 // The showcase page's URL query: role, lang, template, and page. A value the
 // page does not know counts as All and is never sent to the API; a page
-// outside 1 to 100 counts as 1 (docs/design/showcase.md, Order and filters).
+// outside 1 to 100 counts as 1 (docs/design/showcase.md, Order and filters;
+// docs/design/ui/showcase.md, Active filters).
 import type { LocationQuery, LocationQueryRaw } from 'vue-router';
 
 import { GALLERY } from '../templates/catalog';
@@ -57,6 +58,34 @@ export function hasFilters(query: ShowcaseFilters): boolean {
   return query.role !== undefined
     || query.lang !== undefined
     || query.template !== undefined;
+}
+
+export type ShowcaseFilterKind = 'role' | 'lang' | 'template';
+
+export interface ActiveFilter {
+  readonly kind: ShowcaseFilterKind;
+  /** The role, the language filter value, or the template ID. */
+  readonly value: string;
+}
+
+/** The filters that are on, in chip order: role, language, template. */
+export function activeFilterList(query: ShowcaseFilters): ActiveFilter[] {
+  return [
+    ...(query.role === undefined
+      ? []
+      : [{ kind: 'role' as const, value: query.role }]),
+    ...(query.lang === undefined
+      ? []
+      : [{ kind: 'lang' as const, value: query.lang }]),
+    ...(query.template === undefined
+      ? []
+      : [{ kind: 'template' as const, value: query.template }]),
+  ];
+}
+
+/** How many filters are on, 0 to 3; the Filters button badge shows it. */
+export function activeFilterCount(query: ShowcaseFilters): number {
+  return activeFilterList(query).length;
 }
 
 /** The route query for a link: known filters, and `page` above 1. */

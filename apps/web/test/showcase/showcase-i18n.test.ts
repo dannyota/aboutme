@@ -14,6 +14,11 @@ describe('showcase catalog', () => {
       'showcase.reportLabel': ['ada'],
       'showcase.reportSubject': ['ada'],
       'showcase.pageStatus': [1, 2],
+      'showcase.countHead': [1234],
+      'showcase.countLine': [1234],
+      'showcase.filtersActive': [2],
+      'showcase.showResults': [1234],
+      'showcase.removeFilter': ['Backend'],
     })).toEqual([]);
     expect(parityViolations(
       publishCopy.vi.showcase,
@@ -29,7 +34,6 @@ describe('showcase catalog', () => {
       title: copy.title,
       description: copy.description,
       lead: copy.lead,
-      orderNote: copy.orderNote,
       rolesLabel: copy.rolesLabel,
       allRoles: copy.allRoles,
       other: copy.roles.other,
@@ -53,6 +57,24 @@ describe('showcase catalog', () => {
       previous: copy.previous,
       next: copy.next,
       pageStatus: copy.pageStatus(2, 5),
+      countLine: copy.countLine(1234),
+      countHead: copy.countHead(1),
+      countTail: copy.countTail,
+      countNoTotal: copy.countNoTotal,
+      filters: copy.filters,
+      filtersActive: copy.filtersActive(3),
+      roleHeading: copy.roleHeading,
+      close: copy.close,
+      clearFilters: copy.clearFilters,
+      showResults: copy.showResults(1234),
+      showResultsOne: copy.showResults(1),
+      showResultsLoading: copy.showResultsLoading,
+      activeFilters: copy.activeFilters,
+      removeFilter: copy.removeFilter('Backend'),
+      clearAll: copy.clearAll,
+      inviteTitle: copy.inviteTitle,
+      inviteBody: copy.inviteBody,
+      inviteButton: copy.inviteButton,
     }).toEqual({
       nav: 'Community',
       title: 'Community resumes',
@@ -60,7 +82,6 @@ describe('showcase catalog', () => {
       lead:
         'Real resumes that aboutme.vn users published and chose to show '
         + 'here.',
-      orderNote: 'Earliest added first.',
       rolesLabel: 'Filter by role',
       allRoles: 'All roles',
       other: 'Other',
@@ -86,6 +107,26 @@ describe('showcase catalog', () => {
       previous: 'Previous',
       next: 'Next',
       pageStatus: 'Page 2 of 5',
+      countLine: '1,234 resumes · earliest added first',
+      countHead: '1 resume',
+      countTail: 'earliest added first',
+      countNoTotal: 'Earliest added first',
+      filters: 'Filters',
+      filtersActive: 'Filters, 3 active',
+      roleHeading: 'Role',
+      close: 'Close',
+      clearFilters: 'Clear filters',
+      showResults: 'Show 1,234 resumes',
+      showResultsOne: 'Show 1 resume',
+      showResultsLoading: 'Show results',
+      activeFilters: 'Active filters',
+      removeFilter: 'Backend, remove filter',
+      clearAll: 'Clear all',
+      inviteTitle: 'Want your resume here?',
+      inviteBody:
+        'When you publish, turn on Show in the community showcase. You can '
+        + 'turn it off any time.',
+      inviteButton: 'Create a free resume',
     });
   });
 
@@ -96,7 +137,6 @@ describe('showcase catalog', () => {
       title: copy.title,
       description: copy.description,
       lead: copy.lead,
-      orderNote: copy.orderNote,
       rolesLabel: copy.rolesLabel,
       allRoles: copy.allRoles,
       other: copy.roles.other,
@@ -120,13 +160,30 @@ describe('showcase catalog', () => {
       previous: copy.previous,
       next: copy.next,
       pageStatus: copy.pageStatus(2, 5),
+      countLine: copy.countLine(1234),
+      countHead: copy.countHead(1),
+      countTail: copy.countTail,
+      countNoTotal: copy.countNoTotal,
+      filters: copy.filters,
+      filtersActive: copy.filtersActive(3),
+      roleHeading: copy.roleHeading,
+      close: copy.close,
+      clearFilters: copy.clearFilters,
+      showResults: copy.showResults(1234),
+      showResultsOne: copy.showResults(1),
+      showResultsLoading: copy.showResultsLoading,
+      activeFilters: copy.activeFilters,
+      removeFilter: copy.removeFilter('Backend'),
+      clearAll: copy.clearAll,
+      inviteTitle: copy.inviteTitle,
+      inviteBody: copy.inviteBody,
+      inviteButton: copy.inviteButton,
     }).toEqual({
       nav: 'Cộng đồng',
       title: 'CV từ cộng đồng',
       description: 'CV thật do người dùng aboutme.vn chọn chia sẻ.',
       lead:
         'CV thật do người dùng aboutme.vn xuất bản và chọn hiện ở đây.',
-      orderNote: 'CV thêm sớm nhất hiện trước.',
       rolesLabel: 'Lọc theo vị trí',
       allRoles: 'Mọi vị trí',
       other: 'Khác',
@@ -152,7 +209,50 @@ describe('showcase catalog', () => {
       previous: 'Trang trước',
       next: 'Trang sau',
       pageStatus: 'Trang 2/5',
+      countLine: '1.234 CV · sớm nhất trước',
+      countHead: '1 CV',
+      countTail: 'sớm nhất trước',
+      countNoTotal: 'Sớm nhất trước',
+      filters: 'Bộ lọc',
+      filtersActive: 'Bộ lọc, 3 đang bật',
+      roleHeading: 'Vị trí',
+      close: 'Đóng',
+      clearFilters: 'Xóa bộ lọc',
+      showResults: 'Xem 1.234 CV',
+      showResultsOne: 'Xem 1 CV',
+      showResultsLoading: 'Xem kết quả',
+      activeFilters: 'Bộ lọc đang bật',
+      removeFilter: 'Backend, gỡ bộ lọc',
+      clearAll: 'Xóa hết',
+      inviteTitle: 'Muốn CV của bạn ở đây?',
+      inviteBody:
+        'Khi xuất bản CV, bật Hiện trong trang Cộng đồng. Bạn tắt lúc nào '
+        + 'cũng được.',
+      inviteButton: 'Tạo CV miễn phí',
     });
+  });
+
+  it('counts with the English singular and per-locale digit grouping', () => {
+    const en = showcaseCopy.en;
+    expect(en.countHead(0)).toBe('0 resumes');
+    expect(en.countHead(1)).toBe('1 resume');
+    expect(en.countHead(2)).toBe('2 resumes');
+    expect(en.countHead(1234567)).toBe('1,234,567 resumes');
+    expect(en.showResults(1)).toBe('Show 1 resume');
+    expect(en.showResults(1234)).toBe('Show 1,234 resumes');
+    const vi = showcaseCopy.vi;
+    expect(vi.countHead(1)).toBe('1 CV');
+    expect(vi.countHead(1234567)).toBe('1.234.567 CV');
+    expect(vi.countLine(0)).toBe('0 CV · sớm nhất trước');
+    // The bold head is the start of the line, so the page can split it.
+    for (const copy of [en, vi]) {
+      expect(copy.countLine(42).startsWith(copy.countHead(42))).toBe(true);
+    }
+  });
+
+  it('has no order note: the count line carries the order', () => {
+    expect('orderNote' in showcaseCopy.en).toBe(false);
+    expect('orderNote' in showcaseCopy.vi).toBe(false);
   });
 
   it('uses the Library role labels for the nine roles', () => {

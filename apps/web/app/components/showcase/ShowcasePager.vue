@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 // Previous, the page status, and Next. A link keeps the active filters and
 // sets `?page=`; at either end the control is a span that is not a stop
-// (docs/design/ui/landing-and-library.md, Community showcase, Pager).
+// (docs/design/ui/showcase.md, Pager).
 const props = defineProps<{
   readonly page: number;
   readonly pageCount: number;
