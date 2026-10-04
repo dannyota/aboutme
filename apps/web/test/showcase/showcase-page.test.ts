@@ -829,8 +829,11 @@ describe('showcase count line', () => {
       stubListing(reply, reply);
       const wrapper = await mountPage();
       const before = textNode(wrapper);
-      await wrapper.get('[data-action="showcase-next"]').trigger('click');
+      // The pager link changes only `page` in the route; this harness mocks
+      // NuxtLink's navigation, so the test moves the route as the link does.
+      await useRouter().replace({ path: '/showcase', query: { page: '2' } });
       await settleLoad(wrapper);
+      expect(listingUrls().at(-1)).toBe(`${LISTING_PATH}?page=2`);
       expect(textNode(wrapper)).toBe(before);
     });
 
