@@ -837,6 +837,26 @@ describe('showcase count line', () => {
       expect(textNode(wrapper)).toBe(before);
     });
 
+    it('keeps the node when the change fails and replaces it after Retry',
+      async () => {
+        const reply = page([item('ada-lovelace')], { total: 5 });
+        stubListing(reply, { fail: true }, reply);
+        const wrapper = await mountPage();
+        const before = textNode(wrapper);
+        await wrapper.get('[data-role="qa"]').trigger('click');
+        await vi.waitFor(() => expect(wrapper.find('[data-state="failed"]')
+          .exists()).toBe(true));
+        await flushPromises();
+        expect(textNode(wrapper)).toBe(before);
+        await wrapper.get('[data-action="showcase-retry"]').trigger('click');
+        await vi.waitFor(() => expect(calls).toHaveLength(3));
+        await vi.waitFor(() => expect(wrapper.find('[data-state="list"]')
+          .exists()).toBe(true));
+        await flushPromises();
+        expect(countText(wrapper)).toBe('5 resumes · earliest added first');
+        expect(textNode(wrapper)).not.toBe(before);
+      });
+
     it('replaces the sheet status node the same way', async () => {
       const reply = page([item('ada-lovelace')], { total: 5, pageCount: 2 });
       stubListing(reply, reply);

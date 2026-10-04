@@ -92,6 +92,9 @@ const announceKey = ref(0);
 const announcePending = ref(false);
 watch(settled, () => {
   if (!announcePending.value) return;
+  // A failed load keeps the last text and the mark, so the Retry that
+  // succeeds announces the count for the new filters.
+  if (view.value === 'failed') return;
   announcePending.value = false;
   announceKey.value += 1;
 });
