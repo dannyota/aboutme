@@ -907,6 +907,39 @@ describe('EditorPreview zoom controls', () => {
     });
 });
 
+describe('EditorPreview Web margins', () => {
+  // docs/design/web.md, "Pagination and print": the Web sheet carries its
+  // column count so the margin rule can pick the 52em or 70em measure.
+  async function mountMode(mode: 'pdf' | 'web', columns: 1 | 2) {
+    window.localStorage.setItem('aboutme.editorPreviewMode', mode);
+    const accepted = acceptedFixture();
+    accepted.document.customization.layout.columns = columns;
+    const wrapper = mount(EditorPreview, {
+      props: { document: accepted.document, lng: accepted.metadata.lng },
+      global: { stubs: { ResumeDocument: true } },
+    });
+    await nextTick();
+    return wrapper;
+  }
+
+  it.each([1, 2] as const)(
+    'marks the Web sheet with its %s column measure',
+    async (columns) => {
+      const wrapper = await mountMode('web', columns);
+      expect(wrapper.get('[data-testid="preview-sheet"]')
+        .attributes('data-web-columns')).toBe(String(columns));
+      wrapper.unmount();
+    },
+  );
+
+  it('leaves the paged PDF sheet unmarked', async () => {
+    const wrapper = await mountMode('pdf', 2);
+    expect(wrapper.get('[data-testid="preview-sheet"]')
+      .attributes('data-web-columns')).toBeUndefined();
+    wrapper.unmount();
+  });
+});
+
 async function animationFrames(count: number): Promise<void> {
   for (let index = 0; index < count; index += 1) {
     await new Promise<void>((resolve) => {

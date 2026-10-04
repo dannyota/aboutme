@@ -403,6 +403,9 @@ onBeforeUnmount(() => {
             previewMode === 'web' ? 'overflow-hidden' : undefined,
           ]"
           :data-color-scheme="colorScheme"
+          :data-web-columns="previewMode === 'web'
+            ? document.customization.layout.columns
+            : undefined"
           :data-scaled-width="
             previewMode === 'pdf' ? scaledWidth.toFixed(2) : undefined
           "

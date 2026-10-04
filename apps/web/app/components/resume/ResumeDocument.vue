@@ -61,6 +61,12 @@ const rootStyle = computed<CSSProperties>(() => ({
 @import './resumeColorScheme.css';
 
 /*
+ * The screen margins of the public page and the editor's Web preview, in a
+ * second sibling file for the same reason. It is wrapped in `@media screen`.
+ */
+@import './resumeScreenMargins.css';
+
+/*
  * The public page shell's skip link, rendered outside the resume by the public
  * render worker. The public page loads this stylesheet with the resume CSS.
  * The link stays out of view until keyboard focus reaches it.
@@ -96,7 +102,8 @@ a[href="#public-resume"]:focus {
  * size, so body lines hold about 90-110 characters in every template: 52em
  * of text for one column, 70em for two, where the main column keeps about
  * 45em.
- * Narrow screens are narrower than the measure, so phones are unchanged. The
+ * Below the measure plus both page margins the box takes the full width and
+ * the article's padding shrinks toward 16 px (resumeScreenMargins.css). The
  * editor preview and print never render this wrapper.
  */
 body:has(> #public-resume) {
@@ -164,7 +171,7 @@ body:has(> #public-resume) {
   min-height: 32px;
   max-width: calc(52em + 2 * var(--page-margin-x));
   margin-inline: auto;
-  padding-inline: var(--page-margin-x);
+  padding-inline: var(--screen-margin-x);
   font-size: var(--fs-body);
 }
 
@@ -175,7 +182,6 @@ body:has(> #public-resume) {
 @media (width < 40rem) {
   .public-toolbar-inner {
     column-gap: 12px;
-    padding-inline: 16px;
   }
 }
 

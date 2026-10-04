@@ -135,7 +135,7 @@ Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.7:1 and
 | ---------------------- | ------------------------------------------------------- |
 | Bar height             | 48 px, or 56 px on a touch screen; 8 px block padding   |
 | Inner row width        | the resume measure plus both page margins, centered     |
-| Inner inline padding   | `var(--page-margin-x)`; 16 px below 40 rem (640 px)     |
+| Inner inline padding   | the resume's inline padding, `--screen-margin-x`        |
 | Row layout             | brand left, download right; 16 px gap, 12 px on phones  |
 | Wrap                   | the row wraps with an 8 px row gap; download goes last  |
 | Credit type            | Be Vietnam Pro 500, 13 px on 20 px                      |
@@ -149,6 +149,12 @@ Measured contrast: the mark 5.0:1 light and 6.9:1 dark; credit text 5.7:1 and
 
 The button matches the application `outline` button at size `sm`. It replaces
 today's filled button, 2.75em high (about 35 px) in the template's link color.
+
+The padding is `clamp(16px, (page width - measure) / 2, var(--page-margin-x))`,
+the same value as the resume's own inline padding (see
+[web.md](web.md#pagination-and-print)): 16 px on a phone, growing on a tablet,
+the template margin once the full measure fits. So the brand and the text share
+one left edge at every width.
 
 At 1440 px the brand sits on the resume's left text edge and the button's right
 edge on the resume's right text edge. On a phone the bar keeps a 16 px gutter.
