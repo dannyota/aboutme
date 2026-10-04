@@ -82,6 +82,7 @@ Each part holds whole sections of this spec.
 | [Logo and seal](docs/design/ui/identity-and-seal.md)                           | Logo; Seal and state marks                                 |
 | [Typography and tokens](docs/design/ui/typography-and-tokens.md)               | Typography and tokens                                      |
 | [Landing and Library](docs/design/ui/landing-and-library.md)                   | Landing; Library; Community showcase                       |
+| [Community showcase](docs/design/ui/showcase.md)                               | Community showcase page layout                             |
 | [Shell and editor](docs/design/ui/shell-and-editor.md)                         | Authenticated chrome and editor                            |
 | [Responsive and accessibility](docs/design/ui/responsive-and-accessibility.md) | Responsive behavior; Interaction and motion; Accessibility |
 
