@@ -197,6 +197,18 @@ const PUBLIC_CELLS: readonly PublicCell[] = [
     template: 'modern-sidebar',
     width: 390,
   },
+  // Wide template margins on a phone: the text keeps its measure and the
+  // padding drops to 16 px (docs/design/web.md, "Pagination and print").
+  {
+    name: 'public--classic-serif--390.png',
+    template: 'classic-serif',
+    width: 390,
+  },
+  {
+    name: 'public--editorial-wide--390.png',
+    template: 'editorial-wide',
+    width: 390,
+  },
   // The dark and Match device schemes (docs/design/public-page-theme.md,
   // "Baselines and tests"): a plain, a tinted-sidebar, and a tinted-band
   // template, plus a Match device page under a dark preference.
@@ -313,6 +325,62 @@ test.describe('public page measure', () => {
       await page.emulateMedia({ media: 'screen' });
       await verifyScreenshot(page, cell.name, testInfo);
     });
+  }
+});
+
+// The article's padding grows from 16 px toward the template margin as the
+// width allows the measure (docs/design/web.md, "Pagination and print"; the
+// page bar's inner row follows it, docs/design/public-page-theme.md).
+test.describe('public page screen margins', () => {
+  const MM_TO_PX = 96 / 25.4;
+  // Template page margins, mm.
+  const TEMPLATES_MARGIN_X = { 'classic-serif': 25, 'editorial-wide': 35 };
+
+  for (const template of ['classic-serif', 'editorial-wide'] as const) {
+    for (const width of [390, 768, 1024, 1440]) {
+      test(`${template} at ${width}`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        const response = await page.goto(
+          `/_harness/render?fixture=vn-full&template=${template}&mode=public`,
+        );
+        expect(response?.ok()).toBe(true);
+        await expect(page.locator('[data-fonts-ready="true"]')).toHaveCount(1);
+
+        const geometry = await page.evaluate(() => {
+          const article = document.querySelector('.resume-document');
+          const mark = document.querySelector('.public-mark');
+          if (article === null || mark === null) throw new Error('Missing');
+          const style = getComputedStyle(article);
+          const left = Number.parseFloat(style.paddingLeft);
+          const right = Number.parseFloat(style.paddingRight);
+          const box = article.getBoundingClientRect();
+          return {
+            client: document.documentElement.clientWidth,
+            fontSize: Number.parseFloat(style.fontSize),
+            left,
+            markLeft: mark.getBoundingClientRect().left,
+            right,
+            textLeft: box.left + left,
+            text: box.width - left - right,
+          };
+        });
+        const margin = TEMPLATES_MARGIN_X[template] * MM_TO_PX;
+        // Padding is clamp(16, (width - measure) / 2, template margin).
+        const expected = Math.min(
+          margin,
+          Math.max(16, (geometry.client - 52 * geometry.fontSize) / 2),
+        );
+        expect(geometry.left).toBeCloseTo(expected, 0);
+        expect(geometry.right).toBeCloseTo(expected, 0);
+        // The page bar's mark and the body text share one left edge.
+        expect(geometry.markLeft).toBeCloseTo(geometry.textLeft, 0);
+        if (width === 390) {
+          expect(geometry.left).toBe(16);
+          expect(geometry.text).toBeGreaterThanOrEqual(geometry.client - 32.5);
+        }
+        if (width === 1440) expect(geometry.left).toBeCloseTo(margin, 0);
+      });
+    }
   }
 });
 

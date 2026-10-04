@@ -170,6 +170,7 @@ apps/web/app/components/resume/primitives/RichText.vue
 apps/web/app/components/resume/primitives/SectionHeading.vue
 apps/web/app/components/resume/resolveRenderModel.ts
 apps/web/app/components/resume/resumeColorScheme.css
+apps/web/app/components/resume/resumeScreenMargins.css
 apps/web/app/components/resume/sections/CertificateSection.vue
 apps/web/app/components/resume/sections/CustomSection.vue
 apps/web/app/components/resume/sections/EducationSection.vue
