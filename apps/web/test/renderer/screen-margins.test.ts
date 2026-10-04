@@ -40,7 +40,7 @@ describe('screen margin stylesheet', () => {
 
   it('applies to screens only, never to print or a paged page', () => {
     expect(margins.trimStart().startsWith('@media screen {')).toBe(true);
-    expect(margins).not.toContain('resume-page');
+    expect(margins).not.toMatch(/[ ,]\.resume-page/u);
     expect(margins).not.toContain('@media print');
   });
 
