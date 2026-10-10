@@ -21,8 +21,8 @@ impact assessment (DPIA) stays required either way.
 
 Production moves to providers that store and process data in Vietnam:
 
-- GreenNode (VNG Cloud) for compute (vServer), object storage (vStorage), and
-  monitoring (vMonitor). Its vWAF is the escalation if a flood exceeds the host.
+- GreenNode (VNG Cloud) for compute (vServer) and object storage (vStorage). Its
+  vWAF is the escalation if a flood exceeds the host.
 - Caddy on the host carries TLS, the Coraza web application firewall with the
   OWASP Core Rule Set, and the CrowdSec bouncer, replacing CloudFront and AWS
   WAF. Nothing stands in front of the host.
@@ -30,8 +30,9 @@ Production moves to providers that store and process data in Vietnam:
 - PostgreSQL 18 runs self-hosted on the vServer with pgBackRest to vStorage,
   because the managed database offers at most PostgreSQL 17 and no point-in-time
   recovery.
-- The release fence, secrets, jobs, logs, and alarms move to the host and
-  vMonitor.
+- The release fence, secrets, jobs, logs, and alarms move to the host: journald
+  keeps the logs and a host timer mails alarms. The Route 53 health check stays
+  as the one check from outside.
 
 The AWS stack stays as a test environment that holds fictional data only, with
 no domain of its own. Once the cutover is verified, every copy of real data in
@@ -72,7 +73,7 @@ authorization, and every data invariant are unchanged.
   the host replace them, so host compromise exposes every runtime secret, as it
   would on AWS through the task roles.
 - GreenNode's OpenTofu provider covers compute and network only. The `vngcloud`
-  CLI covers IAM, storage, and vMonitor from scripts; the vWAF escalation is a
+  CLI covers IAM, storage, and budgets from scripts; the vWAF escalation is a
   root-portal runbook step.
 - Caddy terminates TLS and takes every request. A flood larger than the host is
   downtime until vWAF is switched on by a DNS change.
