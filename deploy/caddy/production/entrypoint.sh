@@ -68,7 +68,7 @@ write_waf_log_output() {
     serving | maintenance) ;;
     *) fail "unknown WAF log owner '$1'" ;;
   esac
-  printf 'output file /var/log/caddy/waf/%s-match.log {\n\tmode 0600\n\troll_size 5MiB\n\troll_keep 2\n\troll_keep_for 1\n}\n' \
+  printf 'output file /var/log/caddy/waf/%s-match.log {\n\tmode 0600\n\troll_size 5MiB\n\troll_keep 2\n\troll_keep_for 24h\n}\n' \
     "$1" >/run/caddy/waf-log-output.caddy
 }
 
