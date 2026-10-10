@@ -6,13 +6,13 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 
 ## Owner actions
 
-1. Top up the existing GreenNode account for one month of vServer, volumes, and vStorage. Devops quotes each paid create first (`--max-price`).
+1. Top up the existing GreenNode account for one month of vServer, volumes, and vStorage. Devops quotes each paid create first (`--max-price`). The vStorage Gold 30 GB project in HCM04 was bought on 2026-10-10 with auto-renew off; renew it before 2026-11-09.
 2. Done: the GreenNode IAM user in the vngcloud session's `.env` is the aboutme setup account (owner, 2026-10-10); agents run `vngcloud --read-only` unless a step needs a write.
 3. Service accounts come from the CLI, not the console: one per bucket (media, backups, state), each with a bucket policy naming its principal and a key made by `storage create-s3-key --service-account-id`, plus one for the OpenTofu provider. Every secret goes by `--secret-file` to a 0600 file under `.dev/credentials/` and is never printed. **Unconfirmed:** the provider's authentication fields (service-account client ID and secret) until phase 1 tests them.
-4. Put `TOFU_STATE_PASSPHRASE` (at least 32 random bytes, base64) in `.dev/credentials/greennode.env`, mode 0600. Agents load credentials with `set -a; . <file>; set +a` inside the command that needs them and never print, echo, or log a value.
+4. Done (2026-10-10): `TF_VAR_state_passphrase` (32 random bytes, base64) is in the main checkout's `.dev/credentials/greennode.env`, mode 0600, with an age copy in `aboutme-infra`. Agents load credentials with `set -a; . <file>; set +a` inside the command that needs them and never print, echo, or log a value.
 5. Create a Bizfly Cloud account (https://bizflycloud.vn), verify identity, top up, and subscribe to Email Transaction for `aboutme.vn`.
 6. Put Bizfly values in `.dev/credentials/bizfly.env`, mode 0600: `BIZFLY_SMTP_HOST`, `BIZFLY_SMTP_PORT`, `BIZFLY_SMTP_USERNAME`, `BIZFLY_SMTP_PASSWORD`, and `BIZFLY_API_KEY` if Bizfly offers one. `secrets.sh` pipes the SMTP values to the host without printing them.
-7. Generate an age key pair for `aboutme-infra`; keep the private key off the host; give devops the public recipient.
+7. Done (2026-10-10): the age identity is `~/.config/aboutme/vn/infra-age.key` on the laptop, never on the host; `aboutme-infra` holds the recipient. The owner keeps a second copy of the identity off the laptop.
 8. The admin key is the public half of the owner's `ssh-ed25519` commit-signing key.
 9. At cutover: run the SSM-to-host secret pipe and approve the Route 53 switch of the apex and `www`.
 10. Once the cutover is verified: approve the AWS real-data deletion and the CloudFront teardown.
