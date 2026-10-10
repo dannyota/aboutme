@@ -98,8 +98,13 @@ user "$quoted_user"
 passwordeval cat $secrets/smtp-password
 account default : aboutme
 CONF
+# The display name goes out as a quoted string, so dots and commas in it stay
+# part of the name.
+from_name=$(get SES_FROM_NAME)
+from_name=${from_name//\\/\\\\}
+from_name=${from_name//\"/\\\"}
 {
-  printf 'From: %s <%s>\n' "$(get SES_FROM_NAME)" "$(get SES_FROM_ADDRESS)"
+  printf 'From: "%s" <%s>\n' "$from_name" "$(get SES_FROM_ADDRESS)"
   printf 'To: %s\n' "$(get ALERT_TO)"
   printf 'Subject: [aboutme-prod] %s\n' "$subject"
   printf 'Date: %s\n' "$(date -R)"

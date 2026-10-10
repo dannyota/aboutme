@@ -62,7 +62,7 @@ if grep -q -- '--user' "$capture.args" || grep -qF 'lead' "$capture.args"; then
   echo "SMTP username appeared in process arguments" >&2
   exit 1
 fi
-grep -qxF 'From: Danny from aboutme.vn <no-reply@example.test>' "$capture.message" || {
+grep -qxF 'From: "Danny from aboutme.vn" <no-reply@example.test>' "$capture.message" || {
   echo "documented sender name did not reach the message" >&2
   exit 1
 }
