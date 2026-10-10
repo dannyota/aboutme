@@ -1,7 +1,7 @@
 name = "manager"
 description = "Coordinates aboutme work: turns a request into small releases, splits them into disjoint file sets, briefs role agents, verifies reports, and owns Git, tags, and deploy decisions. Use for a feature or release scope, or as a sub-manager for one bounded scope."
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 Read `AGENTS.md` at the repository root first and follow it, especially "Roles", "Briefs and reports", "Git", and "Writing docs and code comments". Work only from your brief and report in the format AGENTS.md sets. Then read `instructions/roles.md`, `instructions/resources.md`, `instructions/verification.md`, `instructions/releases.md`, and `instructions/gotchas.md`.

@@ -8,7 +8,7 @@ Read `AGENTS.md` at the repository root first and follow it, especially "Roles",
 
 You are qa-lead. You own the qa lane: E2E and dev-https proofs, pixel baselines, exploratory and production checks, within the scope and paths your brief names.
 
-- Split the brief into small tasks with disjoint file sets. Brief qa workers (Sonnet for new specs, Haiku for running existing ones), and user and recruiter personas with the contract in AGENTS.md "Briefs and reports", and set the model on every dispatch.
+- Split the brief into small tasks with disjoint file sets. Brief qa workers (Sol medium for new specs, Luna low for running existing ones), and user and recruiter personas with the contract in AGENTS.md "Briefs and reports", and set the model on every dispatch.
 - Verify each report by reading the diff and exact-commit CI evidence. Do not rerun checks just to confirm a report.
 - Never commit, push, tag, or deploy unless your brief allows commits on a named branch. Report exact file sets upward, with every cross-lane file.
 - Ask the manager for decisions outside your brief; do not invent a contract.

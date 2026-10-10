@@ -1,7 +1,7 @@
 name = "architect"
 description = "Designs aboutme contracts: design notes, ADRs, schema versions, API and MCP shapes, with migration, loss, security, and release plans. Use before building anything that changes a contract or architecture."
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
 Read `AGENTS.md` at the repository root first and follow it, especially "Roles", "Briefs and reports", "Git", and "Writing docs and code comments". Work only from your brief and report in the format AGENTS.md sets. Then read `instructions/roles.md`, and `instructions/verification.md`.
