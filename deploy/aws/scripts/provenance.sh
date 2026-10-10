@@ -1,5 +1,6 @@
 # shellcheck shell=bash
-# Build provenance check, sourced by deploy.sh (which defines say and repo).
+# Release image resolution and build provenance check, sourced by deploy.sh
+# (which defines say, repo, and tag) and observer.sh.
 # Before a deploy uses a digest, provenance_verify requires the signed SLSA
 # provenance that release-images.yml attested for it: signed for this exact
 # tag by that workflow on a GitHub-hosted runner, from the commit the tag
@@ -24,4 +25,25 @@ provenance_verify() { # name digest tag commit
     'type == "array" and any(.[]; any(.verificationResult.statement.subject[]?; .name == $n and .digest.sha256 == $d))' \
     <<<"$out" >/dev/null ||
     { say "provenance: the build provenance for $name@$digest names a different subject"; return 1; }
+}
+
+# The digest of the linux/arm64 image the tag names. A release tag names an
+# image index of linux/arm64 and linux/amd64 (docs/design/vietnam-production.md,
+# "Host"), and this host runs the arm64 image, so the deploy pins that platform
+# digest, never the index. An older release tag names the arm64 image itself.
+digest() { # image name -> sha256:...
+  local token url headers type
+  token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo-$1:pull&service=ghcr.io" | jq -r .token)
+  url="https://ghcr.io/v2/$repo-$1/manifests/$tag"
+  headers=$(curl -fsSI -H "Authorization: Bearer $token" \
+    -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json' \
+    "$url" | tr -d '\r') || return
+  type=$(awk -F': ' 'tolower($1) == "content-type" { print $2 }' <<<"$headers")
+  case $type in
+    application/vnd.oci.image.index.v1+json | application/vnd.docker.distribution.manifest.list.v2+json)
+      curl -fsS -H "Authorization: Bearer $token" -H "Accept: $type" "$url" |
+        jq -r '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "arm64")]
+          | if length == 1 then .[0].digest else empty end' ;;
+    *) awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }' <<<"$headers" ;;
+  esac
 }
