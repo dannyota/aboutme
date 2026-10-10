@@ -62,3 +62,20 @@ variable "bizfly_dkim_txt" {
     error_message = "bizfly_dkim_txt is the whole TXT value, v=DKIM1;k=rsa;p=<key>, joined into one string without quotes."
   }
 }
+
+variable "vn_host_ipv4" {
+  type        = string
+  default     = null
+  description = "Vietnam host floating IP; set, it gets the vn-rehearsal names (docs/design/vietnam-production.md)"
+
+  validation {
+    condition     = var.vn_host_ipv4 == null || can(regex("^(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])){3}$", var.vn_host_ipv4))
+    error_message = "vn_host_ipv4 must be an IPv4 address."
+  }
+}
+
+variable "apex_on_vn_host" {
+  type        = bool
+  default     = false
+  description = "Cutover: the apex and www answer with vn_host_ipv4 instead of the CloudFront aliases"
+}
