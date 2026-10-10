@@ -47,8 +47,8 @@ CrowdSec would see one client. Before the cutover:
 - [ ] Start in detection or log-only mode if the portal offers it.
       **Unconfirmed:** the available modes.
 - [ ] Test before any DNS change: send requests to vWAF's address with the
-      `Host` header set to `aboutme.vn`, and check `/readyz` and a public
-      resume page.
+      `Host` header set to `aboutme.vn`, and check `/readyz` and a public resume
+      page.
 
 ## Cut over
 
@@ -67,8 +67,8 @@ Route 53 aliases point only at AWS targets, so use plain records.
 
 - [ ] `dig +short aboutme.vn` and `dig +short www.aboutme.vn` return vWAF's
       address and the CNAME chain.
-- [ ] `curl -sI https://aboutme.vn/readyz` returns 200 with a valid
-      certificate, and so does `https://www.aboutme.vn/`.
+- [ ] `curl -sI https://aboutme.vn/readyz` returns 200 with a valid certificate,
+      and so does `https://www.aboutme.vn/`.
 - [ ] Sign in, open a resume, and download a PDF from a browser.
 - [ ] A CrowdSec-banned test address still gets 403, using its real address.
 - [ ] The attack traffic shows in the vWAF portal and falls in the Caddy log.
@@ -79,13 +79,13 @@ Route 53 aliases point only at AWS targets, so use plain records.
 vWAF decrypts traffic in Vietnam, so GreenNode sees every request and response
 in clear text. The privacy notice already names GreenNode as a processor for
 hosting; it covers this. Confirm that vWAF logs stay in Vietnam and how long
-they are kept. **Unconfirmed:** both. Update the notice if either answer
-differs from the hosting terms.
+they are kept. **Unconfirmed:** both. Update the notice if either answer differs
+from the hosting terms.
 
 ## Roll back
 
-- [ ] Point the apex A record back to the floating IP and `www` back to the
-      same A record, or a CNAME to the apex.
+- [ ] Point the apex A record back to the floating IP and `www` back to the same
+      A record, or a CNAME to the apex.
 - [ ] Keep the TTL at 60 seconds until the traffic is back on the host, then
       raise it to the normal value.
 - [ ] Remove the trusted vWAF header from Caddy only if the escalation is over.
