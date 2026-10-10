@@ -71,9 +71,6 @@ wait_for_decision() { # ip
     if jq -e --arg ip "$ip" \
       '.[] | .decisions[] | select(.value == $ip and .scenario == "aboutme/http-status")' \
       >/dev/null <<<"$decisions"; then
-      jq -r --arg ip "$ip" \
-        '.[] | .decisions[] | select(.value == $ip and .scenario == "aboutme/http-status") | .until' \
-        <<<"$decisions" | head -n1
       return 0
     fi
     sleep 1
@@ -108,7 +105,11 @@ wait_for_decision "$mixed_ip" >/dev/null || {
 
 attack_ip=192.0.2.41
 append_records "$attack_ip" 404 11 static
-until=$(wait_for_decision "$attack_ip") || { echo "status scenario created no decision" >&2; exit 1; }
+wait_for_decision "$attack_ip" || { echo "status scenario created no decision" >&2; exit 1; }
+db=/var/lib/crowdsec/data/crowdsec.db
+until=$(sqlite3 "$db" \
+  "SELECT until FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status' ORDER BY id DESC LIMIT 1;")
+[[ -n $until ]] || { echo "HTTP decision expiry is missing" >&2; exit 1; }
 now_epoch=$(date +%s)
 until_epoch=$(date -d "$until" +%s)
 remaining=$((until_epoch - now_epoch))
@@ -117,7 +118,6 @@ remaining=$((until_epoch - now_epoch))
   exit 1
 }
 
-db=/var/lib/crowdsec/data/crowdsec.db
 [[ $(sqlite3 "$db" "SELECT count(*) FROM alerts WHERE source_ip = '$attack_ip' AND (coalesce(source_country, '') != '' OR coalesce(source_as_number, '') NOT IN ('', '0') OR coalesce(source_as_name, '') != '' OR coalesce(source_latitude, '') NOT IN ('', '0') OR coalesce(source_longitude, '') NOT IN ('', '0') OR coalesce(source_range, '') != '');") == 0 ]] || {
   echo "HTTP alert contains network enrichment" >&2
   exit 1
