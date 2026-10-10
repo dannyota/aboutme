@@ -269,8 +269,9 @@ step_pull() { # server web caddy
 }
 
 step_backup() {
-  runuser -u postgres -- pgbackrest --stanza=aboutme --type=incr \
-    --annotation="aboutme-release=$tag" backup || die "the release backup failed"
+  /usr/local/lib/aboutme/workload-lock.sh 21600 \
+    runuser -u postgres -- pgbackrest --stanza=aboutme --type=incr \
+      --annotation="aboutme-release=$tag" backup || die "the release backup failed"
   say "backup for $tag done"
 }
 
@@ -412,7 +413,8 @@ step_ban_test() { # add|del ip
 step_oneshot() { # unit
   local result
   checkpoint
-  systemctl start "$1.service" || true
+  /usr/local/lib/aboutme/workload-lock.sh 3600 \
+    systemctl start "$1.service" || true
   result=$(systemctl show -p Result --value "$1.service")
   [[ $result == success ]] || die "$1 finished with result '$result'"
   say "$1 done"

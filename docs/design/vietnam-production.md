@@ -61,10 +61,10 @@ under the `EDGES` list, which gains `direct`.
 Three host-level controls replace AWS WAF:
 
 - Go's rate limits stay the application control.
-- CrowdSec's engine, Caddy bouncer, and nftables SSH bouncer read Caddy and sshd
-  logs and ban floods, scans, and brute force; Caddy returns 403. Sharing stays
-  off until the DPIA covers sending attacker addresses abroad (owner,
-  2026-10-10).
+- CrowdSec's engine, Caddy bouncer, and nftables SSH bouncer ban attacks; Caddy
+  returns 403. Its [HTTP privacy contract](crowdsec-http-privacy.md) uses a
+  five-field RAM-only feed, keeps encrypted attack records for at most 24 hours,
+  and disables community sharing (owner, 2026-10-10).
 - Coraza 3.8.1 in Caddy (`coraza-caddy` with OWASP CRS v4) detects for two weeks
   before blocking. Raw audit logging stays off because it can record body data.
   Serving writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
@@ -116,19 +116,15 @@ complaint reporting, suppression list, and sending limits.
 ## Host
 
 One amd64 vServer runs Ubuntu 24.04 LTS with 2 vCPU and 4 GiB (owner,
-2026-10-10), since PostgreSQL now shares the host: 512 MiB for Go and Chromium
-(unchanged cap), about 300 MiB for Nuxt and Caddy, 1 GiB for PostgreSQL, and the
-rest for the OS and page cache. OpenTofu owns the server, a 20 GB root disk, a
+2026-10-10). Its [memory and storage budget](vietnam-host-memory.md) caps each
+service, serializes jobs, gives Caddy logs a 64 MiB tmpfs, and makes measured
+rehearsal peaks a cutover gate. OpenTofu owns a 30 GB unencrypted root disk, a
 20 GB encrypted SSD data volume (aes-xts-plain64 256, set at create time; owner,
-2026-10-10), and the floating IP. The root disk is unencrypted and holds only
-the OS and public images; secrets, PostgreSQL, CrowdSec state, and journald logs
-live on the data volume. Root at 20 GB, the minimum, fits the worst case of
-about 15 GB: Ubuntu 4 GB, three server images of 2.6 GB during a deploy, web and
-Caddy images, 1 GB of Podman overhead, and zram instead of a swap file. The data
-volume starts at 20 GB because RDS holds under 3 GiB today. Either volume grows
-online when its alarm fires at 70%: `vngcloud volume resize-volume`, then
-`growpart` and `resize2fs`. Release images add `linux/amd64` beside
-`linux/arm64`, because GreenNode offers no ARM vServer (**Unconfirmed**).
+2026-10-10), and the floating IP. Only the OS, public images, and caches use
+root. Secrets, PostgreSQL, CrowdSec state, and journald use the data volume.
+Either disk grows online at its 70 percent alarm. Release images add
+`linux/amd64` beside `linux/arm64`, because GreenNode offers no ARM vServer
+(**Unconfirmed**).
 
 Rootful Podman runs every container from systemd Quadlet units:
 
@@ -253,9 +249,9 @@ environment.
 ## Logs, metrics, and alarms
 
 There is no monitoring service (owner, 2026-10-10: vMonitor removed for cost).
-journald on the data volume keeps 30 days, capped at 2 GB (`MaxRetentionSec`,
-`SystemMaxUse`); Caddy logs still drop client addresses and request headers, so
-a host loss loses only operational logs, never data. `aboutme-watch.timer` runs
+journald keeps 30 days on the data volume, capped at 2 GB. Ordinary Caddy logs
+drop addresses, URIs, and request headers. Its RAM-only feed and logs follow
+[HTTP privacy contract](crowdsec-http-privacy.md). `aboutme-watch.timer` runs
 `watch.sh` every five minutes and `OnFailure=` on every unit runs `alert.sh`;
 both mail the support mailbox through Bizfly SMTP with `msmtp`, one message per
 condition per day, from the sender the app uses. The Route 53 health check on
@@ -362,8 +358,8 @@ Each ships alone on AWS before cutover:
 3. Caddy edge selection: the `EDGES` list gains `direct`, a listener that trusts
    no forwarding header; the Coraza and CrowdSec modules in the Caddy image; and
    the site host from the environment so a rehearsal hostname works.
-4. Privacy notice and terms naming GreenNode and Bizfly in Vietnam. The text is
-   true only after cutover, so its first deploy is the cutover deploy.
+4. Privacy notice and terms naming the Vietnam providers and CrowdSec fields and
+   retention, held until Route 53 points at the verified Vietnam host.
 
 ### 3. Build infrastructure
 

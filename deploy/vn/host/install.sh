@@ -53,6 +53,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 timers=(
   aboutme-watch.timer
+  aboutme-crowdsec-retention.timer
   aboutme-backup-full.timer
   aboutme-backup-diff.timer
   aboutme-backup-verify.timer
@@ -103,7 +104,7 @@ install -d -m 0755 /etc/apt/keyrings
 apt-get update -qq
 # age encrypts the secrets copy; msmtp sends alert.sh's mail. Both come from
 # the Ubuntu archive.
-apt-get install -y -qq ca-certificates curl gnupg age msmtp >/dev/null
+apt-get install -y -qq ca-certificates curl gnupg age msmtp sqlite3 >/dev/null
 
 install_key "$bundle/host/keys/pgdg.asc" "$PGDG_SIGNER_FPR" /etc/apt/keyrings/postgresql.asc
 echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
@@ -144,6 +145,8 @@ apt-get update -qq
 install -d -m 0755 /etc/crowdsec/acquis.d
 install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
 install -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+install -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+  /etc/crowdsec/acquis.d/aboutme-http.yaml
 rm -f /etc/crowdsec/acquis.d/caddy.yaml
 
 # 3. Packages. postgresql-common creates the postgres user; the data
@@ -162,13 +165,12 @@ install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGR
 # script before it starts the service. Set the package's supported debconf
 # choice before apt runs, then keep the service masked while removing any
 # inherited online configuration.
-systemctl stop crowdsec.service 2>/dev/null || true
-systemctl mask --runtime crowdsec.service >/dev/null
+systemctl stop crowdsec.service crowdsec-firewall-bouncer.service 2>/dev/null || true
+systemctl mask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null
 crowdsec_install_offline install_pinned "crowdsec=$CROWDSEC_VERSION" \
   "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
 crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
   /etc/crowdsec/online_api_credentials.yaml || die "CrowdSec central API opt-out failed"
-systemctl unmask --runtime crowdsec.service >/dev/null
 say "pinned packages installed"
 
 
@@ -182,6 +184,67 @@ install -o postgres -g postgres -m 0640 "$etc/postgresql/18/main/pg_hba.conf" /e
 install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
 install -o postgres -g postgres -m 0644 "$etc/postgresql/18/main/conf.d/90-aboutme.conf" \
   /etc/postgresql/18/main/conf.d/90-aboutme.conf
+
+install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
+install -m 0644 "$bundle/edge/crowdsec/console.yaml" /etc/crowdsec/console.yaml
+install -m 0644 "$bundle/edge/crowdsec/profiles.yaml" /etc/crowdsec/profiles.yaml
+install -m 0644 "$bundle/edge/crowdsec/acquis.d/aboutme-http.yaml" \
+  /etc/crowdsec/acquis.d/aboutme-http.yaml
+install -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+rm -f /etc/crowdsec/acquis.d/caddy.yaml
+install -d -m 0755 /etc/crowdsec/parsers/s01-parse /etc/crowdsec/parsers/s02-enrich \
+  /etc/crowdsec/scenarios
+install -m 0644 "$bundle/edge/crowdsec/parsers/s01-parse/aboutme-http.yaml" \
+  /etc/crowdsec/parsers/s01-parse/aboutme-http.yaml
+install -m 0644 "$bundle/edge/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
+  /etc/crowdsec/parsers/s02-enrich/zz-aboutme-http-source.yaml
+for scenario in "$bundle"/edge/crowdsec/scenarios/*.yaml; do
+  install -m 0644 "$scenario" "/etc/crowdsec/scenarios/$(basename "$scenario")"
+done
+
+# The startup retention gate must run before the first unmasked CrowdSec
+# start. Install its scripts early; step 6 refreshes the same copies.
+lib=/usr/local/lib/aboutme
+install -d -m 0755 "$lib"
+install -m 0755 "$bundle/host/crowdsec-retention.sh" "$lib/crowdsec-retention.sh"
+install -m 0755 "$bundle/host/crowdsec-retention-fail.sh" "$lib/crowdsec-retention-fail.sh"
+install -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
+  "$lib/crowdsec-retention-lease-check.sh"
+install -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
+
+# The packaged SSH collection includes one non-remediating two-hour detector.
+# The retained brute-force, slow brute-force, CVE, and refused-connection
+# scenarios cover SSH within the bounded record lifetime.
+cscli collections install crowdsecurity/sshd >/dev/null
+rm -f /etc/crowdsec/scenarios/ssh-time-based-bf.yaml
+"$lib/crowdsec-window-check.sh"
+systemctl daemon-reload
+edge_restart=()
+install -d -o 10001 -g 10001 -m 0750 /run/aboutme/caddy-log
+if ! mountpoint -q /run/aboutme/caddy-log; then
+  for unit in aboutme-caddy.service aboutme-maintenance.service; do
+    systemctl is-active --quiet "$unit" && edge_restart+=("$unit")
+  done
+  systemctl stop aboutme-caddy.service aboutme-maintenance.service 2>/dev/null || true
+  for unit in aboutme-caddy.service aboutme-maintenance.service; do
+    systemctl is-active --quiet "$unit" && die "$unit stayed active during log tmpfs migration"
+  done
+  setpriv --reuid 10001 --regid 10001 --clear-groups \
+    /usr/bin/find /run/aboutme/caddy-log -mindepth 1 -xdev -delete
+fi
+systemctl enable --now 'run-aboutme-caddy\x2dlog.mount' >/dev/null
+[[ $(findmnt -n -o FSTYPE -M /run/aboutme/caddy-log) == tmpfs ]] || die "Caddy log mount is not tmpfs"
+log_mount_options=$(findmnt -n -o OPTIONS -M /run/aboutme/caddy-log)
+for option in nosuid nodev noexec mode=750 uid=10001 gid=10001; do
+  [[ ,$log_mount_options, == *,$option,* ]] || die "Caddy log mount lacks $option"
+done
+[[ ,$log_mount_options, == *,size=65536k,* || ,$log_mount_options, == *,size=64M,* ]] || \
+  die "Caddy log mount is not capped at 64 MiB"
+systemd-tmpfiles --create /etc/tmpfiles.d/aboutme.conf
+systemctl start aboutme-crowdsec-retention-startup.service
+systemctl enable --now aboutme-crowdsec-retention.timer >/dev/null
+systemctl unmask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null
+rm -f /var/log/crowdsec.log /var/log/crowdsec-firewall-bouncer.log
 say "configuration copied to /etc"
 
 # 5. CrowdSec: point the agent at the local API, register the firewall
@@ -205,9 +268,11 @@ conf=/etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.local
 )
 systemctl enable crowdsec crowdsec-firewall-bouncer >/dev/null
 systemctl restart crowdsec-firewall-bouncer
+if ((${#edge_restart[@]})); then
+  systemctl start "${edge_restart[@]}"
+fi
 
 # 6. Host scripts, quadlet templates, and environment files.
-lib=/usr/local/lib/aboutme
 install -d -m 0755 "$lib" /etc/aboutme
 copy_script() {
   if [ -f "$1" ]; then
@@ -221,7 +286,12 @@ copy_script "$bundle/scripts/deploy-host.sh"
 copy_script "$bundle/scripts/deploy-safety.sh"
 copy_script "$bundle/scripts/secrets-host.sh"
 copy_script "$bundle/host/crowdsec-offline.sh"
+copy_script "$bundle/host/crowdsec-retention.sh"
+copy_script "$bundle/host/crowdsec-retention-fail.sh"
+copy_script "$bundle/host/crowdsec-retention-lease-check.sh"
+copy_script "$bundle/host/crowdsec-window-check.sh"
 copy_script "$bundle/host/job-run.sh"
+copy_script "$bundle/host/workload-lock.sh"
 for f in "$bundle"/host/bin/*.sh; do
   [ -e "$f" ] && copy_script "$f"
 done
@@ -260,7 +330,16 @@ sysctl --system >/dev/null
 systemctl restart systemd-journald
 journalctl --flush
 systemctl daemon-reload
-systemctl start systemd-zram-setup@zram0.service
+zram_row=$(swapon --bytes --noheadings --show=NAME,SIZE,USED | awk '$1 == "/dev/zram0" { print $2, $3 }')
+if [[ -z $zram_row ]]; then
+  systemctl start systemd-zram-setup@zram0.service
+else
+  read -r zram_size zram_used <<<"$zram_row"
+  if ((zram_size > 536870912)); then
+    ((zram_used == 0)) || die "zram exceeds 512 MiB and is in use; reboot to apply the lower ceiling"
+    systemctl restart systemd-zram-setup@zram0.service
+  fi
+fi
 systemctl restart postgresql@18-main.service
 systemctl enable --now "${timers[@]}" >/dev/null
 systemctl enable --now unattended-upgrades.service >/dev/null

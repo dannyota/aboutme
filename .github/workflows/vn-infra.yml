@@ -47,5 +47,27 @@ jobs:
       - name: Test deployment safety
         run: |
           for test in deploy/vn/tests/*-test.sh; do
+            if [ "$test" = deploy/vn/tests/crowdsec-integration-test.sh ]; then
+              continue
+            fi
             "$test"
           done
+
+  crowdsec-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned CrowdSec
+        run: |
+          sudo install -d -m 0755 /etc/apt/keyrings
+          gpg --dearmor --yes -o /tmp/crowdsec.gpg deploy/vn/host/keys/crowdsec.asc
+          sudo install -m 0644 /tmp/crowdsec.gpg /etc/apt/keyrings/crowdsec.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main" | \
+            sudo tee /etc/apt/sources.list.d/crowdsec.list >/dev/null
+          sudo apt-get update -qq
+          printf 'crowdsec crowdsec/capi boolean false\n' | sudo debconf-set-selections
+          sudo systemctl mask --runtime crowdsec.service
+          sudo apt-get install -y -qq crowdsec=1.8.1 sqlite3
+      - name: Test pinned parser and scenarios
+        run: sudo deploy/vn/tests/crowdsec-integration-test.sh

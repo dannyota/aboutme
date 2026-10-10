@@ -1,0 +1,29 @@
+name: aboutme/http
+description: Parse the bounded aboutme HTTP security feed
+filter: |
+  evt.Line.Labels.type == 'aboutme-http' &&
+  UnmarshalJSON(evt.Line.Raw, evt.Unmarshaled, 'aboutme') in ['', nil] &&
+  len(evt.Unmarshaled.aboutme) == 5 &&
+  evt.Unmarshaled.aboutme.ts matches '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$' &&
+  IsIP(evt.Unmarshaled.aboutme.source_ip) &&
+  evt.Unmarshaled.aboutme.method in ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'OTHER'] &&
+  int(evt.Unmarshaled.aboutme.status) >= 100 && int(evt.Unmarshaled.aboutme.status) <= 599 &&
+  evt.Unmarshaled.aboutme.route_class in ['system', 'static', 'auth', 'api', 'mcp', 'public', 'unknown', 'maintenance']
+onsuccess: next_stage
+statics:
+  - target: evt.StrTime
+    expression: evt.Unmarshaled.aboutme.ts
+  - parsed: aboutme_source_ip
+    expression: evt.Unmarshaled.aboutme.source_ip
+  - meta: service
+    value: http
+  - meta: log_type
+    value: aboutme-http
+  - meta: http_verb
+    expression: evt.Unmarshaled.aboutme.method
+  - meta: http_status
+    expression: Sprintf("%v", evt.Unmarshaled.aboutme.status)
+  - meta: route_class
+    expression: evt.Unmarshaled.aboutme.route_class
+  - meta: feed_mode
+    expression: evt.Line.Labels.feed_mode

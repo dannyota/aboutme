@@ -12,6 +12,11 @@ set -euo pipefail
 
 lib=/usr/local/lib/aboutme
 
+if [[ ${1-} != --locked ]]; then
+  exec "$lib/workload-lock.sh" 3600 "$0" --locked "$@"
+fi
+shift
+
 name=${1-}
 case $name in
   idempotency-expiry-sweep | privacy-retention-sweep) network=none ;;

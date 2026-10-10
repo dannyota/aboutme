@@ -30,7 +30,7 @@ variable "volume_type_id" {
 variable "root_disk_gb" {
   type        = number
   description = "Root disk size in GB"
-  default     = 20
+  default     = 30
 }
 
 variable "data_disk_gb" {

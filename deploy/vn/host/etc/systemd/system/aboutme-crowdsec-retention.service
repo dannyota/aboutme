@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme CrowdSec runtime retention
+After=crowdsec.service
+OnFailure=aboutme-crowdsec-retention-failure.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/crowdsec-retention.sh runtime
+TimeoutStartSec=1min
+StandardOutput=null
+StandardError=null

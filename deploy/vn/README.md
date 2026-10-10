@@ -73,7 +73,7 @@ the state passphrase and host secrets.
 
 ## Data volume encryption
 
-The server is created with a plain 20 GB root disk and no data disk; the 20 GB
+The server is created with a plain 30 GB root disk and no data disk; the 20 GB
 data volume is created separately with `data_volume_encryption_type` (default
 `aes-xts-plain64_256`) and attached. Encrypting a disk at server create adds a
 surcharge of 30% of the flavor price (vngcloud wiki, Compute-Servers.md,
@@ -153,7 +153,9 @@ These contracts match the server and Caddy images:
 
 ## Paid resources and quotes
 
-Read-only quotes on 2026-10-10, VND a month:
+Read-only quotes on 2026-10-10, VND a month. The server quote below used the old
+20 GB root disk setting. Run `scripts/quote.sh` again with the current 30 GB
+default before creating paid resources.
 
 | Resource                                       | Created by                 | Quote                     |
 | ---------------------------------------------- | -------------------------- | ------------------------- |
