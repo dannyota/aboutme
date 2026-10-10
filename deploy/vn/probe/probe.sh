@@ -288,7 +288,7 @@ c_host_to_bridge() {
   ensure_network || return 1
   podman run -d --rm --name "${PREFIX}pub" --network aboutme \
     -p "127.0.0.1:$PUB_PORT:8000" "$IMAGE" \
-    sh -c 'mkdir -p /www && echo ok >/www/index.html && exec httpd -f -p 8000 -h /www' \
+    sh -c 'while :; do printf "HTTP/1.0 200 OK\r\nContent-Length: 3\r\n\r\nok\n" | nc -l -p 8000; done' \
     >/dev/null
   for _ in 1 2 3 4 5; do
     body=$(curl -fsS --max-time 3 "http://127.0.0.1:$PUB_PORT/index.html" 2>/dev/null) && break
