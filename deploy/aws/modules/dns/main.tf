@@ -32,7 +32,7 @@ locals {
     spf = {
       name    = local.zone
       type    = "TXT"
-      records = ["v=spf1 include:_spf.google.com ~all"]
+      records = ["v=spf1 include:_spf.google.com include:_spf.bizflycloud.vn ~all"]
     }
     dmarc = {
       name    = "_dmarc.${local.zone}"
@@ -60,6 +60,13 @@ locals {
       name    = "google._domainkey.${local.zone}"
       type    = "TXT"
       records = [join("\"\"", regexall(".{1,255}", var.google_workspace.dkim_txt))]
+    }
+    # Bizfly Email Transaction signs authentication mail; Google keeps the
+    # mailbox, so the root MX stays Google's and only SPF gains the include.
+    bizfly_dkim = {
+      name    = "dkim._domainkey.${local.zone}"
+      type    = "TXT"
+      records = [join("\"\"", regexall(".{1,255}", var.bizfly_dkim_txt))]
     }
   }
 }

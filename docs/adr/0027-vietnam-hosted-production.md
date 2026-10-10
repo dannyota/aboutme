@@ -1,9 +1,9 @@
 # 0027: Vietnam-hosted production
 
 Status: Accepted (2026-09-24) for the provider choice, by the human owner's
-direction. The design choices marked for owner approval in the
-[Vietnam production design](../design/vietnam-production.md) stay open until the
-owner approves them. Until cutover, ADR 0025 describes what runs.
+direction; the design choices in the
+[Vietnam production design](../design/vietnam-production.md) were approved on
+2026-10-10. Until cutover, ADR 0025 describes what runs.
 
 ## Context
 
@@ -21,12 +21,12 @@ impact assessment (DPIA) stays required either way.
 
 Production moves to providers that store and process data in Vietnam:
 
-- GreenNode (VNG Cloud) for compute (vServer), object storage (vStorage), CDN
-  (vCDN, all PoPs in Vietnam), and monitoring (vMonitor).
-- P.A Vietnam, the domain registrar, for public DNS (DNS Pro, with DNSSEC).
-  GreenNode vDNS is private DNS inside a VPC, not a public zone host.
-- Bizfly Email Transaction for authentication mail, and Bizfly Business Email
-  for the support mailbox.
+- GreenNode (VNG Cloud) for compute (vServer), object storage (vStorage), and
+  monitoring (vMonitor). Its vWAF is the escalation if a flood exceeds the host.
+- Caddy on the host carries TLS, the Coraza web application firewall with the
+  OWASP Core Rule Set, and the CrowdSec bouncer, replacing CloudFront and AWS
+  WAF. Nothing stands in front of the host.
+- Bizfly Email Transaction for authentication mail.
 - PostgreSQL 18 runs self-hosted on the vServer with pgBackRest to vStorage,
   because the managed database offers at most PostgreSQL 17 and no point-in-time
   recovery.
@@ -35,9 +35,8 @@ Production moves to providers that store and process data in Vietnam:
 
 The AWS stack stays as a test environment that holds fictional data only, with
 no domain of its own. Once the cutover is verified, every copy of real data in
-AWS and Google Workspace is deleted. The
-[Vietnam production design](../design/vietnam-production.md) states the rules
-and the migration order.
+AWS is deleted. The [Vietnam production design](../design/vietnam-production.md)
+states the rules and the migration order.
 
 These stay outside the move:
 
@@ -49,15 +48,20 @@ These stay outside the move:
   data leaves Vietnam.
 - MCP clients that a user connects may run abroad. The user starts that
   transfer, and the privacy notice says so.
+- Public DNS stays at Route 53 with DNSSEC and plain address records to the
+  host. An authoritative name server answers resolvers and sees no person. P.A
+  Vietnam stays the registrar.
+- The Google Workspace support mailbox stays. A person who writes to support
+  sends their own mail; the application never sends account data to it.
 - GitHub holds code and public images with no personal data.
 
 These stand through the move: the single-host shape, production without hosted
 UAT until about 500 users, laptop-run deploys by digest, public infrastructure
 code without secrets, GitHub without cloud credentials, one serving replica and
 deploy-step migrations (ADRs 0005 and 0026), the second-factor fence rules with
-a new store (ADR 0017), and the live-state gate (ADR 0010), with vCDN caching
-only hashed assets. Public HTTP, SSE, and MCP contracts, privacy deadlines,
-private media authorization, and every data invariant are unchanged.
+a new store (ADR 0017), and the live-state gate (ADR 0010), with no edge cache.
+Public HTTP, SSE, and MCP contracts, privacy deadlines, private media
+authorization, and every data invariant are unchanged.
 
 ## Consequences
 
@@ -67,13 +71,14 @@ private media authorization, and every data invariant are unchanged.
 - There is no instance role or parameter store. Static keys and secret files on
   the host replace them, so host compromise exposes every runtime secret, as it
   would on AWS through the task roles.
-- GreenNode lacks OpenTofu coverage for buckets, vCDN, and vMonitor, and P.A
-  Vietnam DNS has none. Those settings live in scripts and runbook steps.
-- vCDN has no authenticated origin pulls. An IP allowlist and a secret header
-  replace them.
+- GreenNode's OpenTofu provider covers compute and network only. The `vngcloud`
+  CLI covers IAM, storage, and vMonitor from scripts; the vWAF escalation is a
+  root-portal runbook step.
+- Caddy terminates TLS and takes every request. A flood larger than the host is
+  downtime until vWAF is switched on by a DNS change.
 - Release images must also build for `linux/amd64`.
-- The cutover replaces CloudFront with vCDN and moves the name servers and DS
-  record from Route 53 to P.A Vietnam.
+- The cutover replaces CloudFront and AWS WAF with Caddy's own TLS, Coraza, and
+  CrowdSec. DNS records change at Route 53; no name server moves.
 - Cutover needs a maintenance window. Moving data back after Vietnam accepts
   writes would be a new transfer abroad, so recovery after that is forward only.
 - AWS test costs continue beside the new production costs.
@@ -83,4 +88,7 @@ private media authorization, and every data invariant are unchanged.
 Former ADR 0051 (2026-09-24), unchanged in substance. Later records it did not
 foresee: former ADR 0054 put CloudFront in front of AWS production as an interim
 edge, and former ADR 0056 moved DNS to Route 53, making the move to P.A Vietnam
-DNS a second name-server move.
+DNS a second name-server move. 2026-10-09: the owner chose vWAF from launch,
+Cloudflare DNS-only, and the Google Workspace mailbox over Bizfly Business
+Email. 2026-10-10: the owner dropped vCDN, then vWAF, for host-level controls
+(Coraza, CrowdSec) with vWAF as the escalation, so DNS stays at Route 53.
