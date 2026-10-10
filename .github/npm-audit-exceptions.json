@@ -14,5 +14,37 @@
     ],
     "expires": "2026-11-01",
     "reason": "braces reaches only Nitro's build (nitropack, globby, fast-glob, micromatch); absent from the shipped .output; no fixed release"
+  },
+  {
+    "id": "GHSA-858h-whjf-mvg5",
+    "dirs": [
+      "apps/web"
+    ],
+    "expires": "2026-12-31",
+    "reason": "simple-git reaches only @nuxt/devtools, which runs in the Nuxt dev server; absent from the shipped .output; the fix (simple-git 4.0.2, @simple-git/argv-parser 2.0.1) is outside the ^3.36.0 range @nuxt/devtools 3.x pins"
+  },
+  {
+    "id": "GHSA-g4wm-2vf7-vfgr",
+    "dirs": [
+      "apps/web"
+    ],
+    "expires": "2026-12-31",
+    "reason": "simple-git reaches only @nuxt/devtools, which runs in the Nuxt dev server; absent from the shipped .output; the fix (simple-git 4.0.2, @simple-git/argv-parser 2.0.1) is outside the ^3.36.0 range @nuxt/devtools 3.x pins"
+  },
+  {
+    "id": "GHSA-v5rq-49vh-5v5c",
+    "dirs": [
+      "apps/web"
+    ],
+    "expires": "2026-12-31",
+    "reason": "simple-git reaches only @nuxt/devtools, which runs in the Nuxt dev server; absent from the shipped .output; the fix (simple-git 4.0.2, @simple-git/argv-parser 2.0.1) is outside the ^3.36.0 range @nuxt/devtools 3.x pins"
+  },
+  {
+    "id": "GHSA-x6jw-m9v5-85vh",
+    "dirs": [
+      "apps/web"
+    ],
+    "expires": "2026-12-31",
+    "reason": "simple-git reaches only @nuxt/devtools, which runs in the Nuxt dev server; absent from the shipped .output; the fix (simple-git 4.0.2, @simple-git/argv-parser 2.0.1) is outside the ^3.36.0 range @nuxt/devtools 3.x pins"
   }
 ]

@@ -18,22 +18,23 @@ The request path is browser or MCP client, the host's floating IP, Caddy on 443
 (TLS, Coraza, CrowdSec bouncer), then Go on `127.0.0.1:8080` or Nuxt on
 `127.0.0.1:3000`. Go reaches PostgreSQL on the same host by Unix socket, media
 in vStorage, and Bizfly Email Transaction by SMTP. pgBackRest ships backups and
-WAL to a second vStorage bucket. Agents send logs and metrics to vMonitor.
+WAL to a second vStorage bucket. Logs stay in journald on the host; a host timer
+mails alarms through Bizfly.
 
-| Concern            | Today (AWS, CloudFront)                     | Vietnam production                                            |
-| ------------------ | ------------------------------------------- | ------------------------------------------------------------- |
-| Edge, TLS, cache   | CloudFront, AWS WAF, origin mTLS, ACM certs | Caddy on the host: TLS, Coraza WAF, CrowdSec; no edge service |
-| DNS                | Route 53 with DNSSEC, alias to CloudFront   | Route 53 with DNSSEC, address records to the host, unchanged  |
-| Compute            | EC2 `t4g.small`, Bottlerocket ECS           | One amd64 vServer, Podman containers under systemd            |
-| Database           | RDS PostgreSQL 18, 30-day PITR              | PostgreSQL 18 on the vServer, pgBackRest to vStorage          |
-| Media              | Private S3, task role                       | Private vStorage bucket, static key for one service account   |
-| Secrets            | SSM Parameter Store                         | Root-only host files, age-encrypted copy in `aboutme-infra`   |
-| Release fence      | DynamoDB item                               | Root-owned host file plus a start-time check                  |
-| Jobs               | EventBridge Scheduler, ECS tasks            | systemd timers running one-shot containers                    |
-| Logs and alarms    | CloudWatch, SNS, Route 53 health check      | vMonitor logs, metrics, alarms, synthetic HTTP checks         |
-| Transactional mail | SES `ap-southeast-1`                        | Bizfly Email Transaction over SMTP                            |
-| Support mailbox    | Google Workspace                            | Google Workspace, unchanged                                   |
-| Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS       | OpenTofu `deploy/vn/` plus `vngcloud` CLI, vStorage state     |
+| Concern            | Today (AWS, CloudFront)                     | Vietnam production                                               |
+| ------------------ | ------------------------------------------- | ---------------------------------------------------------------- |
+| Edge, TLS, cache   | CloudFront, AWS WAF, origin mTLS, ACM certs | Caddy on the host: TLS, Coraza WAF, CrowdSec; no edge service    |
+| DNS                | Route 53 with DNSSEC, alias to CloudFront   | Route 53 with DNSSEC, address records to the host, unchanged     |
+| Compute            | EC2 `t4g.small`, Bottlerocket ECS           | One amd64 vServer, Podman containers under systemd               |
+| Database           | RDS PostgreSQL 18, 30-day PITR              | PostgreSQL 18 on the vServer, pgBackRest to vStorage             |
+| Media              | Private S3, task role                       | Private vStorage bucket, static key for one service account      |
+| Secrets            | SSM Parameter Store                         | Root-only host files, age-encrypted copy in `aboutme-infra`      |
+| Release fence      | DynamoDB item                               | Root-owned host file plus a start-time check                     |
+| Jobs               | EventBridge Scheduler, ECS tasks            | systemd timers running one-shot containers                       |
+| Logs and alarms    | CloudWatch, SNS, Route 53 health check      | journald on the host, alert timer by mail, Route 53 health check |
+| Transactional mail | SES `ap-southeast-1`                        | Bizfly Email Transaction over SMTP                               |
+| Support mailbox    | Google Workspace                            | Google Workspace, unchanged                                      |
+| Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS       | OpenTofu `deploy/vn/` plus `vngcloud` CLI, vStorage state        |
 
 Compute and network run in HCM03 and vStorage in HCM04, both Ho Chi Minh City
 (owner, 2026-10-10); vStorage exists only in HCM04 and HAN02.
@@ -82,10 +83,10 @@ floating IP (Q1), and IPv6 on the floating IP (Q2).
 Route 53 keeps the `aboutme.vn` zone, signed, under the existing OpenTofu
 module. The apex and `www` become A records (and AAAA if the floating IP has
 IPv6) to the host: TTL 60 through cutover, then 300. The CloudFront aliases, the
-ACM validation records, and the health check go after cutover; vMonitor's
-synthetic check replaces the health check. An authoritative name server answers
-resolvers and sees no person, so Route 53 stays outside the data-residency
-boundary at about USD 2 a month.
+ACM validation records go after cutover; the health check stays as the external
+app-down check; it resolves `aboutme.vn`, so it follows the DNS switch to the
+host. An authoritative name server answers resolvers and sees no person, so
+Route 53 stays outside the data-residency boundary at about USD 2 a month.
 
 The Google Workspace mailbox stays: a person who writes to support sends their
 own mail. MX, root SPF, Google DKIM, and DMARC are unchanged. Bizfly Email
@@ -94,7 +95,7 @@ like SES's `bounce.aboutme.vn`; otherwise root SPF gains the Bizfly include. SES
 records go once AWS stops sending as `aboutme.vn`.
 
 Go gets an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS or STARTTLS on the
-configured port (Bizfly: `smtp-api.bizfly.vn`, 2465 or 2525) with certificate
+configured port (Bizfly: `smtp.bizflycloud.vn`, 465 or 587) with certificate
 verification, `PLAIN` authentication, one message per connection. As with SES, a
 2xx after `DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and
 transport errors are temporary. Logs carry the reply code only. Go uses SMTP
@@ -237,33 +238,36 @@ environment.
 
 ## Logs, metrics, and alarms
 
-The vMonitor log agent ships journald output to a log project in the same
-region, and the metric agent reports host metrics. Caddy logs still drop client
-addresses and request headers. Alarms email the support mailbox. vMonitor keeps
-logs 1, 7, 14, 30, or 90 days; production keeps 30 (owner, 2026-10-10).
-**Unconfirmed:** log and metric storage in Vietnam.
+There is no monitoring service (owner, 2026-10-10: vMonitor removed for cost).
+journald on the data volume keeps 30 days, capped at 2 GB (`MaxRetentionSec`,
+`SystemMaxUse`); Caddy logs still drop client addresses and request headers, so
+a host loss loses only operational logs, never data. `aboutme-watch.timer` runs
+`watch.sh` every five minutes and `OnFailure=` on every unit runs `alert.sh`;
+both mail the support mailbox through Bizfly SMTP with `msmtp`, one message per
+condition per day, from the sender the app uses. The Route 53 health check on
+`/readyz` stays as the only check from outside the host; it probes a public
+endpoint and carries no personal data.
 
-| Signal   | Mechanism                                                        |
-| -------- | ---------------------------------------------------------------- |
-| App down | vMonitor synthetic HTTPS check on `/readyz`                      |
-| Units    | Log alarm on a unit failure or restart loop                      |
-| Host     | CPU, memory, root and data volume disk                           |
-| Database | Archive failure, backup age, connections, data volume free space |
-| Jobs     | Log alarm on the `OnFailure=` marker                             |
-| Edge     | Log alarm on the CrowdSec ban rate and the Coraza block rate     |
-| TOTP     | Log alarm on `totp_unavailable`                                  |
-| Mail     | Bizfly bounce and complaint reporting (**Unconfirmed**)          |
-| Spend    | GreenNode and Bizfly balance alerts, outside the repository      |
+| Signal   | Mechanism                                                      |
+| -------- | -------------------------------------------------------------- |
+| App down | Route 53 health check on `/readyz`, alarm by SNS mail          |
+| Units    | `OnFailure=` mail; `watch.sh` lists failed units               |
+| Host     | `watch.sh`: root and data volume above 70%, load, memory       |
+| Database | `watch.sh`: archive failure, newest backup older than 26 hours |
+| Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                |
+| Edge     | `watch.sh`: CrowdSec ban count and Coraza match count per hour |
+| TOTP     | `watch.sh`: `totp_unavailable` in the server journal           |
+| Mail     | Bizfly bounce and complaint reporting (**Unconfirmed**)        |
+| Spend    | GreenNode and Bizfly balance alerts, outside the repository    |
 
 ## Infrastructure code and state
 
 The `vngcloud/vngcloud` OpenTofu provider (1.3.21, **Unconfirmed** at build
 time) covers servers, volumes, security groups, and floating IPs. The `vngcloud`
 CLI (github.com/dannyota/vngcloud, an IAM user with a 0600 credentials file)
-covers IAM, service accounts, buckets and their keys and policies, vMonitor
-checks and alarms, and billing budgets; its calls live in `deploy/vn/edge/` and
-`deploy/vn/scripts/`. The vWAF escalation is a runbook checklist for the root
-portal.
+covers IAM, service accounts, buckets and their keys and policies, and billing
+budgets; its calls live in `deploy/vn/scripts/`. The vWAF escalation is a
+runbook checklist for the root portal.
 
 State uses the S3 backend on a vStorage bucket with path-style addressing and
 the AWS-only checks skipped. OpenTofu encrypts state client-side with the
@@ -318,7 +322,7 @@ deploy/vn/
   prod/        OpenTofu root: vServer, volumes, security groups, floating IP
   host/        cloud-init, sysctl, Quadlet units, timers, postgresql.conf,
                pg_hba.conf, pgbackrest.conf, log and metric agent config
-  edge/        vMonitor scripts, CrowdSec and Coraza config, vWAF escalation
+  edge/        CrowdSec and Coraza config, vWAF escalation checklist
   probe/       host fact checks (Podman networking, Chromium sandbox)
   scripts/     deploy.sh, fence.sh, secrets.sh, buckets.sh, restore-drill.sh,
                cutover.sh
@@ -421,10 +425,9 @@ subprocessors come from the provider's published terms.
 | Q4  | GreenNode vStorage | Are pgBackRest and the OpenTofu S3 backend supported with path-style addressing and conditional writes?     |
 | Q5  | GreenNode vStorage | Where is each region's data stored, including replicas?                                                     |
 | Q6  | GreenNode compute  | Is an ARM vServer offered? Which volume types are encrypted, at what price?                                 |
-| Q7  | GreenNode vMonitor | Where are logs and metrics stored? What do synthetic checks and alarms cost?                                |
-| Q8  | GreenNode vDB      | Are PostgreSQL 18 and point-in-time recovery planned, and when?                                             |
-| Q9  | GreenNode          | Is there a data processing agreement? Does any subprocessor store customer data outside Vietnam?            |
-| Q10 | Bizfly             | What are the SMTP host, ports, and TLS modes for Email Transaction?                                         |
-| Q11 | Bizfly             | How are bounces and complaints reported? Is there a suppression list? What are the rate limits?             |
-| Q12 | Bizfly             | Which DKIM key length and selector does Email Transaction use? Is a custom return-path subdomain supported? |
-| Q13 | Bizfly             | Where is Email Transaction data stored? Is there a data processing agreement?                               |
+| Q7  | GreenNode vDB      | Are PostgreSQL 18 and point-in-time recovery planned, and when?                                             |
+| Q8  | GreenNode          | Is there a data processing agreement? Does any subprocessor store customer data outside Vietnam?            |
+| Q9  | Bizfly             | What are the SMTP host, ports, and TLS modes for Email Transaction?                                         |
+| Q10 | Bizfly             | How are bounces and complaints reported? Is there a suppression list? What are the rate limits?             |
+| Q11 | Bizfly             | Which DKIM key length and selector does Email Transaction use? Is a custom return-path subdomain supported? |
+| Q12 | Bizfly             | Where is Email Transaction data stored? Is there a data processing agreement?                               |
