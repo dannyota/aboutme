@@ -193,12 +193,26 @@ cmd_podman_sync() { # [--replace name]
   done
 }
 
+# bouncer_key_valid succeeds when the local API accepts the local key. The key
+# goes to curl on stdin (printf is a builtin), never in argv.
+bouncer_key_valid() {
+  local code
+  code=$(printf 'header = "X-Api-Key: %s"\n' "$(cat "$dir/crowdsec-bouncer-key")" |
+    curl -s -o /dev/null -w '%{http_code}' --max-time 10 -K - \
+      'http://127.0.0.1:8095/v1/decisions?ip=127.0.0.1') || true
+  [[ $code == 200 ]]
+}
+
 # cscli generates the key directly into a private file. No value reaches argv.
 cmd_bouncer_register() {
   local tmp
   if cscli bouncers list -o json | jq -e '[.[]? | select(.name == "aboutme-caddy")] | length == 1' >/dev/null; then
     [[ -s $dir/crowdsec-bouncer-key ]] || die "the registered bouncer has no local key"
-    cmd_podman_sync
+    # A registration interrupted before the key file moved leaves an older
+    # key here; refuse it rather than sync a key the local API rejects.
+    bouncer_key_valid ||
+      die "the local key does not match the registered aboutme-caddy bouncer; run 'cscli bouncers delete aboutme-caddy', then register again"
+    cmd_podman_sync --replace crowdsec-bouncer-key
     say "kept the aboutme-caddy bouncer"
     return 0
   fi
