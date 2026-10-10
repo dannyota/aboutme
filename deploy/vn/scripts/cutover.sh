@@ -213,7 +213,9 @@ cmd_verify() {
     SET extra_float_digits = 1; SET bytea_output = 'hex';" t
   while read -r t; do
     [[ $t =~ ^[a-z0-9_]+$ ]] || die "unexpected table name"
-    per_table+="SELECT '$t', count(*), md5(coalesce(string_agg(x::text, E'\\n' ORDER BY x::text), '')) FROM public.$t x;"
+    # COLLATE "C": RDS uses en_US.UTF-8 and the host C.UTF-8, and the hash must
+    # not depend on either side's sort order.
+    per_table+="SELECT '$t', count(*), md5(coalesce(string_agg(x::text, E'\\n' ORDER BY x::text COLLATE \"C\"), '')) FROM public.$t x;"
   done < <(rds_psql "$sql_tables")
   rds_out=$(rds_psql "$per_table")
   host_out=$(host_psql "$per_table")
