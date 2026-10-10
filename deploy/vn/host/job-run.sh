@@ -11,7 +11,6 @@
 set -euo pipefail
 
 lib=/usr/local/lib/aboutme
-release_env=/var/lib/aboutme/release.env
 
 name=${1-}
 case $name in
@@ -23,26 +22,14 @@ case $name in
     ;;
 esac
 
-field() { # name
-  local v
-  v=$(sed -n "s/^$1=//p" "$release_env")
-  [[ -n $v && $v != *[[:space:]]* ]] || {
-    echo "job-run: $release_env has no valid $1" >&2
-    exit 1
-  }
-  printf '%s' "$v"
-}
-[[ -f $release_env ]] || {
-  echo "job-run: no release is installed" >&2
+# deploy-host.sh owns the one parser and shape check for the release state.
+release=$("$lib/deploy-host.sh" - - release-json) || {
+  echo "job-run: no valid release is installed" >&2
   exit 1
 }
-tag=$(field RELEASE_TAG)
-number=$(field RELEASE_NUMBER)
-image=$(field SERVER_IMAGE)
-[[ $number =~ ^[0-9]+$ && $image =~ ^ghcr\.io/dannyota/aboutme-server@sha256:[0-9a-f]{64}$ ]] || {
-  echo "job-run: $release_env is malformed" >&2
-  exit 1
-}
+tag=$(jq -r .release_tag <<<"$release")
+number=$(jq -r .release_number <<<"$release")
+image=$(jq -r .server_image <<<"$release")
 
 "$lib/fence.sh" check "$number" "aboutme-job@$name"
 
