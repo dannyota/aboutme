@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  updated: 'Cập nhật lần cuối ngày 10/10/2026',
+  updated: 'Cập nhật lần cuối ngày 11/10/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
@@ -174,9 +174,12 @@ export const legalVi: LegalCopy = {
           'Google (Hoa Kỳ) và LinkedIn (Hoa Kỳ) cung cấp lựa chọn đăng '
           + 'nhập. Khi dùng một trong hai dịch vụ để đăng nhập vào tài '
           + 'khoản, bạn đăng nhập tại nhà cung cấp và chúng tôi nhận tên, '
-          + 'email và mã tài khoản của bạn. Email bạn gửi cho chúng tôi '
-          + 'được lưu trong hộp thư Google Workspace.',
-          'Đăng nhập bằng Google hoặc LinkedIn, gửi email hỗ trợ, dịch vụ '
+          + 'email và mã tài khoản của bạn. Email bạn gửi cho chúng tôi, '
+          + 'thư trả lời email tài khoản và thông báo không gửi được email '
+          + 'tài khoản (có thể chứa địa chỉ email của bạn và nội dung thư '
+          + 'gốc) được lưu trong hộp thư Google Workspace.',
+          'Đăng nhập bằng Google hoặc LinkedIn, gửi email hỗ trợ, thư trả '
+          + 'lời và thông báo không gửi được email tài khoản, dịch vụ '
           + 'AI bạn chọn kết nối và dịch vụ nước ngoài lấy đường dẫn CV '
           + 'công khai có thể dẫn đến việc xử lý dữ liệu ngoài Việt Nam. '
           + 'Kiểm tra mật khẩu dùng dịch vụ Have I Been Pwned; dịch vụ này '
@@ -209,8 +212,9 @@ export const legalVi: LegalCopy = {
         items: [
           'Quyền truy cập bị thu hồi ngay lập tức.',
           'Ảnh đã tải lên được xóa, thường trong vòng 24 giờ.',
-          'Bản sao lưu cơ sở dữ liệu giữ các bản cũ trong tối đa 30 ngày '
-          + 'sau đó, và chỉ dùng để khôi phục sau sự cố.',
+          'Bản sao lưu cơ sở dữ liệu giữ các bản cũ trong tối đa khoảng 5 '
+          + 'tuần sau đó (30 ngày để khôi phục cộng bản sao lưu đầy đủ hằng '
+          + 'tuần mà nó cần), và chỉ dùng để khôi phục sau sự cố.',
           'Bản ghi về việc xóa tài khoản và gỡ liên kết nhà cung cấp (chỉ '
           + 'gồm loại sự kiện và thời điểm) được giữ tối đa 180 ngày.',
           'Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản dịch vụ, '

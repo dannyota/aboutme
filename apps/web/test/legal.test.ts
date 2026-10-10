@@ -34,7 +34,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 10/10/2026',
+      'Cập nhật lần cuối ngày 11/10/2026',
     );
     expect(wrapper.text()).toContain('mã băm Argon2id');
     expect(wrapper.text()).toContain(
@@ -148,7 +148,7 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated October 10, 2026',
+      'Last updated October 11, 2026',
     );
     expect(wrapper.text()).toContain(
       'Your account, resumes, photos, backups, and logs are stored on '
