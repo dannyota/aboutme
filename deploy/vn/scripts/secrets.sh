@@ -98,6 +98,8 @@ case "${1-}:$#" in
       [totp-key-b]=/aboutme/prod/totp/key-b
       [google-client-id]=/aboutme/prod/oauth/google-client-id
       [google-client-secret]=/aboutme/prod/oauth/google-client-secret
+      [linkedin-client-id]=/aboutme/prod/oauth/linkedin-client-id
+      [linkedin-client-secret]=/aboutme/prod/oauth/linkedin-client-secret
     )
     for name in "${!from[@]}"; do
       if ! aws ssm describe-parameters --region ap-southeast-1 \
