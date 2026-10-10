@@ -185,17 +185,18 @@ These contracts match the server and Caddy images:
 
 ## Paid resources and quotes
 
-Read-only quotes on 2026-10-10 in zone `HCM03-1C`, VND a month. Run
+Read-only quotes on 2026-10-10 in zone `HCM03-1C`, VND a month, 10% VAT included
+(owner, 2026-10-10). The host and storage total 1,047,880. Run
 `scripts/quote.sh` again before creating paid resources.
 
-| Resource                                       | Created by                                       | Quote                        |
-| ---------------------------------------------- | ------------------------------------------------ | ---------------------------- |
-| vServer `s2-general-2x4` with 30 GB root SSD   | `tofu apply`                                     | 663,600                      |
-| 20 GB SSD data volume                          | `tofu apply`                                     | 64,000                       |
-| Disk encryption chosen at server create (CES)  | `tofu apply`                                     | 170,280                      |
-| Floating IP                                    | `tofu apply`                                     | 120,000                      |
-| vStorage Gold project, 30 GB                   | `storage create-project` (CLI v0.64.0 quotes it) | 30,000                       |
-| Restore drill server and volume, while it runs | `scripts/restore-drill.sh`                       | the server's price, prorated |
+| Resource                                       | Created by                                  | Quote                        |
+| ---------------------------------------------- | ------------------------------------------- | ---------------------------- |
+| vServer `s2-general-2x4` with 30 GB root SSD   | `tofu apply`                                | 663,600                      |
+| 20 GB SSD data volume                          | `tofu apply`                                | 64,000                       |
+| Disk encryption chosen at server create (CES)  | `tofu apply`                                | 170,280                      |
+| Floating IP                                    | `tofu apply`                                | 120,000                      |
+| vStorage Gold project, 30 GB                   | `storage create-project`, bought 2026-10-10 | 30,000                       |
+| Restore drill server and volume, while it runs | `scripts/restore-drill.sh`                  | the server's price, prorated |
 
 The budget is free. Alerts use the Bizfly SMTP account the server already sends
 with.
