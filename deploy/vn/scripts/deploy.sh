@@ -68,8 +68,9 @@ work=$(mktemp -d)
 ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$work/ssh-%C" -o ControlPersist=10m)
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 
-# Runs one host script as root. Every argument is a validated tag, digest,
-# number, address, or operation id; each is quoted again for the remote shell.
+# Runs one host script as root. Arguments include tags, digests, operation
+# ids, and release records. Each is quoted for the remote shell; the host
+# validates the values before use.
 on_host() { # script args...
   local cmd
   printf -v cmd '%q ' "$lib/$1" "${@:2}"
@@ -80,7 +81,8 @@ step() { on_host deploy-host.sh "$op" "$tag" "$@"; }
 op=-
 lock_held=0
 phase=prepare
-rendered=0
+render_requested=0
+previous=
 migration_may_be_applied=0
 timers_stopped=0
 
@@ -107,8 +109,10 @@ restore() {
     say "a failed first deploy leaves maintenance up; no earlier release exists"
     return 1
   fi
-  if ((rendered)); then
-    step restore-previous || return 1
+  step maintenance-up "$maintenance_image" || return 1
+  step app-down || return 1
+  if ((render_requested)); then
+    step restore-previous "$previous" || return 1
   fi
   step app-up || return 1
   step maintenance-down || return 1
@@ -201,12 +205,12 @@ done
 # --activate raises the fence while it holds the lock, only when the running
 # server already is the exact candidate (docs/design/passkey-release-fence.md).
 if ((activate)); then
+  op=$(on_host fence.sh lock activate "$tag") && lock_held=1 || exit 1
   running=$(step running-release) || exit 1
   [[ $running == "$candidate" ]] || {
     say "the running server is release $running, not the activation candidate $candidate"
     exit 1
   }
-  op=$(on_host fence.sh lock activate "$tag") && lock_held=1 || exit 1
   on_host fence.sh raise "$op" "$tag"
   say "raised the release fence to $tag ($candidate)"
   exit 0
@@ -257,8 +261,9 @@ retry 5 3 maintenance_ok || {
 say "maintenance confirmed from outside"
 
 # 7. Database work under the new units.
+if ((!first)); then previous=$(step release-json) || exit 1; fi
+render_requested=1
 step render "${image[server]}" "${image[web]}" "${image[caddy]}"
-rendered=1
 if ((first)); then
   migration_may_be_applied=1
   step db-setup

@@ -11,7 +11,7 @@ After=postgresql@18-main.service
 Image=@SERVER_IMAGE@
 ContainerName=aboutme-db-setup
 Network=none
-Environment=DATABASE_URL=postgres://aboutme@/aboutme?host=/run/postgresql
+Environment=DATABASE_URL=postgres://aboutme@localhost/aboutme?host=/run/postgresql
 Environment=DEPLOY_RELEASE_TAG=@RELEASE_TAG@
 Environment=DEPLOY_RELEASE_NUMBER=@RELEASE_NUMBER@
 Secret=db-admin-password,type=env,target=PGPASSWORD

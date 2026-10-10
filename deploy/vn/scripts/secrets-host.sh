@@ -23,7 +23,7 @@ pgb_conf=/etc/pgbackrest/conf.d/secrets.conf
 # Values this host creates with openssl.
 generated=(db-admin-password db-migrator-password db-app-password
   auth-email-active-key-id auth-email-active-key password-rate-hmac-key
-  view-pass-key totp-key-a crowdsec-bouncer-key pgbackrest-cipher-pass)
+  view-pass-key totp-key-a pgbackrest-cipher-pass)
 # Values the owner pipes in.
 imported=(google-client-id google-client-secret linkedin-client-id linkedin-client-secret
   smtp-username smtp-password totp-key-b)
@@ -94,7 +94,7 @@ cmd_generate() {
     }
     case $name in
       auth-email-active-key-id) printf k1 | store "$name" 0 ;;
-      *-password | crowdsec-bouncer-key | pgbackrest-cipher-pass) hex48 | store "$name" 0 ;;
+      *-password | pgbackrest-cipher-pass) hex48 | store "$name" 0 ;;
       *) key32 | store "$name" 0 ;;
     esac
   done
@@ -148,6 +148,10 @@ cmd_import_s3() { # media|backups [--replace]
     backups) prefix=backup ;;
     *) die "import-s3 takes media or backups" ;;
   esac
+  if ((!replace)) && [[ -e $dir/$prefix-access-key-id || -e $dir/$prefix-secret-access-key ||
+    -L $dir/$prefix-access-key-id || -L $dir/$prefix-secret-access-key ]]; then
+    die "$which key exists; use --replace to rotate it"
+  fi
   parsed=$(head -c 4096 | awk '
     /^[[:space:]]*$/ { next }
     NR_SEEN == 0 && $0 == "[default]" { NR_SEEN = 1; next }
@@ -189,16 +193,25 @@ cmd_podman_sync() { # [--replace name]
   done
 }
 
-# The Caddy bouncer's key is generated here, so the bouncer is registered
-# with that key. cscli takes the key only as an argument, so it is visible to
-# root in the process list for the moment cscli runs.
+# cscli generates the key directly into a private file. No value reaches argv.
 cmd_bouncer_register() {
-  [[ -s $dir/crowdsec-bouncer-key ]] || die "generate the secrets first"
+  local tmp
   if cscli bouncers list -o json | jq -e '[.[]? | select(.name == "aboutme-caddy")] | length == 1' >/dev/null; then
+    [[ -s $dir/crowdsec-bouncer-key ]] || die "the registered bouncer has no local key"
+    cmd_podman_sync
     say "kept the aboutme-caddy bouncer"
     return 0
   fi
-  cscli bouncers add aboutme-caddy --key "$(cat "$dir/crowdsec-bouncer-key")" >/dev/null
+  tmp=$(mktemp "$dir/.bouncer.XXXXXX")
+  chmod 0600 "$tmp"
+  if ! cscli bouncers add aboutme-caddy -o raw >"$tmp" 2>/dev/null; then
+    rm -f -- "$tmp"
+    die "could not register the aboutme-caddy bouncer"
+  fi
+  [[ -s $tmp ]] || { rm -f -- "$tmp"; die "cscli returned an empty bouncer key"; }
+  chmod 0400 "$tmp"
+  mv -fT -- "$tmp" "$dir/crowdsec-bouncer-key"
+  cmd_podman_sync --replace crowdsec-bouncer-key
   say "registered the aboutme-caddy bouncer"
 }
 

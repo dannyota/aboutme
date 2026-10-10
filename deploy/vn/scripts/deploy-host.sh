@@ -26,7 +26,7 @@
 #   maintenance-up <caddy>      render and start maintenance beside Caddy
 #   app-down                    stop Caddy and the server; prove both stopped
 #   render <server> <web> <caddy>  write release.env and the app units
-#   restore-previous            render the previous release again
+#   restore-previous [record]   render the saved release again
 #   secrets-check               every secret the next render names exists
 #   ban-test add|del <ip>       short CrowdSec decision for the outside smoke
 #   db-setup | migrate          run the one-shot unit; require success
@@ -367,13 +367,19 @@ step_render() { # server web caddy
 # Failed-deploy restoration: render the release that ran before this one.
 # It must still meet the fence, so an image below the floor never returns.
 step_restore_previous() {
-  local p cur
-  p=$(release_read "$state/release.previous.json")
-  cur=$(release_read "$release_json")
+  local p
+  if (($#)); then
+    p=$(jq -ce "$release_shape" <<<"$1" 2>/dev/null) || die "saved release is malformed"
+    [[ $(release_number "$(jq -r .release_tag <<<"$p")") == "$(jq -r .release_number <<<"$p")" &&
+      $(release_number "$(jq -r .maintenance_tag <<<"$p")") == "$(jq -r .maintenance_number <<<"$p")" ]] ||
+      die "saved release numbers do not match their tags"
+  else
+    p=$(release_read "$state/release.previous.json")
+  fi
   checkpoint
   # shellcheck disable=SC2046 # the values are shape-checked tags, numbers, and digests
   render_all $(jq -r '.release_tag, .release_number, .server_image, .web_image, .caddy_image' <<<"$p") \
-    $(jq -r '.maintenance_image, .maintenance_tag, .maintenance_number' <<<"$cur")
+    $(jq -r '.maintenance_image, .maintenance_tag, .maintenance_number' <<<"$p")
   say "rendered the previous release $(jq -r .release_tag <<<"$p")"
 }
 
@@ -414,7 +420,7 @@ step_oneshot() { # unit
   local result
   checkpoint
   /usr/local/lib/aboutme/workload-lock.sh 3600 \
-    systemctl start "$1.service" || true
+    systemctl start "$1.service" || die "$1 lock or start failed"
   result=$(systemctl show -p Result --value "$1.service")
   [[ $result == success ]] || die "$1 finished with result '$result'"
   say "$1 done"
@@ -504,7 +510,7 @@ case "$step:$#" in
   ban-test:2) step_ban_test "$@" ;;
   app-down:0) step_app_down ;;
   render:3) step_render "$@" ;;
-  restore-previous:0) step_restore_previous ;;
+  restore-previous:0 | restore-previous:1) step_restore_previous "$@" ;;
   secrets-check:0) step_secrets_check ;;
   db-setup:0) step_oneshot aboutme-db-setup ;;
   migrate:0) step_oneshot aboutme-migrate ;;
