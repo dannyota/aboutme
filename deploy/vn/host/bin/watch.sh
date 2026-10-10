@@ -5,7 +5,12 @@
 # per condition per day. Every check runs even when an earlier one fires.
 set -euo pipefail
 
-lib=/usr/local/lib/aboutme
+if [[ -n ${ABOUTME_WATCH_TEST_LIB:-} ]]; then
+  ((EUID != 0)) || { echo "watch: test library is forbidden for root" >&2; exit 1; }
+  lib=$ABOUTME_WATCH_TEST_LIB
+else
+  lib=/usr/local/lib/aboutme
+fi
 disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
@@ -71,6 +76,7 @@ if ((${#waf_logs[@]})); then
     jq -r --argjson since "$since" '
       if type != "object" or (.ts | type != "number") then "unknown"
       elif .ts < $since then empty
+      elif .msg == "waf_engine_diagnostic" then empty
       elif .msg == "waf_rule_match" then "match"
       elif .msg == "waf_rule_match_unparsed" then "unparsed"
       else "unknown" end' |

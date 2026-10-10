@@ -44,7 +44,8 @@ smtp=$(jq -Rn '
     | if test("^[A-Z][A-Z0-9_]*=") then capture("^(?<key>[^=]+)=(?<value>.*)$")
       else error("malformed line") end
     | if .key == "SES_FROM_NAME" then
-        if (.value | length) <= 64 and (.value | test("[\\u0000-\\u001f\\u007f-\\u009f]") | not)
+        if (.value | length) <= 64
+          and (.value | explode | all(.[]; . >= 32 and (. < 127 or . > 159)))
         then . else error("malformed sender name") end
       elif (.value | test("^[A-Za-z0-9_.,:/@+-]*$")) then .
       else error("malformed value") end]

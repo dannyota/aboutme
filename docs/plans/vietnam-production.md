@@ -31,9 +31,9 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 
 - The amd64 branch head is `52372cbd`; branch CI run `38022739301` and release-images run `38022741220` are green.
 - The SMTP branch head is `76cc9279`; branch CI run `38022537867` is green.
-- The Caddy branch head is `15903fd8`; branch CI run `38023724569` failed on unparsed WAF diagnostic events. The metadata parser fix is in progress. Run `38023189204` failed on a missing log-retention duration unit, corrected in the current head.
+- The Caddy branch head is `56cfe773`; branch CI run `38024459936` is pending. The log-retention duration and Coraza engine diagnostic classification fixes passed independent review.
 - These phase 2 releases remain open because none is merged, tagged, or deployed.
-- Vietnam host code passed independent review and static pre-push checks; hosted tests are pending. No provider apply has started because provider account prerequisites remain open.
+- Vietnam host code passed independent review. Full branch CI run `38024200011` is green at `6d52f805`; VN infrastructure run `38024199905` exposed faulty SMTP sender validation. Numeric codepoint validation and a watcher diagnostic regression are ready for fresh hosted checks. No provider apply has started because provider account prerequisites remain open.
 - CrowdSec HTTP acquisition awaits an owner privacy decision. The acquisition is missing, so CrowdSec cannot yet detect HTTP attacks; the bouncer can enforce existing decisions.
 
 ## Phases
