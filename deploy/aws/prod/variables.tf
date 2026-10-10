@@ -149,6 +149,18 @@ variable "bizfly_dkim_txt" {
   description = "Bizfly Email Transaction dkim._domainkey TXT value"
 }
 
+variable "vn_host_ipv4" {
+  type        = string
+  default     = null
+  description = "Vietnam host floating IP for the rehearsal names and the cutover (modules/dns)"
+}
+
+variable "apex_on_vn_host" {
+  type        = bool
+  default     = false
+  description = "Cutover: the apex and www answer with vn_host_ipv4 (modules/dns)"
+}
+
 variable "transparency_bucket_name" {
   type        = string
   default     = ""
