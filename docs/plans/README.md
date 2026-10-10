@@ -36,7 +36,7 @@ Production runs the tag in the `aboutme-prod-app` task definition's `DEPLOY_RELE
 
 ## Remaining
 
-- Release order, next: [Vietnam production migration](vietnam-production.md), the 0.7 line. v0.6.37 closed 0.6.x. The public announcement waits for the migration. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside it.
+- Release order, next: [Vietnam production migration](vietnam-production.md), the 0.7 line. Mobile display fixes stay in 0.6.x. The public announcement waits for the migration. The open rows of [v0.5-roadmap.md](v0.5-roadmap.md) stay open beside it.
 - [Vietnam production migration](vietnam-production.md): provider confirmation, app preparation releases, build, rehearsal, cutover, AWS real-data deletion.
 - [backlog.md](backlog.md): the app-page CSP gap, traceability remaps, production acceptance, and launch gates.
 - Flutter app: deferred beyond web v1 (AC-API-002).
