@@ -4,7 +4,7 @@
 # ---- build ----
 # Match the exact Go version declared by apps/server/go.mod. Digest pins the
 # multi-arch index so the same reference resolves on amd64 and arm64.
-FROM docker.io/library/golang:1.27.1-alpine3.24@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
+FROM docker.io/library/golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS build
 
 WORKDIR /src
 
