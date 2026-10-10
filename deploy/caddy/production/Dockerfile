@@ -36,15 +36,15 @@ RUN bash /maintenance-render.sh /maintenance.html >/maintenance.generated.caddy
 # tmpfs and without it (adapt mode). The entrypoint's umask 077 keeps the
 # files it writes private to uid 10001.
 #
-# /var/log/caddy/waf holds metadata-only WAF diagnostics for the direct edge.
-# The host mounts /var/log/caddy with a waf directory that uid 10001 owns.
+# /var/log/caddy holds direct-edge diagnostics on the host tmpfs. waf has
+# metadata-only rule matches. crowdsec has the bounded request feed.
 FROM docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 RUN apk add --no-cache ca-certificates mailcap \
     && addgroup -S -g 10001 caddy \
     && adduser -S -D -H -u 10001 -G caddy -h /data -s /sbin/nologin caddy \
-    && mkdir -p /config/caddy /data/caddy /etc/caddy /run/caddy /var/log/caddy/waf \
-    && chown 10001:10001 /config/caddy /data/caddy /var/log/caddy/waf \
-    && chmod 0700 /config/caddy /data/caddy /var/log/caddy/waf \
+    && mkdir -p /config/caddy /data/caddy /etc/caddy /run/caddy /var/log/caddy/waf /var/log/caddy/crowdsec \
+    && chown 10001:10001 /config/caddy /data/caddy /var/log/caddy/waf /var/log/caddy/crowdsec \
+    && chmod 0700 /config/caddy /data/caddy /var/log/caddy/waf /var/log/caddy/crowdsec \
     && chmod 1777 /run/caddy
 ENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
 COPY --from=caddy-build /out/caddy /usr/bin/caddy

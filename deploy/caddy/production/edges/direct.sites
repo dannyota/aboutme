@@ -56,6 +56,10 @@ import /run/caddy/direct-www.sites
 https://{$DIRECT_HOST} {
 	import direct_tls
 	import direct_response_headers
+	# A strict custom encoder emits the socket address and four bounded request
+	# facts. The site's host association confines this logger to the direct apex,
+	# including when the CloudFront listener runs in the same process.
+	import /run/caddy/crowdsec-feed.caddy
 	# Empty unless CROWDSEC_API_URL is set; then the bouncer answers 403 to
 	# a banned socket address.
 	import /run/caddy/crowdsec.handler
