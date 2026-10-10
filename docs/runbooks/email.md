@@ -33,7 +33,9 @@ Route 53 is authoritative for these records. The root records are:
 - MX priority 1: `smtp.google.com`
 - SPF: `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all`
 - Google DKIM selector: `google._domainkey`
-- Bizfly DKIM selector: `dkim._domainkey`
+- Bizfly DKIM selectors: `dkim._domainkey`, which Bizfly's domain check reads,
+  and `etrans._domainkey`, which its mail is signed with. Both hold the same
+  key.
 - Retained Google domain-verification CNAME
 - DMARC at `_dmarc`: `v=DMARC1; p=none; rua=mailto:danny@aboutme.vn`
 
@@ -162,6 +164,7 @@ dig +short MX aboutme.vn
 dig +short TXT aboutme.vn
 dig +short TXT google._domainkey.aboutme.vn
 dig +short TXT dkim._domainkey.aboutme.vn
+dig +short TXT etrans._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-1>._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-2>._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-3>._domainkey.aboutme.vn

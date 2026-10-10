@@ -63,8 +63,15 @@ locals {
     }
     # Bizfly Email Transaction signs authentication mail; Google keeps the
     # mailbox, so the root MX stays Google's and only SPF gains the include.
+    # Bizfly's domain check reads the dkim selector, but its mail is signed
+    # with s=etrans under the same key, so both selectors publish it.
     bizfly_dkim = {
       name    = "dkim._domainkey.${local.zone}"
+      type    = "TXT"
+      records = [join("\"\"", regexall(".{1,255}", var.bizfly_dkim_txt))]
+    }
+    bizfly_dkim_etrans = {
+      name    = "etrans._domainkey.${local.zone}"
       type    = "TXT"
       records = [join("\"\"", regexall(".{1,255}", var.bizfly_dkim_txt))]
     }
