@@ -73,10 +73,12 @@ the same value as `ssh_port` when using another port.
    bucket is created with default encryption (SSE-S3, AES256), and the script
    refuses an existing bucket without it, unless the owner sets
    `BUCKET_ENCRYPTION=off`. Encrypted buckets refuse server-side copy (501).
-3. `scripts/quote.sh --max-price <vnd>`: the price gate, since OpenTofu has no
-   price ceiling.
-4. In `prod/`: `tofu init -backend-config=backend.hcl`, then
-   `tofu plan -var-file=prod.tfvars` and `tofu apply`.
+3. In `prod/`: `tofu init -backend-config=backend.hcl`, then
+   `tofu plan -var-file=prod.tfvars -out=prod.tfplan`.
+4. Still in `prod/`, run
+   `../scripts/quote.sh --plan prod.tfplan --max-price <vnd>`, then
+   `tofu apply prod.tfplan`. The price gate quotes the saved plan. Apply only
+   that same file after the gate passes.
 5. On the host: `host/data-volume.sh <device> --format` once, then
    `host/install.sh <bundle>` with the bundle copied by `rsync`.
 6. `scripts/secrets.sh generate`, `import-s3 media`, `import-s3 backups`,
@@ -85,6 +87,12 @@ the same value as `ssh_port` when using another port.
 8. `scripts/budget.sh --limit-vnd <amount>`, then fill `ALERT_TO` and the SMTP
    settings in `/etc/aboutme/smtp.env`.
 9. `DEPLOY_HOST=<ip> scripts/deploy.sh <tag> --first-deploy`.
+
+To rotate a media or backup key, create its new local key file, then run
+`scripts/secrets.sh import-s3 media --replace` or
+`scripts/secrets.sh import-s3 backups --replace`. The script deletes the local
+file only after the host import and Podman sync succeed. A refused or failed
+replacement keeps the local file for recovery.
 
 ## Data volume encryption
 

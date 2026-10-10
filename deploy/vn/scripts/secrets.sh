@@ -10,7 +10,7 @@
 #                                        secrets, register the Caddy bouncer
 #   secrets.sh import <name> [--replace] value on stdin, for example
 #                                        `secrets.sh import smtp-password < /dev/tty`
-#   secrets.sh import-s3 <media|backups> move buckets.sh's key file, then
+#   secrets.sh import-s3 <media|backups> [--replace] move buckets.sh's key file, then
 #                                        delete the laptop copy
 #   secrets.sh list                      names on the host, never values
 #   secrets.sh age-copy <recipient> <out>  ciphertext for aboutme-infra
@@ -60,11 +60,12 @@ case "${1-}:$#" in
     on_host import "$2" ${3:+"$3"}
     on_host podman-sync </dev/null
     ;;
-  import-s3:2)
+  import-s3:2 | import-s3:3)
     [[ $2 == media || $2 == backups ]] || usage
+    [[ $# == 2 || $3 == --replace ]] || usage
     file=${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR must point at a per-user tmpfs}/aboutme-vn/aboutme-$2-s3-credentials
     [[ -f $file && ! -L $file ]] || die "$file is missing; run buckets.sh first"
-    on_host import-s3 "$2" <"$file"
+    on_host import-s3 "$2" ${3:+"$3"} <"$file"
     on_host podman-sync </dev/null
     rm -f -- "$file"
     say "moved the $2 key to the host and deleted the laptop copy"

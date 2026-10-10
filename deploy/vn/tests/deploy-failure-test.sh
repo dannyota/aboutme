@@ -44,6 +44,7 @@ case $args in
   *' sha256sum '*) printf '%064d  remote\n' 0 | tr 0 c; exit 0 ;;
   *'SSH_CLIENT'*) printf '198.51.100.10'; exit 0 ;;
 esac
+printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/order.log"
 if [[ $args == *' /usr/local/lib/aboutme/fence.sh lock '* ]]; then
   printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
   exit 0
@@ -51,6 +52,9 @@ fi
 printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/ssh.log"
 if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '* ]]; then
   printf '%s\n' "$args" >>"$DEPLOY_TEST_DIR/host.log"
+  if [[ $args == *' release-json '* ]]; then printf '%s\n' '{"release_tag":"v0.1.0","maintenance_image":"previous-caddy"}'; fi
+  if [[ $args == *' running-release '* ]]; then printf '1001\n'; fi
+  if [[ ${FAIL_RENDER:-0} == 1 && $args == *' render '* ]]; then exit 255; fi
   if [[ ${FAIL_CLOSED:-0} == 1 && $args == *' fail-closed '* ]]; then exit 1; fi
   exit 0
 fi
@@ -126,4 +130,24 @@ grep -q 'operation lock remains for manual recovery' "$work/failed-recovery.out"
   exit 1
 }
 
+for mode in uncertain rollback; do
+  : >"$work/host.log"
+  : >"$work/order.log"
+  args=(v0.1.1)
+  [[ $mode != rollback ]] || args=(--rollback v0.1.1)
+  if FAIL_RENDER=$([[ $mode == uncertain ]] && echo 1 || echo 0) \
+    "$repo_root/deploy/vn/scripts/deploy.sh" "${args[@]}" >"$work/$mode.out" 2>&1; then exit 1; fi
+  grep -q ' restore-previous .*v0.1.0' "$work/host.log"
+  tail -n 6 "$work/host.log" >"$work/recovery"
+  maintenance=$(grep -n ' maintenance-up ' "$work/recovery" | cut -d: -f1)
+  stop=$(grep -n ' app-down ' "$work/recovery" | cut -d: -f1)
+  restore=$(grep -n ' restore-previous ' "$work/recovery" | cut -d: -f1)
+  start=$(grep -n ' app-up ' "$work/recovery" | cut -d: -f1)
+  [[ $maintenance -lt $stop && $stop -lt $restore && $restore -lt $start ]]
+done
+: >"$work/order.log"
+"$repo_root/deploy/vn/scripts/deploy.sh" --activate v0.1.1 >"$work/activate.out" 2>&1
+lock=$(grep -n 'fence.sh lock activate' "$work/order.log" | cut -d: -f1)
+read_line=$(grep -n ' running-release ' "$work/order.log" | cut -d: -f1)
+[[ $lock -lt $read_line ]]
 echo "deployment failure test passed"
