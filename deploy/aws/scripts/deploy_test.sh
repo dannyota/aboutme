@@ -1617,6 +1617,31 @@ for case_ in provenance_fails provenance_wrong_subject; do
   grep -qF "provenance:" "$work/$case_.out" || { echo "$case_: no provenance message" >&2; exit 1; }
 done
 
+# A release tag names an image index of linux/arm64 and linux/amd64. The
+# deploy verifies and pins the arm64 image's own digest, never the index or
+# the amd64 image (provenance.sh, digest). The ok case above covers an older
+# tag that names the arm64 image itself.
+run_case index_tag 0 v0.1.0
+f=$work/index_tag.calls
+arm64=sha256:$(printf '%064d' 2)
+for name in server web caddy; do
+  grep -qF "gh attestation verify oci://ghcr.io/dannyota/aboutme-$name@$arm64 " "$f" ||
+    { echo "index_tag: $name arm64 provenance was not verified" >&2; exit 1; }
+  for other in 3 9; do
+    absent "$f" "gh attestation verify oci://ghcr.io/dannyota/aboutme-$name@sha256:$(printf '%064d' "$other")"
+  done
+done
+jq -e --arg d "$arm64" '[.containerDefinitions[].image | endswith("@" + $d)] | length > 0 and all' \
+  "$work/last-registered.json" >/dev/null ||
+  { echo "index_tag: a task definition does not pin the arm64 digest" >&2; exit 1; }
+run_case index_no_arm64 fail v0.1.0
+f=$work/index_no_arm64.calls
+absent "$f" "gh attestation verify"
+absent "$f" "operation_id=:o"
+absent "$f" "ecs register-task-definition"
+grep -qF "no server image for v0.1.0" "$work/index_no_arm64.out" ||
+  { echo "index_no_arm64: did not stop on the missing arm64 image" >&2; exit 1; }
+
 # The standalone root audit builds a one-shot from the candidate server image,
 # keeps the jobs task's command and secret references, and never changes a
 # service, schedule, or snapshot.

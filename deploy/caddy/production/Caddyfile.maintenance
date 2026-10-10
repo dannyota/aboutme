@@ -13,19 +13,20 @@
 # redirecting again.
 {
 	admin off
-	# No HTTP-to-HTTPS redirect server on port 80. CloudFront reaches the
-	# origin over HTTPS on 8443 only, and the security group admits nothing
-	# else, so that server would answer no one. Without it Caddy binds no
-	# privileged port and runs as a non-root user with no capability.
+	# No automatic HTTP-to-HTTPS redirect server. CloudFront reaches the
+	# origin over HTTPS on 8443 only, so with only that edge Caddy binds no
+	# privileged port and runs with no capability. The direct edge declares
+	# its own port 80 site (edges/direct.sites).
 	auto_https disable_redirects
 	import /run/caddy/edges.global
-	# No site below turns on Caddy's access log, so an ordinary request is
-	# never logged. This shapes the format for whatever Caddy still writes
-	# on its own, such as a failed reverse_proxy dial: it keeps the method
-	# and URI but never the visitor's address or request headers (privacy
-	# policy: no IP in logs).
+	# CloudFront keeps no access log and retains the method and URI on runtime
+	# errors, without addresses or headers. The direct edge routes request data
+	# through fixed allowlist encoders instead.
 	log default {
 		output stderr
+		# Direct-edge WAF, CrowdSec, and HTTP errors use private allowlist
+		# loggers. CloudFront-only keeps its existing error output.
+		import /run/caddy/default-log-excludes.caddy
 		format filter {
 			wrap json
 			request>client_ip delete
