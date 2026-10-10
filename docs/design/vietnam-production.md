@@ -156,9 +156,9 @@ The trust boundaries match today's host:
   namespaces it needs.
 
 Access is key-only SSH from the allowlist as a non-root admin with `sudo`, and
-the GreenNode web console for break-glass. The key is hardware-backed
-(`ed25519-sk`; owner, 2026-10-10). Security updates install daily; a monthly
-maintenance window reboots.
+the GreenNode web console for break-glass. The key is the owner's `ssh-ed25519`
+commit-signing key (owner, 2026-10-10). Security updates install daily; a
+monthly maintenance window reboots.
 
 ## Secrets and host identity
 
