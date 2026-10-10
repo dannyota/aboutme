@@ -27,6 +27,10 @@ grep -qxF 'MemoryMax=1G' \
   "$base/host/etc/systemd/system/postgresql@.service.d/90-aboutme-alert.conf"
 grep -qxF 'OnCalendar=*:0/5' \
   "$base/host/etc/systemd/system/aboutme-crowdsec-retention.timer"
+grep -qxF 'Requisite=aboutme-crowdsec-retention-startup.service' \
+  "$base/host/etc/systemd/system/aboutme-crowdsec-retention.service"
+grep -qxF 'After=aboutme-crowdsec-retention-startup.service crowdsec.service' \
+  "$base/host/etc/systemd/system/aboutme-crowdsec-retention.service"
 grep -qxF 'TimeoutStartSec=5min' \
   "$base/host/etc/systemd/system/aboutme-crowdsec-retention-startup.service"
 grep -qxF 'OnFailure=aboutme-crowdsec-retention-failure.service' \
