@@ -38,6 +38,7 @@ cat >"$work/bin/ssh" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 args=" $* "
+[[ $args == *" -p $EXPECTED_SSH_PORT "* ]] || { echo "SSH port missing" >&2; exit 1; }
 case $args in
   *' -O exit '*) exit 0 ;;
   *' sha256sum '*) printf '%064d  remote\n' 0 | tr 0 c; exit 0 ;;
@@ -82,6 +83,8 @@ chmod +x "$work/bin/"*
 export PATH=$work/bin:$PATH
 export DEPLOY_HOST=vn.example.test
 export DEPLOY_SITE=https://vn.example.test
+unset SSH_PORT
+export EXPECTED_SSH_PORT=22922
 
 if "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/out" 2>&1; then
   echo "deploy unexpectedly passed without HSTS" >&2
@@ -103,6 +106,7 @@ if grep -q 'recovery did not finish' "$work/out"; then
   exit 1
 fi
 
+export SSH_PORT=23000 EXPECTED_SSH_PORT=23000
 : >"$work/host.log"
 : >"$work/ssh.log"
 if FAIL_CLOSED=1 "$repo_root/deploy/vn/scripts/deploy.sh" v0.1.1 >"$work/failed-recovery.out" 2>&1; then

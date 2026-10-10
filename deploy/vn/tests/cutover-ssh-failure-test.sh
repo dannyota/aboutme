@@ -11,6 +11,7 @@ cat >"$work/bin/ssh" <<'STUB'
 set -euo pipefail
 printf '%s\n' "$*" >>"$CUTOVER_TEST_LOG"
 args=" $* "
+[[ $args == *" -p $EXPECTED_SSH_PORT "* ]] || { echo "SSH port missing" >&2; exit 1; }
 if [[ $args == *' /usr/local/lib/aboutme/deploy-host.sh '*' release-json '* ]]; then
   printf '{"release_tag":"v0.4.7"}\n'
 elif [[ $args == *' /usr/local/lib/aboutme/fence.sh lock cutover v0.4.7 '* ]]; then
@@ -37,6 +38,8 @@ STUB
 chmod +x "$work/bin/"*
 export PATH=$work/bin:$PATH XDG_RUNTIME_DIR=$work/runtime CUTOVER_TEST_LOG=$work/ssh.log
 export DEPLOY_HOST=vn.example.test
+unset SSH_PORT
+export EXPECTED_SSH_PORT=22922
 export CUTOVER_TEST_MODE=uncertain
 
 if "$repo_root/deploy/vn/scripts/cutover.sh" preflight >"$work/out" 2>&1; then
@@ -52,6 +55,7 @@ fi
 grep -q 'marker and operation lock remain' "$work/out" || { echo "cutover did not report manual recovery" >&2; exit 1; }
 
 : >"$work/ssh.log"
+export SSH_PORT=23000 EXPECTED_SSH_PORT=23000
 export CUTOVER_TEST_MODE=cleanup-failure
 if "$repo_root/deploy/vn/scripts/cutover.sh" preflight >"$work/cleanup.out" 2>&1; then
   echo "cutover passed after final fail-closed cleanup failed" >&2

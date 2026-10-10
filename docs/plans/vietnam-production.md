@@ -13,13 +13,14 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 5. Create a Bizfly Cloud account (https://bizflycloud.vn), verify identity, top up, and subscribe to Email Transaction for `aboutme.vn`.
 6. Put Bizfly values in `.dev/credentials/bizfly.env`, mode 0600: `BIZFLY_SMTP_HOST`, `BIZFLY_SMTP_PORT`, `BIZFLY_SMTP_USERNAME`, `BIZFLY_SMTP_PASSWORD`, and `BIZFLY_API_KEY` if Bizfly offers one. `secrets.sh` pipes the SMTP values to the host without printing them.
 7. Generate an age key pair for `aboutme-infra`; keep the private key off the host; give devops the public recipient.
-8. Give devops the SSH source allowlist; the admin key is the public half of the owner's `ssh-ed25519` commit-signing key.
+8. The admin key is the public half of the owner's `ssh-ed25519` commit-signing key.
 9. At cutover: run the SSM-to-host secret pipe and approve the Route 53 switch of the apex and `www`.
 10. Once the cutover is verified: approve the AWS real-data deletion and the CloudFront teardown.
 11. After the cutover and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. The public announcement waits for the cutover.
 
 ## Decided
 
+- SSH on TCP 22922 open to all sources (owner, 2026-10-10).
 - 2026-09-24: self-hosted PostgreSQL 18 with pgBackRest (30 days, point-in-time recovery, quarterly drill); no rollback window after Vietnam accepts writes; no domain for the AWS test environment; Have I Been Pwned stays and the DPIA records it.
 - 2026-10-10: nothing in front of the host; Caddy with Coraza and CrowdSec; vWAF only as a DNS-change escalation.
 - 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.

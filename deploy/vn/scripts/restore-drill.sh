@@ -32,6 +32,8 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=ssh-lib.sh
+source "$here/ssh-lib.sh"
 # shellcheck source=vng-lib.sh
 . "$here/vng-lib.sh"
 
@@ -138,8 +140,8 @@ cleanup() {
   local rc=$?
   trap - EXIT
   set +e
-  ssh -S "$run/drill.sock" -O exit x >/dev/null 2>&1
-  ssh -S "$run/prod.sock" -O exit x >/dev/null 2>&1
+  ssh -p "$SSH_PORT" -S "$run/drill.sock" -O exit x >/dev/null 2>&1
+  ssh -p "$SSH_PORT" -S "$run/prod.sock" -O exit x >/dev/null 2>&1
   rm -rf "$run"
   if [[ -z $server_id && $create_attempted == 1 ]]; then
     server_id=$(find_server_id)
@@ -206,8 +208,8 @@ order_server() {
   require_price "drill ${DATA_DISK_GB} GB encrypted volume" "$vquoted" "$max_price"
   require_price "drill total" "$(awk -v a="$quoted" -v b="$vquoted" 'BEGIN { printf "%d", a + b }')" "$max_price"
 
-  # First boot adds the operator's key and a host key made for this run, and
-  # nothing else; host/install.sh owns every other host file (design "Host").
+  # First boot sets SSH access and a host key made for this run;
+  # host/install.sh owns the other host files (design "Host").
   # The host key's public half is pinned before the first SSH (pin_host_key),
   # so no connection trusts an unknown key. Its private half reaches the
   # server only through the user data, lives in this run's tmpfs directory,
@@ -234,6 +236,24 @@ ssh_keys:
   ed25519_private: |
 CLOUD
     sed 's/^/    /' "$run/hostkey"
+    cat <<CLOUD
+write_files:
+  - path: /etc/ssh/sshd_config.d/90-aboutme.conf
+    permissions: "0644"
+    content: |
+      Port $SSH_PORT
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers $ADMIN_USER
+      PubkeyAcceptedAlgorithms ssh-ed25519
+runcmd:
+  # Ubuntu 24.04 derives ssh.socket ports from sshd_config at daemon-reload.
+  - systemctl daemon-reload
+  - systemctl restart ssh.socket
+  # Reload access rules in an already active SSH daemon.
+  - systemctl restart ssh
+CLOUD
   } >"$file"
   rm -f "$run/hostkey"
 
@@ -274,9 +294,9 @@ server_private_ip() {
 # The drill server's host key is the one this run generated and handed to
 # cloud-init, pinned under a fixed alias in a per-run known_hosts file, with
 # strict checking: a server that presents any other key is refused.
-prod_opts=(-o ControlMaster=auto -o "ControlPath=$run/prod.sock" -o ControlPersist=15m
+prod_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$run/prod.sock" -o ControlPersist=15m
   -o ConnectTimeout=15)
-drill_opts=(-o ControlMaster=auto -o "ControlPath=$run/drill.sock" -o ControlPersist=15m
+drill_opts=(-p "$SSH_PORT" -o ControlMaster=auto -o "ControlPath=$run/drill.sock" -o ControlPersist=15m
   -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "HostKeyAlias=$SERVER_NAME" -o LogLevel=ERROR
   -o "UserKnownHostsFile=$run/known_hosts" -o ServerAliveInterval=30)
 
@@ -304,7 +324,7 @@ connect_drill() {
   drill_ip=$(server_private_ip)
   [[ -n $drill_ip ]] || die "could not read the drill server's private IP"
   if ((!direct)); then
-    drill_opts+=(-o "ProxyCommand=ssh -o ControlPath=$run/prod.sock -W %h:%p $ADMIN_USER@$prod_host")
+    drill_opts+=(-o "ProxyCommand=ssh -p $SSH_PORT -o ControlPath=$run/prod.sock -W %h:%p $ADMIN_USER@$prod_host")
   fi
   prsh true || die "cannot reach the production host $prod_host over SSH"
   say "waiting for SSH on the drill server $drill_ip"

@@ -11,7 +11,8 @@ with `--rm`, and is removed by a trap on exit. The probe prints no secret.
 Run it as root after `host/install.sh` and before the first deploy:
 
 ```sh
-ssh aboutme-admin@HOST sudo bash -s < deploy/vn/probe/probe.sh
+ssh -p "${SSH_PORT:-22922}" aboutme-admin@HOST \
+  sudo env SSH_PORT="${SSH_PORT:-22922}" bash -s < deploy/vn/probe/probe.sh
 ```
 
 The probe pulls one public image, `alpine:3.24`, pinned by digest, so the host
@@ -42,8 +43,9 @@ The design is [Vietnam production](../../../docs/design/vietnam-production.md).
   Nuxt (Host, trust boundaries).
 - The host reaches a container port published on `127.0.0.1`, as Caddy and Go
   reach Nuxt on `127.0.0.1:3000` (Host).
-- No listener sits on a non-loopback address except 22, 80, 443, and
-  `10.89.10.1:8081`. This is the host-side view of the security group.
+- No listener sits on a non-loopback address except the SSH port (22922 by
+  default), 80, 443, and `10.89.10.1:8081`. This is the host-side view of the
+  security group.
 - PostgreSQL has no TCP listener and its socket exists, because
   `listen_addresses = ''` and `DATABASE_URL` uses `/run/postgresql`
   (PostgreSQL).

@@ -17,6 +17,10 @@
 # instance ID the SSM port forward runs through).
 set -euo pipefail
 
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=ssh-lib.sh
+source "$here/ssh-lib.sh"
+
 admin=aboutme-admin
 host=${DEPLOY_HOST:?set DEPLOY_HOST to the Vietnam host address}
 region=ap-southeast-1
@@ -67,12 +71,12 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # Runs a command on the host as root; the command text is fixed in this file.
-host_root() { ssh -o BatchMode=yes "$admin@$host" "sudo bash -c $(printf '%q' "$1")"; }
-host_fence() { ssh -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/fence.sh "$@"; }
-host_deploy_read() { ssh -o BatchMode=yes "$admin@$host" "sudo /usr/local/lib/aboutme/deploy-host.sh - - $1"; }
-host_deploy() { ssh -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/deploy-host.sh "$op" "$tag" "$1"; }
+host_root() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo bash -c $(printf '%q' "$1")"; }
+host_fence() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/fence.sh "$@"; }
+host_deploy_read() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo /usr/local/lib/aboutme/deploy-host.sh - - $1"; }
+host_deploy() { ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" sudo /usr/local/lib/aboutme/deploy-host.sh "$op" "$tag" "$1"; }
 host_psql() { # sql, as postgres on the aboutme database
-  ssh -o BatchMode=yes "$admin@$host" \
+  ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" \
     "sudo /usr/local/lib/aboutme/fence.sh checkpoint '$op' '$tag' >/dev/null && sudo -u postgres psql -X -q -At -v ON_ERROR_STOP=1 -d aboutme" <<<"$1"
 }
 
@@ -177,7 +181,7 @@ cmd_dump_restore() {
   rds_open
   pg_dump -Fc "$rds_url" | age -r "$recipient" >"$work/dump.age"
   say "dumped $(stat -c %s "$work/dump.age") encrypted bytes"
-  ssh -o BatchMode=yes "$admin@$host" \
+  ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" \
     "sudo bash -c \"set -euo pipefail; /usr/local/lib/aboutme/fence.sh checkpoint '$op' '$tag' >/dev/null; umask 077; cat > /srv/data/cutover-dump.age\"" \
     <"$work/dump.age"
   rm -f "$work/dump.age"

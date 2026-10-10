@@ -51,6 +51,17 @@ the state passphrase and host secrets.
   `CLIENT_ID` and `CLIENT_SECRET` in the environment, never a file in this tree.
 - `TF_VAR_state_passphrase` for state encryption, at least 16 characters.
 
+## SSH access
+
+SSH listens on TCP 22922 from any source (owner, 2026-10-10). Access uses only
+an `ssh-ed25519` admin key, with root login disabled and
+`AllowUsers aboutme-admin`. CrowdSec bans SSH attacks. The admin key is the
+public half of the owner's commit-signing key.
+
+`prod/variables.tf` sets `ssh_port` to 22922 and `ssh_allowlist` to
+`["0.0.0.0/0"]`. Laptop scripts use `SSH_PORT`, default 22922. Set `SSH_PORT` to
+the same value as `ssh_port` when using another port.
+
 ## Build order
 
 1. Confirm each provider fact below on the account.

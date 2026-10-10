@@ -4,7 +4,8 @@
 # docs/design/single-host-production.md, "Host and networking"). Run it as root
 # on the host after install.sh and before the first deploy:
 #
-#   ssh aboutme-admin@HOST sudo bash -s < deploy/vn/probe/probe.sh
+#   ssh -p "${SSH_PORT:-22922}" aboutme-admin@HOST \
+#     sudo env SSH_PORT="${SSH_PORT:-22922}" bash -s < deploy/vn/probe/probe.sh
 #
 # It prints one PASS or FAIL line per fact and exits 1 if any fails. It changes
 # nothing that lasts: every throwaway container is named aboutme-probe-<x> and
@@ -18,6 +19,7 @@ set -euo pipefail
 IMAGE=docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 PREFIX=aboutme-probe-
 GATEWAY=10.89.10.1
+SSH_PORT=${SSH_PORT:-22922}
 # Free ports for the throwaway listeners; the server uses 8080, 8081 and 3000.
 HOST_PORT=18081
 PUB_PORT=18082
@@ -200,8 +202,8 @@ c_userns() {
 
 # ---- Listeners -----------------------------------------------------------
 
-# Nothing may listen on a non-loopback address except 22, 80, 443, and the
-# print listener 10.89.10.1:8081. Run before the probe starts its own listener.
+# Non-loopback listeners are limited to SSH, 80, 443, and 10.89.10.1:8081.
+# Run before the probe starts its own listener.
 c_listeners() {
   local bad out addr port
   bad=()
@@ -212,7 +214,7 @@ c_listeners() {
     addr=${addr%]}
     addr=${addr%%%*}
     case $addr in 127.* | ::1) continue ;; esac
-    case $port in 22 | 80 | 443) continue ;; esac
+    case $port in "$SSH_PORT" | 80 | 443) continue ;; esac
     [[ $addr == "$GATEWAY" && $port == 8081 ]] && continue
     bad+=("$local_addr")
   done < <(ss -Hltn | awk '{print $4}')
@@ -221,7 +223,7 @@ c_listeners() {
     echo "unexpected listeners: $out"
     return 1
   fi
-  echo "only loopback, 22, 80, 443 and $GATEWAY:8081"
+  echo "only loopback, $SSH_PORT, 80, 443 and $GATEWAY:8081"
 }
 
 c_postgres_socket() {

@@ -28,6 +28,7 @@ write_files:
   - path: /etc/ssh/sshd_config.d/90-aboutme.conf
     permissions: "0644"
     content: |
+      Port ${ssh_port}
       PasswordAuthentication no
       KbdInteractiveAuthentication no
       PermitRootLogin no
@@ -35,4 +36,8 @@ write_files:
       PubkeyAcceptedAlgorithms ssh-ed25519
 
 runcmd:
+  # Ubuntu 24.04 derives ssh.socket ports from sshd_config at daemon-reload.
+  - systemctl daemon-reload
+  - systemctl restart ssh.socket
+  # Reload access rules in an already active SSH daemon.
   - systemctl restart ssh

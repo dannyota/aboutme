@@ -62,9 +62,21 @@ variable "subnet_cidr" {
   default     = "10.76.1.0/24"
 }
 
+variable "ssh_port" {
+  type        = number
+  description = "SSH listen port"
+  default     = 22922
+
+  validation {
+    condition     = var.ssh_port >= 1024 && var.ssh_port <= 32767 && var.ssh_port != 22 && floor(var.ssh_port) == var.ssh_port
+    error_message = "ssh_port must be an integer from 1024 to 32767 and must not be 22."
+  }
+}
+
 variable "ssh_allowlist" {
   type        = list(string)
-  description = "CIDRs allowed to reach TCP 22. Never 0.0.0.0/0."
+  description = "CIDRs allowed to reach the SSH port"
+  default     = ["0.0.0.0/0"]
 
   validation {
     condition     = length(var.ssh_allowlist) > 0
@@ -73,10 +85,6 @@ variable "ssh_allowlist" {
   validation {
     condition     = alltrue([for c in var.ssh_allowlist : can(cidrhost(c, 0))])
     error_message = "Every ssh_allowlist entry must be a CIDR."
-  }
-  validation {
-    condition     = alltrue([for c in var.ssh_allowlist : c != "0.0.0.0/0"])
-    error_message = "ssh_allowlist must not contain 0.0.0.0/0."
   }
 }
 
