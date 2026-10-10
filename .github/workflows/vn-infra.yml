@@ -66,8 +66,12 @@ jobs:
           echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main" | \
             sudo tee /etc/apt/sources.list.d/crowdsec.list >/dev/null
           sudo apt-get update -qq
-          printf 'crowdsec crowdsec/capi boolean false\n' | sudo debconf-set-selections
-          sudo systemctl mask --runtime crowdsec.service
-          sudo apt-get install -y -qq crowdsec=1.8.1 sqlite3
+          sudo bash -c '
+            unset CROWDSEC_POLICY_RC_D CROWDSEC_SYSTEMCTL
+            . deploy/vn/host/crowdsec-offline.sh
+            crowdsec_install_offline apt-get install -y -qq crowdsec=1.8.1 sqlite3
+          '
       - name: Test pinned parser and scenarios
-        run: sudo deploy/vn/tests/crowdsec-integration-test.sh
+        run: |
+          sudo systemctl unmask --runtime crowdsec.service
+          sudo deploy/vn/tests/crowdsec-integration-test.sh
