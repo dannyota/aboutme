@@ -1,0 +1,18 @@
+type: leaky
+format: 2.0
+name: aboutme/http-rate
+description: Detect sustained HTTP request floods
+filter: evt.Meta.log_type == 'aboutme-http'
+groupby: evt.Meta.source_ip
+capacity: 120
+leakspeed: 1s
+blackhole: 5m
+labels:
+  remediation: true
+  classification:
+    - attack.T1498
+  behavior: http:flood
+  label: HTTP request flood
+  spoofable: 0
+  service: http
+  confidence: 2

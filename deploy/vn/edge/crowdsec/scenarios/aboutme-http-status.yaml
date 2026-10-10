@@ -1,0 +1,18 @@
+type: leaky
+format: 2.0
+name: aboutme/http-status
+description: Detect repeated HTTP denial and unknown-route probes
+filter: evt.Meta.log_type == 'aboutme-http' && (evt.Meta.http_status in ['400', '401', '403', '404', '405', '429'] || evt.Meta.route_class == 'unknown')
+groupby: evt.Meta.source_ip + '|' + evt.Meta.route_class
+capacity: 10
+leakspeed: 10s
+blackhole: 5m
+labels:
+  remediation: true
+  classification:
+    - attack.T1595
+  behavior: http:scan
+  label: HTTP denial and probing responses
+  spoofable: 0
+  service: http
+  confidence: 2

@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  updated: 'Last updated October 2, 2026',
+  updated: 'Last updated October 11, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
   verifyLink: 'Verify',
@@ -55,12 +55,18 @@ export const legalEn: LegalCopy = {
           'Connected agents: the app name, its redirect addresses, the '
           + 'access you granted, and when it was last used. Access '
           + 'tokens are stored only as hashes.',
-          'Server request logs, which do not record IP addresses, kept for '
-          + 'up to 180 days.',
-          'Email delivery events: sent, delivered, bounced, or marked as '
-          + 'spam. If an email to you bounces or is marked as spam, Amazon '
-          + 'SES keeps that address on its suppression list until it is '
-          + 'removed.',
+          'Ordinary server operational logs do not record request IP '
+          + 'addresses or request headers and are kept for up to 30 days.',
+          'Attack protection: CrowdSec receives a five-field request feed '
+          + 'with the UTC timestamp, source IP address, HTTP method, response '
+          + 'status, and broad route class. The feed does not record the '
+          + 'specific path or URI, query string, request or response '
+          + 'headers, or request or response body. The feed stays only in '
+          + 'RAM. CrowdSec attack alerts and bans are stored on the '
+          + 'encrypted Vietnam data volume. We keep the feed and all '
+          + 'CrowdSec attack records, including HTTP and SSH alerts and '
+          + 'bans, for at most 24 hours. None of this data is shared with '
+          + 'the CrowdSec community.',
           'Password check: when you set a password, we check whether it '
           + 'has appeared in a known breach using Have I Been Pwned. Only '
           + 'the first 5 characters of its SHA-1 hash are sent, never the '
@@ -129,14 +135,12 @@ export const legalEn: LegalCopy = {
           + 'keep its old web address reserved for 180 days so no one '
           + 'else can take over your link. The reservation is not linked '
           + 'to your account, and we delete it after the 180 days.',
-          'Public pages are delivered through a global CDN '
-          + '(Amazon CloudFront), which does not store copies of them. '
-          + 'While a resume is public, anyone who can see it can save '
-          + 'or screenshot it. By default, viewers can also download '
-          + 'the resume\'s PDF; you can turn this off. Avoid putting '
-          + 'sensitive personal data, such as ID numbers or ID card '
-          + 'images, health information, religion, or political views, '
-          + 'in a public resume.',
+          'Public pages are delivered directly from our host in Vietnam. '
+          + 'While a resume is public, anyone who can see it can save or '
+          + 'screenshot it. By default, viewers can also download the '
+          + 'resume\'s PDF; you can turn this off. Avoid putting sensitive '
+          + 'personal data, such as ID numbers or ID card images, health '
+          + 'information, religion, or political views, in a public resume.',
           'When anyone shares your public link in a chat app or social '
           + 'network, that service fetches the page\'s title, summary, and '
           + 'preview image (your name, headline, and photo), and may keep '
@@ -155,21 +159,23 @@ export const legalEn: LegalCopy = {
       {
         heading: 'Where your data is stored',
         paragraphs: [
-          'Your data is stored with Amazon Web Services in Singapore '
-          + '(ap-southeast-1): the database, its backups, photo storage, '
-          + 'and email sending through Amazon SES. Amazon CloudFront '
-          + '(the global network of Amazon Web Services) delivers the '
-          + 'site; CloudFront and AWS WAF process your IP address and '
-          + 'browser details to block attacks and detect bots. Amazon '
-          + 'Route 53 provides '
-          + 'DNS. If you sign in with Google, Google (United '
-          + 'States) verifies your account. If you sign in with '
-          + 'LinkedIn, LinkedIn (United States) verifies your account. '
-          + 'Emails you send us are kept in a Google Workspace mailbox. '
-          + 'If you are in Vietnam, your personal data is transferred '
-          + 'abroad: mainly to Singapore, and in part to Google and '
-          + 'LinkedIn.',
-          'Password checks use Have I Been Pwned.',
+          'Your account, resumes, photos, backups, and logs are stored on '
+          + 'GreenNode infrastructure in Ho Chi Minh City, Vietnam. Bizfly '
+          + 'Email Transaction sends account emails over SMTP. Amazon '
+          + 'Route 53 provides DNS.',
+          'Google (United States) and LinkedIn (United States) provide '
+          + 'optional sign-in. When you use one to sign in to your account, '
+          + 'you sign in at that provider and we receive your name, email, '
+          + 'and account ID. Emails you send us, replies to our account '
+          + 'emails, and notices that one could not be delivered (which can '
+          + 'include your email address and the original message) are kept '
+          + 'in a Google Workspace mailbox.',
+          'Google or LinkedIn sign-in, support email, replies to and failed '
+          + 'deliveries of account emails, connected AI services '
+          + 'you choose, and foreign services that fetch a public resume '
+          + 'link may involve processing outside Vietnam. Password checks '
+          + 'use Have I Been Pwned, which receives only the first 5 '
+          + 'characters of the password\'s SHA-1 hash.',
         ],
       },
       {
@@ -198,8 +204,9 @@ export const legalEn: LegalCopy = {
         items: [
           'Access is removed immediately.',
           'Uploaded photos are deleted, normally within 24 hours.',
-          'Database backups keep earlier copies for up to 30 days after '
-          + 'that; they are used only for disaster recovery.',
+          'Database backups keep earlier copies for up to about 5 weeks '
+          + 'after that (a 30-day recovery window plus the weekly full '
+          + 'backup it needs); they are used only for disaster recovery.',
           'Records of account deletions and provider unlinks, holding only '
           + 'the event type and time, are kept for up to 180 days.',
           'If we delete an account for a breach of our Terms of Service, we '

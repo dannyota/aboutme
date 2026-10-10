@@ -51,24 +51,34 @@ Nothing stands in front of the host (owner, 2026-10-10). The apex and `www`
 resolve to the floating IP; Caddy terminates TLS with Let's Encrypt certificates
 by ACME HTTP-01, as `aboutme-caddy` does today, and serves hashed `/_nuxt/*`
 assets with Nuxt's immutable cache headers. The security group admits TCP 80 and
-443 from anywhere and TCP 22 only from the owner's allowlist. Caddy takes the
-client address from the socket, strips every forwarding header, and sends one
-`X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront listener with
-its edge key and `CloudFront-Viewer-Address` stays for the AWS test environment
-under the `EDGES` list, which gains `direct`.
+443 from anywhere and TCP 22922 from all sources (owner, 2026-10-10). Caddy
+takes the client address from the socket, strips every forwarding header, and
+sends one `X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront
+listener with its edge key and `CloudFront-Viewer-Address` stays for the AWS
+test environment under the `EDGES` list, which gains `direct`.
 
 Three host-level controls replace AWS WAF:
 
 - Go's rate limits stay the application control.
-- CrowdSec (the security engine, its Caddy bouncer, and the nftables bouncer for
-  SSH) reads Caddy and sshd logs, bans addresses that match the HTTP flood,
-  scanning, and brute-force scenarios, and answers 403 to banned addresses.
-  Community blocklist sharing stays off (owner, 2026-10-10), because a shared
-  signal sends the attacker's address abroad.
-- Coraza in Caddy (`coraza-caddy` with the OWASP Core Rule Set v4, built into
-  the Caddy image with `xcaddy`) runs in detection-only mode for two weeks, then
-  blocks, with exclusions for the resume write paths whose rich-text bodies trip
-  the rule set. Its audit log carries no request bodies.
+- CrowdSec's engine, Caddy bouncer, and nftables SSH bouncer ban attacks; Caddy
+  returns 403. Its [HTTP privacy contract](crowdsec-http-privacy.md) uses a
+  five-field RAM-only feed, keeps encrypted attack records for at most 24 hours,
+  and disables community sharing (owner, 2026-10-10).
+- Coraza 3.8.1 in Caddy (`coraza-caddy` with OWASP CRS v4) detects for two weeks
+  before blocking. Raw audit logging stays off because it can record body data.
+  Serving writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
+  `/var/log/caddy/waf/maintenance-match.log`; both are on tmpfs. Rule callbacks
+  emit `msg=waf_rule_match` with numeric `rule_id`; other unknown shapes emit
+  `msg=waf_rule_match_unparsed`. Coraza shares its engine logger with the rule
+  callback. Only its fixed missing-key macro warning,
+  `key not found in collection, returning the original text`, emits
+  `msg=waf_engine_diagnostic`. It has only `ts`, `level`, `logger`, and `msg`,
+  no `rule_id` or raw fields; the watcher excludes it from rule counts and
+  unknown alerts. Logs carry no raw fields or personal data and never reach disk
+  or journald. Files cap at 5 MiB plus two rolls; one-day expiry applies only to
+  rolled files, so a low-volume active file persists until rotation or reboot.
+  After two weeks, devops reviews matches, excludes false positives on resume
+  writes, and enables blocking.
 
 None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
 escalation: an application in the root portal with the floating IP as upstream,
@@ -99,26 +109,23 @@ verification, `PLAIN` authentication, one message per connection. As with SES, a
 2xx after `DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and
 transport errors are temporary. Logs carry the reply code only. Go uses SMTP
 rather than the Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard
-contract that a local stub can test. **Unconfirmed:** Bizfly's bounce and
-complaint reporting, suppression list, and sending limits.
+contract that a local stub can test. Bizfly's SMTP account sends only as its own
+address, and the account refused a second sender for the domain, so auth mail
+goes from `Danny from aboutme.vn <danny@aboutme.vn>` (owner, 2026-10-11);
+replies and bounces reach the owner's mailbox.
 
 ## Host
 
 One amd64 vServer runs Ubuntu 24.04 LTS with 2 vCPU and 4 GiB (owner,
-2026-10-10), since PostgreSQL now shares the host: 512 MiB for Go and Chromium
-(unchanged cap), about 300 MiB for Nuxt and Caddy, 1 GiB for PostgreSQL, and the
-rest for the OS and page cache. OpenTofu owns the server, a 20 GB root disk, a
-20 GB encrypted SSD data volume (aes-xts-plain64 256, set at create time; owner,
-2026-10-10), and the floating IP. The root disk is unencrypted and holds only
-the OS, public images, and capped logs; secrets, PostgreSQL, and CrowdSec state
-live on the data volume. Root at 20 GB, the minimum, fits the worst case of
-about 15 GB: Ubuntu 4 GB, three server images of 2.6 GB during a deploy, web and
-Caddy images, 1 GB of Podman overhead, the journal on the data volume, and zram
-instead of a swap file. The data volume starts at 20 GB because RDS holds under
-3 GiB today. Either volume grows online when its alarm fires at 70%:
-`vngcloud volume resize-volume`, then `growpart` and `resize2fs`. Release images
-add `linux/amd64` beside `linux/arm64`, because GreenNode offers no ARM vServer
-(**Unconfirmed**).
+2026-10-10). Its [memory and storage budget](vietnam-host-memory.md) caps each
+service, serializes jobs, gives Caddy logs a 64 MiB tmpfs, and makes measured
+rehearsal peaks a cutover gate. OpenTofu owns a 30 GB encrypted root disk, a 20
+GB encrypted SSD data volume, and the floating IP. Both disks use GreenNode
+encryption (aes-xts-plain64 256), chosen at server create (owner, 2026-10-10).
+Only the OS, public images, and caches use root. Secrets, PostgreSQL, CrowdSec
+state, and journald use the data volume. Either disk grows online at its 70
+percent alarm. Release images add `linux/amd64` beside `linux/arm64`, because
+GreenNode offers no ARM vServer (no ARM flavor on the account, 2026-10-10).
 
 Rootful Podman runs every container from systemd Quadlet units:
 
@@ -149,10 +156,11 @@ The trust boundaries match today's host:
 - Chromium keeps its sandbox and its blocked proxy; the probe checks the user
   namespaces it needs.
 
-Access is key-only SSH from the allowlist as a non-root admin with `sudo`, and
-the GreenNode web console for break-glass. The key is hardware-backed
-(`ed25519-sk`; owner, 2026-10-10). Security updates install daily; a monthly
-maintenance window reboots.
+Access is key-only SSH on TCP 22922 from all sources as `aboutme-admin` with
+`sudo`; root login is disabled and `AllowUsers` permits only `aboutme-admin`.
+The key is the owner's `ssh-ed25519` commit-signing key. CrowdSec bans SSH
+attacks (owner, 2026-10-10). The GreenNode web console provides break-glass
+access. Security updates install daily; a monthly maintenance window reboots.
 
 ## Secrets and host identity
 
@@ -213,17 +221,22 @@ drill is the launch restore evidence.
 
 ## Release fence
 
-The fence moves to the host, the only place production images start.
-`/var/lib/aboutme/fence.json` is root-owned and holds the DynamoDB item's
-fields. `deploy/vn/scripts/fence.sh` changes it on the host under `flock`, with
-the conditions in the [fence design](passkey-release-fence.md). Every unit that
-runs the server or web image has an `ExecStartPre` that refuses a
-`DEPLOY_RELEASE_NUMBER` below the file's minimum, so a manual `systemctl start`
-cannot start an old image either. A rebuilt host starts at the highest floor in
-the fence design (4007). Root on the host is a privileged bypass, as the
-AWS-login principal is today. The fence is a host file rather than a PostgreSQL
-table (owner, 2026-10-10), because a point-in-time restore would roll a table
-back and a start-time check should not need the database.
+`deploy/vn/scripts/fence.sh` changes root-owned `/var/lib/aboutme/fence.json`
+outside PostgreSQL under `flock` per the
+[fence design](passkey-release-fence.md). Images check the minimum before
+Podman; new hosts start at floor 4007. Each `cutover` subcommand locks the
+installed tag, checkpoints before mutation, and holds through quiescence;
+`verify` locks. Before mutation, the fence writes a marker with its ID, kind,
+state, and start time. A retained cutover operation or any marker refuses
+server, web, serving Caddy, migrate, and scheduled-job starts before Podman,
+including after reboot. Maintenance can start. `db-setup` starts only for a
+valid active `reset-db` marker sharing the cutover lock ID; missing, symlinked,
+malformed, wrong-kind, or mismatched state refuses it. Non-cutover operations
+keep the minimum-only rule. The owning operation removes its marker after safe
+quiescence. Uncertainty keeps the marker and lock closed. Manual clear refuses a
+marker; privileged recovery logs its reason and clears it after inspection.
+Cleanup releases the exact ID only without a marker. A retry cannot replace its
+owner.
 
 ## Scheduled jobs
 
@@ -238,9 +251,9 @@ environment.
 ## Logs, metrics, and alarms
 
 There is no monitoring service (owner, 2026-10-10: vMonitor removed for cost).
-journald on the data volume keeps 30 days, capped at 2 GB (`MaxRetentionSec`,
-`SystemMaxUse`); Caddy logs still drop client addresses and request headers, so
-a host loss loses only operational logs, never data. `aboutme-watch.timer` runs
+journald keeps 30 days on the data volume, capped at 2 GB. Ordinary Caddy logs
+drop addresses, URIs, and request headers. Its RAM-only feed and logs follow
+[HTTP privacy contract](crowdsec-http-privacy.md). `aboutme-watch.timer` runs
 `watch.sh` every five minutes and `OnFailure=` on every unit runs `alert.sh`;
 both mail the support mailbox through Bizfly SMTP with `msmtp`, one message per
 condition per day, from the sender the app uses. The Route 53 health check on
@@ -254,7 +267,7 @@ endpoint and carries no personal data.
 | Host     | `watch.sh`: root and data volume above 70%, load, memory       |
 | Database | `watch.sh`: archive failure, newest backup older than 26 hours |
 | Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                |
-| Edge     | `watch.sh`: CrowdSec ban count and Coraza match count per hour |
+| Edge     | `watch.sh`: CrowdSec bans and Coraza rule counts per hour      |
 | TOTP     | `watch.sh`: `totp_unavailable` in the server journal           |
 | Mail     | Bizfly bounce and complaint reporting (**Unconfirmed**)        |
 | Spend    | GreenNode and Bizfly balance alerts, outside the repository    |
@@ -271,19 +284,19 @@ runbook checklist for the root portal.
 State uses the S3 backend on a vStorage bucket with path-style addressing and
 the AWS-only checks skipped. OpenTofu encrypts state client-side with the
 `pbkdf2` key provider; the passphrase lives in the ignored credentials file and,
-age-encrypted, in `aboutme-infra`. **Unconfirmed:** conditional writes for
-OpenTofu's lock file; without them, one operator applies at a time by rule.
-Public CI runs `tofu fmt -check` and `tofu validate` for `deploy/vn/` without
-credentials.
+age-encrypted, in `aboutme-infra`. OpenTofu's lock file is on: vStorage refuses
+a create-only `PUT` on an existing key, so a second operator's plan fails with
+"Error acquiring the state lock" (tested 2026-10-10). Public CI runs
+`tofu fmt -check` and `tofu validate` for `deploy/vn/` without credentials.
 
 ## Media
 
 Go already supports an S3-compatible endpoint with static keys and path-style
-addressing. Media uses a private, unversioned vStorage bucket. **Unconfirmed,
-cutover blocker:** vStorage answers a `PUT` with `If-None-Match: *` on an
-existing key with 412, which the create-only write needs. If it does not,
-collision safety rests on the random key alone, and that needs its own design
-decision.
+addressing. Media uses a private, unversioned vStorage bucket. The create-only
+write sends `If-None-Match: *`, and vStorage answers it with 412 on an existing
+key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
+`PUT` whose `If-Match` carries the quoted ETag, so no write relies on
+`If-Match`.
 
 ## Deploy
 
@@ -347,8 +360,8 @@ Each ships alone on AWS before cutover:
 3. Caddy edge selection: the `EDGES` list gains `direct`, a listener that trusts
    no forwarding header; the Coraza and CrowdSec modules in the Caddy image; and
    the site host from the environment so a rehearsal hostname works.
-4. Privacy notice and terms naming GreenNode and Bizfly in Vietnam. The text is
-   true only after cutover, so its first deploy is the cutover deploy.
+4. Privacy notice and terms naming the Vietnam providers and CrowdSec fields and
+   retention, held until Route 53 points at the verified Vietnam host.
 
 ### 3. Build infrastructure
 
@@ -361,7 +374,10 @@ verification records go into the live zone beside the existing ones.
 Under a temporary hostname such as `vn-rehearsal.aboutme.vn` (an A record to the
 host), with fictional data only: first deploy, a normal deploy, rollback, a
 restore drill, every alarm once, mail to a test mailbox, SSE and MCP from
-outside, forged-header probes, and a timed dry run of the cutover script.
+outside, forged-header probes, and a timed cutover dry run. A normal deploy and
+second cutover are refused while locked, including during signal cleanup. A
+retained-state reboot refuses serving and jobs before Podman; maintenance and
+matching `reset-db` `db-setup` remain available.
 
 ### 5. Cutover
 
@@ -381,8 +397,8 @@ In one announced maintenance window:
    smoke it from outside with the production host.
 6. Switch the apex and `www` at Route 53 to the floating IP (TTL 60 seconds).
    Visitors on cached answers still get the AWS maintenance page.
-7. After 48 hours with no AWS traffic, delete the CloudFront distribution, its
-   certificates and validation records, and the Route 53 health check.
+7. After 48 hours with no AWS traffic, delete the CloudFront distribution and
+   its certificates and validation records. Keep the Route 53 health check.
 
 The auth-mail keys move with the database, so pending outbox mail sends from
 Vietnam. Sessions, passkeys (RP ID `aboutme.vn`), TOTP, and agent grants keep

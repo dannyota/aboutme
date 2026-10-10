@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme pgBackRest diff backup (daily)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15min
+Unit=aboutme-backup@diff.service
+
+[Install]
+WantedBy=timers.target

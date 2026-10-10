@@ -1,0 +1,7 @@
+name: aboutme/http-source
+description: Set the source after stock enrichment has finished
+filter: evt.Meta.log_type == 'aboutme-http'
+onsuccess: next_stage
+statics:
+  - meta: source_ip
+    expression: evt.Parsed.aboutme_source_ip

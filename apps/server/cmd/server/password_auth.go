@@ -101,14 +101,15 @@ func newPasswordAuth(ctx context.Context, logger *slog.Logger, cfg config.Config
 	}
 
 	worker, err := authmail.NewWorker(authmail.WorkerOptions{
-		Pool:     pool,
-		Queries:  queries,
-		KeyRing:  ring,
-		Sender:   sender,
-		Clock:    time.Now,
-		Jitter:   fullJitter,
-		Logger:   logger,
-		WorkerID: uuid.New(),
+		Pool:       pool,
+		Queries:    queries,
+		KeyRing:    ring,
+		Sender:     sender,
+		FooterNote: authmail.FooterNoteForMode(cfg.AuthEmail.Mode),
+		Clock:      time.Now,
+		Jitter:     fullJitter,
+		Logger:     logger,
+		WorkerID:   uuid.New(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create mail worker: %w", err)

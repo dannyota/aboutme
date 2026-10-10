@@ -1,0 +1,9 @@
+# The five-minute host watch (host/bin/watch.sh).
+[Unit]
+Description=aboutme host watch
+OnFailure=aboutme-alert@%N.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/watch.sh
+TimeoutStartSec=4min
