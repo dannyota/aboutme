@@ -53,3 +53,12 @@ variable "google_workspace" {
     error_message = "dkim_txt is the whole TXT value, v=DKIM1;k=rsa;p=<key>, joined into one string without quotes."
   }
 }
+
+variable "bizfly_dkim_txt" {
+  type        = string
+  description = "Bizfly Email Transaction dkim._domainkey TXT value, the whole string v=DKIM1;k=rsa;p=<key>"
+  validation {
+    condition     = can(regex("^v=DKIM1;[ ]?k=rsa;[ ]?p=[A-Za-z0-9+/]+=*$", var.bizfly_dkim_txt))
+    error_message = "bizfly_dkim_txt is the whole TXT value, v=DKIM1;k=rsa;p=<key>, joined into one string without quotes."
+  }
+}
