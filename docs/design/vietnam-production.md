@@ -283,19 +283,19 @@ runbook checklist for the root portal.
 State uses the S3 backend on a vStorage bucket with path-style addressing and
 the AWS-only checks skipped. OpenTofu encrypts state client-side with the
 `pbkdf2` key provider; the passphrase lives in the ignored credentials file and,
-age-encrypted, in `aboutme-infra`. **Unconfirmed:** conditional writes for
-OpenTofu's lock file; without them, one operator applies at a time by rule.
-Public CI runs `tofu fmt -check` and `tofu validate` for `deploy/vn/` without
-credentials.
+age-encrypted, in `aboutme-infra`. OpenTofu's lock file is on: vStorage refuses
+a create-only `PUT` on an existing key, so a second operator's plan fails with
+"Error acquiring the state lock" (tested 2026-10-10). Public CI runs
+`tofu fmt -check` and `tofu validate` for `deploy/vn/` without credentials.
 
 ## Media
 
 Go already supports an S3-compatible endpoint with static keys and path-style
-addressing. Media uses a private, unversioned vStorage bucket. **Unconfirmed,
-cutover blocker:** vStorage answers a `PUT` with `If-None-Match: *` on an
-existing key with 412, which the create-only write needs. If it does not,
-collision safety rests on the random key alone, and that needs its own design
-decision.
+addressing. Media uses a private, unversioned vStorage bucket. The create-only
+write sends `If-None-Match: *`, and vStorage answers it with 412 on an existing
+key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
+`PUT` whose `If-Match` carries the quoted ETag, so no write relies on
+`If-Match`.
 
 ## Deploy
 
