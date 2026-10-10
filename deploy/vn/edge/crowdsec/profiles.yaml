@@ -3,7 +3,10 @@ filters:
   - Alert.Remediation == true && Alert.GetScope() == "Ip" && Alert.GetScenario() startsWith "aboutme/http-"
 decisions:
   - type: ban
-    duration: 22h
+    duration: 15m
+# A first ban is short, since many customers can share one address; repeat
+# offenders within the decision window get one hour, then four.
+duration_expr: "GetDecisionsCount(Alert.GetValue()) == 0 ? '15m' : (GetDecisionsCount(Alert.GetValue()) == 1 ? '1h' : '4h')"
 on_success: break
 ---
 name: default_ip_remediation

@@ -89,8 +89,13 @@ Vietnam data volume. All feed and database attack records have the 24-hour
 logical retention bound. They are not part of pgBackRest, vStorage, release,
 support, or diagnostic copies.
 
-Every HTTP, SSH, and manual test decision lasts at most 22 hours. The HTTP
-profile precedes the default catch-all and stops profile evaluation.
+Every HTTP, SSH, and manual test decision lasts at most 22 hours. Many customers
+can share one address (mobile carrier NAT, public Wi-Fi), so an HTTP ban starts
+at 15 minutes and escalates to one hour, then four, only when the same address
+offends again while its earlier decisions are still in the database. The status
+scenario counts only scanner signals (400, 404, 405, and unknown routes), and
+the rate scenario leaves out static assets and health checks. The HTTP profile
+precedes the default catch-all and stops profile evaluation.
 `db_config.flush.max_age` is 23 hours, which shortens all alert history to 23
 hours. CrowdSec 1.8.1 runs its alert flush every minute, but that setting is
 only one control: its code keeps an old alert while the alert has an active
@@ -157,8 +162,9 @@ Hosted tests use a marker in a URI, query, header, and body. They prove:
 - the feed contains the exact five keys and the trusted socket address;
 - no marker or raw request field reaches the feed, CrowdSec event, process logs,
   journal, or alarm mail while upstream and Caddy bouncer errors are forced;
-- a sanitized record passes the installed parser and scenario, creates a
-  decision no longer than 22 hours, and makes the Caddy bouncer return 403;
+- a sanitized record passes the installed parser and scenario, creates a first
+  decision of 15 minutes and a repeat decision of one hour, and makes the Caddy
+  bouncer return 403;
 - a benign sequence through the same pinned CrowdSec 1.8.1 path creates no
   decision;
 - seeded 23-hour-30-minute HTTP and SSH records, child events, and WAL content

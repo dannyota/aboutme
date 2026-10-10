@@ -5,7 +5,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 base=$repo_root/deploy/vn
 
 grep -qxF '    max_age: 23h' "$base/edge/crowdsec/config.yaml.local"
-grep -qxF '    duration: 22h' "$base/edge/crowdsec/profiles.yaml"
+grep -qxF '    duration: 15m' "$base/edge/crowdsec/profiles.yaml"
+grep -qF "GetDecisionsCount(Alert.GetValue()) == 1 ? '1h' : '4h'" "$base/edge/crowdsec/profiles.yaml"
 grep -qF '/run/aboutme/caddy-log/crowdsec/serving.json' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
 grep -qF '/run/aboutme/caddy-log/crowdsec/maintenance.json' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
 grep -qxF '  type: aboutme-http' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
