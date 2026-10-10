@@ -105,9 +105,10 @@ copy_tree() {
 # 1. Keys and apt repositories.
 install -d -m 0755 /etc/apt/keyrings
 apt-get update -qq
-# age encrypts the secrets copy; msmtp sends alert.sh's mail. Both come from
+# age encrypts the secrets copy; msmtp sends alert.sh's mail; catatonit is
+# the init process for units run with --init. All come from
 # the Ubuntu archive.
-apt-get install -y -qq ca-certificates curl gnupg age msmtp sqlite3 >/dev/null
+apt-get install -y -qq ca-certificates curl gnupg age msmtp sqlite3 catatonit >/dev/null
 
 install_key "$bundle/host/keys/pgdg.asc" "$PGDG_SIGNER_FPR" /etc/apt/keyrings/postgresql.asc
 echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
