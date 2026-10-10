@@ -118,13 +118,13 @@ complaint reporting, suppression list, and sending limits.
 One amd64 vServer runs Ubuntu 24.04 LTS with 2 vCPU and 4 GiB (owner,
 2026-10-10). Its [memory and storage budget](vietnam-host-memory.md) caps each
 service, serializes jobs, gives Caddy logs a 64 MiB tmpfs, and makes measured
-rehearsal peaks a cutover gate. OpenTofu owns a 30 GB unencrypted root disk, a
-20 GB encrypted SSD data volume (aes-xts-plain64 256, set at create time; owner,
-2026-10-10), and the floating IP. Only the OS, public images, and caches use
-root. Secrets, PostgreSQL, CrowdSec state, and journald use the data volume.
-Either disk grows online at its 70 percent alarm. Release images add
-`linux/amd64` beside `linux/arm64`, because GreenNode offers no ARM vServer
-(**Unconfirmed**).
+rehearsal peaks a cutover gate. OpenTofu owns a 30 GB encrypted root disk, a 20
+GB encrypted SSD data volume, and the floating IP. Both disks use GreenNode
+encryption (aes-xts-plain64 256), chosen at server create (owner, 2026-10-10).
+Only the OS, public images, and caches use root. Secrets, PostgreSQL, CrowdSec
+state, and journald use the data volume. Either disk grows online at its 70
+percent alarm. Release images add `linux/amd64` beside `linux/arm64`, because
+GreenNode offers no ARM vServer (no ARM flavor on the account, 2026-10-10).
 
 Rootful Podman runs every container from systemd Quadlet units:
 

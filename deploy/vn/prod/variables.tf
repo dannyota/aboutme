@@ -39,14 +39,14 @@ variable "data_disk_gb" {
   default     = 20
 }
 
-variable "data_volume_encryption_type" {
+variable "disk_encryption_type" {
   type        = string
-  description = "Encryption key type of the data volume. This is the single switch for data volume encryption."
+  description = "The encryption type of the root disk and the data volume."
   default     = "aes-xts-plain64_256"
 
   validation {
-    condition     = contains(["aes-xts-plain64_256", "aes-xts-plain64_128"], var.data_volume_encryption_type)
-    error_message = "data_volume_encryption_type must be aes-xts-plain64_256 or aes-xts-plain64_128."
+    condition     = contains(["aes-xts-plain64_256", "aes-xts-plain64_128"], var.disk_encryption_type)
+    error_message = "disk_encryption_type must be aes-xts-plain64_256 or aes-xts-plain64_128."
   }
 }
 

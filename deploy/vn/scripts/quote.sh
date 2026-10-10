@@ -9,12 +9,11 @@
 # The IDs and sizes default to the variables in deploy/vn/prod/variables.tf and
 # are overridden by environment variables with the same names in capitals:
 # ZONE_ID, FLAVOR_ID, IMAGE_ID, VOLUME_TYPE_ID, ROOT_DISK_GB, DATA_DISK_GB,
-# DATA_VOLUME_ENCRYPTION_TYPE. The server is quoted with a plain root disk and
-# no data disk, as the root creates it: encrypting a disk at server create adds
-# a surcharge (wiki Compute-Servers.md, "Encrypted disks"), while a separately
-# created encrypted volume prices the same as a plain one. The data volume is
-# quoted with its encryption type when the installed CLI takes one (v0.59.0
-# and later), and plain otherwise. The log project is not part of the
+# DISK_ENCRYPTION_TYPE. The server is quoted with an encrypted root disk and
+# no data disk, as the OpenTofu root creates it. Encryption at server create
+# adds one CES line of 30% of the flavor price. The data volume is quoted
+# separately with its encryption type when the installed CLI takes one
+# (v0.59.0 and later), and plain otherwise. The log project is not part of the
 # plan. Exit 1 when the total is above the maximum.
 set -euo pipefail
 
@@ -47,7 +46,7 @@ done
 : "${VOLUME_TYPE_ID:=vtype-e782f8e1-0569-11f0-a0a4-ec2a72332f83}"
 : "${ROOT_DISK_GB:=30}"
 : "${DATA_DISK_GB:=20}"
-: "${DATA_VOLUME_ENCRYPTION_TYPE:=aes-xts-plain64_256}"
+: "${DISK_ENCRYPTION_TYPE:=aes-xts-plain64_256}"
 
 need_tools
 
@@ -58,11 +57,12 @@ price_of() {
 
 server=$(vng_ro compute quote-create-server \
   --zone-id "$ZONE_ID" --flavor-id "$FLAVOR_ID" --image-id "$IMAGE_ID" \
-  --root-disk-size "$ROOT_DISK_GB" --root-disk-type-id "$VOLUME_TYPE_ID" |
+  --root-disk-size "$ROOT_DISK_GB" --root-disk-type-id "$VOLUME_TYPE_ID" \
+  --root-disk-encryption-type-id "$DISK_ENCRYPTION_TYPE" |
   price_of)
 encryption_args=()
 if vng_ro volume quote-create-volume --help 2>&1 | grep -q -- '--encryption-type-id'; then
-  encryption_args=(--encryption-type-id "$DATA_VOLUME_ENCRYPTION_TYPE")
+  encryption_args=(--encryption-type-id "$DISK_ENCRYPTION_TYPE")
 else
   say "this CLI cannot quote an encrypted volume; quoting it plain (same price)"
 fi
