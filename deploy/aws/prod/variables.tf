@@ -144,6 +144,11 @@ variable "google_workspace" {
   description = "Google Workspace domain verification CNAME and google._domainkey TXT value"
 }
 
+variable "bizfly_dkim_txt" {
+  type        = string
+  description = "Bizfly Email Transaction dkim._domainkey TXT value"
+}
+
 variable "transparency_bucket_name" {
   type        = string
   default     = ""

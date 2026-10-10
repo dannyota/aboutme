@@ -33,11 +33,11 @@ runs:
     - id: toolchain
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ runner.tool_cache }}/go/1.27.1
-        key: go-toolchain-1.27.1-${{ runner.os }}-${{ runner.arch }}
+        path: ${{ runner.tool_cache }}/go/1.27.2
+        key: go-toolchain-1.27.2-${{ runner.os }}-${{ runner.arch }}
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
-        go-version: "1.27.1"
+        go-version: "1.27.2"
         cache: false
     # A key ending in the ISO week lets a cache live past one run instead of
     # being replaced by it. A normal job's restore keys fall back to the same

@@ -1,4 +1,4 @@
-# Curated golangci-lint configuration for deploy/observer (Go 1.27.1, the
+# Curated golangci-lint configuration for deploy/observer (Go 1.27.2, the
 # deployment transparency observer: an ECS/Kubernetes platform reader, an
 # S3 publisher, and a Sigstore verifier). linters.default is "none" so every
 # enabled check is listed explicitly below — nothing is inherited silently
@@ -8,7 +8,7 @@ version: "2"
 
 run:
   timeout: 5m
-  go: "1.27.1"
+  go: "1.27.2"
 
 linters:
   default: none
