@@ -39,12 +39,12 @@ The design is [Vietnam production](../../../docs/design/vietnam-production.md).
 - A user namespace works in a non-root container with `SYS_ADMIN`, which is what
   Chromium's sandbox needs. The probe runs `unshare -U -r true` as uid 1000 with
   the busybox applet already in the image.
-- A bridge container reaches `10.89.10.1`, where Go binds the print listener for
+- A bridge container reaches `172.17.0.1`, where Go binds the print listener for
   Nuxt (Host, trust boundaries).
 - The host reaches a container port published on `127.0.0.1`, as Caddy and Go
   reach Nuxt on `127.0.0.1:3000` (Host).
 - No listener sits on a non-loopback address except the SSH port (22922 by
-  default), 80, 443, and `10.89.10.1:8081`. This is the host-side view of the
+  default), 80, 443, and `172.17.0.1:8081`. This is the host-side view of the
   security group.
 - PostgreSQL has no TCP listener and its socket exists, because
   `listen_addresses = ''` and `DATABASE_URL` uses `/run/postgresql`
