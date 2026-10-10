@@ -5,6 +5,7 @@ go 1.27.2
 require (
 	github.com/caddyserver/caddy/v2 v2.11.4
 	github.com/corazawaf/coraza-caddy/v2 v2.6.2
+	github.com/corazawaf/coraza/v3 v3.8.1
 	github.com/hslatman/caddy-crowdsec-bouncer v0.14.2-0.20260909201224-ffdcb7c6f861
 )
 
@@ -36,7 +37,6 @@ require (
 	github.com/chzyer/readline v1.5.1 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
 	github.com/corazawaf/coraza-coreruleset/v4 v4.25.0 // indirect
-	github.com/corazawaf/coraza/v3 v3.8.1 // indirect
 	github.com/corazawaf/libinjection-go v0.3.3 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect

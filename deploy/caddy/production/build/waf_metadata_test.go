@@ -2,10 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/corazawaf/coraza/v3"
+	"github.com/corazawaf/coraza/v3/debuglog"
+	"github.com/corazawaf/coraza/v3/experimental/plugins/macro"
+	"github.com/corazawaf/coraza/v3/experimental/plugins/plugintypes"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -72,5 +77,60 @@ func TestWAFMetadataEncoderFailsClosed(t *testing.T) {
 		if _, exists := got["rule_id"]; exists {
 			t.Fatalf("unknown WAF diagnostic has rule_id: %#v", got)
 		}
+	}
+}
+
+func TestWAFMetadataEncoderRecognizesCorazaMacroDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	var upstreamMessage string
+	logger := debuglog.DefaultWithPrinterFactory(func(io.Writer) debuglog.Printer {
+		return func(_ debuglog.Level, message, _ string) {
+			upstreamMessage = message
+		}
+	})
+	waf, err := coraza.NewWAF(coraza.NewWAFConfig().WithDebugLogger(logger))
+	if err != nil {
+		t.Fatal(err)
+	}
+	corazaTx := waf.NewTransaction()
+	tx, ok := corazaTx.(plugintypes.TransactionState)
+	if !ok {
+		t.Fatal("Coraza transaction does not implement TransactionState")
+	}
+	t.Cleanup(func() {
+		if err := corazaTx.Close(); err != nil {
+			t.Errorf("close Coraza transaction: %v", err)
+		}
+	})
+	missing, err := macro.NewMacro(`%{tx.missing}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missing.Expand(tx)
+	if upstreamMessage == "" {
+		t.Fatal("Coraza macro expansion did not emit its missing-key diagnostic")
+	}
+
+	encoded, err := newWAFMetadataEncoder().EncodeEntry(zapcore.Entry{Message: upstreamMessage}, []zapcore.Field{
+		zap.String("variable", "TX"),
+		zap.String("key", "missing"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := encoded.String()
+	if strings.Contains(line, "missing") || strings.Contains(line, "TX") {
+		t.Fatalf("encoded Coraza diagnostic leaked source fields: %s", line)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(encoded.Bytes(), &got); err != nil {
+		t.Fatalf("decode Coraza diagnostic: %v", err)
+	}
+	if got["msg"] != "waf_engine_diagnostic" {
+		t.Fatalf("encoded Coraza diagnostic = %#v", got)
+	}
+	if _, exists := got["rule_id"]; exists {
+		t.Fatalf("Coraza diagnostic has rule_id: %#v", got)
 	}
 }

@@ -12,8 +12,10 @@ import (
 )
 
 const (
-	wafMatchMessage   = "waf_rule_match"
-	wafUnknownMessage = "waf_rule_match_unparsed"
+	corazaMissingMacroMessage = "key not found in collection, returning the original text"
+	wafEngineMessage          = "waf_engine_diagnostic"
+	wafMatchMessage           = "waf_rule_match"
+	wafUnknownMessage         = "waf_rule_match_unparsed"
 )
 
 var wafRuleIDPattern = regexp.MustCompile(`\[file "[^"\r\n]*"\] \[line "[0-9]+"\] \[id "([0-9]+)"\] \[rev "`)
@@ -70,13 +72,18 @@ func (e *wafMetadataEncoder) Clone() zapcore.Encoder {
 
 func (e *wafMetadataEncoder) EncodeEntry(entry zapcore.Entry, _ []zapcore.Field) (*buffer.Buffer, error) {
 	matches := wafRuleIDPattern.FindAllStringSubmatch(entry.Message, 2)
-	entry.Message = wafUnknownMessage
 	var fields []zapcore.Field
-	if len(matches) == 1 {
+	switch {
+	case entry.Message == corazaMissingMacroMessage:
+		entry.Message = wafEngineMessage
+	case len(matches) == 1:
+		entry.Message = wafUnknownMessage
 		if id, err := strconv.Atoi(matches[0][1]); err == nil {
 			entry.Message = wafMatchMessage
 			fields = []zapcore.Field{zap.Int("rule_id", id)}
 		}
+	default:
+		entry.Message = wafUnknownMessage
 	}
 	return zapcore.NewJSONEncoder(zapcore.EncoderConfig{
 		MessageKey:  "msg",
