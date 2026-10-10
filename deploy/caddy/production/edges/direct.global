@@ -1,0 +1,42 @@
+# Server options for the direct listener on 80 and 443
+# (docs/design/vietnam-production.md, "Edge"). entrypoint.sh copies this file
+# into the global options block when EDGES includes direct, after writing the
+# /run/caddy/direct-* and /run/caddy/crowdsec-* files it imports.
+# No trusted_proxies: the client address is the socket's.
+servers :443 {
+	# The security group admits TCP only, so no HTTP/3 listener starts.
+	protocols h1 h2
+	timeouts {
+		# Coraza buffers request bodies in memory. Bound slow uploads while
+		# leaving enough time for the largest accepted request on a slow link.
+		read_body 30s
+	}
+}
+servers :80 {
+	protocols h1
+}
+# Tests use Caddy's internal CA (DIRECT_TLS=internal); never touch a trust
+# store.
+skip_install_trust
+# The CrowdSec ban check runs before anything else, then Coraza inspects
+# what is left, before any header is changed.
+order crowdsec first
+order coraza_waf after crowdsec
+# Empty unless CROWDSEC_API_URL is set; see entrypoint.sh.
+import /run/caddy/crowdsec.global
+# Coraza's source messages contain the client address and matched request data.
+# The encoder emits only time, severity, a fixed marker, and the numeric rule
+# ID. Unknown message shapes emit a fixed marker with no source text. The
+# Caddyfile's default logger excludes this logger.
+log waf {
+	# entrypoint.sh gives serving and maintenance Caddy distinct files because
+	# the file writer supports rotation by only one process.
+	import /run/caddy/waf-log-output.caddy
+	format waf_metadata
+	include http.handlers.waf
+}
+# The CrowdSec app and handler can include decision addresses in their source
+# fields and messages. Direct HTTP and ACME errors can include raw request
+# fields. The generated loggers replace them with fixed metadata; serving and
+# maintenance use separate bouncer files while they run together during deploy.
+import /run/caddy/direct-private-logs.global
