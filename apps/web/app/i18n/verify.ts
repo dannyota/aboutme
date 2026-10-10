@@ -51,7 +51,10 @@ export interface VerifyCopy {
   };
   readonly unverified: {
     readonly title: string;
-    readonly detail: (component: ComponentName) => string;
+    readonly detail: (
+      component: ComponentName,
+      orchestrator?: DeploymentDocument['orchestrator'],
+    ) => string;
   };
   readonly rollingOut: {
     readonly title: string;
@@ -77,7 +80,7 @@ export interface VerifyCopy {
     readonly steps: Readonly<Record<ChainStep, string>>;
     readonly buildValue: string;
     readonly buildLine: (runId: string) => string;
-    readonly imageLine: (count: number) => string;
+    readonly imageLine: (count: number, signaturesVerified: boolean) => string;
     readonly runningLine: (place: string, replicas: number, time: string)
     => string;
     readonly chips: Readonly<Record<Exclude<ChipKind, 'failed'>, string>>;
@@ -166,8 +169,11 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
     unverified: {
       title: 'Chưa kiểm tra được chữ ký',
-      detail: (component) => `Chưa kiểm tra xong chữ ký của ${component}. `
-        + 'Trang tự làm mới sau một phút.',
+      detail: (component, orchestrator) => orchestrator === 'podman'
+        ? 'Máy chủ này chưa hỗ trợ kiểm tra chữ ký. Các digest đang chạy '
+          + 'được hiển thị nhưng chưa được kiểm chứng.'
+        : `Chưa kiểm tra xong chữ ký của ${component}. `
+          + 'Trang tự làm mới sau một phút.',
     },
     rollingOut: {
       title: 'Đang cập nhật, hai phiên bản cùng chạy',
@@ -201,7 +207,9 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       },
       buildValue: 'GitHub Actions',
       buildLine: (runId) => `release-images, lần chạy ${runId}`,
-      imageLine: (count) => `${count} image, đã được GitHub ký`,
+      imageLine: (count, signaturesVerified) => signaturesVerified
+        ? `${count} image, đã được GitHub ký`
+        : `${count} image, chữ ký chưa được kiểm chứng`,
       runningLine: (place, replicas, time) =>
         `${place}, ${replicas} bản sao, từ ${time}`,
       chips: {
@@ -325,8 +333,11 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
     },
     unverified: {
       title: 'Signatures not checked yet',
-      detail: (component) => `The signature check for ${component} hasn't `
-        + 'finished. The page refreshes in a minute.',
+      detail: (component, orchestrator) => orchestrator === 'podman'
+        ? 'This host does not check signatures yet. The running digests '
+          + 'are shown without verification.'
+        : `The signature check for ${component} hasn't `
+          + 'finished. The page refreshes in a minute.',
     },
     rollingOut: {
       title: 'Update in progress, two versions running',
@@ -364,8 +375,9 @@ export const verifyCopy: Readonly<Record<Locale, VerifyCopy>> = {
       },
       buildValue: 'GitHub Actions',
       buildLine: (runId) => `release-images, run ${runId}`,
-      imageLine: (count) =>
-        `${plural(count, 'image', 'images')}, signed by GitHub`,
+      imageLine: (count, signaturesVerified) =>
+        `${plural(count, 'image', 'images')}, ${signaturesVerified
+          ? 'signed by GitHub' : 'signatures not verified'}`,
       runningLine: (place, replicas, time) =>
         `${place}, ${plural(replicas, 'replica', 'replicas')}, since ${time}`,
       chips: {

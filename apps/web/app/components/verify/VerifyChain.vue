@@ -104,6 +104,13 @@ const imageCount = computed(() => (document.value?.components ?? [])
   .filter(({ name }) => servingComponents.includes(name))
   .reduce((sum, { runningImages }) => sum + runningImages.length, 0));
 
+const signaturesVerified = computed(() => {
+  const images = (document.value?.components ?? [])
+    .flatMap(({ runningImages }) => runningImages);
+  return images.length > 0
+    && images.every(({ signature }) => signature === 'verified');
+});
+
 const release = computed(() => view.value?.release ?? null);
 const buildLink = computed(() => release.value?.image.links.build ?? null);
 </script>
@@ -228,7 +235,7 @@ const buildLink = computed(() => release.value?.image.links.build ?? null);
                 rel="noopener noreferrer"
               >{{ copy.chain.buildLine(buildRunId(buildLink) ?? '') }}</a>
               <template v-else-if="step === 'image'">
-                {{ copy.chain.imageLine(imageCount) }}
+                {{ copy.chain.imageLine(imageCount, signaturesVerified) }}
               </template>
               <template v-else-if="step === 'running' && document">
                 {{ copy.chain.runningLine(

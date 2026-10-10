@@ -91,7 +91,12 @@ https://{$DIRECT_HOST} {
 			}
 			root * /srv/deployment
 			rewrite * /deployment.json
-			file_server
+			route {
+				file_server {
+					pass_thru
+				}
+				respond 404
+			}
 		}
 		header Allow "GET, HEAD"
 		respond 405

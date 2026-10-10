@@ -89,7 +89,10 @@ const text = computed(() => {
     case 'unverified':
       return {
         title: c.unverified.title,
-        detail: c.unverified.detail(state.component),
+        detail: c.unverified.detail(
+          state.component,
+          document.value?.orchestrator,
+        ),
       };
     case 'rolling_out':
       return {

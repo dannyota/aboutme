@@ -11,6 +11,10 @@ type Wrapper = Awaited<ReturnType<typeof mountSuspended>>;
 interface Fixture {
   readonly observed_at: string;
   readonly stale_after: string;
+  readonly components: readonly {
+    readonly running_images: readonly Record<string, unknown>[];
+    readonly [key: string]: unknown;
+  }[];
   readonly [key: string]: unknown;
 }
 
@@ -120,17 +124,39 @@ afterEach(() => {
 describe('verify page states', () => {
   it('names the host reporter and its weaker trust in both languages',
     async () => {
+      const base = fixture('unverified');
       const document = {
-        ...fixture('unverified'),
+        ...base,
         platform: {
           provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
         },
+        components: base.components.map((component) => ({
+          ...component,
+          running_images: component.running_images.map((image) => ({
+            ...image,
+            signature: {
+              status: 'unchecked', checked_at: null, signer_workflow: null,
+              transparency_log_index: null,
+            },
+            sbom: { status: 'unchecked', format: null },
+          })),
+        })),
       };
       mockResponse = {
         status: 200, body: document, date: freshDate(document),
       };
       const vietnamese = await mountVerify();
       expect(status(vietnamese).attributes('data-state')).toBe('unverified');
+      expect(status(vietnamese).get('[role="status"]').text()).toContain(
+        'Máy chủ này chưa hỗ trợ kiểm tra chữ ký. Các digest đang chạy '
+        + 'được hiển thị nhưng chưa được kiểm chứng.',
+      );
+      expect(status(vietnamese).get('[role="status"]').text())
+        .not.toContain('Trang tự làm mới sau một phút.');
+      expect(vietnamese.get('[data-step="image"]').text())
+        .toContain('3 image, chữ ký chưa được kiểm chứng');
+      expect(vietnamese.get('[data-step="image"]').text())
+        .not.toContain('đã được GitHub ký');
       const limits = vietnamese.get('[data-testid="verify-limits"]');
       expect(limits.text()).toContain('Máy chủ GreenNode tự báo cáo');
       expect(limits.text()).toContain('Yếu hơn báo cáo từ API của ECS');
@@ -140,6 +166,16 @@ describe('verify page states', () => {
 
       setSiteLocale('en');
       const english = await mountVerify();
+      expect(status(english).get('[role="status"]').text()).toContain(
+        'This host does not check signatures yet. The running digests '
+        + 'are shown without verification.',
+      );
+      expect(status(english).get('[role="status"]').text())
+        .not.toContain('The page refreshes in a minute.');
+      expect(english.get('[data-step="image"]').text())
+        .toContain('3 images, signatures not verified');
+      expect(english.get('[data-step="image"]').text())
+        .not.toContain('signed by GitHub');
       const englishLimits = english.get('[data-testid="verify-limits"]');
       expect(englishLimits.text())
         .toContain('The GreenNode host itself reports');
@@ -187,6 +223,8 @@ describe('verify page states', () => {
       const wrapper = await mountVerify();
       const card = status(wrapper);
       expect(card.attributes('data-state')).toBe('verified');
+      expect(wrapper.get('[data-step="image"]').text())
+        .toContain('3 image, đã được GitHub ký');
       expect(card.text()).toContain('Đang chạy đúng mã nguồn trên GitHub');
       expect(card.text()).toContain(
         'Cả 3 thành phần chạy bản v0.6.0, do GitHub dựng và ký từ commit '
@@ -197,6 +235,8 @@ describe('verify page states', () => {
       serveFixture('verified');
       const english = await mountVerify();
       const englishCard = status(english);
+      expect(english.get('[data-step="image"]').text())
+        .toContain('3 images, signed by GitHub');
       expect(englishCard.text()).toContain('Running exactly what\'s on GitHub');
       expect(englishCard.text()).toContain(
         'All 3 components run v0.6.0, built and signed by GitHub from commit '
@@ -220,6 +260,48 @@ describe('verify page states', () => {
       expect(status(wrapper).attributes('data-state')).not.toBe('verified');
     }
   });
+
+  it('claims signed images only when every running signature is verified',
+    async () => {
+      for (const locale of ['vi', 'en'] as const) {
+        setSiteLocale(locale);
+        const signed = locale === 'vi'
+          ? 'đã được GitHub ký' : 'signed by GitHub';
+        for (const name of [
+          'verified', 'rolling-out', 'unverified', 'mismatch-not-found',
+          'mismatch-invalid',
+        ]) {
+          serveFixture(name);
+          const wrapper = await mountVerify();
+          expect(wrapper.get('[data-step="image"]').text().includes(signed))
+            .toBe(name === 'verified' || name === 'rolling-out');
+        }
+        const base = fixture('verified');
+        const document = {
+          ...base,
+          summary: 'unverified',
+          release: null,
+          components: [
+            ...base.components,
+            ...fixture('unverified').components
+              .filter(({ name }) => name === 'maintenance'),
+          ].map((component) => ({
+            ...component,
+            running_images: component.running_images.map((image) => ({
+              ...image,
+              signature: component.name === 'maintenance'
+                ? { status: 'unchecked' } : image.signature,
+            })),
+          })),
+        };
+        mockResponse = {
+          status: 200, body: document, date: freshDate(document),
+        };
+        const wrapper = await mountVerify();
+        expect(wrapper.get('[data-step="image"]').text())
+          .not.toContain(signed);
+      }
+    });
 
   it('shows Unavailable on a 404 and on a non-object body, hiding the chain '
     + 'and components cards', async () => {
@@ -291,6 +373,34 @@ describe('verify page states', () => {
     expect(card.text()).toContain(
       'Chưa kiểm tra xong chữ ký của caddy. Trang tự làm mới sau một phút.',
     );
+    expect(wrapper.get('[data-step="image"]').text())
+      .not.toContain('đã được GitHub ký');
+  });
+
+  it('keeps pending signature wording for ECS and Kubernetes in both '
+    + 'languages', async () => {
+    for (const orchestrator of ['ecs', 'kubernetes']) {
+      const base = fixture('unverified');
+      const document = {
+        ...base,
+        platform: { provider: 'aws', orchestrator, region: 'ap-southeast-1' },
+      };
+      mockResponse = {
+        status: 200, body: document, date: freshDate(document),
+      };
+      for (const locale of ['vi', 'en'] as const) {
+        setSiteLocale(locale);
+        const wrapper = await mountVerify();
+        expect(status(wrapper).text()).toContain(locale === 'vi'
+          ? 'Chưa kiểm tra xong chữ ký của caddy. '
+            + 'Trang tự làm mới sau một phút.'
+          : 'The signature check for caddy hasn\'t finished. '
+            + 'The page refreshes in a minute.');
+        expect(wrapper.get('[data-step="image"]').text())
+          .not.toContain(locale === 'vi'
+            ? 'đã được GitHub ký' : 'signed by GitHub');
+      }
+    }
   });
 
   it('shows Rolling out with its pill and the Updating chain', async () => {
