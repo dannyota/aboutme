@@ -144,8 +144,8 @@ c_journald() {
   local v
   v=$(systemd-analyze cat-config systemd/journald.conf |
     sed -n 's/^SystemMaxUse=//p' | tail -n1)
-  [[ $v == 500M ]] || {
-    echo "SystemMaxUse is '${v:-unset}', want 500M"
+  [[ $v == 2G ]] || {
+    echo "SystemMaxUse is '${v:-unset}', want 2G"
     return 1
   }
   echo "SystemMaxUse=$v"
@@ -339,15 +339,19 @@ c_crowdsec_lapi() {
   echo "local API answers on 127.0.0.1:8095"
 }
 
-# Sharing is off when the host holds no registered central API credentials.
+# Prove the effective local files cannot configure the central API. A network
+# status check cannot distinguish an opt-out from a registered offline host.
 c_crowdsec_capi() {
-  local out rc=0
-  out=$(cscli capi status 2>&1) || rc=$?
-  if ((rc == 0)) || grep -qi 'successfully interact' <<<"$out"; then
-    echo "the central API is registered"
+  local helper=/usr/local/lib/aboutme/crowdsec-offline.sh
+  if [[ ! -r $helper || -L $helper ]]; then
+    echo "$helper is missing or is a symlink"
     return 1
   fi
-  echo "no central API registration"
+  # shellcheck source=../host/crowdsec-offline.sh
+  source "$helper"
+  crowdsec_assert_offline /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
+    /etc/crowdsec/online_api_credentials.yaml || return 1
+  echo "central API config and credentials are absent"
 }
 
 c_fence() {
@@ -363,7 +367,7 @@ check "Quadlet generator exists" c_quadlet
 check "data volume and bind targets are mounted" c_data_volume
 check "root disk has 8 GB free" c_root_free
 check "zram0 is active swap" c_zram
-check "journald SystemMaxUse is 500M" c_journald
+check "journald SystemMaxUse is 2G" c_journald
 check "kernel settings hold" c_sysctls
 check "no unexpected listener on a non-loopback address" c_listeners
 check "PostgreSQL has no TCP port and its socket exists" c_postgres_socket

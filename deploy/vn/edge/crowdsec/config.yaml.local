@@ -5,10 +5,8 @@
 # install.sh points local_api_credentials.yaml at the same address.
 #
 # Community sharing is off until the data protection impact assessment covers
-# it: there is no online_client section, so no signal is sent to the central
-# API. Unconfirmed: whether the package's default online credentials file
-# must also be removed for CrowdSec to stay silent; check `cscli capi status`
-# after install.
+# it. install.sh removes the package's inherited online_client section and its
+# credentials before CrowdSec starts.
 api:
   server:
     listen_uri: 127.0.0.1:8095

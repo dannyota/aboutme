@@ -98,9 +98,8 @@ failed units, PostgreSQL on its socket, WAL archive failures, the newest backup
 older than 26 hours, the CrowdSec alert count and Coraza match count in the last
 hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh` mails
 the support mailbox through Bizfly SMTP with msmtp, at most once a day per
-condition, with names and counts only. The Coraza match text is a placeholder
-until the Caddy image's log fields land. The external app-down check is the
-Route 53 health check, outside this tree.
+condition, with names and counts only. The external app-down check is the Route
+53 health check, outside this tree.
 
 ## Provider facts
 
@@ -135,17 +134,19 @@ unattended-upgrades installs only Ubuntu security updates.
 
 ## Contracts with other lanes
 
-These names are placeholders until the owning branch lands:
+These contracts match the server and Caddy images:
 
-- Caddy image (`EDGES=direct`): `SITE_ADDRESSES`, `CROWDSEC_API_URL`
-  (`http://127.0.0.1:8095`), `CROWDSEC_API_KEY` (Podman secret
-  `crowdsec-bouncer-key`), `WAF_MODE`, Caddy storage at `/data`, and a JSON
-  access log with client addresses at `/var/log/caddy/access.log`, mounted from
-  tmpfs `/run/aboutme/caddy-log`. The image must start without `ORIGIN_CERT` and
-  `ORIGIN_KEY` when `EDGES=direct`, and binds 80 and 443 as uid 10001 (the host
-  sets `net.ipv4.ip_unprivileged_port_start=80`).
+- Caddy image (`EDGES=direct`): `DIRECT_HOST`, `DIRECT_WWW_HOST`,
+  `CROWDSEC_API_URL` (`http://127.0.0.1:8095`), `CROWDSEC_API_KEY` (Podman
+  secret `crowdsec-bouncer-key`), Caddy storage at `/data`, and metadata-only
+  WAF match logs at `/var/log/caddy/waf/serving-match.log` and
+  `/var/log/caddy/waf/maintenance-match.log`, mounted from tmpfs
+  `/run/aboutme/caddy-log`. Each stream has at most two rolled files. The image
+  must start without `ORIGIN_CERT` and `ORIGIN_KEY` when `EDGES=direct`, and
+  binds 80 and 443 as uid 10001 (the host sets
+  `net.ipv4.ip_unprivileged_port_start=80`).
 - Server SMTP sender: `AUTH_EMAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT`,
-  `SMTP_TLS`, `SMTP_FROM_ADDRESS`, `SMTP_FROM_NAME`, and the Podman secrets
+  `SMTP_TLS`, `SES_FROM_ADDRESS`, `SES_FROM_NAME`, and the Podman secrets
   `smtp-username` and `smtp-password` as `SMTP_USERNAME` and `SMTP_PASSWORD`.
 - Release images: a `linux/amd64` entry in each image index; `deploy.sh` refuses
   a tag without one.

@@ -44,6 +44,8 @@ case $only in "" | postgres) ;; *) die "ABOUTME_INSTALL_ONLY must be empty or po
 bundle=$(readlink -f "$1")
 [ -d "$bundle/host/etc" ] || die "$bundle/host/etc not found"
 mountpoint -q /srv/data || die "/srv/data is not a mountpoint; run host/data-volume.sh first"
+# shellcheck source=crowdsec-offline.sh
+source "$bundle/host/crowdsec-offline.sh"
 
 export DEBIAN_FRONTEND=noninteractive
 tmp=$(mktemp -d)
@@ -141,8 +143,8 @@ apt-get update -qq
 # local API never tries 127.0.0.1:8080, which Go owns.
 install -d -m 0755 /etc/crowdsec/acquis.d
 install -m 0644 "$bundle/edge/crowdsec/config.yaml.local" /etc/crowdsec/config.yaml.local
-install -m 0644 "$bundle/edge/crowdsec/acquis.d/caddy.yaml" /etc/crowdsec/acquis.d/caddy.yaml
 install -m 0644 "$bundle/edge/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
+rm -f /etc/crowdsec/acquis.d/caddy.yaml
 
 # 3. Packages. postgresql-common creates the postgres user; the data
 # directories on the volume are handed to it before postgresql-18 creates the
@@ -156,7 +158,17 @@ chown root:postgres /srv/data/pgbackrest-conf
 chmod 0750 /srv/data/pgbackrest-conf
 install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
   "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
-install_pinned "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
+# CrowdSec 1.8.1 registers with its central API in the package post-install
+# script before it starts the service. Set the package's supported debconf
+# choice before apt runs, then keep the service masked while removing any
+# inherited online configuration.
+systemctl stop crowdsec.service 2>/dev/null || true
+systemctl mask --runtime crowdsec.service >/dev/null
+crowdsec_install_offline install_pinned "crowdsec=$CROWDSEC_VERSION" \
+  "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
+crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
+  /etc/crowdsec/online_api_credentials.yaml || die "CrowdSec central API opt-out failed"
+systemctl unmask --runtime crowdsec.service >/dev/null
 say "pinned packages installed"
 
 
@@ -206,7 +218,9 @@ copy_script() {
 }
 copy_script "$bundle/scripts/fence.sh"
 copy_script "$bundle/scripts/deploy-host.sh"
+copy_script "$bundle/scripts/deploy-safety.sh"
 copy_script "$bundle/scripts/secrets-host.sh"
+copy_script "$bundle/host/crowdsec-offline.sh"
 copy_script "$bundle/host/job-run.sh"
 for f in "$bundle"/host/bin/*.sh; do
   [ -e "$f" ] && copy_script "$f"

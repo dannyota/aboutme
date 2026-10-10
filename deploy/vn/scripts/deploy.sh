@@ -16,7 +16,7 @@
 # deploy": a failure before any migration request restores the previous
 # release beside maintenance; once a migration may have run, maintenance stays
 # up with the app and timers stopped, and recovery is a forward fix or a
-# point-in-time restore. The operation lock is released on every exit.
+# point-in-time restore. A failed recovery retains the operation lock.
 set -euo pipefail
 
 repo=dannyota/aboutme
@@ -96,9 +96,10 @@ retry() { # attempts delay command...
 # maintenance, then stop maintenance. After one: leave maintenance up.
 restore() {
   if ((migration_may_be_applied)); then
-    say "a migration may have run: maintenance stays up, the app and job timers stay stopped"
+    step fail-closed || return 1
+    say "a migration may have run: enforced maintenance with the app and job timers stopped"
     say "recover with a forward fix or a point-in-time restore (docs/design/vietnam-production.md, \"PostgreSQL\")"
-    return 1
+    return 0
   fi
   if ((first)); then
     say "a failed first deploy leaves maintenance up; no earlier release exists"
@@ -114,13 +115,18 @@ restore() {
 }
 
 on_exit() {
-  local status=$?
+  local status=$? recovery_ok=1
   exec 2>&9
   trap '' HUP INT TERM
   if ((status != 0)) && [[ $phase == changing ]]; then
-    restore || say "recovery did not finish; check the units with: deploy-host.sh - $tag status"
+    if ! restore; then
+      recovery_ok=0
+      status=1
+      say "recovery did not finish; the operation lock remains for manual recovery"
+      say "check the units with: deploy-host.sh - $tag status"
+    fi
   fi
-  if ((lock_held)); then
+  if ((lock_held && recovery_ok)); then
     on_host fence.sh release "$op" >/dev/null ||
       { say "could not release the operation lock; fence.sh clear owns it"; status=1; }
   fi
@@ -152,7 +158,7 @@ ci=$(gh run list --repo "$repo" --workflow ci.yml --commit "$commit" --event pus
 
 # The deploy runs this checkout's host scripts, never the target release's:
 # the copies installed on the host must equal these files.
-for f in fence.sh deploy-host.sh; do
+for f in fence.sh deploy-host.sh deploy-safety.sh; do
   want=$(sha256sum "$here/$f" | cut -d' ' -f1)
   have=$(ssh "${ssh_opts[@]}" "$admin@$host" sha256sum "$lib/$f" | cut -d' ' -f1)
   [[ $have == "$want" ]] || {
@@ -268,7 +274,6 @@ step maintenance-down
 # 9. Jobs resume.
 step timers-start
 timers_stopped=0
-phase=finished
 
 # 10. Smoke from outside: health, TLS (curl verifies the chain), security
 # headers, and a 403 for a CrowdSec-banned address, the operator's own.
@@ -298,4 +303,5 @@ else
   say "smoke: CrowdSec did not answer 403 for a banned address"
   exit 1
 fi
+phase=finished
 say "deployed $tag"

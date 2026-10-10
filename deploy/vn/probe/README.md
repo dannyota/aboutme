@@ -31,7 +31,7 @@ The design is [Vietnam production](../../../docs/design/vietnam-production.md).
   overhead (Host).
 - `zram0` is active swap, since memory is sized for zram, not a swap file
   (Host).
-- journald `SystemMaxUse` is 500M, which the root disk budget assumes (Host).
+- journald `SystemMaxUse` is 2G on the encrypted data volume (Host).
 - Four kernel settings hold. Caddy binds 80 and 443 unprivileged, the print
   listener may bind before its address exists, and Chromium needs user
   namespaces (Host, trust boundaries).
@@ -52,8 +52,9 @@ The design is [Vietnam production](../../../docs/design/vietnam-production.md).
 - The journal is bound from the data volume, msmtp is installed, and
   `aboutme-watch.timer` is enabled, since the journal is the log store and
   `alert.sh` mails through msmtp (Logs, metrics, and alarms).
-- The CrowdSec local API answers on `127.0.0.1:8095` (Go owns 8080) and the host
-  has no registered central API, so sharing is off (Edge).
+- The CrowdSec local API answers on `127.0.0.1:8095` (Go owns 8080). The base
+  and local configuration have no central API client, and the host has no
+  central API credential file, so sharing is off (Edge).
 - `fence.sh read` works, so the release fence file exists and parses (Release
   fence).
 
