@@ -26,27 +26,28 @@ verification, password reset, and security notifications. Native development
 uses the loopback mail capture described in the
 [native development runbook](native-development.md).
 
-## Cloudflare DNS
+## Route 53 DNS
 
-Cloudflare is DNS-only for these records. The root records are:
+Route 53 is authoritative for these records. The root records are:
 
 - MX priority 1: `smtp.google.com`
-- SPF: `v=spf1 include:_spf.google.com ~all`
+- SPF: `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all`
 - Google DKIM selector: `google._domainkey`
+- Bizfly DKIM selector: `dkim._domainkey`
 - Retained Google domain-verification CNAME
 - DMARC at `_dmarc`: `v=DMARC1; p=none; rua=mailto:danny@aboutme.vn`
 
 SES uses its own DKIM selectors and authenticates its custom MAIL FROM subdomain
-separately. Therefore root SPF remains Google-only. The MAIL FROM records are:
+separately. The MAIL FROM records are:
 
 - `bounce.aboutme.vn` MX: `feedback-smtp.ap-southeast-1.amazonses.com`
 - `bounce.aboutme.vn` SPF: `v=spf1 include:amazonses.com ~all`
 
-Do not replace the Google root MX or root SPF with SES records.
+Do not replace the Google root MX or root SPF with SES records. The root SPF
+authorizes Google Workspace and Bizfly Email Transaction.
 
-OpenTofu's `dns` module recreates these records in the Route 53 zone prepared in
-the [DNS runbook](dns.md). Until the name servers move, change a record at
-Cloudflare and in that module together.
+OpenTofu's `dns` module owns these records in the Route 53 zone described in the
+[DNS runbook](dns.md).
 
 ## Reputation and feedback
 
@@ -100,15 +101,67 @@ body, request ID, or SES error message. `code=MessageRejected` usually means SES
 refused the message content or the from identity; `code=AccessDeniedException`
 points at the app task role's `ses:SendEmail` policy.
 
+## SMTP mode
+
+`AUTH_EMAIL_MODE=smtp` sends authentication mail through an SMTP relay instead
+of SES, as the
+[Vietnam production design](../design/vietnam-production.md#dns-and-mail) sets
+for Bizfly Email Transaction. It uses the same From address, display name,
+templates, and sealed payloads as SES mode. Set these names in the runtime
+environment; the values shown are Bizfly Email Transaction's:
+
+```dotenv
+AUTH_EMAIL_MODE=smtp
+SES_FROM_ADDRESS=danny@aboutme.vn
+SES_FROM_NAME=Danny from aboutme.vn
+SMTP_HOST=smtp.bizflycloud.vn
+SMTP_PORT=465
+SMTP_TLS=implicit
+SMTP_USERNAME=danny@aboutme.vn
+SMTP_PASSWORD=
+```
+
+Bizfly also accepts STARTTLS on port 587 (`SMTP_PORT=587`, `SMTP_TLS=starttls`).
+The username is the sender address. `smtp-api.bizfly.vn` belongs to a different
+Bizfly product and rejects these credentials.
+
+- `SMTP_HOST` is a DNS name; the server certificate must be valid for it under
+  the system roots.
+- `SMTP_PORT` is any port from 1 to 65535 and has no default. `SMTP_TLS` is
+  `implicit` or `starttls`, set explicitly; the sender never infers it from the
+  port.
+- `SMTP_USERNAME` and `SMTP_PASSWORD` are 1 to 256 bytes with no control
+  characters. The loader preserves every byte, including leading and trailing
+  spaces. The password comes from the host secret store, never from a tracked
+  file.
+- `SES_CONFIGURATION_SET` and the capture fields must be absent; `AWS_REGION` is
+  ignored. The `SMTP_*` names must be absent in SES and capture mode.
+
+A startup failure names the variable, never its value.
+
+Each message opens one connection. The sender verifies the certificate, then
+authenticates with `PLAIN` only after TLS is up; a STARTTLS server that does not
+offer STARTTLS gets no credentials. A 2xx reply after `DATA` marks the job sent,
+a 5xx reply marks it failed, and a 4xx reply, a timeout, a certificate failure,
+or a transport error leaves it for retry.
+
+A failed send logs `authmail: smtp send failed` with the closed `outcome` and,
+when the server replied, its three-digit `code`. The log never carries the
+recipient, subject, body, username, password, reply text, or server banner.
+`code=535` points at the SMTP credentials; a failure with no code is a
+connection, timeout, or certificate problem.
+
 ## Verification
 
 Run from a workstation with the AWS CLI configured for the intended account. The
 commands below read state; they do not create or modify resources.
 
 ```sh
+dig +short NS aboutme.vn
 dig +short MX aboutme.vn
 dig +short TXT aboutme.vn
 dig +short TXT google._domainkey.aboutme.vn
+dig +short TXT dkim._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-1>._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-2>._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-3>._domainkey.aboutme.vn
@@ -129,7 +182,7 @@ aws cloudformation describe-stacks \
 ```
 
 Replace the angle-bracket DNS names with the values exposed by the
-CloudFormation outputs or the Cloudflare zone. Do not paste the generated SES
+CloudFormation outputs or the Route 53 zone. Do not paste the generated SES
 tokens into committed documentation.
 
 Send a non-production smoke message to the SES mailbox simulator. The simulator
