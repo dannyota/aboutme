@@ -42,6 +42,9 @@ case $only in "" | postgres) ;; *) die "ABOUTME_INSTALL_ONLY must be empty or po
 [ "$(id -u)" -eq 0 ] || die "run as root"
 [ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"
 bundle=$(readlink -f "$1")
+# Steps run as other users (setpriv, runuser); they need a directory they can
+# enter, not the caller's home.
+cd /
 [ -d "$bundle/host/etc" ] || die "$bundle/host/etc not found"
 mountpoint -q /srv/data || die "/srv/data is not a mountpoint; run host/data-volume.sh first"
 # shellcheck source=crowdsec-offline.sh
