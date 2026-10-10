@@ -143,8 +143,8 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 		{"SMTP_HOST", strings.TrimSpace(getenv("SMTP_HOST"))},
 		{"SMTP_PORT", strings.TrimSpace(getenv("SMTP_PORT"))},
 		{"SMTP_TLS", strings.TrimSpace(getenv("SMTP_TLS"))},
-		{"SMTP_USERNAME", strings.TrimSpace(getenv("SMTP_USERNAME"))},
-		{"SMTP_PASSWORD", strings.TrimSpace(getenv("SMTP_PASSWORD"))},
+		{"SMTP_USERNAME", getenv("SMTP_USERNAME")},
+		{"SMTP_PASSWORD", getenv("SMTP_PASSWORD")},
 	}
 	if mode != authEmailModeSMTP {
 		for _, field := range smtpFields {

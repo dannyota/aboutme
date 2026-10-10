@@ -162,6 +162,26 @@ func TestLoad_AuthEmailSMTPMode(t *testing.T) {
 	}
 }
 
+func TestLoad_AuthEmailSMTPPreservesCredentialWhitespace(t *testing.T) {
+	t.Parallel()
+
+	vars := validDevEnv()
+	applySMTP(vars)
+	vars["SMTP_USERNAME"] = " smtp user "
+	vars["SMTP_PASSWORD"] = " smtp password "
+
+	got, err := config.Load(env(vars))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AuthEmail.SMTPUsername != " smtp user " {
+		t.Errorf("SMTPUsername = %q, want preserved whitespace", got.AuthEmail.SMTPUsername)
+	}
+	if got.AuthEmail.SMTPPassword.Reveal() != " smtp password " {
+		t.Error("SMTPPassword did not preserve whitespace")
+	}
+}
+
 func TestSecretNeverFormatsItsValue(t *testing.T) {
 	t.Parallel()
 
@@ -198,8 +218,10 @@ func TestLoad_AuthEmailSMTPErrorsNameVariableNotValue(t *testing.T) {
 		{"plain tls mode", "SMTP_TLS", "none", "SMTP_TLS"},
 		{"missing username", "SMTP_USERNAME", "", "SMTP_USERNAME"},
 		{"username with control", "SMTP_USERNAME", "user\x00name", "SMTP_USERNAME"},
+		{"username with trailing newline", "SMTP_USERNAME", "username\n", "SMTP_USERNAME"},
 		{"missing password", "SMTP_PASSWORD", "", "SMTP_PASSWORD"},
 		{"password with control", "SMTP_PASSWORD", "pass\x07word", "SMTP_PASSWORD"},
+		{"password with leading newline", "SMTP_PASSWORD", "\npassword", "SMTP_PASSWORD"},
 		{"overlong password", "SMTP_PASSWORD", strings.Repeat("p", 257), "SMTP_PASSWORD"},
 		{"missing from", "SES_FROM_ADDRESS", "", "SES_FROM_ADDRESS"},
 		{"configuration set", "SES_CONFIGURATION_SET", "aboutme-auth", "SES_CONFIGURATION_SET"},
@@ -244,6 +266,25 @@ func TestLoad_AuthEmailSMTPFieldsRejectedInOtherModes(t *testing.T) {
 			vars[key] = "x"
 			if _, err := config.Load(env(vars)); err == nil || !strings.Contains(err.Error(), key) {
 				t.Errorf("%s set in %s mode: err = %v", key, vars["AUTH_EMAIL_MODE"], err)
+			}
+		}
+	}
+}
+
+func TestLoad_AuthEmailWhitespaceCredentialsRejectedInOtherModes(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []func(map[string]string){applySES, func(v map[string]string) {
+		for k, val := range captureAuthEmail() {
+			v[k] = val
+		}
+	}} {
+		for _, key := range []string{"SMTP_USERNAME", "SMTP_PASSWORD"} {
+			vars := validDevEnv()
+			mode(vars)
+			vars[key] = " "
+			if _, err := config.Load(env(vars)); err == nil || !strings.Contains(err.Error(), key) {
+				t.Errorf("%s set to whitespace in %s mode: err = %v", key, vars["AUTH_EMAIL_MODE"], err)
 			}
 		}
 	}
