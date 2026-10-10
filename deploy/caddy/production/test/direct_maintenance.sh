@@ -4,11 +4,13 @@
 # shellcheck disable=SC2154
 
 test_direct_maintenance_log_isolation() {
-  local serving_sum mdport mhport maintenance_ca code maintenance_matches leak maintenance_logs
+  local serving_sum serving_feed_sum mdport mhport maintenance_ca code maintenance_matches
+  local maintenance_feed leak maintenance_logs
 
   # Maintenance Caddy runs beside serving Caddy during a deploy. Both share the
   # host log mount, but each process owns and rotates a distinct diagnostic file.
   serving_sum=$(podman exec "$name" sha256sum /var/log/caddy/waf/serving-match.log)
+  serving_feed_sum=$(podman exec "$name" sha256sum /var/log/caddy/crowdsec/serving.json)
   podman exec "$name" test ! -e /var/log/caddy/waf/maintenance-match.log
   mdport=20455
   mhport=20456
@@ -48,6 +50,17 @@ test_direct_maintenance_log_isolation() {
     { echo "direct maintenance: diagnostic log is not private to uid 10001" >&2; exit 1; }
   [[ $(podman exec "$name" sha256sum /var/log/caddy/waf/serving-match.log) == "$serving_sum" ]] ||
     { echo "direct maintenance: serving diagnostic file changed" >&2; exit 1; }
+  maintenance_feed=$(podman exec "$name-maint" cat /var/log/caddy/crowdsec/maintenance.json)
+  grep -q '"route_class":"maintenance"' <<<"$maintenance_feed" ||
+    { echo "direct maintenance: no maintenance feed record" >&2; exit 1; }
+  if grep -qE 'maintmarker6e4d|"(uri|path|query|headers|body|host|port|tls|duration|size)"' <<<"$maintenance_feed"; then
+    echo "direct maintenance: request data reached the maintenance feed" >&2
+    exit 1
+  fi
+  [[ $(podman exec "$name-maint" stat -c %a:%u /var/log/caddy/crowdsec/maintenance.json) == 600:10001 ]] ||
+    { echo "direct maintenance: feed is not private to uid 10001" >&2; exit 1; }
+  [[ $(podman exec "$name" sha256sum /var/log/caddy/crowdsec/serving.json) == "$serving_feed_sum" ]] ||
+    { echo "direct maintenance: serving feed changed" >&2; exit 1; }
   podman exec "$name-maint" test ! -e /var/log/caddy/waf/match.log
   maintenance_logs=$(podman logs "$name-maint" 2>&1)
   if grep -qE 'maintmarker6e4d|941100|"client_ip"' <<<"$maintenance_logs"; then

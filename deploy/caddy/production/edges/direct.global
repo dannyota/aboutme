@@ -35,3 +35,8 @@ log waf {
 	format waf_metadata
 	include http.handlers.waf
 }
+# The CrowdSec app and handler can include decision addresses in their source
+# fields and messages. Direct HTTP and ACME errors can include raw request
+# fields. The generated loggers replace them with fixed metadata; serving and
+# maintenance use separate bouncer files while they run together during deploy.
+import /run/caddy/direct-private-logs.global

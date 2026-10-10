@@ -11,6 +11,8 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 # shellcheck source=deploy/caddy/production/test/direct_maintenance.sh
 source "$root/deploy/caddy/production/test/direct_maintenance.sh"
+# shellcheck source=deploy/caddy/production/test/crowdsec_feed.sh
+source "$root/deploy/caddy/production/test/crowdsec_feed.sh"
 work=$(mktemp -d)
 name=aboutme-caddy-test
 waf_volume=$name-waf
@@ -516,9 +518,14 @@ slow_time=${slow_result#* }
 awk -v elapsed="$slow_time" 'BEGIN { exit !(elapsed >= 25 && elapsed < 40) }' ||
   { echo "direct: stalled request ended after ${slow_time}s, want 25s to 40s" >&2; exit 1; }
 slow_logs=$(podman logs "$name" 2>&1)
-grep -q '"uri":"/api/v1/slow-body-probe"' <<<"$slow_logs" ||
-  { echo "direct: stalled request did not reach Caddy" >&2; exit 1; }
+grep -q '"msg":"http_error"' <<<"$slow_logs" ||
+  { echo "direct: stalled request did not reach the safe error logger" >&2; exit 1; }
+if grep -q '/api/v1/slow-body-probe' <<<"$slow_logs"; then
+  echo "direct: stalled request URI reached stderr" >&2
+  exit 1
+fi
 
+test_direct_crowdsec_feed
 test_direct_maintenance_log_isolation
 
 # The CrowdSec bouncer: off above (no settings), on with a key file; the
@@ -528,6 +535,15 @@ chmod 0644 "$work/bouncer.key"
 start_direct -e EDGES=direct -e CROWDSEC_API_URL=http://127.0.0.1:8090/ \
   -e CROWDSEC_API_KEY_FILE=/run/secrets/crowdsec-bouncer-key -v "$work/bouncer.key:/run/secrets/crowdsec-bouncer-key:ro"
 wait_direct 403
+# An unreachable local API forces the bouncer's retry path. Requests still
+# pass because hard failure is off, and its source error stays out of stderr.
+start_direct -e EDGES=direct -e CROWDSEC_API_URL=http://127.0.0.1:8099/ \
+  -e CROWDSEC_API_KEY_FILE=/run/secrets/crowdsec-bouncer-key -v "$work/bouncer.key:/run/secrets/crowdsec-bouncer-key:ro"
+wait_direct 200
+dcurl -o /dev/null -H 'User-Agent: agentmarker2b4f' -H 'X-Probe: headermarker8f3b' \
+  -H 'Content-Type: text/plain' --data 'bodymarker1d6c' \
+  "https://aboutme.vn:$dport/api/pathmarker7e2a?token=querymarker4c9d"
+test_crowdsec_bouncer_error_log
 # Both edges, the direct one on a rehearsal host: CloudFront keeps its own
 # rules and no bouncer; the key from the environment does not stay in
 # Caddy's.
@@ -552,6 +568,8 @@ refuse "a CrowdSec key without a URL" "${direct_refuse[@]}" -e CROWDSEC_API_KEY=
 refuse "both CrowdSec key forms" "${direct_refuse[@]}" -e CROWDSEC_API_URL=http://127.0.0.1:8090/ \
   -e CROWDSEC_API_KEY=x -e CROWDSEC_API_KEY_FILE=/run/secrets/k
 refuse "a malformed CrowdSec URL" "${direct_refuse[@]}" -e 'CROWDSEC_API_URL=http://x/ {' -e CROWDSEC_API_KEY=x
+refuse "a remote CrowdSec URL" "${direct_refuse[@]}" \
+  -e CROWDSEC_API_URL=http://crowdsec.example.com:8095/ -e CROWDSEC_API_KEY=x
 refuse "CrowdSec without the direct edge" "${cf_ca_env[@]}" -e EDGES=cloudfront \
   -e CROWDSEC_API_URL=http://127.0.0.1:8090/ -e CROWDSEC_API_KEY=x
 refuse "a malformed DIRECT_HOST" "${direct_refuse[@]}" -e 'DIRECT_HOST=aboutme.vn {'
