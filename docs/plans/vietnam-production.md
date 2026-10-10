@@ -6,7 +6,7 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 
 ## Owner actions
 
-1. Top up the existing GreenNode account for one month of vServer, volumes, vStorage, and vMonitor. Devops quotes each paid create first (`--max-price`).
+1. Top up the existing GreenNode account for one month of vServer, volumes, and vStorage. Devops quotes each paid create first (`--max-price`).
 2. Create an IAM user for the aboutme tooling, separate from the user the other session uses, with policies per the vngcloud IAM wiki page (`~/src/vngcloud/docs/wiki/CLI-IAM.md`, `Configuration.md`). Store it as `vngcloud` profile `aboutme` (`configure set`, password and TOTP secret from stdin, credentials file mode 0600), and a second profile `aboutme-ro` with `read_only 1` for agent reads. Per that wiki page, agent profiles hold no IAM write rights: the owner runs the IAM writes (service accounts, policy attaches) that devops prepares.
 3. Service accounts come from the CLI, not the console: one per bucket (media, backups, state), each with a bucket policy naming its principal and a key made by `storage create-s3-key --service-account-id`, plus one for the OpenTofu provider. Every secret goes by `--secret-file` to a 0600 file under `.dev/credentials/` and is never printed. **Unconfirmed:** the provider's authentication fields (service-account client ID and secret) until phase 1 tests them.
 4. Put `TOFU_STATE_PASSPHRASE` (at least 32 random bytes, base64) in `.dev/credentials/greennode.env`, mode 0600. Agents load credentials with `set -a; . <file>; set +a` inside the command that needs them and never print, echo, or log a value.
@@ -25,7 +25,7 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 - 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.
 - 2026-10-10: compute HCM03 (zone HCM03-1A), vStorage HCM04, one backup repository.
 - 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 20 GB unencrypted, data 20 GB encrypted; grow online at 70%.
-- 2026-10-10: `ed25519-sk` SSH key; host-file release fence; SMTP sender over the Bizfly HTTP API; vMonitor logs 30 days; CrowdSec community sharing off.
+- 2026-10-10: `ed25519-sk` SSH key; host-file release fence; SMTP sender over the Bizfly HTTP API; no vMonitor, journald 30 days on the host; CrowdSec community sharing off.
 
 ## Phases
 
@@ -36,8 +36,8 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 |2b SMTP sender|backend|`AUTH_EMAIL_MODE=smtp` with config validation, TLS verification, outcome classification, stub-server tests; SES mode unchanged.|
 |2c Caddy direct edge|devops|`EDGES` gains `direct`: socket address only, every forwarding header stripped, one `X-Real-IP` to Go; site host from environment. Caddy image built with `xcaddy` adds `coraza-caddy` (OWASP CRS v4) and the CrowdSec Caddy bouncer. Tests: forged `X-Forwarded-For`, `X-Real-IP`, and `CloudFront-Viewer-Address` on `direct` never reach Go; Coraza in detection-only mode logs and passes a rule-matching request; the CloudFront listener is unchanged.|
 |2d Legal text|frontend|Privacy notice and terms name GreenNode and Bizfly in Vietnam; reviewed; first deployed at cutover.|
-|3a Build code|devops, reviewer|`deploy/vn/` per the design layout: OpenTofu root for server, volumes, security groups, floating IP; `vngcloud` CLI scripts for service accounts, buckets, keys, bucket policies, vMonitor, budgets; host, edge (Coraza detection-only with the resume write-path exclusions, CrowdSec sharing off), and probe config. CI runs `tofu fmt -check` and `tofu validate`. Reviewer's adversarial pass done before any apply.|
-|3b Apply|devops|On the manager's go, after `tofu plan` and every CLI quote are shown: buckets, service accounts, keys, and policies created; tofu applied; host, secrets, PostgreSQL, pgBackRest, CrowdSec, agents, checks, and alarms installed; probe passes; first backup and `pgbackrest verify` green.|
+|3a Build code|devops, reviewer|`deploy/vn/` per the design layout: OpenTofu root for server, volumes, security groups, floating IP; `vngcloud` CLI scripts for service accounts, buckets, keys, bucket policies, budgets; host, edge (Coraza detection-only with the resume write-path exclusions, CrowdSec sharing off), and probe config. CI runs `tofu fmt -check` and `tofu validate`. Reviewer's adversarial pass done before any apply.|
+|3b Apply|devops|On the manager's go, after `tofu plan` and every CLI quote are shown: buckets, service accounts, keys, and policies created; tofu applied; host, secrets, PostgreSQL, pgBackRest, CrowdSec, the watch timer, and alert mail installed; probe passes; first backup and `pgbackrest verify` green.|
 |4 Rehearsal|devops, qa|All rehearsal checks in the design pass under the temporary hostname with fictional data; restore drill recorded; cutover dry run timed.|
 |5 Cutover|manager, devops, owner|Design cutover steps 1 to 6 done; verification hashes equal; smoke green, including the CrowdSec 403; AWS in maintenance.|
 |6 AWS teardown|devops, owner|After 48 h with no AWS traffic: design cutover step 7 done (CloudFront, its certificates and validation records, the Route 53 health check deleted) and record TTL 300. Once the cutover is verified: every real-data item in the design deleted and recorded in `aboutme-infra`; keys rotated; AWS rebuilt empty as test.|
