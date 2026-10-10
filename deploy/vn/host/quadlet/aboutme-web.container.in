@@ -2,6 +2,7 @@
 # namespace, published on loopback only (docs/design/vietnam-production.md,
 # "Host").
 [Unit]
+OnFailure=aboutme-alert@%N.service
 Description=aboutme Nuxt renderer
 Requires=aboutme-network.service
 After=aboutme-network.service

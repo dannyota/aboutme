@@ -149,8 +149,8 @@ cmd_release() { # id
 }
 
 # ExecStartPre for every unit that runs the server or web image. Takes a
-# shared lock so it never reads a half-replaced file, and logs a fixed marker
-# that a vMonitor log alarm matches.
+# shared lock so it never reads a half-replaced file. A refusal fails the
+# unit, whose OnFailure= mails the support mailbox (host/bin/alert.sh).
 cmd_check() { # release unit
   local release=$1 unit=$2
   [[ $release =~ ^[0-9]+$ ]] || die "release '$release' is not a number"

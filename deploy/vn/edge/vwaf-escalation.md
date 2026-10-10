@@ -54,8 +54,6 @@ CrowdSec would see one client. Before the cutover:
 
 Route 53 aliases point only at AWS targets, so use plain records.
 
-- [ ] Pause the vMonitor check `aboutme-prod-readyz` so the change does not
-      page. Resume it at the end.
 - [ ] Change `www` to a CNAME to `<code>.waf.greennode.vn`.
 - [ ] Change the apex to an A record with vWAF's address. A CNAME is not allowed
       at the apex. **Unconfirmed:** that vWAF's address is fixed; check the
@@ -72,7 +70,6 @@ Route 53 aliases point only at AWS targets, so use plain records.
 - [ ] Sign in, open a resume, and download a PDF from a browser.
 - [ ] A CrowdSec-banned test address still gets 403, using its real address.
 - [ ] The attack traffic shows in the vWAF portal and falls in the Caddy log.
-- [ ] Resume the vMonitor check and wait for it to read Up.
 
 ## Privacy
 

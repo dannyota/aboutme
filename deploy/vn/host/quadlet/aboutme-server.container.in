@@ -2,6 +2,7 @@
 # host network, 127.0.0.1:8080 and the print listener 10.89.10.1:8081
 # (docs/design/vietnam-production.md, "Host").
 [Unit]
+OnFailure=aboutme-alert@%N.service
 Description=aboutme Go server
 Requires=postgresql@18-main.service
 After=postgresql@18-main.service aboutme-network.service aboutme-web.service

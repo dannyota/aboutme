@@ -1,8 +1,0 @@
-# Writes the fixed marker line a vMonitor log alarm matches
-# (docs/design/vietnam-production.md, "Scheduled jobs").
-[Unit]
-Description=aboutme job %i failed
-
-[Service]
-Type=oneshot
-ExecStart=/bin/echo aboutme-job-failed name=%i

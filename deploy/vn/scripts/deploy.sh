@@ -11,7 +11,6 @@
 #
 # Environment: DEPLOY_HOST (address of the host, required), DEPLOY_SITE
 # (default https://aboutme.vn; a rehearsal sets its own origin), and
-# VNG_PROFILE for the vMonitor check pause (scripts/vng-lib.sh).
 #
 # Recovery follows docs/design/single-host-production.md, "Release and
 # deploy": a failure before any migration request restores the previous
@@ -27,10 +26,6 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # shellcheck source=../../aws/scripts/provenance.sh
 source "$here/../../aws/scripts/provenance.sh"
-# shellcheck source=vng-lib.sh
-source "$here/vng-lib.sh"
-
-# Defined after vng-lib.sh so this script's messages go to the original stderr.
 exec 9>&2
 say() { printf 'deploy: %s\n' "$*" >&9; }
 usage() {
@@ -85,7 +80,6 @@ lock_held=0
 phase=prepare
 rendered=0
 migration_may_be_applied=0
-check_paused=0
 timers_stopped=0
 
 retry() { # attempts delay command...
@@ -116,7 +110,6 @@ restore() {
   step app-up || return 1
   step maintenance-down || return 1
   if ((timers_stopped)); then step timers-start || return 1; fi
-  if ((check_paused)); then resume_app_check || return 1; fi
   say "restored the previous release"
 }
 
@@ -232,10 +225,9 @@ if ((rollback)); then
   maintenance_image=$(step release-json | jq -r .maintenance_image)
 fi
 
-# 5. Jobs and the app-down check stop; maintenance starts beside Caddy, then
-# Caddy and the server stop.
-pause_app_check
-check_paused=1
+# 5. Jobs stop; maintenance starts beside Caddy, then Caddy and the server
+# stop. The external app-down check is a Route 53 health check outside this
+# script; maintenance answers it with 503 for the length of the deploy.
 phase=changing
 timers_stopped=1
 step timers-stop
@@ -273,11 +265,9 @@ fi
 step app-up
 step maintenance-down
 
-# 9. Jobs and the app-down check resume.
+# 9. Jobs resume.
 step timers-start
 timers_stopped=0
-resume_app_check
-check_paused=0
 phase=finished
 
 # 10. Smoke from outside: health, TLS (curl verifies the chain), security

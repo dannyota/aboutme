@@ -32,6 +32,7 @@ TARGETS=(
   /etc/crowdsec
   /var/lib/aboutme-caddy
   /var/lib/aboutme
+  /var/log/journal
 )
 
 failed=0
@@ -307,14 +308,22 @@ c_https() {
 c_vstorage() { c_https hcm04.vstorage.vngcloud.vn; }
 c_ghcr() { c_https ghcr.io; }
 
-# vMonitor log push: Filebeat sends to the LogHub on TCP 10092
-# (https://docs.greennode.ai/vmonitor/dashboards/logs/lam-viec-voi-log-agent/chuan-bi-ket-noi-day-log).
-c_loghub() {
-  timeout 10 bash -c '</dev/tcp/hcm03-loghub01.vngcloud.vn/10092' 2>&1 || {
-    echo "TCP 10092 to hcm03-loghub01.vngcloud.vn is closed"
+# The journal is the log store and lives on the data volume, and alert.sh
+# needs msmtp (design "Logs, metrics, and alarms").
+c_journal_alerts() {
+  mountpoint -q /var/log/journal || {
+    echo "/var/log/journal is not bound from the data volume"
     return 1
   }
-  echo "TCP 10092 open"
+  command -v msmtp >/dev/null || {
+    echo "msmtp is not installed"
+    return 1
+  }
+  systemctl is-enabled --quiet aboutme-watch.timer || {
+    echo "aboutme-watch.timer is not enabled"
+    return 1
+  }
+  echo "journal on the data volume, msmtp present, watch timer enabled"
 }
 
 # ---- CrowdSec and the fence ----------------------------------------------
@@ -363,7 +372,7 @@ check "bridge container reaches the host at $GATEWAY" c_bridge_to_host
 check "host reaches a port published on 127.0.0.1" c_host_to_bridge
 check "outbound HTTPS to hcm04.vstorage.vngcloud.vn" c_vstorage
 check "outbound HTTPS to ghcr.io" c_ghcr
-check "outbound TCP 10092 to hcm03-loghub01.vngcloud.vn" c_loghub
+check "journal on the data volume and alerting in place" c_journal_alerts
 check "CrowdSec local API answers" c_crowdsec_lapi
 check "CrowdSec central API sharing is off" c_crowdsec_capi
 check "fence.sh read works" c_fence
