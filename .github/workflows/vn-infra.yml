@@ -44,3 +44,8 @@ jobs:
             bash -n "$f"
             shellcheck -x -S warning "$f"
           done
+      - name: Test deployment safety
+        run: |
+          for test in deploy/vn/tests/*-test.sh; do
+            "$test"
+          done

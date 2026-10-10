@@ -10,9 +10,6 @@ disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
 coraza_matches_per_hour=${CORAZA_MATCHES_PER_HOUR:-50}
-# Placeholder until the Caddy image's Coraza log fields land: the fixed text
-# one Coraza match writes to aboutme-caddy's journal.
-coraza_match_text=${CORAZA_MATCH_TEXT:-PLACEHOLDER-coraza-match}
 
 alert() { # key subject [detail]
   printf '%s\n' "${3-}" | "$lib/alert.sh" "$1" "$2" || true
@@ -56,9 +53,36 @@ fi
 bans=$(cscli alerts list --since 1h -o json 2>/dev/null | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
 ((bans <= crowdsec_bans_per_hour)) || alert crowdsec-bans "CrowdSec raised $bans alerts in the last hour"
 
-# Coraza matches in the last hour, counted in the Caddy journal.
-matches=$(journalctl -u aboutme-caddy --since -1h -o cat --no-pager 2>/dev/null | grep -c -F -- "$coraza_match_text" || true)
-((${matches:-0} <= coraza_matches_per_hour)) || alert coraza-matches "Coraza matched $matches requests in the last hour"
+# Coraza writes metadata only. Each Caddy process owns one current file and at
+# most two rolls. Filter by record time because a low-volume current file can
+# live longer than the one-hour window.
+mapfile -t waf_logs < <(
+  for stream in serving-match maintenance-match; do
+    find /run/aboutme/caddy-log/waf -maxdepth 1 -type f \
+      \( -name "$stream.log" -o -name "$stream-*.log*" \) \
+      -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 3 | cut -d' ' -f2-
+  done
+)
+matches=0
+unparsed=0
+if ((${#waf_logs[@]})); then
+  since=$(($(date +%s) - 3600))
+  counts=$(zcat -f -- "${waf_logs[@]}" 2>/dev/null |
+    jq -r --argjson since "$since" '
+      if type != "object" or (.ts | type != "number") then "unknown"
+      elif .ts < $since then empty
+      elif .msg == "waf_rule_match" then "match"
+      elif .msg == "waf_rule_match_unparsed" then "unparsed"
+      else "unknown" end' |
+    awk '{ count[$1]++ } END { print count["match"] + 0, count["unparsed"] + 0, count["unknown"] + 0 }') || {
+    alert coraza-log-invalid "the Coraza match log is malformed"
+    counts='0 0 0'
+  }
+  read -r matches unparsed unknown <<<"$counts"
+  ((unknown == 0)) || alert coraza-log-invalid "the Coraza match log has $unknown unknown records in the last hour"
+fi
+((matches <= coraza_matches_per_hour)) || alert coraza-matches "Coraza matched $matches requests in the last hour"
+((unparsed == 0)) || alert coraza-unparsed "Coraza wrote $unparsed unparsed match records in the last hour"
 
 # totp_unavailable in the server journal since the last run.
 totp=$(journalctl -u aboutme-server --since -6min -o cat --no-pager 2>/dev/null | grep -c -F totp_unavailable || true)

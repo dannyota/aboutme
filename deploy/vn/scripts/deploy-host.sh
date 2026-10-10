@@ -19,6 +19,10 @@
 #   pull <server> <web> <caddy> pull images by digest; require linux/amd64
 #   backup                      pgBackRest incremental annotated with <tag>
 #   timers-stop | timers-start  the scheduled job timers
+#   fail-closed                 maintenance up; app and jobs stopped
+#   cutover-quiesce             stop job timers and wait for active jobs
+#   cutover-check               prove maintenance with server and jobs stopped
+#   cutover-fail-closed         enforce maintenance with app and jobs stopped
 #   maintenance-up <caddy>      render and start maintenance beside Caddy
 #   app-down                    stop Caddy and the server; prove both stopped
 #   render <server> <web> <caddy>  write release.env and the app units
@@ -41,6 +45,8 @@ maintenance_json=$state/maintenance.json
 secrets=/etc/aboutme/secrets
 repo=ghcr.io/dannyota/aboutme
 jobs=(idempotency-expiry-sweep media-deletion-sweep privacy-retention-sweep media-orphan-sweep)
+# shellcheck source=deploy-safety.sh
+source "$lib/deploy-safety.sh"
 # Floors from docs/design/passkey-release-fence.md and
 # docs/design/viewer-analytics/sign-in-to-view.md, "Release and rollback".
 fence_epoch=4002
@@ -244,6 +250,7 @@ step_running_release() {
 }
 
 step_release_json() {
+  [[ $op == - ]] || checkpoint
   release_read "$release_json"
   echo
 }
@@ -270,16 +277,37 @@ step_backup() {
 step_timers() { # stop|start
   local j
   if [[ $1 == stop ]]; then
-    for j in "${jobs[@]}"; do systemctl stop "aboutme-job-$j.timer"; done
-    for j in "${jobs[@]}"; do
-      wait_stopped "aboutme-job@$j.service" 600 || die "job $j still runs after 10 minutes"
-    done
+    aboutme_stop_jobs 600 || die "job timers or active jobs did not stop"
     say "job timers stopped and no job runs"
   else
     checkpoint
     for j in "${jobs[@]}"; do systemctl enable --now "aboutme-job-$j.timer" >/dev/null; done
     say "job timers started"
   fi
+}
+
+step_fail_closed() {
+  aboutme_fail_closed 600 || die "could not enforce the fail-closed state"
+  say "maintenance up; app and job timers stopped"
+}
+
+step_cutover_quiesce() {
+  checkpoint
+  aboutme_stop_jobs 600 || die "job timers or active jobs did not stop"
+  aboutme_assert_cutover_quiescent || die "the host is not quiescent for cutover"
+  say "cutover host is quiescent"
+}
+
+step_cutover_check() {
+  checkpoint
+  aboutme_assert_cutover_quiescent || die "the host is not quiescent for cutover"
+  say "cutover host is quiescent"
+}
+
+step_cutover_fail_closed() {
+  checkpoint
+  aboutme_fail_closed 600 || die "could not enforce the fail-closed cutover state"
+  say "cutover host is fail closed"
 }
 
 # Maintenance is the Caddy image only: a static 503 page with no
@@ -453,7 +481,7 @@ SQL
 op=$1 tag=$2 step=$3
 shift 3
 [[ $op == - || $op =~ ^[A-Za-z0-9_-]{43}$ ]] || die "malformed operation id"
-[[ $tag == - && $step == release-json ]] || release_number "$tag" >/dev/null ||
+[[ $op == - && $tag == - && $step == release-json ]] || release_number "$tag" >/dev/null ||
   die "'$tag' is not a strict vMAJOR.MINOR.PATCH tag"
 secrets_block=""
 flags="{}"
@@ -466,6 +494,10 @@ case "$step:$#" in
   backup:0) step_backup ;;
   timers-stop:0) step_timers stop ;;
   timers-start:0) step_timers start ;;
+  fail-closed:0) step_fail_closed ;;
+  cutover-quiesce:0) step_cutover_quiesce ;;
+  cutover-check:0) step_cutover_check ;;
+  cutover-fail-closed:0) step_cutover_fail_closed ;;
   maintenance-up:1) step_maintenance_up "$1" ;;
   ban-test:2) step_ban_test "$@" ;;
   app-down:0) step_app_down ;;

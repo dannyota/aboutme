@@ -10,10 +10,11 @@
 #   fence.sh read                      print the document
 #   fence.sh lock <kind> <tag>         take the operation lock; prints its id
 #   fence.sh checkpoint <id> <tag>     reprove the lock and floor before a start
+#   fence.sh mutation-start <id> <tag> <kind>  mark a cutover write active
+#   fence.sh mutation-clear <id> <kind>        clear its completed marker
 #   fence.sh raise <id> <tag>          raise the minimum to <tag>
 #   fence.sh release <id>              release the lock this id owns
-#   fence.sh check <release> <unit>    ExecStartPre: refuse a release below
-#                                      the minimum
+#   fence.sh check <release> <unit>    ExecStartPre: refuse an unsafe start
 #   fence.sh clear <reason>            privileged manual clear of a stale lock
 #
 # There is no time-based takeover: a crash leaves the lock closed until a
@@ -23,6 +24,7 @@ set -euo pipefail
 dir=${FENCE_DIR:-/var/lib/aboutme}
 file=$dir/fence.json
 lockfile=$dir/fence.lock
+mutation_file=$dir/cutover-mutation.json
 # The highest floor in docs/design/passkey-release-fence.md that a rebuilt
 # host starts at (docs/design/vietnam-production.md, "Release fence").
 floor_tag=v0.4.7
@@ -99,7 +101,7 @@ cmd_read() {
 cmd_lock() { # kind tag
   local kind=$1 candidate oid ts
   case $kind in
-    deploy | rollback | activate | totp_reencrypt) ;;
+    deploy | rollback | activate | totp_reencrypt | cutover) ;;
     *) die "unknown operation kind '$kind'" ;;
   esac
   candidate=$(candidate_of "$2")
@@ -137,6 +139,74 @@ cmd_raise() { # id tag
   say "raised the minimum to $2 ($candidate)"
 }
 
+mutation_kind_or_die() {
+  case $1 in quiesce | reset-db | dump-restore | media) ;; *) die "unknown cutover mutation kind '$1'" ;; esac
+}
+
+load_mutation() {
+  [[ -f $mutation_file && ! -L $mutation_file ]] || die "$mutation_file is missing"
+  mutation=$(jq -ce '
+    if type == "object" and keys == ["mutation_kind", "operation_id", "started_at", "state"]
+      and (.operation_id | type == "string" and test("^[A-Za-z0-9_-]{43}$"))
+      and (.mutation_kind | IN("quiesce", "reset-db", "dump-restore", "media"))
+      and .state == "active" and (.started_at | type == "string")
+    then . else error("malformed") end' "$mutation_file" 2>/dev/null) || die "$mutation_file is malformed"
+}
+
+store_mutation() { # document on stdin
+  local tmp
+  tmp=$(mktemp "$dir/.cutover-mutation.XXXXXX")
+  cat >"$tmp"
+  chmod 0600 "$tmp"
+  sync "$tmp"
+  mv -f "$tmp" "$mutation_file"
+  sync "$dir"
+}
+
+assert_cutover_owner() { # id
+  owned_or_die "$1"
+  [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover ]] || die "the operation is not a cutover"
+}
+
+cutover_owner_is_valid() {
+  jq -e '
+    (.operation_id | type == "string" and test("^[A-Za-z0-9_-]{43}$"))
+      and .operation_kind == "cutover"
+      and (.operation_started_at | type == "string")
+      and (.operation_checked_at | type == "string")
+  ' <<<"$doc" >/dev/null 2>&1
+}
+
+assert_cutover_quiescent() {
+  local safety=${FENCE_SAFETY_LIB:-/usr/local/lib/aboutme/deploy-safety.sh}
+  [[ -r $safety && ! -L $safety ]] || die "$safety is missing or is a symlink"
+  # shellcheck disable=SC1090
+  source "$safety"
+  aboutme_assert_cutover_quiescent || die "the host is not quiescent"
+}
+
+cmd_mutation_start() { # id tag kind
+  local candidate
+  mutation_kind_or_die "$3"
+  candidate=$(candidate_of "$2")
+  assert_cutover_owner "$1"
+  ((candidate >= minimum)) || die "$2 ($candidate) is below the minimum release $minimum"
+  [[ ! -e $mutation_file && ! -L $mutation_file ]] || die "a cutover mutation marker already exists"
+  jq -n --arg o "$1" --arg k "$3" --arg s "$(now)" \
+    '{operation_id: $o, mutation_kind: $k, state: "active", started_at: $s}' | store_mutation
+}
+
+cmd_mutation_clear() { # id kind
+  mutation_kind_or_die "$2"
+  assert_cutover_owner "$1"
+  load_mutation
+  [[ $(jq -r .operation_id <<<"$mutation") == "$1" && $(jq -r .mutation_kind <<<"$mutation") == "$2" ]] ||
+    die "the cutover mutation marker belongs to another operation or kind"
+  assert_cutover_quiescent
+  rm -f "$mutation_file"
+  sync "$dir"
+}
+
 # Releasing an already released lock succeeds, so a retried release after a
 # lost SSH reply settles the same way the first one did.
 cmd_release() { # id
@@ -145,12 +215,15 @@ cmd_release() { # id
     return 0
   fi
   [[ $owner == "$1" ]] || die "the lock belongs to another operation; the manual clear owns it"
+  if [[ $(jq -r '.operation_kind // empty' <<<"$doc") == cutover && ( -e $mutation_file || -L $mutation_file ) ]]; then
+    die "the cutover mutation marker remains; recover or clear it first"
+  fi
   jq 'del(.operation_id, .operation_kind, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
 }
 
-# ExecStartPre for every unit that runs the server or web image. Takes a
-# shared lock so it never reads a half-replaced file. A refusal fails the
-# unit, whose OnFailure= mails the support mailbox (host/bin/alert.sh).
+# ExecStartPre for every production-image start. Takes a shared lock so it
+# never reads a half-replaced file. A retained cutover lock or marker blocks
+# every start except the owning reset-db operation's db-setup.
 cmd_check() { # release unit
   local release=$1 unit=$2
   [[ $release =~ ^[0-9]+$ ]] || die "release '$release' is not a number"
@@ -159,6 +232,18 @@ cmd_check() { # release unit
     echo "aboutme-fence-refused unit=$unit release=$release minimum=$minimum"
     exit 1
   fi
+  if [[ $(jq -r '.operation_kind // empty' <<<"$doc") != cutover && ! -e $mutation_file && ! -L $mutation_file ]]; then
+    return 0
+  fi
+  if [[ $unit == aboutme-db-setup ]] && cutover_owner_is_valid; then
+    load_mutation
+    if [[ $(jq -r .operation_id <<<"$mutation") == "$owner" &&
+      $(jq -r .mutation_kind <<<"$mutation") == reset-db ]]; then
+      return 0
+    fi
+  fi
+  echo "aboutme-fence-refused unit=$unit retained-cutover-state"
+  exit 1
 }
 
 # The privileged manual clear (docs/design/passkey-release-fence.md,
@@ -170,6 +255,7 @@ cmd_clear() { # reason
   if pgrep -f /usr/local/lib/aboutme/deploy-host.sh >/dev/null; then
     die "a deploy-host.sh process is running; wait for it to stop"
   fi
+  [[ ! -e $mutation_file && ! -L $mutation_file ]] || die "a cutover mutation marker remains; recover it first"
   load
   [[ -n $owner ]] || {
     say "no lock to clear"
@@ -178,6 +264,43 @@ cmd_clear() { # reason
   logger -t aboutme-fence "manual clear of $(jq -c '{operation_kind, operation_started_at, operation_checked_at}' <<<"$doc") by ${SUDO_USER:-root}: $reason"
   jq 'del(.operation_id, .operation_kind, .operation_started_at, .operation_checked_at)' <<<"$doc" | store
   say "cleared"
+}
+
+recover_processes_stopped() { # kind
+  ! pgrep -f '[/]usr/local/lib/aboutme/deploy-host.sh' >/dev/null || die "a deploy-host.sh process is running"
+  case $1 in
+    quiesce) ;;
+    reset-db)
+      ! pgrep -f '([d]ropdb|[c]reatedb).*aboutme' >/dev/null || die "a database reset process is running"
+      ! systemctl is-active --quiet aboutme-db-setup.service || die "aboutme-db-setup.service is running"
+      ;;
+    dump-restore) ! pgrep -f '([p]g_restore.*aboutme|[a]ge -d .*cutover)' >/dev/null || die "a dump restore process is running" ;;
+  esac
+}
+
+recover_marker() { # id kind reason [attestation]
+  local id=$1 kind=$2 reason=$3 attestation=${4-}
+  [[ -n $reason ]] || die "recovery needs a reason"
+  assert_cutover_owner "$id"
+  load_mutation
+  [[ $(jq -r .operation_id <<<"$mutation") == "$id" && $(jq -r .mutation_kind <<<"$mutation") == "$kind" ]] ||
+    die "the cutover mutation marker belongs to another operation or kind"
+  recover_processes_stopped "$kind"
+  assert_cutover_quiescent
+  logger -t aboutme-fence "cutover mutation recovery marker=$mutation by ${SUDO_USER:-root} attestation=${attestation:-none}: $reason"
+  rm -f "$mutation_file"
+  sync "$dir"
+  say "cleared the cutover mutation marker; the operation lock remains"
+}
+
+cmd_recover_cutover() { # id kind reason
+  case $2 in quiesce | reset-db | dump-restore) ;; *) die "unknown host cutover mutation kind '$2'" ;; esac
+  recover_marker "$1" "$2" "$3"
+}
+
+cmd_recover_cutover_media() { # id attestation reason
+  [[ $2 == media-writer-stopped-and-result-inspected ]] || die "media recovery needs the exact stop-and-inspect attestation"
+  recover_marker "$1" media "$3" "$2"
 }
 
 [[ $(id -u) == 0 ]] || die "run as root on the host"
@@ -189,12 +312,16 @@ case "$#:${1-}" in
   1:read) with_lock -s cmd_read ;;
   3:lock) with_lock -x cmd_lock "$2" "$3" ;;
   3:checkpoint) with_lock -x cmd_checkpoint "$2" "$3" ;;
+  4:mutation-start) with_lock -x cmd_mutation_start "$2" "$3" "$4" ;;
+  3:mutation-clear) with_lock -x cmd_mutation_clear "$2" "$3" ;;
   3:raise) with_lock -x cmd_raise "$2" "$3" ;;
   2:release) with_lock -x cmd_release "$2" ;;
   3:check) with_lock -s cmd_check "$2" "$3" ;;
   2:clear) with_lock -x cmd_clear "$2" ;;
+  4:recover-cutover) with_lock -x cmd_recover_cutover "$2" "$3" "$4" ;;
+  4:recover-cutover-media) with_lock -x cmd_recover_cutover_media "$2" "$3" "$4" ;;
   *)
-    say "usage: fence.sh init | read | lock <kind> <tag> | checkpoint <id> <tag> | raise <id> <tag> | release <id> | check <release> <unit> | clear <reason>"
+    say "usage: fence.sh init | read | lock <kind> <tag> | checkpoint <id> <tag> | mutation-start <id> <tag> <kind> | mutation-clear <id> <kind> | raise <id> <tag> | release <id> | check <release> <unit> | clear <reason> | recover-cutover <id> <kind> <reason> | recover-cutover-media <id> media-writer-stopped-and-result-inspected <reason>"
     exit 2
     ;;
 esac

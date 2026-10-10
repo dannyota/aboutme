@@ -12,8 +12,19 @@
 # never log lines or personal data.
 set -euo pipefail
 
-secrets=/etc/aboutme/secrets
-stamps=/var/lib/aboutme/alerts
+if [[ -n ${ABOUTME_ALERT_TEST_ROOT:-} ]]; then
+  ((EUID != 0)) || {
+    echo "alert: test root is forbidden for root" >&2
+    exit 1
+  }
+  secrets=$ABOUTME_ALERT_TEST_ROOT/secrets
+  stamps=$ABOUTME_ALERT_TEST_ROOT/alerts
+  smtp_env=$ABOUTME_ALERT_TEST_ROOT/smtp.env
+else
+  secrets=/etc/aboutme/secrets
+  stamps=/var/lib/aboutme/alerts
+  smtp_env=/etc/aboutme/smtp.env
+fi
 
 die() {
   printf 'alert: %s\n' "$*" >&2
@@ -30,18 +41,34 @@ detail=$(head -c 4096 | tr -cd '[:print:]\n' || true)
 # flags.env with, so msmtp gets exactly what the server gets.
 smtp=$(jq -Rn '
   [inputs | select(test("^[[:space:]]*(#|$)") | not)
-    | if test("^[A-Z][A-Z0-9_]*=[A-Za-z0-9_.,:/@+-]*$") then capture("^(?<key>[^=]+)=(?<value>.*)$")
-      else error("malformed line") end]
-  | from_entries
+    | if test("^[A-Z][A-Z0-9_]*=") then capture("^(?<key>[^=]+)=(?<value>.*)$")
+      else error("malformed line") end
+    | if .key == "SES_FROM_NAME" then
+        if (.value | length) <= 64 and (.value | test("[\\u0000-\\u001f\\u007f-\\u009f]") | not)
+        then . else error("malformed sender name") end
+      elif (.value | test("^[A-Za-z0-9_.,:/@+-]*$")) then .
+      else error("malformed value") end]
+  | if (map(.key) | length) == (map(.key) | unique | length) then from_entries
+    else error("repeated name") end
   | if (.SMTP_HOST | test("^[a-z0-9.-]+$")) and (.SMTP_PORT | test("^[0-9]{2,5}$"))
       and (.SMTP_TLS == "implicit" or .SMTP_TLS == "starttls")
-      and (.SMTP_FROM_ADDRESS | test("^[^@]+@[a-z0-9.-]+$"))
+      and (.SES_FROM_ADDRESS | test("^[^@]+@[a-z0-9.-]+$"))
+      and (.SES_FROM_NAME | type == "string")
       and (.ALERT_TO | test("^[^@,]+@[a-z0-9.-]+$"))
-    then . else error("incomplete") end' </etc/aboutme/smtp.env 2>/dev/null) ||
-  die "/etc/aboutme/smtp.env is malformed or incomplete"
+    then . else error("incomplete") end' <"$smtp_env" 2>/dev/null) ||
+  die "$smtp_env is malformed or incomplete"
 get() { jq -r --arg k "$1" '.[$k]' <<<"$smtp"; }
-user=$(<"$secrets/smtp-username") || die "the SMTP username is missing"
-[[ $user =~ ^[[:graph:]]{1,200}$ ]] || die "the SMTP username is malformed"
+user_file=$secrets/smtp-username
+[[ -f $user_file && ! -L $user_file ]] || die "the SMTP username is missing"
+user_size=$(stat -c %s -- "$user_file") || die "the SMTP username is missing"
+printable_size=$(LC_ALL=C tr -cd '[:print:]' <"$user_file" | wc -c)
+((user_size >= 1 && user_size <= 256 && printable_size == user_size)) ||
+  die "the SMTP username must be 1 to 256 printable ASCII bytes with no newline"
+# Command substitution is safe after the byte check rejects every newline.
+# msmtp's quoted config argument preserves spaces; escape its two delimiters.
+user=$(<"$user_file")
+quoted_user=${user//\\/\\\\}
+quoted_user=${quoted_user//\"/\\\"}
 [[ -s $secrets/smtp-password ]] || die "the SMTP password is missing"
 
 umask 077
@@ -65,13 +92,13 @@ logfile -
 account aboutme
 host $(get SMTP_HOST)
 port $(get SMTP_PORT)
-from $(get SMTP_FROM_ADDRESS)
-user $user
+from $(get SES_FROM_ADDRESS)
+user "$quoted_user"
 passwordeval cat $secrets/smtp-password
 account default : aboutme
 CONF
 {
-  printf 'From: aboutme production <%s>\n' "$(get SMTP_FROM_ADDRESS)"
+  printf 'From: %s <%s>\n' "$(get SES_FROM_NAME)" "$(get SES_FROM_ADDRESS)"
   printf 'To: %s\n' "$(get ALERT_TO)"
   printf 'Subject: [aboutme-prod] %s\n' "$subject"
   printf 'Date: %s\n' "$(date -R)"

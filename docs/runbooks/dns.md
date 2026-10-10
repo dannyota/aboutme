@@ -1,18 +1,21 @@
 # DNS
 
-Status: **prepared**. OpenTofu's `deploy/aws/modules/dns` builds a public Route
-53 hosted zone for `aboutme.vn` with every record Cloudflare serves today, and
-signs it with DNSSEC. Cloudflare stays authoritative until the owner changes the
-name servers at the `.vn` registrar, in the order below.
+Status: **in production**. Route 53 is authoritative for `aboutme.vn`, and
+DNSSEC signs the zone. The `.vn` delegation names these Route 53 servers:
 
-The move exists for the apex. Cloudflare flattens the apex CNAME to the
-CloudFront distribution itself, so CloudFront picks an edge near Cloudflare's
-resolver, not near the viewer: from Vietnam through `8.8.8.8` the apex landed on
-Marseille (first byte 1.0 s), while `www`, a plain CNAME, landed on Hanoi. A
-Route 53 alias record answers with the distribution's addresses for the querying
-resolver's location, or for the client subnet the resolver sends. The subnet
-behavior is not stated in the AWS documentation for aliases, so `dns-check.sh`
-measures it before the switch.
+- `ns-949.awsdns-54.net`
+- `ns-1722.awsdns-23.co.uk`
+- `ns-1177.awsdns-19.org`
+- `ns-151.awsdns-18.com`
+
+OpenTofu's `deploy/aws/modules/dns` manages the public hosted zone and its
+records. Cloudflare is not authoritative.
+
+Route 53 owns the apex alias so CloudFront can choose an edge for the querying
+resolver's location, or for the client subnet the resolver sends. This avoids
+Cloudflare's apex CNAME flattening, which selected an edge near Cloudflare's
+resolver. The subnet behavior is not stated in the AWS documentation for
+aliases, so `dns-check.sh` measures it before any future switch.
 
 ## Zone
 
@@ -65,7 +68,11 @@ recommends ([DNSSEC signing][r53-dnssec]). Route 53 publishes both every four
 hours. Either one means the KMS key or its policy needs attention before
 validating resolvers start failing the domain.
 
-## The move
+## Reusable signed-zone move procedure
+
+This section preserves the Cloudflare-to-Route 53 procedure for a future signed
+zone move. Current operation does not require these steps. Replace the provider
+names, delegation, DS values, TTLs, and wait periods before reuse.
 
 Measured on 2026-09-26: the `.vn` servers publish the DS and the delegation with
 TTL 43200 (12 hours), and Cloudflare's in-zone NS record has TTL 86400 (24
@@ -74,8 +81,8 @@ hours).
 Before the first apply, add the Google Workspace values to the ignored
 `prod.tfvars` (the shape is in `prod.tfvars.example`) and back it up to the
 private infrastructure repository; `tofu plan` fails without them. Copy them
-from the records Cloudflare serves today: the verification CNAME's first label
-and target, and the `google._domainkey` TXT value with its strings joined.
+from the source Cloudflare zone: the verification CNAME's first label and
+target, and the `google._domainkey` TXT value with its strings joined.
 
 1. **Apply and compare.** After `tofu apply`, run the comparison with the
    operator profile and the `cf` CLI signed in to the Cloudflare account:
@@ -157,7 +164,7 @@ DNSSEC][cf-dnssec]: remove the DS, wait for its TTL, change name servers, wait
 for the old NS TTL, then add the new DS). The only difference from AWS's order
 is that signing is on from the start, which is safe while no DS exists.
 
-## Rollback
+## Rollback for this procedure
 
 - Before step 3: add the old DS back
   (`2371 13 2 006A39A4D5419DB32B9BA95D930E0101AA1D8ACD3945C9F0359AF8206CADFEAC`);
@@ -170,7 +177,7 @@ is that signing is on from the start, which is safe while no DS exists.
   back.
 - After step 4: remove the DS first and wait 12 hours before any other change.
 
-## Cloudflare cleanup
+## Cloudflare cleanup for this procedure
 
 After step 4 has passed its two-week watch:
 
@@ -180,12 +187,8 @@ After step 4 has passed its two-week watch:
    Cloudflare's DNSSEC signing on until then; disabling it first gains nothing.
 3. Delete any Cloudflare API token scoped to `aboutme.vn`, and drop the zone
    from the Cloudflare MCP connection.
-4. Update the docs that still describe Cloudflare DNS: the production runbook's
-   Access line and Cloudflare DNS section, the email runbook's DNS section, the
-   CloudFront runbook's return path to Cloudflare, the
-   [CloudFront edge design](../design/cloudfront-edge.md), which should then
-   cite [ADR 0025](../adr/0025-single-host-production.md). Set this runbook's
-   status to in production.
+4. Update docs and integrations that name Cloudflare as the authoritative DNS
+   provider.
 
 [r53-price]: https://aws.amazon.com/route53/pricing/
 [kms-price]: https://aws.amazon.com/kms/pricing/

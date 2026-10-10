@@ -22,6 +22,7 @@ PodmanArgs=--memory=128m
 LogDriver=journald
 
 [Service]
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-caddy
 Restart=on-failure
 RestartSec=5
 

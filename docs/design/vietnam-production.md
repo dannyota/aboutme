@@ -67,9 +67,17 @@ Three host-level controls replace AWS WAF:
   Community blocklist sharing stays off until the DPIA covers it (owner,
   2026-10-10), because a shared signal sends the attacker's address abroad.
 - Coraza in Caddy (`coraza-caddy` with the OWASP Core Rule Set v4, built into
-  the Caddy image with `xcaddy`) runs in detection-only mode for two weeks, then
-  blocks, with exclusions for the resume write paths whose rich-text bodies trip
-  the rule set. Its audit log carries no request bodies.
+  the Caddy image with `xcaddy`) detects for two weeks before blocking. Raw
+  audit logging stays off because AHKZ sections can record body data. Serving
+  writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
+  `/var/log/caddy/waf/maintenance-match.log`; both are on host tmpfs. Records
+  contain only `ts`, `level`, `logger`, fixed `msg` (`waf_rule_match` or
+  `waf_rule_match_unparsed`), and numeric `rule_id` when parsed. They contain no
+  personal data, body, header, IP address, or URI and never reach disk or
+  journald. Each active file is at most 5 MiB plus two rolled files;
+  `roll_keep_for 1d` expires rolled files only. A low-volume active file can be
+  older until rotation or reboot. After two weeks, devops reviews diagnostics,
+  excludes false positives on resume writes, and enables blocking.
 
 None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
 escalation: an application in the root portal with the floating IP as upstream,
@@ -111,15 +119,14 @@ One amd64 vServer runs Ubuntu 24.04 LTS with 2 vCPU and 4 GiB (owner,
 rest for the OS and page cache. OpenTofu owns the server, a 20 GB root disk, a
 20 GB encrypted SSD data volume (aes-xts-plain64 256, set at create time; owner,
 2026-10-10), and the floating IP. The root disk is unencrypted and holds only
-the OS, public images, and capped logs; secrets, PostgreSQL, and CrowdSec state
+the OS and public images; secrets, PostgreSQL, CrowdSec state, and journald logs
 live on the data volume. Root at 20 GB, the minimum, fits the worst case of
 about 15 GB: Ubuntu 4 GB, three server images of 2.6 GB during a deploy, web and
-Caddy images, 1 GB of Podman overhead, journald capped at 500 MB, and zram
-instead of a swap file. The data volume starts at 20 GB because RDS holds under
-3 GiB today. Either volume grows online when its alarm fires at 70%:
-`vngcloud volume resize-volume`, then `growpart` and `resize2fs`. Release images
-add `linux/amd64` beside `linux/arm64`, because GreenNode offers no ARM vServer
-(**Unconfirmed**).
+Caddy images, 1 GB of Podman overhead, and zram instead of a swap file. The data
+volume starts at 20 GB because RDS holds under 3 GiB today. Either volume grows
+online when its alarm fires at 70%: `vngcloud volume resize-volume`, then
+`growpart` and `resize2fs`. Release images add `linux/amd64` beside
+`linux/arm64`, because GreenNode offers no ARM vServer (**Unconfirmed**).
 
 Rootful Podman runs every container from systemd Quadlet units:
 
@@ -214,17 +221,24 @@ drill is the launch restore evidence.
 
 ## Release fence
 
-The fence moves to the host, the only place production images start.
-`/var/lib/aboutme/fence.json` is root-owned and holds the DynamoDB item's
-fields. `deploy/vn/scripts/fence.sh` changes it on the host under `flock`, with
-the conditions in the [fence design](passkey-release-fence.md). Every unit that
-runs the server or web image has an `ExecStartPre` that refuses a
-`DEPLOY_RELEASE_NUMBER` below the file's minimum, so a manual `systemctl start`
-cannot start an old image either. A rebuilt host starts at the highest floor in
-the fence design (4007). Root on the host is a privileged bypass, as the
-AWS-login principal is today. The fence is a host file rather than a PostgreSQL
-table (owner, 2026-10-10), because a point-in-time restore would roll a table
-back and a start-time check should not need the database.
+Root-owned `/var/lib/aboutme/fence.json` holds the fence outside PostgreSQL;
+`deploy/vn/scripts/fence.sh` follows the
+[fence design](passkey-release-fence.md) under `flock`. Production images check
+the minimum before Podman; rebuilt hosts start at floor 4007. Each `cutover`
+subcommand locks on the installed tag, checkpoints before mutation, and holds
+through final quiescence. `verify` also locks. Before mutation, the fence writes
+a root-owned marker with its ID, kind, active state, and start time.
+
+A retained cutover operation or any marker refuses server, web, serving Caddy,
+migrate, and scheduled-job starts before Podman, including after reboot.
+Maintenance stays startable. `db-setup` starts only when a valid active
+`reset-db` marker and cutover lock carry the same ID. A missing, symlinked,
+malformed, wrong-kind, or mismatched marker refuses it. Non-cutover operations
+keep the minimum-only rule. The owning operation removes its marker after safe
+quiescence. Uncertainty keeps the marker and lock closed. Manual clear refuses a
+marker; privileged recovery logs its reason and clears it after inspection.
+Cleanup releases the exact ID only without a marker. A retry cannot replace its
+owner.
 
 ## Scheduled jobs
 
@@ -255,7 +269,7 @@ endpoint and carries no personal data.
 | Host     | `watch.sh`: root and data volume above 70%, load, memory       |
 | Database | `watch.sh`: archive failure, newest backup older than 26 hours |
 | Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                |
-| Edge     | `watch.sh`: CrowdSec ban count and Coraza match count per hour |
+| Edge     | `watch.sh`: CrowdSec bans and Coraza rule counts per hour      |
 | TOTP     | `watch.sh`: `totp_unavailable` in the server journal           |
 | Mail     | Bizfly bounce and complaint reporting (**Unconfirmed**)        |
 | Spend    | GreenNode and Bizfly balance alerts, outside the repository    |
@@ -362,7 +376,10 @@ verification records go into the live zone beside the existing ones.
 Under a temporary hostname such as `vn-rehearsal.aboutme.vn` (an A record to the
 host), with fictional data only: first deploy, a normal deploy, rollback, a
 restore drill, every alarm once, mail to a test mailbox, SSE and MCP from
-outside, forged-header probes, and a timed dry run of the cutover script.
+outside, forged-header probes, and a timed cutover dry run. A normal deploy and
+second cutover are refused while locked, including during signal cleanup. A
+retained-state reboot refuses serving and jobs before Podman; maintenance and
+matching `reset-db` `db-setup` remain available.
 
 ### 5. Cutover
 
@@ -382,8 +399,8 @@ In one announced maintenance window:
    smoke it from outside with the production host.
 6. Switch the apex and `www` at Route 53 to the floating IP (TTL 60 seconds).
    Visitors on cached answers still get the AWS maintenance page.
-7. After 48 hours with no AWS traffic, delete the CloudFront distribution, its
-   certificates and validation records, and the Route 53 health check.
+7. After 48 hours with no AWS traffic, delete the CloudFront distribution and
+   its certificates and validation records. Keep the Route 53 health check.
 
 The auth-mail keys move with the database, so pending outbox mail sends from
 Vietnam. Sessions, passkeys (RP ID `aboutme.vn`), TOTP, and agent grants keep
