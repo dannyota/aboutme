@@ -19,6 +19,10 @@
 # Environment: DEPLOY_HOST (the host address, required).
 set -euo pipefail
 
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=ssh-lib.sh
+source "$here/ssh-lib.sh"
+
 admin=aboutme-admin
 host=${DEPLOY_HOST:?set DEPLOY_HOST to the production host address}
 lib=/usr/local/lib/aboutme
@@ -38,7 +42,7 @@ usage() {
 on_host() {
   local cmd
   printf -v cmd '%q ' "$lib/secrets-host.sh" "$@"
-  ssh -o BatchMode=yes "$admin@$host" "sudo $cmd"
+  ssh -p "$SSH_PORT" -o BatchMode=yes "$admin@$host" "sudo $cmd"
 }
 
 name_ok() { [[ $1 =~ ^[a-z0-9-]+$ ]] || die "malformed secret name '$1'"; }

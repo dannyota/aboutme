@@ -52,11 +52,11 @@ Nothing stands in front of the host (owner, 2026-10-10). The apex and `www`
 resolve to the floating IP; Caddy terminates TLS with Let's Encrypt certificates
 by ACME HTTP-01, as `aboutme-caddy` does today, and serves hashed `/_nuxt/*`
 assets with Nuxt's immutable cache headers. The security group admits TCP 80 and
-443 from anywhere and TCP 22 only from the owner's allowlist. Caddy takes the
-client address from the socket, strips every forwarding header, and sends one
-`X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront listener with
-its edge key and `CloudFront-Viewer-Address` stays for the AWS test environment
-under the `EDGES` list, which gains `direct`.
+443 from anywhere and TCP 22922 from all sources (owner, 2026-10-10). Caddy
+takes the client address from the socket, strips every forwarding header, and
+sends one `X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront
+listener with its edge key and `CloudFront-Viewer-Address` stays for the AWS
+test environment under the `EDGES` list, which gains `direct`.
 
 Three host-level controls replace AWS WAF:
 
@@ -155,10 +155,11 @@ The trust boundaries match today's host:
 - Chromium keeps its sandbox and its blocked proxy; the probe checks the user
   namespaces it needs.
 
-Access is key-only SSH from the allowlist as a non-root admin with `sudo`, and
-the GreenNode web console for break-glass. The key is the owner's `ssh-ed25519`
-commit-signing key (owner, 2026-10-10). Security updates install daily; a
-monthly maintenance window reboots.
+Access is key-only SSH on TCP 22922 from all sources as `aboutme-admin` with
+`sudo`; root login is disabled and `AllowUsers` permits only `aboutme-admin`.
+The key is the owner's `ssh-ed25519` commit-signing key. CrowdSec bans SSH
+attacks (owner, 2026-10-10). The GreenNode web console provides break-glass
+access. Security updates install daily; a monthly maintenance window reboots.
 
 ## Secrets and host identity
 

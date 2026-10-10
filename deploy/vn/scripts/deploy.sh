@@ -23,6 +23,8 @@ repo=dannyota/aboutme
 admin=aboutme-admin
 lib=/usr/local/lib/aboutme
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=ssh-lib.sh
+source "$here/ssh-lib.sh"
 
 # shellcheck source=../../aws/scripts/provenance.sh
 source "$here/../../aws/scripts/provenance.sh"
@@ -63,7 +65,7 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
 
 work=$(mktemp -d)
 # One SSH connection for the whole run.
-ssh_opts=(-o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$work/ssh-%C" -o ControlPersist=10m)
+ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$work/ssh-%C" -o ControlPersist=10m)
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 
 # Runs one host script as root. Every argument is a validated tag, digest,
