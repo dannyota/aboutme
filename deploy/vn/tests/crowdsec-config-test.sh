@@ -6,6 +6,7 @@ base=$repo_root/deploy/vn
 
 grep -qxF '    max_age: 23h' "$base/edge/crowdsec/config.yaml.local"
 grep -qxF '    duration: 15m' "$base/edge/crowdsec/profiles.yaml"
+grep -qxF 'capacity: 3000' "$base/edge/crowdsec/scenarios/aboutme-http-static-flood.yaml"
 grep -qF "GetDecisionsCount(Alert.GetValue()) == 1 ? '1h' : '4h'" "$base/edge/crowdsec/profiles.yaml"
 grep -qF '/run/aboutme/caddy-log/crowdsec/serving.json' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
 grep -qF '/run/aboutme/caddy-log/crowdsec/maintenance.json' "$base/edge/crowdsec/acquis.d/aboutme-http.yaml"
