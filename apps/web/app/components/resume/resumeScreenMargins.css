@@ -1,38 +1,42 @@
 @media screen {
   /*
-   * Screen margins for the public page and the editor's Web preview
-   * (docs/design/web.md, "Pagination and print"). The text gets its measure
-   * first: the inline padding is (container width - measure) / 2, never under
-   * 16 px and never over the template's print margin. A phone gets 16 px, a
-   * tablet a growing margin, and a desktop the full margin. The block padding
-   * scales the same way, up to --page-margin-y.
+   * Screen margins for continuous reading surfaces (docs/design/web.md,
+   * "Pagination and print"). The text gets its measure first: the inline
+   * padding is (container width - measure) / 2, never under 16 px and never
+   * over the template's print margin. A phone gets 16 px, a tablet a growing
+   * margin, and a desktop the full margin. The block padding scales the same
+   * way, up to --page-margin-y.
    *
-   * The container is the page root, or the preview sheet, so cqw is the
+   * The container is the page root or live preview sheet, so cqw is the
    * available width without the scrollbar. The em is the body size: the
    * variables are substituted where they are used, on the article and on the
-   * page bar's inner row, and both set font-size to --fs-body. PDF, print,
-   * and the paged preview never match these selectors and keep the
+   * page bar's inner row, and both set font-size to --fs-body. PDF images,
+   * print, and the paged preview never match these selectors and keep the
    * template's margin.
    */
   .public-resume-page,
-  .preview-sheet[data-web-columns] {
+  .preview-sheet[data-web-columns],
+  .template-paper[data-web-columns] {
     container-type: inline-size;
   }
 
   .public-resume-page,
-  .preview-sheet[data-web-columns] .resume-document {
+  .preview-sheet[data-web-columns] .resume-document,
+  .template-paper[data-web-columns] .resume-document {
     --screen-measure: 52em;
     --screen-margin-x: clamp(16px, calc((100cqw - var(--screen-measure)) / 2), var(--page-margin-x));
     --screen-margin-y: clamp(16px, calc((100cqw - var(--screen-measure)) / 2), var(--page-margin-y));
   }
 
   .public-resume-page[data-columns="2"],
-  .preview-sheet[data-web-columns="2"] .resume-document {
+  .preview-sheet[data-web-columns="2"] .resume-document,
+  .template-paper[data-web-columns="2"] .resume-document {
     --screen-measure: 70em;
   }
 
   .public-resume-page .resume-document,
-  .preview-sheet[data-web-columns] .resume-document {
+  .preview-sheet[data-web-columns] .resume-document,
+  .template-paper[data-web-columns] .resume-document {
     padding: var(--screen-margin-y) var(--screen-margin-x);
   }
 }

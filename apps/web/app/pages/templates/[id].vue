@@ -250,7 +250,10 @@ useHead(computed(() => ({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="page">
-            <div class="template-paper">
+            <div
+              class="template-paper"
+              :data-web-columns="template.columns"
+            >
               <ResumeDocument
                 v-if="shown"
                 :context="context"
@@ -305,6 +308,7 @@ useHead(computed(() => ({
         <div
           v-else
           class="template-paper"
+          :data-web-columns="template.columns"
         >
           <ResumeDocument
             v-if="shown"
