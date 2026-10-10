@@ -83,9 +83,11 @@ plain one. The `vngcloud` CLI creates an encrypted volume from v0.59.0
 refuses an older CLI, and the production apply waits for the provider check
 below.
 
-**Unconfirmed:** that an encrypted volume attaches to a server created with
-plain disks (wiki Compute-Servers.md only states it for a server created with an
-encrypted disk).
+A server created with plain disks refuses an encrypted volume with a 400
+`BadRequest` (`cannot attach encryption volume`; vngcloud wiki
+Compute-Servers.md, "Encrypted disks", a live result). Encrypting any disk at
+server create adds the 30% `CES` line, so the encrypted data volume costs that
+line whichever way it is made.
 
 ## Logs and alarms
 
@@ -115,7 +117,7 @@ condition, with names and counts only. The external app-down check is the Route
 | The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Read from source; there is no standalone floating IP resource, so the server has `prevent_destroy`                                                                |
 | The new security group's default egress allows outbound traffic                                                             | **Unconfirmed**; `probe/probe.sh` checks it                                                                                                                       |
 | vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | **Unconfirmed** (design Q4); `use_lockfile` stays off until tested                                                                                                |
-| An encrypted volume attaches to a server created with plain disks                                                           | **Unconfirmed**                                                                                                                                                   |
+| An encrypted volume attaches to a server created with plain disks                                                           | No: 400 `cannot attach encryption volume` (wiki Compute-Servers.md)                                                                                               |
 
 ## Provider questions
 
