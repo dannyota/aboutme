@@ -3,10 +3,10 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The public page and the editor's Web preview give the text its measure
- * before the template's print margin (docs/design/web.md, "Pagination and
- * print"). The rule is screen only, so the PDF, print, the paged preview, and
- * the preview card keep the template margin.
+ * Continuous reading surfaces give the text its measure before the template's
+ * print margin (docs/design/web.md, "Pagination and print"). The rule is
+ * screen only, so PDF images, print, the paged preview, and preview cards keep
+ * the template margin.
  */
 const dir = resolve(import.meta.dirname, '../../app/components/resume');
 const source = readFileSync(resolve(dir, 'ResumeDocument.vue'), 'utf8');
@@ -44,12 +44,15 @@ describe('screen margin stylesheet', () => {
     expect(margins).not.toContain('@media print');
   });
 
-  it('reaches only the public page and the Web preview sheet', () => {
+  it('reaches the continuous public, editor, and gallery surfaces', () => {
     const selectors = /([^{}]+)\{\s*padding: var\(--screen-margin-y\)/u
       .exec(margins)?.[1] ?? '';
     expect(selectors).toContain('.public-resume-page .resume-document');
     expect(selectors).toContain(
       '.preview-sheet[data-web-columns] .resume-document',
+    );
+    expect(selectors).toContain(
+      '.template-paper[data-web-columns] .resume-document',
     );
   });
 
