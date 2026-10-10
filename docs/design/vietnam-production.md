@@ -109,8 +109,10 @@ verification, `PLAIN` authentication, one message per connection. As with SES, a
 2xx after `DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and
 transport errors are temporary. Logs carry the reply code only. Go uses SMTP
 rather than the Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard
-contract that a local stub can test. **Unconfirmed:** Bizfly's bounce and
-complaint reporting, suppression list, and sending limits.
+contract that a local stub can test. Bizfly's SMTP account sends only as its own
+address, and the account refused a second sender for the domain, so auth mail
+goes from `Danny from aboutme.vn <danny@aboutme.vn>` (owner, 2026-10-11);
+replies and bounces reach the owner's mailbox.
 
 ## Host
 
