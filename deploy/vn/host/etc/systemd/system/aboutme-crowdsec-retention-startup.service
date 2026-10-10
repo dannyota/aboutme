@@ -1,0 +1,15 @@
+[Unit]
+Description=aboutme CrowdSec startup retention gate
+After=local-fs.target systemd-time-wait-sync.service
+Wants=systemd-time-wait-sync.service
+Before=crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service
+RequiresMountsFor=/var/lib/crowdsec /run/aboutme/caddy-log
+OnFailure=aboutme-crowdsec-retention-failure.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/crowdsec-retention.sh startup
+TimeoutStartSec=5min
+RemainAfterExit=yes
+StandardOutput=null
+StandardError=null

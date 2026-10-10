@@ -1,0 +1,15 @@
+[Unit]
+Description=aboutme CrowdSec runtime retention
+# The timer catches up a missed run at boot. The runtime pass waits for the
+# startup gate and runs only while it is active, so the two never delete the
+# same rotated files at once.
+After=aboutme-crowdsec-retention-startup.service crowdsec.service
+Requisite=aboutme-crowdsec-retention-startup.service
+OnFailure=aboutme-crowdsec-retention-failure.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/crowdsec-retention.sh runtime
+TimeoutStartSec=1min
+StandardOutput=null
+StandardError=null

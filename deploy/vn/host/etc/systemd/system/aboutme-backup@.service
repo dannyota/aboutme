@@ -1,0 +1,13 @@
+# pgBackRest backup or verify; the instance is full, diff, or verify
+# (docs/design/vietnam-production.md, "PostgreSQL").
+[Unit]
+Description=aboutme pgBackRest %i
+After=postgresql@18-main.service
+Requires=postgresql@18-main.service
+OnFailure=aboutme-alert@%p-%i.service
+
+[Service]
+Type=oneshot
+User=postgres
+ExecStart=/usr/local/lib/aboutme/backup-run.sh %i
+TimeoutStartSec=6h

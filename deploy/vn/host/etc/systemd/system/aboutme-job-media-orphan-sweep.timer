@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme job media-orphan-sweep (weekly)
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=5min
+Unit=aboutme-job@media-orphan-sweep.service
+
+[Install]
+WantedBy=timers.target

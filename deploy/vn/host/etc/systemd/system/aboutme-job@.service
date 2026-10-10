@@ -1,0 +1,12 @@
+# One scheduled job in the server image
+# (docs/design/vietnam-production.md, "Scheduled jobs").
+[Unit]
+Description=aboutme job %i
+After=postgresql@18-main.service
+Requires=postgresql@18-main.service
+OnFailure=aboutme-alert@%p-%i.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/job-run.sh %i
+TimeoutStartSec=1h

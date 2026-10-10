@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme pgBackRest full backup (weekly)
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=15min
+Unit=aboutme-backup@full.service
+
+[Install]
+WantedBy=timers.target

@@ -109,8 +109,10 @@ points at the app task role's `ses:SendEmail` policy.
 of SES, as the
 [Vietnam production design](../design/vietnam-production.md#dns-and-mail) sets
 for Bizfly Email Transaction. It uses the same From address, display name,
-templates, and sealed payloads as SES mode. Set these names in the runtime
-environment; the values shown are Bizfly Email Transaction's:
+templates, and sealed payloads as SES mode. Only SMTP mode adds a bilingual
+footer note naming Bizfly's mail server and Danny's Google Workspace mailbox for
+replies. Set these names in the runtime environment; the values shown are Bizfly
+Email Transaction's:
 
 ```dotenv
 AUTH_EMAIL_MODE=smtp

@@ -1,0 +1,15 @@
+// Security updates install daily; the monthly maintenance window reboots by
+// hand (docs/design/vietnam-production.md, "Host").
+Unattended-Upgrade::Allowed-Origins {
+        "${distro_id}:${distro_codename}-security";
+        "${distro_id}ESMApps:${distro_codename}-apps-security";
+        "${distro_id}ESM:${distro_codename}-infra-security";
+};
+Unattended-Upgrade::Automatic-Reboot "false";
+// PostgreSQL is pinned to one minor version
+// (docs/design/vietnam-production.md, "PostgreSQL"); the operator upgrades it.
+Unattended-Upgrade::Package-Blacklist {
+        "postgresql-18";
+        "postgresql-client-18";
+        "libpq5";
+};

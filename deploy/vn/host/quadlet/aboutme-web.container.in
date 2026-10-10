@@ -1,0 +1,32 @@
+# Rendered by deploy-host.sh; do not edit on the host. Nuxt in its own network
+# namespace, published on loopback only (docs/design/vietnam-production.md,
+# "Host").
+[Unit]
+OnFailure=aboutme-alert@%N.service
+Description=aboutme Nuxt renderer
+Requires=aboutme-network.service
+After=aboutme-network.service
+
+[Container]
+Image=@WEB_IMAGE@
+ContainerName=aboutme-web
+Network=aboutme
+PublishPort=127.0.0.1:3000:3000
+EnvironmentFile=/etc/aboutme/web.env
+Environment=DEPLOY_RELEASE_TAG=@RELEASE_TAG@
+Environment=DEPLOY_RELEASE_NUMBER=@RELEASE_NUMBER@
+PodmanArgs=--init --memory=256m
+HealthCmd=wget -q -O /dev/null http://127.0.0.1:3000/
+HealthInterval=10s
+HealthRetries=3
+HealthStartPeriod=30s
+LogDriver=journald
+
+[Service]
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-web
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

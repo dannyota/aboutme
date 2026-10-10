@@ -1,0 +1,7 @@
+# Copy to prod.tfvars (ignored) and fill in.
+# state_passphrase comes from TF_VAR_state_passphrase, never this file.
+project_id           = "pro-<id>"
+ssh_port             = 22922
+ssh_allowlist        = ["0.0.0.0/0"]
+admin_ssh_public_key = "ssh-ed25519 AAAA... aboutme-admin"
+disk_encryption_type = "aes-xts-plain64_256"

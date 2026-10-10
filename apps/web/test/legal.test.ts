@@ -34,10 +34,45 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Chính sách quyền riêng tư');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Cập nhật lần cuối ngày 02/10/2026',
+      'Cập nhật lần cuối ngày 11/10/2026',
     );
     expect(wrapper.text()).toContain('mã băm Argon2id');
-    expect(wrapper.text()).toContain('Singapore (ap-southeast-1)');
+    expect(wrapper.text()).toContain(
+      'Tài khoản, CV, ảnh, bản sao lưu và nhật ký của bạn được lưu trên '
+      + 'hạ tầng GreenNode tại Thành phố Hồ Chí Minh, Việt Nam.',
+    );
+    expect(wrapper.text()).toContain(
+      'Bizfly Email Transaction gửi email tài khoản qua SMTP.',
+    );
+    expect(wrapper.text()).toContain(
+      'dấu thời gian UTC, địa chỉ IP nguồn, phương thức HTTP, mã trạng '
+      + 'thái phản hồi và nhóm đường dẫn chung',
+    );
+    expect(wrapper.text()).toContain(
+      'không ghi đường dẫn hoặc URI cụ thể, chuỗi truy vấn, tiêu đề yêu '
+      + 'cầu hay phản hồi, hoặc nội dung yêu cầu hay phản hồi',
+    );
+    expect(wrapper.text()).toContain(
+      'Dữ liệu đầu vào chỉ nằm trong RAM. Cảnh báo và lệnh chặn của '
+      + 'CrowdSec được lưu trên ổ dữ liệu được mã hóa tại Việt Nam.',
+    );
+    expect(wrapper.text()).toContain(
+      'Dữ liệu đầu vào và toàn bộ bản ghi tấn công của CrowdSec, gồm cảnh '
+      + 'báo và lệnh chặn HTTP và SSH, được giữ tối đa 24 giờ.',
+    );
+    expect(wrapper.text()).toContain(
+      'Không dữ liệu nào trong số này được chia sẻ với cộng đồng CrowdSec.',
+    );
+    expect(wrapper.text()).toContain(
+      'Nhật ký vận hành thông thường của máy chủ không ghi địa chỉ IP '
+      + 'hoặc tiêu đề yêu cầu và được lưu tối đa 30 ngày.',
+    );
+    expect(wrapper.text()).not.toContain('Amazon Web Services ở Singapore');
+    expect(wrapper.text()).not.toContain('Amazon SES');
+    expect(wrapper.text()).not.toContain('Amazon CloudFront');
+    expect(wrapper.text()).not.toContain('AWS WAF');
+    expect(wrapper.text()).not.toContain('Singapore');
+    expect(wrapper.text()).not.toContain('danh sách chặn gửi');
     expect(wrapper.text()).toContain('Dữ liệu cá nhân chúng tôi thu thập');
     expect(wrapper.text()).toContain('Mục đích và cơ sở xử lý');
     expect(wrapper.text()).toContain('Quyền của bạn');
@@ -62,8 +97,7 @@ describe('privacy and terms pages', () => {
     );
     expect(wrapper.text()).toContain('Amazon Route 53 cung cấp dịch vụ DNS.');
     expect(wrapper.text()).toContain(
-      'Nếu bạn đăng nhập bằng LinkedIn, LinkedIn (Hoa Kỳ) xác thực tài '
-      + 'khoản của bạn.',
+      'Google (Hoa Kỳ) và LinkedIn (Hoa Kỳ) cung cấp lựa chọn đăng nhập.',
     );
     expect(wrapper.text()).toContain(
       'Nhập từ LinkedIn: trình duyệt của bạn đọc tệp PDF hồ sơ LinkedIn bạn '
@@ -114,14 +148,54 @@ describe('privacy and terms pages', () => {
     const wrapper = await mountSuspended(PrivacyPage);
     expect(title(wrapper)).toBe('Privacy Policy');
     expect(wrapper.get('[data-testid="legal-updated"]').text()).toBe(
-      'Last updated October 2, 2026',
+      'Last updated October 11, 2026',
     );
+    expect(wrapper.text()).toContain(
+      'Your account, resumes, photos, backups, and logs are stored on '
+      + 'GreenNode infrastructure in Ho Chi Minh City, Vietnam.',
+    );
+    expect(wrapper.text()).toContain(
+      'Bizfly Email Transaction sends account emails over SMTP.',
+    );
+    expect(wrapper.text()).toContain(
+      'the UTC timestamp, source IP address, HTTP method, response status, '
+      + 'and broad route class',
+    );
+    expect(wrapper.text()).toContain(
+      'does not record the specific path or URI, query string, request or '
+      + 'response headers, or request or response body',
+    );
+    expect(wrapper.text()).toContain(
+      'The feed stays only in RAM. CrowdSec attack alerts and bans are '
+      + 'stored on the encrypted Vietnam data volume.',
+    );
+    expect(wrapper.text()).toContain(
+      'We keep the feed and all CrowdSec attack records, including HTTP '
+      + 'and SSH alerts and bans, for at most 24 hours.',
+    );
+    expect(wrapper.text()).toContain(
+      'None of this data is shared with the CrowdSec community.',
+    );
+    expect(wrapper.text()).toContain(
+      'Ordinary server operational logs do not record request IP addresses '
+      + 'or request headers and are kept for up to 30 days.',
+    );
+    expect(wrapper.text()).not.toContain(
+      'Amazon Web Services in Singapore',
+    );
+    expect(wrapper.text()).not.toContain('Amazon SES');
+    expect(wrapper.text()).not.toContain('Amazon CloudFront');
+    expect(wrapper.text()).not.toContain('AWS WAF');
+    expect(wrapper.text()).not.toContain('Singapore');
+    expect(wrapper.text()).not.toContain('suppression list');
     expect(wrapper.text()).toContain(
       'We delete the IP address and browser (user agent) recorded for a '
       + 'sign-in no later than 90 days after that sign-in.',
     );
     expect(wrapper.text()).toContain('It cannot publish or unpublish');
-    expect(wrapper.text()).toContain('which does not store copies of them');
+    expect(wrapper.text()).toContain(
+      'Public pages are delivered directly from our host in Vietnam.',
+    );
     expect(wrapper.text()).toContain(
       'Cookies are used only to keep you signed in, to complete Google or '
       + 'LinkedIn sign-in, to hold a pending second-factor sign-in for '
@@ -132,7 +206,7 @@ describe('privacy and terms pages', () => {
     expect(wrapper.text()).not.toContain('CSRF');
     expect(wrapper.text()).toContain('Have I Been Pwned');
     expect(wrapper.text()).toContain(
-      'transferred abroad: mainly to Singapore',
+      'may involve processing outside Vietnam',
     );
     expect(wrapper.text()).toContain(
       'we keep its old web address reserved for 180 days',
@@ -150,8 +224,8 @@ describe('privacy and terms pages', () => {
     );
     expect(wrapper.text()).toContain('Amazon Route 53 provides DNS.');
     expect(wrapper.text()).toContain(
-      'If you sign in with LinkedIn, LinkedIn (United States) verifies '
-      + 'your account.',
+      'Google (United States) and LinkedIn (United States) provide optional '
+      + 'sign-in.',
     );
     expect(wrapper.text()).toContain(
       'LinkedIn import: your browser reads the LinkedIn profile PDF you '

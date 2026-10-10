@@ -33,9 +33,14 @@ func TestNewWorkerRejectsInvalidOptions(t *testing.T) {
 		Pool: pool, Queries: queries, KeyRing: ring, Sender: sender,
 		Clock: clock.Now, Jitter: func(d time.Duration) time.Duration { return 0 },
 		Logger: logger, WorkerID: uuid.New(),
+		FooterNote: FooterNoteForMode("smtp"),
 	}
-	if _, err := NewWorker(valid); err != nil {
-		t.Fatalf("NewWorker(valid) = %v, want nil", err)
+	worker, workerErr := NewWorker(valid)
+	if workerErr != nil {
+		t.Fatalf("NewWorker(valid) = %v, want nil", workerErr)
+	}
+	if worker.footerNote != valid.FooterNote {
+		t.Fatal("NewWorker did not preserve the footer note")
 	}
 	cases := []struct {
 		name string
@@ -87,7 +92,7 @@ func TestBackoffCap(t *testing.T) {
 
 func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 	p := Payload{Version: payloadVersion, To: "alice@example.com", Link: verifyLinkPrefix + `t<">&`}
-	msg := buildMessage(KindVerify, p)
+	msg := buildMessage(KindVerify, p, "")
 	if msg.Kind != KindVerify || msg.To != "alice@example.com" {
 		t.Fatalf("msg = %+v, want verify to alice@example.com", msg)
 	}
@@ -108,7 +113,7 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 		t.Errorf("html body leaks raw link: %q", msg.HTMLBody)
 	}
 
-	reset := buildMessage(KindReset, Payload{Version: 1, To: "b@c.d", Link: resetLinkPrefix + "tok"})
+	reset := buildMessage(KindReset, Payload{Version: 1, To: "b@c.d", Link: resetLinkPrefix + "tok"}, "")
 	if reset.Subject != "Đặt lại mật khẩu aboutme.vn / Reset your aboutme.vn password" {
 		t.Errorf("reset subject = %q", reset.Subject)
 	}
@@ -117,7 +122,7 @@ func TestBuildMessageTemplatesAndEscaping(t *testing.T) {
 			t.Errorf("reset text body missing %q", want)
 		}
 	}
-	changed := buildMessage(KindPasswordChanged, Payload{Version: 1, To: "b@c.d"})
+	changed := buildMessage(KindPasswordChanged, Payload{Version: 1, To: "b@c.d"}, "")
 	if changed.Subject != "Mật khẩu aboutme.vn đã thay đổi / Your aboutme.vn password was changed" {
 		t.Errorf("password_changed subject = %q", changed.Subject)
 	}
@@ -140,7 +145,7 @@ func TestBuildMessageHTMLIsSelfContained(t *testing.T) {
 		case KindReset:
 			p.Link = resetLinkPrefix + "tok"
 		}
-		msg := buildMessage(kind, p)
+		msg := buildMessage(kind, p, "")
 		lower := strings.ToLower(msg.HTMLBody)
 		for _, banned := range []string{"<img", "<script", "<link", "url(", "@import", "<iframe"} {
 			if strings.Contains(lower, banned) {

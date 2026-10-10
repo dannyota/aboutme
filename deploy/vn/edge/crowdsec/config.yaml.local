@@ -1,0 +1,32 @@
+# CrowdSec overrides merged over /etc/crowdsec/config.yaml
+# (docs/design/vietnam-production.md, "Edge").
+#
+# The local API listens on 127.0.0.1:8095 because Go owns 127.0.0.1:8080.
+# install.sh points local_api_credentials.yaml at the same address.
+#
+# Community sharing is off until the data protection impact assessment covers
+# it. install.sh removes the package's inherited online_client section and its
+# credentials before CrowdSec starts.
+common:
+  log_media: stdout
+  log_level: info
+
+api:
+  cti:
+    enabled: false
+  server:
+    listen_uri: 127.0.0.1:8095
+
+db_config:
+  type: sqlite
+  db_path: /var/lib/crowdsec/data/crowdsec.db
+  use_wal: true
+  flush:
+    max_items: 5000
+    max_age: 23h
+
+prometheus:
+  enabled: true
+  level: full
+  listen_addr: 127.0.0.1
+  listen_port: 6060

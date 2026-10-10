@@ -1,0 +1,34 @@
+# Rendered by deploy-host.sh; do not edit on the host. Caddy on 80 and 443 with
+# the direct edge (docs/design/vietnam-production.md, "Edge"). It shares its
+# storage directory and uid 10001 with aboutme-maintenance, so either process
+# answers the other's ACME HTTP-01 challenge and both may hold the ports with
+# SO_REUSEPORT during a deploy ("Host").
+[Unit]
+OnFailure=aboutme-alert@%N.service
+Description=aboutme Caddy
+After=aboutme-server.service crowdsec.service
+Requires=aboutme-crowdsec-retention-startup.service
+After=aboutme-crowdsec-retention-startup.service
+
+[Container]
+Image=@CADDY_IMAGE@
+ContainerName=aboutme-caddy
+Network=host
+EnvironmentFile=/etc/aboutme/caddy.env
+Environment=DEPLOY_RELEASE_TAG=@RELEASE_TAG@
+Environment=DEPLOY_RELEASE_NUMBER=@RELEASE_NUMBER@
+Secret=crowdsec-bouncer-key,type=env,target=CROWDSEC_API_KEY
+Volume=/var/lib/aboutme-caddy:/data
+Volume=/run/aboutme/caddy-log:/var/log/caddy
+PodmanArgs=--memory=128m
+LogDriver=journald
+
+[Service]
+ExecStartPre=/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-caddy
+LimitCORE=0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

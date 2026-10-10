@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme job privacy-retention-sweep (daily)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=5min
+Unit=aboutme-job@privacy-retention-sweep.service
+
+[Install]
+WantedBy=timers.target
