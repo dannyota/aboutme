@@ -13,10 +13,10 @@
 # redirecting again.
 {
 	admin off
-	# No HTTP-to-HTTPS redirect server on port 80. CloudFront reaches the
-	# origin over HTTPS on 8443 only, and the security group admits nothing
-	# else, so that server would answer no one. Without it Caddy binds no
-	# privileged port and runs as a non-root user with no capability.
+	# No automatic HTTP-to-HTTPS redirect server. CloudFront reaches the
+	# origin over HTTPS on 8443 only, so with only that edge Caddy binds no
+	# privileged port and runs with no capability. The direct edge declares
+	# its own port 80 site (edges/direct.sites).
 	auto_https disable_redirects
 	import /run/caddy/edges.global
 	# No site below turns on Caddy's access log, so an ordinary request is
@@ -26,6 +26,9 @@
 	# policy: no IP in logs).
 	log default {
 		output stderr
+		# Coraza's rule matches name the client address; edges/direct.global
+		# sends them to a local file instead.
+		exclude http.handlers.waf
 		format filter {
 			wrap json
 			request>client_ip delete

@@ -20,11 +20,13 @@ COPY deploy/caddy/production/maintenance.html /maintenance.html
 RUN bash /maintenance-render.sh /maintenance.html >/maintenance.generated.caddy
 
 # Same base and packages the upstream caddy:2.11.4-alpine image runs on, minus
-# curl and libcap: curl is not used by our entrypoint or config, and Caddy
-# needs no capability, since it binds only port 8443 (see the Caddyfiles).
+# curl and libcap: curl is not used by our entrypoint or config, and the
+# image grants no capability. The CloudFront edge binds only port 8443; the
+# direct edge binds 80 and 443, so its container is given
+# CAP_NET_BIND_SERVICE and nothing else (see deploy/caddy/production/test.sh).
 #
 # Caddy runs as uid and gid 10001, which no other image on the host uses. The
-# app and maintenance services share host port 8443 through SO_REUSEPORT, and
+# app and maintenance services share their host ports through SO_REUSEPORT, and
 # Linux lets a socket join a port only when its owner has the same effective
 # uid as the first socket's (socket(7)), so every Caddy image keeps this uid.
 #
@@ -33,19 +35,24 @@ RUN bash /maintenance-render.sh /maintenance.html >/maintenance.generated.caddy
 # 1777, the default mode of a tmpfs, so uid 10001 can write there with the
 # tmpfs and without it (adapt mode). The entrypoint's umask 077 keeps the
 # files it writes private to uid 10001.
+#
+# /var/log/caddy-waf holds Coraza's rule-match and audit logs for the direct
+# edge (edges/direct.global, coraza/aboutme.conf); the host mounts a
+# directory there that uid 10001 owns.
 FROM docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 RUN apk add --no-cache ca-certificates mailcap \
     && addgroup -S -g 10001 caddy \
     && adduser -S -D -H -u 10001 -G caddy -h /data -s /sbin/nologin caddy \
-    && mkdir -p /config/caddy /data/caddy /etc/caddy /run/caddy \
-    && chown 10001:10001 /config/caddy /data/caddy \
-    && chmod 0700 /config/caddy /data/caddy \
+    && mkdir -p /config/caddy /data/caddy /etc/caddy /run/caddy /var/log/caddy-waf \
+    && chown 10001:10001 /config/caddy /data/caddy /var/log/caddy-waf \
+    && chmod 0700 /config/caddy /data/caddy /var/log/caddy-waf \
     && chmod 1777 /run/caddy
 ENV XDG_CONFIG_HOME=/config XDG_DATA_HOME=/data
 COPY --from=caddy-build /out/caddy /usr/bin/caddy
 COPY deploy/caddy/production/Caddyfile /etc/caddy/Caddyfile
 COPY deploy/caddy/production/Caddyfile.maintenance /etc/caddy/Caddyfile.maintenance
 COPY deploy/caddy/production/edges/ /etc/caddy/edges/
+COPY deploy/caddy/production/coraza/ /etc/caddy/coraza/
 COPY --from=render /routes.caddy /etc/caddy/routes.caddy
 COPY --from=render /maintenance.generated.caddy /etc/caddy/maintenance.generated.caddy
 # file_server's root holds nothing but this one file: no other config or
