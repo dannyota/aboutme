@@ -6,6 +6,8 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORKFLOW=$ROOT/.github/workflows/ci.yml
 RELEASE_WORKFLOW=$ROOT/.github/workflows/release-images.yml
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-workflow-safety.XXXXXX")
+trap 'rm -rf -- "$WORK"' EXIT
 
 fail() {
   printf 'workflow-safety-test: %s\n' "$*" >&2
@@ -251,5 +253,59 @@ grep -Fxq "    if: \${{ !cancelled() && needs.image.result == 'success' }}" <<<"
   fail "release job condition lacks !cancelled(), so an observer-image failure skips the release"
 grep -Fq '[[ ! -e artifacts/digest-observer.txt ]] || names+=(observer)' <<<"$RELEASE_JOB" ||
   fail "release job does not gate observer assets on the observer digest artifact"
+grep -Fq 'cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"' <<<"$RELEASE_JOB" ||
+  fail "release job does not publish the legacy app SBOM name from the AWS arm64 image"
+
+# The scheduled scan exercises both released app platforms and keeps one report
+# per image and platform. The observer remains arm64-only and outside this loop.
+mkdir -p "$WORK/bin" "$WORK/reports"
+cat >"$WORK/bin/git" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' v9.9.9
+EOF
+cat >"$WORK/bin/trivy" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$SCAN_CALLS"
+args=$*
+report=
+while [ "$#" -gt 0 ]; do
+  case $1 in
+  --output) report=$2; shift 2 ;;
+  *) shift ;;
+  esac
+done
+if [ -n "${FAIL_TARGET-}" ] && [[ $args == *"$FAIL_TARGET"* ]]; then
+  printf '%s\n' '{"ArtifactName":"fixture","Results":[{"Vulnerabilities":[{"VulnerabilityID":"CVE-fixture","PkgName":"fixture","InstalledVersion":"1","FixedVersion":"2"}]}]}' >"$report"
+else
+  printf '%s\n' '{"ArtifactName":"fixture","Results":[]}' >"$report"
+fi
+EOF
+chmod +x "$WORK/bin/git" "$WORK/bin/trivy"
+SCAN_CALLS="$WORK/scan.calls" PATH="$WORK/bin:/usr/bin:/bin" \
+  "$ROOT/scripts/security-scan.sh" weekly-scan "$WORK/bin/trivy" "$WORK/reports" >/dev/null
+[ "$(wc -l <"$WORK/scan.calls")" -eq 6 ] ||
+  fail "weekly image scan does not scan three app images on both platforms"
+for name in server web caddy; do
+  for arch in arm64 amd64; do
+    grep -Fq -- "--platform linux/$arch ghcr.io/dannyota/aboutme-$name:v9.9.9" "$WORK/scan.calls" ||
+      fail "weekly image scan misses $name on linux/$arch"
+    [ -s "$WORK/reports/released-$name-$arch.json" ] ||
+      fail "weekly image scan did not keep the $name $arch report"
+  done
+done
+[ ! -e "$WORK/reports/released-observer-arm64.json" ] ||
+  fail "weekly app image scan unexpectedly added the observer"
+
+: >"$WORK/scan.calls"
+rm -rf -- "$WORK/reports"
+if SCAN_CALLS="$WORK/scan.calls" FAIL_TARGET='--platform linux/amd64 ghcr.io/dannyota/aboutme-server:' \
+  PATH="$WORK/bin:/usr/bin:/bin" "$ROOT/scripts/security-scan.sh" weekly-scan \
+  "$WORK/bin/trivy" "$WORK/reports" >/dev/null; then
+  fail "weekly image scan accepted a fixable amd64 finding"
+fi
+[ "$(wc -l <"$WORK/scan.calls")" -eq 6 ] ||
+  fail "weekly image scan stopped after one platform failed"
+grep -Fxq 'ghcr.io/dannyota/aboutme-server:v9.9.9 linux/amd64' "$WORK/reports/failed.txt" ||
+  fail "weekly image scan did not identify the failing platform"
 
 printf 'hosted workflow safety tests passed\n'

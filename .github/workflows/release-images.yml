@@ -403,6 +403,9 @@ jobs:
               jq -e '.spdxVersion == "SPDX-2.3"' "artifacts/aboutme-$name-$arch.spdx.json" >/dev/null
               cp "artifacts/aboutme-$name-$arch.spdx.json" release/
             done
+            # Existing transparency documents link this name. AWS runs the
+            # arm64 image, so keep that platform's SBOM at the legacy URL.
+            cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"
           done
           # The observer image is listed once the observer-image job builds it.
           names=()
@@ -416,9 +419,10 @@ jobs:
           cat >release/notes.md <<EOF
           Images built from $TAG by the release-images workflow. \`digests.txt\`
           lists each image by digest with the platforms it serves: the
-          multi-platform index, then one image per platform. Each \`.spdx.json\`
-          file is a copy of the signed SPDX 2.3 SBOM attested for one platform
-          image digest.
+          multi-platform index, then one image per platform. Files with a
+          platform suffix are copies of signed SPDX 2.3 SBOMs. The app files
+          without a platform suffix are copies of the arm64 SBOMs for existing
+          AWS transparency links.
 
           Verify an image's build provenance with the GitHub CLI:
 
