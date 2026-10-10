@@ -5,7 +5,7 @@
 # the latest backup and then a point-in-time target, checks each result, prints
 # the recovery times, and deletes the server.
 #
-#   restore-drill.sh --prod-host <ip> --ssh-key-id <id> --vpc-id <id> \
+#   restore-drill.sh --prod-host <ip> --vpc-id <id> \
 #     --subnet-id <id> --security-group-id <id> --max-price <vnd a month> \
 #     --admin-key-file <ssh-ed25519 public key> \
 #     [--target-time <ISO-8601 UTC, e.g. 2026-10-09T03:00:00Z>] \
@@ -59,7 +59,7 @@ VOLUME_NAME=${SERVER_NAME}-data
 
 usage() {
   cat >&2 <<'USAGE'
-usage: restore-drill.sh --prod-host <ip> --ssh-key-id <id> --vpc-id <id>
+usage: restore-drill.sh --prod-host <ip> --vpc-id <id>
   --subnet-id <id> --security-group-id <id> --max-price <vnd a month>
   --admin-key-file <ssh-ed25519 public key>
   [--target-time <ISO-8601 UTC>] [--resume] [--keep] [--direct]
@@ -67,7 +67,7 @@ USAGE
   exit 2
 }
 
-prod_host='' ssh_key_id='' vpc_id='' subnet_id='' sg_id='' max_price=''
+prod_host='' vpc_id='' subnet_id='' sg_id='' max_price=''
 admin_key_file='' target_time='' resume=0 keep=0 direct=0
 while (($#)); do
   case $1 in
@@ -79,12 +79,11 @@ while (($#)); do
       esac
       shift
       ;;
-    --prod-host | --ssh-key-id | --vpc-id | --subnet-id | --security-group-id | \
+    --prod-host | --vpc-id | --subnet-id | --security-group-id | \
       --max-price | --admin-key-file | --target-time)
       (($# >= 2)) || usage
       case $1 in
         --prod-host) prod_host=$2 ;;
-        --ssh-key-id) ssh_key_id=$2 ;;
         --vpc-id) vpc_id=$2 ;;
         --subnet-id) subnet_id=$2 ;;
         --security-group-id) sg_id=$2 ;;
@@ -97,7 +96,7 @@ while (($#)); do
     *) usage ;;
   esac
 done
-for v in prod_host ssh_key_id vpc_id subnet_id sg_id max_price admin_key_file; do
+for v in prod_host vpc_id subnet_id sg_id max_price admin_key_file; do
   [[ -n ${!v} ]] || usage
 done
 [[ $max_price =~ ^[0-9]+$ ]] || usage
@@ -276,10 +275,11 @@ CLOUD
 
   create_attempted=1
   say "creating $SERVER_NAME (waits for ACTIVE)"
+  # No --ssh-key-id: GreenNode refuses user data on a create that also sets an
+  # SSH key, and the admin key arrives through the cloud-config above.
   server_id=$(vng compute create-server --name "$SERVER_NAME" \
     --zone-id "$ZONE_ID" --flavor-id "$FLAVOR_ID" --image-id "$IMAGE_ID" \
     --vpc-id "$vpc_id" --subnet-id "$subnet_id" --security-group-id "$sg_id" \
-    --ssh-key-id "$ssh_key_id" \
     --root-disk-size "$ROOT_DISK_GB" --root-disk-type-id "$VOLUME_TYPE_ID" \
     --root-disk-encryption-type-id "$DISK_ENCRYPTION_TYPE" \
     --max-price "$max_price" --user-data-file "$file" |
