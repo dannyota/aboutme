@@ -24,17 +24,18 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 - 2026-10-10: nothing in front of the host; Caddy with Coraza and CrowdSec; vWAF only as a DNS-change escalation.
 - 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.
 - 2026-10-10: compute HCM03 (zone HCM03-1A), vStorage HCM04, one backup repository.
-- 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 20 GB unencrypted, data 20 GB encrypted; grow online at 70%.
+- 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 30 GB unencrypted, data 20 GB encrypted; 4 GiB RAM with hard service caps, serialized jobs, 512 MiB zram, and a 64 MiB Caddy-log tmpfs; grow disks online at 70%.
 - 2026-10-10: `ed25519-sk` SSH key; host-file release fence; SMTP sender instead of the Bizfly HTTP API; no vMonitor; journald on the encrypted data volume for 30 days, capped at 2 GB; CrowdSec community sharing off.
+- 2026-10-10: CrowdSec receives a five-field RAM-only HTTP feed; encrypted attack-IP records stay in Vietnam for at most 24 hours; the public notice changes at cutover.
 
 ## Current status
 
 - The amd64 branch head is `52372cbd`; branch CI run `38022739301` and release-images run `38022741220` are green.
 - The SMTP branch head is `76cc9279`; branch CI run `38022537867` is green.
-- The Caddy branch head is `56cfe773`; branch CI run `38024459936` is pending. The log-retention duration and Coraza engine diagnostic classification fixes passed independent review.
+- The Caddy branch head is `060111d2`; branch CI run `38029254709` passed encoder unit tests but failed the new IPv6 HTTPS probe because its TLS hostname was wrong. The probe fix awaits hosted verification.
 - These phase 2 releases remain open because none is merged, tagged, or deployed.
-- Vietnam host code passed independent review. Full branch CI run `38024200011` is green at `6d52f805`; VN infrastructure run `38024199905` exposed faulty SMTP sender validation. Numeric codepoint validation and a watcher diagnostic regression are ready for fresh hosted checks. No provider apply has started because provider account prerequisites remain open.
-- CrowdSec HTTP acquisition awaits an owner privacy decision. The acquisition is missing, so CrowdSec cannot yet detect HTTP attacks; the bouncer can enforce existing decisions.
+- Vietnam host code at `984bd2c6` passed full branch CI `38024727139` and VN infrastructure CI `38024726866`. The new privacy controls and memory budget passed independent review and await hosted checks. No provider apply has started because provider account prerequisites remain open.
+- The approved CrowdSec HTTP feed, parser, scenarios, retention gate, and cutover notice are implemented. Root and data defaults are 30 GB and 20 GB. Service memory caps and workload serialization target the 4 GiB host; actual peak memory remains a rehearsal gate.
 
 ## Phases
 

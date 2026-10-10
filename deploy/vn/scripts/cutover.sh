@@ -151,7 +151,7 @@ cmd_reset_db() {
     systemctl is-active --quiet aboutme-server && exit 1
     sudo -u postgres dropdb --if-exists aboutme
     sudo -u postgres createdb -O aboutme aboutme
-    systemctl start aboutme-db-setup.service
+    /usr/local/lib/aboutme/workload-lock.sh 3600 systemctl start aboutme-db-setup.service
     [ \"\$(systemctl show -p Result --value aboutme-db-setup.service)\" = success ]" ||
     die "the database reset or db-setup failed"
   assert_cutover_quiescent

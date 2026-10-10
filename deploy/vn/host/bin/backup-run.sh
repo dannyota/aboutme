@@ -4,6 +4,11 @@
 # "PostgreSQL"). Accepts only full, diff, or verify.
 set -euo pipefail
 
+if [[ ${1-} != --locked ]]; then
+  exec /usr/local/lib/aboutme/workload-lock.sh 21600 "$0" --locked "$@"
+fi
+shift
+
 kind=${1:-}
 case "$kind" in
 full | diff)

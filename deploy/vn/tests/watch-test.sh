@@ -12,12 +12,22 @@ cat >"$work/lib/alert.sh" <<'STUB'
 printf '%s|%s\n' "$1" "$2" >>"$WATCH_TEST_ALERTS"
 cat >/dev/null
 STUB
+cat >"$work/lib/crowdsec-retention-fail.sh" <<'STUB'
+#!/usr/bin/env bash
+printf 'retention failure\n' >>"$WATCH_TEST_RETENTION_FAILURES"
+STUB
 cat >"$work/bin/df" <<'STUB'
 #!/usr/bin/env bash
 printf 'Use%%\n10%%\n'
 STUB
 cat >"$work/bin/systemctl" <<'STUB'
 #!/usr/bin/env bash
+if [[ ${1-} == is-enabled && ${WATCH_TEST_TIMER_DISABLED:-0} == 1 ]]; then
+  exit 1
+fi
+if [[ ${1-} == is-active && ${WATCH_TEST_TIMER_INACTIVE:-0} == 1 ]]; then
+  exit 1
+fi
 exit 0
 STUB
 cat >"$work/bin/runuser" <<'STUB'
@@ -47,14 +57,18 @@ cat >"$work/bin/journalctl" <<'STUB'
 #!/usr/bin/env bash
 exit 0
 STUB
-chmod +x "$work/bin/"* "$work/lib/alert.sh"
+chmod +x "$work/bin/"* "$work/lib/"*.sh
 export PATH=$work/bin:$PATH ABOUTME_WATCH_TEST_LIB=$work/lib
 export CORAZA_MATCHES_PER_HOUR=0
+export ABOUTME_RETENTION_SUCCESS_MARKER=$work/retention-ok
+: >"$ABOUTME_RETENTION_SUCCESS_MARKER"
 
 run_watch() { # fixture alerts
-  export WATCH_TEST_FIXTURE=$1 WATCH_TEST_ALERTS=$2
+  export WATCH_TEST_FIXTURE=$1 WATCH_TEST_ALERTS=$2 WATCH_TEST_RETENTION_FAILURES=$work/retention-failures
   : >"$WATCH_TEST_ALERTS"
+  : >"$WATCH_TEST_RETENTION_FAILURES"
   "$watch"
+  [[ ! -s $WATCH_TEST_RETENTION_FAILURES ]] || { echo "fresh retention lease failed" >&2; exit 1; }
   sort -o "$WATCH_TEST_ALERTS" "$WATCH_TEST_ALERTS"
 }
 
@@ -78,6 +92,32 @@ grep -qxF 'coraza-unparsed|Coraza wrote 1 unparsed match records in the last hou
 grep -qxF 'coraza-log-invalid|the Coraza match log has 1 unknown records in the last hour' "$work/diagnostic.alerts"
 [[ $(wc -l <"$work/diagnostic.alerts") == 3 ]] || {
   echo "the watcher raised an unexpected alert" >&2
+  exit 1
+}
+
+touch -d '7 minutes ago' "$ABOUTME_RETENTION_SUCCESS_MARKER"
+WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/stale.alerts WATCH_TEST_RETENTION_FAILURES=$work/stale.failures \
+  "$watch"
+grep -qxF 'retention failure' "$work/stale.failures" || {
+  echo "stale retention lease did not fail closed" >&2
+  exit 1
+}
+: >"$ABOUTME_RETENTION_SUCCESS_MARKER"
+
+WATCH_TEST_TIMER_DISABLED=1 WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/disabled.alerts WATCH_TEST_RETENTION_FAILURES=$work/disabled.failures \
+  "$watch"
+grep -qxF 'retention failure' "$work/disabled.failures" || {
+  echo "disabled retention timer did not fail closed" >&2
+  exit 1
+}
+
+WATCH_TEST_TIMER_INACTIVE=1 WATCH_TEST_FIXTURE=$base \
+  WATCH_TEST_ALERTS=$work/inactive.alerts WATCH_TEST_RETENTION_FAILURES=$work/inactive.failures \
+  "$watch"
+grep -qxF 'retention failure' "$work/inactive.failures" || {
+  echo "inactive retention timer did not fail closed" >&2
   exit 1
 }
 

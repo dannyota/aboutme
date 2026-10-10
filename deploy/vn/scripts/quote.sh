@@ -45,7 +45,7 @@ done
 : "${FLAVOR_ID:=flav-cbb11ae8-f4b7-4e25-96a6-c30bcfcccece}"
 : "${IMAGE_ID:=img-34440a82-92fb-40bc-b79c-b1a2b49b93de}"
 : "${VOLUME_TYPE_ID:=vtype-61c3fc5b-f4e9-45b4-8957-8aa7b6029018}"
-: "${ROOT_DISK_GB:=20}"
+: "${ROOT_DISK_GB:=30}"
 : "${DATA_DISK_GB:=20}"
 : "${DATA_VOLUME_ENCRYPTION_TYPE:=aes-xts-plain64_256}"
 

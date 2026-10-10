@@ -7,6 +7,8 @@
 OnFailure=aboutme-alert@%N.service
 Description=aboutme Caddy
 After=aboutme-server.service crowdsec.service
+Requires=aboutme-crowdsec-retention-startup.service
+After=aboutme-crowdsec-retention-startup.service
 
 [Container]
 Image=@CADDY_IMAGE@
@@ -22,7 +24,9 @@ PodmanArgs=--memory=128m
 LogDriver=journald
 
 [Service]
+ExecStartPre=/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
 ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-caddy
+LimitCORE=0
 Restart=on-failure
 RestartSec=5
 

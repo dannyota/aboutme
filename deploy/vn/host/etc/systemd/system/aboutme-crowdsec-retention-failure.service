@@ -1,0 +1,8 @@
+[Unit]
+Description=aboutme CrowdSec retention failure response
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/crowdsec-retention-fail.sh
+StandardOutput=null
+StandardError=null

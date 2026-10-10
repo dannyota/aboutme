@@ -1,0 +1,12 @@
+[Unit]
+Description=aboutme RAM-only Caddy security logs
+Before=crowdsec.service crowdsec-firewall-bouncer.service aboutme-caddy.service aboutme-maintenance.service
+
+[Mount]
+What=tmpfs
+Where=/run/aboutme/caddy-log
+Type=tmpfs
+Options=mode=0750,uid=10001,gid=10001,size=64M,nosuid,nodev,noexec
+
+[Install]
+WantedBy=local-fs.target

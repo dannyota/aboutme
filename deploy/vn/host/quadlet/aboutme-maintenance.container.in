@@ -4,6 +4,8 @@
 [Unit]
 OnFailure=aboutme-alert@%N.service
 Description=aboutme maintenance Caddy
+Requires=aboutme-crowdsec-retention-startup.service
+After=aboutme-crowdsec-retention-startup.service
 
 [Container]
 Image=@MAINTENANCE_IMAGE@
@@ -20,4 +22,6 @@ PodmanArgs=--memory=128m
 LogDriver=journald
 
 [Service]
+ExecStartPre=/usr/local/lib/aboutme/crowdsec-retention-lease-check.sh
+LimitCORE=0
 Restart=no

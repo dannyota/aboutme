@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalVi: LegalCopy = {
-  updated: 'Cập nhật lần cuối ngày 02/10/2026',
+  updated: 'Cập nhật lần cuối ngày 10/10/2026',
   privacyLink: 'Chính sách quyền riêng tư',
   termsLink: 'Điều khoản sử dụng',
   verifyLink: 'Kiểm chứng',
@@ -58,12 +58,19 @@ export const legalVi: LegalCopy = {
           'Trợ lý AI đã kết nối: tên ứng dụng, các địa chỉ chuyển hướng '
           + '(redirect) của ứng dụng, quyền truy cập bạn đã cấp, và lần '
           + 'dùng gần nhất. Token truy cập chỉ được lưu dưới dạng mã băm.',
-          'Nhật ký yêu cầu của máy chủ (không ghi địa chỉ IP), lưu tối đa '
-          + '180 ngày.',
-          'Sự kiện gửi email: đã gửi, đã nhận, bị trả lại, hoặc bị đánh '
-          + 'dấu là thư rác. Nếu email gửi đến bạn bị trả lại hoặc bị đánh '
-          + 'dấu là thư rác, địa chỉ đó được đưa vào danh sách chặn gửi '
-          + 'của Amazon SES cho đến khi được gỡ ra.',
+          'Nhật ký vận hành thông thường của máy chủ không ghi địa chỉ IP '
+          + 'hoặc tiêu đề yêu cầu và được lưu tối đa 30 ngày.',
+          'Chống tấn công: CrowdSec nhận dữ liệu yêu cầu gồm đúng năm '
+          + 'trường: dấu thời gian UTC, địa chỉ IP nguồn, phương thức HTTP, '
+          + 'mã trạng thái phản hồi và nhóm đường dẫn chung. Dữ liệu này '
+          + 'không ghi đường dẫn hoặc URI cụ thể, chuỗi truy vấn, tiêu đề '
+          + 'yêu cầu hay phản hồi, hoặc nội dung yêu cầu hay phản hồi. Dữ '
+          + 'liệu đầu vào chỉ nằm trong RAM. Cảnh báo và lệnh chặn của '
+          + 'CrowdSec được lưu trên ổ dữ liệu được mã hóa tại Việt Nam. '
+          + 'Dữ liệu đầu vào và toàn bộ bản ghi tấn công của CrowdSec, gồm '
+          + 'cảnh báo và lệnh chặn HTTP và SSH, được giữ tối đa 24 giờ. '
+          + 'Không dữ liệu nào trong số này được chia sẻ với cộng đồng '
+          + 'CrowdSec.',
           'Kiểm tra mật khẩu: khi bạn đặt mật khẩu, chúng tôi kiểm tra xem '
           + 'mật khẩu đã từng bị lộ hay chưa qua dịch vụ Have I Been '
           + 'Pwned. Chỉ 5 ký tự đầu của mã băm SHA-1 được gửi đi, không '
@@ -135,14 +142,13 @@ export const legalVi: LegalCopy = {
           + 'trong 180 ngày để không ai khác chiếm được đường dẫn đó. '
           + 'Việc giữ chỗ này không gắn với tài khoản của bạn, và sẽ bị '
           + 'xóa sau 180 ngày.',
-          'Trang công khai được phân phối qua mạng CDN toàn cầu '
-          + '(Amazon CloudFront) nhưng không được lưu lại trên CDN. '
-          + 'Khi CV đang công khai, bất kỳ ai xem được cũng có thể lưu '
-          + 'hoặc chụp lại trang. Theo mặc định, người xem cũng có thể '
-          + 'tải về bản PDF của CV; bạn có thể tắt tính năng này. Đừng '
-          + 'đưa dữ liệu cá nhân nhạy cảm, như số hoặc ảnh giấy tờ tùy '
-          + 'thân, tình trạng sức khoẻ, tôn giáo, hoặc quan điểm chính '
-          + 'trị, vào một CV công khai.',
+          'Trang công khai được gửi trực tiếp từ máy chủ của chúng tôi tại '
+          + 'Việt Nam. Khi CV đang công khai, bất kỳ ai xem được cũng có '
+          + 'thể lưu hoặc chụp lại trang. Theo mặc định, người xem cũng có '
+          + 'thể tải về bản PDF của CV; bạn có thể tắt tính năng này. Đừng '
+          + 'đưa dữ liệu cá nhân nhạy cảm, như số hoặc ảnh giấy tờ tùy thân, '
+          + 'tình trạng sức khoẻ, tôn giáo, hoặc quan điểm chính trị, vào '
+          + 'một CV công khai.',
           'Khi bất kỳ ai chia sẻ đường dẫn công khai của bạn trong một ứng '
           + 'dụng nhắn tin hoặc mạng xã hội, dịch vụ đó sẽ lấy tiêu đề '
           + 'trang, phần tóm tắt và ảnh xem trước của trang (họ tên, tiêu '
@@ -161,22 +167,20 @@ export const legalVi: LegalCopy = {
       {
         heading: 'Dữ liệu được lưu ở đâu',
         paragraphs: [
-          'Dữ liệu của bạn được lưu tại Amazon Web Services ở Singapore '
-          + '(ap-southeast-1): cơ sở dữ liệu, bản sao lưu, kho ảnh, và '
-          + 'việc gửi email qua Amazon SES. Amazon CloudFront (mạng máy '
-          + 'chủ toàn cầu của Amazon Web Services) phân phối trang web; '
-          + 'CloudFront và AWS WAF xử lý địa chỉ IP và thông tin trình '
-          + 'duyệt của bạn để chặn tấn công và nhận diện bot. Amazon '
-          + 'Route 53 cung cấp dịch vụ '
-          + 'DNS. '
-          + 'Nếu bạn đăng nhập bằng Google, Google (Hoa Kỳ) xác thực '
-          + 'tài khoản của bạn. Nếu bạn đăng nhập bằng LinkedIn, LinkedIn '
-          + '(Hoa Kỳ) xác thực tài khoản của bạn. Email bạn gửi cho '
-          + 'chúng tôi được lưu trong hộp thư Google Workspace. Nếu bạn '
-          + 'ở Việt Nam, dữ liệu cá nhân của bạn được chuyển ra nước '
-          + 'ngoài: chủ yếu đến Singapore, và một phần đến Google và '
-          + 'LinkedIn.',
-          'Kiểm tra mật khẩu dùng dịch vụ Have I Been Pwned.',
+          'Tài khoản, CV, ảnh, bản sao lưu và nhật ký của bạn được lưu trên '
+          + 'hạ tầng GreenNode tại Thành phố Hồ Chí Minh, Việt Nam. Bizfly '
+          + 'Email Transaction gửi email tài khoản qua SMTP. Amazon Route '
+          + '53 cung cấp dịch vụ DNS.',
+          'Google (Hoa Kỳ) và LinkedIn (Hoa Kỳ) cung cấp lựa chọn đăng '
+          + 'nhập. Khi dùng một trong hai dịch vụ để đăng nhập vào tài '
+          + 'khoản, bạn đăng nhập tại nhà cung cấp và chúng tôi nhận tên, '
+          + 'email và mã tài khoản của bạn. Email bạn gửi cho chúng tôi '
+          + 'được lưu trong hộp thư Google Workspace.',
+          'Đăng nhập bằng Google hoặc LinkedIn, gửi email hỗ trợ, dịch vụ '
+          + 'AI bạn chọn kết nối và dịch vụ nước ngoài lấy đường dẫn CV '
+          + 'công khai có thể dẫn đến việc xử lý dữ liệu ngoài Việt Nam. '
+          + 'Kiểm tra mật khẩu dùng dịch vụ Have I Been Pwned; dịch vụ này '
+          + 'chỉ nhận 5 ký tự đầu của mã băm SHA-1 của mật khẩu.',
         ],
       },
       {

@@ -15,10 +15,37 @@ disk_percent=70
 backup_hours=26
 crowdsec_bans_per_hour=${CROWDSEC_BANS_PER_HOUR:-50}
 coraza_matches_per_hour=${CORAZA_MATCHES_PER_HOUR:-50}
+if [[ -n ${ABOUTME_WATCH_TEST_LIB:-} ]]; then
+  retention_lease=${ABOUTME_RETENTION_SUCCESS_MARKER:?watch test lease is required}
+else
+  retention_lease=/run/aboutme/crowdsec-retention-ok
+fi
+retention_lease_owner_bad=no
+retention_lease_stale=yes
+if [[ -z ${ABOUTME_WATCH_TEST_LIB:-} && -e $retention_lease ]] &&
+  [[ $(stat -c '%u:%g:%a' "$retention_lease" 2>/dev/null || true) != 0:0:600 ]]; then
+  retention_lease_owner_bad=yes
+fi
+if [[ -f $retention_lease && ! -L $retention_lease ]]; then
+  lease_mtime=$(stat -c %Y "$retention_lease" 2>/dev/null || echo 0)
+  if ((lease_mtime <= EPOCHSECONDS && EPOCHSECONDS - lease_mtime <= 360)); then
+    retention_lease_stale=no
+  fi
+fi
 
 alert() { # key subject [detail]
   printf '%s\n' "${3-}" | "$lib/alert.sh" "$1" "$2" || true
 }
+
+# The retention timer has its own failure action. This independent lease check
+# also catches a disabled or stuck timer within five minutes.
+if ! systemctl is-enabled --quiet aboutme-crowdsec-retention.timer ||
+  ! systemctl is-active --quiet aboutme-crowdsec-retention.timer ||
+  [[ ! -f $retention_lease || -L $retention_lease ]] ||
+  [[ $retention_lease_owner_bad == yes ]] ||
+  [[ $retention_lease_stale == yes ]]; then
+  "$lib/crowdsec-retention-fail.sh" || true
+fi
 
 # Root and data volume use.
 for pair in root:/ data:/srv/data; do

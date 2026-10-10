@@ -131,10 +131,15 @@ c_root_free() {
 }
 
 c_zram() {
-  local row
-  row=$(swapon --noheadings --show=NAME,SIZE | grep '^/dev/zram0 ' || true)
+  local row size
+  row=$(swapon --bytes --noheadings --show=NAME,SIZE | grep '^/dev/zram0 ' || true)
   [[ -n $row ]] || {
     echo "zram0 is not active swap"
+    return 1
+  }
+  read -r _ size <<<"$row"
+  ((size <= 536870912)) || {
+    echo "zram0 exceeds 512 MiB"
     return 1
   }
   echo "$row"
