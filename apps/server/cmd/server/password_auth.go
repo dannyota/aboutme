@@ -1,10 +1,11 @@
 package main
 
-// Password-authentication composition (Phase PA T09). This file builds the
+// Password-authentication composition. This file builds the
 // blocklist/policy/hasher, the mail key ring and outbox, the mode-selected
-// sender (SES or loopback capture), the rate policies, the password service,
-// and the leased mail worker — then run() wires the routes and joins the worker
-// on shutdown. No AWS client is ever constructed in capture mode.
+// sender (SES, SMTP, or loopback capture), the rate policies, the password
+// service, and the leased mail worker, then run() wires the routes and joins
+// the worker on shutdown. No AWS client is ever constructed in capture or SMTP
+// mode.
 
 import (
 	"context"
@@ -130,9 +131,10 @@ func newMailKeyRing(cfg config.Config) (*authmail.KeyRing, error) {
 	return ring, nil
 }
 
-// newMailSender selects the capture or SES sender. Capture mode constructs no
-// AWS client; SES mode uses the standard credential chain and never reads a
-// credential env field.
+// newMailSender selects the capture, SES, or SMTP sender. Capture and SMTP mode
+// construct no AWS client; SES mode uses the standard credential chain and
+// never reads a credential env field. SMTP verifies the server against the
+// system roots.
 func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) (authmail.Sender, error) {
 	switch cfg.AuthEmail.Mode {
 	case authmailModeCaptureValue:
@@ -158,16 +160,32 @@ func newMailSender(ctx context.Context, cfg config.Config, logger *slog.Logger) 
 			return nil, fmt.Errorf("create SES sender: %w", err)
 		}
 		return sender, nil
+	case authmailModeSMTPValue:
+		sender, err := authmail.NewSMTPSender(authmail.SMTPOptions{
+			Host:     cfg.AuthEmail.SMTPHost,
+			Port:     cfg.AuthEmail.SMTPPort,
+			TLSMode:  authmail.SMTPTLSMode(cfg.AuthEmail.SMTPTLS),
+			Username: cfg.AuthEmail.SMTPUsername,
+			Password: cfg.AuthEmail.SMTPPassword.Reveal(),
+			From:     cfg.AuthEmail.SESFrom,
+			FromName: cfg.AuthEmail.SESFromName,
+			Logger:   logger,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("create SMTP sender: %w", err)
+		}
+		return sender, nil
 	default:
 		return nil, fmt.Errorf("unsupported auth email mode %q", cfg.AuthEmail.Mode)
 	}
 }
 
 // The config package owns the mode strings; these mirrors keep main.go from
-// spelling them a second time while the mode stays a closed two-value set.
+// spelling them a second time while the mode stays a closed three-value set.
 const (
 	authmailModeCaptureValue = "capture"
 	authmailModeSESValue     = "ses"
+	authmailModeSMTPValue    = "smtp"
 )
 
 // fullJitter returns a uniform random duration in [0, d]. The worker owns retry
