@@ -237,7 +237,23 @@ ssh_keys:
 CLOUD
     sed 's/^/    /' "$run/hostkey"
     cat <<CLOUD
+bootcmd:
+  # Print GreenNode's own sshd_config to the serial console once, before
+  # write_files replaces it. It listens on port 234 and ignored the drop-in.
+  - [sh, -c, "[ -e /root/sshd_config.image ] || { cp -p /etc/ssh/sshd_config /root/sshd_config.image; { echo '== image sshd_config'; grep -v -E '^[[:space:]]*(#|$)' /etc/ssh/sshd_config; ls -l /etc/ssh/sshd_config.d; echo '== end'; } > /dev/ttyS0 2>&1; }"]
+
 write_files:
+  - path: /etc/ssh/sshd_config
+    permissions: "0644"
+    content: |
+      # Ubuntu's defaults with the drop-in directory; GreenNode's image file
+      # does not apply the drop-in below.
+      Include /etc/ssh/sshd_config.d/*.conf
+      KbdInteractiveAuthentication no
+      UsePAM yes
+      PrintMotd no
+      AcceptEnv LANG LC_*
+      Subsystem sftp /usr/lib/openssh/sftp-server
   - path: /etc/ssh/sshd_config.d/90-aboutme.conf
     permissions: "0644"
     content: |
@@ -248,11 +264,12 @@ write_files:
       AllowUsers $ADMIN_USER
       PubkeyAcceptedAlgorithms ssh-ed25519
 runcmd:
-  # Ubuntu 24.04 derives ssh.socket ports from sshd_config at daemon-reload.
-  - systemctl daemon-reload
-  - systemctl restart ssh.socket
-  # Reload access rules in an already active SSH daemon.
-  - systemctl restart ssh
+  # GreenNode's Ubuntu 24.04 image starts ssh.service directly; stock Ubuntu
+  # uses ssh.socket. Apply the new port either way, after sshd -t passes.
+  - [sh, -c, "sshd -t && systemctl daemon-reload && if systemctl is-enabled --quiet ssh.socket; then systemctl stop ssh.service && systemctl restart ssh.socket; else systemctl restart ssh.service; fi"]
+  # What listens, and any guest firewall, goes to the serial console, which
+  # the console-log API reads when SSH does not answer. No secret is printed.
+  - [sh, -c, "{ echo '== aboutme ssh check'; sshd -T | grep -iE '^(port|listenaddress|addressfamily|allowusers|pubkeyauthentication|authorizedkeysfile|pubkeyacceptedalgorithms|permitrootlogin|passwordauthentication) '; ss -tlnp; systemctl --no-pager --full status ssh.service ssh.socket ssh-keygen.service; journalctl -b --no-pager -u ssh -u ssh.socket -u ssh-keygen | tail -n 60; nft list ruleset | head -n 60; iptables -S | head -n 40; ufw status; echo '== end'; } > /dev/ttyS0 2>&1"]
 CLOUD
   } >"$file"
   rm -f "$run/hostkey"
