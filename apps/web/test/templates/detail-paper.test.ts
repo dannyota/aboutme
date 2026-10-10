@@ -69,7 +69,18 @@ describe('template detail page: tabs', () => {
       );
       expect(images[0]!.attributes('loading')).toBe('eager');
       expect(wrapper.text()).toContain('Page 1 of 1');
+      expect(wrapper.find('.template-paper[data-web-columns]').exists())
+        .toBe(false);
     });
+
+  it('marks only the live Page sheet with its column measure', async () => {
+    setSiteLocale('en');
+    const wrapper = await mountSuspended(TemplateDetailPage);
+    await flushPromises();
+
+    expect(wrapper.get('.template-paper[data-web-columns]')
+      .attributes('data-web-columns')).toBe('2');
+  });
 
   it(
     'keeps a single h1: the template name, not the embedded sample name',
