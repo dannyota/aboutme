@@ -71,6 +71,13 @@ jobs:
             . deploy/vn/host/crowdsec-offline.sh
             crowdsec_install_offline apt-get install -y -qq crowdsec=1.8.1 sqlite3
           '
+      - name: Disable disk swap
+        # Retention refuses to run while attack records could reach a swap
+        # device other than zram.
+        run: |
+          cat /proc/swaps
+          sudo swapoff -a
+          [ "$(wc -l </proc/swaps)" -eq 1 ]
       - name: Test pinned parser and scenarios
         run: |
           sudo systemctl unmask --runtime crowdsec.service
