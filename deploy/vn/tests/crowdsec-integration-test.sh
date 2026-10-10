@@ -97,15 +97,22 @@ wait_for_decision "$unknown_ip" >/dev/null || {
 mixed_ip=192.0.2.38
 append_records "$mixed_ip" 400 4 static GET
 append_records "$mixed_ip" 401 4 static POST
-append_records "$mixed_ip" 403 3 static HEAD
+append_records "$mixed_ip" 405 3 static HEAD
 wait_for_decision "$mixed_ip" >/dev/null || {
   echo "mixed failure scanning created no decision" >&2
   exit 1
 }
 
+# The bouncer answers a banned address with 403; those must not extend a ban.
+banned_ip=192.0.2.42
+append_records "$banned_ip" 403 15 static GET
+
 attack_ip=192.0.2.41
 append_records "$attack_ip" 404 11 static
 wait_for_decision "$attack_ip" || { echo "status scenario created no decision" >&2; exit 1; }
+denied=$(sqlite3 /var/lib/crowdsec/data/crowdsec.db \
+  "SELECT count(*) FROM decisions WHERE value = '$banned_ip';")
+[[ $denied == 0 ]] || { echo "bouncer 403s created a decision" >&2; exit 1; }
 db=/var/lib/crowdsec/data/crowdsec.db
 until=$(sqlite3 "$db" \
   "SELECT until FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status' ORDER BY id DESC LIMIT 1;")

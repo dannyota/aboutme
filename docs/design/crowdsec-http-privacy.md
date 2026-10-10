@@ -71,8 +71,10 @@ user-agent. Maintenance rules treat the expected 503 status as neutral.
 The parser and scenarios do not add GeoIP, autonomous system, reverse DNS, or
 threat-intelligence data to an HTTP event. CrowdSec may store the five feed
 fields, scenario name, counts, timestamps, and a decision expiry. The Caddy
-bouncer uses only a current IP decision and returns 403. HTTP scenario names
-start with `aboutme/http-`, which identifies their stored records and profiles.
+bouncer uses only a current IP decision and returns 403. The status scenario
+does not count 403, so the bouncer's own answers to a banned address never
+extend its ban. HTTP scenario names start with `aboutme/http-`, which identifies
+their stored records and profiles.
 
 Community API, console, and threat-intelligence clients stay disabled. The
 installation has no online credentials. No HTTP attack feed, event, alert, or
