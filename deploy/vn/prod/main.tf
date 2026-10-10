@@ -21,7 +21,7 @@ resource "vngcloud_vserver_subnet" "main" {
 resource "vngcloud_vserver_secgroup" "main" {
   project_id  = var.project_id
   name        = "aboutme-prod"
-  description = "aboutme-prod host: public web and key-only SSH"
+  description = "aboutme-prod host - public web and key-only SSH"
 }
 
 resource "vngcloud_vserver_secgrouprule" "http" {
@@ -78,11 +78,13 @@ resource "vngcloud_vserver_server" "main" {
   security_group            = [vngcloud_vserver_secgroup.main.id]
   attach_floating           = true
 
-  # No ssh_key: the admin key arrives through cloud-init.
-  user_data = templatefile("${path.module}/../host/cloud-init.yaml.tftpl", {
+  # No ssh_key: the admin key arrives through cloud-init. The provider requires
+  # user_data_base64_encode with user_data; the API takes the encoded form.
+  user_data = base64encode(templatefile("${path.module}/../host/cloud-init.yaml.tftpl", {
     admin_ssh_public_key = var.admin_ssh_public_key
     ssh_port             = var.ssh_port
-  })
+  }))
+  user_data_base64_encode = true
 
   lifecycle {
     prevent_destroy = true
