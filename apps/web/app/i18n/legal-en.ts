@@ -3,7 +3,7 @@
 import type { LegalCopy } from './legal';
 
 export const legalEn: LegalCopy = {
-  updated: 'Last updated October 10, 2026',
+  updated: 'Last updated October 11, 2026',
   privacyLink: 'Privacy Policy',
   termsLink: 'Terms of Service',
   verifyLink: 'Verify',
@@ -166,9 +166,12 @@ export const legalEn: LegalCopy = {
           'Google (United States) and LinkedIn (United States) provide '
           + 'optional sign-in. When you use one to sign in to your account, '
           + 'you sign in at that provider and we receive your name, email, '
-          + 'and account ID. Emails you send us are kept in a Google '
-          + 'Workspace mailbox.',
-          'Google or LinkedIn sign-in, support email, connected AI services '
+          + 'and account ID. Emails you send us, replies to our account '
+          + 'emails, and notices that one could not be delivered (which can '
+          + 'include your email address and the original message) are kept '
+          + 'in a Google Workspace mailbox.',
+          'Google or LinkedIn sign-in, support email, replies to and failed '
+          + 'deliveries of account emails, connected AI services '
           + 'you choose, and foreign services that fetch a public resume '
           + 'link may involve processing outside Vietnam. Password checks '
           + 'use Have I Been Pwned, which receives only the first 5 '
@@ -201,8 +204,9 @@ export const legalEn: LegalCopy = {
         items: [
           'Access is removed immediately.',
           'Uploaded photos are deleted, normally within 24 hours.',
-          'Database backups keep earlier copies for up to 30 days after '
-          + 'that; they are used only for disaster recovery.',
+          'Database backups keep earlier copies for up to about 5 weeks '
+          + 'after that (a 30-day recovery window plus the weekly full '
+          + 'backup it needs); they are used only for disaster recovery.',
           'Records of account deletions and provider unlinks, holding only '
           + 'the event type and time, are kept for up to 180 days.',
           'If we delete an account for a breach of our Terms of Service, we '
