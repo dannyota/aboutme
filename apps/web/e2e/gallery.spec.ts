@@ -178,6 +178,59 @@ test('template page switches between the page and the ATS text', async ({
   await expect(page.locator('h1')).toHaveCount(1);
 });
 
+for (const template of [
+  { id: 'creative-accent', columns: 1, marginMm: 22 },
+  { id: 'engineer-compact', columns: 2, marginMm: 11 },
+] as const) {
+  for (const width of [390, 1440]) {
+    test(`${template.id} Page at ${width}px uses its reading width`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      const response = await page.goto(`/templates/${template.id}`);
+      expect(response?.status()).toBe(200);
+
+      const sheet = page.locator('.template-paper[data-web-columns]');
+      await expect(sheet).toHaveAttribute(
+        'data-web-columns',
+        String(template.columns),
+      );
+      const geometry = await sheet.locator('.resume-document')
+        .evaluate((article) => {
+          const style = getComputedStyle(article);
+          const box = article.getBoundingClientRect();
+          return {
+            fontSize: Number.parseFloat(style.fontSize),
+            left: Number.parseFloat(style.paddingLeft),
+            right: Number.parseFloat(style.paddingRight),
+            width: box.width,
+          };
+        });
+      const sheetWidth = await sheet.evaluate((element) =>
+        element.getBoundingClientRect().width);
+      const measure = (template.columns === 1 ? 52 : 70)
+        * geometry.fontSize;
+      const templateMargin = template.marginMm * 96 / 25.4;
+      const expected = Math.min(
+        templateMargin,
+        Math.max(16, (sheetWidth - measure) / 2),
+      );
+      expect(geometry.left).toBeCloseTo(expected, 0);
+      expect(geometry.right).toBeCloseTo(expected, 0);
+      expect(geometry.width).toBeCloseTo(sheetWidth, 0);
+      if (width === 390) {
+        expect(geometry.left).toBe(16);
+        expect(geometry.width - geometry.left - geometry.right)
+          .toBeGreaterThanOrEqual(sheetWidth - 32.5);
+      }
+      const overflow = await page.evaluate(() =>
+        document.documentElement.scrollWidth
+        - document.documentElement.clientWidth);
+      expect(overflow).toBe(0);
+    });
+  }
+}
+
 // The executive band sample's PDF tab, whose page count the gallery pins.
 const EXECUTIVE_PAGES = SAMPLE_PAGES['executive-band']!;
 
@@ -193,6 +246,8 @@ test('the executive band PDF tab shows every stored page', async ({
   expect(response?.status()).toBe(200);
 
   await page.getByRole('tab', { name: 'PDF' }).click();
+  await expect(page.locator('.template-paper[data-web-columns]'))
+    .toHaveCount(0);
   const images = page.locator('img[data-pdf-page]');
   await expect(images).toHaveCount(EXECUTIVE_PAGES);
   for (let index = 0; index < EXECUTIVE_PAGES; index += 1) {
@@ -204,6 +259,15 @@ test('the executive band PDF tab shows every stored page', async ({
         (element as HTMLImageElement).naturalWidth);
       expect(naturalWidth).toBeGreaterThan(0);
     }).toPass();
+    const geometry = await image.evaluate((element) => {
+      const sheet = element.closest('.template-paper');
+      if (sheet === null) throw new Error('PDF page sheet is missing.');
+      return {
+        image: element.getBoundingClientRect().width,
+        sheet: sheet.getBoundingClientRect().width,
+      };
+    });
+    expect(geometry.image).toBeCloseTo(geometry.sheet, 0);
   }
   await expect(page.locator('figcaption')).toHaveText(
     Array.from(
@@ -269,6 +333,37 @@ test('the role-filtered gallery still lists every template server-side',
 // ATS tab in dark theme (DESIGN.md, Library), at phone and desktop widths.
 const THEMES = ['light', 'dark'] as const;
 const WIDTHS = [390, 1440] as const;
+
+test('creative accent Page at 390px matches baseline', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.context().addCookies([
+    { name: 'aboutme-locale', value: 'vi', url: 'http://127.0.0.1:20092' },
+    { name: 'aboutme-theme', value: 'light', url: 'http://127.0.0.1:20092' },
+  ]);
+
+  const response = await page.goto('/templates/creative-accent');
+  expect(response?.status()).toBe(200);
+  await expect(page.locator('.resume-document')).toContainText(
+    'Đinh Công Khánh',
+  );
+  await page.evaluate(() => document.fonts.ready);
+  await waitForImages(page);
+
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth
+    - document.documentElement.clientWidth);
+  expect(overflow).toBe(0);
+
+  await verifyScreenshot(
+    page,
+    'template-page--creative-accent--light--390.png',
+    testInfo,
+    undefined,
+    CHROME_PIXEL_TOLERANCE,
+  );
+});
 
 for (const theme of THEMES) {
   for (const width of WIDTHS) {
