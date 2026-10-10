@@ -118,7 +118,7 @@ remaining=$((until_epoch - now_epoch))
   exit 1
 }
 
-[[ $(sqlite3 "$db" "SELECT count(*) FROM alerts WHERE source_ip = '$attack_ip' AND (coalesce(source_country, '') != '' OR coalesce(source_as_number, '') NOT IN ('', '0') OR coalesce(source_as_name, '') != '' OR coalesce(source_latitude, '') NOT IN ('', '0') OR coalesce(source_longitude, '') NOT IN ('', '0') OR coalesce(source_range, '') != '');") == 0 ]] || {
+[[ $(sqlite3 "$db" "SELECT count(*) FROM alerts WHERE source_ip = '$attack_ip' AND (coalesce(source_country, '') != '' OR coalesce(source_as_number, '') NOT IN ('', '0') OR coalesce(source_as_name, '') != '' OR coalesce(source_latitude, 0.0) != 0.0 OR coalesce(source_longitude, 0.0) != 0.0 OR coalesce(source_range, '') != '');") == 0 ]] || {
   echo "HTTP alert contains network enrichment" >&2
   exit 1
 }
