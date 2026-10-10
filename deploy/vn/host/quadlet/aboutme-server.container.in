@@ -1,5 +1,5 @@
 # Rendered by deploy-host.sh; do not edit on the host. The Go server on the
-# host network, 127.0.0.1:8080 and the print listener 10.89.10.1:8081
+# host network, 127.0.0.1:8080 and the print listener 172.17.0.1:8081
 # (docs/design/vietnam-production.md, "Host").
 [Unit]
 OnFailure=aboutme-alert@%N.service

@@ -18,7 +18,7 @@ set -euo pipefail
 # inside the container.
 IMAGE=docker.io/library/alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 PREFIX=aboutme-probe-
-GATEWAY=10.89.10.1
+GATEWAY=172.17.0.1
 SSH_PORT=${SSH_PORT:-22922}
 # Free ports for the throwaway listeners; the server uses 8080, 8081 and 3000.
 HOST_PORT=18081
@@ -202,7 +202,7 @@ c_userns() {
 
 # ---- Listeners -----------------------------------------------------------
 
-# Non-loopback listeners are limited to SSH, 80, 443, and 10.89.10.1:8081.
+# Non-loopback listeners are limited to SSH, 80, 443, and 172.17.0.1:8081.
 # Run before the probe starts its own listener.
 c_listeners() {
   local bad out addr port

@@ -1,7 +1,9 @@
 # The bridge network for Nuxt (docs/design/vietnam-production.md, "Host").
 # Nuxt reaches only Go's print listener on the gateway; Go and Caddy stay on
-# the host network.
+# the host network. The server accepts its print listener only at 127.0.0.1 or
+# 172.17.0.1 (apps/server/internal/config/print.go), so the gateway is
+# 172.17.0.1; no Docker bridge exists on this host to clash with it.
 [Network]
 NetworkName=aboutme
-Subnet=10.89.10.0/24
-Gateway=10.89.10.1
+Subnet=172.17.0.0/24
+Gateway=172.17.0.1
