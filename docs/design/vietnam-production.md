@@ -5,8 +5,7 @@ CloudFront to providers that store and process personal data in Vietnam, under
 [ADR 0027](../adr/0027-vietnam-hosted-production.md). This page is the target
 design and the migration order. Until cutover, the
 [single-host design](single-host-production.md) describes what runs. The ADR
-holds the legal reason. A data protection impact assessment (DPIA) is still
-required and is not covered here.
+holds the legal reason.
 
 Status: proposed. **Unconfirmed** marks a provider fact from public docs or
 research; devops verifies each by testing on the account before cutover
