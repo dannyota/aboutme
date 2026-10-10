@@ -1,0 +1,51 @@
+# Rendered by deploy-host.sh; do not edit on the host. The Go server on the
+# host network, 127.0.0.1:8080 and the print listener 10.89.10.1:8081
+# (docs/design/vietnam-production.md, "Host").
+[Unit]
+Description=aboutme Go server
+Requires=postgresql@18-main.service
+After=postgresql@18-main.service aboutme-network.service aboutme-web.service
+Wants=aboutme-network.service
+
+[Container]
+Image=@SERVER_IMAGE@
+ContainerName=aboutme-server
+Network=host
+EnvironmentFile=/etc/aboutme/server.env
+EnvironmentFile=/etc/aboutme/flags.env
+EnvironmentFile=/etc/aboutme/smtp.env
+Environment=DEPLOY_RELEASE_TAG=@RELEASE_TAG@
+Environment=DEPLOY_RELEASE_NUMBER=@RELEASE_NUMBER@
+Environment=APP_BUILD_DIGEST=@SERVER_IMAGE@
+Environment=PUBLIC_RENDERER_BUILD_DIGEST=@WEB_IMAGE@
+Secret=db-app-password,type=env,target=PGPASSWORD
+Secret=auth-email-active-key-id,type=env,target=AUTH_EMAIL_ACTIVE_KEY_ID
+Secret=auth-email-active-key,type=env,target=AUTH_EMAIL_ACTIVE_KEY
+Secret=password-rate-hmac-key,type=env,target=PASSWORD_RATE_HMAC_KEY
+Secret=view-pass-key,type=env,target=VIEW_PASS_KEY
+Secret=media-access-key-id,type=env,target=MEDIA_ACCESS_KEY_ID
+Secret=media-secret-access-key,type=env,target=MEDIA_SECRET_ACCESS_KEY
+Secret=smtp-username,type=env,target=SMTP_USERNAME
+Secret=smtp-password,type=env,target=SMTP_PASSWORD
+@SERVER_SECRETS@
+Volume=/run/postgresql:/run/postgresql
+# SYS_ADMIN lets the default seccomp profile allow the user namespaces that
+# Chromium's sandbox needs. The image runs as a non-root user, so the process
+# gains no effective capability (docs/design/single-host-production.md, "Host
+# and networking").
+AddCapability=SYS_ADMIN
+PodmanArgs=--init --shm-size=128m --memory=512m
+HealthCmd=wget -q -O /dev/null http://127.0.0.1:8080/healthz
+HealthInterval=10s
+HealthRetries=3
+HealthStartPeriod=30s
+LogDriver=journald
+
+[Service]
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-server
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

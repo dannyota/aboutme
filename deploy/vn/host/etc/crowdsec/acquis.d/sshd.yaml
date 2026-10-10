@@ -1,0 +1,7 @@
+# SSH authentication failures from the journal
+# (docs/design/vietnam-production.md, "Edge").
+source: journalctl
+journalctl_filter:
+  - "_SYSTEMD_UNIT=ssh.service"
+labels:
+  type: syslog

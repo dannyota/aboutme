@@ -1,0 +1,24 @@
+# Rendered by deploy-host.sh; do not edit on the host. One-shot migrate apply
+# as aboutme_migrator, with no network: PostgreSQL only through the mounted
+# socket (docs/design/vietnam-production.md, "Host"; ADR 0005).
+[Unit]
+Description=aboutme migrate
+Requires=postgresql@18-main.service
+After=postgresql@18-main.service
+
+[Container]
+Image=@SERVER_IMAGE@
+ContainerName=aboutme-migrate
+Network=none
+Environment=DATABASE_URL=postgres://aboutme_migrator@/aboutme?host=/run/postgresql
+Environment=DEPLOY_RELEASE_TAG=@RELEASE_TAG@
+Environment=DEPLOY_RELEASE_NUMBER=@RELEASE_NUMBER@
+Secret=db-migrator-password,type=env,target=PGPASSWORD
+Volume=/run/postgresql:/run/postgresql
+PodmanArgs=--entrypoint=/usr/local/bin/migrate --memory=256m
+LogDriver=journald
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/local/lib/aboutme/fence.sh check @RELEASE_NUMBER@ aboutme-migrate
+TimeoutStartSec=1h

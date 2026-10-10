@@ -1,0 +1,10 @@
+# Firewall bouncer overrides (docs/design/vietnam-production.md, "Edge").
+# The bouncer acts only on SSH decisions; the Caddy bouncer handles HTTP.
+# api_key is not in the repository: install.sh registers the bouncer with
+# `cscli bouncers add`, keeps the key on the data volume, and appends it to
+# the installed copy of this file.
+api_url: http://127.0.0.1:8095/
+mode: nftables
+scenarios_containing:
+  - ssh
+deny_action: DROP
