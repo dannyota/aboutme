@@ -125,4 +125,6 @@ module "dns" {
   alerts_topic_arn_us_east_1     = module.ops.alerts_topic_arn_us_east_1
   google_workspace               = var.google_workspace
   bizfly_dkim_txt                = var.bizfly_dkim_txt
+  vn_host_ipv4                   = var.vn_host_ipv4
+  apex_on_vn_host                = var.apex_on_vn_host
 }
