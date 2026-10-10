@@ -134,7 +134,25 @@ case "$cmd $args" in
     esac
     exit 0 ;;
   "curl "*"ghcr.io/token"*) echo '{"token":"stub"}' ;;
-  "curl "*"/manifests/"*) printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
+  # A release tag names an image index of linux/arm64 (digest 2) and
+  # linux/amd64 (digest 3); an older tag names the arm64 image itself
+  # (digest 1), as GHCR serves it. index_* cases serve the index.
+  "curl -fsSI "*"/manifests/"*)
+    case $STUB_CASE in
+      index_*) printf 'content-type: application/vnd.docker.distribution.manifest.list.v2+json\r\n'
+        printf 'docker-content-digest: sha256:%064d\r\n' 9 ;;
+      *) printf 'content-type: application/vnd.docker.distribution.manifest.v2+json\r\n'
+        printf 'docker-content-digest: sha256:%064d\r\n' 1 ;;
+    esac ;;
+  "curl -fsS "*"Accept: application/vnd.docker.distribution.manifest.list.v2+json"*"/manifests/"*)
+    arm=linux/arm64
+    # index_no_arm64: the index lists no arm64 image.
+    [[ $STUB_CASE != index_no_arm64 ]] || arm=linux/s390x
+    jq -n --arg arm "$arm" --arg d2 "sha256:$(printf '%064d' 2)" --arg d3 "sha256:$(printf '%064d' 3)" \
+      '{schemaVersion: 2, mediaType: "application/vnd.docker.distribution.manifest.list.v2+json",
+        manifests: [
+          {digest: $d3, platform: {os: "linux", architecture: "amd64"}},
+          {digest: $d2, platform: {os: ($arm | split("/")[0]), architecture: ($arm | split("/")[1]), variant: "v8"}}]}' ;;
   "curl -fsSI https://aboutme.vn/")
     # smoke_flaky: the first headers probe hits a TLS reset, as right after a
     # Caddy restart.

@@ -28,6 +28,8 @@ TAG=v9.9.9
 APP=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 WEB=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 IMAGE=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+AMD=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+INDEX=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 FIXED_LINE='^mcp-owner-workflow: [a-z][A-Za-z0-9 .:;,_-]*$'
 
 failures=0
@@ -204,16 +206,16 @@ EOF
 ctl=__CTL__
 state=$ctl/state
 printf '%s\n' "$*" >>"$ctl/curl.argv"
-out= fmt= method= url= data= form= head=0
+out= headers= fmt= method= url= data= form=
 while [ "$#" -gt 0 ]; do
   case $1 in
   -o) out=$2; shift 2 ;;
+  -D) headers=$2; shift 2 ;;
   -w) fmt=$2; shift 2 ;;
   -X) method=$2; shift 2 ;;
   --data-binary) data=${2#@}; shift 2 ;;
   -F) form=$2; shift 2 ;;
   -H | -b | -c | --cacert | --max-time | --proto) shift 2 ;;
-  -fsSI) head=1; shift ;;
   -*) shift ;;
   *) url=$1; shift ;;
   esac
@@ -235,8 +237,16 @@ case "$method $url" in
 'GET https://ghcr.io/v2/dannyota/aboutme-'*)
   name=${url#https://ghcr.io/v2/dannyota/aboutme-}
   name=${name%%/*}
-  [ "$head" -eq 1 ] && [ "${url##*/}" = "$(cat "$ctl/git.tags")" ] && [ -s "$ctl/ghcr.$name" ] || exit 22
-  printf 'HTTP/2 200\r\ndocker-content-digest: %s\r\n\r\n' "$(cat "$ctl/ghcr.$name")"
+  [ "${url##*/}" = "$(cat "$ctl/git.tags")" ] && [ -s "$ctl/ghcr.$name.json" ] || exit 22
+  if [ -n "$headers" ]; then
+    printf 'HTTP/2 200\r\ndocker-content-digest: %s\r\n\r\n' \
+      "$(cat "$ctl/ghcr.$name.digest")" >"$headers"
+  fi
+  if [ -n "$out" ]; then
+    cp -- "$ctl/ghcr.$name.json" "$out"
+  else
+    cat "$ctl/ghcr.$name.json"
+  fi
   exit 0
   ;;
 'DELETE http://127.0.0.1:20444/api/messages') exit 0 ;;
@@ -382,6 +392,26 @@ refresh_effective_config() {
   chmod 0600 "$STATE/effective-config"
 }
 
+write_registry_index() { # name arm64-digest amd64-digest
+  jq -n --arg arm "$2" --arg amd "$3" '{
+    schemaVersion: 2,
+    mediaType: "application/vnd.oci.image.index.v1+json",
+    manifests: [
+      {mediaType: "application/vnd.oci.image.manifest.v1+json", digest: $arm,
+       size: 1, platform: {os: "linux", architecture: "arm64"}},
+      {mediaType: "application/vnd.oci.image.manifest.v1+json", digest: $amd,
+       size: 1, platform: {os: "linux", architecture: "amd64"}}
+    ]
+  }' >"$CTL/ghcr.$1.json"
+  printf '%s\n' "$INDEX" >"$CTL/ghcr.$1.digest"
+}
+
+write_registry_single() { # name digest
+  printf '%s\n' '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"},"layers":[]}' \
+    >"$CTL/ghcr.$1.json"
+  printf '%s\n' "$2" >"$CTL/ghcr.$1.digest"
+}
+
 container_args() {
   awk -v s="$STATE" 'NR == 3 && index($0, s "/spec-input.") == 1 { print "STAGING"; next }
     NR == 4 && index($0, s "/mcp-sdk-browser.") == 1 { print "EVIDENCE"; next }
@@ -420,8 +450,8 @@ setup_tree() {
   chmod 0600 "$STATE/input/caddy-root.crt" "$STATE/secrets/auth-email-capture-bearer"
   refresh_image_manifest
   printf '%s\n' "$MAIN/.git" >"$CTL/git.common"
-  printf '%s\n' "$APP" >"$CTL/ghcr.server"
-  printf '%s\n' "$WEB" >"$CTL/ghcr.web"
+  write_registry_index server "$APP" "$AMD"
+  write_registry_index web "$WEB" "$AMD"
   printf '%s\n' "$COMMIT" >"$CTL/git.commit"
   printf '%s\n' "$COMMIT" >"$CTL/git.tagcommit"
   : >"$CTL/git.status"
@@ -585,11 +615,20 @@ check 'caller image input is ignored' lacks 'ffffffff' "$ATTESTATION"
 check 'the registry token stays out of curl arguments' lacks ghcr-anon-token "$CTL/curl.argv"
 check 'the registry token stays out of output' lacks ghcr-anon-token "$CTL/out"
 
-rm -f -- "$CTL/ghcr.web"
+rm -f -- "$CTL/ghcr.web.json"
 run_workflow local
 check 'unpublished release images skip the attestation' has 'stage attestation-skipped' "$CTL/out"
 check 'unpublished release images keep the proof passing' [ "$STATUS" -eq 0 ]
-printf '%s\n' "$WEB" >"$CTL/ghcr.web"
+write_registry_index web "$WEB" "$AMD"
+
+write_registry_single server "$APP"
+write_registry_single web "$WEB"
+run_workflow local
+check 'single-platform release manifests remain supported' [ "$STATUS" -eq 0 ]
+check 'single-platform manifest digest is attested' jqe --arg app "$APP" --arg web "$WEB" \
+  '.app_image == $app and .web_image == $web' "$ATTESTATION"
+write_registry_index server "$APP" "$AMD"
+write_registry_index web "$WEB" "$AMD"
 
 restore_release() {
   chmod -R u+rwx "$REPO" 2>/dev/null || true
@@ -602,8 +641,8 @@ restore_release() {
   printf '%s\n' "$COMMIT" >"$CTL/git.commit"
   printf '%s\n' "$COMMIT" >"$CTL/git.tagcommit"
   chmod 0600 "$OWNER_CREDENTIAL"
-  printf '%s\n' "$APP" >"$CTL/ghcr.server"
-  printf '%s\n' "$WEB" >"$CTL/ghcr.web"
+  write_registry_index server "$APP" "$AMD"
+  write_registry_index web "$WEB" "$AMD"
 }
 
 run_production() {
@@ -793,19 +832,38 @@ run_production
 expect_rejection 'added manifest member' 'attestation rejected: browser source mismatch'
 
 restore_release
-printf '%s\n' sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd >"$CTL/ghcr.server"
+write_registry_index server "$AMD" "$APP"
 run_production env ABOUTME_RELEASE_APP_IMAGE="$APP"
 expect_rejection 'other registry app image' 'attestation rejected: release image mismatch'
 
 restore_release
-printf '%s\n' sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd >"$CTL/ghcr.web"
+write_registry_index web "$AMD" "$WEB"
 run_production
 expect_rejection 'other registry web image' 'attestation rejected: release image mismatch'
 
 restore_release
-rm -f -- "$CTL/ghcr.server"
+rm -f -- "$CTL/ghcr.server.json"
 run_production
 expect_rejection 'unpublished release image' 'attestation rejected: release images are not published'
+
+restore_release
+jq '.manifests |= map(select(.platform.architecture != "arm64"))' \
+  "$CTL/ghcr.server.json" >"$CTL/ghcr.server.next"
+mv "$CTL/ghcr.server.next" "$CTL/ghcr.server.json"
+run_production
+expect_rejection 'index missing linux arm64 image' 'attestation rejected: release images are not published'
+
+restore_release
+jq '.manifests += [.manifests[0]]' "$CTL/ghcr.server.json" >"$CTL/ghcr.server.next"
+mv "$CTL/ghcr.server.next" "$CTL/ghcr.server.json"
+run_production
+expect_rejection 'index with duplicate linux arm64 images' 'attestation rejected: release images are not published'
+
+restore_release
+printf '%s\n' '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":"bad"}' \
+  >"$CTL/ghcr.server.json"
+run_production
+expect_rejection 'malformed image index' 'attestation rejected: release images are not published'
 
 restore_release
 refresh_image_manifest sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
