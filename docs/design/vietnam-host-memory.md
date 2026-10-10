@@ -75,7 +75,7 @@ connection-pool failure, or a migration failure blocks cutover.
 
 ## Storage
 
-The root disk is 30 GB, unencrypted, and holds only Ubuntu, public container
+The root disk is 30 GB, encrypted, and holds only Ubuntu, public container
 images, package caches, and Podman metadata. The encrypted data volume starts at
 20 GB and holds PostgreSQL, secrets, CrowdSec state, Caddy state, and the
 journal. Caddy security logs remain on the 64 MiB tmpfs.

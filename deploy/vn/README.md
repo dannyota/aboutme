@@ -73,21 +73,19 @@ the state passphrase and host secrets.
 
 ## Data volume encryption
 
-The server is created with a plain 30 GB root disk and no data disk; the 20 GB
-data volume is created separately with `data_volume_encryption_type` (default
-`aes-xts-plain64_256`) and attached. Encrypting a disk at server create adds a
-surcharge of 30% of the flavor price (vngcloud wiki, Compute-Servers.md,
-"Encrypted disks"); a separately created encrypted volume costs the same as a
-plain one. The `vngcloud` CLI creates an encrypted volume from v0.59.0
-(`volume create-volume --encryption-type-id`); `scripts/restore-drill.sh`
-refuses an older CLI, and the production apply waits for the provider check
-below.
+The server is created with encryption enabled and a 30 GB encrypted root disk.
+The 20 GB encrypted data volume is created separately and attached. Both disks
+use `disk_encryption_type` (default `aes-xts-plain64_256`). A server created
+with plain disks refuses an encrypted volume with a 400 `BadRequest`
+(`cannot attach encryption volume`; vngcloud wiki Compute-Servers.md, "Encrypted
+disks", a live result).
 
-A server created with plain disks refuses an encrypted volume with a 400
-`BadRequest` (`cannot attach encryption volume`; vngcloud wiki
-Compute-Servers.md, "Encrypted disks", a live result). Encrypting any disk at
-server create adds the 30% `CES` line, so the encrypted data volume costs that
-line whichever way it is made.
+Encrypting any disk at server create adds one `CES` line of 30% of the flavor
+price, 170,280 VND a month for `s2-general-2x4`. Encrypting the root disk too
+adds no further charge. The `vngcloud` CLI creates an encrypted volume from
+v0.59.0 (`volume create-volume --encryption-type-id`);
+`scripts/restore-drill.sh` refuses an older CLI, and the production apply waits
+for the provider check below.
 
 ## Logs and alarms
 

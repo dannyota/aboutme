@@ -24,7 +24,7 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 - 2026-10-10: nothing in front of the host; Caddy with Coraza and CrowdSec; vWAF only as a DNS-change escalation.
 - 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.
 - 2026-10-10: compute HCM03 (zone HCM03-1C, the zone enabled for the account; HCM03-1A needs a provider request), vStorage HCM04, one backup repository.
-- 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 30 GB unencrypted, data 20 GB encrypted; 4 GiB RAM with hard service caps, serialized jobs, 512 MiB zram, and a 64 MiB Caddy-log tmpfs; grow disks online at 70%.
+- 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 30 GB and data 20 GB, both GreenNode-encrypted at server create (one CES line); 4 GiB RAM with hard service caps, serialized jobs, 512 MiB zram, and a 64 MiB Caddy-log tmpfs; grow disks online at 70%.
 - 2026-10-10: compute zone HCM03-1C; no DPA requests to GreenNode or Bizfly, the published terms stand (owner).
 - 2026-10-10: admin SSH key is the owner's `ssh-ed25519` commit-signing key; host-file release fence; SMTP sender instead of the Bizfly HTTP API; no vMonitor; journald on the encrypted data volume for 30 days, capped at 2 GB; CrowdSec community sharing off.
 - 2026-10-10: CrowdSec receives a five-field RAM-only HTTP feed; encrypted attack-IP records stay in Vietnam for at most 24 hours; the public notice changes at cutover.

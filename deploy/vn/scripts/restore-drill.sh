@@ -20,15 +20,14 @@
 #   allow SSH from the production host. --direct connects to the private
 #   address straight from the laptop, for a VPN.
 #
-# The drill server has a plain root disk and no data disk at create; the
-# production copy lands on a separately created encrypted volume, which costs
-# the same as a plain one, while encrypting a disk at server create adds a
-# surcharge (wiki Compute-Servers.md, "Encrypted disks"). That needs
-# `volume create-volume --encryption-type-id` (CLI v0.59.0 and later); the
-# script refuses on an older CLI. Unconfirmed: that an encrypted volume
-# attaches to a server created with plain disks. The exit trap deletes the
-# server and the volume. Nothing here prints row data, a
-# secret, or secrets.conf: secrets.conf travels host to host in one pipe and
+# The drill server is created with an encrypted root disk and no data disk.
+# The production copy lands on a separately created encrypted volume. A server
+# created with plain disks refuses an encrypted volume. Encryption at server
+# create adds one CES line of 30% of the flavor price (wiki Compute-Servers.md,
+# "Encrypted disks"). The volume needs `volume create-volume
+# --encryption-type-id` (CLI v0.59.0 and later); the script refuses an older CLI.
+# The exit trap deletes the server and the volume. Nothing here prints row data,
+# a secret, or secrets.conf: secrets.conf travels host to host in one pipe and
 # never touches the laptop disk.
 set -euo pipefail
 
@@ -46,14 +45,14 @@ RECOVERY_WAIT_SECONDS=3600
 
 # Sizes and IDs match quote.sh, so the drill is priced like production. Keep
 # the defaults in sync with it. The encryption type is the one switch for the
-# drill volume's encryption, as data_volume_encryption_type is for production.
+# drill disks' encryption, as disk_encryption_type is for production.
 : "${ZONE_ID:=HCM03-1C}"
 : "${FLAVOR_ID:=flav-530ea5cb-6fac-4264-bcad-9e0e0a5ba3fc}"
 : "${IMAGE_ID:=img-34440a82-92fb-40bc-b79c-b1a2b49b93de}"
 : "${VOLUME_TYPE_ID:=vtype-e782f8e1-0569-11f0-a0a4-ec2a72332f83}"
 : "${ROOT_DISK_GB:=30}"
 : "${DATA_DISK_GB:=20}"
-: "${DATA_VOLUME_ENCRYPTION_TYPE:=aes-xts-plain64_256}"
+: "${DISK_ENCRYPTION_TYPE:=aes-xts-plain64_256}"
 VOLUME_NAME=${SERVER_NAME}-data
 
 usage() {
@@ -197,12 +196,13 @@ order_server() {
     die "this vngcloud CLI cannot create an encrypted volume; the drill needs v0.59.0 or later"
   quoted=$(vng_ro compute quote-create-server \
     --zone-id "$ZONE_ID" --flavor-id "$FLAVOR_ID" --image-id "$IMAGE_ID" \
-    --root-disk-size "$ROOT_DISK_GB" --root-disk-type-id "$VOLUME_TYPE_ID" |
+    --root-disk-size "$ROOT_DISK_GB" --root-disk-type-id "$VOLUME_TYPE_ID" \
+    --root-disk-encryption-type-id "$DISK_ENCRYPTION_TYPE" |
     jq -r '.OptimumPrice // empty')
   vquoted=$(vng_ro volume quote-create-volume --zone-id "$ZONE_ID" --size "$DATA_DISK_GB" \
-    --volume-type-id "$VOLUME_TYPE_ID" --encryption-type-id "$DATA_VOLUME_ENCRYPTION_TYPE" |
+    --volume-type-id "$VOLUME_TYPE_ID" --encryption-type-id "$DISK_ENCRYPTION_TYPE" |
     jq -r '.OptimumPrice // empty')
-  require_price "drill server with a ${ROOT_DISK_GB} GB plain root disk" "$quoted" "$max_price"
+  require_price "drill server with a ${ROOT_DISK_GB} GB encrypted root disk" "$quoted" "$max_price"
   require_price "drill ${DATA_DISK_GB} GB encrypted volume" "$vquoted" "$max_price"
   require_price "drill total" "$(awk -v a="$quoted" -v b="$vquoted" 'BEGIN { printf "%d", a + b }')" "$max_price"
 
@@ -244,6 +244,7 @@ CLOUD
     --vpc-id "$vpc_id" --subnet-id "$subnet_id" --security-group-id "$sg_id" \
     --ssh-key-id "$ssh_key_id" \
     --root-disk-size "$ROOT_DISK_GB" --root-disk-type-id "$VOLUME_TYPE_ID" \
+    --root-disk-encryption-type-id "$DISK_ENCRYPTION_TYPE" \
     --max-price "$max_price" --user-data-file "$file" |
     jq -r '(.Server // .) | (.UUID // .uuid // empty)')
   rm -f "$file"
@@ -254,7 +255,7 @@ CLOUD
   say "creating the encrypted volume $VOLUME_NAME"
   volume_id=$(vng volume create-volume --name "$VOLUME_NAME" --zone-id "$ZONE_ID" \
     --size "$DATA_DISK_GB" --volume-type-id "$VOLUME_TYPE_ID" \
-    --encryption-type-id "$DATA_VOLUME_ENCRYPTION_TYPE" --max-price "$max_price" |
+    --encryption-type-id "$DISK_ENCRYPTION_TYPE" --max-price "$max_price" |
     jq -r '(.Volume // .) | (.UUID // .uuid // .ID // .id // empty)')
   [[ -n $volume_id ]] || volume_id=$(find_volume_id)
   [[ -n $volume_id ]] || die "create-volume returned no volume ID; look for $VOLUME_NAME by hand"

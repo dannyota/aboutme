@@ -61,21 +61,22 @@ resource "vngcloud_vserver_secgrouprule" "ssh" {
   description       = "aboutme-prod-ssh"
 }
 
-# The host. docs/design/vietnam-production.md, "Host". The root disk is
-# unencrypted by design; the data volume below carries every secret and row.
+# The host. docs/design/vietnam-production.md, "Host". Both disks are encrypted
+# because a server with plain disks refuses an encrypted volume.
 resource "vngcloud_vserver_server" "main" {
-  project_id        = var.project_id
-  name              = "aboutme-prod"
-  zone_id           = var.zone_id
-  encryption_volume = false
-  flavor_id         = var.flavor_id
-  image_id          = var.image_id
-  network_id        = vngcloud_vserver_network.main.id
-  subnet_id         = vngcloud_vserver_subnet.main.id
-  root_disk_size    = var.root_disk_gb
-  root_disk_type_id = var.volume_type_id
-  security_group    = [vngcloud_vserver_secgroup.main.id]
-  attach_floating   = true
+  project_id                = var.project_id
+  name                      = "aboutme-prod"
+  zone_id                   = var.zone_id
+  encryption_volume         = true
+  root_disk_encryption_type = var.disk_encryption_type
+  flavor_id                 = var.flavor_id
+  image_id                  = var.image_id
+  network_id                = vngcloud_vserver_network.main.id
+  subnet_id                 = vngcloud_vserver_subnet.main.id
+  root_disk_size            = var.root_disk_gb
+  root_disk_type_id         = var.volume_type_id
+  security_group            = [vngcloud_vserver_secgroup.main.id]
+  attach_floating           = true
 
   # No ssh_key: the admin key arrives through cloud-init.
   user_data = templatefile("${path.module}/../host/cloud-init.yaml.tftpl", {
@@ -96,7 +97,7 @@ resource "vngcloud_vserver_volume" "data" {
   name            = "aboutme-prod-data"
   size            = var.data_disk_gb
   volume_type_id  = var.volume_type_id
-  encryption_type = var.data_volume_encryption_type
+  encryption_type = var.disk_encryption_type
   zone_id         = var.zone_id
 
   lifecycle {
