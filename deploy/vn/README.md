@@ -153,17 +153,17 @@ These contracts match the server and Caddy images:
 
 ## Paid resources and quotes
 
-Read-only quotes on 2026-10-10, VND a month. The server quote below used the old
-20 GB root disk setting. Run `scripts/quote.sh` again with the current 30 GB
-default before creating paid resources.
+Read-only quotes on 2026-10-10 in zone `HCM03-1C`, VND a month. Run
+`scripts/quote.sh` again before creating paid resources.
 
-| Resource                                       | Created by                 | Quote                     |
-| ---------------------------------------------- | -------------------------- | ------------------------- |
-| vServer `s2-general-2x4` with 20 GB root SSD   | `tofu apply`               | 631,600                   |
-| 20 GB encrypted SSD data volume                | `tofu apply`               | 64,000                    |
-| Floating IP                                    | `tofu apply`               | 120,000                   |
-| vStorage package                               | the console, by the owner  | not quoted                |
-| Restore drill server and volume, while it runs | `scripts/restore-drill.sh` | 695,600 a month, prorated |
+| Resource                                       | Created by                 | Quote                        |
+| ---------------------------------------------- | -------------------------- | ---------------------------- |
+| vServer `s2-general-2x4` with 30 GB root SSD   | `tofu apply`               | 663,600                      |
+| 20 GB SSD data volume                          | `tofu apply`               | 64,000                       |
+| Disk encryption chosen at server create (CES)  | `tofu apply`               | 170,280                      |
+| Floating IP                                    | `tofu apply`               | 120,000                      |
+| vStorage package                               | the console, by the owner  | not quoted                   |
+| Restore drill server and volume, while it runs | `scripts/restore-drill.sh` | the server's price, prorated |
 
 The budget is free. Alerts use the Bizfly SMTP account the server already sends
 with.
