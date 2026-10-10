@@ -23,7 +23,8 @@
 #   app-down                    stop Caddy and the server; prove both stopped
 #   render <server> <web> <caddy>  write release.env and the app units
 #   restore-previous            render the previous release again
-#   secrets-check               every secret a rendered unit names exists
+#   secrets-check               every secret the next render names exists
+#   ban-test add|del <ip>       short CrowdSec decision for the outside smoke
 #   db-setup | migrate          run the one-shot unit; require success
 #   app-up                      web, then server (/readyz), then Caddy
 #   maintenance-down            stop maintenance; prove it stopped
@@ -307,7 +308,8 @@ step_maintenance_up() { # maintenance-image
 }
 
 step_app_down() {
-  systemctl stop aboutme-caddy aboutme-server
+  # On a first deploy neither unit exists yet; the checks below still hold.
+  systemctl stop aboutme-caddy aboutme-server 2>/dev/null || true
   wait_stopped aboutme-caddy 60 || die "aboutme-caddy did not stop"
   wait_stopped aboutme-server 60 || die "aboutme-server did not stop"
   ! curl -fsS -o /dev/null -m 3 http://127.0.0.1:8080/healthz 2>/dev/null || die "something still answers on 127.0.0.1:8080"
@@ -346,16 +348,37 @@ step_restore_previous() {
   say "rendered the previous release $(jq -r .release_tag <<<"$p")"
 }
 
+# Runs before the site changes: every secret the templates and flags.env will
+# name must already exist as a Podman secret, or the app would fail after the
+# migration (docs/design/single-host-production.md, "Release and deploy").
 step_secrets_check() {
   local name missing=0
+  flags=$(flags_json)
   while read -r name; do
+    [[ $name =~ ^[a-z0-9-]+$ ]] || die "malformed secret name in a template"
     if ! podman secret exists "$name"; then
       say "missing Podman secret $name"
       missing=1
     fi
-  done < <(sed -n 's/^Secret=\([^,]*\),.*/\1/p' "$units"/aboutme-*.container | sort -u)
+  done < <({
+    cat "$templates"/*.container.in
+    server_secrets
+  } | sed -n 's/^Secret=\([^,]*\),.*/\1/p' | sort -u)
   ((!missing)) || die "create the missing secrets with secrets.sh, then rerun"
   say "every referenced secret exists"
+}
+
+# The outside smoke's CrowdSec check: a short manual decision for the
+# operator's own address, which the Caddy bouncer must answer with 403
+# (docs/design/vietnam-production.md, "Deploy", step 10). The firewall
+# bouncer acts only on SSH scenarios, so SSH stays open.
+step_ban_test() { # add|del ip
+  [[ $2 =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "'$2' is not an IPv4 address"
+  if [[ $1 == add ]]; then
+    cscli decisions add --ip "$2" --duration 3m --type ban --reason aboutme-deploy-smoke >/dev/null
+  else
+    cscli decisions delete --ip "$2" >/dev/null
+  fi
 }
 
 step_oneshot() { # unit
@@ -444,6 +467,7 @@ case "$step:$#" in
   timers-stop:0) step_timers stop ;;
   timers-start:0) step_timers start ;;
   maintenance-up:1) step_maintenance_up "$1" ;;
+  ban-test:2) step_ban_test "$@" ;;
   app-down:0) step_app_down ;;
   render:3) step_render "$@" ;;
   restore-previous:0) step_restore_previous ;;
