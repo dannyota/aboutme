@@ -1,0 +1,34 @@
+# Server options for the direct listener on 80 and 443
+# (docs/design/vietnam-production.md, "Edge"). entrypoint.sh copies this file
+# into the global options block when EDGES includes direct, after writing the
+# /run/caddy/direct-* and /run/caddy/crowdsec-* files it imports.
+# No trusted_proxies: the client address is the socket's.
+servers :443 {
+	# The security group admits TCP only, so no HTTP/3 listener starts.
+	protocols h1 h2
+}
+servers :80 {
+	protocols h1
+}
+# Tests use Caddy's internal CA (DIRECT_TLS=internal); never touch a trust
+# store.
+skip_install_trust
+# The CrowdSec ban check runs before anything else, then Coraza inspects
+# what is left, before any header is changed.
+order crowdsec first
+order coraza_waf after crowdsec
+# Empty unless CROWDSEC_API_URL is set; see entrypoint.sh.
+import /run/caddy/crowdsec.global
+# Coraza's rule-match messages name the client address and the matched
+# data, so they go to a local file only and never to stderr, which the host
+# ships off the host (docs/design/vietnam-production.md, "Logs, metrics, and
+# alarms"). The Caddyfile's default logger excludes this one. The host
+# rotates the file (copytruncate), since the app and maintenance Caddy can
+# both have it open.
+log waf {
+	output file /var/log/caddy-waf/match.log {
+		roll_disabled
+	}
+	format json
+	include http.handlers.waf
+}

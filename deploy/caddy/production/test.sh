@@ -4,7 +4,9 @@
 # (EDGES), that the origin key does not stay in the process environment, and
 # maintenance mode's page, headers, and CSP hashes, and that Caddy runs as its
 # non-root user with no capability and binds only 8443. See
-# docs/design/cloudfront-edge.md.
+# docs/design/cloudfront-edge.md. It also checks the direct listener: the
+# socket client address, Coraza in detection-only mode and its logs, and the
+# CrowdSec bouncer (docs/design/vietnam-production.md, "Edge").
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 work=$(mktemp -d)
@@ -111,11 +113,11 @@ elif [[ ${CI:-} == true ]]; then
   exit 1
 fi
 
-# Caddy (PID 1, exec'd by the entrypoint) runs as 10001 with no capability,
-# on the tmpfs and under the default privileged-port boundary production
-# has, and listens on exactly the given ports (hex, sorted, from
-# /proc/net/tcp and tcp6).
-check_unprivileged() { # container want-ports
+# Caddy (PID 1, exec'd by the entrypoint) runs as 10001 with no capability
+# (or exactly the given set), on the tmpfs and under the default
+# privileged-port boundary production has, and listens on exactly the given
+# ports (hex, sorted, from /proc/net/tcp and tcp6).
+check_unprivileged() { # container want-ports [want-capabilities, hex]
   local status ports
   status=$(podman exec "$1" cat /proc/1/status)
   [[ $(podman exec "$1" cat /proc/1/comm) == caddy ]] || { echo "$1: PID 1 is not caddy" >&2; exit 1; }
@@ -124,8 +126,8 @@ check_unprivileged() { # container want-ports
   grep -qP '^Gid:\t10001\t10001\t10001\t10001$' <<<"$status" ||
     { echo "$1: Caddy does not run as gid 10001:" >&2; grep '^Gid:' <<<"$status" >&2; exit 1; }
   for cap in CapInh CapPrm CapEff CapAmb; do
-    grep -qP "^$cap:\t0{16}$" <<<"$status" ||
-      { echo "$1: Caddy holds a capability:" >&2; grep "^$cap:" <<<"$status" >&2; exit 1; }
+    grep -qP "^$cap:\t${3:-0000000000000000}$" <<<"$status" ||
+      { echo "$1: Caddy capabilities differ:" >&2; grep "^$cap:" <<<"$status" >&2; exit 1; }
   done
   [[ $(podman exec "$1" stat -f -c %T /run/caddy) == tmpfs ]] || { echo "$1: /run/caddy is not a tmpfs" >&2; exit 1; }
   [[ $(podman exec "$1" stat -c %a:%u /run/caddy) == 1777:0 ]] ||
@@ -342,6 +344,184 @@ refuse "cloudfront without its CA" -e EDGES=cloudfront
 # The release smoke test runs the same adapt mode without TLS material.
 podman run --rm "$image" adapt || { echo "adapt failed for EDGES unset" >&2; exit 1; }
 podman run --rm -e EDGES=cloudfront "$image" adapt || { echo "adapt failed for EDGES=cloudfront" >&2; exit 1; }
+
+# ---- Direct listener (docs/design/vietnam-production.md, "Edge") ----
+# Caddy's internal CA stands in for Let's Encrypt. The container gets
+# CAP_NET_BIND_SERVICE for ports 80 and 443, and no other capability.
+dport=20453
+hport=20454
+bouncer_key=stand-in
+# A stand-in for Go on 8080 that echoes every client address header that
+# reached it, and a stand-in CrowdSec local API on 8090 that bans every
+# address, IPv4 and IPv6, for a client that sends the bouncer key.
+direct_echo='{
+	admin off
+}
+:8080 {
+	respond "ip={http.request.header.X-Real-IP} xff={http.request.header.X-Forwarded-For} fwd={http.request.header.Forwarded} cfva={http.request.header.CloudFront-Viewer-Address} cfip={http.request.header.CF-Connecting-IP} tci={http.request.header.True-Client-IP} waf={http.request.header.x-amzn-waf-aboutme-bot}"
+}
+:8090 {
+	@key header X-Api-Key '"$bouncer_key"'
+	handle @key {
+		root * /tmp/lapi
+		rewrite * /stream.json
+		file_server
+	}
+	respond 403
+}'
+ban_all='{"new":[{"duration":"4h0m0s","id":1,"origin":"cscli","scenario":"test","scope":"Range","type":"ban","value":"0.0.0.0/0"},{"duration":"4h0m0s","id":2,"origin":"cscli","scenario":"test","scope":"Range","type":"ban","value":"::/0"}],"deleted":[]}'
+
+start_direct() { # podman run options...
+  local ca
+  podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
+  podman run -d --name "$name" -p "127.0.0.1:$port:8443" -p "127.0.0.1:$dport:443" -p "127.0.0.1:$hport:80" \
+    --tmpfs /run/caddy "${unprivileged[@]}" --cap-add NET_BIND_SERVICE -e DIRECT_TLS=internal "$@" "$image" >/dev/null
+  wait_started "$name"
+  podman run -d --name "$name-echo" --network "container:$name" -e ECHO="$direct_echo" -e BAN="$ban_all" \
+    --entrypoint sh "$image" -c 'mkdir /tmp/lapi && printf "%s" "$BAN" >/tmp/lapi/stream.json &&
+      printf "%s" "$ECHO" >/tmp/echo && exec caddy run --config /tmp/echo --adapter caddyfile' >/dev/null
+  wait_started "$name-echo"
+  for _ in $(seq 1 20); do
+    ca=$(podman exec "$name" cat /data/caddy/pki/authorities/local/root.crt 2>/dev/null || true)
+    [[ -n $ca ]] && break
+    sleep 0.5
+  done
+  printf '%s\n' "$ca" >"$work/direct-ca.pem"
+}
+dcurl() { # curl options... -> against the direct listener, trusting its CA
+  local h resolve=()
+  for h in aboutme.vn www.aboutme.vn vn.aboutme.vn; do
+    resolve+=(--resolve "$h:$dport:127.0.0.1" --resolve "$h:$hport:127.0.0.1")
+  done
+  curl -s -m 10 "${resolve[@]}" --cacert "$work/direct-ca.pem" "$@"
+}
+wait_direct() { # want-status [host] -> polls healthz on the direct listener
+  local code
+  for _ in $(seq 1 60); do
+    code=$(dcurl -o /dev/null -w '%{http_code}' "https://${2:-aboutme.vn}:$dport/healthz" || true)
+    [[ $code == "$1" ]] && return 0
+    sleep 0.5
+  done
+  echo "direct healthz: want $1, got $code" >&2
+  podman logs "$name" >&2
+  exit 1
+}
+forged=(-H 'X-Forwarded-For: 5.5.5.5' -H 'X-Real-IP: 6.6.6.6' -H 'Forwarded: for=4.4.4.4'
+  -H 'CloudFront-Viewer-Address: 203.0.113.7:4444' -H 'CF-Connecting-IP: 203.0.113.50'
+  -H 'True-Client-IP: 203.0.113.51' -H 'x-amzn-waf-aboutme-bot: 1')
+
+start_direct -e EDGES=direct
+wait_direct 200
+# 0050 and 01BB are Caddy's 80 and 443, 1F90 and 1F9A the stand-ins.
+check_unprivileged "$name" "0050 01BB 1F90 1F9A" 0000000000000400
+
+# Forged client address headers never reach Go; Go gets the socket address.
+got=$(dcurl "${forged[@]}" "https://aboutme.vn:$dport/api/v1/probe")
+if ! [[ $got =~ ^ip=([0-9a-f.:]+)\ xff=([0-9a-f.:]+)\ fwd=\ cfva=\ cfip=\ tci=\ waf=$ ]] ||
+  [[ ${BASH_REMATCH[1]} != "${BASH_REMATCH[2]}" ]]; then
+  echo "direct: Go received '$got', want the socket address only" >&2
+  exit 1
+fi
+for leak in 5.5.5.5 6.6.6.6 4.4.4.4 203.0.113; do
+  [[ $got != *"$leak"* ]] || { echo "direct: forged $leak reached Go: '$got'" >&2; exit 1; }
+done
+# From inside the network namespace the socket address is known exactly.
+podman exec --user 0 "$name-echo" sh -c 'echo "127.0.0.1 aboutme.vn" >>/etc/hosts'
+got=$(podman exec "$name-echo" wget -q -O - --no-check-certificate \
+  --header 'X-Forwarded-For: 5.5.5.5' --header 'X-Real-IP: 6.6.6.6' \
+  --header 'CloudFront-Viewer-Address: 203.0.113.7:4444' https://aboutme.vn/api/v1/probe)
+[[ $got == 'ip=127.0.0.1 xff=127.0.0.1 fwd= cfva= cfip= tci= waf=' ]] ||
+  { echo "direct: loopback client, Go received '$got', want ip=127.0.0.1" >&2; exit 1; }
+
+# Port 80 and www redirect to HTTPS on the apex; responses carry the edge
+# headers and nothing naming Caddy.
+for url in "http://aboutme.vn:$hport/a?b=1" "http://www.aboutme.vn:$hport/a?b=1" "https://www.aboutme.vn:$dport/a?b=1"; do
+  dcurl -o /dev/null -D "$work/direct.headers" "$url"
+  grep -q '^HTTP/[0-9.]* 301' "$work/direct.headers" || { echo "$url: want 301" >&2; exit 1; }
+  grep -qi '^location: https://aboutme.vn/a?b=1'$'\r''$' "$work/direct.headers" ||
+    { echo "$url: want a redirect to https://aboutme.vn/a?b=1" >&2; exit 1; }
+done
+dcurl -o /dev/null -D "$work/direct.headers" "https://aboutme.vn:$dport/healthz"
+grep -qi '^strict-transport-security: max-age=31536000'$'\r''$' "$work/direct.headers" ||
+  { echo "direct: want HSTS max-age=31536000" >&2; exit 1; }
+if grep -qiE '^(server|via):' "$work/direct.headers"; then
+  echo "direct: Server or Via header present" >&2
+  exit 1
+fi
+
+# Coraza in detection-only mode: an XSS probe is logged and still reaches Go.
+# The audit log holds no header or body: the cookie and the body field that
+# no rule matches never appear in it. Rule matches stay out of stderr.
+code=$(dcurl -o /dev/null -w '%{http_code}' -H 'Cookie: s=cookiemarker7c2e' \
+  "https://aboutme.vn:$dport/api/v1/probe?q=%3Cscript%3Ealert(1)%3C/script%3E")
+[[ $code == 200 ]] || { echo "coraza: XSS probe got $code, want 200 (detection only)" >&2; exit 1; }
+code=$(dcurl -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -H 'Cookie: s=cookiemarker7c2e' \
+  --data '{"q":"<script>alert(1)</script>","note":"bodymarker9a4b"}' "https://aboutme.vn:$dport/api/v1/probe")
+[[ $code == 200 ]] || { echo "coraza: XSS body got $code, want 200 (detection only)" >&2; exit 1; }
+sleep 1
+audit=$(podman exec "$name" cat /var/log/caddy-waf/audit.log)
+matches=$(podman exec "$name" cat /var/log/caddy-waf/match.log)
+[[ $(grep -c 949110 <<<"$audit") -ge 2 ]] ||
+  { echo "coraza: want two audit entries over the anomaly threshold (949110):" >&2; printf '%s\n' "$audit" >&2; exit 1; }
+grep -q 941100 <<<"$matches" || { echo "coraza: no XSS rule match logged:" >&2; printf '%s\n' "$matches" >&2; exit 1; }
+for leak in cookiemarker7c2e bodymarker9a4b; do
+  if grep -qF "$leak" <<<"$audit$matches"; then
+    echo "coraza: the WAF logs contain $leak" >&2
+    exit 1
+  fi
+done
+[[ $(podman exec "$name" stat -c %a:%u /var/log/caddy-waf/audit.log) == 600:10001 ]] ||
+  { echo "coraza: audit log is not private to uid 10001" >&2; exit 1; }
+logs=$(podman logs "$name" 2>&1)
+if grep -qE '941100|"client_ip"' <<<"$logs"; then
+  echo "coraza: rule matches or client addresses reached stderr" >&2
+  exit 1
+fi
+
+# The CrowdSec bouncer: off above (no settings), on with a key file; the
+# stand-in local API bans every address, so the direct listener answers 403.
+printf '%s\n' "$bouncer_key" >"$work/bouncer.key"
+chmod 0644 "$work/bouncer.key"
+start_direct -e EDGES=direct -e CROWDSEC_API_URL=http://127.0.0.1:8090/ \
+  -e CROWDSEC_API_KEY_FILE=/run/secrets/crowdsec-bouncer-key -v "$work/bouncer.key:/run/secrets/crowdsec-bouncer-key:ro"
+wait_direct 403
+# Both edges, the direct one on a rehearsal host: CloudFront keeps its own
+# rules and no bouncer; the key from the environment does not stay in
+# Caddy's.
+start_direct "${tls_env[@]}" "${cf_ca_env[@]}" -e EDGES=cloudfront,direct -e DIRECT_HOST=vn.aboutme.vn \
+  -e DIRECT_WWW_HOST= -e CROWDSEC_API_URL=http://127.0.0.1:8090 -e CROWDSEC_API_KEY="$bouncer_key"
+wait_direct 403 vn.aboutme.vn
+check_unprivileged "$name" "0050 01BB 1F90 1F9A 20FB" 0000000000000400
+code=$(request "${cf[@]}" "https://aboutme.vn:$port/healthz" || true)
+[[ $code == 200 ]] || { echo "EDGES=cloudfront,direct: CloudFront healthz: want 200, got $code" >&2; exit 1; }
+got=$(curl -s --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
+  -H 'CloudFront-Viewer-Address: 203.0.113.7:46532' "https://aboutme.vn:$port/api/v1/probe")
+[[ $got == 'ip=203.0.113.7 '* ]] ||
+  { echo "EDGES=cloudfront,direct: CloudFront client address: Go received '$got'" >&2; exit 1; }
+if podman exec "$name" sh -c 'tr "\0" "\n" </proc/1/environ | grep -q "^CROWDSEC_API_KEY="'; then
+  echo "CROWDSEC_API_KEY remains in the Caddy process environment" >&2
+  exit 1
+fi
+
+direct_refuse=(-e EDGES=direct)
+refuse "a CrowdSec URL without a key" "${direct_refuse[@]}" -e CROWDSEC_API_URL=http://127.0.0.1:8090/
+refuse "a CrowdSec key without a URL" "${direct_refuse[@]}" -e CROWDSEC_API_KEY=x
+refuse "both CrowdSec key forms" "${direct_refuse[@]}" -e CROWDSEC_API_URL=http://127.0.0.1:8090/ \
+  -e CROWDSEC_API_KEY=x -e CROWDSEC_API_KEY_FILE=/run/secrets/k
+refuse "a malformed CrowdSec URL" "${direct_refuse[@]}" -e 'CROWDSEC_API_URL=http://x/ {' -e CROWDSEC_API_KEY=x
+refuse "CrowdSec without the direct edge" "${cf_ca_env[@]}" -e EDGES=cloudfront \
+  -e CROWDSEC_API_URL=http://127.0.0.1:8090/ -e CROWDSEC_API_KEY=x
+refuse "a malformed DIRECT_HOST" "${direct_refuse[@]}" -e 'DIRECT_HOST=aboutme.vn {'
+refuse "an uppercase DIRECT_HOST" "${direct_refuse[@]}" -e DIRECT_HOST=Aboutme.vn
+refuse "a malformed DIRECT_WWW_HOST" "${direct_refuse[@]}" -e 'DIRECT_WWW_HOST=www.aboutme.vn, evil.example'
+refuse "an unknown DIRECT_TLS" "${direct_refuse[@]}" -e DIRECT_TLS=off
+refuse "both edges on aboutme.vn" "${cf_ca_env[@]}" -e EDGES=cloudfront,direct
+refuse "both edges with the direct www on www.aboutme.vn" "${cf_ca_env[@]}" -e EDGES=cloudfront,direct \
+  -e DIRECT_HOST=vn.aboutme.vn -e DIRECT_WWW_HOST=www.aboutme.vn
+podman run --rm -e EDGES=direct "$image" adapt || { echo "adapt failed for EDGES=direct" >&2; exit 1; }
+podman run --rm -e EDGES=cloudfront,direct -e DIRECT_HOST=vn.aboutme.vn -e DIRECT_WWW_HOST= \
+  -e CROWDSEC_API_URL=http://127.0.0.1:8090/ -e CROWDSEC_API_KEY=x "$image" adapt ||
+  { echo "adapt failed for EDGES=cloudfront,direct with a rehearsal host and CrowdSec" >&2; exit 1; }
 
 # ---- Maintenance mode: same image, MAINTENANCE=1 selects Caddyfile.maintenance ----
 podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true

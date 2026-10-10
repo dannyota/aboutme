@@ -1,0 +1,81 @@
+# Direct listener on 80 and 443 (docs/design/vietnam-production.md, "Edge"):
+# browsers reach Caddy with nothing in front of it. entrypoint.sh includes
+# this file when EDGES includes direct, and sets DIRECT_HOST, the apex this
+# listener serves (aboutme.vn unless a rehearsal names another). The
+# apex_site snippet comes from the Caddyfile that imports this file.
+#
+# No edge stands in front, so every forwarding header a request carries is
+# forged. The listener deletes them all, including the WAF label headers the
+# CloudFront listener restores (a header one edge sets is never trusted on
+# another's), and sends Go the socket address as X-Real-IP.
+
+# Let's Encrypt by ACME HTTP-01 on port 80, or Caddy's internal CA when
+# DIRECT_TLS=internal (tests only); entrypoint.sh writes the file.
+(direct_tls) {
+	import /run/caddy/direct-tls.caddy
+}
+
+# The same response header rule as the CloudFront listener: HSTS and
+# nosniff unless the upstream set them, and no Server or Via naming Caddy.
+(direct_response_headers) {
+	header {
+		?Strict-Transport-Security "max-age=31536000"
+		?X-Content-Type-Options nosniff
+		-Server
+		-Via
+		defer
+	}
+}
+
+# OWASP Core Rule Set v4 in Coraza. coraza/aboutme.conf holds the engine
+# mode (detection only until it is switched to blocking), the body and
+# audit log settings; coraza/exclusions.conf holds the rule exclusions,
+# loaded between the rule set's setup and its rules as the rule set expects.
+(direct_waf) {
+	coraza_waf {
+		load_owasp_crs
+		directives `
+			Include @coraza.conf-recommended
+			Include /etc/caddy/coraza/aboutme.conf
+			Include @crs-setup.conf.example
+			Include /etc/caddy/coraza/exclusions.conf
+			Include @owasp_crs/*.conf
+		`
+	}
+}
+
+# Port 80 answers ACME HTTP-01 challenges (Caddy handles those before any
+# route) and sends everything else to HTTPS on the apex.
+http://{$DIRECT_HOST} {
+	redir https://{$DIRECT_HOST}{uri} permanent
+}
+
+# The www redirect site, when DIRECT_WWW_HOST is not empty.
+import /run/caddy/direct-www.sites
+
+https://{$DIRECT_HOST} {
+	import direct_tls
+	import direct_response_headers
+	# Empty unless CROWDSEC_API_URL is set; then the bouncer answers 403 to
+	# a banned socket address.
+	import /run/caddy/crowdsec.handler
+	import direct_waf
+
+	request_header -X-Real-IP
+	request_header -X-Forwarded-*
+	request_header -Forwarded
+	request_header -Forwarded-*
+	request_header -X-Forwarded
+	request_header -CloudFront-*
+	request_header -CF-*
+	request_header -True-Client-IP
+	request_header -X-Client-IP
+	request_header -X-Cluster-Client-IP
+	request_header -X-Original-Forwarded-For
+	request_header -Fastly-Client-IP
+	request_header -X-Envoy-External-Address
+	request_header -x-amzn-*
+	vars client_address {http.request.remote.host}
+
+	import apex_site
+}
