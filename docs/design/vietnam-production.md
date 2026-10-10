@@ -61,23 +61,25 @@ under the `EDGES` list, which gains `direct`.
 Three host-level controls replace AWS WAF:
 
 - Go's rate limits stay the application control.
-- CrowdSec (the security engine, its Caddy bouncer, and the nftables bouncer for
-  SSH) reads Caddy and sshd logs, bans addresses that match the HTTP flood,
-  scanning, and brute-force scenarios, and answers 403 to banned addresses.
-  Community blocklist sharing stays off until the DPIA covers it (owner,
-  2026-10-10), because a shared signal sends the attacker's address abroad.
-- Coraza in Caddy (`coraza-caddy` with the OWASP Core Rule Set v4, built into
-  the Caddy image with `xcaddy`) detects for two weeks before blocking. Raw
-  audit logging stays off because AHKZ sections can record body data. Serving
-  writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
-  `/var/log/caddy/waf/maintenance-match.log`; both are on host tmpfs. Records
-  contain only `ts`, `level`, `logger`, fixed `msg` (`waf_rule_match` or
-  `waf_rule_match_unparsed`), and numeric `rule_id` when parsed. They contain no
-  personal data, body, header, IP address, or URI and never reach disk or
-  journald. Each active file is at most 5 MiB plus two rolled files;
-  `roll_keep_for 1d` expires rolled files only. A low-volume active file can be
-  older until rotation or reboot. After two weeks, devops reviews diagnostics,
-  excludes false positives on resume writes, and enables blocking.
+- CrowdSec's engine, Caddy bouncer, and nftables SSH bouncer read Caddy and sshd
+  logs and ban floods, scans, and brute force; Caddy returns 403. Sharing stays
+  off until the DPIA covers sending attacker addresses abroad (owner,
+  2026-10-10).
+- Coraza 3.8.1 in Caddy (`coraza-caddy` with OWASP CRS v4) detects for two weeks
+  before blocking. Raw audit logging stays off because it can record body data.
+  Serving writes `/var/log/caddy/waf/serving-match.log`; maintenance writes
+  `/var/log/caddy/waf/maintenance-match.log`; both are on tmpfs. Rule callbacks
+  emit `msg=waf_rule_match` with numeric `rule_id`; other unknown shapes emit
+  `msg=waf_rule_match_unparsed`. Coraza shares its engine logger with the rule
+  callback. Only its fixed missing-key macro warning,
+  `key not found in collection, returning the original text`, emits
+  `msg=waf_engine_diagnostic`. It has only `ts`, `level`, `logger`, and `msg`,
+  no `rule_id` or raw fields; the watcher excludes it from rule counts and
+  unknown alerts. Logs carry no raw fields or personal data and never reach disk
+  or journald. Files cap at 5 MiB plus two rolls; one-day expiry applies only to
+  rolled files, so a low-volume active file persists until rotation or reboot.
+  After two weeks, devops reviews matches, excludes false positives on resume
+  writes, and enables blocking.
 
 None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
 escalation: an application in the root portal with the floating IP as upstream,
@@ -221,19 +223,17 @@ drill is the launch restore evidence.
 
 ## Release fence
 
-Root-owned `/var/lib/aboutme/fence.json` holds the fence outside PostgreSQL;
-`deploy/vn/scripts/fence.sh` follows the
-[fence design](passkey-release-fence.md) under `flock`. Production images check
-the minimum before Podman; rebuilt hosts start at floor 4007. Each `cutover`
-subcommand locks on the installed tag, checkpoints before mutation, and holds
-through final quiescence. `verify` also locks. Before mutation, the fence writes
-a root-owned marker with its ID, kind, active state, and start time.
-
-A retained cutover operation or any marker refuses server, web, serving Caddy,
-migrate, and scheduled-job starts before Podman, including after reboot.
-Maintenance stays startable. `db-setup` starts only when a valid active
-`reset-db` marker and cutover lock carry the same ID. A missing, symlinked,
-malformed, wrong-kind, or mismatched marker refuses it. Non-cutover operations
+`deploy/vn/scripts/fence.sh` changes root-owned `/var/lib/aboutme/fence.json`
+outside PostgreSQL under `flock` per the
+[fence design](passkey-release-fence.md). Images check the minimum before
+Podman; new hosts start at floor 4007. Each `cutover` subcommand locks the
+installed tag, checkpoints before mutation, and holds through quiescence;
+`verify` locks. Before mutation, the fence writes a marker with its ID, kind,
+state, and start time. A retained cutover operation or any marker refuses
+server, web, serving Caddy, migrate, and scheduled-job starts before Podman,
+including after reboot. Maintenance can start. `db-setup` starts only for a
+valid active `reset-db` marker sharing the cutover lock ID; missing, symlinked,
+malformed, wrong-kind, or mismatched state refuses it. Non-cutover operations
 keep the minimum-only rule. The owning operation removes its marker after safe
 quiescence. Uncertainty keeps the marker and lock closed. Manual clear refuses a
 marker; privileged recovery logs its reason and clears it after inspection.
