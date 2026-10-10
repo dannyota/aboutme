@@ -44,9 +44,10 @@ the state passphrase and host secrets.
 
 ## Credentials on the laptop
 
-- A `vngcloud` CLI profile named `aboutme` (`VNG_PROFILE`), set up with
-  `vngcloud --profile aboutme configure`. Agents use only a `--read-only`
-  profile.
+- The `vngcloud` CLI (v0.66.0 or later) with the owner's setup account in the
+  environment (`set -a; . <env file>; set +a` in the command that needs it).
+  `VNG_PROFILE` names a `~/.vngcloud` profile instead. Agents add `--read-only`
+  unless a step writes.
 - The OpenTofu provider authenticates as an IAM service account through
   `CLIENT_ID` and `CLIENT_SECRET` in the environment, never a file in this tree.
 - `TF_VAR_state_passphrase` for state encryption, at least 16 characters.
@@ -66,9 +67,10 @@ the same value as `ssh_port` when using another port.
 
 1. Confirm each provider fact below on the account.
 2. `scripts/buckets.sh --storage-project-id <id>`: the media, backup, and state
-   buckets, each with its own service account, bucket policy, and key. It
-   refuses to create a bucket until the CLI can set bucket encryption, unless
-   the owner sets `BUCKET_ENCRYPTION=off`.
+   buckets, each with its own service account, bucket policy, and key. Each
+   bucket is created with default encryption (SSE-S3, AES256), and the script
+   refuses an existing bucket without it, unless the owner sets
+   `BUCKET_ENCRYPTION=off`. Encrypted buckets refuse server-side copy (501).
 3. `scripts/quote.sh --max-price <vnd>`: the price gate, since OpenTofu has no
    price ceiling.
 4. In `prod/`: `tofu init -backend-config=backend.hcl`, then

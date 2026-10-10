@@ -24,13 +24,12 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=vng-lib.sh
 . "$here/vng-lib.sh"
 
-# required: refuse to create a bucket unless the installed CLI can encrypt it.
-# off: the owner's explicit override. v0.58.0 cannot set bucket encryption.
-BUCKET_ENCRYPTION=required
-# Extra create-bucket arguments for the encryption flag, taken from
-# `vngcloud storage create-bucket --help` once a CLI release adds one.
-# Unconfirmed: that flag's name and value.
-BUCKET_ENCRYPTION_ARGS=${BUCKET_ENCRYPTION_ARGS:-}
+# required: create each bucket with `create-bucket --encryption` (CLI v0.66.0
+# or later: server-managed SSE-S3, AES256) and refuse an existing bucket whose
+# encryption reads off. Encryption covers only objects uploaded after it is
+# on, so it is set at create, before any upload. off: the owner's explicit
+# override.
+BUCKET_ENCRYPTION=${BUCKET_ENCRYPTION:-required}
 
 BUCKETS=(aboutme-media aboutme-backups aboutme-tfstate)
 
@@ -112,11 +111,9 @@ policy_for() {
        Resource: ["arn:aws:s3:::" + $b + "/*"]}]}'
 }
 
-# encryption_flag prints the encryption flag the CLI's create-bucket offers, or
-# nothing.
-encryption_flag() {
-  vng_ro storage create-bucket --help 2>&1 |
-    grep -o -i -E -e '--[a-z0-9-]*(encrypt|kms|sse)[a-z0-9-]*' | head -n 1 || true
+# encryption_on <bucket> succeeds when the bucket's default encryption reads on.
+encryption_on() {
+  [[ $(vst get-bucket-encryption --bucket "$1" | jq -r '.Enabled') == true ]]
 }
 
 existing_buckets=$(vst list-buckets | jq -r '.Items[]? | (.Name // .name)')
@@ -125,13 +122,17 @@ for b in "${BUCKETS[@]}"; do
   grep -qx -- "$b" <<<"$existing_buckets" || missing+=("$b")
 done
 
-# Check encryption support before changing anything.
-if ((${#missing[@]})) && [[ $BUCKET_ENCRYPTION == required ]]; then
-  flag=$(encryption_flag)
-  [[ -n $flag ]] ||
-    die "bucket creation waits for the CLI release that adds bucket encryption (create-bucket offers no encryption flag); set BUCKET_ENCRYPTION=off only as the owner's explicit override. Missing: ${missing[*]}"
-  [[ -n $BUCKET_ENCRYPTION_ARGS ]] ||
-    die "create-bucket now offers $flag; set BUCKET_ENCRYPTION_ARGS to its arguments from --help (Unconfirmed: the value it takes)"
+# Check encryption before changing anything.
+if [[ $BUCKET_ENCRYPTION == required ]]; then
+  if ((${#missing[@]})); then
+    vng_ro storage create-bucket --help 2>&1 | grep -q -e '--encryption' ||
+      die "create-bucket offers no --encryption flag; install vngcloud v0.66.0 or later. Missing: ${missing[*]}"
+  fi
+  for b in "${BUCKETS[@]}"; do
+    grep -qx -- "$b" <<<"$existing_buckets" || continue
+    encryption_on "$b" ||
+      die "bucket $b exists without default encryption; objects already in it stay unencrypted, so empty it, run put-bucket-encryption --enabled=true, and check it before running this again"
+  done
 fi
 
 ensure_bucket() {
@@ -141,12 +142,10 @@ ensure_bucket() {
     return 0
   fi
   local extra=()
-  if [[ $BUCKET_ENCRYPTION == required ]]; then
-    # shellcheck disable=SC2206 # the arguments are split on purpose
-    extra=($BUCKET_ENCRYPTION_ARGS)
-  fi
+  [[ $BUCKET_ENCRYPTION == off ]] || extra=(--encryption)
+  # With --encryption the CLI succeeds only after encryption reads on.
   vst create-bucket --bucket "$b" "${extra[@]}" >/dev/null
-  say "bucket $b: created"
+  say "bucket $b: created${extra:+, encrypted}"
 }
 
 # ensure_service_account <name> prints the service account ID.

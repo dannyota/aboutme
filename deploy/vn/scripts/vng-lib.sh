@@ -3,10 +3,13 @@
 # do not run it. Design: docs/design/vietnam-production.md, "Infrastructure
 # code and state" (the CLI covers service accounts, buckets, and the budget).
 #
-# VNG_PROFILE names a writable operator profile in ~/.vngcloud that the owner
-# created. These scripts never write credentials. Nothing here prints a secret.
+# Credentials come from the environment: the owner's setup account, loaded with
+# `set -a; . <env file>; set +a`. VNG_PROFILE, when set, names a profile in
+# ~/.vngcloud instead; an explicit profile ignores credentials in the
+# environment. These scripts never write credentials. Nothing here prints a
+# secret.
 
-VNG_PROFILE=${VNG_PROFILE:-aboutme}
+VNG_PROFILE=${VNG_PROFILE:-}
 VNG_BIN=${VNG_BIN:-vngcloud}
 VNG_REGION=hcm-3
 
@@ -23,9 +26,11 @@ need_tools() {
   done
 }
 
-# vng runs the CLI as the operator profile with JSON output.
+# vng runs the CLI with JSON output, as VNG_PROFILE when it is set.
 vng() {
-  "$VNG_BIN" --profile "$VNG_PROFILE" --region "$VNG_REGION" --output json "$@"
+  local profile=()
+  [[ -z $VNG_PROFILE ]] || profile=(--profile "$VNG_PROFILE")
+  "$VNG_BIN" "${profile[@]}" --region "$VNG_REGION" --output json "$@"
 }
 
 # vng_ro is vng with the CLI's read-only guard, so it refuses any write.
