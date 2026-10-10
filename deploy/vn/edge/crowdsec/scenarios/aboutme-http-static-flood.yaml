@@ -10,6 +10,8 @@ groupby: evt.Meta.source_ip
 capacity: 3000
 leakspeed: 20ms
 blackhole: 5m
+# Keep only the last events in memory and in the alert, not the whole bucket.
+cache_size: 5
 labels:
   remediation: true
   classification:
