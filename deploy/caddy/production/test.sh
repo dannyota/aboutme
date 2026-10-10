@@ -9,11 +9,16 @@
 # CrowdSec bouncer (docs/design/vietnam-production.md, "Edge").
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
+# shellcheck source=deploy/caddy/production/test/direct_maintenance.sh
+source "$root/deploy/caddy/production/test/direct_maintenance.sh"
 work=$(mktemp -d)
 name=aboutme-caddy-test
+waf_volume=$name-waf
 port=20452
 closed_port=20451
-trap 'podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+trap 'podman rm -f --ignore --depend "$name" "$name-maint" >/dev/null 2>&1 || true; podman volume rm -f "$waf_volume" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+podman volume rm -f "$waf_volume" >/dev/null 2>&1 || true
+podman volume create "$waf_volume" >/dev/null
 
 render=$root/deploy/caddy/production/render.sh
 routes=$(bash "$render" "$root/deploy/caddy/public-roots.generated.caddy")
@@ -73,6 +78,7 @@ bash "$maintenance_render" "$maintenance_html" >/dev/null ||
 want_csp=$(bash "$maintenance_render" "$maintenance_html" |
   grep '^header Content-Security-Policy' | sed -E 's/^header Content-Security-Policy "(.*)"$/\1/')
 
+(cd "$root/deploy/caddy/production/build" && GOWORK=off go test ./...)
 podman build -q -f "$root/deploy/caddy/production/Dockerfile" -t localhost/aboutme/caddy:test "$root" >/dev/null
 # Production runs the image's own user; the task definitions set none.
 user=$(podman image inspect --format '{{.Config.User}}' localhost/aboutme/caddy:test)
@@ -375,7 +381,8 @@ start_direct() { # podman run options...
   local ca
   podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
   podman run -d --name "$name" -p "127.0.0.1:$port:8443" -p "127.0.0.1:$dport:443" -p "127.0.0.1:$hport:80" \
-    --tmpfs /run/caddy "${unprivileged[@]}" --cap-add NET_BIND_SERVICE -e DIRECT_TLS=internal "$@" "$image" >/dev/null
+    --tmpfs /run/caddy "${unprivileged[@]}" --cap-add NET_BIND_SERVICE \
+    -v "$waf_volume:/var/log/caddy:U" -e DIRECT_TLS=internal "$@" "$image" >/dev/null
   wait_started "$name"
   podman run -d --name "$name-echo" --network "container:$name" -e ECHO="$direct_echo" -e BAN="$ban_all" \
     --entrypoint sh "$image" -c 'mkdir /tmp/lapi && printf "%s" "$BAN" >/tmp/lapi/stream.json &&
@@ -450,33 +457,69 @@ if grep -qiE '^(server|via):' "$work/direct.headers"; then
 fi
 
 # Coraza in detection-only mode: an XSS probe is logged and still reaches Go.
-# The audit log holds no header or body: the cookie and the body field that
-# no rule matches never appear in it. Rule matches stay out of stderr.
+# WAF diagnostics keep only fixed metadata. Request values, addresses, rule
+# messages, and Coraza audit records never enter a log.
 code=$(dcurl -o /dev/null -w '%{http_code}' -H 'Cookie: s=cookiemarker7c2e' \
-  "https://aboutme.vn:$dport/api/v1/probe?q=%3Cscript%3Ealert(1)%3C/script%3E")
+  "https://aboutme.vn:$dport/api/v1/probe?q=%3Cscript%3Equerymarker5d1f%3C/script%3E")
 [[ $code == 200 ]] || { echo "coraza: XSS probe got $code, want 200 (detection only)" >&2; exit 1; }
 code=$(dcurl -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -H 'Cookie: s=cookiemarker7c2e' \
-  --data '{"q":"<script>alert(1)</script>","note":"bodymarker9a4b"}' "https://aboutme.vn:$dport/api/v1/probe")
+  --data '{"q":"<script>bodyquerymarker2b6c</script>","note":"bodymarker9a4b"}' \
+  "https://aboutme.vn:$dport/api/v1/probe")
 [[ $code == 200 ]] || { echo "coraza: XSS body got $code, want 200 (detection only)" >&2; exit 1; }
 sleep 1
-audit=$(podman exec "$name" cat /var/log/caddy-waf/audit.log)
-matches=$(podman exec "$name" cat /var/log/caddy-waf/match.log)
-[[ $(grep -c 949110 <<<"$audit") -ge 2 ]] ||
-  { echo "coraza: want two audit entries over the anomaly threshold (949110):" >&2; printf '%s\n' "$audit" >&2; exit 1; }
-grep -q 941100 <<<"$matches" || { echo "coraza: no XSS rule match logged:" >&2; printf '%s\n' "$matches" >&2; exit 1; }
-for leak in cookiemarker7c2e bodymarker9a4b; do
-  if grep -qF "$leak" <<<"$audit$matches"; then
+matches=$(podman exec "$name" cat /var/log/caddy/waf/serving-match.log)
+grep -q '"msg":"waf_rule_match"' <<<"$matches" ||
+  { echo "coraza: no metadata-only rule match logged:" >&2; printf '%s\n' "$matches" >&2; exit 1; }
+grep -q '"rule_id":941100' <<<"$matches" ||
+  { echo "coraza: no XSS rule ID logged:" >&2; printf '%s\n' "$matches" >&2; exit 1; }
+grep -q '"rule_id":949110' <<<"$matches" ||
+  { echo "coraza: no anomaly-threshold rule ID logged:" >&2; printf '%s\n' "$matches" >&2; exit 1; }
+if grep -q 'waf_rule_match_unparsed' <<<"$matches"; then
+  echo "coraza: an upstream rule message did not match the safe metadata shape" >&2
+  printf '%s\n' "$matches" >&2
+  exit 1
+fi
+for leak in cookiemarker7c2e querymarker5d1f bodyquerymarker2b6c bodymarker9a4b 127.0.0.1 \
+  'XSS Attack' 'Matched Data' '@owasp_crs'; do
+  if grep -qF "$leak" <<<"$matches"; then
     echo "coraza: the WAF logs contain $leak" >&2
     exit 1
   fi
 done
-[[ $(podman exec "$name" stat -c %a:%u /var/log/caddy-waf/audit.log) == 600:10001 ]] ||
-  { echo "coraza: audit log is not private to uid 10001" >&2; exit 1; }
+[[ $(podman exec "$name" stat -c %a:%u /var/log/caddy/waf/serving-match.log) == 600:10001 ]] ||
+  { echo "coraza: diagnostic log is not private to uid 10001" >&2; exit 1; }
+if podman exec "$name" test -e /var/log/caddy/waf/audit.log; then
+  echo "coraza: raw audit log exists" >&2
+  exit 1
+fi
 logs=$(podman logs "$name" 2>&1)
 if grep -qE '941100|"client_ip"' <<<"$logs"; then
   echo "coraza: rule matches or client addresses reached stderr" >&2
   exit 1
 fi
+
+# A client that stops during an inspected body cannot hold the 5 MiB WAF
+# buffer forever. Caddy must end the upload before the client's own deadline.
+dd if=/dev/zero of="$work/slow-body" bs=1024 count=1024 status=none
+set +e
+slow_result=$(curl -s --max-time 40 --limit-rate 1 -o /dev/null -w '%{http_code} %{time_total}' \
+  --resolve "aboutme.vn:$dport:127.0.0.1" --cacert "$work/direct-ca.pem" \
+  -H 'Content-Type: application/octet-stream' --data-binary @"$work/slow-body" \
+  "https://aboutme.vn:$dport/api/v1/slow-body-probe")
+slow_status=$?
+set -e
+[[ $slow_status == 0 ]] ||
+  { echo "direct: stalled request failed in curl with status $slow_status ($slow_result)" >&2; exit 1; }
+slow_code=${slow_result%% *}
+slow_time=${slow_result#* }
+[[ $slow_code == 500 ]] || { echo "direct: stalled request got HTTP $slow_code, want 500" >&2; exit 1; }
+awk -v elapsed="$slow_time" 'BEGIN { exit !(elapsed >= 25 && elapsed < 40) }' ||
+  { echo "direct: stalled request ended after ${slow_time}s, want 25s to 40s" >&2; exit 1; }
+slow_logs=$(podman logs "$name" 2>&1)
+grep -q '"uri":"/api/v1/slow-body-probe"' <<<"$slow_logs" ||
+  { echo "direct: stalled request did not reach Caddy" >&2; exit 1; }
+
+test_direct_maintenance_log_isolation
 
 # The CrowdSec bouncer: off above (no settings), on with a key file; the
 # stand-in local API bans every address, so the direct listener answers 403.
