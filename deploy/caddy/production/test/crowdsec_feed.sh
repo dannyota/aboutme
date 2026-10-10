@@ -63,11 +63,13 @@ test_direct_crowdsec_feed() {
     dcurl -o /dev/null "https://aboutme.vn:$dport$path?token=querymarker4c9d" || true
   done
 
-  # This request reaches the same listener over IPv6. The overridden Host keeps
-  # route selection on the direct site while TLS verification stays disabled in
-  # the test-only internal-CA namespace.
+  # The earlier IPv4 proof added this namespace-local name. Move that name to
+  # IPv6 so wget sends aboutme.vn as both TLS SNI and the HTTP Host while Caddy
+  # sees the socket peer as ::1.
+  podman exec --user 0 "$name-echo" sh -c \
+    'sed "s/^127\.0\.0\.1 aboutme\.vn$/::1 aboutme.vn/" /etc/hosts >/tmp/hosts && cat /tmp/hosts >/etc/hosts'
   podman exec "$name-echo" wget -q -O /dev/null --no-check-certificate \
-    --header 'Host: aboutme.vn' 'https://[::1]/healthz'
+    https://aboutme.vn/healthz
   timeout 5 openssl s_client -connect "127.0.0.1:$dport" \
     -servername hostmarker5a7e.example -alpn acme-tls/1 </dev/null >/dev/null 2>&1 || true
 
