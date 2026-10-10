@@ -1,53 +1,46 @@
 # Vietnam production migration
 
-Status: open (owner decision 2026-09-24). Moves production to GreenNode and Bizfly in Vietnam; AWS stays as a fictional-data test environment. Design: [vietnam-production.md](../design/vietnam-production.md). Decision: [ADR 0027](../adr/0027-vietnam-hosted-production.md). Design wins over this plan.
+Status: open (owner decisions 2026-09-24 and 2026-10-10). Moves production to GreenNode and Bizfly in Vietnam; AWS stays as a fictional-data test environment. Design: [vietnam-production.md](../design/vietnam-production.md). Decision: [ADR 0027](../adr/0027-vietnam-hosted-production.md). Design wins over this plan.
 
 Code, comments, tests, and living docs cite the design or ADR 0027, never this plan or its phase numbers. Each app release is one feature per [How we work](../../AGENTS.md#how-we-work).
 
 ## Owner actions
 
-1. Approve or change each **Owner approval** item in the design (list below).
-2. Create a GreenNode account (https://greennode.ai), verify identity (eKYC; business or personal as the owner chooses), add a payment method, top up enough for one month of vServer, volumes, vStorage, vCDN, and vMonitor.
-3. Create a Bizfly Cloud account (https://bizflycloud.vn), verify identity, top up, and subscribe to Email Transaction and Business Email for `aboutme.vn`.
-4. In GreenNode IAM, create a service account `aboutme-tofu` with only the vServer, volume, security group, and floating IP permissions OpenTofu needs; create its client ID and secret.
-5. In vStorage, create a service account `aboutme-state` with an S3 key limited to the state bucket (devops creates the bucket with that key's parent account in step 3 of the build, or the owner creates `aboutme-tfstate` in the console first).
-6. Put those values in `.dev/credentials/greennode.env`, mode 0600: `GREENNODE_CLIENT_ID`, `GREENNODE_CLIENT_SECRET`, `VSTORAGE_STATE_ACCESS_KEY_ID`, `VSTORAGE_STATE_SECRET_ACCESS_KEY`, `TOFU_STATE_PASSPHRASE` (at least 32 random bytes, base64). Agents load it with `set -a; . .dev/credentials/greennode.env; set +a` inside the command that needs it and never print, echo, or log a value.
-7. Put Bizfly values in `.dev/credentials/bizfly.env`, mode 0600: `BIZFLY_SMTP_HOST`, `BIZFLY_SMTP_PORT`, `BIZFLY_SMTP_USERNAME`, `BIZFLY_SMTP_PASSWORD`, and `BIZFLY_API_KEY` if Bizfly offers one. `secrets.sh` pipes the SMTP values to the host without printing them.
-8. Generate an age key pair for `aboutme-infra`; keep the private key off the host; give devops the public recipient.
-9. Move the support mailbox: create the Bizfly Business Email mailbox and import Google Workspace mail.
-10. At cutover: run the SSM-to-host secret pipe, approve the DNS switch at Cloudflare, and later the NS change at the `.vn` registrar.
-11. Once the cutover is verified: approve the AWS real-data deletion and cancel Google Workspace.
-12. After the cutover and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. The public announcement waits for the cutover.
+1. Top up the existing GreenNode account for one month of vServer, volumes, vStorage, and vMonitor. Devops quotes each paid create first (`--max-price`).
+2. Create an IAM user for the aboutme tooling, separate from the user the other session uses, with policies per the vngcloud IAM wiki page (`~/src/vngcloud/docs/wiki/CLI-IAM.md`, `Configuration.md`). Store it as `vngcloud` profile `aboutme` (`configure set`, password and TOTP secret from stdin, credentials file mode 0600), and a second profile `aboutme-ro` with `read_only 1` for agent reads. Per that wiki page, agent profiles hold no IAM write rights: the owner runs the IAM writes (service accounts, policy attaches) that devops prepares.
+3. Service accounts come from the CLI, not the console: one per bucket (media, backups, state), each with a bucket policy naming its principal and a key made by `storage create-s3-key --service-account-id`, plus one for the OpenTofu provider. Every secret goes by `--secret-file` to a 0600 file under `.dev/credentials/` and is never printed. **Unconfirmed:** the provider's authentication fields (service-account client ID and secret) until phase 1 tests them.
+4. Put `TOFU_STATE_PASSPHRASE` (at least 32 random bytes, base64) in `.dev/credentials/greennode.env`, mode 0600. Agents load credentials with `set -a; . <file>; set +a` inside the command that needs them and never print, echo, or log a value.
+5. Create a Bizfly Cloud account (https://bizflycloud.vn), verify identity, top up, and subscribe to Email Transaction for `aboutme.vn`.
+6. Put Bizfly values in `.dev/credentials/bizfly.env`, mode 0600: `BIZFLY_SMTP_HOST`, `BIZFLY_SMTP_PORT`, `BIZFLY_SMTP_USERNAME`, `BIZFLY_SMTP_PASSWORD`, and `BIZFLY_API_KEY` if Bizfly offers one. `secrets.sh` pipes the SMTP values to the host without printing them.
+7. Generate an age key pair for `aboutme-infra`; keep the private key off the host; give devops the public recipient.
+8. Generate an `ed25519-sk` key on the hardware key; give devops the public key and the SSH source allowlist.
+9. At cutover: run the SSM-to-host secret pipe and approve the Route 53 switch of the apex and `www`.
+10. Once the cutover is verified: approve the AWS real-data deletion and the CloudFront teardown.
+11. After the cutover and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. The public announcement waits for the cutover.
 
-## Owner approvals (recommendation first)
+## Decided
 
-- Region HCM03 for every GreenNode resource. Recommend yes.
-- vServer 2 vCPU, 4 GiB, Ubuntu 24.04 LTS, separate encrypted SSD data volume. Recommend yes.
-- Self-hosted PostgreSQL 18 with pgBackRest, 30 days, PITR, quarterly drill. Recommend yes (managed vDB is PG17, no PITR).
-- Second pgBackRest repository in Hanoi. Recommend yes.
-- vCDN-managed viewer certificate if offered, else Let's Encrypt uploaded by devops. Recommend yes.
-- Launch without vWAF. Recommend yes; revisit on abuse.
-- SMTP sender, not the Bizfly HTTP API. Recommend SMTP.
-- Release fence as a root-owned host file with a start-time check. Recommend yes over a PostgreSQL table.
-- Password reset may create the first password for a Google-only account. Recommend yes; otherwise those accounts lose sign-in.
-- Hardware-backed SSH key (`ed25519-sk`). Recommend yes.
-- Decided by the owner (2026-09-24): no rollback window after Vietnam accepts writes; no separate domain for the AWS test environment. All other approvals above: approved.
-- Keep Have I Been Pwned and record it in the DPIA. Recommend yes.
+- 2026-09-24: self-hosted PostgreSQL 18 with pgBackRest (30 days, point-in-time recovery, quarterly drill); no rollback window after Vietnam accepts writes; no domain for the AWS test environment; Have I Been Pwned stays and the DPIA records it.
+- 2026-10-10: nothing in front of the host; Caddy with Coraza and CrowdSec; vWAF only as a DNS-change escalation.
+- 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.
+- 2026-10-10: compute HCM03 (zone HCM03-1A), vStorage HCM04, one backup repository.
+- 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 20 GB unencrypted, data 20 GB encrypted; grow online at 70%.
+- 2026-10-10: `ed25519-sk` SSH key; host-file release fence; SMTP sender over the Bizfly HTTP API; vMonitor logs 30 days; CrowdSec community sharing off.
 
 ## Phases
 
 |Phase|Owner role|Done when|
 |-|-|-|
-|1 Verify on the account|owner, devops|Accounts verified and topped up; credentials files exist; devops has tested Q1 to Q22 on the account and recorded results; no cutover blocker open (Q1, Q3, Q5, Q6, Q11). Q10 blocks only the NS move.|
+|1 Verify on the account|owner, devops|Owner actions 1 to 8 done; `vngcloud --profile aboutme-ro portal get-user-info` succeeds; devops has tested design Q1 to Q13 on the account and recorded results in the runbook; Q3 (cutover blocker) and Q4 (pgBackRest and state backend) answered; Q5, Q9, and Q13 (data location, subprocessors, DPA) answered before cutover, since they carry the ADR's legal reason.|
 |2a amd64 images|devops|Release workflow publishes `linux/amd64` and `linux/arm64` manifests; smoke on both; deploy/aws unchanged in behavior.|
 |2b SMTP sender|backend|`AUTH_EMAIL_MODE=smtp` with config validation, TLS verification, outcome classification, stub-server tests; SES mode unchanged.|
-|2c Caddy edge selection|devops|`EDGES` gains a `vcdn` listener, host from environment, edge-secret check with two values, vCDN client-IP trust; Caddy tests cover forged headers and missing secret.|
-|2d Google-only accounts|backend, frontend|Notice sent; reset rule per owner decision, with tests; count of Google-only accounts recorded without identifiers.|
-|2e Legal text|frontend|Privacy notice and terms name GreenNode and Bizfly in Vietnam; reviewed; first deployed at cutover.|
-|3 Build|devops|`deploy/vn/` per design layout; tofu applied after adversarial review; buckets, host, PostgreSQL, pgBackRest, agents, alarms; probe passes.|
+|2c Caddy direct edge|devops|`EDGES` gains `direct`: socket address only, every forwarding header stripped, one `X-Real-IP` to Go; site host from environment. Caddy image built with `xcaddy` adds `coraza-caddy` (OWASP CRS v4) and the CrowdSec Caddy bouncer. Tests: forged `X-Forwarded-For`, `X-Real-IP`, and `CloudFront-Viewer-Address` on `direct` never reach Go; Coraza in detection-only mode logs and passes a rule-matching request; the CloudFront listener is unchanged.|
+|2d Legal text|frontend|Privacy notice and terms name GreenNode and Bizfly in Vietnam; reviewed; first deployed at cutover.|
+|3a Build code|devops, reviewer|`deploy/vn/` per the design layout: OpenTofu root for server, volumes, security groups, floating IP; `vngcloud` CLI scripts for service accounts, buckets, keys, bucket policies, vMonitor, budgets; host, edge (Coraza detection-only with the resume write-path exclusions, CrowdSec sharing off), and probe config. CI runs `tofu fmt -check` and `tofu validate`. Reviewer's adversarial pass done before any apply.|
+|3b Apply|devops|On the manager's go, after `tofu plan` and every CLI quote are shown: buckets, service accounts, keys, and policies created; tofu applied; host, secrets, PostgreSQL, pgBackRest, CrowdSec, agents, checks, and alarms installed; probe passes; first backup and `pgbackrest verify` green.|
 |4 Rehearsal|devops, qa|All rehearsal checks in the design pass under the temporary hostname with fictional data; restore drill recorded; cutover dry run timed.|
-|5 Cutover|manager, devops, owner|Design cutover steps 1 to 6 done; verification hashes equal; smoke green; AWS in maintenance.|
-|6 NS move|devops, owner|After 48 h, NS at vDNS with identical records.|
-|7 AWS deletion|devops, owner|Once the cutover is verified, every real-data item in the design deleted and recorded in `aboutme-infra`; keys rotated; AWS rebuilt empty as test.|
+|5 Cutover|manager, devops, owner|Design cutover steps 1 to 6 done; verification hashes equal; smoke green, including the CrowdSec 403; AWS in maintenance.|
+|6 AWS teardown|devops, owner|After 48 h with no AWS traffic: design cutover step 7 done (CloudFront, its certificates and validation records, the Route 53 health check deleted) and record TTL 300. Once the cutover is verified: every real-data item in the design deleted and recorded in `aboutme-infra`; keys rotated; AWS rebuilt empty as test.|
+|7 Coraza blocking|devops|After two weeks of detection-only in production, audit log reviewed, exclusions updated for any false positive, Coraza switched to blocking; smoke green.|
 
-Each phase with production infrastructure or deploy code needs a reviewer's adversarial pass before merge. Runbooks (`docs/runbooks/production.md`, `email.md`, `privacy.md`), `docs/architecture.md`, `docs/design/deployment.md`, `docs/design/single-host-production.md`, and `docs/design/decisions.md` update in the change that makes them true.
+Each phase with production infrastructure or deploy code needs a reviewer's adversarial pass before merge. Runbooks (`docs/runbooks/production.md`, `email.md`, `privacy.md`, and the vWAF escalation), `docs/architecture.md`, `docs/design/deployment.md`, `docs/design/single-host-production.md`, and `docs/design/decisions.md` update in the change that makes them true.
