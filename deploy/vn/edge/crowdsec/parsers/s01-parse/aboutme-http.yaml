@@ -4,7 +4,7 @@ filter: |
   evt.Line.Labels.type == 'aboutme-http' &&
   UnmarshalJSON(evt.Line.Raw, evt.Unmarshaled, 'aboutme') in ['', nil] &&
   len(evt.Unmarshaled.aboutme) == 5 &&
-  evt.Unmarshaled.aboutme.ts matches '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?Z$' &&
+  evt.Unmarshaled.aboutme.ts matches '^20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]+)?Z$' &&
   IsIP(evt.Unmarshaled.aboutme.source_ip) &&
   evt.Unmarshaled.aboutme.method in ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'OTHER'] &&
   int(evt.Unmarshaled.aboutme.status) >= 100 && int(evt.Unmarshaled.aboutme.status) <= 599 &&
