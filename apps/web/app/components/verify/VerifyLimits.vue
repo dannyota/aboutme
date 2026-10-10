@@ -7,13 +7,15 @@
 import { Check, Minus } from '@lucide/vue';
 import { computed } from 'vue';
 import type { Locale } from '@/i18n/locale';
-import { limitsUrl, verifyCopy } from '@/i18n/verify';
+import { limitsUrl, verifyLimits } from '@/i18n/verify';
+import type { ReportingPlatform } from '@/utils/verifyView';
 
 const props = defineProps<{
   readonly locale: Locale;
+  readonly reporter: ReportingPlatform;
 }>();
 
-const copy = computed(() => verifyCopy[props.locale]);
+const copy = computed(() => verifyLimits(props.locale, props.reporter));
 </script>
 
 <template>
@@ -25,7 +27,7 @@ const copy = computed(() => verifyCopy[props.locale]);
       id="verify-limits-heading"
       class="text-[18px] font-semibold"
     >
-      {{ copy.limits.heading }}
+      {{ copy.heading }}
     </h2>
     <div
       class="mt-4 grid grid-cols-1 gap-6 min-[42rem]:grid-cols-2
@@ -33,11 +35,11 @@ const copy = computed(() => verifyCopy[props.locale]);
     >
       <div>
         <h3 class="text-[14px] font-semibold">
-          {{ copy.limits.provesLabel }}
+          {{ copy.provesLabel }}
         </h3>
         <ul class="mt-2 space-y-2">
           <li
-            v-for="item in copy.limits.proves"
+            v-for="item in copy.proves"
             :key="item"
             class="flex gap-2.5 text-[15px]"
           >
@@ -51,11 +53,11 @@ const copy = computed(() => verifyCopy[props.locale]);
       </div>
       <div>
         <h3 class="text-[14px] font-semibold">
-          {{ copy.limits.notLabel }}
+          {{ copy.notLabel }}
         </h3>
         <ul class="mt-2 space-y-2">
           <li
-            v-for="item in copy.limits.not"
+            v-for="item in copy.not"
             :key="item"
             class="flex gap-2.5 text-[15px]"
           >
@@ -73,7 +75,7 @@ const copy = computed(() => verifyCopy[props.locale]);
         class="text-link underline-offset-4 hover:underline"
         :href="limitsUrl"
         rel="noopener noreferrer"
-      >{{ copy.limits.fullList }}</a>
+      >{{ copy.fullList }}</a>
     </p>
   </section>
 </template>

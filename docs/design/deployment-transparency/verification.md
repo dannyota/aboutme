@@ -23,7 +23,7 @@ authentication at
 
 ### SBOM
 
-Release 1 adds, per image, after the push:
+For each image, after the push:
 
 1. `trivy image --format spdx-json` on the pushed digest writes
    `aboutme-<name>.spdx.json`. Trivy is already installed and pinned for the
@@ -57,6 +57,11 @@ a verifier that reads cosign's tag-based signatures and not Sigstore bundles,
 such as an admission controller on a future Kubernetes cluster. Revisit it then.
 
 ## What "verified" means
+
+The [host reporter](host.md) does not run signature checks. It publishes
+`unchecked` and leaves signed build claims null. The verifier below remains
+the policy for the ECS and Kubernetes observers. Independent checks use the
+same GitHub and Sigstore commands on every platform.
 
 For one running digest, the observer uses `sigstore-go` with the public-good
 trust root (refreshed through TUF) and requires all of:

@@ -56,6 +56,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 timers=(
   aboutme-watch.timer
+  aboutme-deployment-document.timer
   aboutme-crowdsec-retention.timer
   aboutme-backup-full.timer
   aboutme-backup-diff.timer
@@ -302,6 +303,7 @@ copy_script "$bundle/host/crowdsec-retention-fail.sh"
 copy_script "$bundle/host/crowdsec-retention-lease-check.sh"
 copy_script "$bundle/host/crowdsec-window-check.sh"
 copy_script "$bundle/host/job-run.sh"
+copy_script "$bundle/host/deployment-document.sh"
 copy_script "$bundle/host/workload-lock.sh"
 for f in "$bundle"/host/bin/*.sh; do
   [ -e "$f" ] && copy_script "$f"

@@ -44,7 +44,7 @@
           "enum": ["aws", "greennode"]
         },
         "orchestrator": {
-          "enum": ["ecs", "kubernetes"]
+          "enum": ["ecs", "kubernetes", "podman"]
         },
         "region": {
           "type": "string",
@@ -514,6 +514,26 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "platform": {
+            "properties": {
+              "orchestrator": { "const": "podman" }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "platform": {
+            "properties": {
+              "provider": { "const": "greennode" }
+            }
+          }
+        }
+      }
+    },
     {
       "if": {
         "properties": {

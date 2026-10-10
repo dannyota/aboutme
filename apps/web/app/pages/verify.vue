@@ -13,6 +13,7 @@ import type {
 } from '@/utils/deploymentDocument';
 import { pageTitle } from '@/i18n/meta';
 import { verifyCopy } from '@/i18n/verify';
+import { reportingPlatform } from '@/utils/verifyView';
 import VerifyChain from '@/components/verify/VerifyChain.vue';
 import VerifyCommands from '@/components/verify/VerifyCommands.vue';
 import VerifyComponents from '@/components/verify/VerifyComponents.vue';
@@ -45,6 +46,7 @@ function documentOf(current: PageState): DeploymentDocument | null {
 }
 
 const currentDocument = computed(() => documentOf(state.value));
+const reporter = computed(() => reportingPlatform(currentDocument.value));
 const hidesChain = computed(() => (
   state.value.kind === 'unavailable' || state.value.kind === 'outdated'
 ));
@@ -98,7 +100,10 @@ const isStale = computed(() => state.value.kind === 'stale');
       :locale="locale"
       :state="state"
     />
-    <VerifyLimits :locale="locale" />
+    <VerifyLimits
+      :locale="locale"
+      :reporter="reporter"
+    />
   </main>
 </template>
 

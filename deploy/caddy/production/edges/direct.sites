@@ -81,5 +81,23 @@ https://{$DIRECT_HOST} {
 	request_header -x-amzn-*
 	vars client_address {http.request.remote.host}
 
-	import apex_site
+	handle /.well-known/deployment.json {
+		@deployment_read method GET HEAD
+		handle @deployment_read {
+			header {
+				Content-Type application/json
+				Cache-Control "public, max-age=30"
+				Access-Control-Allow-Origin *
+			}
+			root * /srv/deployment
+			rewrite * /deployment.json
+			file_server
+		}
+		header Allow "GET, HEAD"
+		respond 405
+	}
+
+	handle {
+		import apex_site
+	}
 }

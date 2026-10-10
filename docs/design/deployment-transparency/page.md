@@ -4,8 +4,7 @@ The page "Kiểm chứng phiên bản đang chạy" ("Verify what's running") sh
 [deployment document](document.md) as a chain from source to running service,
 with one clear status at the top and a way to check it independently. It is
 bilingual, works at phone width and in dark mode, and reveals no personal data.
-The designer turns this page into a visual spec in `DESIGN.md` and reviews it
-before the build starts.
+The [visual spec](visual.md) defines the layout and marks.
 
 ## Path
 
@@ -14,10 +13,7 @@ before the build starts.
 `/transparency` is longer and names the idea rather than the action. The risk of
 `/verify` is confusion with `/verify-email`; the page title removes it.
 
-Either path is a new fixed root in the public-root registry (version 9), so it
-becomes a reserved slug. Before that release, devops confirms with a read-only
-query in production that no resume and no tombstone holds the slug. If one does,
-the owner chooses another path; a live resume is never displaced.
+`verify` is a fixed root in the public-root registry and a reserved slug.
 
 The machine document stays at `/.well-known/deployment.json`.
 
@@ -96,13 +92,19 @@ The owner reviews the Vietnamese copy before release, as for the privacy notice.
 Shown in both languages under the heading "Trang này chứng minh gì" / "What this
 proves":
 
-- It shows what AWS reports is running, not proof that the server itself is
-  honest.
+- It names the reporter from the document's platform fields: AWS for ECS,
+  Kubernetes API for Kubernetes, or the GreenNode host itself for Podman.
+  A host report is weaker than ECS's platform API report and does not prove
+  host honesty. Before a document loads, the text names no platform.
 - It covers the code, not settings or secrets.
 - A verified build means GitHub built it from public source, not that the source
   has no bugs.
 
 The [overview](README.md#what-this-proves) holds the full list.
+The [host report](host.md) lists running digests with unchecked signatures and
+SBOMs. It renders as Unverified, with no signed version or commit. Only checked
+signatures support a GitHub build claim; the independent commands are the same
+on every platform.
 
 ## Behavior
 
