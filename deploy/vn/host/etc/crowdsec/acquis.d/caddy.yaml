@@ -1,0 +1,9 @@
+# The Caddy image's direct listener writes a JSON access log with client
+# addresses for CrowdSec only. Caddy rolls it, it lives on tmpfs, and it is
+# never shipped to vMonitor (docs/design/vietnam-production.md, "Edge").
+# The path is a contract with the Caddy image and is a placeholder until that
+# image lands.
+filenames:
+  - /run/aboutme/caddy-log/access.log
+labels:
+  type: caddy

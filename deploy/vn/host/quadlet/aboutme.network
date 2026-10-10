@@ -1,0 +1,7 @@
+# The bridge network for Nuxt (docs/design/vietnam-production.md, "Host").
+# Nuxt reaches only Go's print listener on the gateway; Go and Caddy stay on
+# the host network.
+[Network]
+NetworkName=aboutme
+Subnet=10.89.10.0/24
+Gateway=10.89.10.1

@@ -1,0 +1,11 @@
+[Unit]
+Description=aboutme job idempotency-expiry-sweep (hourly)
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5min
+Unit=aboutme-job@idempotency-expiry-sweep.service
+
+[Install]
+WantedBy=timers.target
