@@ -14,8 +14,9 @@ data are stored abroad.
 Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
 transfer of personal data abroad. Decree 356/2025/ND-CP, Article 17(1)(a),
 treats storing personal data on a foreign provider's cloud as such a transfer.
-Hosting in Vietnam removes that transfer for the core service. A data protection
-impact assessment (DPIA) stays required either way.
+Hosting in Vietnam removes that transfer for the core service. The owner files
+no data protection impact assessment (DPIA) or cross-border dossier
+(2026-10-10): the processors are GreenNode and Bizfly, both in Vietnam.
 
 ## Decision
 
@@ -42,7 +43,7 @@ states the rules and the migration order.
 These stay outside the move:
 
 - Have I Been Pwned receives only a five-character hash prefix, which does not
-  identify a person. The DPIA records it.
+  identify a person.
 - Google and LinkedIn sign-in stay on. The person signs in at the provider;
   aboutme sends only the one-time authorization code and its own client
   credentials, and receives the name, email, and account ID. No stored personal

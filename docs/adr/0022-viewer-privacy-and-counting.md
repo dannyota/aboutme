@@ -106,8 +106,7 @@ Counts are daily aggregates written from a bounded in-memory buffer every 60 s.
 ## Consequences
 
 - No consent popup, viewer cookie for counting, consent record, viewer rights
-  page, or owner terms exist. No release waits on a DPIA update for viewer data;
-  the next regular update notes the transient processing.
+  page, or owner terms exist.
 - The privacy notice states that views are counted as described and never
   implies tracking.
 - About USD 15 a month in WAF fees at current traffic.
