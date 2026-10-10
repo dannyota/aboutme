@@ -1,0 +1,38 @@
+#cloud-config
+# First boot only. host/install.sh owns every other host file
+# (docs/design/vietnam-production.md, "Host"). No secret belongs here.
+users:
+  - name: aboutme-admin
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${admin_ssh_public_key}
+
+disable_root: true
+ssh_pwauth: false
+package_update: true
+package_upgrade: true
+packages:
+  - podman
+  - nftables
+  - jq
+  - rsync
+  - curl
+  - ca-certificates
+  - unattended-upgrades
+  - systemd-zram-generator
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/90-aboutme.conf
+    permissions: "0644"
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PermitRootLogin no
+      AllowUsers aboutme-admin
+      PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com
+
+runcmd:
+  - systemctl restart ssh
