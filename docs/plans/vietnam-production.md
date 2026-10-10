@@ -16,17 +16,16 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 8. The admin key is the public half of the owner's `ssh-ed25519` commit-signing key.
 9. At cutover: run the SSM-to-host secret pipe and approve the Route 53 switch of the apex and `www`.
 10. Once the cutover is verified: approve the AWS real-data deletion and the CloudFront teardown.
-11. After the cutover and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. The public announcement waits for the cutover.
 
 ## Decided
 
 - SSH on TCP 22922 open to all sources (owner, 2026-10-10).
-- 2026-09-24: self-hosted PostgreSQL 18 with pgBackRest (30 days, point-in-time recovery, quarterly drill); no rollback window after Vietnam accepts writes; no domain for the AWS test environment; Have I Been Pwned stays and the DPIA records it.
+- 2026-09-24: self-hosted PostgreSQL 18 with pgBackRest (30 days, point-in-time recovery, quarterly drill); no rollback window after Vietnam accepts writes; no domain for the AWS test environment; Have I Been Pwned stays.
 - 2026-10-10: nothing in front of the host; Caddy with Coraza and CrowdSec; vWAF only as a DNS-change escalation.
 - 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.
 - 2026-10-10: compute HCM03 (zone HCM03-1C, the zone enabled for the account; HCM03-1A needs a provider request), vStorage HCM04, one backup repository.
 - 2026-10-10: one s2-general-2x4 vServer, Ubuntu 24.04; root 30 GB and data 20 GB, both GreenNode-encrypted at server create (one CES line); 4 GiB RAM with hard service caps, serialized jobs, 512 MiB zram, and a 64 MiB Caddy-log tmpfs; grow disks online at 70%.
-- 2026-10-10: compute zone HCM03-1C; no DPA requests to GreenNode or Bizfly, the published terms stand (owner).
+- 2026-10-10: compute zone HCM03-1C; no DPA requests to GreenNode or Bizfly; no DPIA or cross-border filing, since GreenNode and Bizfly are in Vietnam (owner).
 - 2026-10-10: admin SSH key is the owner's `ssh-ed25519` commit-signing key; host-file release fence; SMTP sender instead of the Bizfly HTTP API; no vMonitor; journald on the encrypted data volume for 30 days, capped at 2 GB; CrowdSec community sharing off.
 - 2026-10-10: CrowdSec receives a five-field RAM-only HTTP feed; encrypted attack-IP records stay in Vietnam for at most 24 hours; the public notice changes at cutover.
 
@@ -43,7 +42,7 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 
 |Phase|Owner role|Done when|
 |-|-|-|
-|1 Verify on the account|owner, devops|Owner actions 1 to 8 done; devops has tested design Q1 to Q12 on the account and recorded results in the runbook; Q3 (cutover blocker) and Q4 (pgBackRest and state backend) answered; Q5, Q8, and Q12 (data location, subprocessors, DPA) answered before cutover, since they carry the ADR's legal reason.|
+|1 Verify on the account|owner, devops|Owner actions 1 to 8 done; devops has tested design Q1 to Q12 on the account and recorded results in the runbook; Q3 (cutover blocker) and Q4 (pgBackRest and state backend) answered.|
 |2a amd64 images|devops|Release workflow publishes `linux/amd64` and `linux/arm64` manifests; smoke on both; deploy/aws unchanged in behavior.|
 |2b SMTP sender|backend|`AUTH_EMAIL_MODE=smtp` with config validation, TLS verification, outcome classification, stub-server tests; SES mode unchanged.|
 |2c Caddy direct edge|devops|`EDGES` gains `direct`: socket address only, every forwarding header stripped, one `X-Real-IP` to Go; site host from environment. Caddy image built with `xcaddy` adds `coraza-caddy` (OWASP CRS v4) and the CrowdSec Caddy bouncer. Tests: forged `X-Forwarded-For`, `X-Real-IP`, and `CloudFront-Viewer-Address` on `direct` never reach Go; each Caddy process writes only safe rule metadata to its own log and passes a rule-matching request in detection-only mode; the CloudFront listener is unchanged.|
