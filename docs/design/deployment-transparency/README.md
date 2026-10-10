@@ -1,8 +1,10 @@
 # Deployment transparency
 
-Anyone can check which build runs `https://aboutme.vn`. An observer outside the
-application asks the platform which image digests are running, checks each
-digest against the signed GitHub build record, and publishes the result at
+Anyone can read the image digests reported for `https://aboutme.vn`. The
+[Vietnam host reporter](host.md) reads Podman and publishes unchecked digests.
+On AWS ECS and Kubernetes, an observer outside the application asks the
+platform which digests run and checks each against the signed GitHub build
+record. Both publish the result at
 `https://aboutme.vn/.well-known/deployment.json`. The page `/verify` shows the
 same document to people and tells them how to check it themselves.
 [ADR 0028](../../adr/0028-deployment-transparency-observer.md) records the
@@ -20,11 +22,12 @@ devops confirms on the account before relying on it
 | [Document](document.md)         | `deployment.json` schema, field sources, sanitizer        |
 | [Verification](verification.md) | Provenance, SBOM, what "verified" means, user commands    |
 | [Verify page](page.md)          | `/verify` states, layout, copy, footer link               |
+| [Vietnam host](host.md)         | Podman source, Caddy publication, weaker host trust       |
 
 ## Evidence model
 
-The critical field is the image digest the platform reports, not a tag. A tag
-can move; a digest names exact bytes. Each running digest is joined to a
+The critical field is the image digest the reporter reads, not a tag. A tag
+can move; a digest names exact bytes. A checked running digest is joined to a
 Sigstore-signed provenance record that GitHub Actions produced when it built
 that digest from a tagged commit. The document shows four steps, and each must
 match:
@@ -34,12 +37,18 @@ match:
 3. **Image:** the digest the build signed, in `ghcr.io/dannyota/aboutme-*`.
 4. **Running:** the digest the platform reports for each serving container.
 
-Every field except the running digest, replica count, and start time comes from
-the signed record, never from the application or from deploy scripts. The
-application reporting its own digest would be weaker evidence: a compromised
-application can say anything about itself.
+On ECS and Kubernetes, build fields come from the signed record, never from
+the application or deploy scripts. The host leaves build fields null until
+their signatures have been checked. Running fields come from the named
+reporting platform. Application self-reporting would be weaker evidence: a
+compromised application can say anything about itself.
 
 ## Where the observer runs
+
+Production on the Vietnam vServer uses the [host reporter](host.md). The
+following AWS and Kubernetes deployments remain available for a platform move.
+
+### AWS ECS
 
 ```mermaid
 flowchart LR
@@ -93,13 +102,9 @@ bucket name; none of them reaches the document.
 
 ### Kubernetes
 
-**Open conflict for the owner:**
-[ADR 0027](../../adr/0027-vietnam-hosted-production.md) and the
-[Vietnam design](../vietnam-production.md) describe one vServer with Podman
-under systemd, not Kubernetes. This section holds for a GreenNode VKS cluster.
-On the Podman host there is no read-only platform API: the Podman socket grants
-full control, so an observer on it would need root-equivalent access. That host
-needs its own design before the move.
+This section holds for a GreenNode VKS cluster. The Podman vServer in
+[ADR 0027](../../adr/0027-vietnam-hosted-production.md) uses the separate
+[host source](host.md); it has no read-only platform API.
 
 On Kubernetes the same image runs as a Deployment with one replica that polls
 every 60 seconds, in its own namespace `aboutme-observer`:
@@ -229,7 +234,7 @@ The rest of the boundary:
 
 ## Run, freshness, and staleness
 
-Each run lists the `RUNNING` tasks of the `aboutme-prod-app`,
+On AWS, each run lists the `RUNNING` tasks of the `aboutme-prod-app`,
 `aboutme-prod-web`, and `aboutme-prod-maintenance` services (one `ListTasks`
 call per service), describes them in one call, and counts containers whose
 `lastStatus` is `RUNNING` by component and digest. It then verifies every digest
@@ -250,6 +255,7 @@ not in its cache ([verification](verification.md)) and writes the document.
 
 The page never shows "verified" for a stale document, an unknown schema version,
 or any image whose status is not `verified`.
+The [host timer](host.md) uses the same freshness and staleness thresholds.
 
 ## Serving and caching
 
@@ -280,10 +286,12 @@ apply.
 
 It proves:
 
-- At `observed_at`, the ECS control plane reported these digests as running in
-  the three serving services, with these replica counts.
-- GitHub Actions, running the public `release-images.yml` workflow for that tag
-  on a GitHub-hosted runner, built and signed each verified digest from the
+- At `observed_at`, the named reporter reported these running digests and
+  replica counts. On Podman the reporter is the host itself, not an independent
+  platform API, so the trust claim is weaker than ECS's off-host observer.
+- For an image marked verified, GitHub Actions, running the public
+  `release-images.yml` workflow for that tag on a GitHub-hosted runner,
+  built and signed the digest from the
   named commit, and the signature is in the public Sigstore transparency log.
 
 It does not prove:
@@ -302,34 +310,25 @@ It does not prove:
   verified. The source is public for review.
 - **Build isolation.** Provenance comes from the same job that built the image
   (SLSA Build Level 2), so a compromised build step could influence it.
-- **Operator honesty.** The owner's AWS administrator login can change the
-  observer, the bucket, or the bucket policy. The observer defends against a
-  compromised application and against silent drift, not against the operator.
+- **Operator honesty.** The operator can change the reporter and its published
+  document. The ECS observer defends against a compromised application and
+  silent drift, not against the operator. The host reporter shares the host's
+  failure domain.
 - **Jobs.** One-shot tasks (`migrate`, `db-setup`, `jobs`, `totp-reencrypt`) are
   not listed ([approval](#owner-approval)).
 
 The page states the first three limits in plain words ([page](page.md#limits)).
 
-## Release plan and compatibility
-
-Three small releases, in order, each shipping alone:
-
-1. **Release evidence:** SBOM attestations for every image and a GitHub Release
-   per tag. No runtime change.
-2. **Observer:** the observer image, Lambda, bucket, edge path, and alarm. The
-   document goes live; nothing links to it yet.
-3. **Verify page:** `/verify`, the footer link, and the public-root entry.
-
-Compatibility:
+## Compatibility
 
 - There is no database change and nothing to migrate. The document is a
   snapshot; no history is kept, so nothing is lost when it is overwritten.
-- Digests released before release 1 have provenance but no SBOM. The document
+- Digests without an SBOM attestation have no checked SBOM. The document
   marks their SBOM `not_found`, and the page shows that step without failing the
   build chain.
 - A browser holding an older page reads a newer document by `schema_version`. An
   unknown major version shows "This page is out of date" and never a status.
-- Self-hosted instances have no observer. Go answers the path with 404, and the
+- Self-hosted instances without a reporter answer the path with 404, and the
   page shows that the server publishes no deployment record.
 - Rollback: disabling the schedule leaves the last document to go stale, which
   the page shows honestly. Removing the edge behavior sends the path back to Go,

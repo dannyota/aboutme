@@ -118,6 +118,59 @@ afterEach(() => {
 });
 
 describe('verify page states', () => {
+  it('names the host reporter and its weaker trust in both languages',
+    async () => {
+      const document = {
+        ...fixture('unverified'),
+        platform: {
+          provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
+        },
+      };
+      mockResponse = {
+        status: 200, body: document, date: freshDate(document),
+      };
+      const vietnamese = await mountVerify();
+      expect(status(vietnamese).attributes('data-state')).toBe('unverified');
+      const limits = vietnamese.get('[data-testid="verify-limits"]');
+      expect(limits.text()).toContain('Máy chủ GreenNode tự báo cáo');
+      expect(limits.text()).toContain('Yếu hơn báo cáo từ API của ECS');
+      expect(limits.text()).not.toContain('AWS');
+      expect(vietnamese.get('[data-testid="verify-components"]').text())
+        .toContain('sha256:');
+
+      setSiteLocale('en');
+      const english = await mountVerify();
+      const englishLimits = english.get('[data-testid="verify-limits"]');
+      expect(englishLimits.text())
+        .toContain('The GreenNode host itself reports');
+      expect(englishLimits.text()).toContain('weaker than an ECS API report');
+      expect(englishLimits.text()).not.toContain('AWS');
+    });
+
+  it('keeps AWS wording for an ECS report and names Kubernetes separately',
+    async () => {
+      serveFixture('verified');
+      setSiteLocale('en');
+      const aws = await mountVerify();
+      expect(aws.get('[data-testid="verify-limits"]').text())
+        .toContain('AWS reports these exact digests');
+
+      const document = {
+        ...fixture('verified'),
+        platform: {
+          provider: 'greennode', orchestrator: 'kubernetes', region: 'HCM03',
+        },
+      };
+      mockResponse = {
+        status: 200, body: document, date: freshDate(document),
+      };
+      const kubernetes = await mountVerify();
+      expect(kubernetes.get('[data-testid="verify-limits"]').text())
+        .toContain('The Kubernetes API reports');
+      expect(kubernetes.get('[data-testid="verify-limits"]').text())
+        .not.toContain('AWS reports');
+    });
+
   it('shows Loading before the fetch resolves, with no mark', async () => {
     serveFixture('verified');
     const wrapper = await mountSuspended(VerifyPage);

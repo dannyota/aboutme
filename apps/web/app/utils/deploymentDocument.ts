@@ -69,6 +69,7 @@ export interface Release {
 
 export interface DeploymentDocument {
   readonly provider: 'aws' | 'greennode';
+  readonly orchestrator: 'ecs' | 'kubernetes' | 'podman';
   readonly region: string;
   readonly observedAt: string;
   readonly staleAfter: string;
@@ -236,8 +237,10 @@ export function decodeDeploymentDocument(value: unknown): DecodeResult {
     const platform = record(raw.platform);
     const provider = platform.provider;
     if (provider !== 'aws' && provider !== 'greennode') refuse();
-    if (platform.orchestrator !== 'ecs'
-      && platform.orchestrator !== 'kubernetes') refuse();
+    const orchestrator = platform.orchestrator;
+    if (orchestrator !== 'ecs' && orchestrator !== 'kubernetes'
+      && orchestrator !== 'podman') refuse();
+    if (orchestrator === 'podman' && provider !== 'greennode') refuse();
     if (typeof raw.summary !== 'string') refuse();
     if (!Array.isArray(raw.components) || raw.components.length > 4) refuse();
     const components = raw.components.map(component);
@@ -249,6 +252,7 @@ export function decodeDeploymentDocument(value: unknown): DecodeResult {
       kind: 'document',
       document: {
         provider,
+        orchestrator,
         region: text(platform.region, REGION),
         observedAt: timestamp(raw.observed_at),
         staleAfter: timestamp(raw.stale_after),

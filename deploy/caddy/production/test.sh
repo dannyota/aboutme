@@ -13,6 +13,8 @@ root=$(git rev-parse --show-toplevel)
 source "$root/deploy/caddy/production/test/direct_maintenance.sh"
 # shellcheck source=deploy/caddy/production/test/crowdsec_feed.sh
 source "$root/deploy/caddy/production/test/crowdsec_feed.sh"
+# shellcheck source=deploy/caddy/production/test/deployment_document.sh
+source "$root/deploy/caddy/production/test/deployment_document.sh"
 work=$(mktemp -d)
 name=aboutme-caddy-test
 waf_volume=$name-waf
@@ -359,6 +361,8 @@ podman run --rm -e EDGES=cloudfront "$image" adapt || { echo "adapt failed for E
 dport=20453
 hport=20454
 bouncer_key=stand-in
+mkdir -p "$work/deployment"
+chmod 0755 "$work/deployment"
 # A stand-in for Go on 8080 that echoes every client address header that
 # reached it, and a stand-in CrowdSec local API on 8090 that bans every
 # address, IPv4 and IPv6, for a client that sends the bouncer key.
@@ -384,7 +388,8 @@ start_direct() { # podman run options...
   podman rm -f --ignore --depend "$name" >/dev/null 2>&1 || true
   podman run -d --name "$name" -p "127.0.0.1:$port:8443" -p "127.0.0.1:$dport:443" -p "127.0.0.1:$hport:80" \
     --tmpfs /run/caddy "${unprivileged[@]}" --cap-add NET_BIND_SERVICE \
-    -v "$waf_volume:/var/log/caddy:U" -e DIRECT_TLS=internal "$@" "$image" >/dev/null
+    -v "$waf_volume:/var/log/caddy:U" -v "$work/deployment:/srv/deployment:ro" \
+    -e DIRECT_TLS=internal "$@" "$image" >/dev/null
   wait_started "$name"
   podman run -d --name "$name-echo" --network "container:$name" -e ECHO="$direct_echo" -e BAN="$ban_all" \
     --entrypoint sh "$image" -c 'mkdir /tmp/lapi && printf "%s" "$BAN" >/tmp/lapi/stream.json &&
@@ -421,6 +426,7 @@ forged=(-H 'X-Forwarded-For: 5.5.5.5' -H 'X-Real-IP: 6.6.6.6' -H 'Forwarded: for
 
 start_direct -e EDGES=direct
 wait_direct 200
+test_direct_deployment_document
 # 0050 and 01BB are Caddy's 80 and 443, 1F90 and 1F9A the stand-ins.
 check_unprivileged "$name" "0050 01BB 1F90 1F9A" 0000000000000400
 
@@ -528,6 +534,17 @@ fi
 test_direct_crowdsec_feed
 test_direct_maintenance_log_isolation
 
+# Maintenance must not rewrite the public document into maintenance.html.
+start_direct -e EDGES=direct -e MAINTENANCE=1
+wait_direct 503
+printf '%s\n' '{"marker":"maintenance"}' >"$work/deployment/deployment.json"
+chmod 0644 "$work/deployment/deployment.json"
+dcurl -D "$work/document.headers" -o "$work/document.body" \
+  "https://aboutme.vn:$dport/.well-known/deployment.json"
+grep -q '^HTTP/[0-9.]* 200' "$work/document.headers"
+[[ $(cat "$work/document.body") == '{"marker":"maintenance"}' ]]
+grep -qixF 'cache-control: public, max-age=30'$'\r' "$work/document.headers"
+
 # The CrowdSec bouncer: off above (no settings), on with a key file; the
 # stand-in local API bans every address, so the direct listener answers 403.
 printf '%s\n' "$bouncer_key" >"$work/bouncer.key"
@@ -557,6 +574,10 @@ got=$(curl -s --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem"
   -H 'CloudFront-Viewer-Address: 203.0.113.7:46532' "https://aboutme.vn:$port/api/v1/probe")
 [[ $got == 'ip=203.0.113.7 '* ]] ||
   { echo "EDGES=cloudfront,direct: CloudFront client address: Go received '$got'" >&2; exit 1; }
+got=$(curl -s --resolve "aboutme.vn:$port:127.0.0.1" --cacert "$work/origin.pem" "${cf[@]}" \
+  "https://aboutme.vn:$port/.well-known/deployment.json")
+[[ $got != '{"marker":"maintenance"}' ]] ||
+  { echo 'CloudFront listener served the host document' >&2; exit 1; }
 if podman exec "$name" sh -c 'tr "\0" "\n" </proc/1/environ | grep -q "^CROWDSEC_API_KEY="'; then
   echo "CROWDSEC_API_KEY remains in the Caddy process environment" >&2
   exit 1
