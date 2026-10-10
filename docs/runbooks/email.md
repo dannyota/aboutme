@@ -107,23 +107,28 @@ of SES, as the
 [Vietnam production design](../design/vietnam-production.md#dns-and-mail) sets
 for Bizfly Email Transaction. It uses the same From address, display name,
 templates, and sealed payloads as SES mode. Set these names in the runtime
-environment:
+environment; the values shown are Bizfly's, from the
+[BizMail delivery docs](https://docs.bizmail-delivery.bizfly.vn/):
 
 ```dotenv
 AUTH_EMAIL_MODE=smtp
 SES_FROM_ADDRESS=danny@aboutme.vn
 SES_FROM_NAME=Danny from aboutme.vn
-SMTP_HOST=
-SMTP_PORT=
-SMTP_TLS=
+SMTP_HOST=smtp-api.bizfly.vn
+SMTP_PORT=2465
+SMTP_TLS=implicit
 SMTP_USERNAME=
 SMTP_PASSWORD=
 ```
 
+Bizfly also accepts STARTTLS on port 2525 (`SMTP_PORT=2525`,
+`SMTP_TLS=starttls`). The username and password come from the BizMail Portal.
+
 - `SMTP_HOST` is a DNS name; the server certificate must be valid for it under
   the system roots.
-- `SMTP_TLS=implicit` requires `SMTP_PORT=465`; `SMTP_TLS=starttls` requires
-  `SMTP_PORT=587`. Any other pair fails at startup.
+- `SMTP_PORT` is any port from 1 to 65535 and has no default. `SMTP_TLS` is
+  `implicit` or `starttls`, set explicitly; the sender never infers it from the
+  port.
 - `SMTP_USERNAME` and `SMTP_PASSWORD` are 1 to 256 bytes with no control
   characters. The password comes from the host secret store, never from a
   tracked file.

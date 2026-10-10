@@ -421,7 +421,7 @@ func TestNewSMTPSenderRejectsInvalidOptions(t *testing.T) {
 	t.Parallel()
 	logger, _ := testLogger()
 	valid := func() SMTPOptions {
-		return SMTPOptions{Host: "smtp.example.com", Port: 465, TLSMode: SMTPTLSImplicit,
+		return SMTPOptions{Host: "smtp.example.com", Port: 2465, TLSMode: SMTPTLSImplicit,
 			Username: "u", Password: "p", From: stubFrom, Logger: logger}
 	}
 	if _, err := NewSMTPSender(valid()); err != nil {
@@ -429,7 +429,7 @@ func TestNewSMTPSenderRejectsInvalidOptions(t *testing.T) {
 	}
 	for name, mut := range map[string]func(*SMTPOptions){
 		"empty host":         func(o *SMTPOptions) { o.Host = "" },
-		"host with port":     func(o *SMTPOptions) { o.Host = "smtp.example.com:465" },
+		"host with port":     func(o *SMTPOptions) { o.Host = "smtp.example.com:2465" },
 		"zero port":          func(o *SMTPOptions) { o.Port = 0 },
 		"unknown tls mode":   func(o *SMTPOptions) { o.TLSMode = "none" },
 		"empty username":     func(o *SMTPOptions) { o.Username = "" },

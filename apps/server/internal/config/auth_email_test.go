@@ -50,7 +50,7 @@ func smtpAuthEmail() map[string]string {
 		"AUTH_EMAIL_CAPTURE_URL":    "",
 		"AUTH_EMAIL_CAPTURE_BEARER": "",
 		"SMTP_HOST":                 "smtp.example.com",
-		"SMTP_PORT":                 "465",
+		"SMTP_PORT":                 "2465",
 		"SMTP_TLS":                  "implicit",
 		"SMTP_USERNAME":             "smtp-user",
 		"SMTP_PASSWORD":             "smtp-password-value",
@@ -138,7 +138,8 @@ func TestLoad_AuthEmailSESFromName(t *testing.T) {
 func TestLoad_AuthEmailSMTPMode(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct{ port, tls string }{{"465", "implicit"}, {"587", "starttls"}} {
+	// The TLS mode is explicit, so any port pairs with either mode.
+	for _, tc := range []struct{ port, tls string }{{"2465", "implicit"}, {"2525", "starttls"}, {"2525", "implicit"}, {"2465", "starttls"}} {
 		vars := validDevEnv()
 		applySMTP(vars)
 		vars["SMTP_PORT"], vars["SMTP_TLS"] = tc.port, tc.tls
@@ -187,12 +188,12 @@ func TestLoad_AuthEmailSMTPErrorsNameVariableNotValue(t *testing.T) {
 	}{
 		{"missing host", "SMTP_HOST", "", "SMTP_HOST"},
 		{"host with scheme", "SMTP_HOST", "smtps://smtp.example.com", "SMTP_HOST"},
-		{"host with port", "SMTP_HOST", "smtp.example.com:465", "SMTP_HOST"},
+		{"host with port", "SMTP_HOST", "smtp.example.com:2465", "SMTP_HOST"},
 		{"ip host", "SMTP_HOST", "203.0.113.7", "SMTP_HOST"},
 		{"missing port", "SMTP_PORT", "", "SMTP_PORT"},
 		{"non-numeric port", "SMTP_PORT", "smtps", "SMTP_PORT"},
-		{"port 25", "SMTP_PORT", "25", "SMTP_PORT"},
-		{"implicit on 587", "SMTP_PORT", "587", "SMTP_TLS"},
+		{"port zero", "SMTP_PORT", "0", "SMTP_PORT"},
+		{"port too large", "SMTP_PORT", "65536", "SMTP_PORT"},
 		{"missing tls", "SMTP_TLS", "", "SMTP_TLS"},
 		{"plain tls mode", "SMTP_TLS", "none", "SMTP_TLS"},
 		{"missing username", "SMTP_USERNAME", "", "SMTP_USERNAME"},

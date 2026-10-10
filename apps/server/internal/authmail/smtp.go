@@ -29,8 +29,9 @@ import (
 // authenticates (docs/design/vietnam-production.md, "DNS and mail").
 type SMTPTLSMode string
 
-// SMTPTLSMode values: implicit TLS from the first byte (port 465), or a plain
-// connection upgraded with STARTTLS before any credential is sent (port 587).
+// SMTPTLSMode values: implicit TLS from the first byte, or a plain connection
+// upgraded with STARTTLS before any credential is sent. The mode is always set
+// explicitly and never inferred from the port.
 const (
 	SMTPTLSImplicit SMTPTLSMode = "implicit"
 	SMTPTLSStartTLS SMTPTLSMode = "starttls"
