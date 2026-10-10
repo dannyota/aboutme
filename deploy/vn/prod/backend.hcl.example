@@ -1,7 +1,3 @@
 # Copy to backend.hcl (ignored) and fill in.
 bucket                   = "aboutme-tfstate"
 shared_credentials_files = ["~/.config/aboutme/vn/tfstate-s3-credentials"]
-# Turn use_lockfile on only after the conditional-write test
-# (docs/design/vietnam-production.md, "Provider facts to confirm", Q4).
-# Until then one operator applies at a time.
-use_lockfile = false

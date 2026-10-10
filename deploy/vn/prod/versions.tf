@@ -5,11 +5,13 @@ terraform {
     vngcloud = { source = "vngcloud/vngcloud", version = "1.3.21" }
   }
 
-  # vStorage in HCM04 speaks the S3 API. bucket, shared_credentials_files, and
-  # use_lockfile come from the ignored backend.hcl.
+  # vStorage in HCM04 speaks the S3 API and answers a create-only PUT on an
+  # existing key with 412, so the lock file works. bucket and
+  # shared_credentials_files come from the ignored backend.hcl.
   backend "s3" {
-    key    = "prod/terraform.tfstate"
-    region = "HCM04"
+    key          = "prod/terraform.tfstate"
+    region       = "HCM04"
+    use_lockfile = true
     endpoints = {
       s3 = "https://hcm04.vstorage.vngcloud.vn"
     }
