@@ -1,17 +1,19 @@
 package config
 
-// Password-authentication email configuration (Phase PA T09). Every value is
-// validated at load time; secrets are base64url-decoded exactly once and never
-// echoed in an error. Capture and SES are exclusive modes, and capture is
-// permitted only in development so production can never route mail to a local
-// loopback sink.
+// Password-authentication email configuration. Every value is validated at
+// load time; secrets are base64url-decoded exactly once and never echoed in an
+// error. Capture, SES, and SMTP are exclusive modes, and capture is permitted
+// only in development so production can never route mail to a local loopback
+// sink. SMTP follows docs/design/vietnam-production.md, "DNS and mail".
 
 import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -22,13 +24,24 @@ import (
 const (
 	authEmailModeSES     = "ses"
 	authEmailModeCapture = "capture"
+	authEmailModeSMTP    = "smtp"
+	// smtpTLSImplicit and smtpTLSStartTLS are the SMTP_TLS values; each has
+	// exactly one port.
+	smtpTLSImplicit  = "implicit"
+	smtpTLSStartTLS  = "starttls"
+	smtpImplicitPort = 465
+	smtpStartTLSPort = 587
+	// maxSMTPValueBytes bounds SMTP_USERNAME and SMTP_PASSWORD.
+	maxSMTPValueBytes = 256
 	// requiredSESRegion is the exact region SES mode requires (D7).
 	requiredSESRegion = "ap-southeast-1"
 )
 
 // AuthEmailConfig holds the validated password-mail configuration. The two key
 // fields are 32-byte arrays so a decoded secret can never be a string that
-// accidentally reaches a log or error.
+// accidentally reaches a log or error; the SMTP password is a Secret for the
+// same reason. SESFrom and SESFromName are the From address and display name
+// in both SES and SMTP mode.
 type AuthEmailConfig struct {
 	RateHMACKey   [32]byte
 	ActiveKeyID   string
@@ -43,14 +56,36 @@ type AuthEmailConfig struct {
 	SESFromName   string
 	SESConfigSet  string
 	SESRegion     string
+	SMTPHost      string
+	SMTPPort      int
+	SMTPTLS       string
+	SMTPUsername  string
+	SMTPPassword  Secret
 }
+
+// Secret is a string value that formats and logs as "[redacted]". Read it with
+// Reveal only where the value is used.
+type Secret string
+
+// Reveal returns the secret value.
+func (s Secret) Reveal() string { return string(s) }
+
+// String implements fmt.Stringer without the value.
+func (Secret) String() string { return "[redacted]" }
+
+// GoString implements fmt.GoStringer without the value.
+func (Secret) GoString() string { return "[redacted]" }
+
+// LogValue implements slog.LogValuer without the value.
+func (Secret) LogValue() slog.Value { return slog.StringValue("[redacted]") }
 
 // loadAuthEmailConfig reads and validates the password-mail configuration. It
 // rejects a missing or malformed rate key, active key, a previous key that is
 // only half-set or duplicates the active ID, an unknown mode, a capture mode in
 // a non-dev environment, a non-loopback capture URL, a malformed capture
-// bearer, a noncanonical SES From address, a non-AWS-safe configuration set,
-// and any SES/capture field set in the wrong mode.
+// bearer, a noncanonical From address, a non-AWS-safe configuration set, an
+// incomplete or inconsistent SMTP setting, and any mode-specific field set in
+// the wrong mode.
 func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEmailConfig, error) {
 	var cfg AuthEmailConfig
 
@@ -94,10 +129,10 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 
 	mode := strings.ToLower(strings.TrimSpace(getenv("AUTH_EMAIL_MODE")))
 	switch mode {
-	case authEmailModeSES, authEmailModeCapture:
+	case authEmailModeSES, authEmailModeCapture, authEmailModeSMTP:
 		cfg.Mode = mode
 	default:
-		return cfg, errors.New("config: AUTH_EMAIL_MODE must be ses or capture")
+		return cfg, errors.New("config: AUTH_EMAIL_MODE must be ses, smtp, or capture")
 	}
 
 	captureURL := strings.TrimSpace(getenv("AUTH_EMAIL_CAPTURE_URL"))
@@ -106,6 +141,20 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 	sesFromName := strings.TrimSpace(getenv("SES_FROM_NAME"))
 	sesConfigSet := strings.TrimSpace(getenv("SES_CONFIGURATION_SET"))
 	sesRegion := strings.TrimSpace(getenv("AWS_REGION"))
+	smtpFields := []struct{ name, value string }{
+		{"SMTP_HOST", strings.TrimSpace(getenv("SMTP_HOST"))},
+		{"SMTP_PORT", strings.TrimSpace(getenv("SMTP_PORT"))},
+		{"SMTP_TLS", strings.TrimSpace(getenv("SMTP_TLS"))},
+		{"SMTP_USERNAME", strings.TrimSpace(getenv("SMTP_USERNAME"))},
+		{"SMTP_PASSWORD", strings.TrimSpace(getenv("SMTP_PASSWORD"))},
+	}
+	if mode != authEmailModeSMTP {
+		for _, field := range smtpFields {
+			if field.value != "" {
+				return cfg, fmt.Errorf("config: %s must be absent when AUTH_EMAIL_MODE=%s", field.name, mode)
+			}
+		}
+	}
 
 	if mode == authEmailModeCapture {
 		if environment != "dev" {
@@ -136,17 +185,14 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 		return cfg, nil
 	}
 
-	// SES mode.
+	// SES and SMTP mode.
 	for _, field := range []struct{ name, value string }{
 		{"AUTH_EMAIL_CAPTURE_URL", captureURL},
 		{"AUTH_EMAIL_CAPTURE_BEARER", captureBearerRaw},
 	} {
 		if field.value != "" {
-			return cfg, fmt.Errorf("config: %s must be absent when AUTH_EMAIL_MODE=ses", field.name)
+			return cfg, fmt.Errorf("config: %s must be absent when AUTH_EMAIL_MODE=%s", field.name, mode)
 		}
-	}
-	if sesRegion != requiredSESRegion {
-		return cfg, errors.New("config: AWS_REGION must be ap-southeast-1 when AUTH_EMAIL_MODE=ses")
 	}
 	if _, err := accountemail.Canonicalize(sesFrom); err != nil {
 		return cfg, errors.New("config: SES_FROM_ADDRESS must be a canonical email address")
@@ -154,14 +200,90 @@ func loadAuthEmailConfig(getenv func(string) string, environment string) (AuthEm
 	if !validFromName(sesFromName) {
 		return cfg, errors.New("config: SES_FROM_NAME must be at most 64 characters with no control characters")
 	}
+	cfg.SESFrom = sesFrom
+	cfg.SESFromName = sesFromName
+	if mode == authEmailModeSMTP {
+		if sesConfigSet != "" {
+			return cfg, errors.New("config: SES_CONFIGURATION_SET must be absent when AUTH_EMAIL_MODE=smtp")
+		}
+		return loadSMTPConfig(cfg, smtpFields[0].value, smtpFields[1].value, smtpFields[2].value, smtpFields[3].value, smtpFields[4].value)
+	}
+	if sesRegion != requiredSESRegion {
+		return cfg, errors.New("config: AWS_REGION must be ap-southeast-1 when AUTH_EMAIL_MODE=ses")
+	}
 	if !isAWSSafeASCII(sesConfigSet) {
 		return cfg, errors.New("config: SES_CONFIGURATION_SET must be 1-64 ASCII letters, digits, hyphens, or underscores")
 	}
-	cfg.SESFrom = sesFrom
-	cfg.SESFromName = sesFromName
 	cfg.SESConfigSet = sesConfigSet
 	cfg.SESRegion = sesRegion
 	return cfg, nil
+}
+
+// loadSMTPConfig validates the SMTP settings. Every error names the variable,
+// never its value.
+func loadSMTPConfig(cfg AuthEmailConfig, host, port, tlsMode, username, password string) (AuthEmailConfig, error) {
+	if !isSMTPHostname(host) {
+		return cfg, errors.New("config: SMTP_HOST must be a DNS host name when AUTH_EMAIL_MODE=smtp")
+	}
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		return cfg, errors.New("config: SMTP_PORT must be 465 or 587 when AUTH_EMAIL_MODE=smtp")
+	}
+	switch {
+	case tlsMode == smtpTLSImplicit && portNum == smtpImplicitPort:
+	case tlsMode == smtpTLSStartTLS && portNum == smtpStartTLSPort:
+	case tlsMode != smtpTLSImplicit && tlsMode != smtpTLSStartTLS:
+		return cfg, errors.New("config: SMTP_TLS must be implicit or starttls when AUTH_EMAIL_MODE=smtp")
+	default:
+		return cfg, errors.New("config: SMTP_PORT and SMTP_TLS must be 465 with implicit or 587 with starttls")
+	}
+	if !validSMTPValue(username) {
+		return cfg, errors.New("config: SMTP_USERNAME must be 1-256 bytes with no control characters")
+	}
+	if !validSMTPValue(password) {
+		return cfg, errors.New("config: SMTP_PASSWORD must be 1-256 bytes with no control characters")
+	}
+	cfg.SMTPHost = strings.ToLower(host)
+	cfg.SMTPPort = portNum
+	cfg.SMTPTLS = tlsMode
+	cfg.SMTPUsername = username
+	cfg.SMTPPassword = Secret(password)
+	return cfg, nil
+}
+
+// isSMTPHostname reports whether s is a DNS host name of at most 253 bytes
+// whose labels are 1-63 ASCII letters, digits, or inner hyphens. An IP literal
+// is rejected because the certificate is verified against the name.
+func isSMTPHostname(s string) bool {
+	if s == "" || len(s) > 253 || net.ParseIP(s) != nil {
+		return false
+	}
+	for _, label := range strings.Split(s, ".") {
+		if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := 0; i < len(label); i++ {
+			c := label[i]
+			if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// validSMTPValue reports whether v is 1-256 bytes of valid UTF-8 with no
+// control characters, the bound the SMTP sender also enforces.
+func validSMTPValue(v string) bool {
+	if v == "" || len(v) > maxSMTPValueBytes || !utf8.ValidString(v) {
+		return false
+	}
+	for _, r := range v {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // decodeBase64URL32 decodes an unpadded base64url string and requires exactly 32

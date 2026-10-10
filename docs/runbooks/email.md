@@ -100,6 +100,50 @@ body, request ID, or SES error message. `code=MessageRejected` usually means SES
 refused the message content or the from identity; `code=AccessDeniedException`
 points at the app task role's `ses:SendEmail` policy.
 
+## SMTP mode
+
+`AUTH_EMAIL_MODE=smtp` sends authentication mail through an SMTP relay instead
+of SES, as the
+[Vietnam production design](../design/vietnam-production.md#dns-and-mail) sets
+for Bizfly Email Transaction. It uses the same From address, display name,
+templates, and sealed payloads as SES mode. Set these names in the runtime
+environment:
+
+```dotenv
+AUTH_EMAIL_MODE=smtp
+SES_FROM_ADDRESS=danny@aboutme.vn
+SES_FROM_NAME=Danny from aboutme.vn
+SMTP_HOST=
+SMTP_PORT=
+SMTP_TLS=
+SMTP_USERNAME=
+SMTP_PASSWORD=
+```
+
+- `SMTP_HOST` is a DNS name; the server certificate must be valid for it under
+  the system roots.
+- `SMTP_TLS=implicit` requires `SMTP_PORT=465`; `SMTP_TLS=starttls` requires
+  `SMTP_PORT=587`. Any other pair fails at startup.
+- `SMTP_USERNAME` and `SMTP_PASSWORD` are 1 to 256 bytes with no control
+  characters. The password comes from the host secret store, never from a
+  tracked file.
+- `SES_CONFIGURATION_SET` and the capture fields must be absent; `AWS_REGION` is
+  ignored. The `SMTP_*` names must be absent in SES and capture mode.
+
+A startup failure names the variable, never its value.
+
+Each message opens one connection. The sender verifies the certificate, then
+authenticates with `PLAIN` only after TLS is up; a STARTTLS server that does not
+offer STARTTLS gets no credentials. A 2xx reply after `DATA` marks the job sent,
+a 5xx reply marks it failed, and a 4xx reply, a timeout, a certificate failure,
+or a transport error leaves it for retry.
+
+A failed send logs `authmail: smtp send failed` with the closed `outcome` and,
+when the server replied, its three-digit `code`. The log never carries the
+recipient, subject, body, username, password, reply text, or server banner.
+`code=535` points at the SMTP credentials; a failure with no code is a
+connection, timeout, or certificate problem.
+
 ## Verification
 
 Run from a workstation with the AWS CLI configured for the intended account. The
