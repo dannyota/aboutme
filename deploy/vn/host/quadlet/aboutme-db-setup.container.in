@@ -2,6 +2,7 @@
 # as the database owner role aboutme, with no network
 # (docs/design/single-host-production.md, "Database").
 [Unit]
+OnFailure=aboutme-alert@%N.service
 Description=aboutme db-setup
 Requires=postgresql@18-main.service
 After=postgresql@18-main.service

@@ -15,7 +15,7 @@
 # created encrypted volume prices the same as a plain one. The data volume is
 # quoted with its encryption type when the installed CLI takes one (v0.59.0
 # and later), and plain otherwise. The log project is not part of the
-# plan; vmonitor.sh quotes it. Exit 1 when the total is above the maximum.
+# plan. Exit 1 when the total is above the maximum.
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

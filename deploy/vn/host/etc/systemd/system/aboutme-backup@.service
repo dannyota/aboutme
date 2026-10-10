@@ -4,7 +4,7 @@
 Description=aboutme pgBackRest %i
 After=postgresql@18-main.service
 Requires=postgresql@18-main.service
-OnFailure=aboutme-backup-failed@%i.service
+OnFailure=aboutme-alert@%p-%i.service
 
 [Service]
 Type=oneshot

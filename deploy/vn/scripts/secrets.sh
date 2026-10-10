@@ -12,7 +12,6 @@
 #                                        `secrets.sh import smtp-password < /dev/tty`
 #   secrets.sh import-s3 <media|backups> move buckets.sh's key file, then
 #                                        delete the laptop copy
-#   secrets.sh import-vmonitor <dir>     the three vMonitor client files
 #   secrets.sh list                      names on the host, never values
 #   secrets.sh age-copy <recipient> <out>  ciphertext for aboutme-infra
 #   secrets.sh move-from-ssm             cutover only, run by the owner
@@ -65,13 +64,6 @@ case "${1-}:$#" in
     on_host podman-sync </dev/null
     rm -f -- "$file"
     say "moved the $2 key to the host and deleted the laptop copy"
-    ;;
-  import-vmonitor:2)
-    for f in VNG.trust.pem user.cer.pem user.key.pem; do
-      [[ -f $2/$f && ! -L $2/$f ]] || die "$2/$f is missing"
-    done
-    tar -C "$2" -cf - VNG.trust.pem user.cer.pem user.key.pem | on_host import-vmonitor
-    say "moved the vMonitor client files; delete $2 once filebeat runs"
     ;;
   list:1)
     on_host list </dev/null

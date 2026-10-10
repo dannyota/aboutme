@@ -40,6 +40,7 @@ dirs=(
   "crowdsec-etc root:root 0755 /etc/crowdsec"
   "caddy 10001:10001 0700 /var/lib/aboutme-caddy"
   "aboutme root:root 0755 /var/lib/aboutme"
+  "journal root:systemd-journal 2755 /var/log/journal"
 )
 
 already_ours=no

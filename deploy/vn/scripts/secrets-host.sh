@@ -11,7 +11,6 @@
 #   secrets-host.sh import <name> [--replace]  value on stdin
 #   secrets-host.sh import-s3 <media|backups> [--replace]
 #                                           AWS-format key file on stdin
-#   secrets-host.sh import-vmonitor         tar of the three vMonitor files on stdin
 #   secrets-host.sh podman-sync [--replace <name>]
 #   secrets-host.sh bouncer-register        register the Caddy CrowdSec bouncer
 #   secrets-host.sh list                    names present, never values
@@ -171,29 +170,6 @@ cmd_import_s3() { # media|backups [--replace]
   fi
 }
 
-# The vMonitor log agent's client files (host/etc/filebeat/filebeat.yml):
-# a tar holding exactly VNG.trust.pem, user.cer.pem, and user.key.pem.
-cmd_import_vmonitor() {
-  local tmp names
-  tmp=$(mktemp -d "$dir/.vmonitor.XXXXXX")
-  head -c 1048576 >"$tmp/in.tar"
-  # Exactly three regular files with fixed names: no link, device, or path.
-  names=$(tar -tvf "$tmp/in.tar" | awk '{ t = substr($1, 1, 1); n = $NF; sub(/^\.\//, "", n); print t n }' |
-    LC_ALL=C sort | tr '\n' ' ')
-  [[ $names == "-VNG.trust.pem -user.cer.pem -user.key.pem " ]] || {
-    rm -rf -- "$tmp"
-    die "the tar must hold exactly the regular files VNG.trust.pem, user.cer.pem, and user.key.pem"
-  }
-  install -d -m 0700 "$tmp/out"
-  tar -xf "$tmp/in.tar" -C "$tmp/out" --no-same-owner --no-same-permissions \
-    VNG.trust.pem user.cer.pem user.key.pem
-  chmod 0400 -- "$tmp/out"/*.pem
-  rm -rf -- "$dir/vmonitor"
-  mv -T -- "$tmp/out" "$dir/vmonitor"
-  rm -rf -- "$tmp"
-  say "stored the vMonitor client files"
-}
-
 cmd_podman_sync() { # [--replace name]
   local name
   if [[ ${1-} == --replace ]]; then
@@ -247,13 +223,12 @@ case "${1-}:$#" in
   generate:1) cmd_generate ;;
   import:2 | import:3) cmd_import "$2" "${3-}" ;;
   import-s3:2 | import-s3:3) cmd_import_s3 "$2" "${3-}" ;;
-  import-vmonitor:1) cmd_import_vmonitor ;;
   podman-sync:1) cmd_podman_sync ;;
   bouncer-register:1) cmd_bouncer_register ;;
   list:1) cmd_list ;;
   age-copy:2) cmd_age_copy "$2" ;;
   *)
-    say "usage: secrets-host.sh generate | import <name> [--replace] | import-s3 <media|backups> [--replace] | import-vmonitor | podman-sync | bouncer-register | list | age-copy <recipient>"
+    say "usage: secrets-host.sh generate | import <name> [--replace] | import-s3 <media|backups> [--replace] | podman-sync | bouncer-register | list | age-copy <recipient>"
     exit 2
     ;;
 esac

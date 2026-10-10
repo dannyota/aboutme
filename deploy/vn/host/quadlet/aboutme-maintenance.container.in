@@ -2,6 +2,7 @@
 # started only by a deploy or a recovery, never at boot
 # (docs/design/single-host-production.md, "Release and deploy").
 [Unit]
+OnFailure=aboutme-alert@%N.service
 Description=aboutme maintenance Caddy
 
 [Container]

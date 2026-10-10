@@ -4,6 +4,7 @@
 # answers the other's ACME HTTP-01 challenge and both may hold the ports with
 # SO_REUSEPORT during a deploy ("Host").
 [Unit]
+OnFailure=aboutme-alert@%N.service
 Description=aboutme Caddy
 After=aboutme-server.service crowdsec.service
 

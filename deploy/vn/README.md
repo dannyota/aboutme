@@ -21,7 +21,7 @@ confirm").
 | `host/quadlet/`              | Quadlet templates that `deploy-host.sh` renders per release                   |
 | `host/env/`                  | Non-secret container settings; `*.example` files are copied once and kept     |
 | `host/keys/`                 | The apt signing keys `install.sh` trusts, checked against pinned fingerprints |
-| `edge/`                      | vMonitor, budget, and the vWAF escalation checklist                           |
+| `edge/`                      | CrowdSec configuration and the vWAF escalation checklist                      |
 | `probe/`                     | Host fact checks                                                              |
 | `scripts/`                   | Deploy, fence, secrets, buckets, quotes, restore drill, cutover               |
 
@@ -65,9 +65,10 @@ the state passphrase and host secrets.
 5. On the host: `host/data-volume.sh <device> --format` once, then
    `host/install.sh <bundle>` with the bundle copied by `rsync`.
 6. `scripts/secrets.sh generate`, `import-s3 media`, `import-s3 backups`,
-   `import smtp-username`, `import smtp-password`, and `import-vmonitor <dir>`.
+   `import smtp-username`, and `import smtp-password`.
 7. `deploy-host.sh - <tag> db-bootstrap` on the host, then `probe/probe.sh`.
-8. `edge/vmonitor.sh apply ...` and `edge/budget.sh --limit-vnd <amount>`.
+8. `scripts/budget.sh --limit-vnd <amount>`, then fill `ALERT_TO` and the SMTP
+   settings in `/etc/aboutme/smtp.env`.
 9. `DEPLOY_HOST=<ip> scripts/deploy.sh <tag> --first-deploy`.
 
 ## Data volume encryption
@@ -86,34 +87,47 @@ below.
 plain disks (wiki Compute-Servers.md only states it for a server created with an
 encrypted disk).
 
+## Logs and alarms
+
+There is no log or monitoring service. The journal on the data volume is the log
+store: 30 days, at most 2 GB (`host/etc/systemd/journald.conf.d/`). Every
+aboutme unit, and the PostgreSQL, CrowdSec, and SSH services, names
+`aboutme-alert@.service` in `OnFailure=`, and `aboutme-watch.timer` runs
+`host/bin/watch.sh` every five minutes: root and data volume use above 70%,
+failed units, PostgreSQL on its socket, WAL archive failures, the newest backup
+older than 26 hours, the CrowdSec alert count and Coraza match count in the last
+hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh` mails
+the support mailbox through Bizfly SMTP with msmtp, at most once a day per
+condition, with names and counts only. The Coraza match text is a placeholder
+until the Caddy image's log fields land. The external app-down check is the
+Route 53 health check, outside this tree.
+
 ## Provider facts
 
-| Fact                                                                                                                        | Status                                                                                                                                                                                                       |
-| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Provider `vngcloud/vngcloud` 1.3.21 (1.3.22 adds only VKS logging)                                                          | Read from the registry and source tag                                                                                                                                                                        |
-| Resource names: `vngcloud_vserver_server`, `_volume`, `_volume_attach`, `_secgroup`, `_secgrouprule`, `_network`, `_subnet` | [docs/resources](https://github.com/vngcloud/terraform-provider-vngcloud/tree/v1.3.21/docs/resources)                                                                                                        |
-| Authentication: `client_id` and `client_secret` (env `CLIENT_ID`, `CLIENT_SECRET`)                                          | [docs/index.md](https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/index.md)                                                                                                          |
-| Default endpoints `*.vngcloud.vn` still answer after the GreenNode domain move                                              | **Unconfirmed**; the CLI wiki says the old hosts redirect and drop the Authorization header                                                                                                                  |
-| `vngcloud_vserver_volume.encryption_type` creates an encrypted volume                                                       | **Unconfirmed**; the argument exists ([vserver_volume.md](https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/resources/vserver_volume.md))                                            |
-| The UEFI Ubuntu image passes as `image_id`                                                                                  | **Unconfirmed** ([vserver_server.md](https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/resources/vserver_server.md))                                                                 |
-| A server without `ssh_key` is accepted (the admin key comes through cloud-init)                                             | **Unconfirmed**; the provider marks it optional, the CLI requires one                                                                                                                                        |
-| The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Read from source; there is no standalone floating IP resource, so the server has `prevent_destroy`                                                                                                           |
-| The new security group's default egress allows outbound traffic                                                             | **Unconfirmed**; `probe/probe.sh` checks it                                                                                                                                                                  |
-| vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | **Unconfirmed** (design Q4); `use_lockfile` stays off until tested                                                                                                                                           |
-| An encrypted volume attaches to a server created with plain disks                                                           | **Unconfirmed**                                                                                                                                                                                              |
-| vMonitor log agent: Filebeat 8.7.1 over Kafka on TCP 10092 with client certificates                                         | [GreenNode docs](https://docs.greennode.ai/vmonitor/dashboards/logs/lam-viec-voi-log-agent/cai-dat-log-agent-tren-cac-he-dieu-hanh/debian-ubuntu); full certificate verification **Unconfirmed**             |
-| vMonitor metric agent (Telegraf, a service account with `vMonitorMetricPush`, a paid metric quota)                          | [GreenNode docs](https://docs.greennode.ai/vmonitor/dashboards/metrics/lam-viec-voi-metric-agent/cai-dat-metric-agent-tren-server/linux-os); not installed: the documented installer runs an unpinned script |
+| Fact                                                                                                                        | Status                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider `vngcloud/vngcloud` 1.3.21 (1.3.22 adds only VKS logging)                                                          | Read from the registry and source tag                                                                                                                             |
+| Resource names: `vngcloud_vserver_server`, `_volume`, `_volume_attach`, `_secgroup`, `_secgrouprule`, `_network`, `_subnet` | [docs/resources](https://github.com/vngcloud/terraform-provider-vngcloud/tree/v1.3.21/docs/resources)                                                             |
+| Authentication: `client_id` and `client_secret` (env `CLIENT_ID`, `CLIENT_SECRET`)                                          | [docs/index.md](https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/index.md)                                                               |
+| Default endpoints `*.vngcloud.vn` still answer after the GreenNode domain move                                              | **Unconfirmed**; the CLI wiki says the old hosts redirect and drop the Authorization header                                                                       |
+| `vngcloud_vserver_volume.encryption_type` creates an encrypted volume                                                       | **Unconfirmed**; the argument exists ([vserver_volume.md](https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/resources/vserver_volume.md)) |
+| The UEFI Ubuntu image passes as `image_id`                                                                                  | **Unconfirmed** ([vserver_server.md](https://github.com/vngcloud/terraform-provider-vngcloud/blob/v1.3.21/docs/resources/vserver_server.md))                      |
+| A server without `ssh_key` is accepted (the admin key comes through cloud-init)                                             | **Unconfirmed**; the provider marks it optional, the CLI requires one                                                                                             |
+| The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Read from source; there is no standalone floating IP resource, so the server has `prevent_destroy`                                                                |
+| The new security group's default egress allows outbound traffic                                                             | **Unconfirmed**; `probe/probe.sh` checks it                                                                                                                       |
+| vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | **Unconfirmed** (design Q4); `use_lockfile` stays off until tested                                                                                                |
+| An encrypted volume attaches to a server created with plain disks                                                           | **Unconfirmed**                                                                                                                                                   |
 
 ## Host packages and what each fetch verifies
 
-| Package                                           | Pinned version         | Verified against                                                                             |
-| ------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------------- |
-| `postgresql-18`, `postgresql-client-18`, `libpq5` | `18.6-1.pgdg24.04+2`   | PGDG key `host/keys/pgdg.asc`, fingerprint `B97B0AFC…ACCC4CF8`                               |
-| `postgresql-common`                               | `293.pgdg24.04+1`      | the same PGDG key                                                                            |
-| `pgbackrest`                                      | `2.59.3-1.pgdg24.04+1` | the same PGDG key                                                                            |
-| `crowdsec`                                        | `1.8.1`                | `host/keys/crowdsec.asc`, fingerprint `6A89E3C2…6E93CD0C`                                    |
-| `crowdsec-firewall-bouncer-nftables`              | `0.0.36`               | the same CrowdSec key                                                                        |
-| `filebeat`                                        | `8.7.1`                | SHA-512 in `host/install.sh`, checked against Elastic's signature by key `46095ACC…D88E42B4` |
+| Package                                           | Pinned version         | Verified against                                                       |
+| ------------------------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| `postgresql-18`, `postgresql-client-18`, `libpq5` | `18.6-1.pgdg24.04+2`   | PGDG key `host/keys/pgdg.asc`, fingerprint `B97B0AFC…ACCC4CF8`         |
+| `postgresql-common`                               | `293.pgdg24.04+1`      | the same PGDG key                                                      |
+| `pgbackrest`                                      | `2.59.3-1.pgdg24.04+1` | the same PGDG key                                                      |
+| `crowdsec`                                        | `1.8.1`                | `host/keys/crowdsec.asc`, fingerprint `6A89E3C2…6E93CD0C`              |
+| `crowdsec-firewall-bouncer-nftables`              | `0.0.36`               | the same CrowdSec key                                                  |
+| `age`, `msmtp`                                    | Ubuntu archive         | Ubuntu archive signature; security updates through unattended-upgrades |
 
 CrowdSec publishes no key fingerprint; the committed key is the one
 packagecloud.io served on 2026-10-10. apt holds every pinned package, and
@@ -140,14 +154,13 @@ These names are placeholders until the owning branch lands:
 
 Read-only quotes on 2026-10-10, VND a month:
 
-| Resource                                       | Created by                 | Quote                        |
-| ---------------------------------------------- | -------------------------- | ---------------------------- |
-| vServer `s2-general-2x4` with 20 GB root SSD   | `tofu apply`               | 631,600                      |
-| 20 GB encrypted SSD data volume                | `tofu apply`               | 64,000                       |
-| Floating IP                                    | `tofu apply`               | 120,000                      |
-| Log project, Pro, 30 days, 5 GB a day          | `edge/vmonitor.sh apply`   | 1,125,000                    |
-| Synthetic check and log alarms                 | `edge/vmonitor.sh apply`   | no quote command (design Q7) |
-| vStorage package                               | the console, by the owner  | not quoted                   |
-| Restore drill server and volume, while it runs | `scripts/restore-drill.sh` | 695,600 a month, prorated    |
+| Resource                                       | Created by                 | Quote                     |
+| ---------------------------------------------- | -------------------------- | ------------------------- |
+| vServer `s2-general-2x4` with 20 GB root SSD   | `tofu apply`               | 631,600                   |
+| 20 GB encrypted SSD data volume                | `tofu apply`               | 64,000                    |
+| Floating IP                                    | `tofu apply`               | 120,000                   |
+| vStorage package                               | the console, by the owner  | not quoted                |
+| Restore drill server and volume, while it runs | `scripts/restore-drill.sh` | 695,600 a month, prorated |
 
-The budget is free.
+The budget is free. Alerts use the Bizfly SMTP account the server already sends
+with.

@@ -17,8 +17,8 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-# shellcheck source=../scripts/vng-lib.sh
-. "$here/../scripts/vng-lib.sh"
+# shellcheck source=vng-lib.sh
+. "$here/vng-lib.sh"
 
 NAME=aboutme-prod
 THRESHOLDS=(80 100)

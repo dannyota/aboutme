@@ -49,8 +49,9 @@ The design is [Vietnam production](../../../docs/design/vietnam-production.md).
   (PostgreSQL).
 - Outbound HTTPS reaches vStorage HCM04 and `ghcr.io`, for pgBackRest, media,
   and image pulls.
-- Outbound TCP 10092 reaches `hcm03-loghub01.vngcloud.vn`, where Filebeat pushes
-  logs to vMonitor (Logs, metrics, and alarms).
+- The journal is bound from the data volume, msmtp is installed, and
+  `aboutme-watch.timer` is enabled, since the journal is the log store and
+  `alert.sh` mails through msmtp (Logs, metrics, and alarms).
 - The CrowdSec local API answers on `127.0.0.1:8095` (Go owns 8080) and the host
   has no registered central API, so sharing is off (Edge).
 - `fence.sh read` works, so the release fence file exists and parses (Release

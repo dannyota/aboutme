@@ -2,6 +2,7 @@
 # as aboutme_migrator, with no network: PostgreSQL only through the mounted
 # socket (docs/design/vietnam-production.md, "Host"; ADR 0005).
 [Unit]
+OnFailure=aboutme-alert@%N.service
 Description=aboutme migrate
 Requires=postgresql@18-main.service
 After=postgresql@18-main.service

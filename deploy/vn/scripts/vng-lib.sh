@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Shared helpers for the laptop-side vngcloud scripts in deploy/vn/. Source it;
 # do not run it. Design: docs/design/vietnam-production.md, "Infrastructure
-# code and state" (the CLI covers service accounts, buckets, vMonitor, budgets).
+# code and state" (the CLI covers service accounts, buckets, and the budget).
 #
 # VNG_PROFILE names a writable operator profile in ~/.vngcloud that the owner
 # created. These scripts never write credentials. Nothing here prints a secret.
@@ -9,9 +9,6 @@
 VNG_PROFILE=${VNG_PROFILE:-aboutme}
 VNG_BIN=${VNG_BIN:-vngcloud}
 VNG_REGION=hcm-3
-# The synthetic check that deploy.sh pauses while the site is in maintenance
-# (docs/design/vietnam-production.md, "Deploy", steps 5 and 9).
-APP_CHECK_NAME=aboutme-prod-readyz
 
 say() { printf '%s\n' "$*"; }
 die() {
@@ -60,41 +57,4 @@ json_id_by_name() {
     [.Items[]?
      | select((.Name // .name // .ProjectName // .projectName) == $n)
      | (.ID // .id // .UUID // .uuid)] | .[0] // empty'
-}
-
-# check_id_by_name <name> prints the vMonitor check ID with that exact name, or
-# nothing.
-check_id_by_name() {
-  vng monitor list-checks | json_id_by_name "$1"
-}
-
-# APP_CHECK_PAUSE_CHANGED is 1 when pause_app_check changed the check, 0 when
-# the check was already paused (someone else's pause), so resume_app_check does
-# not re-enable a check paused for another reason.
-APP_CHECK_PAUSE_CHANGED=1
-
-# pause_app_check pauses the app-down check. A missing check is an error.
-pause_app_check() {
-  local id out
-  id=$(check_id_by_name "$APP_CHECK_NAME")
-  [[ -n $id ]] || die "vMonitor check $APP_CHECK_NAME does not exist"
-  out=$(vng monitor pause-check --check-id "$id") ||
-    die "pause-check failed; if the error says StatusUnconfirmed the pause may have landed, so resume the check by hand after the release"
-  APP_CHECK_PAUSE_CHANGED=$(jq -r 'if has("Changed") then (if .Changed then 1 else 0 end) else 1 end' <<<"$out")
-  say "paused check $APP_CHECK_NAME"
-}
-
-# resume_app_check resumes the app-down check unless it was already paused
-# before pause_app_check ran. A missing check is an error.
-resume_app_check() {
-  local id
-  id=$(check_id_by_name "$APP_CHECK_NAME")
-  [[ -n $id ]] || die "vMonitor check $APP_CHECK_NAME does not exist"
-  if [[ $APP_CHECK_PAUSE_CHANGED == 0 ]]; then
-    say "check $APP_CHECK_NAME was paused before this run; leaving it paused"
-    return 0
-  fi
-  vng monitor resume-check --check-id "$id" >/dev/null ||
-    die "resume-check failed; resume $APP_CHECK_NAME by hand"
-  say "resumed check $APP_CHECK_NAME"
 }

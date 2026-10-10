@@ -1,0 +1,10 @@
+# Mails the support mailbox once a day per failed unit; every aboutme unit and
+# the packaged services name it in OnFailure= (docs/design/vietnam-production.md,
+# "Logs, metrics, and alarms").
+[Unit]
+Description=aboutme alert for %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/aboutme/alert.sh unit-%i "unit %i failed"
+StandardInput=null
