@@ -48,9 +48,11 @@ the state passphrase and host secrets.
   environment (`set -a; . <env file>; set +a` in the command that needs it).
   `VNG_PROFILE` names a `~/.vngcloud` profile instead. Agents add `--read-only`
   unless a step writes.
-- The OpenTofu provider authenticates as an IAM service account through
-  `CLIENT_ID` and `CLIENT_SECRET` in the environment, never a file in this tree.
-- `TF_VAR_state_passphrase` for state encryption, at least 16 characters.
+- The OpenTofu provider authenticates as the `aboutme-tofu` IAM service account
+  (`vServerFullAccess`) through `CLIENT_ID` and `CLIENT_SECRET`, and state
+  encryption reads `TF_VAR_state_passphrase`. All three live in the main
+  checkout's ignored `.dev/credentials/greennode.env`, mode 0600, with an age
+  copy in `aboutme-infra`; load the file only in the command that runs `tofu`.
 
 ## SSH access
 
