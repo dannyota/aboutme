@@ -53,25 +53,33 @@ member() { # word list...
   return 1
 }
 
-# Writes stdin to one secret file through a private temporary file, so a
-# reader never sees a partial value.
+# Every write goes to a fresh mktemp file inside a directory only root can
+# write, which root just created and so may chmod, then replaces the target
+# with one rename (mv -T never follows a link at the target). No path is
+# checked and then written in a separate step under a directory another user
+# controls.
+require_root_dir() { # path mode
+  [[ -d $1 && ! -L $1 ]] || die "$1 is not a directory"
+  [[ $(stat -c '%u %a' -- "$1") == "0 $2" ]] || die "$1 must be owned by root with mode $2"
+}
+
+# Writes stdin to one secret file, so a reader never sees a partial value.
 store() { # name replace(0|1)
-  local name=$1 replace=$2 tmp
-  if [[ -e $dir/$name ]] && ((!replace)); then
+  local name=$1 replace=$2 tmp size
+  if [[ -e $dir/$name || -L $dir/$name ]] && ((!replace)); then
     say "kept $name"
     cat >/dev/null
     return 0
   fi
   tmp=$(mktemp "$dir/.new.XXXXXX")
   head -c 65537 >"$tmp"
-  local size
-  size=$(stat -c %s "$tmp")
+  size=$(stat -c %s -- "$tmp")
   if ((size == 0 || size > 65536)); then
-    rm -f "$tmp"
+    rm -f -- "$tmp"
     die "$name must be 1 to 65536 bytes"
   fi
-  chmod 0400 "$tmp"
-  mv -f "$tmp" "$dir/$name"
+  chmod 0400 -- "$tmp"
+  mv -fT -- "$tmp" "$dir/$name"
   say "stored $name"
 }
 
@@ -94,8 +102,10 @@ cmd_generate() {
   write_pgbackrest_conf
 }
 
-# pgBackRest reads its repository key and cipher pass from a postgres-owned
-# file on the data volume (host/etc/pgbackrest/secrets.conf.example).
+# pgBackRest reads its repository key and cipher pass from a file on the data
+# volume (host/etc/pgbackrest/secrets.conf.example). Its directory is owned by
+# root, group postgres, mode 0750, so postgres can read the file but cannot
+# place anything where root writes.
 write_pgbackrest_conf() {
   local f
   for f in backup-access-key-id backup-secret-access-key pgbackrest-cipher-pass; do
@@ -105,6 +115,7 @@ write_pgbackrest_conf() {
     }
   done
   local tmp
+  require_root_dir "$(dirname "$pgb_conf")" 750
   tmp=$(mktemp "$(dirname "$pgb_conf")/.new.XXXXXX")
   {
     printf '[global]\n'
@@ -112,9 +123,9 @@ write_pgbackrest_conf() {
     printf 'repo1-s3-key-secret=%s\n' "$(cat "$dir/backup-secret-access-key")"
     printf 'repo1-cipher-pass=%s\n' "$(cat "$dir/pgbackrest-cipher-pass")"
   } >"$tmp"
-  chown postgres:postgres "$tmp"
-  chmod 0400 "$tmp"
-  mv -f "$tmp" "$pgb_conf"
+  chgrp postgres -- "$tmp"
+  chmod 0440 -- "$tmp"
+  mv -fT -- "$tmp" "$pgb_conf"
   say "wrote $pgb_conf"
 }
 
@@ -166,17 +177,20 @@ cmd_import_vmonitor() {
   local tmp names
   tmp=$(mktemp -d "$dir/.vmonitor.XXXXXX")
   head -c 1048576 >"$tmp/in.tar"
-  names=$(tar -tf "$tmp/in.tar" | sed 's|^\./||' | sort | tr '\n' ' ')
-  [[ $names == "VNG.trust.pem user.cer.pem user.key.pem " ]] || {
-    rm -rf "$tmp"
-    die "the tar must hold exactly VNG.trust.pem, user.cer.pem, and user.key.pem"
+  # Exactly three regular files with fixed names: no link, device, or path.
+  names=$(tar -tvf "$tmp/in.tar" | awk '{ t = substr($1, 1, 1); n = $NF; sub(/^\.\//, "", n); print t n }' |
+    LC_ALL=C sort | tr '\n' ' ')
+  [[ $names == "-VNG.trust.pem -user.cer.pem -user.key.pem " ]] || {
+    rm -rf -- "$tmp"
+    die "the tar must hold exactly the regular files VNG.trust.pem, user.cer.pem, and user.key.pem"
   }
   install -d -m 0700 "$tmp/out"
-  tar -xf "$tmp/in.tar" -C "$tmp/out" --no-same-owner --no-same-permissions
-  chmod 0400 "$tmp/out"/*.pem
-  rm -rf "$dir/vmonitor"
-  mv "$tmp/out" "$dir/vmonitor"
-  rm -rf "$tmp"
+  tar -xf "$tmp/in.tar" -C "$tmp/out" --no-same-owner --no-same-permissions \
+    VNG.trust.pem user.cer.pem user.key.pem
+  chmod 0400 -- "$tmp/out"/*.pem
+  rm -rf -- "$dir/vmonitor"
+  mv -T -- "$tmp/out" "$dir/vmonitor"
+  rm -rf -- "$tmp"
   say "stored the vMonitor client files"
 }
 
@@ -227,7 +241,7 @@ cmd_age_copy() { # recipient
 [[ $(id -u) == 0 ]] || die "run as root on the host"
 umask 077
 mountpoint -q /srv/data || die "/srv/data is not mounted; the secrets would land on the root disk"
-[[ -d $dir ]] || die "$dir is missing; run host/data-volume.sh"
+require_root_dir "$dir" 700
 
 case "${1-}:$#" in
   generate:1) cmd_generate ;;

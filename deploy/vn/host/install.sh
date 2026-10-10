@@ -40,6 +40,12 @@ die() {
 }
 say() { echo "install: $*"; }
 
+# ABOUTME_INSTALL_ONLY=postgres stops once PostgreSQL and pgBackRest are
+# installed and configured, with no timer, agent, or CrowdSec: the restore
+# drill server (scripts/restore-drill.sh) needs nothing else.
+only=${ABOUTME_INSTALL_ONLY:-}
+case $only in "" | postgres) ;; *) die "ABOUTME_INSTALL_ONLY must be empty or postgres" ;; esac
+
 [ "$(id -u)" -eq 0 ] || die "run as root"
 [ $# -eq 1 ] || die "usage: install.sh <bundle-dir>"
 bundle=$(readlink -f "$1")
@@ -107,6 +113,28 @@ echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.or
   >/etc/apt/sources.list.d/pgdg.list
 say "PGDG repository in place"
 
+if [ "$only" = postgres ]; then
+  apt-get update -qq
+  install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION"
+  chown postgres:postgres /srv/data/postgresql
+  chmod 0700 /srv/data/postgresql
+  # pgBackRest's secrets directory: root writes, postgres only reads
+  # (scripts/secrets-host.sh).
+  chown root:postgres /srv/data/pgbackrest-conf
+  chmod 0750 /srv/data/pgbackrest-conf
+  install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
+    "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
+  install -m 0644 "$bundle/host/etc/pgbackrest/pgbackrest.conf" /etc/pgbackrest/pgbackrest.conf
+  install -o postgres -g postgres -m 0640 "$bundle/host/etc/postgresql/18/main/pg_hba.conf" \
+    /etc/postgresql/18/main/pg_hba.conf
+  install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
+  install -o postgres -g postgres -m 0644 "$bundle/host/etc/postgresql/18/main/conf.d/90-aboutme.conf" \
+    /etc/postgresql/18/main/conf.d/90-aboutme.conf
+  systemctl restart postgresql@18-main.service
+  say "PostgreSQL and pgBackRest only: done"
+  exit 0
+fi
+
 install_key "$bundle/host/keys/crowdsec.asc" "$CROWDSEC_SIGNER_FPR" "$tmp/crowdsec.asc"
 gpg --dearmor --yes -o /etc/apt/keyrings/crowdsec.gpg "$tmp/crowdsec.asc"
 echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main" \
@@ -125,10 +153,12 @@ install -m 0644 "$bundle/host/etc/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acq
 # directories on the volume are handed to it before postgresql-18 creates the
 # cluster there.
 install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION"
-for d in /srv/data/postgresql /srv/data/pgbackrest-conf; do
-  chown postgres:postgres "$d"
-  chmod 0700 "$d"
-done
+chown postgres:postgres /srv/data/postgresql
+chmod 0700 /srv/data/postgresql
+# pgBackRest's secrets directory: root writes, postgres only reads
+# (scripts/secrets-host.sh).
+chown root:postgres /srv/data/pgbackrest-conf
+chmod 0750 /srv/data/pgbackrest-conf
 install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
   "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
 install_pinned "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"

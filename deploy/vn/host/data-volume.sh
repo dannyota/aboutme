@@ -35,7 +35,7 @@ dirs=(
   "secrets root:root 0700 /etc/aboutme/secrets"
   "podman-secrets root:root 0700 /var/lib/containers/storage/secrets"
   "postgresql root:root 0700 /var/lib/postgresql"
-  "pgbackrest-conf root:root 0700 /etc/pgbackrest/conf.d"
+  "pgbackrest-conf root:root 0750 /etc/pgbackrest/conf.d"
   "crowdsec root:root 0755 /var/lib/crowdsec"
   "crowdsec-etc root:root 0755 /etc/crowdsec"
   "caddy 10001:10001 0700 /var/lib/aboutme-caddy"
@@ -103,17 +103,20 @@ fi
 for entry in "${dirs[@]}"; do
   read -r name owner mode target <<<"$entry"
   src=$mnt/$name
+  new=no
   if [ -d "$src" ]; then
     kept "directory $src"
   else
     mkdir -p "$src"
+    new=yes
     changed "created $src"
   fi
-  # PostgreSQL and pgBackRest directories keep their current owner once
-  # install.sh has handed them to postgres; the others are set every run.
+  # The PostgreSQL and pgBackRest directories get their final owner from
+  # install.sh once the postgres user exists, so they are set here only when
+  # just created; the others are set every run.
   case "$name" in
   postgresql | pgbackrest-conf)
-    if [ "$(stat -c %U "$src")" = root ]; then
+    if [ "$new" = yes ]; then
       chown "$owner" "$src"
       chmod "$mode" "$src"
     fi
