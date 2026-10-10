@@ -4,7 +4,7 @@
 from the application, that asks the platform which image digests are running,
 checks each one against the signed GitHub build record, and publishes the result
 to `https://aboutme.vn/.well-known/deployment.json`. It is its own Go module
-(`github.com/dannyota/aboutme/deploy/observer`, go 1.27.1), outside the
+(`github.com/dannyota/aboutme/deploy/observer`, go 1.27.2), outside the
 repository's `go.work`, because it ships as a separate container image and never
 shares a dependency graph with `apps/server`.
 
