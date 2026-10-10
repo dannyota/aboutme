@@ -7,6 +7,8 @@ trap 'echo "CrowdSec integration failed at line $LINENO" >&2' ERR
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 edge=$repo_root/deploy/vn/edge/crowdsec
 feed=/run/aboutme/caddy-log/crowdsec/serving.json
+# shellcheck source=../host/crowdsec-offline.sh
+source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 
 cleanup() {
   systemctl stop crowdsec.service >/dev/null 2>&1 || true
@@ -18,19 +20,15 @@ crowdsec -version 2>&1 | grep -qF 'v1.8.1' || {
   exit 1
 }
 
-install -d -m 0755 /etc/crowdsec/acquis.d /etc/crowdsec/parsers/s01-parse \
-  /etc/crowdsec/parsers/s02-enrich /etc/crowdsec/scenarios
-: >/etc/crowdsec/acquis.yaml
-find /etc/crowdsec/acquis.d -maxdepth 1 -type f -delete
-cscli collections install crowdsecurity/sshd >/dev/null
-rm -f /etc/crowdsec/scenarios/ssh-time-based-bf.yaml
+crowdsec_configure_local_detection
+[[ $(cscli collections list -o json | jq -r '.collections | map(.name) | join("\n")') == \
+  crowdsecurity/sshd ]] || { echo "unexpected CrowdSec collection is enabled" >&2; exit 1; }
 "$repo_root/deploy/vn/host/crowdsec-window-check.sh" >/dev/null
-find /etc/crowdsec/parsers/s01-parse -maxdepth 1 -type f -delete
-find /etc/crowdsec/scenarios -maxdepth 1 -type f -delete
 install -m 0644 "$edge/config.yaml.local" /etc/crowdsec/config.yaml.local
 install -m 0644 "$edge/console.yaml" /etc/crowdsec/console.yaml
 install -m 0644 "$edge/profiles.yaml" /etc/crowdsec/profiles.yaml
 install -m 0644 "$edge/acquis.d/aboutme-http.yaml" /etc/crowdsec/acquis.d/aboutme-http.yaml
+install -m 0644 "$edge/acquis.d/sshd.yaml" /etc/crowdsec/acquis.d/sshd.yaml
 install -m 0644 "$edge/parsers/s01-parse/aboutme-http.yaml" \
   /etc/crowdsec/parsers/s01-parse/aboutme-http.yaml
 install -m 0644 "$edge/parsers/s02-enrich/zz-aboutme-http-source.yaml" \
@@ -39,9 +37,10 @@ install -m 0644 "$edge/scenarios/aboutme-http-rate.yaml" \
   /etc/crowdsec/scenarios/aboutme-http-rate.yaml
 install -m 0644 "$edge/scenarios/aboutme-http-status.yaml" \
   /etc/crowdsec/scenarios/aboutme-http-status.yaml
+[[ $(find /etc/crowdsec/acquis.d -maxdepth 1 -type f -printf '%f\n' | sort) == \
+  $'aboutme-http.yaml\nsshd.yaml' ]] || { echo "unexpected CrowdSec acquisition is enabled" >&2; exit 1; }
+"$repo_root/deploy/vn/host/crowdsec-window-check.sh" >/dev/null
 
-# shellcheck source=../host/crowdsec-offline.sh
-source "$repo_root/deploy/vn/host/crowdsec-offline.sh"
 crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
   /etc/crowdsec/online_api_credentials.yaml
 sed -i 's|^url: .*|url: http://127.0.0.1:8095|' /etc/crowdsec/local_api_credentials.yaml
@@ -69,9 +68,11 @@ wait_for_decision() { # ip
   local ip=$1 attempt decisions
   for ((attempt = 0; attempt < 30; attempt++)); do
     decisions=$(cscli decisions list -o json)
-    if jq -e --arg ip "$ip" '.[] | select(.value == $ip and .scenario == "aboutme/http-status")' \
+    if jq -e --arg ip "$ip" \
+      '.[] | .decisions[] | select(.value == $ip and .scenario == "aboutme/http-status")' \
       >/dev/null <<<"$decisions"; then
-      jq -r --arg ip "$ip" '.[] | select(.value == $ip and .scenario == "aboutme/http-status") | .until' \
+      jq -r --arg ip "$ip" \
+        '.[] | .decisions[] | select(.value == $ip and .scenario == "aboutme/http-status") | .until' \
         <<<"$decisions" | head -n1
       return 0
     fi
@@ -83,7 +84,8 @@ wait_for_decision() { # ip
 benign_ip=192.0.2.40
 append_records "$benign_ip" 503 20 maintenance
 sleep 3
-if cscli decisions list -o json | jq -e --arg ip "$benign_ip" '.[] | select(.value == $ip)' >/dev/null; then
+if cscli decisions list -o json | \
+  jq -e --arg ip "$benign_ip" '.[] | .decisions[] | select(.value == $ip)' >/dev/null; then
   echo "maintenance 503 created a decision" >&2
   exit 1
 fi
@@ -162,6 +164,8 @@ wait_for_decision "$fresh_ip" >/dev/null || {
 cscli bouncers delete retention-proof >/dev/null 2>&1 || true
 cscli bouncers add retention-proof --key fixed-safe-test-key >/dev/null
 systemctl stop crowdsec.service
+bouncer_digest=$(sqlite3 "$db" "SELECT api_key FROM bouncers WHERE name = 'retention-proof';")
+[[ -n $bouncer_digest ]] || { echo "retention bouncer credential is missing" >&2; exit 1; }
 machine_digest=$(sqlite3 "$db" 'SELECT machine_id, password FROM machines ORDER BY id;' | sha256sum | cut -d' ' -f1)
 sqlite3 "$db" <<'SQL'
 PRAGMA foreign_keys=ON;
@@ -198,7 +202,7 @@ SQL
   echo "startup retention removed a fresh alert" >&2
   exit 1
 }
-[[ $(sqlite3 "$db" "SELECT api_key FROM bouncers WHERE name = 'retention-proof';") == fixed-safe-test-key ]] || {
+[[ $(sqlite3 "$db" "SELECT api_key FROM bouncers WHERE name = 'retention-proof';") == "$bouncer_digest" ]] || {
   echo "startup retention changed bouncer credentials" >&2
   exit 1
 }
@@ -225,7 +229,7 @@ SQL
   echo "runtime retention kept an old alert" >&2
   exit 1
 }
-[[ $(sqlite3 "$db" "SELECT api_key FROM bouncers WHERE name = 'retention-proof';") == fixed-safe-test-key ]] || {
+[[ $(sqlite3 "$db" "SELECT api_key FROM bouncers WHERE name = 'retention-proof';") == "$bouncer_digest" ]] || {
   echo "runtime retention changed bouncer credentials" >&2
   exit 1
 }

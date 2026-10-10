@@ -182,6 +182,7 @@ crowdsec_install_offline install_pinned "crowdsec=$CROWDSEC_VERSION" \
   "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
 crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
   /etc/crowdsec/online_api_credentials.yaml || die "CrowdSec central API opt-out failed"
+crowdsec_configure_local_detection || die "CrowdSec local detection setup failed"
 say "pinned packages installed"
 
 
@@ -223,11 +224,6 @@ install -m 0755 "$bundle/host/crowdsec-retention-lease-check.sh" \
   "$lib/crowdsec-retention-lease-check.sh"
 install -m 0755 "$bundle/host/crowdsec-window-check.sh" "$lib/crowdsec-window-check.sh"
 
-# The packaged SSH collection includes one non-remediating two-hour detector.
-# The retained brute-force, slow brute-force, CVE, and refused-connection
-# scenarios cover SSH within the bounded record lifetime.
-cscli collections install crowdsecurity/sshd >/dev/null
-rm -f /etc/crowdsec/scenarios/ssh-time-based-bf.yaml
 "$lib/crowdsec-window-check.sh"
 systemctl daemon-reload
 edge_restart=()
