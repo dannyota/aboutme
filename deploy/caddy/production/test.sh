@@ -537,6 +537,7 @@ test_direct_maintenance_log_isolation
 # Maintenance must not rewrite the public document into maintenance.html.
 start_direct -e EDGES=direct -e MAINTENANCE=1
 wait_direct 503
+test_direct_deployment_document
 printf '%s\n' '{"marker":"maintenance"}' >"$work/deployment/deployment.json"
 chmod 0644 "$work/deployment/deployment.json"
 dcurl -D "$work/document.headers" -o "$work/document.body" \
