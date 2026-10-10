@@ -6,6 +6,11 @@
 servers :443 {
 	# The security group admits TCP only, so no HTTP/3 listener starts.
 	protocols h1 h2
+	timeouts {
+		# Coraza buffers request bodies in memory. Bound slow uploads while
+		# leaving enough time for the largest accepted request on a slow link.
+		read_body 30s
+	}
 }
 servers :80 {
 	protocols h1
@@ -19,16 +24,14 @@ order crowdsec first
 order coraza_waf after crowdsec
 # Empty unless CROWDSEC_API_URL is set; see entrypoint.sh.
 import /run/caddy/crowdsec.global
-# Coraza's rule-match messages name the client address and the matched
-# data, so they go to a local file only and never to stderr, which the host
-# ships off the host (docs/design/vietnam-production.md, "Logs, metrics, and
-# alarms"). The Caddyfile's default logger excludes this one. The host
-# rotates the file (copytruncate), since the app and maintenance Caddy can
-# both have it open.
+# Coraza's source messages contain the client address and matched request data.
+# The encoder emits only time, severity, a fixed marker, and the numeric rule
+# ID. Unknown message shapes emit a fixed marker with no source text. The
+# Caddyfile's default logger excludes this logger.
 log waf {
-	output file /var/log/caddy-waf/match.log {
-		roll_disabled
-	}
-	format json
+	# entrypoint.sh gives serving and maintenance Caddy distinct files because
+	# the file writer supports rotation by only one process.
+	import /run/caddy/waf-log-output.caddy
+	format waf_metadata
 	include http.handlers.waf
 }

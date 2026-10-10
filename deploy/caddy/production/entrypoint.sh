@@ -59,6 +59,19 @@ hostname_ok() {
   printf '%s\n' "$1" | grep -Eqx '([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]([a-z0-9-]{0,61}[a-z0-9])?'
 }
 
+# Serving and maintenance Caddy run concurrently during a deploy. The file
+# writer can rotate a file from one process only, so each mode owns one fixed
+# basename. roll_keep_for expires rolled files; an active low-volume file can
+# remain longer than one day.
+write_waf_log_output() {
+  case $1 in
+    serving | maintenance) ;;
+    *) fail "unknown WAF log owner '$1'" ;;
+  esac
+  printf 'output file /var/log/caddy/waf/%s-match.log {\n\tmode 0600\n\troll_size 5MiB\n\troll_keep 2\n\troll_keep_for 1\n}\n' \
+    "$1" >/run/caddy/waf-log-output.caddy
+}
+
 crowdsec_url=${CROWDSEC_API_URL-}
 crowdsec_key_file=${CROWDSEC_API_KEY_FILE-}
 crowdsec_key_set=${CROWDSEC_API_KEY+set}
@@ -125,7 +138,9 @@ esac
 unset CROWDSEC_API_KEY
 
 if [ "${1:-}" = adapt ]; then
+  write_waf_log_output serving
   caddy adapt --config /etc/caddy/Caddyfile >/dev/null
+  write_waf_log_output maintenance
   caddy adapt --config /etc/caddy/Caddyfile.maintenance >/dev/null
   exit 0
 fi
@@ -139,5 +154,10 @@ case $seen in
 esac
 unset ORIGIN_KEY
 config=/etc/caddy/Caddyfile
-[ "${MAINTENANCE:-0}" = 1 ] && config=/etc/caddy/Caddyfile.maintenance
+log_owner=serving
+if [ "${MAINTENANCE:-0}" = 1 ]; then
+  config=/etc/caddy/Caddyfile.maintenance
+  log_owner=maintenance
+fi
+write_waf_log_output "$log_owner"
 exec caddy run --config "$config" --adapter caddyfile
