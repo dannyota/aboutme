@@ -1,6 +1,6 @@
 module github.com/dannyota/aboutme/apps/server
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/altcha-org/altcha-lib-go/v2 v2.0.0-20260923082747-352eeeca913a

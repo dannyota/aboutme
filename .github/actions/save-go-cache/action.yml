@@ -18,8 +18,8 @@ runs:
     - if: ${{ github.ref == 'refs/heads/main' && inputs.toolchain-hit != 'true' }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ runner.tool_cache }}/go/1.27.1
-        key: go-toolchain-1.27.1-${{ runner.os }}-${{ runner.arch }}
+        path: ${{ runner.tool_cache }}/go/1.27.2
+        key: go-toolchain-1.27.2-${{ runner.os }}-${{ runner.arch }}
     - if: ${{ github.ref == 'refs/heads/main' && inputs.cache-hit != 'true' }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
