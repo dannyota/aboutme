@@ -100,7 +100,7 @@ copy_tree() {
 # 1. Keys and apt repositories.
 install -d -m 0755 /etc/apt/keyrings
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg >/dev/null
+apt-get install -y -qq ca-certificates curl gnupg age >/dev/null
 
 install_key "$bundle/host/keys/pgdg.asc" "$PGDG_SIGNER_FPR" /etc/apt/keyrings/postgresql.asc
 echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
@@ -193,6 +193,7 @@ copy_script() {
 }
 copy_script "$bundle/scripts/fence.sh"
 copy_script "$bundle/scripts/deploy-host.sh"
+copy_script "$bundle/scripts/secrets-host.sh"
 copy_script "$bundle/host/job-run.sh"
 for f in "$bundle"/host/bin/*.sh; do
   [ -e "$f" ] && copy_script "$f"
