@@ -114,7 +114,7 @@ rest for the OS and page cache. OpenTofu owns the server, a 20 GB root disk, a
 the OS, public images, and capped logs; secrets, PostgreSQL, and CrowdSec state
 live on the data volume. Root at 20 GB, the minimum, fits the worst case of
 about 15 GB: Ubuntu 4 GB, three server images of 2.6 GB during a deploy, web and
-Caddy images, 1 GB of Podman overhead, journald capped at 500 MB, and zram
+Caddy images, 1 GB of Podman overhead, the journal on the data volume, and zram
 instead of a swap file. The data volume starts at 20 GB because RDS holds under
 3 GiB today. Either volume grows online when its alarm fires at 70%:
 `vngcloud volume resize-volume`, then `growpart` and `resize2fs`. Release images
