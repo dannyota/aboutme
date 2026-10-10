@@ -41,10 +41,10 @@ done
 [[ -n $max_price ]] || usage
 [[ $max_price =~ ^[0-9]+$ ]] || usage
 
-: "${ZONE_ID:=HCM03-1A}"
-: "${FLAVOR_ID:=flav-cbb11ae8-f4b7-4e25-96a6-c30bcfcccece}"
+: "${ZONE_ID:=HCM03-1C}"
+: "${FLAVOR_ID:=flav-530ea5cb-6fac-4264-bcad-9e0e0a5ba3fc}"
 : "${IMAGE_ID:=img-34440a82-92fb-40bc-b79c-b1a2b49b93de}"
-: "${VOLUME_TYPE_ID:=vtype-61c3fc5b-f4e9-45b4-8957-8aa7b6029018}"
+: "${VOLUME_TYPE_ID:=vtype-e782f8e1-0569-11f0-a0a4-ec2a72332f83}"
 : "${ROOT_DISK_GB:=30}"
 : "${DATA_DISK_GB:=20}"
 : "${DATA_VOLUME_ENCRYPTION_TYPE:=aes-xts-plain64_256}"

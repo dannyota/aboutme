@@ -6,13 +6,13 @@ variable "project_id" {
 variable "zone_id" {
   type        = string
   description = "Availability zone in region hcm-3"
-  default     = "HCM03-1A"
+  default     = "HCM03-1C"
 }
 
 variable "flavor_id" {
   type        = string
   description = "Server flavor (s2-general-2x4)"
-  default     = "flav-cbb11ae8-f4b7-4e25-96a6-c30bcfcccece"
+  default     = "flav-530ea5cb-6fac-4264-bcad-9e0e0a5ba3fc"
 }
 
 variable "image_id" {
@@ -24,7 +24,7 @@ variable "image_id" {
 variable "volume_type_id" {
   type        = string
   description = "Volume type for the root and data disks (SSD 3000 IOPS)"
-  default     = "vtype-61c3fc5b-f4e9-45b4-8957-8aa7b6029018"
+  default     = "vtype-e782f8e1-0569-11f0-a0a4-ec2a72332f83"
 }
 
 variable "root_disk_gb" {
