@@ -20,9 +20,11 @@ locals {
   # the SES custom MAIL FROM's (docs/runbooks/email.md).
   static_records = {
     caa = {
-      name    = local.zone
-      type    = "CAA"
-      records = ["0 issue \"amazon.com\""]
+      name = local.zone
+      type = "CAA"
+      # Amazon issues the CloudFront certificates; Let's Encrypt issues the
+      # Vietnam host's through Caddy (docs/design/vietnam-production.md).
+      records = ["0 issue \"amazon.com\"", "0 issue \"letsencrypt.org\""]
     }
     mx = {
       name    = local.zone
@@ -103,22 +105,49 @@ resource "aws_route53_record" "ns" {
 # Alias A and AAAA answers carry the distribution's addresses for the
 # resolver's (or the client subnet's) location; the HTTPS alias advertises
 # HTTP/2 and HTTP/3 before the connection. Queries for all three are free.
+# At cutover (apex_on_vn_host) the A records answer with the Vietnam host's
+# address instead, in place, and AAAA and HTTPS go: the host has no IPv6, and
+# an HTTPS alias would still send clients to CloudFront.
 resource "aws_route53_record" "edge" {
   for_each = {
-    for pair in setproduct([local.zone, "www.${local.zone}"], ["A", "AAAA", "HTTPS"]) :
+    for pair in setproduct([local.zone, "www.${local.zone}"], var.apex_on_vn_host ? ["A"] : ["A", "AAAA", "HTTPS"]) :
     "${pair[0]} ${pair[1]}" => { name = pair[0], type = pair[1] }
   }
 
   zone_id = aws_route53_zone.zone.zone_id
   name    = each.value.name
   type    = each.value.type
+  ttl     = var.apex_on_vn_host ? 60 : null
+  records = var.apex_on_vn_host ? [var.vn_host_ipv4] : null
 
-  alias {
-    name    = var.distribution_domain_name
-    zone_id = var.distribution_hosted_zone_id
-    # CloudFront aliases do not support target health.
-    evaluate_target_health = false
+  dynamic "alias" {
+    for_each = var.apex_on_vn_host ? [] : [1]
+    content {
+      name    = var.distribution_domain_name
+      zone_id = var.distribution_hosted_zone_id
+      # CloudFront aliases do not support target health.
+      evaluate_target_health = false
+    }
   }
+
+  lifecycle {
+    precondition {
+      condition     = !var.apex_on_vn_host || var.vn_host_ipv4 != null
+      error_message = "apex_on_vn_host needs vn_host_ipv4."
+    }
+  }
+}
+
+# The Vietnam host's rehearsal names (docs/design/vietnam-production.md,
+# "Rehearsal"), until the apex itself moves to the host.
+resource "aws_route53_record" "vn_rehearsal" {
+  for_each = var.vn_host_ipv4 == null || var.apex_on_vn_host ? toset([]) : toset(["vn-rehearsal.${local.zone}", "www.vn-rehearsal.${local.zone}"])
+
+  zone_id = aws_route53_zone.zone.zone_id
+  name    = each.value
+  type    = "A"
+  ttl     = 60
+  records = [var.vn_host_ipv4]
 }
 
 resource "aws_route53_record" "static" {

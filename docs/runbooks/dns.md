@@ -27,7 +27,8 @@ the registrar reaches resolvers.
 | Record                                         | Type                 | Source                                                           |
 | ---------------------------------------------- | -------------------- | ---------------------------------------------------------------- |
 | `aboutme.vn`, `www.aboutme.vn`                 | Alias A, AAAA, HTTPS | The CloudFront distribution (`module.edge`)                      |
-| `aboutme.vn`                                   | CAA                  | `0 issue "amazon.com"`, fixed                                    |
+| `aboutme.vn`                                   | CAA                  | `0 issue "amazon.com"` and `0 issue "letsencrypt.org"`, fixed    |
+| `vn-rehearsal.aboutme.vn` and its `www` name   | A, TTL 60            | `vn_host_ipv4` in `prod.tfvars`, until `apex_on_vn_host`         |
 | `aboutme.vn`                                   | MX, TXT              | Google Workspace MX and SPF, fixed ([email runbook](email.md))   |
 | `_dmarc.aboutme.vn`                            | TXT                  | DMARC, fixed                                                     |
 | `bounce.aboutme.vn`                            | MX, TXT              | SES custom MAIL FROM, fixed                                      |
@@ -35,6 +36,13 @@ the registrar reaches resolvers.
 | `google._domainkey.aboutme.vn`                 | TXT                  | `google_workspace.dkim_txt` in `prod.tfvars`                     |
 | `<label>.aboutme.vn`                           | CNAME                | Google domain verification, `google_workspace` in `prod.tfvars`  |
 | `_<hash>.aboutme.vn`, `_<hash>.www.aboutme.vn` | CNAME                | ACM validation, from the origin certificate's validation options |
+
+At cutover, `apex_on_vn_host = true` turns the apex and `www` A records into
+plain A records for `vn_host_ipv4` (TTL 60), in place, and removes the AAAA and
+HTTPS aliases (docs/design/vietnam-production.md, "DNS and mail"). These records
+point at a GreenNode floating IP. Before the server is replaced or deleted, or
+the IP is released, point the records elsewhere first: a released address can go
+to another customer, who would then answer for `aboutme.vn`.
 
 The ACM records come from the certificate resource, so they stay correct and
 both certificates keep renewing on their own. ACM gives the origin and viewer
