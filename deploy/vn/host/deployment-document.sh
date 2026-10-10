@@ -28,9 +28,10 @@ for component in server web caddy maintenance; do
   case $exists in
     0)
       # ImageDigest is the running container's manifest digest, not its image
-      # configuration ID or the image its name would pull today.
+      # configuration ID or the image its name would pull today. A bare
+      # StartedAt prints Go's spaced time format, so format it as RFC 3339.
       observation=$(podman container inspect --format \
-        '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt}}' \
+        '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}}' \
         "aboutme-$component" 2>/dev/null) || die 'container inspection failed'
       read -r running digest started extra <<<"$observation" || die 'malformed observation'
       [[ -z $extra && $observation != *$'\n'* ]] || die 'malformed observation'

@@ -19,7 +19,7 @@ case $2 in
     esac ;;
   inspect)
     # No full inspect may read or print environment secrets.
-    [[ $3 == --format && $4 == '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt}}' ]]
+    [[ $3 == --format && $4 == '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}}' ]]
     if [[ $PODMAN_CASE == inspect-error ]]; then
       echo 'secret-canary-from-podman-error' >&2; exit 125
     fi
@@ -27,7 +27,7 @@ case $2 in
     [[ $PODMAN_CASE != stopped || $5 != aboutme-web ]] || running=false
     digest=sha256:$(printf '%064d' 7)
     [[ $PODMAN_CASE != malformed ]] || digest=sha256:bad
-    stamp=2026-10-11T08:14:05.123456789+07:00
+    stamp=2026-10-11T01:14:05.123456789Z
     [[ $PODMAN_CASE != bad-time ]] || stamp=secret-canary
     [[ $PODMAN_CASE != extra-field ]] || stamp+=' secret-canary'
     printf '%s %s %s\n' "$running" "$digest" "$stamp" ;;
