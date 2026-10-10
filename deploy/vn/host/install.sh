@@ -161,12 +161,23 @@ chown root:postgres /srv/data/pgbackrest-conf
 chmod 0750 /srv/data/pgbackrest-conf
 install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
   "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
+# Install the persistent startup requirements before package scripts can
+# enable either service. Until step 4 installs the required gate and lease
+# check, a reboot during package installation fails closed.
+install -d -m 0755 /etc/systemd/system/crowdsec.service.d \
+  /etc/systemd/system/crowdsec-firewall-bouncer.service.d
+install -m 0644 "$bundle/host/etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf" \
+  /etc/systemd/system/crowdsec.service.d/90-aboutme-alert.conf
+install -m 0644 \
+  "$bundle/host/etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf" \
+  /etc/systemd/system/crowdsec-firewall-bouncer.service.d/90-aboutme-alert.conf
+systemctl daemon-reload
 # CrowdSec 1.8.1 registers with its central API in the package post-install
 # script before it starts the service. Set the package's supported debconf
-# choice before apt runs, then keep the service masked while removing any
-# inherited online configuration.
-systemctl stop crowdsec.service crowdsec-firewall-bouncer.service 2>/dev/null || true
-systemctl mask --runtime crowdsec.service crowdsec-firewall-bouncer.service >/dev/null
+# choice and inhibit service startup while allowing the package to enable its
+# units. Disable every package-enabled unit, and keep CrowdSec, the bouncer, and
+# the vendor hub updater masked until the controlled configuration is ready.
+unset CROWDSEC_POLICY_RC_D CROWDSEC_SYSTEMCTL
 crowdsec_install_offline install_pinned "crowdsec=$CROWDSEC_VERSION" \
   "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
 crowdsec_remove_online /etc/crowdsec/config.yaml /etc/crowdsec/config.yaml.local \
