@@ -109,9 +109,10 @@ latest_release_tag() {
   git describe --tags --abbrev=0 --match 'v*'
 }
 
-# The weekly scan's target list: the three released images at the latest
-# tag, each into its own report under $2. Base images are not scanned on their
-# own: the runtime stages remove packages the bases ship (the npm CLI), so a
+# The weekly scan's target list: both released platforms of the three app
+# images at the latest tag, each into its own report under $2. Base images are
+# not scanned on their own: the runtime stages remove packages the bases ship
+# (the npm CLI), so a
 # base finding may not reach production, and the released images already show
 # every fixable finding that does. Continues past a failing target so one run
 # shows the complete picture, then exits non-zero if any target had a fixable
@@ -122,19 +123,22 @@ weekly_scan() {
   local report_dir=${2:?weekly-scan needs a report directory}
   mkdir -p "$report_dir"
   : >"$report_dir/summary.txt"
-  local fail=0 tag name ref report
+  local fail=0 tag name arch ref report
 
   tag=$(latest_release_tag)
   printf 'security-scan: scanning released images at %s\n' "$tag"
   for name in server web caddy; do
     ref="ghcr.io/dannyota/aboutme-${name}:${tag}"
-    report="$report_dir/released-${name}.json"
-    scan_image "$trivy_bin" "$ref" linux/arm64 "$report" || fail=1
-    printf 'security-scan: result for %s\n' "$ref" | tee -a "$report_dir/summary.txt"
-    if ! report_findings "$report" >>"$report_dir/summary.txt"; then
-      printf '%s\n' "$ref" >>"$report_dir/failed.txt"
-      fail=1
-    fi
+    for arch in arm64 amd64; do
+      report="$report_dir/released-${name}-${arch}.json"
+      scan_image "$trivy_bin" "$ref" "linux/$arch" "$report" || fail=1
+      printf 'security-scan: result for %s on linux/%s\n' "$ref" "$arch" |
+        tee -a "$report_dir/summary.txt"
+      if ! report_findings "$report" >>"$report_dir/summary.txt"; then
+        printf '%s linux/%s\n' "$ref" "$arch" >>"$report_dir/failed.txt"
+        fail=1
+      fi
+    done
   done
 
   cat "$report_dir/summary.txt"
