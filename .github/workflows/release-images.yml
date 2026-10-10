@@ -2,21 +2,30 @@ name: release-images
 
 # Builds, smoke-tests and publishes the production images for a version tag.
 # It holds no cloud credential and never deploys; see
-# docs/design/single-host-production.md. The observer image builds in its own
-# job below so a Trivy finding there cannot cancel or block server, web, or
-# caddy, or stop the release job that publishes them.
+# docs/design/single-host-production.md. Server, web, and caddy publish one
+# image per platform, linux/arm64 for AWS and linux/amd64 for the Vietnam host
+# (docs/design/vietnam-production.md, "Host"), and the version tag names an
+# image index of the two. The observer image builds in its own job below so a
+# Trivy finding there cannot cancel or block server, web, or caddy, or stop the
+# release job that publishes them.
+#
+# A manual run builds, smokes, and scans every image on every platform without
+# pushing, attesting, or releasing anything, so a branch can prove the builds
+# before a tag.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   # server, web, and caddy ship as one release, so they fail fast together: a
-  # Trivy finding or smoke failure in one cancels the others in flight.
-  image:
-    runs-on: ubuntu-24.04-arm
+  # Trivy finding or smoke failure on one image or platform cancels the others
+  # in flight. Each platform builds on a native runner.
+  build:
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -26,6 +35,7 @@ jobs:
       fail-fast: true
       matrix:
         name: [server, web, caddy]
+        arch: [arm64, amd64]
         include:
           - name: server
             dockerfile: deploy/server.Dockerfile
@@ -33,22 +43,45 @@ jobs:
             dockerfile: deploy/web.Dockerfile
           - name: caddy
             dockerfile: deploy/caddy/production/Dockerfile
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+          - arch: amd64
+            runner: ubuntu-24.04
+            machine: x86_64
     env:
-      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.ref_name }}
+      # One tag per platform; the image job below joins them under the version
+      # tag. A manual run never pushes, so its tag is only a local name.
+      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.event_name == 'push' && github.ref_name || 'dry-run' }}-${{ matrix.arch }}
       NAME: ${{ matrix.name }}
+      ARCH: ${{ matrix.arch }}
+      MACHINE: ${{ matrix.machine }}
       DOCKERFILE: ${{ matrix.dockerfile }}
       VERSION: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Build
-        run: docker build --platform linux/arm64 -f "$DOCKERFILE" -t "$IMAGE" .
+        run: docker build --platform "linux/$ARCH" -f "$DOCKERFILE" -t "$IMAGE" .
       - name: Smoke
         run: |
+          [ "$(docker inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE")" = "linux/$ARCH" ]
           case "$NAME" in
             server)
-              docker run --rm --entrypoint sh "$IMAGE" -c \
-                'test "$(uname -m)" = aarch64 && /opt/chromium/chrome --version && test -s /etc/ssl/rds/global-bundle.pem && test -x /usr/local/bin/db-setup'
+              # The server exits on its missing configuration, which proves the
+              # binary runs on this platform. Chromium then renders one page
+              # headless; the smoke container has no user namespaces for the
+              # sandbox, which production keeps.
+              docker run --rm --entrypoint sh -e MACHINE="$MACHINE" "$IMAGE" -c '
+                set -e
+                test "$(uname -m)" = "$MACHINE"
+                if out=$(/usr/local/bin/server 2>&1); then exit 1; fi
+                case "$out" in *"load config"*) ;; *) printf "%s\n" "$out"; exit 1 ;; esac
+                /opt/chromium/chrome --version
+                timeout 60 /opt/chromium/chrome --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
+                  --dump-dom "data:text/html,<title>smoke-ok</title>" | grep -q smoke-ok
+                test -s /etc/ssl/rds/global-bundle.pem
+                test -x /usr/local/bin/db-setup'
               ;;
             web)
               docker run -d --name smoke -e HOST=0.0.0.0 -e PORT=3000 -p 127.0.0.1:3000:3000 "$IMAGE"
@@ -75,17 +108,18 @@ jobs:
       - name: Scan for fixable HIGH/CRITICAL vulnerabilities
         run: |
           scripts/security-scan.sh scan-image \
-            "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$NAME.json"
-          scripts/security-scan.sh report "trivy-$NAME.json"
+            "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$NAME-$ARCH.json"
+          scripts/security-scan.sh report "trivy-$NAME-$ARCH.json"
       - name: Upload Trivy report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: trivy-report-${{ matrix.name }}
-          path: trivy-${{ matrix.name }}.json
+          name: trivy-report-${{ matrix.name }}-${{ matrix.arch }}
+          path: trivy-${{ matrix.name }}-${{ matrix.arch }}.json
           if-no-files-found: warn
           retention-days: 7
       - name: Push
+        if: github.event_name == 'push'
         id: push
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -95,9 +129,10 @@ jobs:
           docker push "$IMAGE"
           digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE" | cut -d@ -f2)
           echo "digest=$digest" >>"$GITHUB_OUTPUT"
-          echo "$NAME=$digest" >"digest-$NAME.txt"
-          echo "$NAME=$digest" >>"$GITHUB_STEP_SUMMARY"
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+          echo "$NAME=$digest" >"digest-$NAME-$ARCH.txt"
+          echo "$NAME linux/$ARCH=$digest" >>"$GITHUB_STEP_SUMMARY"
+      - if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -106,28 +141,97 @@ jobs:
       # and the OS package database. The attestation binds it to that digest;
       # docs/design/deployment-transparency/verification.md, "SBOM".
       - name: SBOM
+        if: github.event_name == 'push'
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           "$RUNNER_TEMP/trivy-bin/trivy" image --format spdx-json \
-            --output "aboutme-$NAME.spdx.json" "ghcr.io/dannyota/aboutme-$NAME@$DIGEST"
-          jq -e '.spdxVersion == "SPDX-2.3"' "aboutme-$NAME.spdx.json" >/dev/null
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+            --output "aboutme-$NAME-$ARCH.spdx.json" "ghcr.io/dannyota/aboutme-$NAME@$DIGEST"
+          jq -e '.spdxVersion == "SPDX-2.3"' "aboutme-$NAME-$ARCH.spdx.json" >/dev/null
+      - if: github.event_name == 'push'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
           subject-digest: ${{ steps.push.outputs.digest }}
-          sbom-path: aboutme-${{ matrix.name }}.spdx.json
+          sbom-path: aboutme-${{ matrix.name }}-${{ matrix.arch }}.spdx.json
           push-to-registry: true
           create-storage-record: false
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: digest-${{ matrix.name }}
-          path: digest-${{ matrix.name }}.txt
+          name: digest-${{ matrix.name }}-${{ matrix.arch }}
+          path: digest-${{ matrix.name }}-${{ matrix.arch }}.txt
           if-no-files-found: error
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.name }}-${{ matrix.arch }}
+          path: aboutme-${{ matrix.name }}-${{ matrix.arch }}.spdx.json
+          if-no-files-found: error
+
+  # Joins each image's two platform digests under the version tag as an image
+  # index, checks the index lists exactly those digests, and attests its
+  # provenance. A deploy pins one platform digest, never the index:
+  # deploy/aws/scripts/deploy.sh picks linux/arm64.
+  image:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: true
+      matrix:
+        name: [server, web, caddy]
+    env:
+      REPO: ghcr.io/dannyota/aboutme-${{ matrix.name }}
+      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.ref_name }}
+      NAME: ${{ matrix.name }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-${{ matrix.name }}-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create index
+        id: index
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          declare -A want
+          for arch in arm64 amd64; do
+            line=$(cat "artifacts/digest-$NAME-$arch.txt")
+            [[ $line =~ ^$NAME=(sha256:[0-9a-f]{64})$ ]] ||
+              { echo "image: malformed $arch digest for $NAME" >&2; exit 1; }
+            want[$arch]=${BASH_REMATCH[1]}
+          done
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          docker buildx imagetools create --tag "$IMAGE" \
+            "$REPO@${want[arm64]}" "$REPO@${want[amd64]}"
+          raw=$(docker buildx imagetools inspect --raw "$IMAGE")
+          jq -e --arg arm "${want[arm64]}" --arg amd "${want[amd64]}" '
+            (.manifests | length) == 2
+            and any(.manifests[]; .digest == $arm and .platform.os == "linux" and .platform.architecture == "arm64")
+            and any(.manifests[]; .digest == $amd and .platform.os == "linux" and .platform.architecture == "amd64")' \
+            <<<"$raw" >/dev/null || { echo "image: $IMAGE does not list exactly the built digests" >&2; exit 1; }
+          digest=$(docker buildx imagetools inspect --format '{{json .Manifest}}' "$IMAGE" | jq -r .digest)
+          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "image: no index digest for $IMAGE" >&2; exit 1; }
+          echo "digest=$digest" >>"$GITHUB_OUTPUT"
+          echo "$NAME=$digest" >"index-$NAME.txt"
+          echo "$NAME index=$digest" >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/dannyota/aboutme-${{ matrix.name }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: sbom-${{ matrix.name }}
-          path: aboutme-${{ matrix.name }}.spdx.json
+          name: index-${{ matrix.name }}
+          path: index-${{ matrix.name }}.txt
           if-no-files-found: error
 
   # The deployment transparency observer
@@ -142,7 +246,7 @@ jobs:
       id-token: write
       attestations: write
     env:
-      IMAGE: ghcr.io/dannyota/aboutme-observer:${{ github.ref_name }}
+      IMAGE: ghcr.io/dannyota/aboutme-observer:${{ github.event_name == 'push' && github.ref_name || 'dry-run' }}
       NAME: observer
       VERSION: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
@@ -151,6 +255,8 @@ jobs:
       # The observer's image must be a single-platform manifest with no
       # buildx provenance attachment, so Lambda accepts it
       # (docs/design/deployment-transparency/README.md, "Where the observer runs").
+      # It therefore stays linux/arm64 only, unlike server, web, and caddy:
+      # an amd64 build or an image index would make observer.sh refuse it.
       # Its build information comes from build args, never from a
       # self-reported runtime value.
       - name: Build
@@ -184,6 +290,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Push
+        if: github.event_name == 'push'
         id: push
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -195,7 +302,8 @@ jobs:
           echo "digest=$digest" >>"$GITHUB_OUTPUT"
           echo "observer=$digest" >digest-observer.txt
           echo "observer=$digest" >>"$GITHUB_STEP_SUMMARY"
-      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      - if: github.event_name == 'push'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/dannyota/aboutme-observer
           subject-digest: ${{ steps.push.outputs.digest }}
@@ -204,25 +312,29 @@ jobs:
       # and the OS package database. The attestation binds it to that digest;
       # docs/design/deployment-transparency/verification.md, "SBOM".
       - name: SBOM
+        if: github.event_name == 'push'
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           "$RUNNER_TEMP/trivy-bin/trivy" image --format spdx-json \
             --output aboutme-observer.spdx.json "ghcr.io/dannyota/aboutme-observer@$DIGEST"
           jq -e '.spdxVersion == "SPDX-2.3"' aboutme-observer.spdx.json >/dev/null
-      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      - if: github.event_name == 'push'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/dannyota/aboutme-observer
           subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: aboutme-observer.spdx.json
           push-to-registry: true
           create-storage-record: false
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: digest-observer
           path: digest-observer.txt
           if-no-files-found: error
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: sbom-observer
           path: aboutme-observer.spdx.json
@@ -232,7 +344,7 @@ jobs:
   # permanent public link. The signed attestations above are the evidence; a
   # release asset is a copy. This job holds no registry, OIDC, or attestation
   # permission. It needs only the app images: the observer image's own
-  # outcome never gates or blocks this release (see the "image" job comment).
+  # outcome never gates or blocks this release (see the "build" job comment).
   # needs still lists observer-image so this job waits for it and can pick up
   # its digest artifact, but !cancelled() keeps this job from being skipped
   # outright by GitHub's default "skip on a failed need" behavior when only
@@ -259,28 +371,52 @@ jobs:
           pattern: sbom-*
           path: artifacts
           merge-multiple: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: index-*
+          path: artifacts
+          merge-multiple: true
       - name: Assemble
         run: |
           [[ $TAG =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
             { echo "release: $TAG is not a vMAJOR.MINOR.PATCH tag" >&2; exit 1; }
           mkdir release
           : >release/digests.txt
-          # server, web, and caddy are always built; the observer image is
-          # listed once the observer-image job builds it.
-          names=(server web caddy)
+          # Reads one "name=sha256:..." digest file.
+          read_digest() { # file name
+            local line
+            line=$(cat "$1")
+            [[ $line =~ ^$2=(sha256:[0-9a-f]{64})$ ]] ||
+              { echo "release: malformed digest in ${1##*/}" >&2; return 1; }
+            printf '%s\n' "${BASH_REMATCH[1]}"
+          }
+          # Each line of digests.txt is an image reference and the platforms
+          # it serves: the index first, then each platform image.
+          for name in server web caddy; do
+            d=$(read_digest "artifacts/index-$name.txt" "$name")
+            echo "ghcr.io/dannyota/aboutme-$name@$d linux/arm64,linux/amd64" >>release/digests.txt
+            for arch in arm64 amd64; do
+              d=$(read_digest "artifacts/digest-$name-$arch.txt" "$name")
+              echo "ghcr.io/dannyota/aboutme-$name@$d linux/$arch" >>release/digests.txt
+              jq -e '.spdxVersion == "SPDX-2.3"' "artifacts/aboutme-$name-$arch.spdx.json" >/dev/null
+              cp "artifacts/aboutme-$name-$arch.spdx.json" release/
+            done
+          done
+          # The observer image is listed once the observer-image job builds it.
+          names=()
           [[ ! -e artifacts/digest-observer.txt ]] || names+=(observer)
           for name in "${names[@]}"; do
-            line=$(cat "artifacts/digest-$name.txt")
-            [[ $line =~ ^$name=(sha256:[0-9a-f]{64})$ ]] ||
-              { echo "release: malformed digest for $name" >&2; exit 1; }
-            echo "ghcr.io/dannyota/aboutme-$name@${BASH_REMATCH[1]}" >>release/digests.txt
+            d=$(read_digest "artifacts/digest-$name.txt" "$name")
+            echo "ghcr.io/dannyota/aboutme-$name@$d linux/arm64" >>release/digests.txt
             jq -e '.spdxVersion == "SPDX-2.3"' "artifacts/aboutme-$name.spdx.json" >/dev/null
             cp "artifacts/aboutme-$name.spdx.json" release/
           done
           cat >release/notes.md <<EOF
           Images built from $TAG by the release-images workflow. \`digests.txt\`
-          lists each image by digest. Each \`.spdx.json\` file is a copy of the
-          signed SPDX 2.3 SBOM attested for that digest.
+          lists each image by digest with the platforms it serves: the
+          multi-platform index, then one image per platform. Each \`.spdx.json\`
+          file is a copy of the signed SPDX 2.3 SBOM attested for one platform
+          image digest.
 
           Verify an image's build provenance with the GitHub CLI:
 

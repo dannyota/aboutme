@@ -139,9 +139,9 @@ immutable cache. A font change must rename the fixed-name `.woff2` under
 `/_nuxt/fonts/`, changing both stylesheet hashes too.
 
 A release is a `v*` tag on `main` with green `ci.yml` (not `workflow_dispatch`).
-`release-images.yml` publishes and Trivy-scans
-`ghcr.io/dannyota/aboutme-{server,web,caddy}` (public), failing on a fixable
-HIGH/CRITICAL finding. `security-scan.yml` also runs `govulncheck`/`npm audit`
+`release-images.yml` publishes public `aboutme-{server,web,caddy}` arm64 and
+amd64 images under one index (`deploy.sh` pins arm64); a fixable HIGH/CRITICAL
+Trivy finding fails it. `security-scan.yml` runs `govulncheck`/`npm audit`
 weekly on `main`/latest images; cron editor alone is alerted; 60d idle drops it.
 
 Before the first maintenance deploy, apply reviewed OpenTofu. It creates
