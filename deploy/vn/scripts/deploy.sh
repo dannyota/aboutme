@@ -62,7 +62,7 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
 }
 
 work=$(mktemp -d)
-# One SSH connection for the whole run, so a hardware key is touched once.
+# One SSH connection for the whole run.
 ssh_opts=(-o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$work/ssh-%C" -o ControlPersist=10m)
 ssh_close() { ssh "${ssh_opts[@]}" -O exit "$admin@$host" 2>/dev/null || true; }
 

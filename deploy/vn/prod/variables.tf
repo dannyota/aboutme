@@ -82,11 +82,11 @@ variable "ssh_allowlist" {
 
 variable "admin_ssh_public_key" {
   type        = string
-  description = "Hardware-backed admin public key (docs/design/vietnam-production.md, Host)"
+  description = "Admin ssh-ed25519 public key (docs/design/vietnam-production.md, Host)"
 
   validation {
-    condition     = startswith(var.admin_ssh_public_key, "sk-ssh-ed25519@openssh.com ")
-    error_message = "admin_ssh_public_key must be an sk-ssh-ed25519@openssh.com key."
+    condition     = startswith(var.admin_ssh_public_key, "ssh-ed25519 ")
+    error_message = "admin_ssh_public_key must be an ssh-ed25519 key."
   }
 }
 

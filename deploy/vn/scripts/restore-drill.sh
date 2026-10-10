@@ -7,7 +7,7 @@
 #
 #   restore-drill.sh --prod-host <ip> --ssh-key-id <id> --vpc-id <id> \
 #     --subnet-id <id> --security-group-id <id> --max-price <vnd a month> \
-#     --admin-key-file <sk-ssh-ed25519 public key> \
+#     --admin-key-file <ssh-ed25519 public key> \
 #     [--target-time <ISO-8601 UTC, e.g. 2026-10-09T03:00:00Z>] \
 #     [--resume] [--keep] [--direct]
 #
@@ -60,7 +60,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage: restore-drill.sh --prod-host <ip> --ssh-key-id <id> --vpc-id <id>
   --subnet-id <id> --security-group-id <id> --max-price <vnd a month>
-  --admin-key-file <sk-ssh-ed25519 public key>
+  --admin-key-file <ssh-ed25519 public key>
   [--target-time <ISO-8601 UTC>] [--resume] [--keep] [--direct]
 USAGE
   exit 2
@@ -107,12 +107,12 @@ for t in ssh tar ssh-keygen date mktemp; do
 done
 [[ -d ${XDG_RUNTIME_DIR:-} ]] || die "XDG_RUNTIME_DIR must name a tmpfs directory"
 
-# The key must be one sk-ssh-ed25519 public key, as the production admin key is
+# The key must be one ssh-ed25519 public key, as the production admin key is
 # (design "Host", access).
 [[ -f $admin_key_file ]] || die "--admin-key-file: no such file"
 admin_key=$(<"$admin_key_file")
-[[ $admin_key == sk-ssh-ed25519@openssh.com\ * && $admin_key != *$'\n'* ]] ||
-  die "--admin-key-file must hold one sk-ssh-ed25519 public key line"
+[[ $admin_key == ssh-ed25519\ * && $admin_key != *$'\n'* ]] ||
+  die "--admin-key-file must hold one ssh-ed25519 public key line"
 ssh-keygen -l -f "$admin_key_file" >/dev/null 2>&1 ||
   die "--admin-key-file is not a valid public key"
 
@@ -269,7 +269,7 @@ server_private_ip() {
 
 # ---- SSH -----------------------------------------------------------------
 
-# One multiplexed connection per host, so a hardware key asks for a touch once.
+# One multiplexed connection per host.
 # The drill server's host key is the one this run generated and handed to
 # cloud-init, pinned under a fixed alias in a per-run known_hosts file, with
 # strict checking: a server that presents any other key is refused.

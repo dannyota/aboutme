@@ -32,7 +32,7 @@ write_files:
       KbdInteractiveAuthentication no
       PermitRootLogin no
       AllowUsers aboutme-admin
-      PubkeyAcceptedAlgorithms sk-ssh-ed25519@openssh.com
+      PubkeyAcceptedAlgorithms ssh-ed25519
 
 runcmd:
   - systemctl restart ssh
