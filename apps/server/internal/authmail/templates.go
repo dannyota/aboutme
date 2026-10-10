@@ -47,6 +47,16 @@ type template struct {
 	security  bool
 }
 
+// FooterNoteForMode identifies the SMTP relay and reply mailbox from
+// docs/design/vietnam-production.md, "DNS and mail". Other modes have no note.
+func FooterNoteForMode(mode string) string {
+	if mode != "smtp" {
+		return ""
+	}
+	return "Email này được gửi qua máy chủ thư của Bizfly. Nếu bạn trả lời, thư sẽ đến thẳng hộp thư Google Workspace của Danny.\n" +
+		"This email was sent through Bizfly's mail server. If you reply, your email goes straight to Danny's Google Workspace mailbox."
+}
+
 var templates = map[Kind]template{
 	KindVerify: {
 		subject:   "Xác minh email aboutme.vn / Verify your aboutme.vn email",
@@ -128,7 +138,7 @@ func securityTemplate(subject, viAction, enAction string) template {
 
 // buildMessage renders the fixed template for a decrypted payload. An unknown
 // kind yields a message with no subject or body, which SES rejects.
-func buildMessage(kind Kind, p Payload) Message {
+func buildMessage(kind Kind, p Payload, footerNote string) Message {
 	t, ok := templates[kind]
 	if !ok {
 		return Message{Kind: kind, To: p.To}
@@ -144,8 +154,8 @@ func buildMessage(kind Kind, p Payload) Message {
 		Kind:     kind,
 		To:       p.To,
 		Subject:  t.subject,
-		TextBody: renderText(t, link),
-		HTMLBody: renderHTML(t, link),
+		TextBody: renderText(t, link, footerNote),
+		HTMLBody: renderHTML(t, link, footerNote),
 	}
 }
 
@@ -160,7 +170,7 @@ func withSecurityDetails(t template, p Payload) template {
 	return t
 }
 
-func renderText(t template, link string) string {
+func renderText(t template, link, footerNote string) string {
 	var b strings.Builder
 	for i, s := range []section{t.vi, t.en} {
 		if i > 0 {
@@ -172,11 +182,15 @@ func renderText(t template, link string) string {
 		}
 		b.WriteString(s.note + "\n")
 	}
-	b.WriteString("\n-- \n" + footerVI + "\n" + footerEN + "\n")
+	b.WriteString("\n-- \n")
+	if footerNote != "" {
+		b.WriteString(footerNote + "\n")
+	}
+	b.WriteString(footerVI + "\n" + footerEN + "\n")
 	return b.String()
 }
 
-func renderHTML(t template, link string) string {
+func renderHTML(t template, link, footerNote string) string {
 	esc := html.EscapeString
 	var b strings.Builder
 	b.WriteString(`<!DOCTYPE html><html lang="vi"><head><meta charset="utf-8">` +
@@ -211,8 +225,12 @@ func renderHTML(t template, link string) string {
 			`<span lang="vi">` + esc(fallbackVI) + `</span><br><span lang="en">` + esc(fallbackEN) + `</span><br>` +
 			`<a href="` + esc(link) + `" style="color:` + colorInk + `;word-break:break-all;">` + esc(link) + `</a></td></tr>`)
 	}
-	b.WriteString(`<tr><td style="padding:24px 32px 32px;font-size:12px;line-height:18px;color:` + colorMuted + `;">` +
-		`<span lang="vi">` + esc(footerVI) + `</span><br><span lang="en">` + esc(footerEN) + `</span></td></tr>`)
+	b.WriteString(`<tr><td style="padding:24px 32px 32px;font-size:12px;line-height:18px;color:` + colorMuted + `;">`)
+	if footerNote != "" {
+		vi, en, _ := strings.Cut(footerNote, "\n")
+		b.WriteString(`<span lang="vi">` + esc(vi) + `</span><br><span lang="en">` + esc(en) + `</span><br>`)
+	}
+	b.WriteString(`<span lang="vi">` + esc(footerVI) + `</span><br><span lang="en">` + esc(footerEN) + `</span></td></tr>`)
 	b.WriteString(`</table></td></tr></table></body></html>`)
 	return b.String()
 }
