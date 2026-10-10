@@ -17,8 +17,6 @@ shaped this way.
 - OpenTofu: `deploy/aws/prod` with the ignored `backend.hcl` and `prod.tfvars`.
   Every `tofu plan` and `tofu apply` takes `-var-file=prod.tfvars`, because
   state encryption reads the key ARN before a saved plan loads.
-- Cloudflare: the owner's authenticated Cloudflare MCP connection. There is no
-  Cloudflare API token and no Cloudflare provider in OpenTofu.
 
 ```sh
 tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars
@@ -26,27 +24,20 @@ tofu -chdir=deploy/aws/prod plan -var-file=prod.tfvars
 
 A clean environment prints `No changes.`
 
-## Cloudflare DNS
+## Route 53 DNS
 
-Cloudflare is DNS only: it answers queries for the zone and carries no HTTP
-traffic. Change these through the MCP connection or the dashboard, and update
-this table in the same change. A Route 53 zone with the same records is prepared
-for the move in the [DNS runbook](dns.md); change a record in both until then.
+Route 53 is authoritative for `aboutme.vn`. OpenTofu in `deploy/aws/prod` owns
+the zone, records, and DNSSEC signing. Change them through that stack and follow
+the [DNS runbook](dns.md) for DNSSEC operations.
 
-| Setting                    | Value                                                                                                     |
-| -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `aboutme.vn`               | `CNAME` (flattened) to the distribution domain (`tofu output distribution_domain_name`), DNS-only, TTL 60 |
-| `www.aboutme.vn`           | `CNAME` to the distribution domain, DNS-only, TTL 60                                                      |
-| ACM validation `CNAME`s    | DNS-only; see the [CloudFront runbook](cloudfront.md#origin-certificate)                                  |
-| CAA                        | `0 issue "amazon.com"`                                                                                    |
-| DNSSEC                     | On, with the DS record at the `.vn` registry                                                              |
-| Universal SSL              | Off, so Cloudflare adds no CAA record for its own CAs                                                     |
-| Authenticated Origin Pulls | Off; no zone-level certificate                                                                            |
-| Origin CA certificate      | None                                                                                                      |
-
-No record is proxied, so proxy-only settings (SSL/TLS mode, cache rules, HSTS,
-Always Use HTTPS) have no effect, and a proxied record would fail TLS because
-Universal SSL is off.
+- `aboutme.vn` and `www.aboutme.vn`: alias A, AAAA, and HTTPS records to the
+  CloudFront distribution.
+- ACM validation CNAMEs: managed from certificate validation options. See the
+  [CloudFront runbook](cloudfront.md#origin-certificate).
+- CAA: `0 issue "amazon.com"`.
+- DNSSEC: Route 53 signing on, with the DS record at the `.vn` registry.
+- Hosted-zone name servers: the four Route 53 servers delegated by the `.vn`
+  registrar.
 
 Mail records (MX, TXT, DKIM and the SES `bounce` records) belong to the
 [email runbook](email.md); do not change them here.
@@ -139,9 +130,9 @@ immutable cache. A font change must rename the fixed-name `.woff2` under
 `/_nuxt/fonts/`, changing both stylesheet hashes too.
 
 A release is a `v*` tag on `main` with green `ci.yml` (not `workflow_dispatch`).
-`release-images.yml` publishes and Trivy-scans
-`ghcr.io/dannyota/aboutme-{server,web,caddy}` (public), failing on a fixable
-HIGH/CRITICAL finding. `security-scan.yml` also runs `govulncheck`/`npm audit`
+`release-images.yml` publishes public `aboutme-{server,web,caddy}` arm64 and
+amd64 images under one index (`deploy.sh` pins arm64); a fixable HIGH/CRITICAL
+Trivy finding fails it. `security-scan.yml` runs `govulncheck`/`npm audit`
 weekly on `main`/latest images; cron editor alone is alerted; 60d idle drops it.
 
 Before the first maintenance deploy, apply reviewed OpenTofu. It creates

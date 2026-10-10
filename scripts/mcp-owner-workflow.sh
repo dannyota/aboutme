@@ -26,18 +26,13 @@ readonly IMAGE_RE='^sha256:[0-9a-f]{64}$'
 readonly IMAGE_REPOSITORY=dannyota/aboutme
 # The runner prints at most one closed failure word (reason.go) on stderr, only
 # while it has written no evidence; this list must match them all.
-RUNNER_REASONS=' arguments control-root run-root entry-set artifact-mode tls network discovery'
-RUNNER_REASONS+=' oauth registration metadata issuer state-mismatch token-exchange authorize-shape'
-RUNNER_REASONS+=' authorize-redirect authorize-scope authorize-resource authorize-challenge callback'
-RUNNER_REASONS+=' callback-bind second-factor-required reauthorization browser-handoff grant'
-RUNNER_REASONS+=' source-selection source-changed candidate create-intent create-rejected mutation-cap'
-RUNNER_REASONS+=' tool-output photo recovery revocation evidence workflow-state contract local-proof internal '
+RUNNER_REASONS=' arguments control-root run-root entry-set artifact-mode tls network discovery oauth registration metadata issuer state-mismatch token-exchange authorize-shape'
+RUNNER_REASONS+=' authorize-redirect authorize-scope authorize-resource authorize-challenge callback callback-bind second-factor-required reauthorization browser-handoff grant'
+RUNNER_REASONS+=' source-selection source-changed candidate create-intent create-rejected mutation-cap tool-output photo recovery revocation evidence workflow-state contract local-proof internal '
 readonly RUNNER_REASONS
 readonly -a IMAGE_SOURCES=(
-  deploy/dev-https-browser/Dockerfile
-  deploy/dev-https-browser/package.json
-  deploy/dev-https-browser/package-lock.json
-  deploy/dev-https-browser/run.sh
+  deploy/dev-https-browser/Dockerfile deploy/dev-https-browser/package.json
+  deploy/dev-https-browser/package-lock.json deploy/dev-https-browser/run.sh
   deploy/dev-https-browser/verify-evidence.mjs
 )
 
@@ -213,36 +208,41 @@ release_identity() {
   RELEASE_TAG=$tags
 }
 
-# registry_digest sets the variable named $2 to the immutable digest the
-# public registry holds for the release tag, with the deploy script's lookup.
+# Sets $2 to the AWS linux/arm64 digest, or an older single manifest's digest.
 registry_digest() {
-  local name=$1 token digest=
-  token=$(curl -fsS --proto '=https' --max-time 20 \
-    "https://ghcr.io/token?scope=repository:$IMAGE_REPOSITORY-$name:pull&service=ghcr.io" |
+  local name=$1 token media_type digest= response_headers response_body header_digests=()
+  token=$(curl -fsS --proto '=https' --max-time 20 "https://ghcr.io/token?scope=repository:$IMAGE_REPOSITORY-$name:pull&service=ghcr.io" |
     jq -er '.token | select(type == "string" and length > 0)') || return 1
   REGISTRY_HEADERS=$(mktemp "$STATE/.registry-headers.XXXXXX")
-  printf 'Authorization: Bearer %s\nAccept: %s\n' "$token" \
-    'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json' \
-    >"$REGISTRY_HEADERS"
-  digest=$(curl -fsSI --proto '=https' --max-time 20 -H "@$REGISTRY_HEADERS" \
-    "https://ghcr.io/v2/$IMAGE_REPOSITORY-$name/manifests/$RELEASE_TAG" |
-    tr -d '\r' | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }') || digest=
-  rm -f -- "$REGISTRY_HEADERS"
-  REGISTRY_HEADERS=
+  printf 'Authorization: Bearer %s\nAccept: %s\n' "$token" 'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' >"$REGISTRY_HEADERS"
+  REGISTRY_RESPONSE=$(mktemp -d "$STATE/.registry-response.XXXXXX")
+  response_headers=$REGISTRY_RESPONSE/headers response_body=$REGISTRY_RESPONSE/manifest.json
+  curl -fsS --proto '=https' --max-time 20 -H "@$REGISTRY_HEADERS" -D "$response_headers" -o "$response_body" \
+    "https://ghcr.io/v2/$IMAGE_REPOSITORY-$name/manifests/$RELEASE_TAG" || return 1
+  media_type=$(jq -er '.mediaType | select(type == "string")' "$response_body" 2>/dev/null) || return 1
+  case $media_type in
+  application/vnd.oci.image.index.v1+json | application/vnd.docker.distribution.manifest.list.v2+json)
+    digest=$(jq -er 'def digest: type == "string" and test("^sha256:[0-9a-f]{64}$");
+      if (.schemaVersion == 2 and (.manifests | type) == "array" and (.manifests | length) > 0 and all(.manifests[]; type == "object" and (.digest | digest) and ((.platform | type) == "object"))) then [.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest] else error("malformed image index") end | if (length == 1) then .[0] else error("expected one linux/arm64 manifest") end' "$response_body" 2>/dev/null) || return 1
+    ;;
+  application/vnd.oci.image.manifest.v1+json | application/vnd.docker.distribution.manifest.v2+json)
+    jq -e '.schemaVersion == 2 and (.config | type) == "object" and (.layers | type) == "array"' "$response_body" >/dev/null 2>&1 || return 1
+    mapfile -t header_digests < <(tr -d '\r' <"$response_headers" | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
+    [ "${#header_digests[@]}" -eq 1 ] || return 1; digest=${header_digests[0]}
+    ;;
+  *) return 1 ;;
+  esac
+  rm -f -- "$REGISTRY_HEADERS" && rm -rf -- "$REGISTRY_RESPONSE"
+  REGISTRY_HEADERS= REGISTRY_RESPONSE=
   [[ $digest =~ $IMAGE_RE ]] || return 1
   printf -v "$2" '%s' "$digest"
 }
-
-# release_images derives the app (server) and web digests of RELEASE_TAG from
-# the registry; no caller input sets them. It cannot prove what production
-# runs: the manager checks the deployed digests before the production run.
+# Caller input cannot set these registry-derived release image digests.
 release_images() {
   APP_IMAGE= WEB_IMAGE=
   registry_digest server APP_IMAGE && registry_digest web WEB_IMAGE
 }
-
-# validate_attestation rejects a missing, malformed, time-reversed, stale, or
-# mismatched proof before production resolves the owner credential path.
+# Rejects an invalid proof before production resolves the owner credential.
 validate_attestation() {
   local path=$PRODUCTION_CONTROL/$ATTESTATION_NAME reason
   secure_dir "$PRODUCTION_CONTROL" || fail 'attestation rejected: missing'
@@ -636,7 +636,7 @@ cleanup() {
     status=1
   fi
   for path in "${STAGING-}" "${BROWSER_EVIDENCE-}" "${SCRATCH-}" "${BROWSER_LOG-}" "${RUNNER_LOG-}" \
-    "${REGISTRY_HEADERS-}"; do
+    "${REGISTRY_HEADERS-}" "${REGISTRY_RESPONSE-}"; do
     [ -z "$path" ] || rm -rf -- "$path"
   done
   if [ -n "${RUN-}" ] && [ -d "$RUN" ]; then
@@ -661,7 +661,7 @@ main() {
   UID_NOW=$(id -u)
   [ "$UID_NOW" -ne 0 ] || fail 'the workflow must not run as root'
   RUNNER_PID= BROWSER_PID= FIXTURE_SEEDED=0 STAGING= BROWSER_EVIDENCE= BROWSER_LOG= RUN= SCRATCH=
-  REGISTRY_HEADERS= CONTAINER_NAME= RUNNER_LOG=
+  REGISTRY_HEADERS= REGISTRY_RESPONSE= CONTAINER_NAME= RUNNER_LOG=
   trap cleanup EXIT
   stage preflight
   resolve_paths

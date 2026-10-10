@@ -185,15 +185,6 @@ trap 'on_signal HUP 129' HUP
 trap 'on_signal INT 130' INT
 trap 'on_signal TERM 143' TERM
 
-digest() { # image name -> sha256:...
-  local token
-  token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo-$1:pull&service=ghcr.io" | jq -r .token)
-  curl -fsSI -H "Authorization: Bearer $token" \
-    -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json' \
-    "https://ghcr.io/v2/$repo-$1/manifests/$tag" |
-    tr -d '\r' | awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }'
-}
-
 current_def() { describe_task_def "aboutme-prod-$1"; }
 # Unlike current_def, takes an exact family:revision or full ARN rather than
 # assuming the family's latest registration; fence_read uses it to prove what
