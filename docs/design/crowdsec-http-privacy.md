@@ -94,13 +94,15 @@ can share one address (mobile carrier NAT, public Wi-Fi), so an HTTP ban starts
 at 15 minutes and escalates to one hour, then four, only when the same address
 offends again while its earlier decisions are still in the database. The status
 scenario counts only scanner signals (400, 404, 405, and unknown routes), and
-the rate scenario leaves out static assets and health checks. The HTTP profile
-precedes the default catch-all and stops profile evaluation.
-`db_config.flush.max_age` is 23 hours, which shortens all alert history to 23
-hours. CrowdSec 1.8.1 runs its alert flush every minute, but that setting is
-only one control: its code keeps an old alert while the alert has an active
-decision. Events and metadata follow their alert by cascade. The decision and
-scenario-window limits make every child event eligible before 24 hours.
+the rate scenario leaves out static assets and health checks, and a separate
+static-flood scenario bans only far beyond page-load bursts (3,000 requests,
+then 50 a second). The HTTP profile precedes the default catch-all and stops
+profile evaluation. `db_config.flush.max_age` is 23 hours, which shortens all
+alert history to 23 hours. CrowdSec 1.8.1 runs its alert flush every minute, but
+that setting is only one control: its code keeps an old alert while the alert
+has an active decision. Events and metadata follow their alert by cascade. The
+decision and scenario-window limits make every child event eligible before 24
+hours.
 
 A host retention unit runs at startup and every five minutes. Startup waits for
 a valid synchronized clock and cleans stopped SQLite before CrowdSec, either

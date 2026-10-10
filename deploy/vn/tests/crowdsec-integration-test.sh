@@ -37,6 +37,8 @@ install -m 0644 "$edge/scenarios/aboutme-http-rate.yaml" \
   /etc/crowdsec/scenarios/aboutme-http-rate.yaml
 install -m 0644 "$edge/scenarios/aboutme-http-status.yaml" \
   /etc/crowdsec/scenarios/aboutme-http-status.yaml
+install -m 0644 "$edge/scenarios/aboutme-http-static-flood.yaml" \
+  /etc/crowdsec/scenarios/aboutme-http-static-flood.yaml
 [[ $(find /etc/crowdsec/acquis.d -maxdepth 1 -type f -printf '%f\n' | sort) == \
   $'aboutme-http.yaml\nsshd.yaml' ]] || { echo "unexpected CrowdSec acquisition is enabled" >&2; exit 1; }
 "$repo_root/deploy/vn/host/crowdsec-window-check.sh" >/dev/null
@@ -101,6 +103,11 @@ wait_for_decision "$mixed_ip" >/dev/null || {
   echo "mixed failure scanning created no decision" >&2
   exit 1
 }
+
+# A static flood far beyond page-load bursts creates a decision.
+flood_ip=192.0.2.51
+append_records "$flood_ip" 200 4000 static GET
+wait_for_decision "$flood_ip" >/dev/null || { echo "static flood created no decision" >&2; exit 1; }
 
 # A shared address sends wrong passwords, throttled requests, and the
 # bouncer's 403s; none of them may create a ban.
