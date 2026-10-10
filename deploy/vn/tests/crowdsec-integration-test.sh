@@ -88,31 +88,33 @@ if cscli decisions list -o json | \
 fi
 
 unknown_ip=192.0.2.39
-append_records "$unknown_ip" 200 11 unknown
+append_records "$unknown_ip" 200 21 unknown
 wait_for_decision "$unknown_ip" >/dev/null || {
   echo "unknown route scanning created no decision" >&2
   exit 1
 }
 
 mixed_ip=192.0.2.38
-append_records "$mixed_ip" 400 4 static GET
-append_records "$mixed_ip" 401 4 static POST
-append_records "$mixed_ip" 405 3 static HEAD
+append_records "$mixed_ip" 400 10 static GET
+append_records "$mixed_ip" 405 11 static HEAD
 wait_for_decision "$mixed_ip" >/dev/null || {
   echo "mixed failure scanning created no decision" >&2
   exit 1
 }
 
-# The bouncer answers a banned address with 403; those must not extend a ban.
-banned_ip=192.0.2.42
-append_records "$banned_ip" 403 15 static GET
+# A shared address sends wrong passwords, throttled requests, and the
+# bouncer's 403s; none of them may create a ban.
+shared_ip=192.0.2.50
+append_records "$shared_ip" 401 15 auth POST
+append_records "$shared_ip" 403 15 static GET
+append_records "$shared_ip" 429 15 api POST
 
 attack_ip=192.0.2.41
-append_records "$attack_ip" 404 11 static
+append_records "$attack_ip" 404 21 static
 wait_for_decision "$attack_ip" || { echo "status scenario created no decision" >&2; exit 1; }
 denied=$(sqlite3 /var/lib/crowdsec/data/crowdsec.db \
-  "SELECT count(*) FROM decisions WHERE value = '$banned_ip';")
-[[ $denied == 0 ]] || { echo "bouncer 403s created a decision" >&2; exit 1; }
+  "SELECT count(*) FROM decisions WHERE value = '$shared_ip';")
+[[ $denied == 0 ]] || { echo "401, 403, or 429 responses created a decision" >&2; exit 1; }
 db=/var/lib/crowdsec/data/crowdsec.db
 until=$(sqlite3 "$db" \
   "SELECT until FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status' ORDER BY id DESC LIMIT 1;")
@@ -120,8 +122,22 @@ until=$(sqlite3 "$db" \
 now_epoch=$(date +%s)
 until_epoch=$(date -d "$until" +%s)
 remaining=$((until_epoch - now_epoch))
-((remaining >= 78600 && remaining <= 79260)) || {
-  echo "HTTP decision duration is not 22 hours" >&2
+((remaining >= 780 && remaining <= 900)) || {
+  echo "a first HTTP decision does not last 15 minutes" >&2
+  exit 1
+}
+# A second offense from the same address escalates to one hour. It comes
+# from another route class: the first bucket is blackholed for five minutes.
+append_records "$attack_ip" 404 21 public
+for _ in $(seq 60); do
+  [[ $(sqlite3 "$db" "SELECT count(*) FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status';") -ge 2 ]] && break
+  sleep 1
+done
+until=$(sqlite3 "$db" \
+  "SELECT until FROM decisions WHERE value = '$attack_ip' AND scenario = 'aboutme/http-status' ORDER BY id DESC LIMIT 1;")
+remaining=$(( $(date -d "$until" +%s) - $(date +%s) ))
+((remaining >= 3480 && remaining <= 3600)) || {
+  echo "a second HTTP decision does not last one hour" >&2
   exit 1
 }
 
@@ -146,20 +162,20 @@ fi
 # record must still reach the parser after the same operation.
 : >"$feed"
 second_ip=192.0.2.42
-append_records "$second_ip" 404 11 static
+append_records "$second_ip" 404 21 static
 wait_for_decision "$second_ip" >/dev/null || {
   echo "parser did not continue after active-feed truncation" >&2
   exit 1
 }
 
 old_child_ip=192.0.2.44
-append_records "$old_child_ip" 404 11 static
+append_records "$old_child_ip" 404 21 static
 wait_for_decision "$old_child_ip" >/dev/null || {
   echo "old-child fixture created no decision" >&2
   exit 1
 }
 fresh_ip=192.0.2.45
-append_records "$fresh_ip" 404 11 static
+append_records "$fresh_ip" 404 21 static
 wait_for_decision "$fresh_ip" >/dev/null || {
   echo "fresh fixture created no decision" >&2
   exit 1

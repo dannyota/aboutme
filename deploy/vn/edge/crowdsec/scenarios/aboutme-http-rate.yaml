@@ -2,10 +2,12 @@ type: leaky
 format: 2.0
 name: aboutme/http-rate
 description: Detect sustained HTTP request floods
-filter: evt.Meta.log_type == 'aboutme-http'
+# Static assets and health checks are cheap and arrive in bursts with every
+# page load; counting them would flag an address many customers share.
+filter: evt.Meta.log_type == 'aboutme-http' && evt.Meta.route_class not in ['static', 'system']
 groupby: evt.Meta.source_ip
-capacity: 120
-leakspeed: 1s
+capacity: 300
+leakspeed: 250ms
 blackhole: 5m
 labels:
   remediation: true

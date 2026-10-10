@@ -2,12 +2,13 @@ type: leaky
 format: 2.0
 name: aboutme/http-status
 description: Detect repeated HTTP denial and unknown-route probes
-# 403 is left out: the Caddy bouncer answers a banned address with 403, and
-# counting those would turn every short ban, such as the deploy smoke ban,
-# into a 22-hour one for anyone still browsing from that address.
-filter: evt.Meta.log_type == 'aboutme-http' && (evt.Meta.http_status in ['400', '401', '404', '405', '429'] || evt.Meta.route_class == 'unknown')
+# Only scanner signals count. Many customers can share one address (mobile
+# carrier NAT, public Wi-Fi), so a mistyped password (401), the app's own
+# throttle (429), and the bouncer's answer to a banned address (403) are left
+# out: counting them would ban everyone behind that address.
+filter: evt.Meta.log_type == 'aboutme-http' && (evt.Meta.http_status in ['400', '404', '405'] || evt.Meta.route_class == 'unknown')
 groupby: evt.Meta.source_ip + '|' + evt.Meta.route_class
-capacity: 10
+capacity: 20
 leakspeed: 10s
 blackhole: 5m
 labels:
