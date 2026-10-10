@@ -1,6 +1,6 @@
 name = "qa"
 description = "Tests aboutme: scripted headless Playwright (web-e2e, dev-https proofs), pixel baseline regeneration, dogfooding as a real user, and production release checks. Use to verify a change or a release."
-model = "gpt-5.6-terra"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "medium"
 sandbox_mode = "workspace-write"
 developer_instructions = """
