@@ -50,6 +50,9 @@ google_workspace = {
   dkim_txt            = ""
 }
 
+# Bizfly Email Transaction DKIM, the whole dkim._domainkey TXT value.
+bizfly_dkim_txt = ""
+
 # The deployment observer (docs/design/deployment-transparency/README.md).
 # Empty until deploy/aws/scripts/observer.sh <tag> has copied the image into
 # ECR; then its digest, which creates the function, schedule, and alarm.

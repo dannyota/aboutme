@@ -8,36 +8,36 @@ design and the migration order. Until cutover, the
 holds the legal reason. A data protection impact assessment (DPIA) is still
 required and is not covered here.
 
-Status: proposed. **Owner approval** marks a choice the owner must make before
-the work that depends on it starts. **Unconfirmed** marks a provider fact from
-public docs or research; devops verifies each by testing on the account before
-cutover ([facts](#provider-facts-to-confirm)).
+Status: proposed. **Unconfirmed** marks a provider fact from public docs or
+research; devops verifies each by testing on the account before cutover
+([facts](#provider-facts-to-confirm)).
 
 ## Target architecture
 
-The request path is browser or MCP client, vCDN (PoPs in Vietnam), the host's
-floating IP, Caddy on 443, then Go on `127.0.0.1:8080` or Nuxt on
+The request path is browser or MCP client, the host's floating IP, Caddy on 443
+(TLS, Coraza, CrowdSec bouncer), then Go on `127.0.0.1:8080` or Nuxt on
 `127.0.0.1:3000`. Go reaches PostgreSQL on the same host by Unix socket, media
 in vStorage, and Bizfly Email Transaction by SMTP. pgBackRest ships backups and
-WAL to a second vStorage bucket. Agents send logs and metrics to vMonitor.
+WAL to a second vStorage bucket. Logs stay in journald on the host; a host timer
+mails alarms through Bizfly.
 
-| Concern            | Today (AWS, CloudFront)                     | Vietnam production                                          |
-| ------------------ | ------------------------------------------- | ----------------------------------------------------------- |
-| Edge, TLS, cache   | CloudFront, public origin cert, origin mTLS | vCDN Web Accelerator; origin allowlist plus secret header   |
-| DNS                | Route 53 with DNSSEC, alias to CloudFront   | P.A Vietnam DNS Pro with DNSSEC                             |
-| Compute            | EC2 `t4g.small`, Bottlerocket ECS           | One amd64 vServer, Podman containers under systemd          |
-| Database           | RDS PostgreSQL 18, 30-day PITR              | PostgreSQL 18 on the vServer, pgBackRest to vStorage        |
-| Media              | Private S3, task role                       | Private vStorage bucket, static key for one service account |
-| Secrets            | SSM Parameter Store                         | Root-only host files, age-encrypted copy in `aboutme-infra` |
-| Release fence      | DynamoDB item                               | Root-owned host file plus a start-time check                |
-| Jobs               | EventBridge Scheduler, ECS tasks            | systemd timers running one-shot containers                  |
-| Logs and alarms    | CloudWatch, SNS, Route 53 health check      | vMonitor logs, metrics, alarms, synthetic HTTP checks       |
-| Transactional mail | SES `ap-southeast-1`                        | Bizfly Email Transaction over SMTP                          |
-| Support mailbox    | Google Workspace                            | Bizfly Business Email                                       |
-| Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS       | OpenTofu `deploy/vn/`, vStorage state, passphrase           |
+| Concern            | Today (AWS, CloudFront)                     | Vietnam production                                               |
+| ------------------ | ------------------------------------------- | ---------------------------------------------------------------- |
+| Edge, TLS, cache   | CloudFront, AWS WAF, origin mTLS, ACM certs | Caddy on the host: TLS, Coraza WAF, CrowdSec; no edge service    |
+| DNS                | Route 53 with DNSSEC, alias to CloudFront   | Route 53 with DNSSEC, address records to the host, unchanged     |
+| Compute            | EC2 `t4g.small`, Bottlerocket ECS           | One amd64 vServer, Podman containers under systemd               |
+| Database           | RDS PostgreSQL 18, 30-day PITR              | PostgreSQL 18 on the vServer, pgBackRest to vStorage             |
+| Media              | Private S3, task role                       | Private vStorage bucket, static key for one service account      |
+| Secrets            | SSM Parameter Store                         | Root-only host files, age-encrypted copy in `aboutme-infra`      |
+| Release fence      | DynamoDB item                               | Root-owned host file plus a start-time check                     |
+| Jobs               | EventBridge Scheduler, ECS tasks            | systemd timers running one-shot containers                       |
+| Logs and alarms    | CloudWatch, SNS, Route 53 health check      | journald on the host, alert timer by mail, Route 53 health check |
+| Transactional mail | SES `ap-southeast-1`                        | Bizfly Email Transaction over SMTP                               |
+| Support mailbox    | Google Workspace                            | Google Workspace, unchanged                                      |
+| Infrastructure     | OpenTofu `deploy/aws/`, S3 state, KMS       | OpenTofu `deploy/vn/` plus `vngcloud` CLI, vStorage state        |
 
-All GreenNode resources live in one region. **Owner approval:** HCM03 (Ho Chi
-Minh City), where vServer and vStorage both have current docs.
+Compute and network run in HCM03 and vStorage in HCM04, both Ho Chi Minh City
+(owner, 2026-10-10); vStorage exists only in HCM04 and HAN02.
 
 Unchanged: one serving replica ([ADR 0026](../adr/0026-replica-scaling.md)), the
 migrator and roles ([ADR 0005](../adr/0005-database-migrations.md)), the public
@@ -48,84 +48,78 @@ personal data.
 
 ## Edge
 
-vCDN Web Accelerator fronts the apex and `www`. Following ADR 0010, it caches
-only hashed `/_nuxt/*` assets; every other path passes through with no edge
-storage. **Unconfirmed:** Web Accelerator caches HTML and API by default, so a
-rule must bypass everything else, and vCDN must neither cache nor replace 5xx
-responses (the maintenance page is a 503).
+Nothing stands in front of the host (owner, 2026-10-10). The apex and `www`
+resolve to the floating IP; Caddy terminates TLS with Let's Encrypt certificates
+by ACME HTTP-01, as `aboutme-caddy` does today, and serves hashed `/_nuxt/*`
+assets with Nuxt's immutable cache headers. The security group admits TCP 80 and
+443 from anywhere and TCP 22 only from the owner's allowlist. Caddy takes the
+client address from the socket, strips every forwarding header, and sends one
+`X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront listener with
+its edge key and `CloudFront-Viewer-Address` stays for the AWS test environment
+under the `EDGES` list, which gains `direct`.
 
-vCDN has no equivalent of CloudFront origin mTLS, so two layers lock the origin:
+Three host-level controls replace AWS WAF:
 
-1. The security group admits TCP 443 only from vCDN's published origin ranges
-   and TCP 22 only from the owner's allowlist. `deploy.sh` stops when vCDN's
-   live range list differs from the deployed one. **Unconfirmed:** vCDN
-   publishes its ranges and announces changes.
-2. vCDN adds the request header `Aboutme-Edge-Key` with a 32-byte random value.
-   Caddy answers 403 unless it carries the current or previous value, then
-   strips it before proxying. Two values allow rotation without downtime.
-   **Unconfirmed:** vCDN can add a fixed origin request header.
+- Go's rate limits stay the application control.
+- CrowdSec (the security engine, its Caddy bouncer, and the nftables bouncer for
+  SSH) reads Caddy and sshd logs, bans addresses that match the HTTP flood,
+  scanning, and brute-force scenarios, and answers 403 to banned addresses.
+  Community blocklist sharing stays off until the DPIA covers it (owner,
+  2026-10-10), because a shared signal sends the attacker's address abroad.
+- Coraza in Caddy (`coraza-caddy` with the OWASP Core Rule Set v4, built into
+  the Caddy image with `xcaddy`) runs in detection-only mode for two weeks, then
+  blocks, with exclusions for the resume write paths whose rich-text bodies trip
+  the rule set. Its audit log carries no request bodies.
 
-Viewer TLS terminates at vCDN. **Owner approval:** a vCDN-managed certificate
-for the apex and `www` with automatic renewal if offered, otherwise a Let's
-Encrypt certificate that devops renews and uploads. vCDN reaches the origin over
-HTTPS with `Host: aboutme.vn`. If vCDN verifies the origin certificate
-(**Unconfirmed**), Caddy gets a public one by ACME HTTP-01, with vCDN passing
-`/.well-known/acme-challenge/*` uncached. If not, a private CA certificate is
-enough, and the two layers above carry origin trust.
-
-Caddy trusts the vCDN client-IP header only from vCDN ranges
-(`trusted_proxies_strict`), strips every other forwarding header, and sends one
-`X-Real-IP` to Go. Go keeps trusting only loopback and never parses
-`X-Forwarded-For`. The vCDN listener ignores `CloudFront-Viewer-Address`. If
-vCDN sends only `X-Forwarded-For`, Caddy takes the rightmost address outside its
-trusted ranges. **Unconfirmed:** the header name, and whether vCDN overwrites a
-viewer-supplied value.
-
-**Unconfirmed, required before cutover:** vCDN streams responses unbuffered; its
-idle timeout is at least 60 seconds, above the 25-second SSE heartbeat; it
-passes `Authorization`, cookies, query strings, `ETag`, `If-None-Match`, and
-every method unchanged; and it accepts request bodies of at least 2,162,688
-bytes (the photo limit in [budgets](budgets.md)). If buffering or the timeout
-cannot be changed, the heartbeat changes with a budget update.
-
-The free tier has L3 and L4 DDoS protection but no L7 protection. Go's rate
-limits stay the application control. **Owner approval:** launch without vWAF and
-add it if abuse appears.
+None of these absorbs an HTTP flood larger than the host. GreenNode vWAF is the
+escalation: an application in the root portal with the floating IP as upstream,
+live after `www` becomes a CNAME to `<code>.waf.greennode.vn` and the apex an A
+record to vWAF's address, since Route 53 aliases only AWS targets. The runbook
+holds the steps. **Unconfirmed:** network-level DDoS protection for a vServer
+floating IP (Q1), and IPv6 on the floating IP (Q2).
 
 ## DNS and mail
 
-P.A Vietnam, the registrar, hosts the `aboutme.vn` zone on DNS Pro with DNSSEC,
-with the apex pointing at vCDN. GreenNode vDNS is private DNS inside a VPC and
-cannot host the public zone. **Unconfirmed, blocker for the NS move:** DNS Pro
-supports an apex ALIAS or flattening. If not, the apex uses A records to stable
-vCDN addresses, if vCDN has them. The [cutover](#5-cutover) switches records at
-Route 53 first and moves NS and DS later, so it does not wait on this.
+Route 53 keeps the `aboutme.vn` zone, signed, under the existing OpenTofu
+module. The apex and `www` become A records (and AAAA if the floating IP has
+IPv6) to the host: TTL 60 through cutover, then 300. The CloudFront aliases, the
+ACM validation records go after cutover; the health check stays as the external
+app-down check; it resolves `aboutme.vn`, so it follows the DNS switch to the
+host. An authoritative name server answers resolvers and sees no person, so
+Route 53 stays outside the data-residency boundary at about USD 2 a month.
 
-- MX: Bizfly Business Email, after Google Workspace mail has moved.
-- Root SPF: the two Bizfly includes only; `~all` until DMARC reports are clean,
-  then `-all`.
-- DKIM: one selector per Bizfly service, 2048-bit where offered.
-- DMARC: `p=none` with reports to the support mailbox for two weeks, then
-  `p=quarantine`.
-- SES MAIL FROM and SES DKIM records go once AWS stops sending as `aboutme.vn`.
+The Google Workspace mailbox stays: a person who writes to support sends their
+own mail. MX, root SPF, Google DKIM, and DMARC are unchanged. Bizfly Email
+Transaction gets its own DKIM selector and, if offered, a return-path subdomain
+like SES's `bounce.aboutme.vn`; otherwise root SPF gains the Bizfly include. SES
+records go once AWS stops sending as `aboutme.vn`.
 
-Go gets an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS on 465 or STARTTLS
-on 587 with certificate verification, `PLAIN` authentication, one message per
-connection. As with SES, a 2xx after `DATA` is accepted, a 5xx is permanent, and
-4xx, timeouts, and transport errors are temporary. Logs carry the reply code
-only. **Owner approval:** SMTP rather than the Bizfly HTTP API, because SMTP is
-a standard contract that a local stub can test. **Unconfirmed:** Bizfly's bounce
-and complaint reporting, suppression list, and sending limits.
+Go gets an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS or STARTTLS on the
+configured port (Bizfly: `smtp.bizflycloud.vn`, 465 or 587) with certificate
+verification, `PLAIN` authentication, one message per connection. As with SES, a
+2xx after `DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and
+transport errors are temporary. Logs carry the reply code only. Go uses SMTP
+rather than the Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard
+contract that a local stub can test. **Unconfirmed:** Bizfly's bounce and
+complaint reporting, suppression list, and sending limits.
 
 ## Host
 
-One amd64 vServer runs Ubuntu 24.04 LTS (**Owner approval**). **Owner
-approval:** 2 vCPU and 4 GiB, since PostgreSQL now shares the host: 512 MiB for
-Go and Chromium (unchanged cap), about 300 MiB for Nuxt and Caddy, 1 GiB for
-PostgreSQL, and the rest for the OS and page cache. OpenTofu owns the server,
-the root disk, an encrypted SSD data volume for PostgreSQL, and the floating IP.
-Release images add `linux/amd64` beside `linux/arm64`, because GreenNode offers
-no ARM vServer (**Unconfirmed**).
+One amd64 vServer runs Ubuntu 24.04 LTS with 2 vCPU and 4 GiB (owner,
+2026-10-10), since PostgreSQL now shares the host: 512 MiB for Go and Chromium
+(unchanged cap), about 300 MiB for Nuxt and Caddy, 1 GiB for PostgreSQL, and the
+rest for the OS and page cache. OpenTofu owns the server, a 20 GB root disk, a
+20 GB encrypted SSD data volume (aes-xts-plain64 256, set at create time; owner,
+2026-10-10), and the floating IP. The root disk is unencrypted and holds only
+the OS, public images, and capped logs; secrets, PostgreSQL, and CrowdSec state
+live on the data volume. Root at 20 GB, the minimum, fits the worst case of
+about 15 GB: Ubuntu 4 GB, three server images of 2.6 GB during a deploy, web and
+Caddy images, 1 GB of Podman overhead, journald capped at 500 MB, and zram
+instead of a swap file. The data volume starts at 20 GB because RDS holds under
+3 GiB today. Either volume grows online when its alarm fires at 70%:
+`vngcloud volume resize-volume`, then `growpart` and `resize2fs`. Release images
+add `linux/amd64` beside `linux/arm64`, because GreenNode offers no ARM vServer
+(**Unconfirmed**).
 
 Rootful Podman runs every container from systemd Quadlet units:
 
@@ -157,15 +151,16 @@ The trust boundaries match today's host:
   namespaces it needs.
 
 Access is key-only SSH from the allowlist as a non-root admin with `sudo`, and
-the GreenNode web console for break-glass. **Owner approval:** a hardware-backed
-key (`ed25519-sk`). Security updates install daily; a monthly maintenance window
-reboots.
+the GreenNode web console for break-glass. The key is hardware-backed
+(`ed25519-sk`; owner, 2026-10-10). Security updates install daily; a monthly
+maintenance window reboots.
 
 ## Secrets and host identity
 
 There is no instance role or parameter store. Each secret is a root-owned 0400
-file under `/etc/aboutme/secrets/`, loaded as a Podman secret and given only to
-the units that need it, with the split in the
+file under `/etc/aboutme/secrets/`, a directory on the encrypted data volume,
+loaded as a Podman secret and given only to the units that need it, with the
+split in the
 [single-host design](single-host-production.md#secrets-and-identity). New
 values:
 
@@ -174,7 +169,7 @@ values:
 | vStorage media key (service account)    | `aboutme-server`, media jobs |
 | vStorage backup key and pgBackRest pass | pgBackRest on the host       |
 | Bizfly SMTP user and password           | `aboutme-server`             |
-| Edge secret, current and previous       | `aboutme-caddy`              |
+| CrowdSec bouncer API key                | `aboutme-caddy`              |
 
 `deploy/vn/scripts/secrets.sh` runs over SSH. It generates each value on the
 host with `openssl`, never overwrites or prints one, and writes a copy encrypted
@@ -184,8 +179,8 @@ password-rate key) move once at cutover through an owner-run pipe that prints
 nothing, and rotate when AWS real data is deleted.
 
 Each vStorage service account has a policy for one bucket: media (get, put,
-list, delete), backups, or state. The state key, the OpenTofu service account,
-and the Bizfly API key stay on the laptop.
+list, delete), backups, or state. The state key, the OpenTofu provider's
+credentials, and the Bizfly API key stay on the laptop.
 
 ## PostgreSQL
 
@@ -208,8 +203,8 @@ backup weekly, a differential daily, and `pgbackrest verify` weekly, keeps 30
 days by time, and encrypts every file client-side (`aes-256-cbc`) before upload.
 An alarm fires on an archive failure or a newest backup older than 26 hours.
 **Unconfirmed:** vStorage works as a pgBackRest S3 repository with path-style
-addressing. **Owner approval:** a second repository in the Hanoi region against
-a regional failure; it stays in Vietnam and costs little.
+addressing. One repository in HCM04 (owner, 2026-10-10): the only other vStorage
+region is Hanoi, so a regional failure means waiting for HCM04 to return.
 
 Before cutover and then every quarter, devops restores the latest backup and a
 point-in-time target from the previous day to a temporary vServer. It checks the
@@ -227,9 +222,9 @@ runs the server or web image has an `ExecStartPre` that refuses a
 `DEPLOY_RELEASE_NUMBER` below the file's minimum, so a manual `systemctl start`
 cannot start an old image either. A rebuilt host starts at the highest floor in
 the fence design (4007). Root on the host is a privileged bypass, as the
-AWS-login principal is today. **Owner approval:** a host file rather than a
-PostgreSQL table, because a point-in-time restore would roll a table back and a
-start-time check should not need the database.
+AWS-login principal is today. The fence is a host file rather than a PostgreSQL
+table (owner, 2026-10-10), because a point-in-time restore would roll a table
+back and a start-time check should not need the database.
 
 ## Scheduled jobs
 
@@ -243,30 +238,36 @@ environment.
 
 ## Logs, metrics, and alarms
 
-The vMonitor log agent ships journald output to a log project in the same
-region, and the metric agent reports host metrics. Caddy logs still drop client
-addresses and request headers. Alarms email the support mailbox.
-**Unconfirmed:** 180-day log retention, and log and metric storage in Vietnam.
+There is no monitoring service (owner, 2026-10-10: vMonitor removed for cost).
+journald on the data volume keeps 30 days, capped at 2 GB (`MaxRetentionSec`,
+`SystemMaxUse`); Caddy logs still drop client addresses and request headers, so
+a host loss loses only operational logs, never data. `aboutme-watch.timer` runs
+`watch.sh` every five minutes and `OnFailure=` on every unit runs `alert.sh`;
+both mail the support mailbox through Bizfly SMTP with `msmtp`, one message per
+condition per day, from the sender the app uses. The Route 53 health check on
+`/readyz` stays as the only check from outside the host; it probes a public
+endpoint and carries no personal data.
 
-| Signal   | Mechanism                                                        |
-| -------- | ---------------------------------------------------------------- |
-| App down | vMonitor synthetic HTTPS check on `/readyz` through vCDN         |
-| Units    | Log alarm on a unit failure or restart loop                      |
-| Host     | CPU, memory, root and data volume disk                           |
-| Database | Archive failure, backup age, connections, data volume free space |
-| Jobs     | Log alarm on the `OnFailure=` marker                             |
-| TOTP     | Log alarm on `totp_unavailable`                                  |
-| Mail     | Bizfly bounce and complaint reporting (**Unconfirmed**)          |
-| Spend    | GreenNode and Bizfly balance alerts, outside the repository      |
+| Signal   | Mechanism                                                      |
+| -------- | -------------------------------------------------------------- |
+| App down | Route 53 health check on `/readyz`, alarm by SNS mail          |
+| Units    | `OnFailure=` mail; `watch.sh` lists failed units               |
+| Host     | `watch.sh`: root and data volume above 70%, load, memory       |
+| Database | `watch.sh`: archive failure, newest backup older than 26 hours |
+| Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                |
+| Edge     | `watch.sh`: CrowdSec ban count and Coraza match count per hour |
+| TOTP     | `watch.sh`: `totp_unavailable` in the server journal           |
+| Mail     | Bizfly bounce and complaint reporting (**Unconfirmed**)        |
+| Spend    | GreenNode and Bizfly balance alerts, outside the repository    |
 
 ## Infrastructure code and state
 
 The `vngcloud/vngcloud` OpenTofu provider (1.3.21, **Unconfirmed** at build
-time) covers servers, volumes, security groups, and floating IPs, but not
-buckets, vCDN, or vMonitor, or for P.A Vietnam DNS. A script creates buckets
-with the S3 API. vCDN, DNS, and vMonitor settings are applied by API scripts
-where an API exists, or by console steps in the runbook; a change to one updates
-the runbook in the same change.
+time) covers servers, volumes, security groups, and floating IPs. The `vngcloud`
+CLI (github.com/dannyota/vngcloud, an IAM user with a 0600 credentials file)
+covers IAM, service accounts, buckets and their keys and policies, and billing
+budgets; its calls live in `deploy/vn/scripts/`. The vWAF escalation is a
+runbook checklist for the root portal.
 
 State uses the S3 backend on a vStorage bucket with path-style addressing and
 the AWS-only checks skipped. OpenTofu encrypts state client-side with the
@@ -297,16 +298,16 @@ order:
 4. Run a pgBackRest incremental backup annotated with the tag.
 5. Stop the job timers and the app-down check. Start maintenance beside Caddy
    (both bind 80 and 443 with `SO_REUSEPORT`), then stop Caddy and the server.
-6. Require the marked 503 through vCDN.
+6. Require the marked 503 from outside the host.
 7. Run `db-setup` with `--first-deploy`; otherwise run `migrate` and require
    exit 0.
 8. Restart web at the new digest, start the server and Caddy beside maintenance,
-   wait for `/readyz` on Go at `127.0.0.1:8080` from the host, not only through
-   vCDN, so the result does not depend on a cache or on which Caddy takes the
-   connection. Then stop maintenance and prove it stopped.
+   wait for `/readyz` on Go at `127.0.0.1:8080` from the host, not only from
+   outside, so the result does not depend on which Caddy takes the connection.
+   Then stop maintenance and prove it stopped.
 9. Start the timers and resume the app-down check.
-10. Smoke through vCDN: health, TLS, and security headers. From the host, a
-    request without the edge secret gets 403. Release the lock.
+10. Smoke from outside: health, TLS, security headers, and a 403 for a
+    CrowdSec-banned test address. Release the lock.
 
 Failure handling, `--rollback`, and the maintenance page keep the rules in the
 [single-host design](single-host-production.md#release-and-deploy). A failed or
@@ -318,11 +319,10 @@ point-in-time restore.
 ```text
 deploy/vn/
   README.md
-  bootstrap/   OpenTofu root: service accounts that exist before state
   prod/        OpenTofu root: vServer, volumes, security groups, floating IP
   host/        cloud-init, sysctl, Quadlet units, timers, postgresql.conf,
                pg_hba.conf, pgbackrest.conf, log and metric agent config
-  edge/        vCDN, DNS, and vMonitor settings and the scripts that apply them
+  edge/        CrowdSec and Coraza config, vWAF escalation checklist
   probe/       host fact checks (Podman networking, Chromium sandbox)
   scripts/     deploy.sh, fence.sh, secrets.sh, buckets.sh, restore-drill.sh,
                cutover.sh
@@ -345,9 +345,9 @@ Each ships alone on AWS before cutover:
 
 1. Images for `linux/amd64` and `linux/arm64`.
 2. The SMTP mail sender.
-3. Caddy edge selection: the `EDGES` list gains `vcdn`, a listener with its own
-   trust and client address rule, and the site host comes from the environment
-   so a rehearsal hostname works.
+3. Caddy edge selection: the `EDGES` list gains `direct`, a listener that trusts
+   no forwarding header; the Coraza and CrowdSec modules in the Caddy image; and
+   the site host from the environment so a rehearsal hostname works.
 4. Privacy notice and terms naming GreenNode and Bizfly in Vietnam. The text is
    true only after cutover, so its first deploy is the cutover deploy.
 
@@ -355,15 +355,14 @@ Each ships alone on AWS before cutover:
 
 Devops applies `deploy/vn/prod`, creates buckets, installs the host, secrets,
 PostgreSQL, pgBackRest, agents, and alarms, and runs the probe. Bizfly
-verification records go into Route 53 beside the existing ones.
+verification records go into the live zone beside the existing ones.
 
 ### 4. Rehearsal
 
-Under a temporary hostname such as `vn-rehearsal.aboutme.vn` (a Route 53 record
-to vCDN), with fictional data only: first deploy, a normal deploy, rollback, a
-restore drill, every alarm once, mail to a test mailbox, SSE and MCP through
-vCDN, forged-header and direct-IP probes, and a timed dry run of the cutover
-script.
+Under a temporary hostname such as `vn-rehearsal.aboutme.vn` (an A record to the
+host), with fictional data only: first deploy, a normal deploy, rollback, a
+restore drill, every alarm once, mail to a test mailbox, SSE and MCP from
+outside, forged-header probes, and a timed dry run of the cutover script.
 
 ### 5. Cutover
 
@@ -380,11 +379,11 @@ In one announced maintenance window:
 4. `rclone copy` the media, then `rclone check --download` for a byte-for-byte
    match and equal object counts.
 5. Run `migrate` if the cutover release adds migrations, start the app, and
-   smoke it through vCDN with the production host.
-6. Switch the apex and `www` at Route 53 to vCDN (TTL 60 seconds), and MX and
-   SPF to Bizfly. Visitors on old DNS still get the AWS maintenance page.
-7. After 48 hours with no AWS traffic, move NS and DS to P.A Vietnam with
-   identical records and a new DNSSEC key.
+   smoke it from outside with the production host.
+6. Switch the apex and `www` at Route 53 to the floating IP (TTL 60 seconds).
+   Visitors on cached answers still get the AWS maintenance page.
+7. After 48 hours with no AWS traffic, delete the CloudFront distribution, its
+   certificates and validation records, and the Route 53 health check.
 
 The auth-mail keys move with the database, so pending outbox mail sends from
 Vietnam. Sessions, passkeys (RP ID `aboutme.vn`), TOTP, and agent grants keep
@@ -394,11 +393,10 @@ working.
 
 Once the cutover is verified, delete: the RDS instance without a final snapshot,
 every manual snapshot and retained automated backup, every media object and the
-bucket, the CloudWatch log groups, the SES suppression list and feedback queue,
-and the Google Workspace mailbox once its mail has moved. Rotate the TOTP key
-ring and auth-mail keys on the host, then delete their SSM copies. Record each
-deletion with its date in `aboutme-infra`. Then rebuild the AWS stack empty as
-the test environment.
+bucket, the CloudWatch log groups, and the SES suppression list and feedback
+queue. Rotate the TOTP key ring and auth-mail keys on the host, then delete
+their SSM copies. Record each deletion with its date in `aboutme-infra`. Then
+rebuild the AWS stack empty as the test environment.
 
 ## Rollback
 
@@ -414,35 +412,22 @@ The AWS stack holds fictional data only: no real accounts and no production
 copy. It gets no domain of its own (owner, 2026-09-24), and `aboutme.vn` keeps
 no AWS records. Its mail goes only to test addresses.
 
-Have I Been Pwned, MCP clients a user connects, and GitHub stay outside this
-move; [ADR 0027](../adr/0027-vietnam-hosted-production.md) records why.
-
 ## Provider facts to confirm
 
 Devops tests each on the account; the runbook records results. Data location and
 subprocessors come from the provider's published terms.
 
-| ID  | Provider           | Question                                                                                                                       |
-| --- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| Q1  | GreenNode vCDN     | Can a rule cache only `/_nuxt/*` and pass every other path with no edge storage? Are 5xx responses passed uncached, unchanged? |
-| Q2  | GreenNode vCDN     | Is there a published list of origin-facing IP ranges, and how are changes announced?                                           |
-| Q3  | GreenNode vCDN     | Can vCDN add a fixed request header to every origin request?                                                                   |
-| Q4  | GreenNode vCDN     | Which header carries the viewer IP, and does vCDN overwrite a viewer-supplied value?                                           |
-| Q5  | GreenNode vCDN     | Are responses streamed unbuffered? What is the idle timeout for a long-lived response (Server-Sent Events)?                    |
-| Q6  | GreenNode vCDN     | Are `Authorization`, cookies, query strings, all methods, `ETag`, and `If-None-Match` passed unchanged? What is the body cap?  |
-| Q7  | GreenNode vCDN     | Does vCDN verify the origin certificate? Does it offer a managed apex certificate with automatic renewal?                      |
-| Q8  | GreenNode vCDN     | Where are viewer request logs stored, and for how long?                                                                        |
-| Q9  | GreenNode vCDN     | What L7 protection applies without vWAF?                                                                                       |
-| Q10 | P.A Vietnam DNS    | Does DNS Pro support an apex ALIAS or flattening? An API for records? Does vCDN give stable apex IPs?                          |
-| Q11 | GreenNode vStorage | Does `PUT` with `If-None-Match: *` return 412 when the key exists?                                                             |
-| Q12 | GreenNode vStorage | Are pgBackRest and the OpenTofu S3 backend supported with path-style addressing and conditional writes?                        |
-| Q13 | GreenNode vStorage | Where is each region's data stored, including replicas?                                                                        |
-| Q14 | GreenNode compute  | Is an ARM vServer offered? Is Ubuntu 24.04 available? Which volume types are encrypted?                                        |
-| Q15 | GreenNode vMonitor | Which log retention periods exist, and where are logs and metrics stored?                                                      |
-| Q16 | GreenNode vDB      | Are PostgreSQL 18 and point-in-time recovery planned, and when?                                                                |
-| Q17 | GreenNode          | Is there a data processing agreement? Does any subprocessor store customer data outside Vietnam?                               |
-| Q18 | Bizfly             | What are the SMTP host, ports, and TLS modes for Email Transaction?                                                            |
-| Q19 | Bizfly             | How are bounces and complaints reported? Is there a suppression list? What are the rate limits?                                |
-| Q20 | Bizfly             | Which DKIM key lengths and selectors do Email Transaction and Business Email use?                                              |
-| Q21 | Bizfly             | Can Business Email import a Google Workspace mailbox?                                                                          |
-| Q22 | Bizfly             | Where is data for both services stored? Is there a data processing agreement?                                                  |
+| ID  | Provider           | Question                                                                                                    |
+| --- | ------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Q1  | GreenNode compute  | Does a vServer floating IP get network-level DDoS protection, and to what capacity?                         |
+| Q2  | GreenNode compute  | Is IPv6 offered on a floating IP?                                                                           |
+| Q3  | GreenNode vStorage | Does `PUT` with `If-None-Match: *` return 412 when the key exists?                                          |
+| Q4  | GreenNode vStorage | Are pgBackRest and the OpenTofu S3 backend supported with path-style addressing and conditional writes?     |
+| Q5  | GreenNode vStorage | Where is each region's data stored, including replicas?                                                     |
+| Q6  | GreenNode compute  | Is an ARM vServer offered? Which volume types are encrypted, at what price?                                 |
+| Q7  | GreenNode vDB      | Are PostgreSQL 18 and point-in-time recovery planned, and when?                                             |
+| Q8  | GreenNode          | Is there a data processing agreement? Does any subprocessor store customer data outside Vietnam?            |
+| Q9  | Bizfly             | What are the SMTP host, ports, and TLS modes for Email Transaction?                                         |
+| Q10 | Bizfly             | How are bounces and complaints reported? Is there a suppression list? What are the rate limits?             |
+| Q11 | Bizfly             | Which DKIM key length and selector does Email Transaction use? Is a custom return-path subdomain supported? |
+| Q12 | Bizfly             | Where is Email Transaction data stored? Is there a data processing agreement?                               |
