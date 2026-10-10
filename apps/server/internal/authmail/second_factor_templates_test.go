@@ -28,7 +28,7 @@ func TestSecondFactorTemplatesRenderBilingualSecretFreeNotices(t *testing.T) {
 			if err != nil {
 				t.Fatalf("decodePayloadStrict: %v", err)
 			}
-			message := buildMessage(tc.kind, payload)
+			message := buildMessage(tc.kind, payload, "")
 			if message.Subject == "" {
 				t.Fatal("security message has no subject")
 			}

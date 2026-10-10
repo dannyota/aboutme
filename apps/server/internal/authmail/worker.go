@@ -14,7 +14,7 @@ import (
 	"github.com/dannyota/aboutme/apps/server/internal/store"
 )
 
-// Worker scheduling bounds (D7).
+// Worker scheduling bounds.
 const (
 	pollInterval       = 1 * time.Second
 	leaseDuration      = 30 * time.Second
@@ -29,19 +29,20 @@ const (
 	finishedJobRetain  = 7 * 24 * time.Hour
 )
 
-// WorkerOptions wires the worker to the store pool, the exact T01 transaction
-// query surface, the T04 key ring, a Sender, and deterministic clock/jitter.
+// WorkerOptions wires the worker to the store pool, transaction queries,
+// key ring, a Sender, and deterministic clock/jitter.
 // Production has no alternate store path; tests inject only package-private
 // begin/commit failure hooks and the same *store.Queries transaction binding.
 type WorkerOptions struct {
-	Pool     *store.Pool
-	Queries  *store.Queries
-	KeyRing  *KeyRing
-	Sender   Sender
-	Clock    func() time.Time
-	Jitter   func(time.Duration) time.Duration
-	Logger   *slog.Logger
-	WorkerID uuid.UUID
+	Pool       *store.Pool
+	Queries    *store.Queries
+	KeyRing    *KeyRing
+	Sender     Sender
+	FooterNote string
+	Clock      func() time.Time
+	Jitter     func(time.Duration) time.Duration
+	Logger     *slog.Logger
+	WorkerID   uuid.UUID
 }
 
 // Worker polls once per second, claims at most ten jobs, and sends at most two
@@ -49,14 +50,15 @@ type WorkerOptions struct {
 // locks the scope row first and the leased job second, holds both locks through
 // the at-most-ten-second sender call, and commits sent/terminal/requeue state.
 type Worker struct {
-	pool    poolBeginner
-	queries *store.Queries
-	ring    *KeyRing
-	sender  Sender
-	clock   func() time.Time
-	jitter  func(time.Duration) time.Duration
-	logger  *slog.Logger
-	id      uuid.UUID
+	pool       poolBeginner
+	queries    *store.Queries
+	ring       *KeyRing
+	sender     Sender
+	footerNote string
+	clock      func() time.Time
+	jitter     func(time.Duration) time.Duration
+	logger     *slog.Logger
+	id         uuid.UUID
 
 	// package-private hooks tests use as deterministic barriers; nil in
 	// production.
@@ -89,14 +91,15 @@ func NewWorker(opts WorkerOptions) (*Worker, error) {
 		return nil, ErrWorker
 	}
 	return &Worker{
-		pool:    opts.Pool,
-		queries: opts.Queries,
-		ring:    opts.KeyRing,
-		sender:  opts.Sender,
-		clock:   opts.Clock,
-		jitter:  opts.Jitter,
-		logger:  opts.Logger,
-		id:      opts.WorkerID,
+		pool:       opts.Pool,
+		queries:    opts.Queries,
+		ring:       opts.KeyRing,
+		sender:     opts.Sender,
+		footerNote: opts.FooterNote,
+		clock:      opts.Clock,
+		jitter:     opts.Jitter,
+		logger:     opts.Logger,
+		id:         opts.WorkerID,
 	}, nil
 }
 
@@ -188,7 +191,7 @@ func (w *Worker) requeueExpired(ctx context.Context, now time.Time) error {
 	return tx.Commit(ctx)
 }
 
-// cleanup runs the three bounded D3 cleanups, each in its own transaction:
+// cleanup runs three bounded cleanups, each in its own transaction:
 // expired registrations, expired reset tokens, and sent/terminal jobs older
 // than seven days. Every delete is capped at cleanupBatch (200).
 func (w *Worker) cleanup(ctx context.Context, now time.Time) error {
@@ -290,7 +293,7 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 	qtx := w.queries.WithTx(tx)
 	now := w.clock()
 
-	// Lock the scope row first (scope-before-job order, D7). A missing scope
+	// Lock the scope row first (scope-before-job order). A missing scope
 	// means the owning registration/reset token/user was replaced or deleted;
 	// the job may have been cascaded already, so terminate it if it still
 	// exists and otherwise commit a no-op.
@@ -356,7 +359,7 @@ func (w *Worker) sendJob(ctx context.Context, job store.AuthEmailJob) error {
 		w.hooks.beforeSend(leased.ID)
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, sendDeadline)
-	result, sendErr := w.sender.Send(sendCtx, buildMessage(Kind(leased.Kind), payload))
+	result, sendErr := w.sender.Send(sendCtx, buildMessage(Kind(leased.Kind), payload, w.footerNote))
 	cancel()
 	if w.hooks.afterSend != nil {
 		w.hooks.afterSend(leased.ID, result.Outcome)
@@ -390,7 +393,7 @@ func (w *Worker) markTerminal(ctx context.Context, qtx *store.Queries, jobID uui
 	return err
 }
 
-// requeueOrTerminal applies the D7 temporary-failure policy: failed attempt 8
+// requeueOrTerminal applies the temporary-failure policy: failed attempt 8
 // or a next attempt at/after expiry marks terminal; otherwise the job returns
 // to pending with a full-jitter backoff capped at min(30s*2^(attempt-1), 1h).
 func (w *Worker) requeueOrTerminal(ctx context.Context, qtx *store.Queries, job store.AuthEmailJob, now time.Time) error {
@@ -460,7 +463,7 @@ func (s *scopeState) tokenMatches(jobDigest []byte) bool {
 	return bytes.Equal(s.tokenDigest, jobDigest)
 }
 
-// sealedFromJob converts the stored job columns into the T04 Sealed blob.
+// sealedFromJob converts the stored job columns into a Sealed blob.
 func sealedFromJob(job store.AuthEmailJob) Sealed {
 	var nonce [12]byte
 	copy(nonce[:], job.Nonce)
