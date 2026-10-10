@@ -11,7 +11,7 @@ crowdsec_install_offline() { # install-command package...
     set -euo pipefail
     local policy=${CROWDSEC_POLICY_RC_D:-/usr/sbin/policy-rc.d}
     local systemctl=${CROWDSEC_SYSTEMCTL:-systemctl}
-    local backup= backup_dir= had_policy=no cleanup_status=0 load_state state status unit
+    local backup='' backup_dir='' had_policy=no cleanup_status=0 load_state state status unit
     local -a enable_units=(crowdsec.service crowdsec-firewall-bouncer.service)
     local -a hub_units=(crowdsec-hubupdate.timer crowdsec-hubupdate.service)
     local -a disable_units=("${enable_units[@]}" crowdsec-hubupdate.timer)
@@ -75,6 +75,20 @@ crowdsec_install_offline() { # install-command package...
     "$systemctl" unmask --runtime "${enable_units[@]}" || exit $?
     SYSTEMD_OFFLINE=1 "$@"
   )
+}
+
+crowdsec_configure_local_detection() {
+  local item_type
+  local -a item_types=(collections parsers scenarios postoverflows contexts)
+
+  install -d -m 0755 /etc/crowdsec/acquis.d || return $?
+  : >/etc/crowdsec/acquis.yaml || return $?
+  find /etc/crowdsec/acquis.d -mindepth 1 -maxdepth 1 -delete || return $?
+  for item_type in "${item_types[@]}"; do
+    cscli "$item_type" remove --all --force >/dev/null || return $?
+  done
+  cscli collections install crowdsecurity/sshd >/dev/null || return $?
+  rm -f /etc/crowdsec/scenarios/ssh-time-based-bf.yaml || return $?
 }
 
 crowdsec_assert_offline() { # base-config local-config credentials
