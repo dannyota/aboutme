@@ -256,14 +256,15 @@ forbidden.
   size, plus the page margins. Body lines then hold about 90-110 characters in
   every template, and a two-column main column keeps about 45em. Screens
   narrower than the measure, such as phones, keep the full width. On screen, the
-  public page and the editor's Web preview give the text its measure before the
-  template's print margin: the inline padding is
-  `clamp(16px, (container width - measure) / 2, margin-x)`, with the measure in
-  em of the body size. A phone gets 16 px, a tablet a growing margin, and a
-  desktop the full template margin. The block padding uses the same formula with
-  `margin-y`. The container is the page root (the preview sheet in the editor),
-  so the width excludes the scrollbar. The PDF, print, the paged preview, and
-  the template page images keep the template margin.
+  public page, the editor's Web preview, and the template detail's Page preview
+  give the text its measure before the template's print margin: the inline
+  padding is `clamp(16px, (container width - measure) / 2, margin-x)`, with the
+  measure in em of the body size. A phone gets 16 px, a tablet a growing margin,
+  and a desktop the full template margin. The block padding uses the same
+  formula with `margin-y`. The container is the page root (the preview sheet in
+  the editor), so the width excludes the scrollbar. The PDF and print routes,
+  the editor's paged preview, and the template detail's stored PDF page images
+  keep the template margin.
 - The public page `<title>` is the owner's page title or `<full name> — Resume`.
   When the owner sets an emoji, the page links it as an SVG `data:` icon. The
   server computes both exact values; the renderer writes them and the public

@@ -20,8 +20,11 @@ of `0` really is `0`:
 | `--page-margin-y` | `spacing.pageMargin.y` mm, else `15mm` | top and bottom page margin          |
 
 The page margins are the one place a token reaches `@page` geometry (`print.md`
-§2); the editor preview and public page apply the same values as padding on the
-resume root. The `15mm` fallback applies at the point of use and is never
+§2). Continuous screen targets use adaptive resume-root padding bounded by these
+values: the public resume, the editor's Web preview, and the template detail's
+Page preview ([web pagination](../web.md#pagination-and-print)). The PDF and
+print routes, the editor's paged preview, and stored PDF page images use the
+exact values. The `15mm` fallback applies at the point of use and is never
 written into `customization`. Margins are the first lever for fitting a resume
 onto one page, ahead of `baseSizePx`.
 
