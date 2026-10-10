@@ -25,12 +25,10 @@ const (
 	authEmailModeSES     = "ses"
 	authEmailModeCapture = "capture"
 	authEmailModeSMTP    = "smtp"
-	// smtpTLSImplicit and smtpTLSStartTLS are the SMTP_TLS values; each has
-	// exactly one port.
-	smtpTLSImplicit  = "implicit"
-	smtpTLSStartTLS  = "starttls"
-	smtpImplicitPort = 465
-	smtpStartTLSPort = 587
+	// smtpTLSImplicit and smtpTLSStartTLS are the SMTP_TLS values. The mode is
+	// always explicit and never inferred from SMTP_PORT.
+	smtpTLSImplicit = "implicit"
+	smtpTLSStartTLS = "starttls"
 	// maxSMTPValueBytes bounds SMTP_USERNAME and SMTP_PASSWORD.
 	maxSMTPValueBytes = 256
 	// requiredSESRegion is the exact region SES mode requires (D7).
@@ -226,16 +224,11 @@ func loadSMTPConfig(cfg AuthEmailConfig, host, port, tlsMode, username, password
 		return cfg, errors.New("config: SMTP_HOST must be a DNS host name when AUTH_EMAIL_MODE=smtp")
 	}
 	portNum, err := strconv.Atoi(port)
-	if err != nil {
-		return cfg, errors.New("config: SMTP_PORT must be 465 or 587 when AUTH_EMAIL_MODE=smtp")
+	if err != nil || portNum < 1 || portNum > 65535 {
+		return cfg, errors.New("config: SMTP_PORT must be a port number from 1 to 65535 when AUTH_EMAIL_MODE=smtp")
 	}
-	switch {
-	case tlsMode == smtpTLSImplicit && portNum == smtpImplicitPort:
-	case tlsMode == smtpTLSStartTLS && portNum == smtpStartTLSPort:
-	case tlsMode != smtpTLSImplicit && tlsMode != smtpTLSStartTLS:
+	if tlsMode != smtpTLSImplicit && tlsMode != smtpTLSStartTLS {
 		return cfg, errors.New("config: SMTP_TLS must be implicit or starttls when AUTH_EMAIL_MODE=smtp")
-	default:
-		return cfg, errors.New("config: SMTP_PORT and SMTP_TLS must be 465 with implicit or 587 with starttls")
 	}
 	if !validSMTPValue(username) {
 		return cfg, errors.New("config: SMTP_USERNAME must be 1-256 bytes with no control characters")
