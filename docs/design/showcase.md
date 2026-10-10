@@ -318,9 +318,8 @@ then.
   about an ended opt-in is kept.
 - **Export.** The account export includes each resume's showcase state
   (`listed`), role, and opt-in time.
-- **Impact assessment.** The next regular impact assessment update notes the
-  showcase; the privacy and disclosure gate in [decision status](decisions.md)
-  covers the new text.
+- **Privacy text.** The privacy and disclosure gate in
+  [decision status](decisions.md) covers the new text.
 
 ## Data and contract
 

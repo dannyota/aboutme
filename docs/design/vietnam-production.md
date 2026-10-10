@@ -5,8 +5,7 @@ CloudFront to providers that store and process personal data in Vietnam, under
 [ADR 0027](../adr/0027-vietnam-hosted-production.md). This page is the target
 design and the migration order. Until cutover, the
 [single-host design](single-host-production.md) describes what runs. The ADR
-holds the legal reason. A data protection impact assessment (DPIA) is still
-required and is not covered here.
+holds the legal reason.
 
 Status: proposed. **Unconfirmed** marks a provider fact from public docs or
 research; devops verifies each by testing on the account before cutover
@@ -64,8 +63,8 @@ Three host-level controls replace AWS WAF:
 - CrowdSec (the security engine, its Caddy bouncer, and the nftables bouncer for
   SSH) reads Caddy and sshd logs, bans addresses that match the HTTP flood,
   scanning, and brute-force scenarios, and answers 403 to banned addresses.
-  Community blocklist sharing stays off until the DPIA covers it (owner,
-  2026-10-10), because a shared signal sends the attacker's address abroad.
+  Community blocklist sharing stays off (owner, 2026-10-10), because a shared
+  signal sends the attacker's address abroad.
 - Coraza in Caddy (`coraza-caddy` with the OWASP Core Rule Set v4, built into
   the Caddy image with `xcaddy`) runs in detection-only mode for two weeks, then
   blocks, with exclusions for the resume write paths whose rich-text bodies trip
