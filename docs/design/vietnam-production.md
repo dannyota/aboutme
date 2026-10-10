@@ -93,13 +93,14 @@ Transaction gets its own DKIM selector and, if offered, a return-path subdomain
 like SES's `bounce.aboutme.vn`; otherwise root SPF gains the Bizfly include. SES
 records go once AWS stops sending as `aboutme.vn`.
 
-Go gets an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS on 465 or STARTTLS
-on 587 with certificate verification, `PLAIN` authentication, one message per
-connection. As with SES, a 2xx after `DATA` is accepted, a 5xx is permanent, and
-4xx, timeouts, and transport errors are temporary. Logs carry the reply code
-only. Go uses SMTP rather than the Bizfly HTTP API (owner, 2026-10-10), because
-SMTP is a standard contract that a local stub can test. **Unconfirmed:**
-Bizfly's bounce and complaint reporting, suppression list, and sending limits.
+Go gets an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS or STARTTLS on the
+configured port (Bizfly: `smtp-api.bizfly.vn`, 2465 or 2525) with certificate
+verification, `PLAIN` authentication, one message per connection. As with SES, a
+2xx after `DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and
+transport errors are temporary. Logs carry the reply code only. Go uses SMTP
+rather than the Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard
+contract that a local stub can test. **Unconfirmed:** Bizfly's bounce and
+complaint reporting, suppression list, and sending limits.
 
 ## Host
 
