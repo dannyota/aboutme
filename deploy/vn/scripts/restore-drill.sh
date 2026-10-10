@@ -206,10 +206,16 @@ order_server() {
   require_price "drill ${DATA_DISK_GB} GB encrypted volume" "$vquoted" "$max_price"
   require_price "drill total" "$(awk -v a="$quoted" -v b="$vquoted" 'BEGIN { printf "%d", a + b }')" "$max_price"
 
-  # First boot adds the operator's key and nothing else. host/install.sh owns
-  # every other host file (design "Host").
+  # First boot adds the operator's key and a host key made for this run, and
+  # nothing else; host/install.sh owns every other host file (design "Host").
+  # The host key's public half is pinned before the first SSH (pin_host_key),
+  # so no connection trusts an unknown key. Its private half reaches the
+  # server only through the user data, lives in this run's tmpfs directory,
+  # and dies with the server.
+  new_host_key
   file=$run/user-data.yaml
-  cat >"$file" <<CLOUD
+  {
+    cat <<CLOUD
 #cloud-config
 users:
   - name: $ADMIN_USER
@@ -221,7 +227,15 @@ users:
       - $admin_key
 disable_root: true
 ssh_pwauth: false
+ssh_deletekeys: true
+ssh_genkeytypes: []
+ssh_keys:
+  ed25519_public: $(cat "$run/hostkey.pub")
+  ed25519_private: |
 CLOUD
+    sed 's/^/    /' "$run/hostkey"
+  } >"$file"
+  rm -f "$run/hostkey"
 
   create_attempted=1
   say "creating $SERVER_NAME (waits for ACTIVE)"
@@ -256,13 +270,27 @@ server_private_ip() {
 # ---- SSH -----------------------------------------------------------------
 
 # One multiplexed connection per host, so a hardware key asks for a touch once.
-# The drill host key is trusted on first use into a file that dies with the run:
-# the server is new and no fingerprint exists to check against.
+# The drill server's host key is the one this run generated and handed to
+# cloud-init, pinned under a fixed alias in a per-run known_hosts file, with
+# strict checking: a server that presents any other key is refused.
 prod_opts=(-o ControlMaster=auto -o "ControlPath=$run/prod.sock" -o ControlPersist=15m
   -o ConnectTimeout=15)
 drill_opts=(-o ControlMaster=auto -o "ControlPath=$run/drill.sock" -o ControlPersist=15m
-  -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new -o LogLevel=ERROR
+  -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "HostKeyAlias=$SERVER_NAME" -o LogLevel=ERROR
   -o "UserKnownHostsFile=$run/known_hosts" -o ServerAliveInterval=30)
+
+# The public half is also kept in the state directory, so --resume can pin the
+# same key; it is not secret.
+hostkey_state=${XDG_STATE_HOME:-$HOME/.local/state}/aboutme/restore-drill-hostkey.pub
+new_host_key() {
+  ssh-keygen -q -t ed25519 -N '' -C "$SERVER_NAME" -f "$run/hostkey"
+  mkdir -p "$(dirname "$hostkey_state")"
+  cp -f "$run/hostkey.pub" "$hostkey_state"
+}
+pin_host_key() {
+  [[ -f $hostkey_state ]] || die "no pinned host key for $SERVER_NAME at $hostkey_state"
+  printf '%s %s\n' "$SERVER_NAME" "$(cut -d' ' -f1,2 "$hostkey_state")" >"$run/known_hosts"
+}
 
 # prsh runs a quoted command on the production host. rsh runs one on the drill.
 # shellcheck disable=SC2029 # the command is quoted for the remote shell on purpose
@@ -271,6 +299,7 @@ prsh() { ssh "${prod_opts[@]}" "$ADMIN_USER@$prod_host" "$(printf '%q ' "$@")"; 
 rsh() { ssh "${drill_opts[@]}" "$ADMIN_USER@$drill_ip" "$(printf '%q ' "$@")"; }
 
 connect_drill() {
+  pin_host_key
   drill_ip=$(server_private_ip)
   [[ -n $drill_ip ]] || die "could not read the drill server's private IP"
   if ((!direct)); then
@@ -322,7 +351,7 @@ copy_secrets() {
   ssh "${prod_opts[@]}" "$ADMIN_USER@$prod_host" \
     'sudo cat /etc/pgbackrest/conf.d/secrets.conf' |
     ssh "${drill_opts[@]}" "$ADMIN_USER@$drill_ip" \
-      'sudo install -o root -g postgres -m 0440 /dev/stdin /etc/pgbackrest/conf.d/secrets.conf'
+      'sudo sh -c "umask 077; install -o root -g postgres -m 0440 /dev/stdin /etc/pgbackrest/conf.d/secrets.conf"'
   rsh sudo test -s /etc/pgbackrest/conf.d/secrets.conf ||
     die "secrets.conf on the drill host is empty"
 }
