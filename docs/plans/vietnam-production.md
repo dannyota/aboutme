@@ -16,11 +16,10 @@ Code, comments, tests, and living docs cite the design or ADR 0027, never this p
 8. Generate an `ed25519-sk` key on the hardware key; give devops the public key and the SSH source allowlist.
 9. At cutover: run the SSM-to-host secret pipe and approve the Route 53 switch of the apex and `www`.
 10. Once the cutover is verified: approve the AWS real-data deletion and the CloudFront teardown.
-11. After the cutover and before real users: prepare and file the data protection impact assessment and the cross-border transfer dossier with the Ministry of Public Security. The public announcement waits for the cutover.
 
 ## Decided
 
-- 2026-09-24: self-hosted PostgreSQL 18 with pgBackRest (30 days, point-in-time recovery, quarterly drill); no rollback window after Vietnam accepts writes; no domain for the AWS test environment; Have I Been Pwned stays and the DPIA records it.
+- 2026-09-24: self-hosted PostgreSQL 18 with pgBackRest (30 days, point-in-time recovery, quarterly drill); no rollback window after Vietnam accepts writes; no domain for the AWS test environment; Have I Been Pwned stays.
 - 2026-10-10: nothing in front of the host; Caddy with Coraza and CrowdSec; vWAF only as a DNS-change escalation.
 - 2026-10-10: DNS stays at Route 53; Google Workspace support mailbox stays; no Bizfly Business Email.
 - 2026-10-10: compute HCM03 (zone HCM03-1A), vStorage HCM04, one backup repository.

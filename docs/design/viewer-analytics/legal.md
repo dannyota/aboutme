@@ -10,8 +10,8 @@ agent-reviewed text before the public announcement
 ([decisions](../decisions.md#remaining-gates)).
 
 The design keeps no data about any viewer. That choice removes the consent
-popup, viewer cookies other than the sign-in pass, the viewer rights page, owner
-terms, and the need to record viewers in the DPIA before a release.
+popup, viewer cookies other than the sign-in pass, the viewer rights page, and
+owner terms.
 
 ## Roles
 
@@ -89,13 +89,9 @@ Law Article 3(3) keeps data only as long as its purpose needs; Law Article
 
 ## Assessments
 
-A data protection impact assessment covers aboutme's processing and is updated
-when a new processing purpose arises (Law Articles 21(1) and 22(1); Decree
-Articles 19 and 20(1)(a)). Viewer analytics stores no viewer data, so no release
-waits on an assessment; the owner adds the transient counting and sign-in
-verification to the DPIA and cross-border assessment that are prepared after the
-move to Vietnam and before real users (Law Article 20(2); Decree Article 18).
-The dossiers stay out of this public repository.
+Viewer analytics stores no viewer data, so no release waits on an assessment.
+The owner files no data protection impact assessment or cross-border dossier
+(2026-10-10).
 
 ## Privacy notice changes
 
