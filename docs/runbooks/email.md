@@ -26,27 +26,28 @@ verification, password reset, and security notifications. Native development
 uses the loopback mail capture described in the
 [native development runbook](native-development.md).
 
-## Cloudflare DNS
+## Route 53 DNS
 
-Cloudflare is DNS-only for these records. The root records are:
+Route 53 is authoritative for these records. The root records are:
 
 - MX priority 1: `smtp.google.com`
-- SPF: `v=spf1 include:_spf.google.com ~all`
+- SPF: `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all`
 - Google DKIM selector: `google._domainkey`
+- Bizfly DKIM selector: `dkim._domainkey`
 - Retained Google domain-verification CNAME
 - DMARC at `_dmarc`: `v=DMARC1; p=none; rua=mailto:danny@aboutme.vn`
 
 SES uses its own DKIM selectors and authenticates its custom MAIL FROM subdomain
-separately. Therefore root SPF remains Google-only. The MAIL FROM records are:
+separately. The MAIL FROM records are:
 
 - `bounce.aboutme.vn` MX: `feedback-smtp.ap-southeast-1.amazonses.com`
 - `bounce.aboutme.vn` SPF: `v=spf1 include:amazonses.com ~all`
 
-Do not replace the Google root MX or root SPF with SES records.
+Do not replace the Google root MX or root SPF with SES records. The root SPF
+authorizes Google Workspace and Bizfly Email Transaction.
 
-OpenTofu's `dns` module recreates these records in the Route 53 zone prepared in
-the [DNS runbook](dns.md). Until the name servers move, change a record at
-Cloudflare and in that module together.
+OpenTofu's `dns` module owns these records in the Route 53 zone described in the
+[DNS runbook](dns.md).
 
 ## Reputation and feedback
 
@@ -130,8 +131,9 @@ Bizfly product and rejects these credentials.
   `implicit` or `starttls`, set explicitly; the sender never infers it from the
   port.
 - `SMTP_USERNAME` and `SMTP_PASSWORD` are 1 to 256 bytes with no control
-  characters. The password comes from the host secret store, never from a
-  tracked file.
+  characters. The loader preserves every byte, including leading and trailing
+  spaces. The password comes from the host secret store, never from a tracked
+  file.
 - `SES_CONFIGURATION_SET` and the capture fields must be absent; `AWS_REGION` is
   ignored. The `SMTP_*` names must be absent in SES and capture mode.
 
@@ -155,9 +157,11 @@ Run from a workstation with the AWS CLI configured for the intended account. The
 commands below read state; they do not create or modify resources.
 
 ```sh
+dig +short NS aboutme.vn
 dig +short MX aboutme.vn
 dig +short TXT aboutme.vn
 dig +short TXT google._domainkey.aboutme.vn
+dig +short TXT dkim._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-1>._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-2>._domainkey.aboutme.vn
 dig +short CNAME <ses-dkim-token-3>._domainkey.aboutme.vn
@@ -178,7 +182,7 @@ aws cloudformation describe-stacks \
 ```
 
 Replace the angle-bracket DNS names with the values exposed by the
-CloudFormation outputs or the Cloudflare zone. Do not paste the generated SES
+CloudFormation outputs or the Route 53 zone. Do not paste the generated SES
 tokens into committed documentation.
 
 Send a non-production smoke message to the SES mailbox simulator. The simulator
