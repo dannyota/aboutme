@@ -7,25 +7,32 @@
 # contents of /etc/aboutme/secrets.
 set -euo pipefail
 
-# The PostgreSQL minor is pinned (design "PostgreSQL"). Empty installs the
-# repository's current 18.x and prints it; after the first install the
-# operator sets this to that version, for example "18.1-1.pgdg24.04+1".
-PG_VERSION=""
+# Every package from outside the Ubuntu archive is pinned to one version and
+# verified against material written in this repository, never against a key
+# or checksum fetched from the same source at install time:
+# - apt repositories: the signing keys are committed under host/keys and must
+#   carry the fingerprints below; apt then verifies every package against
+#   them, and dpkg must report exactly the pinned version afterward.
+# - Filebeat: the .deb must match the SHA-512 below.
+# PostgreSQL stays on one minor version (docs/design/vietnam-production.md,
+# "PostgreSQL"); unattended-upgrades does not touch these packages. Raising a
+# version is a reviewed change to this file.
+PGDG_SIGNER_FPR=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
+# CrowdSec publishes no fingerprint in its documentation; this is the primary
+# key in host/keys/crowdsec.asc as served by packagecloud.io on 2026-10-10.
+CROWDSEC_SIGNER_FPR=6A89E3C2303A901A889971D3376ED5326E93CD0C
 
-# Fingerprint of the PGDG archive signing key (ACCC4CF8).
-PGDG_KEY_FINGERPRINT=B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8
-PGDG_KEY_URL=https://www.postgresql.org/media/keys/ACCC4CF8.asc
-
-# Placeholder: refuses until filled. Read the fingerprint from
-# https://docs.crowdsec.net/u/getting_started/installation/linux
-CROWDSEC_KEY_FINGERPRINT=""
-CROWDSEC_KEY_URL=https://packagecloud.io/crowdsec/crowdsec/gpgkey
+POSTGRESQL_COMMON_VERSION=293.pgdg24.04+1
+POSTGRESQL_VERSION=18.6-1.pgdg24.04+2
+PGBACKREST_VERSION=2.59.3-1.pgdg24.04+1
+CROWDSEC_VERSION=1.8.1
+CROWDSEC_BOUNCER_VERSION=0.0.36
 
 FILEBEAT_VERSION=8.7.1
 FILEBEAT_URL=https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-8.7.1-amd64.deb
-# Placeholder: refuses until filled with the SHA-512 Elastic publishes for the
-# .deb at the URL above plus ".sha512".
-FILEBEAT_SHA512=""
+# Checked on 2026-10-10 against Elastic's detached signature by key
+# 46095ACC8548582C1A2699A9D27D666CD88E42B4.
+FILEBEAT_SHA512=722951ae4c91893a67ff5f66613082087be3f44e3fc450378994b565e829c35c1bf04949e9625880607f4adfe01a53a26a822d168f9dc05fe7d92c9fbc7ec70e
 
 die() {
   echo "install: $*" >&2
@@ -50,15 +57,28 @@ timers=(
   aboutme-backup-age.timer
 )
 
-# Fetch an armored key and check that its fingerprint equals $2.
-fetch_key() { # url fingerprint outfile
+# Installs a committed armored key after checking that it holds exactly one
+# primary key with the pinned fingerprint. gpg's machine-readable output is
+# the only thing parsed.
+install_key() { # committed-key fingerprint outfile
   local fprs
-  curl -fsSL --proto '=https' "$1" -o "$tmp/key.asc"
-  fprs=$(gpg --show-keys --with-colons "$tmp/key.asc" | awk -F: '$1 == "fpr" {print $10}')
-  if ! grep -qxF "$2" <<<"$fprs"; then
-    die "key from $1 does not carry fingerprint $2"
-  fi
-  cp "$tmp/key.asc" "$3"
+  fprs=$(gpg --show-keys --with-colons "$1" | awk -F: '$1 == "pub" { want = 1; next } want && $1 == "fpr" { print $10; want = 0 }')
+  [ "$fprs" = "$2" ] || die "$1 is not exactly one primary key with fingerprint $2"
+  install -m 0644 "$1" "$3"
+}
+
+# Installs packages at their pinned versions and proves dpkg holds exactly
+# those versions afterward.
+install_pinned() { # package=version...
+  local spec pkg want have
+  apt-get install -y -qq --allow-downgrades "$@" >/dev/null
+  for spec in "$@"; do
+    pkg=${spec%%=*}
+    want=${spec#*=}
+    have=$(dpkg-query -W -f='${Version}' "$pkg")
+    [ "$have" = "$want" ] || die "$pkg is $have, not the pinned $want"
+    apt-mark hold "$pkg" >/dev/null
+  done
 }
 
 # copy_tree <src> <dest-root>: install every file under src into dest-root,
@@ -82,14 +102,12 @@ install -d -m 0755 /etc/apt/keyrings
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg >/dev/null
 
-fetch_key "$PGDG_KEY_URL" "$PGDG_KEY_FINGERPRINT" /etc/apt/keyrings/postgresql.asc
+install_key "$bundle/host/keys/pgdg.asc" "$PGDG_SIGNER_FPR" /etc/apt/keyrings/postgresql.asc
 echo "deb [signed-by=/etc/apt/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
   >/etc/apt/sources.list.d/pgdg.list
 say "PGDG repository in place"
 
-[ -n "$CROWDSEC_KEY_FINGERPRINT" ] ||
-  die "CROWDSEC_KEY_FINGERPRINT is empty; read it from https://docs.crowdsec.net/u/getting_started/installation/linux"
-fetch_key "$CROWDSEC_KEY_URL" "$CROWDSEC_KEY_FINGERPRINT" "$tmp/crowdsec.asc"
+install_key "$bundle/host/keys/crowdsec.asc" "$CROWDSEC_SIGNER_FPR" "$tmp/crowdsec.asc"
 gpg --dearmor --yes -o /etc/apt/keyrings/crowdsec.gpg "$tmp/crowdsec.asc"
 echo "deb [signed-by=/etc/apt/keyrings/crowdsec.gpg] https://packagecloud.io/crowdsec/crowdsec/ubuntu noble main" \
   >/etc/apt/sources.list.d/crowdsec.list
@@ -106,27 +124,25 @@ install -m 0644 "$bundle/host/etc/crowdsec/acquis.d/sshd.yaml" /etc/crowdsec/acq
 # 3. Packages. postgresql-common creates the postgres user; the data
 # directories on the volume are handed to it before postgresql-18 creates the
 # cluster there.
-apt-get install -y -qq postgresql-common >/dev/null
+install_pinned "postgresql-common=$POSTGRESQL_COMMON_VERSION"
 for d in /srv/data/postgresql /srv/data/pgbackrest-conf; do
   chown postgres:postgres "$d"
   chmod 0700 "$d"
 done
-pg_pkg=postgresql-18
-[ -z "$PG_VERSION" ] || pg_pkg="postgresql-18=$PG_VERSION"
-apt-get install -y -qq "$pg_pkg" pgbackrest >/dev/null
-say "installed $(dpkg-query -W -f='${Package} ${Version}' postgresql-18)"
-[ -n "$PG_VERSION" ] || say "PG_VERSION is empty: pin the version printed above in this script"
-apt-get install -y -qq crowdsec crowdsec-firewall-bouncer-nftables >/dev/null
+install_pinned "postgresql-18=$POSTGRESQL_VERSION" "postgresql-client-18=$POSTGRESQL_VERSION" \
+  "libpq5=$POSTGRESQL_VERSION" "pgbackrest=$PGBACKREST_VERSION"
+install_pinned "crowdsec=$CROWDSEC_VERSION" "crowdsec-firewall-bouncer-nftables=$CROWDSEC_BOUNCER_VERSION"
+say "pinned packages installed"
 
 have_fb=$(dpkg-query -W -f='${Version}' filebeat 2>/dev/null || true)
 if [ "$have_fb" = "$FILEBEAT_VERSION" ]; then
   say "filebeat $FILEBEAT_VERSION already installed"
 else
-  [ -n "$FILEBEAT_SHA512" ] || die "FILEBEAT_SHA512 is empty; fill it before installing filebeat"
   curl -fsSL --proto '=https' "$FILEBEAT_URL" -o "$tmp/filebeat.deb"
   echo "$FILEBEAT_SHA512  $tmp/filebeat.deb" | sha512sum -c --quiet - ||
     die "filebeat .deb does not match FILEBEAT_SHA512"
   dpkg -i "$tmp/filebeat.deb" >/dev/null
+  apt-mark hold filebeat >/dev/null
   say "installed filebeat $FILEBEAT_VERSION"
 fi
 
