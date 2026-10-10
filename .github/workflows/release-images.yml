@@ -21,9 +21,11 @@ permissions:
   contents: read
 
 jobs:
-  # server, web, and caddy ship as one release, so they fail fast together: a
-  # Trivy finding or smoke failure on one image or platform cancels the others
-  # in flight. Each platform builds on a native runner.
+  # server, web, and caddy ship as one release, so on a tag they fail fast
+  # together: a Trivy finding or smoke failure on one image or platform
+  # cancels the others in flight. A manual run lets every job finish, so one
+  # run shows each image's result on each platform. Each platform builds on a
+  # native runner.
   build:
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -32,7 +34,7 @@ jobs:
       id-token: write
       attestations: write
     strategy:
-      fail-fast: true
+      fail-fast: ${{ github.event_name == 'push' }}
       matrix:
         name: [server, web, caddy]
         arch: [arm64, amd64]
