@@ -124,4 +124,5 @@ module "dns" {
   certificate_validation_records = module.edge.certificate_validation_records_by_domain
   alerts_topic_arn_us_east_1     = module.ops.alerts_topic_arn_us_east_1
   google_workspace               = var.google_workspace
+  bizfly_dkim_txt                = var.bizfly_dkim_txt
 }

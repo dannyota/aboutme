@@ -4,7 +4,7 @@
 # and patched modules instead of the upstream release binary, which lags
 # behind both; see deploy/caddy/production/build/main.go. Multi-architecture
 # index digest, so the same pin builds amd64 and arm64.
-FROM docker.io/library/golang:1.27.1-alpine3.24@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS caddy-build
+FROM docker.io/library/golang:1.27.2-alpine3.24@sha256:85dc1069ac644ea3c527b177303a406eb3358192816cd7f9e5848eb658851673 AS caddy-build
 WORKDIR /src
 COPY deploy/caddy/production/build/ ./
 RUN GOWORK=off go mod download
