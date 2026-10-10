@@ -106,7 +106,13 @@ wait_for_decision "$mixed_ip" >/dev/null || {
 
 # A static flood far beyond page-load bursts creates a decision.
 flood_ip=192.0.2.51
-append_records "$flood_ip" 200 4000 static GET
+# One timestamp for the whole burst: a per-record date call spreads it over
+# seconds while the bucket drains 50 a second.
+flood_ts=$(date -u +%Y-%m-%dT%H:%M:%S.%NZ)
+for ((i = 0; i < 4000; i++)); do
+  printf '{"ts":"%s","source_ip":"%s","method":"GET","status":200,"route_class":"static"}\n' \
+    "$flood_ts" "$flood_ip"
+done >>"$feed"
 wait_for_decision "$flood_ip" >/dev/null || { echo "static flood created no decision" >&2; exit 1; }
 
 # A shared address sends wrong passwords, throttled requests, and the
