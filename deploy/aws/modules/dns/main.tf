@@ -32,7 +32,7 @@ locals {
     spf = {
       name    = local.zone
       type    = "TXT"
-      records = ["v=spf1 include:_spf.google.com include:_spf.bizflycloud.vn ~all"]
+      records = ["v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all"]
     }
     dmarc = {
       name    = "_dmarc.${local.zone}"
