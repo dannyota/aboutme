@@ -178,9 +178,10 @@ Session revoke and agent-grant revoke need only a live current-epoch session and
 no recent proof, because ending sessions only reduces access.
 
 The operator's out-of-band `account-delete` command
-([showcase design](showcase.md#derived-values-and-reports)) deletes an account
-without recent reauth. It runs with database credentials outside the public app,
-as [ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) allows.
+([showcase design](showcase-contract.md#derived-values-and-reports)) deletes an
+account without recent reauth. It runs with database credentials outside the
+public app, as
+[ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) allows.
 
 Logout revokes the session, expires the cookie, and sends `Clear-Site-Data`.
 Logout-everywhere revokes all sessions. Password reset revokes every session and
@@ -336,8 +337,8 @@ serves) uses a policy scoped to the app's own origin instead
 `worker-src` is `'none'` on the locked-down policy and `'self'` on the app
 policy, so only a same-origin script file can start a worker, never a `blob:` or
 `data:` URL. `script-src 'self'` already runs same-origin code, so `'self'` adds
-no code source. The [LinkedIn import](linkedin-import.md#security) page is the
-only page that starts one: a module worker that runs pdf.js
+no code source. The [LinkedIn import](linkedin-import-parser.md#security) page
+is the only page that starts one: a module worker that runs pdf.js
 ([ADR 0023](../adr/0023-linkedin-import.md)).
 
 `script-src` never carries `'unsafe-inline'` on either policy: Nuxt's own

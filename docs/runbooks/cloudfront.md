@@ -122,9 +122,10 @@ retries.
 ## Edge checks
 
 After a change to the distribution, the web ACL, or the Caddy CloudFront
-listener, run the [design test plan](../design/cloudfront-edge.md#test-plan)
-items against the public hostnames `aboutme.vn` and `www.aboutme.vn`. Evidence
-goes under `.dev/prod-checks/cloudfront/`.
+listener, run the
+[design test plan](../design/cloudfront-verification.md#test-plan) items against
+the public hostnames `aboutme.vn` and `www.aboutme.vn`. Evidence goes under
+`.dev/prod-checks/cloudfront/`.
 
 To check one edge address in isolation, pin the real hostnames to it so cookies,
 CSRF origin checks, and passkeys, which all depend on the real hostname, stay
@@ -157,8 +158,8 @@ path.
 
 ## Facts to verify
 
-The [design](../design/cloudfront-edge.md#facts-to-verify) lists facts that
-documentation does not settle. Results so far, checked on 2026-09-25 with
+The [design](../design/cloudfront-verification.md#facts-to-verify) lists facts
+that documentation does not settle. Results so far, checked on 2026-09-25 with
 read-only calls and the AWS documentation; the rest require a rebuilt
 distribution with the real hostnames.
 

@@ -238,11 +238,15 @@ and `X-Robots-Tag: noindex, noarchive` when discovery is off. `/og.png` serves
 the same current card. `robots.txt` gains `Allow: /api/v1/public/resumes/*/og/`.
 The per-IP limits stay: 300 artifact reads and 20 render misses a minute.
 
-**Edge and first byte.** CloudFront keeps passing public routes through uncached
-([CloudFront edge](cloudfront-edge.md#cache-and-forwarding)). A stored card
-costs the gate read and one row read at the origin, so its first byte is close
-to the page's 0.39 s. A revalidating edge behavior for the card is left out: it
-would save little, and whether CloudFront stores a `no-cache` response at
+**Edge and first byte.** Production's direct Caddy edge on the
+[Vietnam host](vietnam-production.md#edge) passes public routes through without
+an edge cache; Cloudflare provides DNS only. A stored card costs the gate read
+and one row read at the origin, so its first byte is close to the page's 0.39 s.
+
+**AWS reference.** The undeployed
+[CloudFront edge](cloudfront-delivery.md#cache-and-forwarding) must pass public
+routes through uncached. A revalidating edge behavior for the card is left out:
+it would save little, and whether CloudFront stores a `no-cache` response at
 minimum TTL 0 is unclear in its documentation [cf-exp].
 
 **Cost.** One card render of about 1 second per card change, on the existing

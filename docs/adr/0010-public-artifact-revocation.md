@@ -109,12 +109,12 @@ the [scaling design](../design/scaling/transitions.md), which keep the distinct
 non-draining and revoking behavior.
 
 The operator `account-delete` command
-([showcase design](../design/showcase.md#derived-values-and-reports)) is the one
-exception to the fence rule. It runs in its own process, so it cannot reach the
-server's in-memory fences or leases. It commits the account deletion without
-them and without advancing the durable discovery generation, which would leave
-the server's fences on a generation the database no longer holds. After its
-commit:
+([showcase design](../design/showcase-contract.md#derived-values-and-reports))
+is the one exception to the fence rule. It runs in its own process, so it cannot
+reach the server's in-memory fences or leases. It commits the account deletion
+without them and without advancing the durable discovery generation, which would
+leave the server's fences on a generation the database no longer holds. After
+its commit:
 
 - every new public request returns the ordinary `404` at once, because every
   public read starts from the database;
