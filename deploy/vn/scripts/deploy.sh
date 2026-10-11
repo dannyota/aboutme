@@ -63,6 +63,10 @@ site=${DEPLOY_SITE:-https://aboutme.vn}
   exit 1
 }
 
+# Refuse before opening an SSH connection or querying the registry. Deployment
+# code comes from clean, current main, even when rolling back to an older tag.
+commit=$(bash "$here/../../../scripts/release-eligibility.sh" --deploy-checkout "$tag")
+
 work=$(mktemp -d)
 # One SSH connection for the whole run.
 ssh_opts=(-p "$SSH_PORT" -o BatchMode=yes -o ControlMaster=auto -o "ControlPath=$work/ssh-%C" -o ControlPersist=10m)
@@ -144,23 +148,6 @@ trap on_exit EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-# 1. The tag is on main with a green push run of ci.yml on main for its commit
-# (a dispatched run on a branch never counts), and every image has amd64.
-git -C "$here" fetch -q origin main
-commit=$(git -C "$here" rev-list -n1 "$tag")
-git -C "$here" merge-base --is-ancestor "$commit" origin/main || {
-  say "$tag is not on main"
-  exit 1
-}
-ci=$(gh run list --repo "$repo" --workflow ci.yml --commit "$commit" --event push --branch main \
-  --json conclusion,status,event,headBranch,headSha --limit 20 |
-  jq -r --arg c "$commit" '[.[] | select(.event == "push" and .headBranch == "main" and .headSha == $c)]
-    | .[0] | if . == null then "none" elif (.conclusion // "") == "" then .status else .conclusion end')
-[[ $ci == success ]] || {
-  say "no successful push run of ci.yml on main for $tag (${commit:0:7}); latest: '$ci'"
-  exit 1
-}
 
 # The deploy runs this checkout's host scripts, never the target release's:
 # the copies installed on the host must equal these files.
@@ -289,8 +276,8 @@ if ((rollback)); then
 fi
 
 # 5. Jobs stop; maintenance starts beside Caddy, then Caddy and the server
-# stop. The external app-down check is a Route 53 health check outside this
-# script; maintenance answers it with 503 for the length of the deploy.
+# stop. The external uptime workflow keeps checking during maintenance,
+# which answers it with 503 for the length of the deploy.
 phase=changing
 timers_stopped=1
 step timers-stop
