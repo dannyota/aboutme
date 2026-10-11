@@ -22,7 +22,7 @@ fact that only the first production sign-in can confirm.
 | Config        | Prod and staging need `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` only when LinkedIn is enabled. `LINKEDIN_OIDC_ISSUER_URL` is allowed only with `ENV=dev` and only on loopback path `/linkedin`.                                                     |
 | Web           | Capabilities `providers` drives the buttons ("Tiếp tục với LinkedIn" / "Continue with LinkedIn"), settings link, reauth, and notices. The authorize URL allowlist holds `https://www.linkedin.com/oauth/v2/authorization`.                                  |
 | Mock provider | `internal/uatmock` and `cmd/mock-oauth` serve Google and LinkedIn. The native HTTPS harness enables `google,linkedin`.                                                                                                                                      |
-| Production    | `deploy/vn/scripts/deploy-host.sh` gives the server each enabled provider's two named Podman secrets.                                                                                                                        |
+| Production    | `deploy/vn/scripts/deploy-host.sh` gives the server each enabled provider's two named Podman secrets.                                                                                                                                                       |
 
 ## LinkedIn facts
 
@@ -166,8 +166,9 @@ No schema, API, OpenAPI, or database change. Every live release accepts the
 `google,linkedin` list, so rollback needs no flag change for the server. Rolling
 back to a release before this one while LinkedIn is on would bring back the PKCE
 flow and the old notice. Before such a rollback, set
-`PROVIDER_LOGIN_ENABLED=google` in `/etc/aboutme/flags.env` and redeploy. An account whose only method is LinkedIn cannot sign in while
-LinkedIn is off, as ADR 0016 already states.
+`PROVIDER_LOGIN_ENABLED=google` in `/etc/aboutme/flags.env` and redeploy. An
+account whose only method is LinkedIn cannot sign in while LinkedIn is off, as
+ADR 0016 already states.
 
 ### Size
 

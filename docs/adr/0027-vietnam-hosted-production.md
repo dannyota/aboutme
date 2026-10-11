@@ -7,8 +7,8 @@ direction; the design choices in the
 
 ## Context
 
-At the provider decision, production ran on one AWS host in Singapore
-(ADR 0025), with RDS, S3, SES, and a Google Workspace mailbox. Account, resume,
+At the provider decision, production ran on one AWS host in Singapore (ADR
+0025), with RDS, S3, SES, and a Google Workspace mailbox. Account, resume,
 photo, and sign-in data were stored abroad.
 
 Vietnam's Personal Data Protection Law 91/2025/QH15, Article 20, governs
@@ -37,8 +37,9 @@ Production uses providers that store and process data in Vietnam:
 
 The AWS production stack and its state bootstrap are removed. Nothing from
 `deploy/aws/` is deployed. The code stays for a possible return to AWS ECS or
-move to Kubernetes. The [Vietnam production design](../design/vietnam-production.md)
-states the running topology and recovery rules.
+move to Kubernetes. The
+[Vietnam production design](../design/vietnam-production.md) states the running
+topology and recovery rules.
 
 These stay outside the move:
 
@@ -88,19 +89,19 @@ authorization, and every data invariant are unchanged.
 
 ## Amendment: 2026-10-11
 
-Cloudflare became authoritative for `aboutme.vn` on 2026-10-10 at 20:56 UTC,
-on the Free plan. Every record is DNS-only. Apex and `www` A records point to
-the host's floating IP with TTL 300. Cloudflare signs with DNSSEC algorithm 13;
-the owner adds its DS record at the `.vn` registrar. This replaces the Route 53
-DNS choice. The zone, its key-signing key, and its KMS key were deleted on
+Cloudflare became authoritative for `aboutme.vn` on 2026-10-10 at 20:56 UTC, on
+the Free plan. Every record is DNS-only. Apex and `www` A records point to the
+host's floating IP with TTL 300. Cloudflare signs with DNSSEC algorithm 13; the
+owner adds its DS record at the `.vn` registrar. This replaces the Route 53 DNS
+choice. The zone, its key-signing key, and its KMS key were deleted on
 2026-10-11. The GitHub uptime workflow replaces the Route 53 health check.
 
 Production cut over on 2026-10-11 with release v0.7.3. The AWS production stack
 and state bootstrap were destroyed that day. RDS was deleted without a final
 snapshot. Production data lives only on the Vietnam host and its pgBackRest
-backups in GreenNode vStorage. The `aboutme-email` CloudFormation stack was
-also deleted, including its SES identity, configuration set, feedback queue,
-and alarms. Keeping AWS as a fictional-data test environment is superseded by
+backups in GreenNode vStorage. The `aboutme-email` CloudFormation stack was also
+deleted, including its SES identity, configuration set, feedback queue, and
+alarms. Keeping AWS as a fictional-data test environment is superseded by
 removal of every deployed AWS resource.
 
 ## History

@@ -1,10 +1,10 @@
 # Account delete
 
-Status: **open host procedure**. This runbook covers how the operator deletes the
-account that owns a reported showcase slug. It extends
-[the production runbook](production.md), which owns the host
-operation lock and recovery. The [showcase design](../design/showcase.md) owns
-the rules; [ADR 0029](../adr/0029-community-showcase.md) owns the decision, and
+Status: **open host procedure**. This runbook covers how the operator deletes
+the account that owns a reported showcase slug. It extends
+[the production runbook](production.md), which owns the host operation lock and
+recovery. The [showcase design](../design/showcase.md) owns the rules;
+[ADR 0029](../adr/0029-community-showcase.md) owns the decision, and
 [ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md) is why the
 command has no screen in the app.
 
@@ -22,10 +22,10 @@ the account becomes a tombstone that blocks reuse for 180 days.
 ## Run it
 
 The AWS ECS deletion procedure no longer applies to production. The Vietnam
-scripts, including `host/job-run.sh` and the host bin scripts, provide no reviewed
-abuse account-deletion path. Do not run the AWS deployer or improvise a host
-command. The steps below define the checks a reviewed host procedure must keep;
-operator deletion remains blocked until that procedure exists.
+scripts, including `host/job-run.sh` and the host bin scripts, provide no
+reviewed abuse account-deletion path. Do not run the AWS deployer or improvise a
+host command. The steps below define the checks a reviewed host procedure must
+keep; operator deletion remains blocked until that procedure exists.
 
 ## Steps
 
@@ -55,7 +55,7 @@ live audit stores.
 
 The account-delete command returns exit 4 when the slug is absent and exit 5
 when the owner does not match. Neither outcome deletes an account. An unknown
-commit result requires a fresh `show <slug>` check before retrying `confirm`.
-If the host cannot prove the command stopped, retain the operation lock until
+commit result requires a fresh `show <slug>` check before retrying `confirm`. If
+the host cannot prove the command stopped, retain the operation lock until
 inspection proves quiescence. Follow the
 [host lock-clear safeguards](production.md#passkey-release-fence).

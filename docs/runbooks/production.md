@@ -39,9 +39,10 @@ inventory and Cloudflare DNSSEC. The owner adds Cloudflare's DS record at the
 
 Caddy terminates TLS on 443 with Let's Encrypt, using ACME HTTP-01 on port 80.
 DNS must point at the host before the edge starts so validation can reach it.
-Production uses `EDGES=direct`: Caddy takes the socket address, strips forwarding
-headers, and emits one `X-Real-IP` to Go on loopback. Coraza and CrowdSec run on
-the host. The [CloudFront runbook](cloudfront.md) is an AWS reference.
+Production uses `EDGES=direct`: Caddy takes the socket address, strips
+forwarding headers, and emits one `X-Real-IP` to Go on loopback. Coraza and
+CrowdSec run on the host. The [CloudFront runbook](cloudfront.md) is an AWS
+reference.
 
 ## Secrets
 
@@ -53,11 +54,11 @@ keeps an age-encrypted copy in `aboutme-infra`. Never print values.
 DEPLOY_HOST=<host> bash deploy/vn/scripts/secrets.sh list
 ```
 
-`secrets.sh generate` creates missing values. `secrets.sh import <name>` reads
-a value from standard input and syncs Podman. Supported rotations use
-`--replace`; feed a private file or an approved runtime pipe, never a literal
-value in a command. See the [host guide](../../deploy/vn/README.md#build-order)
-for media and backup key imports.
+`secrets.sh generate` creates missing values. `secrets.sh import <name>` reads a
+value from standard input and syncs Podman. Supported rotations use `--replace`;
+feed a private file or an approved runtime pipe, never a literal value in a
+command. See the [host guide](../../deploy/vn/README.md#build-order) for media
+and backup key imports.
 
 The owner edits `/etc/aboutme/flags.env` on the host. `host/install.sh` copies
 the example once and preserves that file. Redeploy the live tag after a flag or
@@ -68,14 +69,14 @@ secret change so the rendered units and running containers use it.
   `<provider>-client-id` and `<provider>-client-secret` before enabling them.
   Keep provider callback URLs under `https://aboutme.vn/api/v1/auth/`.
 - `PASSWORD_REGISTRATION_ENABLED=false` disables new email registration. Login,
-  password reset, pending verification, and provider sign-up keep working.
-  Set `true` and redeploy to restore registration.
+  password reset, pending verification, and provider sign-up keep working. Set
+  `true` and redeploy to restore registration.
 - Passkey, TOTP, and sign-in-to-view flags require their release-fence floors.
   See [Passkey release fence](#passkey-release-fence).
 
-The app sends through Bizfly SMTP as
-`Danny from aboutme.vn <danny@aboutme.vn>`. Replies reach Google Workspace.
-The [email runbook](email.md) owns configuration and delivery checks.
+The app sends through Bizfly SMTP as `Danny from aboutme.vn <danny@aboutme.vn>`.
+Replies reach Google Workspace. The [email runbook](email.md) owns configuration
+and delivery checks.
 
 ## Deploy
 
@@ -117,11 +118,11 @@ Rename a changed fixed-name font under `/_nuxt/fonts/` so browsers fetch it.
 ## Failed deploy
 
 Before a migration request, a failed deploy restores the previous release and
-job timers through maintenance. A failed first deploy keeps maintenance up.
-Once a migration may have run, the deployer keeps maintenance up with the app
-and jobs stopped. Recover with a forward fix or point-in-time restore.
-A failed recovery retains the operation lock. Inspect units and the host
-journal before retrying.
+job timers through maintenance. A failed first deploy keeps maintenance up. Once
+a migration may have run, the deployer keeps maintenance up with the app and
+jobs stopped. Recover with a forward fix or point-in-time restore. A failed
+recovery retains the operation lock. Inspect units and the host journal before
+retrying.
 
 ## Rollback
 
@@ -150,8 +151,8 @@ DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh --activate <tag>
 ```
 
 Deploy a capable release with its feature flag off, prove it healthy, activate
-the floor, then enable the flag in `/etc/aboutme/flags.env` and redeploy the same
-tag. The floors are v0.4.2 for passkeys, v0.4.7 for TOTP, and v0.6.26 for
+the floor, then enable the flag in `/etc/aboutme/flags.env` and redeploy the
+same tag. The floors are v0.4.2 for passkeys, v0.4.7 for TOTP, and v0.6.26 for
 sign in to view. A raised floor stays raised if a later step fails.
 
 Before clearing a stale lock, prove that no laptop deploy, host deploy process,
@@ -164,9 +165,9 @@ sudo /usr/local/lib/aboutme/fence.sh clear '<reason>'
 
 The clear records its reason and never lowers the floor. It refuses a retained
 cutover mutation marker. A retained cutover lock or marker also blocks serving
-and job starts across reboot; maintenance remains available. Inspect and
-recover the exact mutation before clearing its lock. Do not delete fence files
-to restart the app.
+and job starts across reboot; maintenance remains available. Inspect and recover
+the exact mutation before clearing its lock. Do not delete fence files to
+restart the app.
 
 ## Backups and restore
 
@@ -177,13 +178,13 @@ weekly, a differential daily, and backup verification weekly. Deploys add
 incremental backups. `archive_timeout=60s` bounds normal WAL shipping delay.
 
 RDS was deleted without a final snapshot on 2026-10-11. Production data lives
-only on the Vietnam host and its pgBackRest backups in GreenNode vStorage.
-There is no AWS recovery copy.
+only on the Vietnam host and its pgBackRest backups in GreenNode vStorage. There
+is no AWS recovery copy.
 
 The quarterly [restore drill](../../deploy/vn/README.md#restore-drill) restores
 the latest backup and a point-in-time target to a temporary encrypted server.
-Outbound networking for that server remains open; do not claim a completed
-drill from backup configuration alone.
+Outbound networking for that server remains open; do not claim a completed drill
+from backup configuration alone.
 
 ## Alarms
 
@@ -202,7 +203,8 @@ workflow's enabled state and run history after an idle period.
 Host alarms use `aboutme-watch.timer`, `aboutme-watch.service`, and
 `aboutme-alert@.service`. The watcher runs every five minutes and checks:
 
-- Root and data volume use above 70%, failed units, and PostgreSQL on its socket.
+- Root and data volume use above 70%, failed units, and PostgreSQL on its
+  socket.
 - WAL archive failure, unreadable backups, and newest backup age at 26 hours.
 - CrowdSec retention timer and lease, CrowdSec alert counts, and Coraza match
   counts and malformed records in the last hour.
@@ -223,8 +225,8 @@ sudo systemctl list-timers 'aboutme-*'
 Use the GreenNode API to reboot the server. An in-guest `systemctl reboot` hung
 once. Readiness stayed failed once after a hard reset until `aboutme-server`
 restarted. The cause remains open. If the same failure occurs, inspect the
-journal and fence before restarting the server unit, then check public
-readiness again.
+journal and fence before restarting the server unit, then check public readiness
+again.
 
 ## Healthy state
 

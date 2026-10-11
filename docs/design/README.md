@@ -27,7 +27,7 @@ Current behavior lives in code, deployment configuration, and
 | 6       | [Deployment](deployment.md)                                            | Environments, trust boundaries, media, mail, and migrations    |
 | 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms          |
 | 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM            |
-| 6c      | [Single-host AWS reference](single-host-production.md)                  | Retained AWS deployment design                                |
+| 6c      | [Single-host AWS reference](single-host-production.md)                 | Retained AWS deployment design                                 |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                      |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                     |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks    |

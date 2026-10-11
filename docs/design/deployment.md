@@ -12,7 +12,7 @@ in [`../architecture.md`](../architecture.md) and operator guides.
 | Native development  | Shared test DB container plus native Go, Nuxt, and Caddy processes                          | `http://localhost:20080`          |
 | Native HTTPS checks | Shared DB, native processes, and disposable browser                                         | `https://localhost:20443`         |
 | Self-hosted         | Podman Compose with operator-supplied credentials and TLS configuration                     | Operator-defined HTTPS origin     |
-| Production          | One GreenNode host (Caddy, Go, Nuxt, PostgreSQL), private vStorage         | `https://aboutme.vn`              |
+| Production          | One GreenNode host (Caddy, Go, Nuxt, PostgreSQL), private vStorage                          | `https://aboutme.vn`              |
 
 Native development uses ports `20432` (PostgreSQL), `20081` (Go), `20030`
 (Nuxt), and `20080` (Caddy). The test and development databases are separate
@@ -37,12 +37,12 @@ product acceptance runs in production, per
 ## Production topology
 
 A version tag builds ARM64 and AMD64 server, web, and Caddy images on
-GitHub-hosted runners, smoke-tests them, and publishes them with build provenance
-to public GitHub Container Registry packages. The AMD64 Playwright baseline job
-is the pixel authority. The Vietnam host requires AMD64. OpenTofu lives in
-`deploy/vn/prod`; state and environment values stay out of Git. GitHub holds no
-cloud credentials. The owner applies infrastructure and deploys from the laptop
-by image digest.
+GitHub-hosted runners, smoke-tests them, and publishes them with build
+provenance to public GitHub Container Registry packages. The AMD64 Playwright
+baseline job is the pixel authority. The Vietnam host requires AMD64. OpenTofu
+lives in `deploy/vn/prod`; state and environment values stay out of Git. GitHub
+holds no cloud credentials. The owner applies infrastructure and deploys from
+the laptop by image digest.
 
 Production runs on one GreenNode host in Vietnam with Caddy, Go, Nuxt,
 PostgreSQL 18, private vStorage media, and pgBackRest backups in vStorage
@@ -51,9 +51,9 @@ DNS-only records. The [Vietnam production design](vietnam-production.md) owns
 the topology. The AWS deployment was removed on 2026-10-11; `deploy/aws/`
 remains undeployed for a possible AWS ECS or Kubernetes path.
 
-One serving replica runs under [ADR 0026](../adr/0026-replica-scaling.md).
-Grow the host first. Raising the replica count alone is unsafe: publication
-fences, render jobs and capabilities, and SSE state are process-local until the
+One serving replica runs under [ADR 0026](../adr/0026-replica-scaling.md). Grow
+the host first. Raising the replica count alone is unsafe: publication fences,
+render jobs and capabilities, and SSE state are process-local until the
 [scaling contract](scaling/README.md) is implemented.
 
 ## Client-IP boundary
@@ -68,11 +68,11 @@ in production when its trusted-proxy set is empty. Go never parses
 
 Clients connect directly to the floating IP. Caddy terminates TLS with Let's
 Encrypt and runs Coraza and the CrowdSec bouncer. Apex is the sole application
-origin; `www` redirects before any authentication route. Cloudflare provides
-DNS with proxying off. There is no edge cache. Caddy serves hashed `/_nuxt/*`
-assets with Nuxt's immutable cache headers. Every public resume request reaches
-Go's slug, live-state, route-flag, and public-generation gate before a strong
-ETag can validate retained bytes
+origin; `www` redirects before any authentication route. Cloudflare provides DNS
+with proxying off. There is no edge cache. Caddy serves hashed `/_nuxt/*` assets
+with Nuxt's immutable cache headers. Every public resume request reaches Go's
+slug, live-state, route-flag, and public-generation gate before a strong ETag
+can validate retained bytes
 ([ADR 0010](../adr/0010-public-artifact-revocation.md)).
 
 Go reaches Nuxt on the host's private network, and at the native Nuxt address in
@@ -120,7 +120,8 @@ Verification, reset, and security-notification email is committed through a
 bounded encrypted outbox and delivered by a worker. Production sends through
 Bizfly Email Transaction over SMTP as
 `Danny from aboutme.vn <danny@aboutme.vn>`. Replies reach the Google Workspace
-mailbox. The [email runbook](../runbooks/email.md) owns SMTP and delivery checks.
+mailbox. The [email runbook](../runbooks/email.md) owns SMTP and delivery
+checks.
 
 Native development starts a loopback-only mail capture that retains a bounded
 number of messages. No production credentials enter that capture.
@@ -129,17 +130,18 @@ number of messages. No production credentials enter that capture.
 
 PostgreSQL 18 runs on the host's encrypted data volume and listens only on its
 Unix socket. pgBackRest archives WAL to GreenNode vStorage and retains backups
-for 30 days. Quarterly restore drills check the latest backup and a point-in-time
-target on an isolated temporary server. The drill's outbound networking remains
-open. See the [Vietnam database design](vietnam-production.md#postgresql).
+for 30 days. Quarterly restore drills check the latest backup and a
+point-in-time target on an isolated temporary server. The drill's outbound
+networking remains open. See the
+[Vietnam database design](vietnam-production.md#postgresql).
 
 Migrations run as a separate deploy step, never at server startup
 ([ADR 0026](../adr/0026-replica-scaling.md)); the
-[Vietnam production design](vietnam-production.md#deploy) lists the
-order. A nonzero migration exit blocks the update. The runner uses goose's
-Provider with a PostgreSQL session advisory locker, which takes the lock before
-reading the pending set, so a second concurrent runner is safe. Every migration
-runs as the fixed `aboutme_migrator` role that `db-setup` creates.
+[Vietnam production design](vietnam-production.md#deploy) lists the order. A
+nonzero migration exit blocks the update. The runner uses goose's Provider with
+a PostgreSQL session advisory locker, which takes the lock before reading the
+pending set, so a second concurrent runner is safe. Every migration runs as the
+fixed `aboutme_migrator` role that `db-setup` creates.
 `apps/server/migrations/.uat-baseline` keeps existing migrations immutable
 ([ADR 0005](../adr/0005-database-migrations.md)).
 
@@ -155,8 +157,8 @@ does not test that, so redeploying an earlier image is a supported rollback only
 when the failed release applied no migration. Otherwise recovery is a forward
 fix or a point-in-time restore.
 
-Application secrets are root-owned 0400 host files on the encrypted data
-volume, supplied as named Podman secrets only to the units that need them. An
+Application secrets are root-owned 0400 host files on the encrypted data volume,
+supplied as named Podman secrets only to the units that need them. An
 age-encrypted copy stays in `aboutme-infra`. Values never enter images, source,
 command lines, logs, or OpenTofu state.
 

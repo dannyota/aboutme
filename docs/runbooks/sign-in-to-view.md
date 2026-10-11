@@ -19,8 +19,8 @@ Follow the [release-fence order](production.md#passkey-release-fence): deploy a
 capable tag with `SIGN_IN_TO_VIEW_ENABLED=false`, prove it healthy, activate the
 v0.6.26 floor, then set `SIGN_IN_TO_VIEW_ENABLED=true` in
 `/etc/aboutme/flags.env` and redeploy the same tag. The deployer refuses an
-enabled flag below numeric 6026. A failed redeploy leaves the floor raised;
-fix forward with a capable tag.
+enabled flag below numeric 6026. A failed redeploy leaves the floor raised; fix
+forward with a capable tag.
 
 Run the sign-in-to-view live checks
 ([delivery](../design/viewer-analytics/delivery.md#live-checks), item 7) on a
@@ -41,8 +41,8 @@ improvise a rotation from the generic import command.
 
 The key must encode 32 random bytes as canonical 43-character unpadded
 base64url. Keep plaintext out of shell history, command arguments, logs, and
-reports. A reviewed procedure must redeploy the live tag to load the new key
-and confirm that existing passes are rejected.
+reports. A reviewed procedure must redeploy the live tag to load the new key and
+confirm that existing passes are rejected.
 
 Rotation ends every pass at once: every viewer of every `sign_in` resume must
 sign in again, whatever epoch their pass carried. This is routine maintenance,

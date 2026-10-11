@@ -16,26 +16,26 @@ in vStorage, and Bizfly Email Transaction by SMTP. pgBackRest ships backups and
 WAL to a second vStorage bucket. Logs stay in journald on the host; a host timer
 mails alarms through Bizfly.
 
-| Concern | Production |
-| --- | --- |
-| Edge, TLS, cache | Caddy on the host: Let's Encrypt, Coraza, CrowdSec; no edge service |
-| DNS | Cloudflare Free plan, DNS-only records, DNSSEC |
-| Compute | One amd64 vServer, Podman containers under systemd |
-| Database | PostgreSQL 18 on the vServer, pgBackRest to vStorage |
-| Media | Private vStorage bucket, static key for one service account |
-| Secrets | Root-only host files, age-encrypted copy in `aboutme-infra` |
-| Release fence | Root-owned host file plus a start-time check |
-| Jobs | systemd timers running one-shot containers |
-| Logs and alarms | journald, host mail alert units, GitHub uptime workflow |
-| Transactional mail | Bizfly Email Transaction over SMTP |
-| Support mailbox | Google Workspace |
-| Infrastructure | OpenTofu `deploy/vn/`, `vngcloud` CLI, vStorage state; manual DNS |
+| Concern            | Production                                                          |
+| ------------------ | ------------------------------------------------------------------- |
+| Edge, TLS, cache   | Caddy on the host: Let's Encrypt, Coraza, CrowdSec; no edge service |
+| DNS                | Cloudflare Free plan, DNS-only records, DNSSEC                      |
+| Compute            | One amd64 vServer, Podman containers under systemd                  |
+| Database           | PostgreSQL 18 on the vServer, pgBackRest to vStorage                |
+| Media              | Private vStorage bucket, static key for one service account         |
+| Secrets            | Root-only host files, age-encrypted copy in `aboutme-infra`         |
+| Release fence      | Root-owned host file plus a start-time check                        |
+| Jobs               | systemd timers running one-shot containers                          |
+| Logs and alarms    | journald, host mail alert units, GitHub uptime workflow             |
+| Transactional mail | Bizfly Email Transaction over SMTP                                  |
+| Support mailbox    | Google Workspace                                                    |
+| Infrastructure     | OpenTofu `deploy/vn/`, `vngcloud` CLI, vStorage state; manual DNS   |
 
 Compute and network run in HCM03 and vStorage in HCM04, both Ho Chi Minh City
 (owner, 2026-10-10); vStorage exists only in HCM04 and HAN02.
 
-One serving replica ([ADR 0026](../adr/0026-replica-scaling.md)), the
-migrator and roles ([ADR 0005](../adr/0005-database-migrations.md)), the public
+One serving replica ([ADR 0026](../adr/0026-replica-scaling.md)), the migrator
+and roles ([ADR 0005](../adr/0005-database-migrations.md)), the public
 revocation gate ([ADR 0010](../adr/0010-public-artifact-revocation.md)), private
 media ([ADR 0009](../adr/0009-private-media-delivery.md)), and the HTTP, SSE,
 and MCP contracts apply. Public images stay on GitHub Container Registry; they
@@ -46,12 +46,12 @@ hold no personal data.
 Nothing stands in front of the host (owner, 2026-10-10). The apex and `www`
 resolve to the floating IP; Caddy terminates TLS with Let's Encrypt certificates
 by ACME HTTP-01, and serves hashed `/_nuxt/*` assets with Nuxt's immutable cache
-headers. The security group admits TCP 80 and
-443 from anywhere and TCP 22922 from all sources (owner, 2026-10-10). Caddy
-takes the client address from the socket, strips every forwarding header, and
-sends one `X-Real-IP` to Go; Go keeps trusting only loopback. The CloudFront
-listener with `CloudFront-Viewer-Address` remains in the code for the AWS
-path. Production uses `EDGES=direct`.
+headers. The security group admits TCP 80 and 443 from anywhere and TCP 22922
+from all sources (owner, 2026-10-10). Caddy takes the client address from the
+socket, strips every forwarding header, and sends one `X-Real-IP` to Go; Go
+keeps trusting only loopback. The CloudFront listener with
+`CloudFront-Viewer-Address` remains in the code for the AWS path. Production
+uses `EDGES=direct`.
 
 Three host-level controls replace AWS WAF:
 
@@ -81,8 +81,8 @@ escalation: an application in the root portal with the floating IP as upstream,
 live after `www` becomes a CNAME to `<code>.waf.greennode.vn` and the apex an A
 record to vWAF's address. The
 [escalation checklist](../../deploy/vn/edge/vwaf-escalation.md) holds the steps.
-**Unconfirmed:** network-level DDoS protection for a vServer
-floating IP (Q1), and IPv6 on the floating IP (Q2).
+**Unconfirmed:** network-level DDoS protection for a vServer floating IP (Q1),
+and IPv6 on the floating IP (Q2).
 
 ## DNS and mail
 
@@ -99,26 +99,27 @@ owns mail DNS and SMTP configuration.
 
 Go uses an SMTP sender (`AUTH_EMAIL_MODE=smtp`): implicit TLS or STARTTLS on the
 configured port (Bizfly: `smtp.bizflycloud.vn`, 465 or 587) with certificate
-verification, `PLAIN` authentication, one message per connection. A
-2xx after `DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and
-transport errors are temporary. Logs carry the reply code only. Go uses SMTP
-rather than the Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard
-contract that a local stub can test. Bizfly's SMTP account sends only as its own
-address, and the account refused a second sender for the domain, so auth mail
-goes from `Danny from aboutme.vn <danny@aboutme.vn>` (owner, 2026-10-11);
-replies reach the Google Workspace mailbox.
+verification, `PLAIN` authentication, one message per connection. A 2xx after
+`DATA` is accepted, a 5xx is permanent, and 4xx, timeouts, and transport errors
+are temporary. Logs carry the reply code only. Go uses SMTP rather than the
+Bizfly HTTP API (owner, 2026-10-10), because SMTP is a standard contract that a
+local stub can test. Bizfly's SMTP account sends only as its own address, and
+the account refused a second sender for the domain, so auth mail goes from
+`Danny from aboutme.vn <danny@aboutme.vn>` (owner, 2026-10-11); replies reach
+the Google Workspace mailbox.
 
 ## Host
 
 One amd64 vServer runs Ubuntu 24.04 LTS with 2 vCPU and 4 GiB (owner,
 2026-10-10). Its [memory and storage budget](vietnam-host-memory.md) caps each
-service, serializes jobs, and gives Caddy logs a 64 MiB tmpfs. OpenTofu owns a 30 GB encrypted root disk, a 20
-GB encrypted SSD data volume, and the floating IP. Both disks use GreenNode
-encryption (aes-xts-plain64 256), chosen at server create (owner, 2026-10-10).
-Only the OS, public images, and caches use root. Secrets, PostgreSQL, CrowdSec
-state, and journald use the data volume. Either disk grows online at its 70
-percent alarm. Release images add `linux/amd64` beside `linux/arm64`, because
-GreenNode offers no ARM vServer (no ARM flavor on the account, 2026-10-10).
+service, serializes jobs, and gives Caddy logs a 64 MiB tmpfs. OpenTofu owns a
+30 GB encrypted root disk, a 20 GB encrypted SSD data volume, and the floating
+IP. Both disks use GreenNode encryption (aes-xts-plain64 256), chosen at server
+create (owner, 2026-10-10). Only the OS, public images, and caches use root.
+Secrets, PostgreSQL, CrowdSec state, and journald use the data volume. Either
+disk grows online at its 70 percent alarm. Release images add `linux/amd64`
+beside `linux/arm64`, because GreenNode offers no ARM vServer (no ARM flavor on
+the account, 2026-10-10).
 
 Rootful Podman runs every container from systemd Quadlet units:
 
@@ -162,30 +163,29 @@ file under `/etc/aboutme/secrets/`, a directory on the encrypted data volume,
 loaded as a Podman secret and given only to the units that need it. The host
 templates name each unit's secret set. Runtime values include:
 
-| Value                                   | Units                        |
-| --------------------------------------- | ---------------------------- |
+| Value                                   | Units                                     |
+| --------------------------------------- | ----------------------------------------- |
 | vStorage media key (service account)    | `aboutme-server`, all four scheduled jobs |
-| vStorage backup key and pgBackRest pass | pgBackRest on the host       |
-| Bizfly SMTP user and password           | `aboutme-server`             |
-| CrowdSec bouncer API key                | `aboutme-caddy`, `aboutme-maintenance` |
+| vStorage backup key and pgBackRest pass | pgBackRest on the host                    |
+| Bizfly SMTP user and password           | `aboutme-server`                          |
+| CrowdSec bouncer API key                | `aboutme-caddy`, `aboutme-maintenance`    |
 
 `deploy/vn/scripts/secrets.sh` runs over SSH. It generates missing application
 keys on the host with `openssl` and imports provider credentials from standard
-input. Supported rotations require `--replace`. The script never prints a
-value. `age-copy` exports a copy encrypted to the owner's age recipient; the
-laptop keeps only that ciphertext in `aboutme-infra`.
+input. Supported rotations require `--replace`. The script never prints a value.
+`age-copy` exports a copy encrypted to the owner's age recipient; the laptop
+keeps only that ciphertext in `aboutme-infra`.
 
 All four scheduled jobs receive the media keys because server configuration
-requires them when `MEDIA_ENDPOINT` is set. Only the two media jobs have outbound
-network access; the database jobs run with `--network none`.
+requires them when `MEDIA_ENDPOINT` is set. Only the two media jobs have
+outbound network access; the database jobs run with `--network none`.
 
 If application keys are ever copied in from another platform again, rotate them
 once that platform's copies are deleted, as `deploy/vn/scripts/secrets.sh`
-requires. The cutover rotation
-is complete: on 2026-10-10 at about 20:46 UTC, before deleting the AWS parameter
-copies, the host rotated the auth-mail key and key ID, TOTP key A, password-rate
-HMAC key, and view-pass key. No TOTP credentials or queued mail jobs existed.
-Sign-in was rechecked afterwards.
+requires. The cutover rotation is complete: on 2026-10-10 at about 20:46 UTC,
+before deleting the AWS parameter copies, the host rotated the auth-mail key and
+key ID, TOTP key A, password-rate HMAC key, and view-pass key. No TOTP
+credentials or queued mail jobs existed. Sign-in was rechecked afterwards.
 
 Each vStorage service account has a policy for one bucket: media (get, put,
 list, delete), backups, or state. The state key, the OpenTofu provider's
@@ -212,16 +212,16 @@ backup weekly, a differential daily, and `pgbackrest verify` weekly, keeps 30
 days by time, and encrypts every file client-side (`aes-256-cbc`) before upload.
 An alarm fires on an archive failure or a newest backup at least 26 hours old.
 The repository uses S3 path-style addressing. One repository in HCM04 (owner,
-2026-10-10): the only other vStorage
-region is Hanoi, so a regional failure means waiting for HCM04 to return.
+2026-10-10): the only other vStorage region is Hanoi, so a regional failure
+means waiting for HCM04 to return.
 
-The quarterly restore drill targets the latest backup and a point-in-time
-target from the previous day on a temporary vServer. It checks the
-goose version, row counts per table, the catalog grant test, and a store smoke
-as `aboutme_app`, records the recovery time, and deletes the server. The drill
-has no outbound internet because it has no floating IP or NAT. Outbound
-networking remains open; a successful restore drill is not recorded here. See
-the [host guide](../../deploy/vn/README.md#restore-drill).
+The quarterly restore drill targets the latest backup and a point-in-time target
+from the previous day on a temporary vServer. It checks the goose version, row
+counts per table, the catalog grant test, and a store smoke as `aboutme_app`,
+records the recovery time, and deletes the server. The drill has no outbound
+internet because it has no floating IP or NAT. Outbound networking remains open;
+a successful restore drill is not recorded here. See the
+[host guide](../../deploy/vn/README.md#restore-drill).
 
 ## Release fence
 
@@ -247,9 +247,9 @@ owner.
 systemd timers start `aboutme-job@<name>` with the server image:
 `idempotency-expiry-sweep` and `media-deletion-sweep` hourly,
 `privacy-retention-sweep` daily, and `media-orphan-sweep` weekly. `Persistent=`
-runs a missed job after a reboot, and `OnFailure=` sends mail through the host alert unit. `release-snapshot-sweep` does not run, because pgBackRest
-retention expires release backups; the command stays for the AWS
-path.
+runs a missed job after a reboot, and `OnFailure=` sends mail through the host
+alert unit. `release-snapshot-sweep` does not run, because pgBackRest retention
+expires release backups; the command stays for the AWS path.
 
 ## Logs, metrics, and alarms
 
@@ -264,26 +264,26 @@ message per condition per UTC day, from the sender the app uses. The GitHub
 outside the host. The [production runbook](../runbooks/production.md#alarms)
 owns its schedule, notification recipient, and limits.
 
-| Signal   | Mechanism                                                      |
-| -------- | -------------------------------------------------------------- |
-| App down | GitHub uptime workflow on `/readyz`, failed-run mail          |
-| Units    | `OnFailure=` mail; `watch.sh` lists failed units               |
-| Host     | `watch.sh`: root and data volume above 70%       |
+| Signal   | Mechanism                                                        |
+| -------- | ---------------------------------------------------------------- |
+| App down | GitHub uptime workflow on `/readyz`, failed-run mail             |
+| Units    | `OnFailure=` mail; `watch.sh` lists failed units                 |
+| Host     | `watch.sh`: root and data volume above 70%                       |
 | Database | `watch.sh`: archive failure, newest backup at least 26 hours old |
-| Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                |
-| Edge     | `watch.sh`: CrowdSec bans and Coraza rule counts per hour      |
-| TOTP     | `watch.sh`: `totp_unavailable` in the server journal           |
-| Mail     | Bizfly delivery logs; see the email runbook                    |
-| Spend    | GreenNode and Bizfly balance alerts, outside the repository    |
+| Jobs     | `OnFailure=` mail from each `aboutme-job@` unit                  |
+| Edge     | `watch.sh`: CrowdSec bans and Coraza rule counts per hour        |
+| TOTP     | `watch.sh`: `totp_unavailable` in the server journal             |
+| Mail     | Bizfly delivery logs; see the email runbook                      |
+| Spend    | GreenNode and Bizfly balance alerts, outside the repository      |
 
 ## Infrastructure code and state
 
 The `vngcloud/vngcloud` OpenTofu provider (1.3.21) covers servers, volumes,
-security groups, and floating IPs. The `vngcloud`
-CLI (github.com/dannyota/vngcloud, an IAM user with a 0600 credentials file)
-covers IAM, service accounts, buckets and their keys and policies, and billing
-budgets; its calls live in `deploy/vn/scripts/`. The vWAF escalation is a
-runbook checklist for the root portal.
+security groups, and floating IPs. The `vngcloud` CLI
+(github.com/dannyota/vngcloud, an IAM user with a 0600 credentials file) covers
+IAM, service accounts, buckets and their keys and policies, and billing budgets;
+its calls live in `deploy/vn/scripts/`. The vWAF escalation is a runbook
+checklist for the root portal.
 
 State uses the S3 backend on a vStorage bucket with path-style addressing and
 the AWS-only checks skipped. OpenTofu encrypts state client-side with the
@@ -313,8 +313,8 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
 3. Pull images by digest while the old release serves. Check every referenced
    secret by name.
 4. Run a pgBackRest incremental backup annotated with the tag.
-5. Stop the job timers and active jobs. Start maintenance beside Caddy
-   (both bind 80 and 443 with `SO_REUSEPORT`), then stop Caddy and the server.
+5. Stop the job timers and active jobs. Start maintenance beside Caddy (both
+   bind 80 and 443 with `SO_REUSEPORT`), then stop Caddy and the server.
 6. Require the marked 503 from outside the host.
 7. Render the new units. Run `db-setup` with `--first-deploy`, then `migrate`;
    normal deploys run `migrate` only. Require exit 0.
@@ -326,12 +326,12 @@ key (tested 2026-10-10). vStorage ignores `If-Match` on `DELETE` and refuses a
 10. Smoke from outside: health, TLS, security headers, and a 403 for a
     CrowdSec-banned test address. Release the lock.
 
-Before a migration request, a failed deploy restores the previous release.
-After a migration may have run, maintenance stays up with the app and jobs
-stopped. Recovery is a forward fix or a point-in-time restore. A failed recovery
-keeps the operation lock. `--rollback` skips backup and migration and is safe
-only when the failed release applied no migration and the older release can
-read every stored document version.
+Before a migration request, a failed deploy restores the previous release. After
+a migration may have run, maintenance stays up with the app and jobs stopped.
+Recovery is a forward fix or a point-in-time restore. A failed recovery keeps
+the operation lock. `--rollback` skips backup and migration and is safe only
+when the failed release applied no migration and the older release can read
+every stored document version.
 
 ## `deploy/vn/` layout
 
@@ -358,9 +358,9 @@ only on the Vietnam host and its pgBackRest backups in GreenNode vStorage. The
 set, feedback queue, and alarms, was deleted.
 
 Nothing from `deploy/aws/` is deployed. The code stays so production could
-return to AWS ECS or move to Kubernetes later. A return would need a new reviewed
-infrastructure and data-transfer decision. Recovery uses the Vietnam host or
-its backups.
+return to AWS ECS or move to Kubernetes later. A return would need a new
+reviewed infrastructure and data-transfer decision. Recovery uses the Vietnam
+host or its backups.
 
 ## Provider facts to confirm
 

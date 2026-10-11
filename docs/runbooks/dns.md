@@ -1,31 +1,31 @@
 # Production DNS
 
-Cloudflare is authoritative for `aboutme.vn` since 2026-10-10 20:56 UTC, on
-the Free plan. Every record is DNS-only, with proxying off. The owner edits the
+Cloudflare is authoritative for `aboutme.vn` since 2026-10-10 20:56 UTC, on the
+Free plan. Every record is DNS-only, with proxying off. The owner edits the
 records by hand in Cloudflare. Putting them under OpenTofu remains open.
 
 ## Records
 
-| Name | Type | Value or purpose |
-| --- | --- | --- |
-| `aboutme.vn`, `www.aboutme.vn` | A | Host floating IP, TTL 300 |
-| `aboutme.vn` | CAA | `0 issue "letsencrypt.org"` |
-| `aboutme.vn` | MX | `smtp.google.com`, Google Workspace mailbox |
-| `aboutme.vn` | TXT | `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all` |
-| `_dmarc.aboutme.vn` | TXT | `v=DMARC1; p=none; rua=mailto:danny@aboutme.vn` |
-| `dkim._domainkey.aboutme.vn` | TXT | Bizfly domain verification key |
-| `etrans._domainkey.aboutme.vn` | TXT | Bizfly mail-signing key |
-| `google._domainkey.aboutme.vn` | TXT | Google Workspace DKIM key |
-| Google site-verification name | CNAME | Google site verification |
+| Name                           | Type  | Value or purpose                                                  |
+| ------------------------------ | ----- | ----------------------------------------------------------------- |
+| `aboutme.vn`, `www.aboutme.vn` | A     | Host floating IP, TTL 300                                         |
+| `aboutme.vn`                   | CAA   | `0 issue "letsencrypt.org"`                                       |
+| `aboutme.vn`                   | MX    | `smtp.google.com`, Google Workspace mailbox                       |
+| `aboutme.vn`                   | TXT   | `v=spf1 include:_spf.bizflycloud.vn include:_spf.google.com ~all` |
+| `_dmarc.aboutme.vn`            | TXT   | `v=DMARC1; p=none; rua=mailto:danny@aboutme.vn`                   |
+| `dkim._domainkey.aboutme.vn`   | TXT   | Bizfly domain verification key                                    |
+| `etrans._domainkey.aboutme.vn` | TXT   | Bizfly mail-signing key                                           |
+| `google._domainkey.aboutme.vn` | TXT   | Google Workspace DKIM key                                         |
+| Google site-verification name  | CNAME | Google site verification                                          |
 
 Cloudflare also publishes CAA entries for its own certificate authorities
-automatically. Keep the Let's Encrypt CAA entry. The
-[email runbook](email.md) owns the mail flow and SMTP settings. Keep generated
-verification values and DKIM key material out of the repository.
+automatically. Keep the Let's Encrypt CAA entry. The [email runbook](email.md)
+owns the mail flow and SMTP settings. Keep generated verification values and
+DKIM key material out of the repository.
 
-Before replacing or deleting the host, or releasing its floating IP, point the
-A records elsewhere. A released address can go to another customer who could
-then answer for `aboutme.vn`.
+Before replacing or deleting the host, or releasing its floating IP, point the A
+records elsewhere. A released address can go to another customer who could then
+answer for `aboutme.vn`.
 
 DNS must point at the host before Caddy starts, so Let's Encrypt can validate
 its ACME HTTP-01 challenge. DNS-only records send clients directly to Caddy;
@@ -73,9 +73,9 @@ Use the Google verification name from Cloudflare. Expect Cloudflare name
 servers, both A records at the floating IP, and the mail records in the table.
 Check TTL 300 for the A records with `dig aboutme.vn A` and
 `dig www.aboutme.vn A` against an authoritative name server. After the registrar
-publishes the matching DS and caches expire, validating resolvers should set
-the `ad` flag and `delv` should report full validation. A missing or mismatched
-DS needs the owner's registrar check.
+publishes the matching DS and caches expire, validating resolvers should set the
+`ad` flag and `delv` should report full validation. A missing or mismatched DS
+needs the owner's registrar check.
 
 The external site-down alarm belongs to the
 [production runbook](production.md#alarms).
