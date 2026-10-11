@@ -24,6 +24,7 @@ Current behavior lives in code, deployment configuration, and
 | 5d      | [Passkey contract](passkey-second-factor-contract.md)                  | Pending, WebAuthn, recovery, mail, and passkey storage shapes             |
 | 5e      | [Authenticator-app contract](totp-second-factor-contract.md)           | TOTP routes, failure budget, and storage                                  |
 | 5f      | [TOTP key management](totp-key-management.md)                          | Sealing, key ring, rotation, and key failures                             |
+| Other   | [AWS TOTP key management](aws-totp-key-management.md)                  | Undeployed ECS key injection, rotation, and monitoring reference          |
 | 6       | [Deployment](deployment.md)                                            | Environments, trust boundaries, media, mail, and migrations               |
 | 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms                     |
 | 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM                       |
