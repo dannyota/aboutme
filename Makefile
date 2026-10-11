@@ -16,6 +16,7 @@ WEB_E2E_MANIFEST := scripts/web-e2e-source.manifest
 # the whole normal surface.
 WEB_E2E_HARNESS_SPECS := screenshot.spec.ts fonts-offline.spec.ts corpus.spec.ts print.spec.ts samples.spec.ts sample-pages.spec.ts preview-gap.spec.ts card.spec.ts sign-in-gate.spec.ts
 WEB_E2E_NORMAL_SPECS := normal-csp.spec.ts gallery.spec.ts chrome.spec.ts verify.spec.ts showcase.spec.ts showcase-baselines.spec.ts
+
 DEV_HTTPS_BROWSER_CONTEXT := deploy/dev-https-browser
 DEV_HTTPS_BROWSER_TAG := localhost/aboutme-dev-https-browser:local
 DEV_HTTPS_BROWSER_MANIFEST := .dev/native-https/browser-image.manifest
@@ -56,6 +57,7 @@ tools-check: ## Verify local gate tools match .tool-versions (limit with ARGS="c
 operational-test: operational-test-fast operational-test-dev-https operational-test-deploy operational-test-browser ## Test local CI, scan, toolchain, Compose guard, and native-status contracts without real services
 
 operational-test-fast: ## operational-test's sub-second-to-low-single-digit-second scripts
+	python3 -I -c 'from pathlib import Path; path = Path("scripts/collect-browser-diagnostics.py"); compile(path.read_bytes(), str(path), "exec")'
 	bash -n scripts/test/security-scan-test.sh
 	bash scripts/test/security-scan-test.sh
 	for f in scripts/check-tool-versions.sh scripts/check-migrations-append-only.sh scripts/check-released-schemas.sh scripts/ci.sh scripts/check-lengths.sh scripts/scan.sh scripts/security-scan.sh scripts/dev-native.sh scripts/dev-https.sh scripts/lib/dev-https-state.sh scripts/lib/dev-https-identity.sh scripts/lib/dev-https-caddy.sh scripts/lib/dev-https-preflight.sh scripts/lib/dev-https-lifecycle.sh scripts/dev-https-test.sh scripts/test-s3.sh scripts/generate-web-e2e-source-manifest.sh scripts/generate-web-e2e-source-manifest.test.sh scripts/web-e2e-source.sh scripts/web-e2e-source.test.sh deploy/dev-https-browser/run.sh deploy/dev-https-browser/static-test.sh scripts/mcp-owner-workflow.sh scripts/lib/mcp-workflow-fixture.sh scripts/mcp-owner-workflow_test.sh scripts/test/render-topology-test.sh scripts/test/ci-failure-propagation-test.sh scripts/test/ci-lifecycle-test.sh scripts/test/ci-scan-adversarial-test.sh scripts/test/live-db-transcript-secrecy-test.sh scripts/test/makefile-safety-test.sh scripts/test/migration-append-only-test.sh scripts/test/scan-engine-error-test.sh scripts/test/scan-products-contract-test.sh scripts/test/semgrep-sca-inputs-test.sh scripts/test/toolchain-contract-test.sh scripts/test/workflow-safety-test.sh scripts/totp-production-proof.sh scripts/lib/dev-https-browser-stage.sh scripts/test/totp-production-proof-test.sh scripts/pre-push.sh scripts/test/pre-push-test.sh scripts/ci-browser-proofs.sh scripts/test/ci-browser-proofs-test.sh scripts/ci-background.sh scripts/test/ci-background-test.sh scripts/deployment-document-check.sh scripts/test/deployment-document-check-test.sh scripts/npm-audit.sh scripts/test/npm-audit-test.sh scripts/codex-agent.sh scripts/test/codex-agent-test.sh; do bash -n "$$f" || exit 1; done
@@ -239,6 +241,8 @@ web-e2e: ## Compare renderer baselines in the pinned AMD64 browser
 	test "$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1)" = "$$manifest_sha"; \
 	tar_sha=$$(sha256sum "$$source_tar" | cut -d ' ' -f 1); \
 	umask 077; printf 'commit=%s\nmanifest_sha256=%s\ntar_sha256=%s\n' "$$commit" "$$manifest_sha" "$$tar_sha" >"$$mode_dir/source-metadata.txt"; \
+	collect_diagnostics() { status=$$?; trap - EXIT; python3 -I scripts/collect-browser-diagnostics.py "$$mode_dir" "$$source_tar" "$$commit" '$(lastword $(subst @, ,$(WEB_E2E_IMAGE)))' "$$manifest_sha" "$$tar_sha" "$$status" 2>/dev/null || { echo "browser diagnostics could not be collected" >&2; exit 1; }; exit "$$status"; }; \
+	trap collect_diagnostics EXIT; \
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"; \
 	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \
@@ -272,6 +276,8 @@ web-e2e-update: ## Generate review-only renderer baseline candidates in the pinn
 	test "$$(sha256sum '$(WEB_E2E_MANIFEST)' | cut -d ' ' -f 1)" = "$$manifest_sha"; \
 	tar_sha=$$(sha256sum "$$source_tar" | cut -d ' ' -f 1); \
 	umask 077; printf 'commit=%s\nmanifest_sha256=%s\ntar_sha256=%s\n' "$$commit" "$$manifest_sha" "$$tar_sha" >"$$mode_dir/source-metadata.txt"; \
+	collect_diagnostics() { status=$$?; trap - EXIT; python3 -I scripts/collect-browser-diagnostics.py "$$mode_dir" "$$source_tar" "$$commit" '$(lastword $(subst @, ,$(WEB_E2E_IMAGE)))' "$$manifest_sha" "$$tar_sha" "$$status" 2>/dev/null || { echo "browser diagnostics could not be collected" >&2; exit 1; }; exit "$$status"; }; \
+	trap collect_diagnostics EXIT; \
 	test "$$(git rev-parse --verify 'HEAD^{commit}')" = "$$commit"; \
 	test -z "$$(git status --porcelain=v1 --untracked-files=all)"; \
 	podman run --rm --platform linux/amd64 --network=host --security-opt label=disable \

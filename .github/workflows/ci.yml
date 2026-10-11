@@ -538,6 +538,15 @@ jobs:
           test -z "${UPDATE_GOLDEN+x}"
           test -z "${PLAYWRIGHT_UPDATE_SNAPSHOTS+x}"
           make web-e2e
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-diagnostics-${{ matrix.shard }}
+          path: .dev/web-e2e-results/*/*/compare/diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
       - name: Upload preview gap report
         if: ${{ always() && matrix.shard == 'preview-gap' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

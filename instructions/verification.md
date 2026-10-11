@@ -59,6 +59,8 @@ A dispatch run tests a branch only. It never satisfies the main ruleset's requir
 
 CI concurrency groups include the event name. Pull requests and dispatches cancel superseded runs for their own ref; each main push uses its run ID and never cancels another push. Preflight and the aggregate gate have 5-minute timeouts. Contracts, server, server integration, resume API, web, and each Semgrep job have 20-minute timeouts. Web E2E and HTTPS proofs have 40-minute timeouts. The reusable VN workflow bounds its own jobs.
 
+Both web-e2e shards upload `browser-diagnostics-<shard>` even when comparison fails. The allowlist covers committed renderer, print, and template page baseline names with expected, actual, and difference PNGs. The collector decodes bounded, non-interlaced 8-bit RGB/RGBA PNGs and re-encodes pixels without metadata or appended bytes. Diagnostics include source commit, source manifest and tar hashes, browser-image digest, and redacted failure summaries with spec file, line, and fixed status only. Test titles, error messages, console output, raw responses, traces, and HTML reports stay out of diagnostics. The existing preview-gap report and HTTPS proof-evidence redaction remain unchanged. `Baselines` uploads the same diagnostics on failure and includes `source-metadata.txt` with successful `candidate-baselines`; failed generation never uploads candidates. Comparison still forbids snapshot updates and uses exact pixel comparison.
+
 After merging to `main`, the `main` push run is the gate: wait for it before tagging.
 
 ## When a check fails
