@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -68,6 +70,147 @@ test("aggregate rejects unrestricted job and event skips", () => {
     assert.throws(() => checkAggregateResults(ci), /skipped/);
   }
 });
+
+test("preflight gates every large job and publishes the validated comparison base", () => {
+  const ci = readWorkflow("ci");
+  const preflight = ci.jobs.preflight;
+  assert.ok(preflight, "comparison guards need preflight");
+  assert.equal(preflight["timeout-minutes"], 5);
+  assert.equal(preflight.outputs.base_sha, "${{ steps.comparison.outputs.base_sha }}");
+  const comparison = preflight.steps.find((step) => step.id === "comparison");
+  assert.equal(comparison.env.BASE_SHA, "${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}");
+  assert.match(comparison.run, /git fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main/);
+  assert.match(comparison.run, /--dispatch-base "\$BASE_SHA" HEAD origin\/main/);
+  assert.match(comparison.run, /check-migrations-append-only.sh --commits "\$base" HEAD/);
+  assert.match(comparison.run, /check-released-schemas.sh --commits "\$base" HEAD/);
+  for (const [name, job] of Object.entries(ci.jobs)) {
+    if (["ci", "preflight"].includes(name)) continue;
+    assert.deepEqual(job.needs, ["preflight"], `${name}: must wait for preflight`);
+  }
+  assert.equal(ci.jobs.ci["timeout-minutes"], 5);
+  const docs = ci.jobs.contracts.steps.find((step) => step.env?.DOC_LINK_BASE);
+  assert.equal(docs.env.DOC_LINK_BASE, "${{ needs.preflight.outputs.base_sha }}");
+});
+
+test("preflight derives the comparison base for each event", () => {
+  checkPreflightBases(readWorkflow("ci"));
+});
+
+test("preflight rejects a renamed dispatch event condition", () => {
+  const ci = readWorkflow("ci");
+  const comparison = comparisonStep(ci);
+  comparison.run = comparison.run.replace(
+    '"$GITHUB_EVENT_NAME" = workflow_dispatch',
+    '"$GITHUB_EVENT_NAME" = workflow_dispatch_renamed',
+  );
+  assert.throws(() => checkPreflightBases(ci), /dispatch event guard/);
+});
+
+test("CI job timeouts match their workloads and retain VN timeouts", () => {
+  checkJobTimeouts(readWorkflow("ci"), readWorkflow("vn-infra"));
+});
+
+test("CI rejects too-short job timeouts", () => {
+  for (const name of Object.keys(readWorkflow("ci").jobs)) {
+    if (name === "vn-infra") continue;
+    const ci = readWorkflow("ci");
+    ci.jobs[name]["timeout-minutes"] = 1;
+    assert.throws(() => checkJobTimeouts(ci, readWorkflow("vn-infra")), /timeout-minutes/, name);
+  }
+  for (const name of Object.keys(readWorkflow("vn-infra").jobs)) {
+    const vn = readWorkflow("vn-infra");
+    vn.jobs[name]["timeout-minutes"] = 1;
+    assert.throws(() => checkJobTimeouts(readWorkflow("ci"), vn), /timeout-minutes/, name);
+  }
+});
+
+test("CI separates event concurrency and keeps every main push run", () => {
+  const ci = readWorkflow("ci");
+  assert.equal(ci.concurrency.group, "ci-${{ github.event_name }}-${{ github.event_name == 'push' && github.run_id || github.ref }}");
+  assert.equal(ci.concurrency["cancel-in-progress"], "${{ github.event_name != 'push' }}");
+});
+
+function comparisonStep(ci) {
+  const step = ci.jobs.preflight.steps.find((step) => step.id === "comparison");
+  assert.ok(step, "preflight needs a comparison step");
+  return step;
+}
+
+function checkPreflightBases(ci) {
+  const step = comparisonStep(ci);
+  assert.equal(step.env.BASE_SHA, "${{ github.event_name == 'workflow_dispatch' && inputs.base_sha || github.event.pull_request.base.sha || github.event.before }}", "event-provided comparison bases");
+  assert.match(
+    step.run,
+    /if \[ "\$GITHUB_EVENT_NAME" = workflow_dispatch \]; then\s+git fetch --no-tags origin \+refs\/heads\/main:refs\/remotes\/origin\/main\s+base=\$\(bash scripts\/check-migrations-append-only\.sh --dispatch-base "\$BASE_SHA" HEAD origin\/main\)\s+fi/,
+    "dispatch event guard must enclose fetched-main merge-base validation",
+  );
+  const directory = mkdtempSync(join(tmpdir(), "preflight-contract-"));
+  const trace = join(directory, "trace");
+  const output = join(directory, "output");
+  const stubCommands = `
+    git() { printf 'git %s\\n' "$*" >> "$TRACE_FILE"; }
+    bash() {
+      printf 'bash %s\\n' "$*" >> "$TRACE_FILE"
+      if [ "$2" = --dispatch-base ]; then printf '%s\\n' "$VALIDATED_BASE"; fi
+    }
+    export -f git bash
+  `;
+  try {
+    for (const [event, eventBase, validatedBase] of [
+      ["pull_request", "a".repeat(40), "a".repeat(40)],
+      ["push", "b".repeat(40), "b".repeat(40)],
+      ["workflow_dispatch", "c".repeat(40), "d".repeat(40)],
+    ]) {
+      rmSync(trace, { force: true });
+      rmSync(output, { force: true });
+      const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", stubCommands + step.run], {
+        cwd: root,
+        env: { ...process.env, GITHUB_EVENT_NAME: event, BASE_SHA: eventBase,
+          VALIDATED_BASE: validatedBase, TRACE_FILE: trace, GITHUB_OUTPUT: output },
+        encoding: "utf8",
+        timeout: 5000,
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, `${event}: ${result.stderr}`);
+      const expected = event === "workflow_dispatch" ? [
+        "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
+        `bash scripts/check-migrations-append-only.sh --dispatch-base ${eventBase} HEAD origin/main`,
+      ] : [];
+      expected.push(
+        `bash scripts/check-migrations-append-only.sh --commits ${validatedBase} HEAD`,
+        `bash scripts/check-released-schemas.sh --commits ${validatedBase} HEAD`,
+      );
+      assert.deepEqual(readFileSync(trace, "utf8").trim().split("\n"), expected, `${event}: comparison commands`);
+      assert.equal(readFileSync(output, "utf8"), `base_sha=${validatedBase}\n`, `${event}: published base`);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function checkJobTimeouts(ci, vn) {
+  const timeouts = {
+    preflight: 5,
+    contracts: 20,
+    server: 20,
+    "server-integration": 20,
+    "server-resumeapi": 20,
+    web: 20,
+    "web-e2e": 40,
+    "dev-https-proofs": 40,
+    "semgrep-code": 20,
+    "semgrep-supply-chain": 20,
+    ci: 5,
+  };
+  assert.deepEqual(Object.keys(ci.jobs).sort(), [...Object.keys(timeouts), "vn-infra"].sort(), "CI timeout job set");
+  for (const [name, minutes] of Object.entries(timeouts)) {
+    assert.equal(ci.jobs[name]["timeout-minutes"], minutes, `${name}: timeout-minutes`);
+  }
+  assert.equal(ci.jobs["vn-infra"]["timeout-minutes"], undefined, "reusable VN caller inherits timeouts");
+  for (const [name, job] of Object.entries(vn.jobs)) {
+    assert.equal(job["timeout-minutes"], 10, `VN ${name}: timeout-minutes`);
+  }
+}
 
 function aggregateStep(ci) {
   const step = ci.jobs.ci.steps.find((step) => step.env?.NEEDS_JSON);
