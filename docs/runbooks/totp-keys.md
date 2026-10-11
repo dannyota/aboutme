@@ -3,8 +3,9 @@
 Production TOTP uses release floor **v0.4.7, numeric 4007**. The
 [production runbook](production.md) owns host deploys, flags, and the release
 fence. [Key management](../design/totp-key-management.md) owns the key-ring
-contract; [ADR 0017](../adr/0017-second-factor-authentication.md) owns the
-choice.
+contract. The [AWS key reference](../design/aws-totp-key-management.md) owns ECS
+injection, rotation, and monitoring;
+[ADR 0017](../adr/0017-second-factor-authentication.md) owns the choice.
 
 ## Bootstrap and enrollment
 
@@ -22,8 +23,9 @@ fix forward with a capable tag.
 
 ## Key rotation
 
-Status: **open host procedure**. The AWS ECS re-encryption procedure no longer
-applies to production. Neither the Vietnam deployer nor `host/job-run.sh`
+Status: **open host procedure**. The
+[AWS ECS re-encryption procedure](../design/aws-totp-key-management.md#rotation)
+does not apply to production. Neither the Vietnam deployer nor `host/job-run.sh`
 provides a reviewed TOTP re-encryption path. Do not use AWS commands or
 improvise a host command to rotate keys with stored credentials.
 

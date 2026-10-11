@@ -174,7 +174,7 @@ rule.
 
 The `aboutme-prod-totp-reencrypt` family uses the app execution and task roles,
 so the deploy role's pass-role scope stays the same, and scheduler and job roles
-gain nothing. The [key-management design](totp-key-management.md#rotation)
+gain nothing. The [key-management design](aws-totp-key-management.md#rotation)
 defines what the task does.
 
 ## Privileged bypass
