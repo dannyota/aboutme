@@ -9,8 +9,10 @@ and [accepted ADRs](../adr/README.md) own project decisions; the
 | Research                                                   | Material                                                       | Status                                                                      |
 | ---------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [FlowCV](flowcv/README.md)                                 | Competitor feature inventory and gap analysis                  | Historical observations; not verified against the live API                  |
+| [FlowCV API surface](flowcv/api-surface.md)                | Read-only API observations and resume document structure       | Historical probe; observed and inferred claims marked separately            |
 | [AWS cost comparison](aws-cost/comparison.md)              | Workload estimates, pricing inputs, and cost models            | Historical AWS estimates; not the deployed topology                         |
 | [AWS cost recommendation](aws-cost/recommendation.md)      | Hosting recommendation and operating assumptions               | Historical recommendation; production follows ADR 0027                      |
+| [AWS UAT lifecycle cost](aws-cost/uat-lifecycle.md)        | Hosted test environment lifecycle estimates                    | Historical model; not the deployed topology                                 |
 | [Caddy header experiment](caddy-header-boundary/README.md) | Native matchers tested against duplicate and malformed headers | Historical CloudFront origin-secret experiment; not the live trust boundary |
 
 Production runs in Vietnam under

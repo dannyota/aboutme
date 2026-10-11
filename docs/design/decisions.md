@@ -61,7 +61,8 @@ To change a decision in force, edit its topic ADR with the owner's approval and
 add a History entry naming what changed and why. Open a new ADR only for a new
 topic. Update the design text that applies the decision; see the
 [engineering standard](../standards/engineering.md#keeping-text-current) and
-[ADR policy](../adr/README.md).
+[ADR policy](../adr/README.md). A structural rewrite needs a v5 revision of this
+design.
 
 A correction that fixes an error, ambiguity, or contradiction without changing a
 decision is an ordinary edit. Status words are exact: "approved" means the
