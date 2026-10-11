@@ -6,48 +6,27 @@ npm workspace. Intended UI and renderer boundaries live in the
 
 ## Implemented surface
 
-- Server-rendered landing, authentication, template gallery, and public resume
-  pages.
-- Client-side authenticated user state, resume list, and optimistic-save editor.
-- Session, device, and connected-agent settings with CSRF-aware mutations.
-- A pure resume renderer shared by the editor preview and public SSR.
-- Template and sample-resume flows for starting a new resume or changing its
-  presentation.
-- A committed TypeScript API client generated from
-  [`docs/api/openapi.yaml`](../../docs/api/openapi.yaml).
+See [rendering and editor](../../docs/architecture/rendering-and-editor.md).
 
-The landing page server-renders a compiled-in sample resume through the shared
-renderer and places its public seal on the sheet without fetching data. The
-authenticated shell, built from `AppShell` and the shared `components/app`
-composites, switches between signed-out and signed-in navigation after the
-client session read. `AccountMenu` and `ThemeToggle` provide account actions and
-the persisted theme choice; `PageHeader`, fields, status/loading states, empty
-states, menus, and dialogs keep page behavior and focus handling shared.
+## Source map
 
-`EditorShell` provides the top bar, account menu, publish action, tool rail,
-resume outline, preview, and inspector. `EditorPreview` keeps the rendered
-resume on a whole white sheet, reports the settled estimated page count, and
-shows the public seal or photo state without exposing a photo key. `ResumeList`
-uses paper-like cards with title, update time, a public seal/link or Draft mark,
-empty create slots, and Rename/Delete menus. The sessions settings page uses the
-shared settings and status components for devices, password changes, provider
-linking, and connected-agent revocation. `PublishDialog` exposes the slug,
-Public resume, PDF download, and SEO and GEO choices, then shows the seal,
-public link, and Copy link after success.
+| Path | Purpose |
+| --- | --- |
+| `app/pages/` | Public and authenticated routes |
+| `app/components/ui/` | Generated UI primitives |
+| `app/components/app/` | Shared application composites |
+| `app/components/editor/`, `app/editor/` | Editor surfaces, commands, and reconciliation |
+| `app/components/resume/` | Pure resume rendering |
+| `app/i18n/`, `app/composables/useLocale.ts` | Interface copy and language state |
+| `app/api/` | Typed API transport and generated OpenAPI types |
+| `server/routes/`, `server/utils/`, `server/workers/` | SSR, private print routes, and bounded render workers |
+| `test/`, `e2e/` | Unit, renderer, and browser checks |
 
-The landing page, account and legal pages, and template gallery switch between
-Vietnamese and English. The editor and settings pages remain English.
-
-The chrome uses Tailwind CSS v4 without Preflight and generated shadcn-vue /
-reka-ui primitives. Its desk and paper tokens are cool grey and white in light
-mode, lamp-lit in dark mode; signature blue-black is reserved for the person's
-actions, while seal red is reserved for public state and publishing.
-`Be Vietnam Pro` is the chrome font. At narrow widths the editor collapses the
-rail and outline, switches between Edit and Preview, and stacks the inspector;
-the sheet scales to the viewport down to 390 px and is never cropped.
-
-The product and built-surface records are [`PRODUCT.md`](../../PRODUCT.md)
-and [`DESIGN.md`](../../DESIGN.md).
+[Rendering and editor](../../docs/architecture/rendering-and-editor.md) describes
+application chrome, the bilingual workspace and settings, preview, public SSR,
+and exports. [Authentication and agent access](../../docs/architecture/auth-and-agent-access.md)
+describes the session and consent boundaries. The product and visual direction
+live in [`PRODUCT.md`](../../PRODUCT.md) and [`DESIGN.md`](../../DESIGN.md).
 
 ## UI conventions
 
@@ -62,9 +41,8 @@ The application UI has three layers:
 - Shared application composites live under `app/components/app/`.
 - Pages and editor panels compose those layers into product surfaces.
 
-Text fields commit on blur or Enter. Empty text unsets a defined value,
-unchanged text emits nothing, and Escape restores the current model value.
-Enumerations, checkboxes, switches, colors, and numbers commit on change.
+The [editor architecture](../../docs/architecture/rendering-and-editor.md#implemented-authenticated-editor)
+defines field commit behavior.
 
 Tests query accessible roles and labels first, then retained stable hooks. Do
 not couple tests to tags, utility classes, or list positions. Dialog and menu
