@@ -115,6 +115,17 @@ grep -Eq '^\| editor \| passed \| [0-9]+ \| 60 \| 1 \|$' "$WORK/ok.summary" ||
 grep -Eq '^\| passkey:primary-disabled \| passed \| [0-9]+ \| 0 \| 0 \|$' "$WORK/ok.summary" ||
   fail "summary counted another proof's requests: $(cat "$WORK/ok.summary")"
 
+timing=$REPO/.dev/proof-timing/proofs.tsv
+[ -f "$timing" ] || fail "proof timings were not recorded"
+awk -F '\t' '
+  NR == 1 { if ($0 != "proof\tstatus\trestart_seconds\tcheck_seconds\ttotal_seconds") exit 1; next }
+  { if (NF != 5 || $2 != 0 || $3 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ ||
+        $5 !~ /^[0-9]+$/ || $5 < $3 + $4) exit 1 }
+  END { if (NR != 4) exit 1 }
+' "$timing" || fail "passing proof timings lack durations or results"
+[ "$(awk -F '\t' 'NR == 2 { print $3 }' "$timing")" = 0 ] ||
+  fail "the first proof recorded a harness restart"
+
 if run_group failing exports auth; then
   fail "a group with a failing proof passed"
 fi
@@ -129,6 +140,12 @@ grep -Fq 'failed proofs: exports' "$WORK/failing.out" ||
 if compgen -G "$REPO/.dev/native-https/evidence/exports.*" >/dev/null; then
   fail "a failing exports proof's evidence was left in the evidence root"
 fi
+
+awk -F '\t' '
+  NR == 2 { if ($1 != "exports" || $2 != 3) exit 1 }
+  NR == 3 { if ($1 != "auth" || $2 != 0) exit 1 }
+  END { if (NR != 3) exit 1 }
+' "$timing" || fail "failed proof timings lost the failure or the later proof"
 
 for bad in '' 'totp:' 'Editor' '../x' 'totp:skew;id' 'totp:skew,' 'totp:,skew' \
   'passkey:primary-disabled,recovery-attempts' 'editor,exports'; do

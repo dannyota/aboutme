@@ -48,6 +48,9 @@ evidence_root=.dev/native-https/evidence
 staging=.dev/proof-evidence
 server_log=.dev/native-https/log/server.log
 summary=${GITHUB_STEP_SUMMARY:-/dev/null}
+timing=.dev/proof-timing/proofs.tsv
+install -d -m 0700 "${timing%/*}" || exit 1
+printf 'proof\tstatus\trestart_seconds\tcheck_seconds\ttotal_seconds\n' >"$timing" || exit 1
 
 # move_shard_evidence moves every KIND-* evidence directory the shard left in
 # the evidence root into the shard's own staging directory.
@@ -153,16 +156,22 @@ for proof in "$@"; do
   start=$SECONDS
   log_start=$(log_lines)
   status=0
+  restart_seconds=0
+  check_seconds=0
   if [ "$first" -eq 0 ]; then
+    restart_start=$SECONDS
     { make dev-https-down && make dev-https; } || status=$?
+    restart_seconds=$((SECONDS - restart_start))
   fi
   first=0
   if [ "$status" -eq 0 ]; then
+    check_start=$SECONDS
     case $kind in
     totp) ABOUTME_TOTP_SHARD=$shard make "$target" || status=$? ;;
     passkey) ABOUTME_PASSKEY_SHARD=$shard make "$target" || status=$? ;;
     *) make "$target" || status=$? ;;
     esac
+    check_seconds=$((SECONDS - check_start))
   fi
   case $kind in
   totp) stage_totp_evidence "$shard" || status=1 ;;
@@ -178,7 +187,10 @@ for proof in "$@"; do
     failed+=("$proof")
     echo "::error title=$proof::$target failed with exit $status"
   fi
-  row="| $proof | $result | $((SECONDS - start)) | $(api_load "$log_start") |"
+  total_seconds=$((SECONDS - start))
+  printf '%s\t%s\t%s\t%s\t%s\n' "$proof" "$status" "$restart_seconds" \
+    "$check_seconds" "$total_seconds" >>"$timing" || exit 1
+  row="| $proof | $result | $total_seconds | $(api_load "$log_start") |"
   echo "$row" >>"$summary"
   echo "ci-browser-proofs: $row"
 done
