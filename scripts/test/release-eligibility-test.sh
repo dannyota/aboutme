@@ -47,8 +47,15 @@ grep -Eq '^          fetch-depth: 0$' <<<"$body" || fail 'eligibility needs main
 grep -Fq 'TAG: ${{ github.ref_name }}' <<<"$body" || fail 'eligibility must use the event tag'
 grep -Fq 'COMMIT: ${{ github.sha }}' <<<"$body" || fail 'eligibility must bind the event commit'
 # Run the actual workflow command, so bypassing the helper is a regression.
-command=$(sed -n 's/^        run: //p' <<<"$body")
-[[ $command == 'bash scripts/release-eligibility.sh "$TAG" "$COMMIT"' ]] || fail 'missing shared eligibility command'
+gate_command() {
+  job_body "$1" | awk '
+    /^      - name: Check release eligibility$/ { found=1; next }
+    /^      - / { found=0 }
+    found && /^        run: / { sub(/^        run: /, ""); print }
+  '
+}
+command=$(gate_command eligibility)
+[[ -n $command ]] || fail 'missing shared eligibility command'
 
 cat >"$work/bin/git" <<'STUB'
 #!/usr/bin/env bash
@@ -84,12 +91,18 @@ for name in docker ssh; do
   cat >"$work/bin/$name" <<'STUB'
 #!/usr/bin/env bash
 echo "${0##*/} $*" >>"$ELIGIBILITY_TEST_DIR/writes"
+if [[ ${0##*/} == docker && $1 == push && ${TEST_PUSH_FAIL:-0} == 1 ]]; then exit 1; fi
 STUB
 done
 chmod +x "$work/bin/"*
 export PATH=$work/bin:$PATH
 export TAG=v0.7.5 COMMIT=$TEST_COMMIT
-cd "$root"
+# Model the candidate checkout and the separate trusted main checkout. Static
+# checks below bind the trusted fixture to the workflow's checkout source.
+mkdir -p "$work/workspace/scripts" "$work/workspace/.release-trusted/scripts"
+cp "$root/scripts/release-eligibility.sh" "$work/workspace/scripts/"
+cp "$root/scripts/release-eligibility.sh" "$work/workspace/.release-trusted/scripts/"
+cd "$work/workspace"
 
 runs() {
   jq -n --arg sha "$TEST_COMMIT" --arg event "${1:-push}" --arg branch "${2:-main}" \
@@ -99,9 +112,9 @@ runs() {
 }
 publication() {
   # A failed gate stops before registry login, image push, or release creation.
-  bash -euo pipefail -c "$command" || return
-  docker login ghcr.io
-  docker push test-image
+  bash -euo pipefail -c "${1-$command}" || return
+  docker login ghcr.io || return
+  docker push test-image || return
   gh release create "$TAG"
 }
 reject() {
@@ -147,4 +160,69 @@ runs
 publication >"$work/out" 2>&1 || { cat "$work/out" >&2; fail 'valid release refused'; }
 [[ $(cat "$work/out") == "$TEST_COMMIT" ]] || fail 'gate did not return the resolved commit'
 grep -q 'docker push' "$work/writes" || fail 'valid release did not reach publication'
+# A candidate can replace its own helper, but cannot replace the main helper.
+printf '#!/usr/bin/env bash\nexit 0\n' >scripts/release-eligibility.sh
+failures=0
+expect_job_rejected() {
+  local job=$1
+  : >"$work/writes"
+  if publication "$(gate_command "$job")" >"$work/out" 2>&1 || [[ -s $work/writes ]]; then
+    echo "release-eligibility-test: $TEST_CASE reached publication in $job" >&2
+    failures=$((failures + 1))
+    return
+  fi
+  grep -q 'release-eligibility:' "$work/out" || { cat "$work/out" >&2; fail "$job failed outside eligibility"; }
+  echo "rejected $TEST_CASE in $job before publication"
+}
+TEST_CASE=off-main
+runs
+for job in eligibility $write_jobs; do
+  expect_job_rejected "$job"
+done
+
+# A partial rerun reuses the successful prerequisite, but reruns the failed
+# publishing job's own steps. Main CI can turn red between those attempts.
+cp "$root/scripts/release-eligibility.sh" scripts/release-eligibility.sh
+TEST_CASE=success
+runs
+bash -euo pipefail -c "$command" >/dev/null || fail 'first attempt eligibility failed'
+for job in $write_jobs; do
+  runs
+  : >"$work/writes"
+  if TEST_PUSH_FAIL=1 publication "$(gate_command "$job")" >"$work/out" 2>&1; then
+    fail "$job did not fail its first push"
+  fi
+  grep -q 'docker push' "$work/writes" || fail "$job first attempt never reached push"
+  ! grep -qx release "$work/writes" || fail "$job created a release after push failed"
+  TEST_CASE=partial-rerun-red
+  runs push main failure
+  expect_job_rejected "$job"
+done
+[[ $failures == 0 ]] || fail "$failures publication bypasses"
+
+# Every job checks trusted code before candidate checkout or artifact handling.
+# Exact prefix comparison also rejects conditional or fail-open gate steps.
+expected_prefix=$(cat <<'YAML'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: dannyota/aboutme
+          ref: refs/heads/main
+          path: .release-trusted
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release eligibility
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
+YAML
+)
+for job in eligibility $write_jobs; do
+  body=$(job_body "$job")
+  prefix=$(awk '/^    steps:$/ { found=1; next } found { print; if (/^        run: /) exit }' <<<"$body")
+  [[ $prefix == "$expected_prefix" ]] || fail "$job does not start with the trusted main gate"
+  grep -Eq '^      actions: read$' <<<"$body" || fail "$job cannot refresh CI evidence"
+done
 echo 'release eligibility test passed'
