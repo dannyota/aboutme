@@ -26,16 +26,17 @@ defect, not permission to choose one silently.
 
 ## Directory map
 
-| Path                                     | Contents                                                       | Lifecycle                                               |
-| ---------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------- |
-| [`design/`](design/README.md)            | Intended product, architecture, budgets, and template contract | Approved at v4; changes need an ADR or a new revision   |
-| [`adr/`](adr/README.md)                  | One decision per record                                        | Accepted records are append-only; supersede, never edit |
-| [`api/`](api/README.md)                  | OpenAPI source, contract tests, and client-generation notes    | Living with implemented HTTP behavior                   |
-| [`plans/`](plans/README.md)              | Roadmap, active phase plans, and acceptance traceability       | Living; a phase's plan is deleted when the phase exits  |
-| [`research/`](research/flowcv/README.md) | External observations used as evidence                         | Not project authority                                   |
-| [`guides/`](guides/README.md)            | Setup and usage guidance                                       | Living with supported workflows                         |
-| [`runbooks/`](runbooks/README.md)        | Exact operating, verification, and recovery procedures         | Added only when the operation exists                    |
-| [`standards/`](standards/README.md)      | Documentation and code-comment rules                           | Living repository policy                                |
+| Path                                | Contents                                                       | Lifecycle                                               |
+| ----------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------- |
+| [`design/`](design/README.md)       | Intended product, architecture, budgets, and template contract | Approved design with accepted ADR amendments            |
+| [`brand/`](brand/README.md)         | Brand assets and usage rules                                   | Living with the approved visual identity                |
+| [`adr/`](adr/README.md)             | One decision per record                                        | Update the topic record with owner approval and History |
+| [`api/`](api/README.md)             | OpenAPI source, contract tests, and client-generation notes    | Living with implemented HTTP behavior                   |
+| [`plans/`](plans/README.md)         | Roadmap, active phase plans, and acceptance traceability       | Living; a phase's plan is deleted when the phase exits  |
+| [`research/`](research/README.md)   | Historical observations and experiments                        | Not project authority                                   |
+| [`guides/`](guides/README.md)       | Setup and usage guidance                                       | Living with supported workflows                         |
+| [`runbooks/`](runbooks/README.md)   | Exact operating, verification, and recovery procedures         | Supported commands and explicitly open host procedures  |
+| [`standards/`](standards/README.md) | Documentation and code-comment rules                           | Living repository policy                                |
 
 Root [`README.md`](../README.md), [`CONTRIBUTING.md`](../CONTRIBUTING.md),
 [`SECURITY.md`](../SECURITY.md), and [`LICENSE`](../LICENSE) cover repository
@@ -54,11 +55,17 @@ entry points and project policy.
 - [Local UAT runbook](runbooks/local-uat.md)
 - [Authentication email runbook](runbooks/email.md)
 
-Design v4 is approved. Changing a decision needs a new ADR; see the
-[design index](design/README.md#approval-rule).
+To change a decision in force, update its topic ADR with the owner's approval
+and add a History entry naming what changed and why. Open a new ADR only for a
+new topic. See the [ADR policy](adr/README.md).
 
 ## Writing and checks
 
 Follow [`standards/engineering.md`](standards/engineering.md). Format only the
-files you change, then run `make docs-lint`. See the
-[contributor checks](../CONTRIBUTING.md#checks) for commands.
+files you change, then run `make docs-lint` and `make docs-links-check`. The
+link check covers changed Markdown, the main documentation indexes, ancestor
+indexes, and indexes linking to changed or deleted targets. It does not crawl
+unchanged historical pages. Set `DOC_LINK_BASE` to a commit to compare against;
+the default is `HEAD`, including working changes and untracked files. CI uses
+the event base commit. See the [contributor checks](../CONTRIBUTING.md#checks)
+for commands.
