@@ -80,10 +80,26 @@ and delivery checks.
 
 ## Deploy
 
-Use the current reviewed checkout's deployer. A release tag must be on `main`
-with a green push run of `ci.yml` on its exact commit. The image workflow
-publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and pins
-image digests. GitHub holds no cloud credentials.
+Use the current reviewed checkout's deployer. Publication and deployment share
+`scripts/release-eligibility.sh`: the tag must be strict `vMAJOR.MINOR.PATCH`,
+resolve to a commit on `main` fetched from `dannyota/aboutme`, and have a
+completed, successful latest matching `ci.yml` push run on `main` for that exact
+commit. A branch or manual run never counts. A newer pending, cancelled, or
+failed matching run blocks an older success. Missing evidence or a fetch/API
+error also blocks.
+
+The image workflow runs the helper from a separate checkout of
+`dannyota/aboutme` at `refs/heads/main` and binds the tag to the workflow's
+event commit. A read-only job checks eligibility before publishing jobs start.
+Every write-capable job repeats the check before other work, so a partial rerun
+must pass fresh eligibility. Candidate checkouts supply build inputs only. The
+workflow publishes arm64 and amd64 images; the Vietnam deploy requires amd64 and
+pins image digests. GitHub holds no cloud credentials.
+
+Before SSH or registry access, the deployer also requires its checkout to be on
+`main`, clean (including untracked files), and equal to freshly fetched
+`origin/main`. Use that checkout for rollbacks and activation too; the target
+tag may be older. Ignored local configuration does not make the checkout dirty.
 
 ```sh
 DEPLOY_HOST=<host> bash deploy/vn/scripts/deploy.sh <tag>

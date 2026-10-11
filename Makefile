@@ -72,6 +72,8 @@ operational-test-fast: ## operational-test's sub-second-to-low-single-digit-seco
 	scripts/test/scan-products-contract-test.sh
 	scripts/test/toolchain-contract-test.sh
 	scripts/test/workflow-safety-test.sh
+	bash -n scripts/release-eligibility.sh scripts/test/release-eligibility-test.sh
+	bash scripts/test/release-eligibility-test.sh
 	scripts/test/totp-production-proof-test.sh
 	scripts/test/pre-push-test.sh
 	scripts/test/ci-browser-proofs-test.sh
