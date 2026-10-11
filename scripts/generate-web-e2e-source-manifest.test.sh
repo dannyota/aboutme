@@ -18,6 +18,7 @@ fail() {
 
 REPO=$WORK/repo
 mkdir -p \
+  "$REPO/apps/web/app/components/resume" \
   "$REPO/apps/web/app/assets/fonts/tools" \
   "$REPO/apps/web/e2e" \
   "$REPO/apps/web/public" \
@@ -36,6 +37,8 @@ cp "$SCRIPT" "$REPO/scripts/generate-web-e2e-source-manifest.sh"
 
 for path in \
   apps/web/app/app.vue \
+  apps/web/app/components/resume/AGENTS.md \
+  apps/web/app/components/resume/CLAUDE.md \
   apps/web/app/assets/fonts/README.md \
   apps/web/app/assets/fonts/tools/generate.py \
   apps/web/e2e/corpus.spec.ts \
@@ -44,6 +47,8 @@ for path in \
   apps/web/package.json \
   apps/web/public/theme-bootstrap.js \
   apps/web/server/route.ts \
+  apps/web/server/AGENTS.md \
+  apps/web/server/CLAUDE.md \
   apps/web/test/sanitizer/neutralization.ts \
   apps/web/test/unit/example.test.ts \
   apps/web/tsconfig.json \
@@ -102,6 +107,26 @@ cmp -s "$WORK/expected" "$REPO/scripts/web-e2e-source.manifest" ||
   cd "$REPO"
   scripts/generate-web-e2e-source-manifest.sh --check
 )
+
+cp "$REPO/scripts/web-e2e-source.manifest" "$WORK/before-guide-edits"
+for directory in \
+  apps/web/app/components/resume \
+  apps/web/e2e \
+  apps/web/public \
+  apps/web/server \
+  apps/web/types \
+  packages/schema/gen/ts; do
+  for guide in AGENTS.md CLAUDE.md; do
+    printf 'edited guide\n' >"$REPO/$directory/$guide"
+  done
+done
+(
+  cd "$REPO"
+  scripts/generate-web-e2e-source-manifest.sh --check
+  scripts/generate-web-e2e-source-manifest.sh --update
+)
+cmp -s "$WORK/before-guide-edits" "$REPO/scripts/web-e2e-source.manifest" ||
+  fail 'agent guide edits changed the source manifest'
 
 printf 'new source\n' >"$REPO/apps/web/app/new-source.ts"
 cp "$REPO/scripts/web-e2e-source.manifest" "$WORK/before-drift-check"
