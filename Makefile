@@ -102,6 +102,13 @@ lengths-check: ## Fail when a doc passes 450 lines or non-test code passes 700
 docs-lint: ## Check markdown formatting + lint
 	npm run docs:lint
 
+.PHONY: docs-links-check docs-links-test
+docs-links-check: ## Check local links in changed Markdown and affected indexes (DOC_LINK_BASE defaults to HEAD)
+	node scripts/check-doc-links.mjs
+
+docs-links-test: ## Test local Markdown file, anchor, and scope checks
+	node --test scripts/test/check-doc-links.test.mjs
+
 docs-fmt: ## Format + autofix markdown, then re-lint (catches non-convergence)
 	npm run docs:fmt
 	$(MAKE) docs-lint
