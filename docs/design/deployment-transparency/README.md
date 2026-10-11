@@ -4,11 +4,11 @@ Anyone can read the image digests reported for `https://aboutme.vn`. The
 [Vietnam host reporter](host.md) reads Podman for a container that verifies and
 publishes the running digests. On AWS ECS and Kubernetes, an observer outside
 the application asks the platform which digests run and checks each against the
-signed GitHub build record. Both
-publish the result at `https://aboutme.vn/.well-known/deployment.json`. The page
-`/verify` shows the same document to people and tells them how to check it
-themselves. [ADR 0028](../../adr/0028-deployment-transparency-observer.md)
-records the choice.
+signed GitHub build record. Both publish the result at
+`https://aboutme.vn/.well-known/deployment.json`. The page `/verify` shows the
+same document to people and tells them how to check it themselves.
+[ADR 0028](../../adr/0028-deployment-transparency-observer.md) records the
+choice.
 
 Status: accepted; the owner approved A1 to A5 on 2026-09-27. **Owner approval**
 marks a product-visible choice the owner makes before the work that depends on

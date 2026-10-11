@@ -34,23 +34,23 @@ The root-owned directory has mode `0755`.
 The observer reads that directory at `/observation` through a read-only mount.
 It validates the closed document schema, the component order, replica bounds,
 digests, and RFC 3339 timestamps, then passes only runtime observations to the
-existing aggregator and Sigstore verifier. The reporter's unchecked build
-claims never become verification evidence. Reads are capped at 64 KiB.
-The public document keeps the root reporter's `observed_at`; verification
-cannot extend a snapshot's freshness.
+existing aggregator and Sigstore verifier. The reporter's unchecked build claims
+never become verification evidence. Reads are capped at 64 KiB. The public
+document keeps the root reporter's `observed_at`; verification cannot extend a
+snapshot's freshness.
 
 The observer publishes to `/var/lib/aboutme/deployment`, owned by its uid
 `65532` with mode `0755`. It writes a temporary file beside `deployment.json`,
 sets mode `0644`, fsyncs and closes the file, renames it, and fsyncs the
-directory. A failure before rename removes the temporary file and preserves
-the previous document. A directory fsync failure after rename is logged as an
-error; the complete new document may be visible.
+directory. A failure before rename removes the temporary file and preserves the
+previous document. A directory fsync failure after rename is logged as an error;
+the complete new document may be visible.
 
 Serving and maintenance Caddy mount the public directory read-only at
 `/srv/deployment`. A directory mount keeps atomic replacements visible. The
 direct edge serves only the exact document path for GET and HEAD. Other methods
-get 405; a missing file gets 404. Responses
-carry `Content-Type: application/json`, `Cache-Control: public, max-age=30`,
+get 405; a missing file gets 404. Responses carry
+`Content-Type: application/json`, `Cache-Control: public, max-age=30`,
 `Access-Control-Allow-Origin: *`, HSTS `max-age=31536000`, and
 `X-Content-Type-Options: nosniff`. Caddy removes its `Server` and `Via` headers.
 The `www` host keeps its apex redirect.
@@ -67,10 +67,10 @@ reject the new enum need a reload after the updated web image ships.
 The root reporter writes signatures and SBOMs as `unchecked` and leaves build
 claims null. The observer checks each running digest with the existing
 [verification policy](verification.md#what-verified-means), using `sigstore-go`.
-It derives versions, commits, signed links, and the release from those checks.
-A fresh document whose signatures pass shows Verified; an unfinished check
-shows Unverified. Deploy-time checks and `release.json` are not runtime
-evidence. The independent commands use the same policy on every platform.
+It derives versions, commits, signed links, and the release from those checks. A
+fresh document whose signatures pass shows Verified; an unfinished check shows
+Unverified. Deploy-time checks and `release.json` are not runtime evidence. The
+independent commands use the same policy on every platform.
 
 The page names the reporter in Vietnamese and English. It states that the host
 reports its own Podman state and an observer container on that host checks the
@@ -91,8 +91,8 @@ digest, renders the unit, and starts or restarts it. A tag without that image
 leaves the installed observer unit unchanged and reports that choice.
 
 The observer runs `observer run --interval 60s` as uid `65532` with a read-only
-root filesystem, all capabilities dropped, no-new-privileges, no secrets, and
-a 128 MiB memory cap. Its TUF cache is a bounded tmpfs. The bridge network gives
+root filesystem, all capabilities dropped, no-new-privileges, no secrets, and a
+128 MiB memory cap. Its TUF cache is a bounded tmpfs. The bridge network gives
 it outbound HTTPS for GitHub, the registry fallback, and Sigstore TUF; it has no
 published ports or Podman socket. Verification results stay in memory for the
 process lifetime and retain the daily recheck policy. No bucket is required.
