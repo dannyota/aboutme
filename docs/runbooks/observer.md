@@ -54,9 +54,9 @@ reports. When the signature checks pass, expect `verified` with the release
 version and commit. An unfinished signature check gives `unverified`. The page
 must show the digests and the host trust limit, with no AWS claim. The host
 reports its own runtime state, and a container on that host checks signatures.
-Use the page's GitHub CLI commands to check each image independently.
-Verified Podman images link to the release's `aboutme-<name>-amd64.spdx.json`
-assets, including `aboutme-caddy-amd64.spdx.json` for maintenance.
+Use the page's GitHub CLI commands to check each image independently. Verified
+Podman images link to the release's `aboutme-<name>-amd64.spdx.json` assets,
+including `aboutme-caddy-amd64.spdx.json` for maintenance.
 
 A reporter failure preserves the observation and invokes `aboutme-alert@`. The
 observer refuses observations older than 180 seconds or more than 60 seconds in
