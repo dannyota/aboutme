@@ -237,6 +237,10 @@ done
   fail "ci gate accepts a skipped result in more than one place"
 grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
   fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
+grep -Fq "ALLOW_SEMGREP_SKIP: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}" <<<"$CI_JOB" ||
+  fail "ci gate does not bind Semgrep skips to fork pull requests"
+grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
+  fail "ci gate accepts Semgrep skips outside fork pull requests"
 
 # Each observer platform builds in its own native job. The plain version tag
 # stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,
