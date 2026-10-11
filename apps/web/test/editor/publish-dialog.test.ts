@@ -1118,6 +1118,82 @@ describe('PublishResult clipboard lifecycle', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
+  it('keeps newer copied feedback when an older write rejects', async () => {
+    const { wrapper, writeText } = mountResult();
+    const older = deferredPromise<undefined>();
+    const newer = deferredPromise<undefined>();
+    writeText.mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const button = wrapper.get('[data-action="copy-link"]');
+    await button.trigger('click');
+    await button.trigger('click');
+
+    newer.resolve(undefined);
+    await newer.promise;
+    await nextTick();
+    expect(button.text()).toBe('Copied');
+
+    older.reject(new Error('denied'));
+    await older.promise.catch(() => undefined);
+    await nextTick();
+    expect(button.text()).toBe('Copied');
+    expect(wrapper.find('[data-testid="copy-link-error"]').exists())
+      .toBe(false);
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it.each(['older', 'newer'] as const)(
+    'keeps one reset timer when the %s overlapping write succeeds first',
+    async (first) => {
+      const { wrapper, writeText } = mountResult();
+      const older = deferredPromise<undefined>();
+      const newer = deferredPromise<undefined>();
+      writeText.mockReturnValueOnce(older.promise)
+        .mockReturnValueOnce(newer.promise);
+      const button = wrapper.get('[data-action="copy-link"]');
+      await button.trigger('click');
+      await button.trigger('click');
+
+      const writes = first === 'older' ? [older, newer] : [newer, older];
+      for (const write of writes) {
+        write.resolve(undefined);
+        await write.promise;
+        await nextTick();
+        expect(vi.getTimerCount()).toBe(write === older && first === 'older'
+          ? 0
+          : 1);
+      }
+      expect(button.text()).toBe('Copied');
+      wrapper.unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['success', 'failure'] as const)(
+    'ignores clipboard %s after unmount during a pending write',
+    async (outcome) => {
+      const { wrapper, writeText } = mountResult();
+      const pending = deferredPromise<undefined>();
+      writeText.mockReturnValueOnce(pending.promise);
+      await wrapper.get('[data-action="copy-link"]').trigger('click');
+      const vm = wrapper.vm as unknown as { copyState: string };
+      wrapper.unmount();
+      expect(vm.copyState).toBe('idle');
+      expect(vi.getTimerCount()).toBe(0);
+
+      if (outcome === 'success') {
+        pending.resolve(undefined);
+      } else {
+        pending.reject(new Error('denied'));
+      }
+      await pending.promise.catch(() => undefined);
+      await nextTick();
+
+      expect(vm.copyState).toBe('idle');
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
   it('resets copied and failed feedback when the accepted link changes',
     async () => {
       const { wrapper, writeText } = mountResult();
