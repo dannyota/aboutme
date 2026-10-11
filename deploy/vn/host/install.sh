@@ -193,6 +193,7 @@ say "pinned packages installed"
 
 # 4. Configuration files. PostgreSQL files belong to postgres; the firewall
 # bouncer file is built in step 5.
+systemctl stop aboutme-deployment-document.timer aboutme-deployment-document.service 2>/dev/null || true
 etc=$bundle/host/etc
 copy_tree "$etc" /etc \
   postgresql/18/main/pg_hba.conf \
@@ -359,6 +360,7 @@ else
   fi
 fi
 systemctl restart postgresql@18-main.service
+systemctl start aboutme-deployment-document.service
 systemctl enable --now "${timers[@]}" >/dev/null
 systemctl enable --now unattended-upgrades.service >/dev/null
 

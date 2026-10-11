@@ -7,16 +7,16 @@ umask 077
 
 die() { echo "deployment-document: $1" >&2; exit 1; }
 (($# <= 2)) || die 'usage: deployment-document.sh [directory [region]]'
-directory=${1:-/var/lib/aboutme/deployment}
+directory=${1:-/var/lib/aboutme/observation}
 region=${2:-HCM03}
 [[ $region =~ ^[A-Z]{2,4}[0-9]{2}$ ]] || die 'invalid region'
-[[ -d $directory && ! -L $directory ]] || die 'public directory is missing'
+[[ -d $directory && ! -L $directory ]] || die 'observation directory is missing'
 
 # Writers serialize without involving the application deployment lock. The
-# temporary file lives beside the public file, so rename is atomic.
+# temporary file lives beside the observation file, so rename is atomic.
 exec 9>"$directory/.writer.lock"
 flock -n 9 || die 'another reporter is running'
-temporary=$(mktemp "$directory/.deployment.XXXXXX")
+temporary=$(mktemp "$directory/.observation.XXXXXX")
 trap 'rm -f "$temporary"' EXIT
 observed=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 stale=$(date -u -d "$observed +180 seconds" +%Y-%m-%dT%H:%M:%SZ)
@@ -79,5 +79,5 @@ jq -n --arg region "$region" --arg observed "$observed" --arg stale "$stale" \
 [[ $(wc -c <"$temporary") -le 65536 ]] || die 'document exceeds size limit'
 chmod 0644 "$temporary"
 sync "$temporary"
-mv -f "$temporary" "$directory/deployment.json"
+mv -f "$temporary" "$directory/observation.json"
 sync "$directory"

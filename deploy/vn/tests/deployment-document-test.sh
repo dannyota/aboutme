@@ -3,7 +3,7 @@ set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/bin" "$work/public"
+mkdir -p "$work/bin" "$work/observation" "$work/public"
 printf 'secret-canary-not-a-release\n' >"$work/release.json"
 export CALLS=$work/calls PODMAN_CASE=running
 cat >"$work/bin/podman" <<'STUB'
@@ -37,11 +37,13 @@ STUB
 chmod +x "$work/bin/podman"
 export PATH="$work/bin:$PATH"
 generator=$root/deploy/vn/host/deployment-document.sh
-generate() { bash "$generator" "$work/public" HCM03 >"$work/out" 2>"$work/err"; }
+generate() { bash "$generator" "$work/observation" HCM03 >"$work/out" 2>"$work/err"; }
 fail() { echo "deployment-document-test: $*" >&2; exit 1; }
 
 generate
-doc=$work/public/deployment.json
+doc=$work/observation/observation.json
+[[ ! -e $work/public/deployment.json ]] || fail 'reporter wrote a public document'
+grep -qx 'directory=${1:-/var/lib/aboutme/observation}' "$generator" || fail 'wrong default observation directory'
 jq -e '
   .schema_version == 1 and .platform == {provider:"greennode",orchestrator:"podman",region:"HCM03"}
   and .summary == "unverified" and .release == null
@@ -64,9 +66,9 @@ for PODMAN_CASE in error inspect-error malformed bad-time extra-field; do
   if generate; then fail "accepted $PODMAN_CASE"; fi
   cmp -s "$doc" "$work/previous" || fail "replaced good document on $PODMAN_CASE"
   if grep -q -- 'secret-canary' "$doc" "$work/out" "$work/err"; then fail 'leaked raw data'; fi
-  [[ $(find "$work/public" -name '.deployment.*' | wc -l) == 0 ]] || fail 'left a temporary file'
+  [[ $(find "$work/observation" -name '.observation.*' | wc -l) == 0 ]] || fail 'left a temporary file'
 done
-if flock -o "$work/public/.writer.lock" bash "$generator" "$work/public" HCM03 \
+if flock -o "$work/observation/.writer.lock" bash "$generator" "$work/observation" HCM03 \
   >"$work/out" 2>"$work/err"; then fail 'accepted a concurrent writer'; fi
 cmp -s "$doc" "$work/previous" || fail 'changed document while locked'
 for PODMAN_CASE in missing stopped; do
@@ -77,7 +79,7 @@ done
 PODMAN_CASE=maintenance generate
 jq -e '.components[3].name == "maintenance" and .components[3].image == "ghcr.io/dannyota/aboutme-caddy"' \
   "$doc" >/dev/null
-if bash "$generator" "$work/public" 'HCM03 secret-canary' >"$work/out" 2>"$work/err"; then
+if bash "$generator" "$work/observation" 'HCM03 secret-canary' >"$work/out" 2>"$work/err"; then
   fail 'accepted invalid region'
 fi
 if grep -q -- 'secret-canary' "$work/out" "$work/err"; then fail 'printed invalid input'; fi
@@ -85,4 +87,19 @@ for unit in aboutme-caddy aboutme-maintenance; do
   grep -qx -- 'Volume=/var/lib/aboutme/deployment:/srv/deployment:ro' \
     "$root/deploy/vn/host/quadlet/$unit.container.in"
 done
+observer=$root/deploy/vn/host/quadlet/aboutme-observer.container.in
+for setting in 'User=65532:65532' 'Network=aboutme' 'ReadOnly=true' 'DropCapability=all' 'NoNewPrivileges=true' \
+  'Exec=run --interval 60s' 'Environment=OBSERVER_PLATFORM=podman' 'Environment=OBSERVER_REGION=HCM03' \
+  'Volume=/var/lib/aboutme/observation:/observation:ro' 'Volume=/var/lib/aboutme/deployment:/public:rw'; do
+  grep -qxF -- "$setting" "$observer" || fail "observer lacks $setting"
+done
+[[ $(grep -c '^Volume=' "$observer") == 2 ]] || fail 'observer has unexpected host mounts'
+grep -q -- '--memory=128m' "$observer" || fail 'observer memory is not capped'
+grep -qxF -- 'Tmpfs=/tmp/sigstore-tuf:rw,nosuid,nodev,noexec,size=16m,uid=65532,gid=65532,mode=0700' \
+  "$observer" || fail 'observer TUF cache is not bounded tmpfs'
+if grep -Ei -- 'podman.sock|Secret=|EnvironmentFile=|AddCapability=|PublishPort=|Network=host' "$observer"; then
+  fail 'observer exposes host access, ports, or secrets'
+fi
+grep -qxF 'd /var/lib/aboutme/observation 0755 root root -' "$root/deploy/vn/host/etc/tmpfiles.d/aboutme.conf"
+grep -qxF 'd /var/lib/aboutme/deployment 0755 65532 65532 -' "$root/deploy/vn/host/etc/tmpfiles.d/aboutme.conf"
 echo 'deployment document tests passed'

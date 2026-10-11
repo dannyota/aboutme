@@ -122,7 +122,7 @@ export function chainView(state: PageState): ChainView | null {
   const release = chainRelease(document);
   const images = servingImages(document);
   const shown = release === null
-    ? []
+    ? images
     : images.filter(({ version }) => version === release.version);
   const runningSince = document.release?.deployedAt
     ?? shown.map(({ runningSince: since }) => since)

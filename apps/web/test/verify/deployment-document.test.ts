@@ -467,6 +467,11 @@ describe('chain view', () => {
     expect(view.runningSince).toBe('2026-10-02T03:12:02Z');
   });
 
+  it('uses the running image start times when there is no release', () => {
+    const view = chainView(stateOf('unverified'))!;
+    expect(view.runningSince).toBe('2026-10-02T03:12:02Z');
+  });
+
   it('has no chain without a document', () => {
     expect(chainView({ kind: 'unavailable' })).toBeNull();
     expect(chainView({ kind: 'outdated' })).toBeNull();

@@ -101,10 +101,12 @@ proves":
   has no bugs.
 
 The [overview](README.md#what-this-proves) holds the full list. The
-[host report](host.md) lists running digests with unchecked signatures and
-SBOMs. It renders as Unverified, with no signed version or commit. Only checked
-signatures support a GitHub build claim; the independent commands are the same
-on every platform.
+[host report](host.md) gets signature and SBOM checks from an observer
+container on that host. Verified Podman documents show the signed version and
+commit; unfinished checks show Unverified. The Running step uses reported start
+times even when no signed release can be derived. Only checked signatures
+support a GitHub build claim; the independent commands are the same on every
+platform.
 
 ## Behavior
 

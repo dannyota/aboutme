@@ -23,6 +23,10 @@ if [[ $1 == run ]]; then
   exit 0
 fi
 uri=$3
+if [[ $uri == *aboutme-observer@* ]]; then
+  printf '%s\n' "$*" >>"$DEPLOY_TEST_DIR/observer-verify.log"
+  [[ ${OBSERVER_CASE:-absent} != bad-provenance ]] || exit 1
+fi
 subject=${uri#oci://}
 subject=${subject%@*}
 digest=${uri##*@sha256:}
@@ -66,7 +70,28 @@ cat >"$work/bin/curl" <<'STUB'
 set -euo pipefail
 args=" $* "
 digest=$(printf '%064d' 0 | tr 0 b)
-if [[ $args == *'ghcr.io/token'* ]]; then
+if [[ $args == *'aboutme-observer/manifests/'* ]]; then
+  [[ ${OBSERVER_CASE:-absent} != transport-error ]] || exit 7
+  if [[ ${OBSERVER_CASE:-absent} == absent ]]; then printf '404'; exit 0; fi
+  output= headers=
+  while (($#)); do
+    case $1 in
+      -o) output=$2; shift ;;
+      -D) headers=$2; shift ;;
+    esac
+    shift
+  done
+  printf 'Docker-Content-Digest: sha256:%s\r\n' "$digest" >"$headers"
+  if [[ $OBSERVER_CASE == index ]]; then
+    printf '{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}' >"$output"
+  else
+    printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"sha256:%s"}}' "$digest" >"$output"
+  fi
+  printf '200'
+elif [[ $args == *'aboutme-observer/blobs/'* ]]; then
+  if [[ $OBSERVER_CASE == arm64 ]]; then arch=arm64; else arch=amd64; fi
+  printf '{"os":"linux","architecture":"%s"}' "$arch"
+elif [[ $args == *'ghcr.io/token'* ]]; then
   printf '{"token":"test"}\n'
 elif [[ $args == *'ghcr.io/v2/'* && $args == *'fsSI'* ]]; then
   printf 'Docker-Content-Digest: sha256:%s\r\n' "$digest"
@@ -105,6 +130,8 @@ grep -q 'smoke: HSTS header missing' "$work/out" || {
   echo "deploy did not report the failing security header" >&2
   exit 1
 }
+grep -q 'observer image absent; keeping the installed observer unit' "$work/out"
+[[ ! -e $work/observer-verify.log ]] || { echo 'verified an absent observer image' >&2; exit 1; }
 if grep -q 'recovery did not finish' "$work/out"; then
   echo "deploy reported a failed recovery after enforcing fail closed" >&2
   exit 1
@@ -150,4 +177,18 @@ done
 lock=$(grep -n 'fence.sh lock activate' "$work/order.log" | cut -d: -f1)
 read_line=$(grep -n ' running-release ' "$work/order.log" | cut -d: -f1)
 [[ $lock -lt $read_line ]]
+
+for OBSERVER_CASE in good arm64 index bad-provenance transport-error; do
+  export OBSERVER_CASE
+  : >"$work/host.log"
+  : >"$work/observer-verify.log"
+  if "$repo_root/deploy/vn/scripts/deploy.sh" v0.7.5 >"$work/observer-$OBSERVER_CASE.out" 2>&1; then exit 1; fi
+  if [[ $OBSERVER_CASE == good ]]; then
+    grep -q -- 'pull .*ghcr.io/dannyota/aboutme-observer@sha256:' "$work/host.log"
+    grep -q -- 'render .*ghcr.io/dannyota/aboutme-observer@sha256:' "$work/host.log"
+    grep -q -- '--source-ref refs/tags/v0.7.5' "$work/observer-verify.log"
+  else
+    [[ ! -s $work/host.log ]] || { echo "changed host on $OBSERVER_CASE observer" >&2; exit 1; }
+  fi
+done
 echo "deployment failure test passed"

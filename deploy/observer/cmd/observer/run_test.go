@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -17,6 +18,13 @@ type fakeLister struct {
 }
 
 func (f *fakeLister) Running(context.Context) ([]platform.Image, error) { return f.images, f.err }
+
+type fakeSnapshotLister struct {
+	fakeLister
+	observed time.Time
+}
+
+func (f *fakeSnapshotLister) ObservationTime() time.Time { return f.observed }
 
 type fakeChecker struct {
 	calls int
@@ -90,6 +98,32 @@ func TestRunFailsWithoutPublishingOnListError(t *testing.T) {
 	}
 	if checker.calls != 0 {
 		t.Error("run: checked a digest after a failed platform read")
+	}
+}
+
+func TestRunPreservesHostObservationTime(t *testing.T) {
+	observed := fixedNow().Add(-180 * time.Second)
+	digest := "sha256:" + repeatHex("a1", 32)
+	lister := &fakeSnapshotLister{
+		fakeLister: fakeLister{images: []platform.Image{
+			serverImage(digest, observed.Add(-time.Minute)),
+		}},
+		observed: observed,
+	}
+	pub := &fakePublisher{}
+	obs := &observer{
+		lister: lister, verifier: &fakeChecker{}, publisher: pub,
+		info: platform.Info{Provider: "greennode", Orchestrator: "podman", Region: "HCM03"},
+	}
+	if err := obs.run(t.Context(), fixedNow); err != nil {
+		t.Fatal(err)
+	}
+	var doc document.Document
+	if err := json.Unmarshal(pub.body, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.ObservedAt != observed.Format(time.RFC3339) || doc.StaleAfter != fixedNow().Format(time.RFC3339) {
+		t.Fatalf("host observation freshness was extended: %s, %s", doc.ObservedAt, doc.StaleAfter)
 	}
 }
 

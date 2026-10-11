@@ -202,6 +202,45 @@ for name in server web caddy; do
   image[$name]="ghcr.io/$repo-$name@$d"
 done
 
+# The observer has a separate single-platform tag. Only a missing tag permits
+# keeping the installed observer; registry errors and bad evidence refuse.
+observer_image=""
+if ((!activate)); then
+  token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo-observer:pull&service=ghcr.io" | jq -er .token)
+  code=$(curl -sS -D "$work/observer-headers" -o "$work/observer-manifest.json" -w '%{http_code}' \
+    -H "Authorization: Bearer $token" \
+    -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+    "https://ghcr.io/v2/$repo-observer/manifests/$tag-amd64") || {
+    say "could not read the observer image for $tag"
+    exit 1
+  }
+  case $code in
+    404) say "observer image absent; keeping the installed observer unit" ;;
+    200)
+      d=$(tr -d '\r' <"$work/observer-headers" |
+        awk -F': ' 'tolower($1) == "docker-content-digest" { print $2 }')
+      [[ $d =~ ^sha256:[0-9a-f]{64}$ ]] || { say "observer image has no digest"; exit 1; }
+      config_digest=$(jq -er '
+        select(.schemaVersion == 2 and .manifests == null
+          and (.mediaType == "application/vnd.oci.image.manifest.v1+json"
+            or .mediaType == "application/vnd.docker.distribution.manifest.v2+json"))
+        | .config.digest | select(type == "string" and test("^sha256:[0-9a-f]{64}$"))
+        ' "$work/observer-manifest.json") || {
+        say "observer for $tag is not a single-platform image"
+        exit 1
+      }
+      curl -fsS -H "Authorization: Bearer $token" "https://ghcr.io/v2/$repo-observer/blobs/$config_digest" |
+        jq -e '.os == "linux" and .architecture == "amd64"' >/dev/null || {
+        say "observer for $tag is not linux/amd64"
+        exit 1
+      }
+      provenance_verify observer "$d" "$tag" "$commit" || exit 1
+      observer_image="ghcr.io/$repo-observer@$d"
+      ;;
+    *) say "observer registry returned HTTP $code"; exit 1 ;;
+  esac
+fi
+
 # --activate raises the fence while it holds the lock, only when the running
 # server already is the exact candidate (docs/design/passkey-release-fence.md).
 if ((activate)); then
@@ -222,7 +261,7 @@ lock_held=1
 say "holding the operation lock"
 
 # 3. Pull while the old release serves, and prove every secret exists.
-step pull "${image[server]}" "${image[web]}" "${image[caddy]}"
+step pull "${image[server]}" "${image[web]}" "${image[caddy]}" "$observer_image"
 step secrets-check
 
 # 4. The release backup, annotated with the tag.
@@ -263,7 +302,7 @@ say "maintenance confirmed from outside"
 # 7. Database work under the new units.
 if ((!first)); then previous=$(step release-json) || exit 1; fi
 render_requested=1
-step render "${image[server]}" "${image[web]}" "${image[caddy]}"
+step render "${image[server]}" "${image[web]}" "${image[caddy]}" "$observer_image"
 if ((first)); then
   migration_may_be_applied=1
   step db-setup

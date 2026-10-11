@@ -11,6 +11,7 @@ import (
 	"github.com/dannyota/aboutme/deploy/observer/internal/platform"
 	ecsplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/ecs"
 	kubernetesplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/kubernetes"
+	podmanplatform "github.com/dannyota/aboutme/deploy/observer/internal/platform/podman"
 	"github.com/dannyota/aboutme/deploy/observer/internal/publish"
 	"github.com/dannyota/aboutme/deploy/observer/internal/verify"
 )
@@ -23,8 +24,7 @@ type checker interface {
 	Check(ctx context.Context, digest string) verify.Evidence
 }
 
-// publisher writes the encoded document. It is satisfied by
-// *publish.Publisher.
+// publisher writes the encoded document to object storage or a host directory.
 type publisher interface {
 	Put(ctx context.Context, body []byte) error
 }
@@ -41,10 +41,13 @@ type observer struct {
 	build     document.BuildInfo
 }
 
-// wire builds an observer from cfg. It loads AWS credentials once, from the
-// environment or the Lambda execution role, for both the platform adapter
-// (on ecs) and the S3 client.
+// wire builds one adapter, verifier, cache, and publisher per process.
 func wire(ctx context.Context, cfg config) (*observer, error) {
+	if cfg.Platform == platformPodman {
+		return newObserver(ctx, cfg, podmanplatform.New(cfg.ObservationFile),
+			platform.Info{Provider: "greennode", Orchestrator: "podman", Region: cfg.Region},
+			publish.NewFilePublisher(cfg.OutputDir), verify.NewMemoryCache())
+	}
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(cfg.Region))
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
@@ -76,7 +79,10 @@ func wire(ctx context.Context, cfg config) (*observer, error) {
 	s3Client := publish.NewClient(awsCfg, cfg.S3Endpoint)
 	cache := publish.NewCache(s3Client, cfg.Bucket)
 	pub := publish.NewPublisher(s3Client, cfg.Bucket)
+	return newObserver(ctx, cfg, lister, info, pub, cache)
+}
 
+func newObserver(ctx context.Context, cfg config, lister platform.Lister, info platform.Info, pub publisher, cache verify.Cache) (*observer, error) {
 	v, err := verify.New(ctx, verify.Options{
 		Cache:       cache,
 		TUFCacheDir: cfg.TUFCacheDir,

@@ -66,10 +66,27 @@ fields identify Podman; version 1 adds that enum value without a new field.
 
 The host reports itself, not an independent platform API. Its evidence is weaker
 than ECS's off-host observer. The report does not prove host honesty or runtime
-integrity. The host publishes unchecked signature and SBOM statuses; it does not
-treat deploy-time checks as runtime verification. GitHub attestation and
-Sigstore checks retain their policy and independent commands. AWS ECS and
+integrity. Deploy-time checks are not runtime verification. AWS ECS and
 Kubernetes retain their observer implementations.
+
+## Amendment: Vietnam host signature verification (2026-10-11)
+
+The root reporter writes an unchecked observation to a root-owned directory.
+An observer container reads that file without Podman socket access, checks the
+digests through the existing `sigstore-go` verifier, and atomically publishes
+the deployment document to a directory Caddy mounts read-only. The observer
+rejects observations older than 180 seconds or more than 60 seconds in the
+future. Its verification cache stays in memory; no bucket or secret is needed.
+
+The observer runs independently of application maintenance with a read-only
+root filesystem and bounded memory. Its native amd64 release image uses the
+`<tag>-amd64` tag; the plain version tag remains a single arm64 image for
+Lambda. Deploy checks the observer's provenance before use. A release without
+the amd64 image leaves the installed observer unchanged.
+
+The page shows Verified only for fresh, checked evidence. The signature policy
+and independent commands stay the same across platforms. An observer sharing
+the host cannot prove host honesty; the page states that limit.
 
 ## Alternatives
 
@@ -85,5 +102,8 @@ Kubernetes retain their observer implementations.
 
 2026-10-11: Added host reporting for the Vietnam vServer, with its weaker trust
 claim and unchanged attestation verification policy.
+
+2026-10-11: Added a host observer container to verify runtime digests with the
+existing verifier while keeping Podman access in the root reporter.
 
 Originally proposed as ADR 0057.

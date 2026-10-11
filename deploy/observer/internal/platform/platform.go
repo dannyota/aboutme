@@ -63,13 +63,20 @@ type Observation struct {
 // Info names the platform in the document.
 type Info struct {
 	Provider     string // aws or greennode
-	Orchestrator string // ecs or kubernetes
+	Orchestrator string // ecs, kubernetes, or podman
 	Region       string
 }
 
 // Lister reads the running images from a platform.
 type Lister interface {
 	Running(ctx context.Context) ([]Image, error)
+}
+
+// SnapshotLister supplies the source clock for a previously recorded snapshot.
+// ObservationTime is valid after a successful Running call.
+type SnapshotLister interface {
+	Lister
+	ObservationTime() time.Time
 }
 
 // Aggregate counts observations by component and digest. It fails on an
