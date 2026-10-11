@@ -33,6 +33,7 @@ readonly RUNNER_REASONS
 readonly -a IMAGE_SOURCES=(
   deploy/dev-https-browser/Dockerfile deploy/dev-https-browser/package.json
   deploy/dev-https-browser/package-lock.json deploy/dev-https-browser/run.sh
+  deploy/dev-https-browser/spec-sources.txt
   deploy/dev-https-browser/verify-evidence.mjs
 )
 
@@ -49,13 +50,10 @@ file_sha256() { [ -f "$1" ] && [ ! -L "$1" ] && sha256sum -- "$1" | awk '{print 
 # spec_manifest prints the closed staged browser source set run.sh enforces,
 # sorted bytewise. A change in membership changes the digest.
 spec_manifest() {
-  local launcher=$1 name
+  local manifest=$1 name
   local -a names=()
-  mapfile -t names < <(awk '
-    /^readonly -a SPEC_SOURCES=\($/ { inside = 1; next }
-    inside && /^\)$/ { exit }
-    inside { gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print }
-  ' "$launcher")
+  [ -f "$manifest" ] && [ ! -L "$manifest" ] || return 1
+  mapfile -t names <"$manifest" || return 1
   [ "${#names[@]}" -gt 0 ] || return 1
   for name in "${names[@]}"; do
     [[ $name =~ ^[a-z0-9][a-z0-9.-]*\.(ts|mjs)$ ]] || return 1
@@ -158,7 +156,7 @@ build_tools() {
 
 stage_browser_sources() {
   local name helper=0
-  mapfile -t MANIFEST_NAMES < <(spec_manifest "$CONTEXT/run.sh")
+  mapfile -t MANIFEST_NAMES < <(spec_manifest "$CONTEXT/spec-sources.txt")
   [ "${#MANIFEST_NAMES[@]}" -gt 0 ] || fail 'cannot read the browser source manifest'
   STAGING=$(mktemp -d "$STATE/spec-input.XXXXXX") && chmod 0700 "$STAGING"
   for name in "${MANIFEST_NAMES[@]}"; do

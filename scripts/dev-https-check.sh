@@ -5,7 +5,7 @@
 # passkey, and totp). Stages an immutable per-run copy of the spec sources
 # and mounts it into the pinned browser image, so editing a spec
 # never requires an image rebuild; the image manifest gates only the
-# image-side sources (Dockerfile, run.sh, package manifests).
+# image-side sources, including the spec source list.
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -25,40 +25,13 @@ readonly -a IMAGE_SOURCES=(
   deploy/dev-https-browser/package.json
   deploy/dev-https-browser/package-lock.json
   deploy/dev-https-browser/run.sh
+  deploy/dev-https-browser/spec-sources.txt
   deploy/dev-https-browser/verify-evidence.mjs
 )
 
 # Spec-side sources: staged per run, never gated on the image manifest.
-readonly -a SPEC_SOURCES=(
-  playwright.config.ts
-  auth.spec.ts
-  transport.spec.ts
-  editor.spec.ts
-  public.spec.ts
-  password-auth.spec.ts
-  mcp.spec.ts
-  mcp-sdk.spec.ts
-  mcp-ts-sdk.spec.ts
-  entry.spec.ts
-  publish.spec.ts
-  exports.spec.ts
-  privacy.spec.ts
-  sample-start.spec.ts
-  linkedin.spec.ts
-  linkedin-import.spec.ts
-  linkedin-import-fixtures.ts
-  second-factor.spec.ts
-  totp.spec.ts
-  totp-fixture.ts
-  totp-production.spec.ts
-  production.config.ts
-  editor-fixtures.ts
-  network-policy.ts
-  harness-lib.ts
-  second-factor-lib.ts
-  second-factor-pages.ts
-  proof-shards.mjs
-)
+mapfile -t SPEC_SOURCES <"$CONTEXT/spec-sources.txt"
+readonly -a SPEC_SOURCES
 
 EVIDENCE_KEEP=10
 
@@ -237,13 +210,10 @@ prune_evidence() {
 }
 
 staging=$(mktemp -d "$STATE/spec-input.XXXXXX")
-chmod 0700 "$staging"
-for path in "${SPEC_SOURCES[@]}"; do
-  [ -f "$CONTEXT/$path" ] && [ ! -L "$CONTEXT/$path" ] ||
-    fail "spec source $path is missing or not a regular file"
-  cp -- "$CONTEXT/$path" "$staging/$path"
-  chmod 0600 "$staging/$path"
-done
+# shellcheck source=scripts/lib/dev-https-browser-stage.sh
+source "$REPO/scripts/lib/dev-https-browser-stage.sh"
+stage_dev_https_browser_specs "$CONTEXT" "$staging" ||
+  fail 'cannot stage the browser spec sources'
 spec_sha=$(spec_source_hash "$staging") ||
   fail 'cannot hash staged spec sources'
 
