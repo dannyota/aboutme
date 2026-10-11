@@ -85,12 +85,20 @@ if [[ $args == *'aboutme-observer/manifests/'* ]]; then
   if [[ $OBSERVER_CASE == index ]]; then
     printf '{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}' >"$output"
   else
-    printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"sha256:%s"}}' "$digest" >"$output"
+    if [[ $OBSERVER_CASE == arm64 ]]; then arch=arm64; else arch=amd64; fi
+    config_sha=$(printf '{"os":"linux","architecture":"%s"}' "$arch" | sha256sum | cut -d' ' -f1)
+    printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"sha256:%s"}}' "$config_sha" >"$output"
   fi
   printf '200'
 elif [[ $args == *'aboutme-observer/blobs/'* ]]; then
+  [[ $args == *'-fsSL'* ]] || exit 22
   if [[ $OBSERVER_CASE == arm64 ]]; then arch=arm64; else arch=amd64; fi
-  printf '{"os":"linux","architecture":"%s"}' "$arch"
+  output=/dev/stdout
+  while (($#)); do
+    [[ $1 == -o ]] && output=$2
+    shift
+  done
+  printf '{"os":"linux","architecture":"%s"}' "$arch" >"$output"
 elif [[ $args == *'ghcr.io/token'* ]]; then
   printf '{"token":"test"}\n'
 elif [[ $args == *'ghcr.io/v2/'* && $args == *'fsSI'* ]]; then

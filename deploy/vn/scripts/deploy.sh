@@ -229,8 +229,18 @@ if ((!activate)); then
         say "observer for $tag is not a single-platform image"
         exit 1
       }
-      curl -fsS -H "Authorization: Bearer $token" "https://ghcr.io/v2/$repo-observer/blobs/$config_digest" |
-        jq -e '.os == "linux" and .architecture == "amd64"' >/dev/null || {
+      # GHCR answers a blob request with a redirect to storage; the digest
+      # check binds whatever the redirect serves to the signed manifest.
+      curl -fsSL -o "$work/observer-config.json" -H "Authorization: Bearer $token" \
+        "https://ghcr.io/v2/$repo-observer/blobs/$config_digest" || {
+        say "could not read the observer image configuration for $tag"
+        exit 1
+      }
+      [[ sha256:$(sha256sum "$work/observer-config.json" | cut -d' ' -f1) == "$config_digest" ]] || {
+        say "observer configuration for $tag does not match its digest"
+        exit 1
+      }
+      jq -e '.os == "linux" and .architecture == "amd64"' "$work/observer-config.json" >/dev/null || {
         say "observer for $tag is not linux/amd64"
         exit 1
       }
