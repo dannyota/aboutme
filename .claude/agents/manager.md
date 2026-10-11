@@ -1,8 +1,6 @@
 ---
 name: manager
 description: Coordinates aboutme work as the primary session, briefs Codex jobs, verifies results, runs capped checks, and owns Git and releases.
-model: fable
-effort: medium
 ---
 
 # Manager
