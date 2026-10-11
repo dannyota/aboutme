@@ -4,8 +4,8 @@ The CloudFront edge is not deployed. The AWS deployment was removed on
 2026-10-11; `deploy/aws/` remains as a reference for a possible AWS ECS path.
 Production uses the [Vietnam host](production.md) with
 [Cloudflare DNS-only](dns.md). This runbook preserves the AWS certificate and
-edge procedures. Apply them only after rebuilding and reviewing that path.
-The [CloudFront edge design](../design/cloudfront-edge.md) owns its settings.
+edge procedures. Apply them only after rebuilding and reviewing that path. The
+[CloudFront edge design](../design/cloudfront-edge.md) owns its settings.
 
 ## Origin certificate
 
@@ -19,10 +19,10 @@ does not wait for it to issue.
 
 ### Validation records
 
-For an AWS rebuild, OpenTofu's `dns` module can create validation records in
-its Route 53 zone. Production DNS is in Cloudflare, so those records alone
-cannot validate a certificate. Publish the certificate's validation records at
-the authoritative provider if the AWS edge is rebuilt. Read the values from the
+For an AWS rebuild, OpenTofu's `dns` module can create validation records in its
+Route 53 zone. Production DNS is in Cloudflare, so those records alone cannot
+validate a certificate. Publish the certificate's validation records at the
+authoritative provider if the AWS edge is rebuilt. Read the values from the
 rebuilt stack:
 
 ```sh
@@ -93,8 +93,8 @@ must trust the old and the new CA at once during a rotation.
 `tls.sh client-import` imports the client certificate and key into ACM and
 deletes the tmpfs files; `tls.sh forget-client` deletes them without importing.
 
-On an AWS build, run `client-ca` then `client-import`, then `tofu apply`,
-since nothing is deployed yet to trust. On a rotation, the order reverses:
+On an AWS build, run `client-ca` then `client-import`, then `tofu apply`, since
+nothing is deployed yet to trust. On a rotation, the order reverses:
 `client-ca`, then deploy the live tag so Caddy trusts the new CA alongside the
 old one, then `client-import`, which reimports under the same ACM certificate
 ARN so the distribution's configuration never changes. The old CA stays in the

@@ -90,9 +90,8 @@ session, generation, or grant denies access. Physical media deletion removes an
 unreferenced object asynchronously and targets completion within 24 hours of
 reference revocation. Backup expiry is separate: backups follow the 30-day
 retention schedule and can outlive live revocation or physical object removal.
-Rollback restores the application and job configuration to a reviewed
-previous version; it does not restore revoked references, sessions, or deleted
-media.
+Rollback restores the application and job configuration to a reviewed previous
+version; it does not restore revoked references, sessions, or deleted media.
 
 ## Local verification
 

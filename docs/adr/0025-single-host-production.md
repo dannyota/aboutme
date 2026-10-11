@@ -1,7 +1,7 @@
 # 0025: Single-host AWS production behind CloudFront and Route 53
 
-The AWS deployment was removed on 2026-10-11; the code is kept as an
-undeployed reference.
+The AWS deployment was removed on 2026-10-11; the code is kept as an undeployed
+reference.
 
 Status: Accepted (2026-09-05 to 2026-09-26), by the human owner's direction. The
 owner approved every choice in the

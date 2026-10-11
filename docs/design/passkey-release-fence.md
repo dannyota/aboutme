@@ -5,15 +5,15 @@ below the minimum release once second-factor enrollment can exist
 ([ADR 0017](../adr/0017-second-factor-authentication.md)). These feature floors
 apply:
 
-| Enrollment flag              | Floor  | Numeric release |
-| ---------------------------- | ------ | --------------- |
-| `PASSKEY_ENROLLMENT_ENABLED` | v0.4.2 | 4002            |
-| `TOTP_ENROLLMENT_ENABLED`    | v0.4.7 | 4007            |
-| `SIGN_IN_TO_VIEW_ENABLED`    | v0.6.26 | 6026           |
+| Enrollment flag              | Floor   | Numeric release |
+| ---------------------------- | ------- | --------------- |
+| `PASSKEY_ENROLLMENT_ENABLED` | v0.4.2  | 4002            |
+| `TOTP_ENROLLMENT_ENABLED`    | v0.4.7  | 4007            |
+| `SIGN_IN_TO_VIEW_ENABLED`    | v0.6.26 | 6026            |
 
 Production uses the [Vietnam host fence](vietnam-production.md#release-fence)
-and the [host commands](../runbooks/production.md#passkey-release-fence).
-The sections below describe the undeployed AWS reference implementation. Its
+and the [host commands](../runbooks/production.md#passkey-release-fence). The
+sections below describe the undeployed AWS reference implementation. Its
 DynamoDB, IAM, ECS, and OpenTofu procedures do not apply to the live host.
 Reusing them requires rebuilding and reviewing the AWS path. In particular,
 `--check-public-root`, `--require-free-root`, and `--totp-key-reencrypt` are AWS

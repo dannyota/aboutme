@@ -16,7 +16,7 @@ exercised at the environment that owns the risk.
 | Audit records    | Security and lifecycle audit records retained for 180 days, including delayed and completed physical deletion                                                                                                                                                              |
 | Orphan media     | Weekly idempotent reconciliation of private objects, live references, and deletion jobs, including crash candidates                                                                                                                                                        |
 | Idempotency data | Expire after 24 hours; hourly bounded global sweep is authoritative, with request-path cleanup only opportunistic                                                                                                                                                          |
-| Backups          | pgBackRest backups expire after 30 days; disclosures distinguish this delay from live access and private-object deletion                                                                                                                              |
+| Backups          | pgBackRest backups expire after 30 days; disclosures distinguish this delay from live access and private-object deletion                                                                                                                                                   |
 
 Account and resume delete APIs may succeed once reference revocation and every
 applicable deletion job commit together. Object-storage latency does not extend
@@ -108,11 +108,11 @@ evidence.
 
 Production uses host mail alert units and a GitHub uptime workflow. The
 [production runbook](../runbooks/production.md#alarms) owns exact triggers,
-notification recipients, and schedule limits. Host checks cover disk use,
-failed units, PostgreSQL availability, WAL archiving, backup age, CrowdSec
-retention and alerts, Coraza diagnostics, and TOTP key failures. Unit failures
-also raise mail alerts. The external workflow checks `/readyz` every five
-minutes. Production has no CloudWatch or Route 53 health-check alarm.
+notification recipients, and schedule limits. Host checks cover disk use, failed
+units, PostgreSQL availability, WAL archiving, backup age, CrowdSec retention
+and alerts, Coraza diagnostics, and TOTP key failures. Unit failures also raise
+mail alerts. The external workflow checks `/readyz` every five minutes.
+Production has no CloudWatch or Route 53 health-check alarm.
 
 Resource and latency budgets still require measurements on the host. A service
 limit or readiness probe does not prove a separate alert exists for each budget.

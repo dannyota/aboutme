@@ -3,7 +3,8 @@
 Production TOTP uses release floor **v0.4.7, numeric 4007**. The
 [production runbook](production.md) owns host deploys, flags, and the release
 fence. [Key management](../design/totp-key-management.md) owns the key-ring
-contract; [ADR 0017](../adr/0017-second-factor-authentication.md) owns the choice.
+contract; [ADR 0017](../adr/0017-second-factor-authentication.md) owns the
+choice.
 
 ## Bootstrap and enrollment
 
@@ -13,18 +14,18 @@ and `TOTP_PREVIOUS_KEY_SLOT` from `/etc/aboutme/flags.env` when rendering units.
 Do not provision an unused previous slot ahead of need.
 
 For first enablement, follow the
-[release-fence order](production.md#passkey-release-fence): deploy a capable
-tag with `TOTP_ENROLLMENT_ENABLED=false`, run the flag-off proof, activate the
-floor, then set `TOTP_ENROLLMENT_ENABLED=true` and redeploy the same tag. Run the
-enabled proof after that deploy. A failed redeploy leaves the floor raised;
+[release-fence order](production.md#passkey-release-fence): deploy a capable tag
+with `TOTP_ENROLLMENT_ENABLED=false`, run the flag-off proof, activate the
+floor, then set `TOTP_ENROLLMENT_ENABLED=true` and redeploy the same tag. Run
+the enabled proof after that deploy. A failed redeploy leaves the floor raised;
 fix forward with a capable tag.
 
 ## Key rotation
 
 Status: **open host procedure**. The AWS ECS re-encryption procedure no longer
 applies to production. Neither the Vietnam deployer nor `host/job-run.sh`
-provides a reviewed TOTP re-encryption path. Do not use AWS commands or improvise
-a host command to rotate keys with stored credentials.
+provides a reviewed TOTP re-encryption path. Do not use AWS commands or
+improvise a host command to rotate keys with stored credentials.
 
 A reviewed host procedure must preserve these safeguards:
 
@@ -44,10 +45,10 @@ A reviewed host procedure must preserve these safeguards:
 
 ## TOTP unavailable
 
-The host watcher checks `totp_unavailable` in the server journal. A key ID outside
-`TOTP_ACTIVE_KEY`/`TOTP_PREVIOUS_KEY`, or an AES-GCM authentication failure,
-returns `503 authentication_unavailable` for that TOTP row. Passkeys, recovery
-codes, accounts without TOTP, and `/readyz` remain available.
+The host watcher checks `totp_unavailable` in the server journal. A key ID
+outside `TOTP_ACTIVE_KEY`/`TOTP_PREVIOUS_KEY`, or an AES-GCM authentication
+failure, returns `503 authentication_unavailable` for that TOTP row. Passkeys,
+recovery codes, accounts without TOTP, and `/readyz` remain available.
 
 On alert:
 

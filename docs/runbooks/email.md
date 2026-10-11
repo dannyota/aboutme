@@ -34,8 +34,8 @@ and CloudWatch alarms are not production mail controls.
 `AUTH_EMAIL_MODE=smtp` sends authentication mail through Bizfly Email
 Transaction. Each message includes a bilingual footer naming Bizfly's mail
 server and the Google Workspace mailbox for replies. The host loads non-secret
-settings from `/etc/aboutme/smtp.env` and credentials from Podman secrets.
-Set these names in the runtime environment:
+settings from `/etc/aboutme/smtp.env` and credentials from Podman secrets. Set
+these names in the runtime environment:
 
 ```dotenv
 AUTH_EMAIL_MODE=smtp

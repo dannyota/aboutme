@@ -5,13 +5,13 @@ This page describes the undeployed AWS reference edge under
 EC2 host, with no load balancer, and Route 53 DNS. Production uses the
 [Vietnam host](vietnam-production.md) and Cloudflare DNS-only under
 [ADR 0027](../adr/0027-vietnam-hosted-production.md). Follow the
-[production runbook](../runbooks/production.md) for live operations. Reusing this
-AWS edge requires a new reviewed infrastructure and data-transfer decision.
+[production runbook](../runbooks/production.md) for live operations. Reusing
+this AWS edge requires a new reviewed infrastructure and data-transfer decision.
 
-**Owner approval** marks a choice the
-owner made before the work that depended on it; the owner approved all of them.
-**Verify** marks a fact from documentation or community sources that devops
-confirms on the account ([facts to verify](#facts-to-verify)).
+**Owner approval** marks a choice the owner made before the work that depended
+on it; the owner approved all of them. **Verify** marks a fact from
+documentation or community sources that devops confirms on the account
+([facts to verify](#facts-to-verify)).
 
 ## Why
 

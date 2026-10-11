@@ -47,14 +47,14 @@ The [architecture](docs/architecture.md) describes implemented behavior. The
 
 ## Repository
 
-| Path              | Responsibility                                                                  |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `apps/server`     | Go API: authentication, resume domain, media, publish, public read, OAuth, MCP  |
-| `apps/web`        | Nuxt SSR, authenticated editor, renderer, public pages, generated API client    |
-| `apps/mobile`     | Deferred Flutter client                                                         |
-| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets  |
+| Path              | Responsibility                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| `apps/server`     | Go API: authentication, resume domain, media, publish, public read, OAuth, MCP         |
+| `apps/web`        | Nuxt SSR, authenticated editor, renderer, public pages, generated API client           |
+| `apps/mobile`     | Deferred Flutter client                                                                |
+| `packages/schema` | Resume JSON Schema, immutable releases, generated types, fixtures, and presets         |
 | `deploy`          | Vietnam host deployment, Compose, Caddy images, retained AWS code, and browser harness |
-| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks              |
+| `docs`            | Design, ADRs, API contract, plans, guides, standards, and runbooks                     |
 
 See the [documentation map](docs/README.md) for authority and lifecycle rules.
 

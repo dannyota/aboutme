@@ -119,13 +119,13 @@ aboutme unit, and the PostgreSQL, CrowdSec, and SSH services, names
 `aboutme-alert@.service` in `OnFailure=`, and `aboutme-watch.timer` runs
 `host/bin/watch.sh` every five minutes: root and data volume use above 70%,
 failed units, PostgreSQL on its socket, WAL archive failures, the newest backup
-at least 26 hours old, the CrowdSec alert count and Coraza match count in the last
-hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh` mails
-the support mailbox through Bizfly SMTP with msmtp, at most once per condition
-per UTC day, with names and counts only. The external app-down check is the
-GitHub uptime workflow. The
-[production runbook](../../docs/runbooks/production.md#alarms) owns its schedule,
-notification recipient, and limits.
+at least 26 hours old, the CrowdSec alert count and Coraza match count in the
+last hour, and `totp_unavailable` in the server journal. `host/bin/alert.sh`
+mails the support mailbox through Bizfly SMTP with msmtp, at most once per
+condition per UTC day, with names and counts only. The external app-down check
+is the GitHub uptime workflow. The
+[production runbook](../../docs/runbooks/production.md#alarms) owns its
+schedule, notification recipient, and limits.
 
 ## Restore drill
 
@@ -154,8 +154,8 @@ against the current infrastructure.
 Use the GreenNode API to reboot. An in-guest `systemctl reboot` hung once.
 Readiness stayed failed once after a hard reset until `aboutme-server`
 restarted. The cause remains open. The
-[production runbook](../../docs/runbooks/production.md#reboot)
-owns the host checks.
+[production runbook](../../docs/runbooks/production.md#reboot) owns the host
+checks.
 
 ## Provider facts
 
@@ -167,10 +167,10 @@ owns the host checks.
 | Default endpoints `*.vngcloud.vn` still answer after the GreenNode domain move                                              | Yes: the provider's default token and vServer URLs worked for plan and apply (2026-10-10)                                                                                                                                         |
 | `vngcloud_vserver_volume.encryption_type` creates an encrypted volume                                                       | Yes: the data volume reads `EncryptionType` `aes-xts-plain64_256`                                                                                                                                                                 |
 | The UEFI Ubuntu image passes as `image_id`                                                                                  | Yes                                                                                                                                                                                                                               |
-| User data with an SSH key ID at server creation                                             | Refused by GreenNode. `restore-drill.sh` omits `--ssh-key-id`; cloud-init supplies the admin key                                                                                                                                                                                     |
-| The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Created with the server; replacing the server twice kept the same address. The server keeps `prevent_destroy`                                                                                                      |
+| User data with an SSH key ID at server creation                                                                             | Refused by GreenNode. `restore-drill.sh` omits `--ssh-key-id`; cloud-init supplies the admin key                                                                                                                                  |
+| The floating IP is created with the server (`attach_floating`) and deleted on detach                                        | Created with the server; replacing the server twice kept the same address. The server keeps `prevent_destroy`                                                                                                                     |
 | The new security group's default egress allows outbound traffic                                                             | Yes: cloud-init installed packages over it                                                                                                                                                                                        |
-| vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | Lock file works (412 on a contended lock), so `versions.tf` sets `use_lockfile`; pgBackRest uses the backup bucket; restore-drill outbound networking remains open                                                                                                              |
+| vStorage as the OpenTofu S3 backend and pgBackRest repository, path-style                                                   | Lock file works (412 on a contended lock), so `versions.tf` sets `use_lockfile`; pgBackRest uses the backup bucket; restore-drill outbound networking remains open                                                                |
 | An encrypted volume attaches to a server created with plain disks                                                           | No: 400 `cannot attach encryption volume` (wiki Compute-Servers.md)                                                                                                                                                               |
 | GreenNode's Ubuntu 24.04 image ships its own `sshd_config`                                                                  | Yes: `Port 234`, no `Include` of `sshd_config.d`, password login on, and `ssh.service` without socket activation. cloud-init replaces the file before sshd starts, and the image's `ssh-keygen.service` fails on DSA without harm |
 | A security group description takes any text                                                                                 | No: only letters, digits, `_`, `.`, `@`, `-`, and spaces                                                                                                                                                                          |

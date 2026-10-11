@@ -4,20 +4,20 @@
 undeployed AWS code. The intended environment and trust boundaries live in the
 [deployment design](../docs/design/deployment.md).
 
-| Path                 | Purpose                                                |
-| -------------------- | ------------------------------------------------------ |
-| `compose.yml`        | Podman Compose services and isolated networks          |
-| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle   |
-| `web.Dockerfile`     | Nuxt production image                                  |
-| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary  |
+| Path                 | Purpose                                                    |
+| -------------------- | ---------------------------------------------------------- |
+| `compose.yml`        | Podman Compose services and isolated networks              |
+| `server.Dockerfile`  | Go server, one-shot database commands, RDS CA bundle       |
+| `web.Dockerfile`     | Nuxt production image                                      |
+| `caddy/Caddyfile`    | Current one-origin route table and client-IP boundary      |
 | `caddy/production/`  | Caddy image: direct Vietnam edge and retained AWS listener |
-| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof   |
-| `vn/`                | Live Vietnam host, OpenTofu root, and deploy scripts    |
-| `aws/`               | Retained undeployed AWS roots, modules, and scripts     |
+| `dev-https-browser/` | Pinned disposable browser for local HTTPS auth proof       |
+| `vn/`                | Live Vietnam host, OpenTofu root, and deploy scripts       |
+| `aws/`               | Retained undeployed AWS roots, modules, and scripts        |
 
 `deploy/vn/` holds the production OpenTofu root, host bundle, and deploy
-scripts. GitHub Actions builds images for `linux/amd64` and `linux/arm64`.
-See the [Vietnam production design](../docs/design/vietnam-production.md).
+scripts. GitHub Actions builds images for `linux/amd64` and `linux/arm64`. See
+the [Vietnam production design](../docs/design/vietnam-production.md).
 
 ## Which stack to use
 
