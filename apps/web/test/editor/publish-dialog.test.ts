@@ -239,8 +239,7 @@ describe('PublishDialog', () => {
       expect(dialog().text()).toContain('SEO and GEO');
       expect(dialog().text()).toContain('Show in the community showcase');
       expect(dialog().text()).toContain(
-        'Public resumes may be delivered through a global '
-        + 'content-delivery network.',
+        'Public resumes are delivered directly from our host in Vietnam.',
       );
       expect(dialog().text()).toContain(
         'Whether visitors can download the PDF. '
@@ -251,6 +250,17 @@ describe('PublishDialog', () => {
         + 'and reuse public resume content.',
       );
     });
+
+  it('discloses direct delivery from Vietnam in Vietnamese', async () => {
+    locale.value = 'vi';
+    const record = editorRecord();
+    const { actions } = actionsFor(record);
+    await mountDialog(record, actions);
+
+    expect(dialog().text()).toContain(
+      'CV công khai được gửi trực tiếp từ máy chủ của chúng tôi tại Việt Nam.',
+    );
+  });
 
   it('renders the slug prefix and reserves seal ink for Publish', async () => {
     const record = editorRecord();
