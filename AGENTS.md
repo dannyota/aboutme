@@ -21,11 +21,11 @@ Direct user instructions and platform safety rules come first.
 
 |Doing|Read first|
 |-|-|
-|Design or research|`instructions/workflow.md`, accepted ADRs, and the domain's design docs|
-|Writing docs or comments|`docs/standards/engineering.md`|
-|Implementing or reviewing|`instructions/workflow.md`, `instructions/verification.md`, and the brief's authorities|
-|Running local commands|`instructions/resources.md` and `instructions/gotchas.md`|
-|Committing, tagging, or deploying|`instructions/workflow.md` and `instructions/releases.md`|
+|Design or research|`instructions/workflow.md`, `instructions/documentation.md`, accepted ADRs, and the domain's design docs|
+|Writing docs or comments|`docs/standards/engineering.md` and `instructions/documentation.md`|
+|Implementing or reviewing|`instructions/workflow.md`, `instructions/verification.md`, the relevant topic files below, and the brief's authorities|
+|Running local commands|`instructions/resources.md`, `instructions/gotchas.md`, and the relevant topic file|
+|Committing, tagging, or deploying|`instructions/workflow.md`, `instructions/releases.md`, and `instructions/deploy.md` for deployment|
 
 Design wins over a plan. An accepted ADR wins over design text it contradicts; fix the text. Disagreement between code, deployment config, and OpenAPI is a defect: repair them together rather than picking one silently.
 
@@ -35,13 +35,18 @@ Design wins over a plan. An accepted ADR wins over design text it contradicts; f
 
 This file holds the rules every agent needs on every task. Topic files in `instructions/` hold the rest; each agent file in `.claude/agents/` and `.codex/agents/` names the ones its role must read.
 
-| File | Read when |
+|File|Read when|
 |-|-|
-| [`instructions/workflow.md`](instructions/workflow.md) | Planning, briefing, implementing, or reviewing |
-| [`instructions/resources.md`](instructions/resources.md) | Before any local command beyond reading files |
-| [`instructions/verification.md`](instructions/verification.md) | Writing, testing, or reviewing code |
-| [`instructions/releases.md`](instructions/releases.md) | Reviewing, committing, tagging, or deploying |
-| [`instructions/gotchas.md`](instructions/gotchas.md) | Running repository tools |
+|[`instructions/workflow.md`](instructions/workflow.md)|Planning, briefing, implementing, or reviewing|
+|[`instructions/resources.md`](instructions/resources.md)|Before any local command beyond reading files|
+|[`instructions/verification.md`](instructions/verification.md)|Writing, testing, or reviewing code|
+|[`instructions/releases.md`](instructions/releases.md)|Reviewing, committing, tagging, or deploying|
+|[`instructions/gotchas.md`](instructions/gotchas.md)|Running repository tools|
+|[`instructions/go.md`](instructions/go.md)|Go, store, schema Go, or migrations|
+|[`instructions/web.md`](instructions/web.md)|TypeScript, Nuxt, renderer, source manifests, or baselines|
+|[`instructions/deploy.md`](instructions/deploy.md)|Podman, Caddy, container images, host access, or deployment|
+|[`instructions/testing.md`](instructions/testing.md)|Writing tests, browser proofs, or selecting change-area gates|
+|[`instructions/documentation.md`](instructions/documentation.md)|Selecting docs, writing agent files, or handling plans and evidence|
 
 ## AI agent definitions
 
@@ -62,7 +67,7 @@ The primary assigns a lane and exact owned paths to each implementer brief. Desi
 |frontend|`apps/web/`: pages, editor, renderer, i18n, render workers, web tests and baselines|Edits Go, migrations, or production infrastructure|
 |devops|`deploy/` (`vn/` host, `caddy/`, `observer/`, and the kept `aws/` reference), `.github/workflows/`, OpenTofu, Cloudflare, release scripts|Reads secret values or applies infrastructure unreviewed|
 
-A path outside these lanes belongs to the primary, which assigns it in a brief. Renderer CSS and template tokens are frontend implementation; the designer supplies visual direction and UI specs.
+A path outside these lanes belongs to the primary, which assigns it in a brief. Renderer ownership details live in [web rules](instructions/web.md).
 
 ## How we work
 
@@ -95,11 +100,4 @@ Only the primary changes Git state. Workers may read status and diffs. Workers n
 
 ## Writing docs and code comments
 
-[`docs/standards/engineering.md`](docs/standards/engineering.md) holds the full rules. The ones most often broken:
-
-- Keep text short and plain. Say each fact once. No em dashes.
-- Never cite plans, phases, tasks, review findings, or their IDs in code, comments, tests, or living docs. Cite the design doc, ADR, or `AC-*` ID, or state the rule. Plans are deleted when their work ends; design stays.
-- Describe the current state, not history.
-- Fix stale text in files your work touches, in the same change. No sweeps.
-- Markdown stays at or under 450 lines and non-test code at or under 700 (`scripts/check-lengths.sh`).
-- Files only agents read (`AGENTS.md`, `CLAUDE.md`, `instructions/`, `.claude/`, `.codex/`, `docs/plans/`) stay minified: one line per paragraph or list item, tables without padding. Prettier and markdownlint skip them. Markdown that people read keeps Prettier's 80-column wrap.
+Human writing rules, documentation ownership, and ADR policy live in the [engineering standard](docs/standards/engineering.md). Agent-file formatting, document selection, and plan/evidence handling live in [documentation instructions](instructions/documentation.md).
