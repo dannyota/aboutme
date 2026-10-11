@@ -1,0 +1,50 @@
+name: release-check
+
+# Checks every release image on native runners without publication authority.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [server, web, caddy, observer]
+        arch: [arm64, amd64]
+        include:
+          - name: server
+            dockerfile: deploy/server.Dockerfile
+          - name: web
+            dockerfile: deploy/web.Dockerfile
+          - name: caddy
+            dockerfile: deploy/caddy/production/Dockerfile
+          - name: observer
+            dockerfile: deploy/observer/Dockerfile
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            machine: aarch64
+          - arch: amd64
+            runner: ubuntu-24.04
+            machine: x86_64
+    env:
+      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:dry-run-${{ matrix.arch }}
+      NAME: ${{ matrix.name }}
+      ARCH: ${{ matrix.arch }}
+      MACHINE: ${{ matrix.machine }}
+      DOCKERFILE: ${{ matrix.dockerfile }}
+      VERSION: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/release-image-check
+        with:
+          report-name: ${{ matrix.name }}-${{ matrix.arch }}
