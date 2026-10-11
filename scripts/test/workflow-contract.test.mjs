@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { parseDocument, visit } from "yaml";
@@ -24,6 +25,112 @@ const hostedFiles = [...workflowFiles, ...actionFiles];
 const sha = "a".repeat(40);
 const actionFixture = (reference, comment = "v1.2.3") =>
   `jobs:\n  check:\n    steps:\n      - uses: ${reference} # ${comment}\n`;
+const readWorkflow = (name) =>
+  parseYaml(read(`.github/workflows/${name}.yml`), name).toJS();
+const forkCondition = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}";
+
+test("ci requires every job and calls the reusable VN infrastructure workflow", () => {
+  checkRequiredGate(readWorkflow("ci"), readWorkflow("vn-infra"));
+});
+
+test("required gate rejects incomplete needs and independent VN triggers", () => {
+  const fixtures = [
+    ["removed need", (ci) => { ci.jobs.ci.needs.pop(); }, /complete job set/],
+    ["extra unlisted job", (ci) => { ci.jobs.extra = { "runs-on": "ubuntu-latest" }; }, /complete job set/],
+    ["restored push", (_ci, vn) => { vn.on.push = { paths: ["deploy/vn/**"] }; }, /VN triggers/],
+    ["restored pull request", (_ci, vn) => { vn.on.pull_request = null; }, /VN triggers/],
+    ["missing reusable trigger", (_ci, vn) => { delete vn.on.workflow_call; }, /VN triggers/],
+    ["missing manual trigger", (_ci, vn) => { delete vn.on.workflow_dispatch; }, /VN triggers/],
+    ["missing reusable call", (ci) => { delete ci.jobs["vn-infra"].uses; }, /VN workflow call/],
+    ["conditional reusable call", (ci) => { ci.jobs["vn-infra"].if = "false"; }, /VN workflow must run/],
+    ["conditional gate", (ci) => { delete ci.jobs.ci.if; }, /always/],
+    ["unrestricted fork skips", (ci) => { aggregateStep(ci).env.ALLOW_SEMGREP_SKIP = "true"; }, /fork condition/],
+  ];
+  for (const [name, mutate, diagnostic] of fixtures) {
+    const ci = readWorkflow("ci");
+    const vn = readWorkflow("vn-infra");
+    mutate(ci, vn);
+    assert.throws(() => checkRequiredGate(ci, vn), diagnostic, name);
+  }
+});
+
+test("aggregate accepts only successful jobs and fork-only Semgrep skips", () => {
+  checkAggregateResults(readWorkflow("ci"));
+});
+
+test("aggregate rejects unrestricted job and event skips", () => {
+  for (const condition of [
+    'or (.key | IN("semgrep-code", "semgrep-supply-chain") | not)',
+    'or $allow_semgrep_skip != "true"',
+  ]) {
+    const ci = readWorkflow("ci");
+    aggregateStep(ci).run = aggregateStep(ci).run.replace(condition, "or false");
+    assert.throws(() => checkAggregateResults(ci), /skipped/);
+  }
+});
+
+function aggregateStep(ci) {
+  const step = ci.jobs.ci.steps.find((step) => step.env?.NEEDS_JSON);
+  assert.ok(step, "ci needs an aggregate result step");
+  return step;
+}
+
+function checkRequiredGate(ci, vn) {
+  assert.deepEqual(Object.keys(vn.on).sort(), ["workflow_call", "workflow_dispatch"], "VN triggers");
+  assert.deepEqual(vn.permissions, { contents: "read" });
+  assert.equal(vn.concurrency, undefined, "VN workflow must not cancel callers");
+  assert.equal(ci.jobs["vn-infra"]?.uses, "./.github/workflows/vn-infra.yml", "VN workflow call");
+  assert.equal(ci.jobs["vn-infra"].if, undefined, "VN workflow must run on every trigger");
+  assert.deepEqual(
+    [...ci.jobs.ci.needs].sort(),
+    Object.keys(ci.jobs).filter((job) => job !== "ci").sort(),
+    "ci needs must equal the complete job set",
+  );
+  assert.equal(ci.jobs.ci.if, "always()", "ci must always run");
+  const step = aggregateStep(ci);
+  assert.equal(step.if, "always()", "aggregate must always run");
+  assert.equal(step.env.ALLOW_SEMGREP_SKIP, forkCondition, "Semgrep skip fork condition");
+  assert.equal(step.env.NEEDS_JSON, "${{ toJSON(needs) }}");
+}
+
+function checkAggregateResults(ci) {
+  const step = aggregateStep(ci);
+  const jobs = ci.jobs.ci.needs;
+  const contexts = [
+    ["push", false],
+    ["workflow_dispatch", false],
+    ["same-repository pull_request", false],
+    ["fork pull_request", true],
+  ];
+  const run = (needs, allowSkip) => {
+    const result = spawnSync("bash", ["-e", "-o", "pipefail", "-c", step.run], {
+      env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), ALLOW_SEMGREP_SKIP: String(allowSkip) },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    assert.ifError(result.error);
+    assert.ok(result.status === 0 || result.status === 1, result.stderr);
+    return result.status;
+  };
+  for (const [context, allowSkip] of contexts) {
+    const successful = Object.fromEntries(jobs.map((job) => [job, { result: "success" }]));
+    assert.equal(run(successful, allowSkip), 0, `${context}: all jobs succeeded`);
+    const bothSkipped = {
+      ...successful,
+      "semgrep-code": { result: "skipped" },
+      "semgrep-supply-chain": { result: "skipped" },
+    };
+    assert.equal(run(bothSkipped, allowSkip), allowSkip ? 0 : 1, `${context}: both Semgrep jobs skipped`);
+    for (const job of jobs) {
+      for (const result of ["skipped", "cancelled", "failure", undefined]) {
+        const needs = { ...successful, [job]: { result } };
+        const allowed = allowSkip && result === "skipped" &&
+          ["semgrep-code", "semgrep-supply-chain"].includes(job);
+        assert.equal(run(needs, allowSkip), allowed ? 0 : 1, `${context}: ${job}=${result}`);
+      }
+    }
+  }
+}
 
 test("external actions and reusable workflows require full commit pins", () => {
   for (const path of hostedFiles) checkActionPins(read(path), path);
