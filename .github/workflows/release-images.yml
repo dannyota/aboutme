@@ -21,12 +21,34 @@ permissions:
   contents: read
 
 jobs:
+  # No publishing job receives write authority until this read-only check
+  # accepts the tag and its exact main CI result. Manual builds do not publish.
+  eligibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release eligibility
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release-eligibility.sh "$TAG" "$COMMIT"
+
   # server, web, and caddy ship as one release, so on a tag they fail fast
   # together: a Trivy finding or smoke failure on one image or platform
   # cancels the others in flight. A manual run lets every job finish, so one
   # run shows each image's result on each platform. Each platform builds on a
   # native runner.
   build:
+    needs: eligibility
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -241,6 +263,7 @@ jobs:
   # same Trivy gate and attestation as server, web, and caddy above, so its
   # Trivy finding cannot cancel or block them, or stop the release job below.
   observer-image:
+    needs: eligibility
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -346,6 +369,7 @@ jobs:
   # Its job stays independent so a Trivy finding cannot block the app images
   # or their release.
   observer-image-amd64:
+    needs: eligibility
     runs-on: ubuntu-24.04
     permissions:
       contents: read
