@@ -25,6 +25,12 @@ Keep literal \paths and $variables; use Unicode: Việt.
 '''
 TOML
 printf 'A brief with "quotes", $variables and \\paths.\nSecond line.\n' >"$WORK/brief"
+python3 - "$WORK/caller-stdin" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_bytes(b"stdin must not reach codex\n" * 65536)
+PY
 
 check_args() {
   python3 - "$WORK" "$@" <<'PY'
@@ -60,8 +66,9 @@ PY
 }
 
 run() {
-  printf 'stdin must not reach codex\n' | bash "$ROOT/scripts/codex-agent.sh" "$@" \
-    "$WORK/tree with spaces" "$WORK/brief" "$WORK/report with spaces.md"
+  bash "$ROOT/scripts/codex-agent.sh" "$@" \
+    "$WORK/tree with spaces" "$WORK/brief" "$WORK/report with spaces.md" \
+    <"$WORK/caller-stdin"
 }
 
 run implementer
