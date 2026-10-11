@@ -16,6 +16,13 @@ stage_dev_https_browser_specs() {
   local context=$1 dest=$2 path
   local -a sources=()
   mapfile -t sources <"$context/spec-sources.txt" || return 1
+  for path in "${sources[@]}"; do
+    if [[ ! $path =~ ^[a-z0-9][a-z0-9.-]*\.(ts|mjs)$ ]]; then
+      printf 'dev-https-browser-stage: spec source %s is not a plain .ts or .mjs basename\n' \
+        "$path" >&2
+      return 1
+    fi
+  done
   chmod 0700 "$dest" || return 1
   for path in "${sources[@]}"; do
     if [ ! -f "$context/$path" ] || [ -L "$context/$path" ]; then
