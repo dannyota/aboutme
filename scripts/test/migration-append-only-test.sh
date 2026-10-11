@@ -290,4 +290,52 @@ if run_local "$repo" >/dev/null 2>&1; then
   exit 1
 fi
 
+run_dispatch_base() {
+  local repo=$1 requested=$2
+  (cd "$repo" && bash scripts/check-migrations-append-only.sh --dispatch-base "$requested" HEAD origin/main)
+}
+
+repo=$WORK/dispatch-base
+new_repo "$repo" true
+trusted=$(git -C "$repo" rev-parse HEAD)
+printf '%s\n' '-- tampered migration' >"$repo/apps/server/migrations/00001_released.sql"
+git -C "$repo" add -- apps/server/migrations/00001_released.sql
+git -C "$repo" commit -qm "test: modify frozen migration"
+bypass=$(git -C "$repo" rev-parse HEAD)
+printf '%s\n' 'candidate' >"$repo/candidate.txt"
+git -C "$repo" add -- candidate.txt
+git -C "$repo" commit -qm "test: advance candidate"
+resolved=$(run_dispatch_base "$repo" "$trusted")
+[ "$resolved" = "$trusted" ] || { echo 'dispatch did not derive the main base' >&2; exit 1; }
+for invalid in "$bypass" "$(git -C "$repo" rev-parse HEAD)" not-a-sha HEAD "$(git -C "$repo" rev-parse 'HEAD^{tree}')"; do
+  if run_dispatch_base "$repo" "$invalid" >/dev/null 2>&1; then
+    echo 'migration-append-only-test: candidate-selected or malformed base passed' >&2
+    exit 1
+  fi
+done
+if run_commits "$repo" "$resolved" HEAD >/dev/null 2>&1; then
+  echo 'migration-append-only-test: dispatch hid a frozen migration edit' >&2
+  exit 1
+fi
+# An older main commit cannot hide a guard introduced on newer main ancestry.
+git -C "$repo" update-ref refs/remotes/origin/main "$bypass"
+if run_dispatch_base "$repo" "$trusted" >/dev/null 2>&1; then
+  echo 'migration-append-only-test: stale main base passed' >&2
+  exit 1
+fi
+run_dispatch_base "$repo" "$bypass" >/dev/null
+# A fetched main with unrelated history must fail closed.
+git -C "$repo" switch -q --orphan unrelated
+git -C "$repo" rm -q -rf --ignore-unmatch -- .
+printf '%s\n' 'unrelated' >"$repo/unrelated.txt"
+git -C "$repo" add -- unrelated.txt
+git -C "$repo" commit -qm "test: unrelated main"
+unrelated=$(git -C "$repo" rev-parse HEAD)
+git -C "$repo" update-ref refs/remotes/origin/main "$unrelated"
+git -C "$repo" switch -q main
+if run_dispatch_base "$repo" "$unrelated" >/dev/null 2>&1; then
+  echo 'migration-append-only-test: unrelated main base passed' >&2
+  exit 1
+fi
+
 echo "Migration append-only tests passed"

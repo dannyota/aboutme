@@ -19,27 +19,98 @@ if grep -Fq 'changed=$(git diff --name-status' "$WORKFLOW"; then
   fail "a hosted append-only job still filters git diff before checking its status"
 fi
 
-grep -Fq 'bash scripts/check-migrations-append-only.sh --commits "$BASE_SHA" HEAD' "$WORKFLOW" ||
-  fail "migration job does not use the tested commit-to-commit guard"
-grep -Fq 'base is not a commit' "$ROOT/scripts/check-migrations-append-only.sh" ||
-  fail "migration guard does not reject an invalid base"
-grep -Fq 'git diff --quiet "$base" "$head"' "$ROOT/scripts/check-migrations-append-only.sh" ||
-  fail "migration guard does not compare push trees directly"
+assert_preflight_guards() { # job-body
+  grep -Fq 'bash scripts/check-migrations-append-only.sh --commits "$base" HEAD' <<<"$1" ||
+    fail "preflight does not use the tested migration commit-to-commit guard"
+  grep -Fq 'bash scripts/check-released-schemas.sh --commits "$base" HEAD' <<<"$1" ||
+    fail "preflight does not use the tested released-schema commit-to-commit guard"
+  grep -Fq 'base="$BASE_SHA"' <<<"$1" ||
+    fail "preflight does not preserve the event comparison base"
+  grep -Fq 'base=$(bash scripts/check-migrations-append-only.sh --dispatch-base "$BASE_SHA" HEAD origin/main)' <<<"$1" ||
+    fail "preflight does not use the validated dispatch comparison base"
+}
 
-count=$(grep -Fc 'if ! diff=$(git diff --name-status' "$WORKFLOW" || true)
-[ "$count" -eq 1 ] ||
-  fail "want one inline fail-closed hosted diff capture, found $count"
-grep -Fq 'Could not compare released schemas with base.' "$WORKFLOW" ||
-  fail "released-schema job lacks an explicit diff-failure result"
-grep -Fq 'git diff --name-status "$base" "$head"' "$WORKFLOW" ||
-  fail "released-schema job does not compare event trees directly"
-grep -Fq 'git rev-parse --verify --quiet "$BASE_SHA^{commit}"' "$WORKFLOW" ||
-  fail "released-schema job does not validate the base commit"
-grep -Fq 'git rev-parse --verify --quiet "HEAD^{commit}"' "$WORKFLOW" ||
-  fail "released-schema job does not validate the head commit"
-if grep -Fq 'git diff --name-status "$base"...HEAD' "$WORKFLOW"; then
-  fail "released-schema job still uses a merge-base diff"
-fi
+assert_migration_guard() { # script-body
+  grep -Fq 'base=$(resolve_commit "$1") || fail "base is not a commit: $1"' <<<"$1" ||
+    fail "migration guard does not reject an invalid base"
+  grep -Fq 'git diff --quiet "$base" "$head"' <<<"$1" ||
+    fail "migration guard does not compare push and dispatch trees directly"
+  if grep -Eq 'git diff .*\.\.\.' <<<"$1"; then
+    fail "migration guard uses a merge-base diff"
+  fi
+}
+
+assert_released_schema_guard() { # script-body
+  local count
+  count=$(grep -Fc 'if ! diff=$(git diff --name-status' <<<"$1" || true)
+  [ "$count" -eq 1 ] ||
+    fail "want one fail-closed released-schema diff capture, found $count"
+  grep -Fq 'Could not compare released schemas with base.' <<<"$1" ||
+    fail "released-schema guard lacks an explicit diff-failure result"
+  grep -Fq 'git diff --name-status "$base" "$head"' <<<"$1" ||
+    fail "released-schema guard does not compare push and dispatch trees directly"
+  grep -Fq 'git rev-parse --verify --quiet "$2^{commit}"' <<<"$1" ||
+    fail "released-schema guard does not validate the base commit"
+  grep -Fq 'git rev-parse --verify --quiet "$3^{commit}"' <<<"$1" ||
+    fail "released-schema guard does not validate the head commit"
+  if grep -Eq 'git diff .*\.\.\.' <<<"$1"; then
+    fail "released-schema guard uses a merge-base diff"
+  fi
+}
+
+expect_guard_drift() { # validator body diagnostic
+  local status=0
+  ( "$1" "$2" ) >"$WORK/guard-drift" 2>&1 || status=$?
+  [ "$status" -eq 1 ] || fail "guard drift did not fail: $3"
+  grep -Fxq "workflow-safety-test: $3" "$WORK/guard-drift" ||
+    fail "guard drift lacks the expected diagnostic: $3"
+}
+
+PREFLIGHT_JOB=$(awk '/^  preflight:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
+MIGRATION_GUARD=$(cat "$ROOT/scripts/check-migrations-append-only.sh")
+SCHEMA_GUARD=$(cat "$ROOT/scripts/check-released-schemas.sh")
+assert_preflight_guards "$PREFLIGHT_JOB"
+assert_migration_guard "$MIGRATION_GUARD"
+assert_released_schema_guard "$SCHEMA_GUARD"
+
+while IFS='|' read -r pattern diagnostic; do
+  expect_guard_drift assert_preflight_guards \
+    "$(grep -Fv -- "$pattern" <<<"$PREFLIGHT_JOB")" "$diagnostic"
+done <<'CASES'
+check-migrations-append-only.sh --commits|preflight does not use the tested migration commit-to-commit guard
+check-released-schemas.sh|preflight does not use the tested released-schema commit-to-commit guard
+base="$BASE_SHA"|preflight does not preserve the event comparison base
+--dispatch-base|preflight does not use the validated dispatch comparison base
+CASES
+
+while IFS='|' read -r pattern diagnostic; do
+  expect_guard_drift assert_migration_guard \
+    "$(grep -Fv -- "$pattern" <<<"$MIGRATION_GUARD")" "$diagnostic"
+done <<'CASES'
+base=$(resolve_commit "$1")|migration guard does not reject an invalid base
+git diff --quiet "$base" "$head"|migration guard does not compare push and dispatch trees directly
+CASES
+expect_guard_drift assert_migration_guard \
+  "$MIGRATION_GUARD
+git diff --name-status \"\$base\"...\"\$head\"" \
+  'migration guard uses a merge-base diff'
+
+while IFS='|' read -r pattern diagnostic; do
+  expect_guard_drift assert_released_schema_guard \
+    "$(grep -Fv -- "$pattern" <<<"$SCHEMA_GUARD")" "$diagnostic"
+done <<'CASES'
+if ! diff=$(git diff --name-status|want one fail-closed released-schema diff capture, found 0
+Could not compare released schemas with base.|released-schema guard lacks an explicit diff-failure result
+git rev-parse --verify --quiet "$2^{commit}"|released-schema guard does not validate the base commit
+git rev-parse --verify --quiet "$3^{commit}"|released-schema guard does not validate the head commit
+CASES
+expect_guard_drift assert_released_schema_guard \
+  "$(sed 's/"$base" "$head"/"$base"/' <<<"$SCHEMA_GUARD")" \
+  'released-schema guard does not compare push and dispatch trees directly'
+expect_guard_drift assert_released_schema_guard \
+  "$SCHEMA_GUARD
+git diff --name-status \"\$base\"...\"\$head\"" \
+  'released-schema guard uses a merge-base diff'
 
 grep -Fq 'runs-on: ubuntu-24.04' "$WORKFLOW" ||
   fail "hosted S3 conformance does not pin a runner with Podman"
@@ -54,9 +125,35 @@ grep -Fq 'run: make test-s3-down' "$WORKFLOW" ||
 
 WEB_E2E_JOB=$(awk '/^  web-e2e:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$WORKFLOW")
 [ -n "$WEB_E2E_JOB" ] || fail "hosted workflow lacks the pinned browser job"
-if grep -Fq 'needs:' <<<"$WEB_E2E_JOB"; then
-  fail "pinned browser job depends on a job whose artifact it does not use"
-fi
+assert_browser_dependencies() { # job-body
+  local needs
+  needs=$(awk '
+    /^    needs:/ { count++; active = 1; sub(/^    needs:[ ]*/, ""); print; next }
+    active && /^      - / { sub(/^      - /, ""); print; next }
+    /^    [^ ]/ { active = 0 }
+    END { if (count > 1) print "duplicate" }
+  ' <<<"$1" | tr -d '[:space:][]')
+  [ -z "$needs" ] || [ "$needs" = preflight ] ||
+    fail "pinned browser job may need only preflight"
+  if grep -Eq 'actions/download-artifact@|gh run download' <<<"$1"; then
+    fail "pinned browser job depends on another job's artifacts"
+  fi
+}
+assert_browser_dependencies "$WEB_E2E_JOB"
+assert_browser_dependencies "$(sed '/^    needs:/d' <<<"$WEB_E2E_JOB")"
+assert_browser_dependencies "$(sed 's/needs: \[preflight\]/needs: preflight/' <<<"$WEB_E2E_JOB")"
+assert_browser_dependencies "$(sed 's/needs: \[preflight\]/needs:\n      - preflight/' <<<"$WEB_E2E_JOB")"
+expect_guard_drift assert_browser_dependencies \
+  "$(sed 's/needs: \[preflight\]/needs: [preflight, web]/' <<<"$WEB_E2E_JOB")" \
+  'pinned browser job may need only preflight'
+expect_guard_drift assert_browser_dependencies \
+  "$WEB_E2E_JOB
+      - uses: actions/download-artifact@$(printf '%040d' 0)" \
+  "pinned browser job depends on another job's artifacts"
+expect_guard_drift assert_browser_dependencies \
+  "$WEB_E2E_JOB
+      - run: gh run download" \
+  "pinned browser job depends on another job's artifacts"
 grep -Fq '        WEB_E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}' \
   "$WORKFLOW" || fail "pinned browser job lacks the closed immutable run ID"
 grep -Fq '        test -z "${UPDATE_GOLDEN+x}"' "$WORKFLOW" ||
