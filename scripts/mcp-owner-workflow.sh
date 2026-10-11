@@ -359,16 +359,10 @@ write_synthetic_login() {
 
 # api sends one same-origin request to the local stack and requires the exact
 # status. Secrets travel in private header and body files, never curl arguments.
+# The helper writes redacted diagnostics on failure.
 api() {
-  local want=$1 label=$2 method=$3 path=$4 body=${5-} headers=${6-} form=${7-} status
-  local -a args=(-sS --proto '=https' --cacert "$CA_INPUT/caddy-root.crt" --max-time 30
-    -o "$SCRATCH/response" -w '%{http_code}' -b "$SCRATCH/cookies" -c "$SCRATCH/cookies"
-    -H "Origin: $LOCAL_ORIGIN" -X "$method")
-  [ -z "$headers" ] || args+=(-H "@$headers")
-  [ -z "$body" ] || args+=(--data-binary "@$body")
-  [ -z "$form" ] || args+=(-F "$form")
-  status=$(curl "${args[@]}" "$LOCAL_ORIGIN$path" 2>/dev/null) || status=000
-  [ "$status" = "$want" ] || fail "fixture request failed at $label"
+  bash "$REPO/scripts/lib/mcp-workflow-fixture.sh" "$CA_INPUT" "$SCRATCH" "$LOCAL_ORIGIN" \
+    "$REPO/.dev/proof-evidence/mcp-sdk-fixture" "$@" || fail "fixture request failed at $2"
 }
 
 session_headers() {

@@ -225,7 +225,14 @@ path=/${url#*://*/}
 printf '%s %s\n' "$method" "$path" >>"$ctl/curl.calls"
 respond() {
   [ -z "$out" ] || printf '%s' "$2" >"$out"
-  [ -z "$fmt" ] || printf '%s' "$1"
+  case $behavior in
+  register-boundary | register-oversized) stat -c %s -- "$out" >"$ctl/response.size" ;;
+  esac
+  if [ "$fmt" = '%{http_code} %{time_total}' ]; then
+    printf '%s %s' "$1" "${duration:-0.012345}"
+  elif [ -n "$fmt" ]; then
+    printf '%s' "$1"
+  fi
   [ -n "$out" ] || [ -n "$fmt" ] || printf '%s' "$2"
   exit 0
 }
@@ -256,6 +263,34 @@ case "$method $url" in
 esac
 case "$method $path" in
 'POST /api/v1/auth/password/register')
+  case $behavior in
+  register-unavailable)
+    duration=5.004321
+    respond 503 '{"error":{"code":"authentication_unavailable","message":"leak-marker"},"token":"tok123"}'
+    ;;
+  register-rate-limited) respond 429 '{"error":{"code":"rate_limited"}}' ;;
+  register-timeout)
+    printf '000 30.001234'
+    printf 'leak-marker' >&2
+    exit 28
+    ;;
+  register-partial)
+    printf '{"error":{"code":"authentication_unavailable"}}' >"$out"
+    printf '503 5.004321'
+    exit 18
+    ;;
+  register-unknown) respond 502 '{"error":{"code":"leak-marker","message":"tok123"}}' ;;
+  register-malformed) respond 502 'leak-marker' ;;
+  register-multiple) respond 502 '{"error":{"code":"rate_limited"}} {"error":{"code":"authentication_unavailable"}}' ;;
+  register-bad-metrics) printf 'leak-marker'; exit 7 ;;
+  register-boundary | register-oversized)
+    response='{"error":{"code":"authentication_unavailable","message":"leak-marker"},"token":"tok123"}'
+    size=65536
+    [ "$behavior" != register-oversized ] || size=65537
+    printf -v padding '%*s' "$((size - ${#response}))" ''
+    respond 503 "$response$padding"
+    ;;
+  esac
   jq -r .email "$data" >"$state/email"
   jq -r .password "$data" >"$state/password"
   respond 202 ''
@@ -423,7 +458,7 @@ setup_tree() {
   chmod -R u+rwx "$MAIN" "$REPO" 2>/dev/null || true
   rm -rf -- "$MAIN" "$REPO" "$CTL"
   make_fakes
-  mkdir -p "$MAIN/.git" "$MAIN/.dev/credentials" "$REPO/scripts" "$BROWSER" \
+  mkdir -p "$MAIN/.git" "$MAIN/.dev/credentials" "$REPO/scripts/lib" "$BROWSER" \
     "$REPO/apps/server/cmd/native-http-fixture/testdata" "$REPO/.dev/bin" \
     "$STATE/input" "$STATE/secrets"
   chmod 0700 "$MAIN/.dev/credentials" "$REPO/.dev" "$REPO/.dev/bin" "$STATE" "$STATE/input" "$STATE/secrets"
@@ -431,6 +466,9 @@ setup_tree() {
     "$OWNER_MARKER" "$OWNER_MARKER" >"$OWNER_CREDENTIAL"
   chmod 0600 "$OWNER_CREDENTIAL"
   cp -- "$SCRIPT_SOURCE" "$SCRIPT"
+  if [ -f "$ROOT/scripts/lib/mcp-workflow-fixture.sh" ]; then
+    cp -- "$ROOT/scripts/lib/mcp-workflow-fixture.sh" "$REPO/scripts/lib/"
+  fi
   chmod 0755 "$SCRIPT"
   local name
   for name in Dockerfile package.json package-lock.json playwright.config.ts mcp.spec.ts \
@@ -466,6 +504,7 @@ setup_tree() {
 run_workflow() {
   local mode=$1
   shift
+  rm -rf -- "$REPO/.dev/proof-evidence"
   rm -f -- "$CTL"/runner.* "$CTL"/container.args "$CTL"/container.pid "$CTL/synthetic.copy"
   echo "${RUNNER_BEHAVIOR:-ok}" >"$CTL/runner.behavior"
   echo "${CONTAINER_BEHAVIOR:-ok}" >"$CTL/container.behavior"
@@ -527,6 +566,64 @@ check 'usage runs nothing' [ ! -s "$CTL/calls" ]
 
 # 2. Local synthetic proof on an untagged checkout.
 setup_tree
+DIAGNOSTIC=$REPO/.dev/proof-evidence/mcp-sdk-fixture/fixture-failure.json
+for behavior in register-unavailable register-rate-limited register-timeout register-partial \
+  register-unknown register-malformed register-multiple register-bad-metrics \
+  register-boundary register-oversized; do
+  CURL_BEHAVIOR=$behavior run_workflow local
+  check "$behavior fails the fixture" [ "$STATUS" -eq 1 ]
+  check "$behavior names the fixture step" has 'fixture request failed at register' "$CTL/out"
+  check "$behavior sends registration once" [ "$(grep -c '^POST /api/v1/auth/password/register$' "$CTL/curl.calls")" -eq 1 ]
+  check "$behavior starts no runner or browser" not_called '^(runner|container)'
+  check "$behavior still cleans the fixture" [ "$(grep -c '^fixture cleanup$' "$CTL/calls")" -eq 2 ]
+  check "$behavior writes only redacted evidence" jqe '
+    keys == ["curl_exit", "duration_seconds", "error_code", "expected_status", "http_status", "stage", "version"]
+    and .version == 1 and .stage == "register" and .expected_status == 202' "$DIAGNOSTIC"
+  check "$behavior evidence is private" [ "$(mode_of "$DIAGNOSTIC")" = 600 ]
+  check "$behavior withholds response content in output" no_secret_in "$CTL/out"
+  check "$behavior withholds response content in evidence" no_secret_in "$DIAGNOSTIC"
+  check "$behavior output uses fixed words" fixed_output
+  check "$behavior removes the private response" [ ! -e "$REPO/.dev/mcp-workflow-local/fixture/response" ]
+  case $behavior in
+  register-unavailable)
+    check 'unavailable response records status, code, and five-second duration' jqe \
+      '.http_status == 503 and .error_code == "authentication_unavailable" and .curl_exit == 0 and .duration_seconds == "5.004321"' "$DIAGNOSTIC"
+    check 'unavailable response logs the exact redacted diagnostic' grep -Fxq \
+      'mcp-owner-workflow: fixture response at register status 503 code authentication_unavailable curl-exit 0 duration-seconds 5.004321' "$CTL/out"
+    ;;
+  register-rate-limited)
+    check 'rate rejection records the closed code' jqe '.http_status == 429 and .error_code == "rate_limited"' "$DIAGNOSTIC"
+    ;;
+  register-timeout)
+    check 'curl timeout records no response and its exit code' jqe \
+      '.http_status == 0 and .error_code == "none" and .curl_exit == 28 and .duration_seconds == "30.001234"' "$DIAGNOSTIC"
+    check 'curl timeout logs the exact redacted diagnostic' grep -Fxq \
+      'mcp-owner-workflow: fixture response at register status 000 code none curl-exit 28 duration-seconds 30.001234' "$CTL/out"
+    ;;
+  register-partial)
+    check 'a transfer failure preserves the received status' jqe '.http_status == 503 and .curl_exit == 18' "$DIAGNOSTIC"
+    ;;
+  register-unknown | register-malformed | register-multiple)
+    check "$behavior keeps unrecognized content out of the code" jqe '.http_status == 502 and .error_code == "unknown"' "$DIAGNOSTIC"
+    ;;
+  register-bad-metrics)
+    check 'unrecognized curl output stays out of evidence' jqe \
+      '.http_status == 0 and .duration_seconds == "unknown" and .curl_exit == 7' "$DIAGNOSTIC"
+    ;;
+  register-boundary)
+    check 'response at the parsing limit has exactly 65,536 bytes' [ "$(cat "$CTL/response.size")" -eq 65536 ]
+    check 'response at the parsing limit yields the closed code' jqe \
+      '.http_status == 503 and .error_code == "authentication_unavailable"' "$DIAGNOSTIC"
+    ;;
+  register-oversized)
+    check 'response above the parsing limit has exactly 65,537 bytes' [ "$(cat "$CTL/response.size")" -eq 65537 ]
+    check 'response above the parsing limit yields unknown' jqe \
+      '.http_status == 503 and .error_code == "unknown"' "$DIAGNOSTIC"
+    ;;
+  esac
+done
+
+setup_tree
 chmod 000 "$MAIN/.dev/credentials"
 run_workflow local
 chmod 0700 "$MAIN/.dev/credentials"
@@ -536,6 +633,7 @@ check 'local ends with the completed stage' [ "$(tail -n 1 "$CTL/out")" = 'mcp-o
 check 'local output is fixed stage lines only' fixed_output
 check 'local skips the attestation off a release tag' has 'stage attestation-skipped' "$CTL/out"
 check 'local writes no attestation' [ ! -e "$ATTESTATION" ]
+check 'local success writes no failure diagnostic' [ ! -e "$DIAGNOSTIC" ]
 check 'local never names the owner credential' lacks 'owner-test.env' "$CTL/trace"
 check 'local never names the credential directory' lacks '.dev/credentials' "$CTL/trace"
 check 'local uses a non-production control root' \
