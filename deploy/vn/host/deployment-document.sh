@@ -27,15 +27,28 @@ for component in server web caddy maintenance; do
   podman container exists "aboutme-$component" >/dev/null 2>&1 || exists=$?
   case $exists in
     0)
-      # ImageDigest is the running container's manifest digest, not its image
-      # configuration ID or the image its name would pull today. A bare
-      # StartedAt prints Go's spaced time format, so format it as RFC 3339.
+      # ImageDigest is the digest the local image was first pulled by, which
+      # is the index when an earlier release pulled it through the index.
+      # The container's own pin (ImageName) names the platform image the
+      # deploy verified; it is reported only when the image the container
+      # runs (Image) lists that exact repository digest. A bare StartedAt
+      # prints Go's spaced time format, so format it as RFC 3339.
       observation=$(podman container inspect --format \
-        '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}}' \
+        '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}} {{.ImageName}} {{.Image}}' \
         "aboutme-$component" 2>/dev/null) || die 'container inspection failed'
-      read -r running digest started extra <<<"$observation" || die 'malformed observation'
+      read -r running digest started pin image_id extra <<<"$observation" || die 'malformed observation'
       [[ -z $extra && $observation != *$'\n'* ]] || die 'malformed observation'
       case $running in true | false) ;; *) die 'invalid container state' ;; esac
+      [[ $running == false || $digest =~ ^sha256:[0-9a-f]{64}$ ]] || die 'invalid running digest'
+      repository=ghcr.io/dannyota/aboutme-$component
+      [[ $component != maintenance ]] || repository=ghcr.io/dannyota/aboutme-caddy
+      # The pin match comes last so BASH_REMATCH holds its digest.
+      if [[ $running == true && $image_id =~ ^[0-9a-f]{64}$ && $pin =~ ^${repository//./\\.}@(sha256:[0-9a-f]{64})$ ]]; then
+        pinned=${BASH_REMATCH[1]}
+        repo_digests=$(podman image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+          "$image_id" 2>/dev/null) || die 'image inspection failed'
+        if grep -qxF -- "$repository@$pinned" <<<"$repo_digests"; then digest=$pinned; fi
+      fi
       ;;
     1) running=false ;;
     *) die 'container lookup failed' ;;
