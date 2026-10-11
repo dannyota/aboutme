@@ -24,8 +24,17 @@ jobs:
         env:
           WEB_E2E_RUN_ID: baselines-${{ github.run_id }}-${{ github.run_attempt }}
         run: make web-e2e-update
-      - name: Upload candidate baselines
+      - name: Upload browser diagnostics
         if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-diagnostics-update
+          path: .dev/web-e2e-results/*/*/update/diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: true
+      - name: Upload candidate baselines
+        if: success()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: candidate-baselines
