@@ -9,9 +9,10 @@ operations the repository supports now.
 | [Local HTTPS checks](local-uat.md)          | Runnable    | Verify native features before the production deploy          |
 | [Resume exports](exports.md)                | Runnable    | Check PDF/image rendering, public gates, and resource limits |
 | [Realtime](realtime.md)                     | Runnable    | Check stream bounds, recovery, refresh, and revocation       |
-| [Authentication email](email.md)            | Production  | Verify and operate Google Workspace and AWS SES              |
+| [Authentication email](email.md)            | Production  | Operate Bizfly SMTP and the Google Workspace mailbox          |
 | [Production](production.md)                 | Operational | Deploy, rollback, access, edge settings, and secrets         |
-| [DNS](dns.md)                               | Prepared    | Route 53 zone, the move from Cloudflare, and DNSSEC          |
+| [DNS](dns.md)                               | Operational | Cloudflare DNS-only records and DNSSEC                        |
+| [CloudFront](cloudfront.md)                 | Reference   | Certificates and edge checks for the undeployed AWS path      |
 | [Deployment observer](observer.md)          | Prepared    | Set up, update, and stop the deployment document             |
 
 The production runbook covers only shipped scripts and current operator steps.

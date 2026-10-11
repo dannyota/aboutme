@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The quarterly restore drill (docs/design/vietnam-production.md, "PostgreSQL"
-# and "Migration", step 4). Run it from the laptop. It orders a temporary
+# The quarterly restore drill (deploy/vn/README.md, "Restore drill").
+# Run it from the laptop. It orders a temporary
 # vServer, installs PostgreSQL 18 and pgBackRest on it from the bundle, restores
 # the latest backup and then a point-in-time target, checks each result, prints
 # the recovery times, and deletes the server.

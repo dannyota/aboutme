@@ -1,12 +1,11 @@
 # CloudFront edge
 
-Production serves `https://aboutme.vn` through Amazon CloudFront, in front of
-the same EC2 host, under [ADR 0025](../adr/0025-single-host-production.md). See
-the [CloudFront edge design](../design/cloudfront-edge.md) for the full request
-path and the return path to Cloudflare. Cloudflare answers DNS only; see the
-[production runbook's Cloudflare DNS section](production.md#cloudflare-dns).
-This runbook covers the origin certificate, the client certificate, and the
-checks that run around a deploy or an edge change.
+The CloudFront edge is not deployed. The AWS deployment was removed on
+2026-10-11; `deploy/aws/` remains as a reference for a possible AWS ECS path.
+Production uses the [Vietnam host](production.md) with
+[Cloudflare DNS-only](dns.md). This runbook preserves the AWS certificate and
+edge procedures. Apply them only after rebuilding and reviewing that path.
+The [CloudFront edge design](../design/cloudfront-edge.md) owns its settings.
 
 ## Origin certificate
 
@@ -20,13 +19,14 @@ does not wait for it to issue.
 
 ### Validation records
 
-OpenTofu's `dns` module creates the certificate's DNS validation records in the
-Route 53 zone from the certificate's own validation options. Until the name
-servers move to Route 53 ([DNS runbook](dns.md)), Cloudflare answers, and its
-DNS-only copies of the same records must stay. List them with:
+For an AWS rebuild, OpenTofu's `dns` module can create validation records in
+its Route 53 zone. Production DNS is in Cloudflare, so those records alone
+cannot validate a certificate. Publish the certificate's validation records at
+the authoritative provider if the AWS edge is rebuilt. Read the values from the
+rebuilt stack:
 
 ```sh
-tofu output -json certificate_validation_records
+tofu -chdir=deploy/aws/prod output -json certificate_validation_records
 ```
 
 The same records also validate the viewer certificate, so one set serves both.
@@ -93,7 +93,7 @@ must trust the old and the new CA at once during a rotation.
 `tls.sh client-import` imports the client certificate and key into ACM and
 deletes the tmpfs files; `tls.sh forget-client` deletes them without importing.
 
-On the first build, run `client-ca` then `client-import`, then `tofu apply`,
+On an AWS build, run `client-ca` then `client-import`, then `tofu apply`,
 since nothing is deployed yet to trust. On a rotation, the order reverses:
 `client-ca`, then deploy the live tag so Caddy trusts the new CA alongside the
 old one, then `client-import`, which reimports under the same ACM certificate
@@ -159,7 +159,7 @@ path.
 
 The [design](../design/cloudfront-edge.md#facts-to-verify) lists facts that
 documentation does not settle. Results so far, checked on 2026-09-25 with
-read-only calls and the AWS documentation; the rest are checked against the live
+read-only calls and the AWS documentation; the rest require a rebuilt
 distribution with the real hostnames.
 
 | Fact                                | Result                                                                                                                                                                                                           |
