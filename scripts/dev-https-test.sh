@@ -769,6 +769,115 @@ run_group_member_exit_race_check() (
   kill -0 "$foreign_pid" 2>/dev/null || fail 'down signalled the simulated exiting process'
 )
 
+run_group_member_identity_race_checks() (
+  local work scenario output expected calls
+  work=$(mktemp -d)
+  trap 'rm -rf -- "$work"' EXIT
+  # shellcheck source=lib/dev-https-identity.sh
+  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
+  ps() {
+    [ "$*" = '-o pgid=,sid=,stat= -p 123' ] || fail 'unexpected member state probe'
+    calls=$(<"$work/state-calls")
+    calls=$((calls + 1))
+    printf '%s\n' "$calls" >"$work/state-calls"
+    case $scenario:$calls in
+    absent-before:1 | absent-after:2) return 1 ;;
+    foreign-group-before:1 | foreign-group-after:2) printf '789 456 S\n' ;;
+    foreign-session-before:1 | foreign-session-after:2) printf '456 789 S\n' ;;
+    zombie-before:1 | zombie-after:2) printf '456 456 Z\n' ;;
+    dead-before:1 | dead-after:2) printf '456 456 X\n' ;;
+    malformed-before:1) printf 'invalid state\n' ;;
+    *) printf '456 456 S\n' ;;
+    esac
+  }
+  member_has_token() {
+    [ "$1" = 123 ] && [ "$2" = fixture-token ] || fail 'member token probe changed its target'
+    printf 'token\n' >>"$work/token-calls"
+    [ "$scenario" = marked ]
+  }
+  proc_member_state() {
+    [ "$1" = 123 ] || fail 'exit flag probe changed its target'
+    case $scenario in
+    absent-after) return 0 ;;
+    foreign-group-after) printf '789 456 S 0\n' ;;
+    foreign-session-after) printf '456 789 S 0\n' ;;
+    zombie-after) printf '456 456 Z 0\n' ;;
+    dead-after) printf '456 456 X 0\n' ;;
+    exiting-before-zombie) printf '456 456 S 4\n' ;;
+    state-unreadable) return 1 ;;
+    *) printf '456 456 S 0\n' ;;
+    esac
+  }
+  for scenario in absent-before foreign-group-before foreign-session-before \
+    absent-after foreign-group-after foreign-session-after zombie-before \
+    zombie-after dead-before dead-after exiting-before-zombie marked unmarked unreadable \
+    state-unreadable malformed-before; do
+    printf '0\n' >"$work/state-calls"
+    : >"$work/token-calls"
+    expected=0
+    case $scenario in unmarked | unreadable | state-unreadable | malformed-before) expected=1 ;; esac
+    if output=$(validate_group_member 123 456 456 fixture-token 2>&1); then
+      [ "$expected" = 0 ] || fail "accepted a live $scenario group member"
+    else
+      [ "$expected" = 1 ] || fail "rejected the $scenario identity race: $output"
+    fi
+    [ -z "$output" ] || fail "member validation printed process data: $scenario"
+    case $scenario in
+    *-before)
+      [ ! -s "$work/token-calls" ] || fail "read a stale member's environment: $scenario"
+      ;;
+    *) [ -s "$work/token-calls" ] || fail "skipped the live member token proof: $scenario" ;;
+    esac
+  done
+)
+
+run_member_token_open_race_check() (
+  local work output
+  work=$(mktemp -d)
+  trap 'rm -rf -- "$work"' EXIT
+  # shellcheck source=lib/dev-https-identity.sh
+  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
+  printf 'ABOUTME_DEV_HTTPS_IDENTITY=fixture-token\0' >"$work/environ"
+  # Make the readability probe succeed before the open sees a vanished PID.
+  proc_member_environ_path() {
+    [ "$1" = 2147483647 ] || fail 'environment path probe changed its target'
+    [ -r "$work/environ" ] || fail 'fixture environment was not readable'
+    rm -- "$work/environ"
+    : >"$work/path-probed"
+    printf '%s' "$work/environ"
+  }
+  if output=$(member_has_token 2147483647 fixture-token 2>&1); then
+    fail 'accepted the token of a vanished process'
+  fi
+  [ -z "$output" ] || fail 'a raced environment open leaked a shell diagnostic'
+  [ -f "$work/path-probed" ] || fail 'skipped the raced environment path probe'
+)
+
+run_process_member_state_check() (
+  local flags output
+  # shellcheck source=lib/dev-https-identity.sh
+  source "$SOURCE_LIB_DIR/dev-https-identity.sh"
+  cat() {
+    [ "$*" = /proc/123/stat ] || fail 'unexpected process stat read'
+    # comm can contain spaces and closing parentheses. flags is field 9.
+    printf '123 (fixture ) child) S 1 456 456 0 -1 %s 0 0 0\n' "$flags"
+  }
+  for flags in 0 4194304 4 4194308; do
+    output=$(proc_member_state 123) || fail "rejected process state with flags $flags"
+    [ "$output" = "456 456 S $flags" ] || fail "parsed process state incorrectly: $output"
+  done
+  flags=invalid
+  if proc_member_state 123 >/dev/null; then fail 'accepted malformed process flags'; fi
+  cat() { return 1; }
+  output=$(proc_member_state 2147483647) || fail 'rejected a vanished process state'
+  [ -z "$output" ] || fail 'a vanished process still had state'
+  proc_member_exists() {
+    [ "$1" = 2147483647 ] || fail 'process directory probe changed its target'
+    return 0
+  }
+  if proc_member_state 2147483647 >/dev/null; then fail 'a failed stat read proved process exit'; fi
+)
+
 run_identity_field_tamper_check() (
   local fixture output identity original pid mutation
   fixture=$(new_fixture)
@@ -1371,6 +1480,9 @@ readonly CHECKS=(
   run_identity_field_tamper_check
   run_process_group_drain_check
   run_group_member_exit_race_check
+  run_group_member_identity_race_checks
+  run_member_token_open_race_check
+  run_process_member_state_check
   run_binary_drift_check
   run_lifecycle_command_drift_down_check
   run_partial_startup_rollback_check
@@ -1443,6 +1555,7 @@ main() {
   identity-tamper) run_identity_field_tamper_check; return ;;
   group-drain) run_process_group_drain_check; return ;;
   member-exit-race) run_group_member_exit_race_check; return ;;
+  member-identity-races) run_group_member_identity_race_checks; run_member_token_open_race_check; run_process_member_state_check; return ;;
   binary-drift) run_binary_drift_check; return ;;
   lifecycle-drift) run_lifecycle_command_drift_down_check; return ;;
   rollback) run_partial_startup_rollback_check; return ;;
