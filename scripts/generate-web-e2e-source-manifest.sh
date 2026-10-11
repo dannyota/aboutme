@@ -86,7 +86,8 @@ is_secret_like() {
 
 while IFS= read -r -d '' path; do
   case $path in
-    apps/web/app/assets/fonts/README.md | \
+    */AGENTS.md | */CLAUDE.md | \
+      apps/web/app/assets/fonts/README.md | \
       apps/web/app/assets/fonts/tools/*)
       continue
       ;;

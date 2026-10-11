@@ -202,14 +202,22 @@ mkdir -p "$REPO/instructions"
 printf '# Changed\n' >"$REPO/docs/a.md"
 printf '# Agent\n' >"$REPO/instructions/x.md"
 printf '# Agents\n' >"$REPO/AGENTS.md"
+printf '@AGENTS.md\n' >"$REPO/CLAUDE.md"
+printf '# Nested agents\n' >"$REPO/apps/web/AGENTS.md"
+printf '@AGENTS.md\n' >"$REPO/apps/web/CLAUDE.md"
+mkdir -p "$REPO/docs/component"
+printf '# Nested agents\n' >"$REPO/docs/component/AGENTS.md"
+printf '@AGENTS.md\n' >"$REPO/docs/component/CLAUDE.md"
 check "$REPO" 0
 has_call "prettier --check -- docs/a.md (in repo"
 has_call "markdownlint-cli2 docs/a.md (in repo"
 no_call "instructions/x.md"
 no_call "AGENTS.md"
+no_call "CLAUDE.md"
 check "$REPO" 1 STUB_FAIL=markdownlint-cli2
 has_line 'markdownlint +FAIL'
-rm -rf "$REPO/instructions" "$REPO/AGENTS.md"
+rm -rf "$REPO/instructions" "$REPO/AGENTS.md" "$REPO/CLAUDE.md" \
+  "$REPO/apps/web/AGENTS.md" "$REPO/apps/web/CLAUDE.md" "$REPO/docs/component"
 git -C "$REPO" checkout -q -- docs/a.md
 
 # Go: gofmt sees changed files across every Go module (found from go.mod,

@@ -5,8 +5,8 @@ apps/
 packages/schema/gen/
 .superpowers/
 **/node_modules/
-CLAUDE.md
-AGENTS.md
+**/CLAUDE.md
+**/AGENTS.md
 .claude/
 instructions/
 .codex/
