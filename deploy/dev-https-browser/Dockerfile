@@ -19,8 +19,8 @@ RUN npm ci --ignore-scripts \
 
 # Spec sources are NOT baked in; they are mounted read-only at /uat-spec per
 # run and validated by run.sh, so a spec edit needs no image rebuild.
-COPY run.sh verify-evidence.mjs ./
-RUN chmod 0444 package.json package-lock.json verify-evidence.mjs \
+COPY run.sh verify-evidence.mjs spec-sources.txt ./
+RUN chmod 0444 package.json package-lock.json verify-evidence.mjs spec-sources.txt \
     && chmod 0555 run.sh
 
 USER pwuser

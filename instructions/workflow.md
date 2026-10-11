@@ -1,36 +1,38 @@
 # Agent workflow
 
-The primary session runs as `manager`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. It asks the owner only for decisions the owner must make, one question at a time, with a recommendation.
+The primary session runs as `manager`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. It manages the work and does not investigate or debug itself; it fetches inputs workers cannot reach, such as CI logs and artifacts. It asks the owner only for decisions the owner must make, one question at a time, with a recommendation.
 
 ## Models and ownership
 
 |Work|Model|Effort|
 |-|-|-|
 |Design and first-party research|Fable through `designer`|high|
-|Design when Fable is unavailable|`gpt-6-astra` through the Codex `designer` role|high|
+|Review and improve each Fable design; design when Fable is unavailable|`gpt-6-astra` through the Codex `designer` role|high|
 |Implementation on Codex|`gpt-6.1-sol`|medium|
-|Every review and fix confirmation|`gpt-6.1-sol` or `gpt-6-astra`, subject to review routing|xhigh|
+|Troubleshooting, flaky tests, and root-cause debugging, fix included|`gpt-6.1-sol` through `troubleshooter`|xhigh|
+|Every review and fix confirmation|`gpt-6.1-sol`, as a separate job from the author|xhigh|
 |QA proofs and persona dogfooding|`gpt-6.1-sol`|medium|
 |Exploration, searches, summaries, mechanical reading|`gpt-6-luna`|low|
 
-Dispatch with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`, which loads model, effort, sandbox, and developer instructions from the role TOML in that worktree. Override the model for cross-model review, for example `--model gpt-6-astra` when Sol wrote the work under design review. The owner chooses the primary session's model. Workers and subagents never run on Sonnet or Opus. Claude models do design and research only; the primary coordinates the work. No Claude model implements or reviews. Codex implementers work in any lane within the brief's owned paths. The designer writes design notes, ADRs, schema and API contract proposals, visual direction, and UI specs; it never implements or reviews.
+Dispatch with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`, which loads model, effort, sandbox, and developer instructions from the role TOML in that worktree. The owner chooses the primary session's model. Workers and subagents never run on Sonnet or Opus. Claude models do design and research only; the primary coordinates the work. No Claude model implements or reviews. Codex implementers work in any lane within the brief's owned paths. The designer writes design notes, ADRs, schema and API contract proposals, visual direction, and UI specs; it never implements or reviews.
 
 Design proposals cover benefits, trade-offs, dependencies, limits, alternatives, migration and loss rules, older-client behavior, security, size, and release order. The owner approves product-visible choices before code starts. UI specs give exact values, breakpoints, and copy in both languages. Research cites first-party sources and marks claims supported only by secondary sources as needing verification.
 
 ## Flow
 
 1. Read the brief's authorities and the domain's design docs and accepted ADRs. Design wins over a plan; an accepted ADR wins over conflicting design text.
-2. For a contract or architecture change, the designer writes the proposal and `design_reviewer` reviews it independently before implementation. Small changes skip design.
+2. For a contract or architecture change, the Fable designer writes the proposal, the Codex `designer` role (Astra high) reviews and improves it in place, and `design_reviewer` reviews the result independently before implementation. Small changes skip design.
 3. Brief one implementer per bounded task with exact paths. Write the failing regression test first, then the smallest correct change. Observe failure in CI or an approved local exception; otherwise report it as unrun. Adversarial cases for write safety, races, bounds, hostile input, authorization, and CSRF belong to the author.
 4. Run `code_reviewer` once after the last code task. One-line changes, including production DNS, skip the reviewer pass; the primary shows plan or diff evidence instead under [ADR 0024](../docs/adr/0024-delivery-gates.md#amendment-one-line-review-exemption-2026-10-10). Local-only and test-only changes also skip the fresh review under the delivery rules. Other security-relevant changes still require the adversarial pass before merge.
-5. Return findings to the author for fixes, then request the original reviewer to confirm each fix at `xhigh`. Use another reviewer only when the original reviewer shares the fix author's model; the replacement must use a different model at `xhigh`.
+5. Return findings to the author for fixes, then request the original reviewer to confirm each fix at `xhigh`.
 6. The primary inspects each diff and report, runs `make pre-push` and approved capped checks, and reads exact-commit CI evidence. It never repeats checks just to confirm a report.
-7. Push the branch and open a pull request against `main`. CI and GitHub Copilot review must cover the change. Fix each Copilot finding or reply in its thread with the reason it does not apply. A push starts its next review; Copilot adds to independent review and never replaces it.
+7. Push the branch and open a draft pull request against `main` (`gh pr create --draft`); mark it ready (`gh pr ready`) when the change is complete, which requests the Copilot review. CI and GitHub Copilot review must cover the change. Fix each Copilot finding or reply in its thread with the reason it does not apply. After material fixes, request the next review with `gh pr edit <n> --add-reviewer @copilot`; Copilot adds to independent review and never replaces it. When Copilot drops review requests (no review_requested event, usually the account's premium-request quota), land on exact-head CI and the Codex review, have a Sol xhigh job confirm any open Copilot-finding fixes, and request Copilot again once it returns.
 8. If `main` moved, merge `origin/main` into the branch and push so CI and review cover the combination. The primary merges locally with a signed `--no-ff` merge, pushes `main`, and deletes the branch locally and remotely. Follow [releases](releases.md) for tags and deploys.
+9. Close the GitHub notifications the work produced: review each thread for this repository (pull request, review, and failed-run threads), then mark it done with `gh api -X DELETE notifications/threads/<id>`. Close, never just mark read. A failed-run thread closes only after its cause is fixed or explained in the report.
 
 ## Reviews
 
-A reviewer never implements what it reviews or reviews work it authored. A reviewer never reviews work written by the same model: Astra reviews Sol code; Sol reviews Astra designs; work written by Fable or the owner goes to whichever of Sol xhigh or Astra xhigh is free. Override the default reviewer model when routing requires it. The original reviewer confirms each fix at `xhigh`. Only when the original reviewer shares the fix author's model does another reviewer of a different model confirm at `xhigh`.
+Every review and fix confirmation runs on `gpt-6.1-sol` at `xhigh` as its own job, separate from the job that wrote the work; it may share the author's model. A worker's self-review never counts. A reviewer never implements what it reviews. The original reviewer confirms each fix at `xhigh`.
 
 Security-relevant work beyond one-line changes needs an adversarial pass before merge: auth, sessions, CSRF, sanitizing, media privacy, publish revocation, credentials, keys, signing, production writes, deploys, and release workflows. Also check concurrency, idempotency, and migrations when touched. Name the invariants confirmed and trace each relevant attack end to end.
 
@@ -49,13 +51,13 @@ Reviews stay read-only. Reviewers read the primary's check output and exact-comm
 
 ## Concurrency and blocked workers
 
-At most four Codex jobs run at once across all work, counting design, implementation, review, QA, and exploration. Each concurrent writer has its own worktree. The primary creates worktrees and verifies their base commits. Local check execution is globally serialized under [resources](resources.md).
+At most four Codex jobs run at once across all work, counting design, implementation, troubleshooting, review, QA, and exploration. Each concurrent writer has its own worktree. The primary creates worktrees and verifies their base commits. Local check execution is globally serialized under [resources](resources.md).
 
 Codex sandboxes have no network or user systemd bus and cannot create capped scopes. The primary prefetches dependencies under the resource rules before a worker needs them, runs `make pre-push` and approved capped checks, and gives reviewers the output.
 
 When a worker stops with a question, a design conflict, overlapping ownership, or a missing decision, the primary answers from the reviewed design or returns the conflict to the designer and independent reviewer. Record an approved contract change in the design before resuming the worker with a new brief that states the answer. Never invent a contract.
 
-When CI fails, the primary follows [verification](verification.md#when-a-check-fails), finds the root cause, and briefs the implementer with the cause, evidence, and required change. Read the whole log and fix every reported error together. Count red runs and their causes; two from the same cause, or a failure covered by `make pre-push`, means stop dispatching and repair the process before the next push. After two failed attempts, diagnose and rebrief instead of retrying unchanged work. Wait on CI in the foreground; do not end with a waiting message.
+When CI fails or a defect needs diagnosis, the primary downloads the failing logs and artifacts to the scratchpad and dispatches `troubleshooter` with that evidence. The worker follows [verification](verification.md#when-a-check-fails), finds the root cause, and fixes it; `code_reviewer` reviews the fix. The worker reads the whole log and fixes every reported error together. Count red runs and their causes; two from the same cause, or a failure covered by `make pre-push`, means stop dispatching and repair the process before the next push. After two failed attempts, diagnose and rebrief instead of retrying unchanged work. Wait on CI in the foreground; do not end with a waiting message.
 
 ## Lane instructions
 

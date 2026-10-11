@@ -10,7 +10,7 @@ Work only from the primary's brief. Start with git status --short; leave existin
 
 Codex sandboxes have no network or user systemd bus and cannot run capped local checks. The primary prefetches dependencies and runs make pre-push and approved capped checks. Read its output and exact-commit CI evidence; never invent results. Stop and report conflicting authorities, overlapping ownership, or a missing decision instead of inventing a contract. Do not dispatch other jobs; the primary owns concurrency and verification.
 
-You implement one bounded task; Astra xhigh independently reviews Sol work. Never review your own work or implement a design you authored.
+You implement one bounded task; A separate Sol xhigh job independently reviews your work. Never review your own work or implement a design you authored.
 
 Rules:
 - The reviewed design is the contract. Report an edit needed outside your owned paths instead of making it. Read your diff line by line and update every test, spec, snapshot, and doc that asserts the changed behavior.
@@ -21,7 +21,7 @@ Rules:
 - Documentation and configuration outside those lanes need exact paths in the brief. Do not change contracts without a reviewed proposal and the owner's approval for product-visible choices.
 - Root Makefile, manifests, workflows, lockfiles, migrations, schema heads, and generated snapshots are shared. Edit only when the brief names them; report every changed line. Serialize migrations and schema versions.
 - Never hand-edit generated output. Regenerate schema Go, OpenAPI clients, sqlc output, web source manifests, and public roots from their source when affected. Ask the primary to run generators that need a capped scope. Report every generated file and changed line.
-- When CI fails, read the whole log and fix every reported error together from the primary's diagnosis; never retry unchanged failures or weaken a check without evidence.
+- When CI fails, read the whole log and fix every reported error together from the diagnosis in the brief; a failure without a known cause goes to the troubleshooter role. Never retry unchanged failures or weaken a check without evidence.
 
 Report: exact new, changed, and deleted files, one line each; your hunks in shared files and every changed shared or generated line; tests added; checks run with results; checks not run with exact commands and reasons; evidence paths; open items and assumptions. Never claim a check ran when it awaits CI or the primary.
 

@@ -13,37 +13,15 @@ fail() {
   exit 1
 }
 
-readonly -a SPEC_FILES=(
-  playwright.config.ts
-  auth.spec.ts
-  transport.spec.ts
-  editor.spec.ts
-  public.spec.ts
-  password-auth.spec.ts
-  mcp.spec.ts
-  mcp-sdk.spec.ts
-  mcp-ts-sdk.spec.ts
-  entry.spec.ts
-  publish.spec.ts
-  exports.spec.ts
-  privacy.spec.ts
-  sample-start.spec.ts
-  linkedin.spec.ts
-  linkedin-import.spec.ts
-  linkedin-import-fixtures.ts
-  second-factor.spec.ts
-  totp.spec.ts
-  totp-fixture.ts
-  totp-production.spec.ts
-  production.config.ts
-  editor-fixtures.ts
-  network-policy.ts
-  harness-lib.ts
-  second-factor-lib.ts
-  second-factor-pages.ts
-  proof-shards.mjs
-)
-for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+mapfile -t SPEC_FILES <"$SOURCE/spec-sources.txt"
+readonly -a SPEC_FILES
+[ "${#SPEC_FILES[@]}" -gt 0 ] || fail 'spec source list is empty'
+[ "$(printf '%s\n' "${SPEC_FILES[@]}" | sort -u | wc -l)" -eq "${#SPEC_FILES[@]}" ] ||
+  fail 'spec source list contains duplicates'
+for file in "${SPEC_FILES[@]}"; do
+  [[ $file =~ ^[a-z0-9][a-z0-9.-]*\.(ts|mjs)$ ]] || fail 'invalid spec source name'
+done
+for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt \
   "${SPEC_FILES[@]}"; do
   [ -f "$SOURCE/$file" ] || fail "missing $file"
 done
@@ -66,7 +44,8 @@ for file in \
   deploy/dev-https-browser/Dockerfile \
   deploy/dev-https-browser/package.json \
   deploy/dev-https-browser/package-lock.json \
-  deploy/dev-https-browser/run.sh; do
+  deploy/dev-https-browser/run.sh \
+  deploy/dev-https-browser/spec-sources.txt; do
   grep -Eq "^[[:blank:]]*${file//./\\.}[[:blank:]]+\\\\$" "$ROOT/Makefile" ||
     fail "browser image hash does not include ${file##*/}"
 done
@@ -76,11 +55,6 @@ for file in "${SPEC_FILES[@]}"; do
   if grep -Eq "^[[:blank:]]*deploy/dev-https-browser/${file//./\\.}" "$ROOT/Makefile"; then
     fail "spec source ${file} re-entered the image manifest hash"
   fi
-  # mcp-sdk.spec.ts is staged by scripts/mcp-owner-workflow.sh, not the
-  # shared multi-mode scripts/dev-https-check.sh entry point.
-  [ "$file" = mcp-sdk.spec.ts ] && continue
-  grep -Eq "^[[:blank:]]*${file//./\\.}$" "$ROOT/scripts/dev-https-check.sh" ||
-    fail "check script does not stage ${file}"
 done
 
 readonly WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-dev-https-browser.XXXXXX")
@@ -97,7 +71,7 @@ readonly INPUT=$WORK/input
 readonly MCP_INPUT=$WORK/mcp-input
 readonly EVIDENCE=$WORK/evidence
 install -d -m 0700 "$CONTEXT" "$FAKE_BIN" "$INPUT" "$MCP_INPUT" "$EVIDENCE"
-for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs \
+for file in Dockerfile package.json package-lock.json run.sh verify-evidence.mjs spec-sources.txt \
   "${SPEC_FILES[@]}"; do
   cp -- "$SOURCE/$file" "$CONTEXT/$file"
 done
@@ -148,7 +122,7 @@ build)
   grep -Fq '"@axe-core/playwright": "4.13.0"' "$context/package-lock.json"
   ! grep -Eq '\.spec\.ts|network-policy\.ts|editor-fixtures\.ts|harness-lib\.ts|second-factor-(lib|pages)\.ts|proof-shards\.mjs|playwright\.config\.ts' \
     "$context/Dockerfile"
-  grep -Fq 'COPY run.sh verify-evidence.mjs' "$context/Dockerfile"
+  grep -Fq 'COPY run.sh verify-evidence.mjs spec-sources.txt' "$context/Dockerfile"
   [ -f "$context/verify-evidence.mjs" ] && [ ! -L "$context/verify-evidence.mjs" ]
   printf '%s\n' built >"$FAKE_IMAGE_META"
   ;;
@@ -1029,6 +1003,7 @@ readonly BROWSER_LOG=$INSIDE_ROOT/browser.calls
 install -d -m 0700 "$INSIDE_INPUT" "$INSIDE_SPEC" "$INSIDE_EVIDENCE" \
   "$(dirname "$INSIDE_MCP_CREDENTIAL")" "$INSIDE_MCP_BROWSER" \
   "$INSIDE_TMP" "$INSIDE_APP/node_modules/.bin" "$INSIDE_BIN"
+cp -- "$SOURCE/spec-sources.txt" "$INSIDE_ROOT/spec-sources.txt"
 cp -- "$SOURCE/package.json" "$INSIDE_APP/package.json"
 cp -- "$SOURCE/verify-evidence.mjs" "$INSIDE_APP/verify-evidence.mjs"
 cp -- "$INPUT/caddy-root.crt" "$INSIDE_INPUT/caddy-root.crt"
