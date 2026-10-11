@@ -2,6 +2,14 @@ playwright.config.ts
 auth.spec.ts
 transport.spec.ts
 editor.spec.ts
+editor-autosave.ts
+editor-structure.ts
+editor-conflicts.ts
+editor-photo-session.ts
+editor-accessibility.ts
+editor-diagnostics.ts
+editor-locale.ts
+editor-proof-state.ts
 public.spec.ts
 password-auth.spec.ts
 mcp.spec.ts
