@@ -8,23 +8,23 @@ name: release-images
 # image index of the two. Each observer platform builds in its own job below so
 # a Trivy finding there cannot cancel or block server, web, or caddy, or stop
 # the release job that publishes them.
-#
-# A manual run builds, smokes, and scans every image on every platform without
-# pushing, attesting, or releasing anything, so a branch can prove the builds
-# before a tag.
+# Manual builds use release-check.yml with read-only permissions.
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # No publishing job receives write authority until this read-only check
   # accepts the tag and its exact main CI result. Each write-capable job repeats
   # the check from trusted main before other work, including on partial reruns.
-  # Candidate checkouts supply build inputs only. Manual builds do not publish.
+  # Candidate checkouts supply build inputs only.
   eligibility:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -47,14 +47,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
 
-  # server, web, and caddy ship as one release, so on a tag they fail fast
-  # together: a Trivy finding or smoke failure on one image or platform
-  # cancels the others in flight. A manual run lets every job finish, so one
-  # run shows each image's result on each platform. Each platform builds on a
-  # native runner.
+  # App images fail fast together. Observer outcomes never gate app builds.
+  # Each platform builds on a native runner.
   build:
     needs: eligibility
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
     permissions:
       actions: read
       contents: read
@@ -62,7 +60,7 @@ jobs:
       id-token: write
       attestations: write
     strategy:
-      fail-fast: ${{ github.event_name == 'push' }}
+      fail-fast: true
       matrix:
         name: [server, web, caddy]
         arch: [arm64, amd64]
@@ -80,9 +78,8 @@ jobs:
             runner: ubuntu-24.04
             machine: x86_64
     env:
-      # One tag per platform; the image job below joins them under the version
-      # tag. A manual run never pushes, so its tag is only a local name.
-      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.event_name == 'push' && github.ref_name || 'dry-run' }}-${{ matrix.arch }}
+      # The image job joins the platform tags under the version tag.
+      IMAGE: ghcr.io/dannyota/aboutme-${{ matrix.name }}:${{ github.ref_name }}-${{ matrix.arch }}
       NAME: ${{ matrix.name }}
       ARCH: ${{ matrix.arch }}
       MACHINE: ${{ matrix.machine }}
@@ -105,63 +102,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build
-        run: docker build --platform "linux/$ARCH" -f "$DOCKERFILE" -t "$IMAGE" .
-      - name: Smoke
-        run: |
-          [ "$(docker inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE")" = "linux/$ARCH" ]
-          case "$NAME" in
-            server)
-              # The server exits on its missing configuration, which proves the
-              # binary runs on this platform. Chromium then renders one page
-              # headless; the smoke container has no user namespaces for the
-              # sandbox, which production keeps.
-              docker run --rm --entrypoint sh -e MACHINE="$MACHINE" "$IMAGE" -c '
-                set -e
-                test "$(uname -m)" = "$MACHINE"
-                if out=$(/usr/local/bin/server 2>&1); then exit 1; fi
-                case "$out" in *"load config"*) ;; *) printf "%s\n" "$out"; exit 1 ;; esac
-                /opt/chromium/chrome --version
-                timeout 60 /opt/chromium/chrome --headless --no-sandbox --disable-gpu --disable-dev-shm-usage \
-                  --dump-dom "data:text/html,<title>smoke-ok</title>" | grep -q smoke-ok
-                test -s /etc/ssl/rds/global-bundle.pem
-                test -x /usr/local/bin/db-setup'
-              ;;
-            web)
-              docker run -d --name smoke -e HOST=0.0.0.0 -e PORT=3000 -p 127.0.0.1:3000:3000 "$IMAGE"
-              for _ in $(seq 1 30); do
-                curl -fsS -o /dev/null http://127.0.0.1:3000/ && exit 0
-                sleep 1
-              done
-              docker logs smoke
-              exit 1
-              ;;
-            caddy)
-              # The entrypoint's adapt mode assembles the edge listeners and
-              # parses both route tables without the runtime TLS files.
-              docker run --rm "$IMAGE" adapt
-              docker run --rm -e EDGES=cloudfront "$IMAGE" adapt
-              ;;
-          esac
-      - name: Install Trivy
-        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
-      # Scans the image built above, before it is pushed anywhere. Fails on a
-      # fixable HIGH or CRITICAL finding; see scripts/security-scan.sh. The
-      # full JSON report is uploaded as a short-retention artifact instead of
-      # printed, since this log is public.
-      - name: Scan for fixable HIGH/CRITICAL vulnerabilities
-        run: |
-          scripts/security-scan.sh scan-image \
-            "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$NAME-$ARCH.json"
-          scripts/security-scan.sh report "trivy-$NAME-$ARCH.json"
-      - name: Upload Trivy report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: ./.github/actions/release-image-check
         with:
-          name: trivy-report-${{ matrix.name }}-${{ matrix.arch }}
-          path: trivy-${{ matrix.name }}-${{ matrix.arch }}.json
-          if-no-files-found: warn
-          retention-days: 7
+          report-name: ${{ matrix.name }}-${{ matrix.arch }}
       - name: Push
         if: github.event_name == 'push'
         id: push
@@ -221,6 +164,7 @@ jobs:
     needs: build
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       actions: read
       contents: read
@@ -294,12 +238,12 @@ jobs:
           if-no-files-found: error
 
   # The deployment transparency observer
-  # (docs/design/deployment-transparency/README.md): its own job, with the
-  # same Trivy gate and attestation as server, web, and caddy above, so its
-  # Trivy finding cannot cancel or block them, or stop the release job below.
+  # (docs/design/deployment-transparency/README.md) builds a single-platform
+  # arm64 manifest for Lambda. Its failures never block the app release.
   observer-image:
     needs: eligibility
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
     permissions:
       actions: read
       contents: read
@@ -307,8 +251,11 @@ jobs:
       id-token: write
       attestations: write
     env:
-      IMAGE: ghcr.io/dannyota/aboutme-observer:${{ github.event_name == 'push' && github.ref_name || 'dry-run' }}
+      IMAGE: ghcr.io/dannyota/aboutme-observer:${{ github.ref_name }}
       NAME: observer
+      ARCH: arm64
+      MACHINE: aarch64
+      DOCKERFILE: deploy/observer/Dockerfile
       VERSION: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
     steps:
@@ -327,43 +274,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The observer's image must be a single-platform manifest with no
-      # buildx provenance attachment, so Lambda accepts it
-      # (docs/design/deployment-transparency/README.md, "Where the observer runs").
-      # It therefore stays linux/arm64 only, unlike server, web, and caddy:
-      # an amd64 build or an image index would make observer.sh refuse it.
-      # Its build information comes from build args, never from a
-      # self-reported runtime value.
-      - name: Build
-        run: |
-          docker build --platform linux/arm64 --provenance=false \
-            --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
-            -f deploy/observer/Dockerfile -t "$IMAGE" .
-      - name: Smoke
-        run: |
-          # No AWS access here: this only proves the binary starts and the
-          # manifest is the single-platform arch Lambda requires.
-          [ "$(docker inspect --format '{{.Architecture}}' "$IMAGE")" = "arm64" ]
-          docker run --rm "$IMAGE" version
-      - name: Install Trivy
-        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
-      # Scans the image built above, before it is pushed anywhere. Fails on a
-      # fixable HIGH or CRITICAL finding; see scripts/security-scan.sh. The
-      # full JSON report is uploaded as a short-retention artifact instead of
-      # printed, since this log is public.
-      - name: Scan for fixable HIGH/CRITICAL vulnerabilities
-        run: |
-          scripts/security-scan.sh scan-image \
-            "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$NAME.json"
-          scripts/security-scan.sh report "trivy-$NAME.json"
-      - name: Upload Trivy report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: ./.github/actions/release-image-check
         with:
-          name: trivy-report-observer
-          path: trivy-observer.json
-          if-no-files-found: warn
-          retention-days: 7
+          report-name: observer
       - name: Push
         if: github.event_name == 'push'
         id: push
@@ -421,6 +334,7 @@ jobs:
   observer-image-amd64:
     needs: eligibility
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       actions: read
       contents: read
@@ -428,8 +342,11 @@ jobs:
       id-token: write
       attestations: write
     env:
-      IMAGE: ghcr.io/dannyota/aboutme-observer:${{ github.event_name == 'push' && format('{0}-amd64', github.ref_name) || 'dry-run-amd64' }}
+      IMAGE: ghcr.io/dannyota/aboutme-observer:${{ github.ref_name }}-amd64
       NAME: observer-amd64
+      ARCH: amd64
+      MACHINE: x86_64
+      DOCKERFILE: deploy/observer/Dockerfile
       VERSION: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
     steps:
@@ -448,30 +365,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .release-trusted/scripts/release-eligibility.sh "$TAG" "$COMMIT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Build
-        run: |
-          docker build --platform linux/amd64 --provenance=false \
-            --build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT" \
-            -f deploy/observer/Dockerfile -t "$IMAGE" .
-      - name: Smoke
-        run: |
-          [ "$(docker inspect --format '{{.Architecture}}' "$IMAGE")" = "amd64" ]
-          docker run --rm "$IMAGE" version
-      - name: Install Trivy
-        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
-      - name: Scan for fixable HIGH/CRITICAL vulnerabilities
-        run: |
-          scripts/security-scan.sh scan-image \
-            "$RUNNER_TEMP/trivy-bin/trivy" "$IMAGE" "" "trivy-$NAME.json"
-          scripts/security-scan.sh report "trivy-$NAME.json"
-      - name: Upload Trivy report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - uses: ./.github/actions/release-image-check
         with:
-          name: trivy-report-observer-amd64
-          path: trivy-observer-amd64.json
-          if-no-files-found: warn
-          retention-days: 7
+          report-name: observer-amd64
       - name: Push
         if: github.event_name == 'push'
         id: push
@@ -532,6 +428,7 @@ jobs:
     needs: [image, observer-image, observer-image-amd64]
     if: ${{ !cancelled() && needs.image.result == 'success' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       actions: read
       contents: write

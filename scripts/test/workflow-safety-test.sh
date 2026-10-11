@@ -6,6 +6,7 @@ set -Eeuo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORKFLOW=$ROOT/.github/workflows/ci.yml
 RELEASE_WORKFLOW=$ROOT/.github/workflows/release-images.yml
+IMAGE_CHECK=$ROOT/.github/actions/release-image-check/action.yml
 SECURITY_WORKFLOW=$ROOT/.github/workflows/security-scan.yml
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-workflow-safety.XXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
@@ -345,28 +346,45 @@ grep -Fq 'or $allow_semgrep_skip != "true"' <<<"$CI_JOB" ||
 release_job_body() { # job-id
   awk -v job="  $1:" '$0 == job { flag = 1; next } /^  [a-z]/ { flag = 0 } flag' "$RELEASE_WORKFLOW"
 }
+
+assert_observer_build() { # action-body
+  grep -Fq 'observer*)' <<<"$1" &&
+    grep -Fq 'docker build --platform "linux/$ARCH" --provenance=false' <<<"$1" &&
+    grep -Fq -- '--build-arg VERSION="$VERSION" --build-arg COMMIT="$COMMIT"' <<<"$1" ||
+    fail "shared observer build must keep a single-platform manifest and build identity"
+}
+IMAGE_CHECK_BODY=$(cat "$IMAGE_CHECK")
+assert_observer_build "$IMAGE_CHECK_BODY"
+for pattern in 'observer*)' '--provenance=false' '--build-arg VERSION='; do
+  expect_guard_drift assert_observer_build \
+    "$(grep -Fv -- "$pattern" <<<"$IMAGE_CHECK_BODY")" \
+    'shared observer build must keep a single-platform manifest and build identity'
+done
+
 OBSERVER_ARM_JOB=$(release_job_body observer-image)
 [ -n "$OBSERVER_ARM_JOB" ] || fail "release-images workflow lacks the arm64 observer job"
 grep -Fxq '    runs-on: ubuntu-24.04-arm' <<<"$OBSERVER_ARM_JOB" ||
   fail "arm64 observer image does not use the native arm64 runner"
-grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.event_name == 'push' && github.ref_name || 'dry-run' }}" <<<"$OBSERVER_ARM_JOB" ||
+grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.ref_name }}" <<<"$OBSERVER_ARM_JOB" ||
   fail "arm64 observer image does not keep the plain version tag"
-grep -Fq 'docker build --platform linux/arm64 --provenance=false' <<<"$OBSERVER_ARM_JOB" ||
+grep -Fxq '      ARCH: arm64' <<<"$OBSERVER_ARM_JOB" &&
+  grep -Fq 'uses: ./.github/actions/release-image-check' <<<"$OBSERVER_ARM_JOB" ||
   fail "arm64 observer image is not a single-platform arm64 manifest"
 
 OBSERVER_AMD_JOB=$(release_job_body observer-image-amd64)
 [ -n "$OBSERVER_AMD_JOB" ] || fail "release-images workflow lacks the amd64 observer job"
 grep -Fxq '    runs-on: ubuntu-24.04' <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer image does not use the native amd64 runner"
-grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.event_name == 'push' && format('{0}-amd64', github.ref_name) || 'dry-run-amd64' }}" <<<"$OBSERVER_AMD_JOB" ||
+grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.ref_name }}-amd64" <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer image does not use the platform-suffixed version tag"
-grep -Fq 'docker build --platform linux/amd64 --provenance=false' <<<"$OBSERVER_AMD_JOB" ||
+grep -Fxq '      ARCH: amd64' <<<"$OBSERVER_AMD_JOB" &&
+  grep -Fq 'uses: ./.github/actions/release-image-check' <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer image is not a single-platform amd64 manifest"
-grep -Fq "[ \"\$(docker inspect --format '{{.Architecture}}' \"\$IMAGE\")\" = \"amd64\" ]" <<<"$OBSERVER_AMD_JOB" ||
-  fail "amd64 observer smoke does not check the built architecture"
-grep -Fq 'docker run --rm "$IMAGE" version' <<<"$OBSERVER_AMD_JOB" ||
+grep -Fq "[ \"\$(docker inspect --format '{{.Os}}/{{.Architecture}}' \"\$IMAGE\")\" = \"linux/\$ARCH\" ]" "$IMAGE_CHECK" ||
+  fail "shared image smoke does not check the built architecture"
+grep -Fq 'docker run --rm "$IMAGE" version' "$IMAGE_CHECK" ||
   fail "amd64 observer smoke does not start the observer binary"
-grep -Fq 'scripts/security-scan.sh scan-image' <<<"$OBSERVER_AMD_JOB" ||
+grep -Fq 'scripts/security-scan.sh scan-image' "$IMAGE_CHECK" ||
   fail "amd64 observer image lacks its Trivy scan"
 grep -Fq 'uses: actions/attest-build-provenance@' <<<"$OBSERVER_AMD_JOB" ||
   fail "amd64 observer image lacks provenance attestation"
