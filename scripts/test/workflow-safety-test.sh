@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
-# Author regression checks for fail-closed hosted append-only jobs.
+# Regression checks for hosted workflow contracts.
 set -Eeuo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 WORKFLOW=$ROOT/.github/workflows/ci.yml
 RELEASE_WORKFLOW=$ROOT/.github/workflows/release-images.yml
+SECURITY_WORKFLOW=$ROOT/.github/workflows/security-scan.yml
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/aboutme-workflow-safety.XXXXXX")
 trap 'rm -rf -- "$WORK"' EXIT
 
@@ -304,5 +305,103 @@ grep -Fq 'echo "ghcr.io/dannyota/aboutme-observer@$d linux/$arch" >>release/dige
   fail "release job does not list each observer platform digest"
 grep -Fq 'cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"' <<<"$RELEASE_JOB" ||
   fail "release job does not publish the legacy app SBOM name from the AWS arm64 image"
+
+# Scheduled scans need a contract checked by pull-request CI.
+assert_observer_scan() { # govulncheck job-body
+  awk '
+    function finish_step() { if (scan && directory && off) found = 1 }
+    /^      - / {
+      finish_step()
+      scan = directory = off = in_env = 0
+    }
+    /^        [^ ]/ { in_env = 0 }
+    $0 == "        run: govulncheck ./..." { scan = 1 }
+    $0 == "        working-directory: deploy/observer" { directory = 1 }
+    $0 == "        env:" { in_env = 1 }
+    in_env && $0 == "          GOWORK: \"off\"" { off = 1 }
+    END { finish_step(); exit !found }
+  ' <<<"$1" || fail "$observer_diagnostic"
+}
+
+assert_image_scan() { # image-scan job-body
+  local scan_step scan_command scan_env install_step
+  scan_step=$(step_block "Scan released images" "$1")
+  scan_command=$(awk '
+    /^        run: \|$/ { run = 1; next }
+    run && /^          / { print; next }
+    run { exit }
+  ' <<<"$scan_step")
+  [ "$scan_command" = '          scripts/security-scan.sh weekly-scan \
+            "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/reports" \
+            "$RELEASE_TAG" "$OBSERVER_RELEASE_TAG"' ] ||
+    fail "$image_command_diagnostic"
+  scan_env=$(awk '
+    /^        env:$/ { env = 1; next }
+    env && /^          / { print; next }
+    env { exit }
+  ' <<<"$scan_step")
+  if ! grep -Fxq '          RELEASE_TAG: ${{ inputs.release_tag }}' <<<"$scan_env" ||
+    ! grep -Fxq '          OBSERVER_RELEASE_TAG: ${{ inputs.observer_release_tag }}' <<<"$scan_env"; then
+    fail 'security-scan Scan released images must bind both release tag inputs in its env'
+  fi
+  install_step=$(step_block "Install Trivy" "$1")
+  grep -Fxq '        run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"' <<<"$install_step" ||
+    fail 'security-scan must install Trivy before Scan released images'
+  awk '
+    $0 == "      - name: Install Trivy" { install = NR }
+    $0 == "      - name: Scan released images" { scan = NR }
+    END { exit !(install && scan && install < scan) }
+  ' <<<"$1" || fail 'security-scan must install Trivy before Scan released images'
+}
+
+SECURITY_GO_JOB=$(awk '/^  govulncheck:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$SECURITY_WORKFLOW")
+SECURITY_IMAGE_JOB=$(awk '/^  image-scan:$/{flag=1; next} /^  [a-z]/{flag=0} flag' "$SECURITY_WORKFLOW")
+observer_diagnostic='security-scan govulncheck must run govulncheck ./... in deploy/observer with env GOWORK: "off" in the same step'
+image_command_diagnostic='security-scan Scan released images must pass the Trivy binary, reports directory, release tag, and observer release tag to weekly-scan'
+assert_observer_scan "$SECURITY_GO_JOB"
+assert_image_scan "$SECURITY_IMAGE_JOB"
+
+expect_security_drift() { # validator job-body diagnostic
+  local status=0
+  ( "$1" "$2" ) >"$WORK/security-drift" 2>&1 || status=$?
+  [ "$status" -eq 1 ] || fail "security scan drift did not fail: $3"
+  grep -Fxq "workflow-safety-test: $3" "$WORK/security-drift" ||
+    fail "security scan drift lacks the expected diagnostic: $3"
+}
+
+for drift in \
+  's/working-directory: deploy\/observer/working-directory: apps\/server/' \
+  's/run: govulncheck .\/\.\.\./run: go version/' \
+  's/GOWORK: "off"/GOWORK: "on"/' \
+  '/working-directory: deploy\/observer/a\      - name: unrelated' \
+  '/        env:/d'; do
+  expect_security_drift assert_observer_scan \
+    "$(sed "$drift" <<<"$SECURITY_GO_JOB")" "$observer_diagnostic"
+done
+
+for drift in \
+  's/weekly-scan/scan-image/' \
+  's|trivy-bin/trivy|other/trivy|' \
+  's|\$RUNNER_TEMP/reports|\$RUNNER_TEMP/other|' \
+  's/"\$RELEASE_TAG"/""/' \
+  's/"\$OBSERVER_RELEASE_TAG"/""/'; do
+  expect_security_drift assert_image_scan \
+    "$(sed "$drift" <<<"$SECURITY_IMAGE_JOB")" "$image_command_diagnostic"
+done
+for input in release_tag observer_release_tag; do
+  expect_security_drift assert_image_scan \
+    "$(sed "s/inputs\.$input /inputs.other /" <<<"$SECURITY_IMAGE_JOB")" \
+    'security-scan Scan released images must bind both release tag inputs in its env'
+done
+TRIVY_INSTALL_STEP=$(step_block "Install Trivy" "$SECURITY_IMAGE_JOB")
+IMAGE_WITHOUT_INSTALL=$(awk '
+  /^      - name: Install Trivy$/ { skip = 1; next }
+  /^      - / { skip = 0 }
+  !skip { print }
+' <<<"$SECURITY_IMAGE_JOB")
+expect_security_drift assert_image_scan \
+  "$IMAGE_WITHOUT_INSTALL
+$TRIVY_INSTALL_STEP" \
+  'security-scan must install Trivy before Scan released images'
 
 printf 'hosted workflow safety tests passed\n'
