@@ -10,16 +10,16 @@ cat >"$work/bin/podman" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$CALLS"
-[[ $1 == container ]]
-case $2 in
-  exists)
+image_id=$(printf '%064d' 0 | tr 0 e)
+case $1:$2 in
+  container:exists)
     case "$PODMAN_CASE:${3}" in
       error:*) exit 125 ;;
       running:aboutme-maintenance | missing:aboutme-web) exit 1 ;;
     esac ;;
-  inspect)
+  container:inspect)
     # No full inspect may read or print environment secrets.
-    [[ $3 == --format && $4 == '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}}' ]]
+    [[ $3 == --format && $4 == '{{.State.Running}} {{.ImageDigest}} {{.State.StartedAt.UTC.Format "2006-01-02T15:04:05.999999999Z07:00"}} {{.ImageName}} {{.Image}}' ]]
     if [[ $PODMAN_CASE == inspect-error ]]; then
       echo 'secret-canary-from-podman-error' >&2; exit 125
     fi
@@ -30,7 +30,15 @@ case $2 in
     stamp=2026-10-11T01:14:05.123456789Z
     [[ $PODMAN_CASE != bad-time ]] || stamp=secret-canary
     [[ $PODMAN_CASE != extra-field ]] || stamp+=' secret-canary'
-    printf '%s %s %s\n' "$running" "$digest" "$stamp" ;;
+    repo=ghcr.io/dannyota/${5/maintenance/caddy}
+    printf '%s %s %s %s@sha256:%s %s\n' "$running" "$digest" "$stamp" "$repo" "$(printf '%064d' 8)" "$image_id" ;;
+  image:inspect)
+    [[ $3 == --format && $4 == '{{range .RepoDigests}}{{println .}}{{end}}' && $5 == "$image_id" ]]
+    for name in server web caddy; do
+      printf 'ghcr.io/dannyota/aboutme-%s@sha256:%s\n' "$name" "$(printf '%064d' 7)"
+      [[ $PODMAN_CASE == pin-unlisted ]] ||
+        printf 'ghcr.io/dannyota/aboutme-%s@sha256:%s\n' "$name" "$(printf '%064d' 8)"
+    done ;;
   *) exit 99 ;;
 esac
 STUB
@@ -49,7 +57,7 @@ jq -e '
   and .summary == "unverified" and .release == null
   and (.components | map(.name)) == ["server","web","caddy"]
   and all(.components[].running_images[];
-    .digest == ("sha256:" + ("0" * 63) + "7") and .replicas == 1
+    .digest == ("sha256:" + ("0" * 63) + "8") and .replicas == 1
     and .running_since == "2026-10-11T01:14:05Z"
     and .version == null and .commit == null
     and .signature.status == "unchecked" and .sbom.status == "unchecked"
@@ -76,6 +84,11 @@ for PODMAN_CASE in missing stopped; do
   generate
   jq -e '.summary == "mismatch" and .components[1].running_images == []' "$doc" >/dev/null
 done
+# Without its repository digest on the running image, the pin is not
+# reported; the image's own first digest is.
+PODMAN_CASE=pin-unlisted generate
+jq -e 'all(.components[].running_images[]; .digest == ("sha256:" + ("0" * 63) + "7"))' "$doc" >/dev/null ||
+  fail 'reported a pin the running image does not list'
 PODMAN_CASE=maintenance generate
 jq -e '.components[3].name == "maintenance" and .components[3].image == "ghcr.io/dannyota/aboutme-caddy"' \
   "$doc" >/dev/null
