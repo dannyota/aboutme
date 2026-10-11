@@ -102,7 +102,7 @@ level. Readers ignore fields they do not know (see [versions](#versions)).
 | `platform.provider`                | `aws` or `greennode`                                                                                    | Observer platform adapter                |
 | `platform.orchestrator`            | `ecs`, `kubernetes`, or `podman`                                                                        | Observer platform adapter                |
 | `platform.region`                  | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                                            | Observer configuration                   |
-| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock, or Podman reporter clock  |
+| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock, or Podman reporter clock |
 | `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
 | `release`                          | Object or `null` (rules below)                                                                          | Computed from the components             |
 | `components[].name`                | `server`, `web`, `caddy`, or `maintenance`, in that order                                               | Fixed mapping from service and container |
@@ -183,10 +183,10 @@ reports many digests.
 ## Sanitizer
 
 The [host reporter](host.md) uses formatted Podman inspection and a closed
-builder. It writes an unchecked observation in this document's shape. The
-Podman adapter validates that file against the schema, checks freshness and
-runtime fields, and discards its build claims. Every observer follows the
-sanitizer below.
+builder. It writes an unchecked observation in this document's shape. The Podman
+adapter validates that file against the schema, checks freshness and runtime
+fields, and discards its build claims. Every observer follows the sanitizer
+below.
 
 The sanitizer is an allowlist. The observer never serializes a platform object.
 Platform adapters return one internal type holding only component name, digest,

@@ -41,9 +41,9 @@ a wrong one
 
 ## Configuration
 
-Every configuration value comes from a non-secret environment variable. ECS
-and Kubernetes publish to a bucket. Podman reads an observation file and
-publishes to a host directory without cloud credentials.
+Every configuration value comes from a non-secret environment variable. ECS and
+Kubernetes publish to a bucket. Podman reads an observation file and publishes
+to a host directory without cloud credentials.
 
 | Variable                       | Required                             | Meaning                                                  |
 | ------------------------------ | ------------------------------------ | -------------------------------------------------------- |
@@ -68,12 +68,11 @@ not configuration: the design fixes one observer to one site.
 `OBSERVER_PLATFORM=podman` reads the root reporter's observation file. It
 requires the closed version 1 document shape with `greennode` / `podman`, known
 components in document order, valid digests, replica counts, and RFC 3339
-timestamps. Unknown or repeated JSON fields are rejected. Maintenance is
-omitted when stopped. The read is capped at 64 KiB.
-An observation older than 180 seconds or more than 60 seconds in the future is
-a platform read failure, so the run publishes nothing.
-The public document preserves the root reporter's `observed_at`, so signature
-checks cannot extend an old snapshot's freshness.
+timestamps. Unknown or repeated JSON fields are rejected. Maintenance is omitted
+when stopped. The read is capped at 64 KiB. An observation older than 180
+seconds or more than 60 seconds in the future is a platform read failure, so the
+run publishes nothing. The public document preserves the root reporter's
+`observed_at`, so signature checks cannot extend an old snapshot's freshness.
 
 Only the runtime fields enter the existing aggregator, verifier, and document
 builder. The reporter's signature statuses and build claims are not evidence.
@@ -83,13 +82,13 @@ Verification results stay in memory for the process lifetime, with the same
 The publisher writes a temporary file in `OBSERVER_OUTPUT_DIR`, sets mode
 `0644`, fsyncs and closes it, renames it to `deployment.json`, and fsyncs the
 directory. A failure before rename removes the temporary file and keeps the
-previous document. A directory fsync failure after rename returns an error;
-the complete new document may be visible. The run loop logs that error.
+previous document. A directory fsync failure after rename returns an error; the
+complete new document may be visible. The run loop logs that error.
 
-The [host design](../../docs/design/deployment-transparency/host.md) defines
-the root timer, Quadlet restrictions, Caddy mounts, and weaker host trust limit.
-The host image is the single-platform amd64 `<tag>-amd64` tag. The plain version
-tag remains single-platform arm64 for Lambda.
+The [host design](../../docs/design/deployment-transparency/host.md) defines the
+root timer, Quadlet restrictions, Caddy mounts, and weaker host trust limit. The
+host image is the single-platform amd64 `<tag>-amd64` tag. The plain version tag
+remains single-platform arm64 for Lambda.
 
 ## Package layout
 
@@ -140,10 +139,9 @@ The ECS and Kubernetes adapters are tested against `httptest` servers standing
 in for the ECS control plane and the in-cluster Kubernetes API, using
 recorded-shape fixtures under `testdata/ecs/` and `testdata/kubernetes/`.
 `internal/publish` is tested against an `httptest` server standing in for S3 and
-temporary directories
-for atomic file replacement. Podman tests cover strict parsing, size bounds,
-timestamps, and the maintenance rule. `internal/document` carries
-`TestDocumentLeaksNothing`, which asserts that no infrastructure
+temporary directories for atomic file replacement. Podman tests cover strict
+parsing, size bounds, timestamps, and the maintenance rule. `internal/document`
+carries `TestDocumentLeaksNothing`, which asserts that no infrastructure
 identifier a platform adapter might read can reach the published bytes.
 
 ## Example documents

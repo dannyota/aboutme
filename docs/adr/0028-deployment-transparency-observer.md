@@ -71,22 +71,22 @@ Kubernetes retain their observer implementations.
 
 ## Amendment: Vietnam host signature verification (2026-10-11)
 
-The root reporter writes an unchecked observation to a root-owned directory.
-An observer container reads that file without Podman socket access, checks the
+The root reporter writes an unchecked observation to a root-owned directory. An
+observer container reads that file without Podman socket access, checks the
 digests through the existing `sigstore-go` verifier, and atomically publishes
 the deployment document to a directory Caddy mounts read-only. The observer
 rejects observations older than 180 seconds or more than 60 seconds in the
 future. Its verification cache stays in memory; no bucket or secret is needed.
 
-The observer runs independently of application maintenance with a read-only
-root filesystem and bounded memory. Its native amd64 release image uses the
+The observer runs independently of application maintenance with a read-only root
+filesystem and bounded memory. Its native amd64 release image uses the
 `<tag>-amd64` tag; the plain version tag remains a single arm64 image for
 Lambda. Deploy checks the observer's provenance before use. A release without
 the amd64 image leaves the installed observer unchanged.
 
 The page shows Verified only for fresh, checked evidence. The signature policy
-and independent commands stay the same across platforms. An observer sharing
-the host cannot prove host honesty; the page states that limit.
+and independent commands stay the same across platforms. An observer sharing the
+host cannot prove host honesty; the page states that limit.
 
 ## Alternatives
 

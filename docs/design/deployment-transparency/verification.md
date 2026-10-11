@@ -37,30 +37,30 @@ For each image, after the push:
    the action skips storage records for a user-owned repository anyway.
 3. The SBOM and digest files are uploaded as job artifacts.
 
-The observer publishes separate single-platform images: the plain version tag
-is `linux/arm64` for Lambda, and `<tag>-amd64` is `linux/amd64` for the Vietnam
+The observer publishes separate single-platform images: the plain version tag is
+`linux/arm64` for Lambda, and `<tag>-amd64` is `linux/amd64` for the Vietnam
 host. Both build on native GitHub-hosted runners with the same smoke, Trivy,
 provenance, and SBOM checks. An observer job failure does not block the app
 images or their release.
 
 **Owner approval (A3):** a final `release` job, which waits for every image job
 and requires only the app image jobs to pass, runs with only `contents: write`,
-downloads those artifacts, and runs
-`gh release create <tag> --verify-tag` with the platform SBOMs, a `digests.txt`
-listing each image and digest, and fixed notes holding the verify command below.
-The release gives the SBOM a permanent public link; workflow artifacts expire.
-The release asset is a convenience copy: the signed SBOM attestation is the
-evidence, and a changed asset would no longer match it. Without a release, the
-signed SBOM remains available through the GitHub attestations API.
+downloads those artifacts, and runs `gh release create <tag> --verify-tag` with
+the platform SBOMs, a `digests.txt` listing each image and digest, and fixed
+notes holding the verify command below. The release gives the SBOM a permanent
+public link; workflow artifacts expire. The release asset is a convenience copy:
+the signed SBOM attestation is the evidence, and a changed asset would no longer
+match it. Without a release, the signed SBOM remains available through the
+GitHub attestations API.
 
 ### A separate cosign signature
 
-A GitHub attestation is a Sigstore signature: a
-DSSE envelope signed with a Fulcio certificate for the same workflow identity,
-logged in Rekor, and bound to the digest. `cosign sign` would add a second
-signature from the same identity over the same digest. It would matter only for
-a verifier that reads cosign's tag-based signatures and not Sigstore bundles,
-such as an admission controller on a future Kubernetes cluster. Revisit it then.
+A GitHub attestation is a Sigstore signature: a DSSE envelope signed with a
+Fulcio certificate for the same workflow identity, logged in Rekor, and bound to
+the digest. `cosign sign` would add a second signature from the same identity
+over the same digest. It would matter only for a verifier that reads cosign's
+tag-based signatures and not Sigstore bundles, such as an admission controller
+on a future Kubernetes cluster. Revisit it then.
 
 ## What "verified" means
 
@@ -99,10 +99,10 @@ predicate the workflow wrote.
 | `invalid`   | A bundle exists and a check failed                                       |
 | `unchecked` | The observer could not finish (network, rate limit, trust root, timeout) |
 
-A digest's result is cached for 24 hours, then checked again. ECS and
-Kubernetes use the bucket under `verified/<digest>.json`; Podman uses process
-memory. Digests are immutable, so the cache only saves API calls. An `unchecked`
-result is not reused.
+A digest's result is cached for 24 hours, then checked again. ECS and Kubernetes
+use the bucket under `verified/<digest>.json`; Podman uses process memory.
+Digests are immutable, so the cache only saves API calls. An `unchecked` result
+is not reused.
 
 "Verified" therefore means: our observer, a program whose own source is public,
 checked the public signature and found that GitHub built this exact digest from
