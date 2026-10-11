@@ -50,9 +50,9 @@ The owner talks to the primary agent, which runs as `manager` in `.claude/settin
 |Tool|Where|Agents with model and effort|
 |-|-|-|
 |Claude Code|`.claude/agents/`|`manager` (primary; the owner chooses its model), `designer` (Fable high, design and first-party research)|
-|Codex|`.codex/agents/`|`implementer` (`gpt-6.1-sol` medium, workspace-write), `code_reviewer` (`gpt-6-astra` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-sol` medium, workspace-write), `explorer` (`gpt-6-luna` low, read-only)|
+|Codex|`.codex/agents/`|`implementer` (`gpt-6.1-sol` medium, workspace-write), `code_reviewer` (`gpt-6-astra` xhigh, read-only), `design_reviewer` (`gpt-6.1-sol` xhigh, read-only), `qa` (`gpt-6.1-sol` medium, workspace-write), `explorer` (`gpt-6-luna` low, read-only), `designer` (`gpt-6-astra` high, workspace-write, only when Fable is unavailable)|
 
-When Fable is unavailable, a separate Codex `gpt-6-astra` worker at `high` writes designs. Set model and effort explicitly on every dispatch. Review routing and fix confirmations follow [workflow](instructions/workflow.md#reviews); a reviewer never reviews work written by the same model or implements what it reviews. Track these agent definitions; keep other local tool settings ignored.
+When Fable is unavailable, the Codex `designer` role (`gpt-6-astra` at `high`) writes designs, and Sol reviews them. Set model and effort explicitly on every dispatch. Review routing and fix confirmations follow [workflow](instructions/workflow.md#reviews); a reviewer never reviews work written by the same model or implements what it reviews. Track these agent definitions; keep other local tool settings ignored.
 
 The primary assigns a lane and exact owned paths to each implementer brief. Design proposals belong to the designer; QA owns proofs, baselines, release checks, and persona dogfooding, never product fixes.
 
