@@ -13,7 +13,7 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 |QA proofs and persona dogfooding|`gpt-6.1-sol`|medium|
 |Exploration, searches, summaries, mechanical reading|`gpt-6-luna`|low|
 
-Set model and effort on every dispatch. Claude models do design and research only; the primary coordinates the work. No Claude model implements or reviews. Codex implementers work in any lane within the brief's owned paths. The designer writes design notes, ADRs, schema and API contract proposals, visual direction, and UI specs; it never implements or reviews.
+Dispatch with `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`, which loads model, effort, sandbox, and developer instructions from the role TOML in that worktree. Override the model for cross-model review, for example `--model gpt-6-astra` when Sol wrote the work under design review. Claude models do design and research only; the primary coordinates the work. No Claude model implements or reviews. Codex implementers work in any lane within the brief's owned paths. The designer writes design notes, ADRs, schema and API contract proposals, visual direction, and UI specs; it never implements or reviews.
 
 Design proposals cover benefits, trade-offs, dependencies, limits, alternatives, migration and loss rules, older-client behavior, security, size, and release order. The owner approves product-visible choices before code starts. UI specs give exact values, breakpoints, and copy in both languages. Research cites first-party sources and marks claims supported only by secondary sources as needing verification.
 
@@ -22,17 +22,17 @@ Design proposals cover benefits, trade-offs, dependencies, limits, alternatives,
 1. Read the brief's authorities and the domain's design docs and accepted ADRs. Design wins over a plan; an accepted ADR wins over conflicting design text.
 2. For a contract or architecture change, the designer writes the proposal and `design_reviewer` reviews it independently before implementation. Small changes skip design.
 3. Brief one implementer per bounded task with exact paths. Write the failing regression test first, then the smallest correct change. Observe failure in CI or an approved local exception; otherwise report it as unrun. Adversarial cases for write safety, races, bounds, hostile input, authorization, and CSRF belong to the author.
-4. Run `code_reviewer` once after the last code task. One-line changes skip review. Local-only and test-only changes also skip the fresh review under the delivery rules. Security-relevant changes still require the adversarial pass before merge.
-5. Return findings to the author for fixes, then request a fix confirmation at `xhigh` under the same routing rule.
+4. Run `code_reviewer` once after the last code task. One-line changes, including production DNS, skip the reviewer pass; the primary shows plan or diff evidence instead under [ADR 0024](../docs/adr/0024-delivery-gates.md#amendment-one-line-review-exemption-2026-10-10). Local-only and test-only changes also skip the fresh review under the delivery rules. Other security-relevant changes still require the adversarial pass before merge.
+5. Return findings to the author for fixes, then request the original reviewer to confirm each fix at `xhigh`. Use another reviewer only when the original reviewer shares the fix author's model; the replacement must use a different model at `xhigh`.
 6. The primary inspects each diff and report, runs `make pre-push` and approved capped checks, and reads exact-commit CI evidence. It never repeats checks just to confirm a report.
 7. Push the branch and open a pull request against `main`. CI and GitHub Copilot review must cover the change. Fix each Copilot finding or reply in its thread with the reason it does not apply. A push starts its next review; Copilot adds to independent review and never replaces it.
 8. If `main` moved, merge `origin/main` into the branch and push so CI and review cover the combination. The primary merges locally with a signed `--no-ff` merge, pushes `main`, and deletes the branch locally and remotely. Follow [releases](releases.md) for tags and deploys.
 
 ## Reviews
 
-A reviewer never implements what it reviews or reviews work it authored. A reviewer never reviews work written by the same model: Astra reviews Sol code; Sol reviews Astra designs; work written by Fable or the owner goes to whichever of Sol xhigh or Astra xhigh is free. Override the default reviewer model when routing requires it. Fix confirmations follow the same rule and may use the original reviewer if it still qualifies.
+A reviewer never implements what it reviews or reviews work it authored. A reviewer never reviews work written by the same model: Astra reviews Sol code; Sol reviews Astra designs; work written by Fable or the owner goes to whichever of Sol xhigh or Astra xhigh is free. Override the default reviewer model when routing requires it. The original reviewer confirms each fix at `xhigh`. Only when the original reviewer shares the fix author's model does another reviewer of a different model confirm at `xhigh`.
 
-Security-relevant work needs an adversarial pass before merge: auth, sessions, CSRF, sanitizing, media privacy, publish revocation, credentials, keys, signing, production writes, deploys, and release workflows. Also check concurrency, idempotency, and migrations when touched. Name the invariants confirmed and trace each relevant attack end to end.
+Security-relevant work beyond one-line changes needs an adversarial pass before merge: auth, sessions, CSRF, sanitizing, media privacy, publish revocation, credentials, keys, signing, production writes, deploys, and release workflows. Also check concurrency, idempotency, and migrations when touched. Name the invariants confirmed and trace each relevant attack end to end.
 
 Model these attackers:
 
@@ -63,7 +63,7 @@ Implementers read their own diff line by line, update tests, specs, snapshots, a
 
 - Backend: use the Go, store, schema, and OpenAPI gates in [verification](verification.md). Migrations are append-only; preserve frozen migrations and grant `aboutme_app` under ADR 0005.
 - Frontend: adding a web file needs the source manifest regenerated through the primary. Never run Nuxt tooling in a checkout with an active browser proof. Report every pixel baseline a renderer change moves; generate it through hosted Baselines.
-- Devops: follow the [production runbook](../docs/runbooks/production.md) and prefer infrastructure as code. Production infrastructure and release paths need adversarial review before merge. The primary applies and deploys already reviewed commits under standing approval without a new review, and stops on unexpected destroys. Check that secrets exist; never read their values.
+- Devops: follow the [production runbook](../docs/runbooks/production.md) and prefer infrastructure as code. Production infrastructure and release paths beyond one-line changes need adversarial review before merge. The primary applies and deploys already reviewed commits under standing approval without a new review, and stops on unexpected destroys. Check that secrets exist; never read their values.
 - Shared generated files: regenerate schema Go, sqlc output, OpenAPI clients, web source manifests, and public roots from their sources when affected. Never hand-edit generated output. The primary runs generators needing capped scopes. The source's assigned implementer reports each changed generated file and line. Serialize migrations and schema versions.
 
 ## QA and personas
