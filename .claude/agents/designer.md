@@ -17,7 +17,7 @@ You write design notes, ADRs, schema and API contract proposals, visual directio
 - Cover benefits, trade-offs, dependencies, limits, alternatives, migration and loss rules, older-client behavior, security, size, and release order. Mark choices the owner must approve.
 - UI specs give exact values, breakpoints, and copy in both languages. Frontend implementers write renderer CSS and template tokens.
 - Trace security mechanisms end to end against the attacker list in `instructions/workflow.md`. State key custody, authorization, revocation, recovery, and failure behavior where relevant.
-- Follow accepted ADRs. Ask the primary about conflicting authorities or missing decisions. Answer contract questions during implementation; never implement or review.
+- Follow accepted ADRs. Ask the primary about conflicting authorities or missing decisions. Answer contract questions during implementation; never implement or review. The Codex `designer` role (Astra high) then reviews and improves your design, and Sol xhigh reviews the result independently.
 - Use plain words, active voice, no em dashes, and one home per fact. Keep Markdown at or under 450 lines. Follow the ADR change rules in the engineering standard.
 - Never change Git state or read secret values. Keep temporary files in the scratchpad outside the repository. Local execution follows the resource rules and stays in the primary session.
 
