@@ -28,11 +28,15 @@ Current behavior lives in code, deployment configuration, and
 | 6a      | [Vietnam production](vietnam-production.md)                            | Live host, DNS, database, secrets, deploy, and alarms          |
 | 6b      | [Release fence](passkey-release-fence.md)                              | Minimum production release, operation lock, and IAM            |
 | 6c      | [Single-host AWS reference](single-host-production.md)                 | Retained AWS deployment design                                 |
+| 6d      | [CloudFront edge](cloudfront-edge.md)                                  | Undeployed AWS edge reference; not live operations             |
+| 6e      | [CrowdSec HTTP privacy](crowdsec-http-privacy.md)                      | Live edge request feed, redaction, and abuse detection         |
+| 6f      | [Vietnam host memory](vietnam-host-memory.md)                          | Host memory ceilings, storage, and verification                |
 | 7       | [Repository boundaries](repository.md)                                 | Sources of truth and dependency direction                      |
 | 8       | [Realtime](realtime.md)                                                | Autosave, Server-Sent Events, and fallback                     |
 | 9       | [Operations](operations.md)                                            | Privacy lifecycle, export, deletion, monitoring, and checks    |
 | 10      | [Decision status](decisions.md)                                        | ADR index, open gates, and change process                      |
 | Other   | [Numeric budgets](budgets.md)                                          | Hard limits, rate policies, SLOs, and benchmark protocol       |
+| Other   | [Vietnam tech resumes](vietnam-tech-resumes.md)                        | Resume language and writing rules for developers in Vietnam    |
 | Other   | [Font catalog](fonts.md)                                               | Font license gate, provenance, coverage, and fallback          |
 | Other   | [MCP owner workflow](mcp-owner-workflow.md)                            | Official-SDK client run that copies one resume into Vietnamese |
 | Other   | [MCP client compatibility](mcp-client-compatibility.md)                | OAuth rules Claude and TypeScript SDK clients need             |
