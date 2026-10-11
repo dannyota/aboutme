@@ -12,6 +12,9 @@ Open items that outlived their shipped plans. One line each, with the evidence t
 - Implement Client ID Metadata Documents once the owner settles the open decisions in the design. Evidence: [MCP Client ID Metadata Documents](../design/mcp-cimd.md).
 - The Vietnam tech style guide conflicts with the samples on two points (Zalo line in English resumes; fresher awards as their own section). The designer decides and updates the guide or the samples. Evidence: `docs/design/vietnam-tech-resumes.md`.
 - The test S3 images are Chainguard's MinIO rebuild pinned by digest; the free tier does not keep old digests forever, so a pin will stop pulling. Add a scheduled job that refreshes both digests and opens a change. Evidence: `scripts/test-s3.sh` (`MINIO_IMAGE`, `MC_IMAGE`), `deploy/compose.yml` (`media`, `media-init`).
+- The browser failure artifact uploads expected and actual images for every comparison when any test fails (197 PNGs, 45 MB for one timed-out test in run 38134235232); upload only the failing comparisons. Evidence: `scripts/collect-browser-diagnostics.py`.
+- `e2e/chrome.spec.ts:188` (hero sheet centered on phones, WebKit light vi) timed out once at 20 s in run 38134235232 and passed on the next run; five widths, each launching WebKit, navigating, and awaiting fonts, share one 20 s budget. If it recurs, troubleshoot with both runs' logs. Evidence: `apps/web/e2e/chrome.spec.ts`.
+- An MCP fixture register failure (run 38115886452) now leaves a redacted `fixture-failure.json` in the `shard-evidence-mcp` artifact; on the next occurrence, check whether it is a 503 `authentication_unavailable` from the five-second Have I Been Pwned deadline. Evidence: `scripts/lib/mcp-workflow-fixture.sh`.
 
 ## Production acceptance
 
