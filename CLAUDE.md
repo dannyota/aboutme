@@ -4,7 +4,7 @@
 
 - The primary session runs as `manager` in `.claude/settings.json`; its duties are in AGENTS.md "AI agent definitions".
 - The owner chooses the primary session's model; workers and subagents never run on Sonnet or Opus.
-- Claude does design and research only through the Fable `designer`. When Fable is unavailable, dispatch the Codex `designer` role (`gpt-6-astra` at `high`).
+- Claude does design and research only through the Fable `designer`. The Codex `designer` role (`gpt-6-astra` at `high`) then reviews and improves each Fable design, or writes the design when Fable is unavailable.
 - Implementation, troubleshooting, and review run only on Codex. Load the role's model and effort; every review and fix confirmation runs on Sol xhigh as its own job; `gpt-6-astra` writes designs only.
 - Run Codex: `scripts/codex-agent.sh [--model <m>] [--effort <e>] [--search] <role> <worktree> <brief-file> <report-file>`. The script loads model, effort, sandbox, and developer instructions from `<worktree>/.codex/agents/<role>.toml` and redirects stdin from `/dev/null`.
 - Codex sandboxes have no network and no user systemd bus. Prefetch dependencies before workers need them. The primary runs `make pre-push` and approved capped checks; reviewers read the output and exact-commit CI evidence.

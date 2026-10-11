@@ -7,7 +7,7 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 |Work|Model|Effort|
 |-|-|-|
 |Design and first-party research|Fable through `designer`|high|
-|Design when Fable is unavailable|`gpt-6-astra` through the Codex `designer` role|high|
+|Review and improve each Fable design; design when Fable is unavailable|`gpt-6-astra` through the Codex `designer` role|high|
 |Implementation on Codex|`gpt-6.1-sol`|medium|
 |Troubleshooting, flaky tests, and root-cause debugging, fix included|`gpt-6.1-sol` through `troubleshooter`|xhigh|
 |Every review and fix confirmation|`gpt-6.1-sol`, as a separate job from the author|xhigh|
@@ -21,7 +21,7 @@ Design proposals cover benefits, trade-offs, dependencies, limits, alternatives,
 ## Flow
 
 1. Read the brief's authorities and the domain's design docs and accepted ADRs. Design wins over a plan; an accepted ADR wins over conflicting design text.
-2. For a contract or architecture change, the designer writes the proposal and `design_reviewer` reviews it independently before implementation. Small changes skip design.
+2. For a contract or architecture change, the Fable designer writes the proposal, the Codex `designer` role (Astra high) reviews and improves it in place, and `design_reviewer` reviews the result independently before implementation. Small changes skip design.
 3. Brief one implementer per bounded task with exact paths. Write the failing regression test first, then the smallest correct change. Observe failure in CI or an approved local exception; otherwise report it as unrun. Adversarial cases for write safety, races, bounds, hostile input, authorization, and CSRF belong to the author.
 4. Run `code_reviewer` once after the last code task. One-line changes, including production DNS, skip the reviewer pass; the primary shows plan or diff evidence instead under [ADR 0024](../docs/adr/0024-delivery-gates.md#amendment-one-line-review-exemption-2026-10-10). Local-only and test-only changes also skip the fresh review under the delivery rules. Other security-relevant changes still require the adversarial pass before merge.
 5. Return findings to the author for fixes, then request the original reviewer to confirm each fix at `xhigh`.
