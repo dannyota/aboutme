@@ -4,7 +4,8 @@ This design fixes how TOTP secrets are sealed, how the key ring is configured
 and rotated, and how a key failure stays confined to TOTP. The
 [authenticator-app contract](totp-second-factor-contract.md) owns every other
 TOTP rule, and the [TOTP key runbook](../runbooks/totp-keys.md) holds the
-operator commands.
+Vietnam operator procedures. The [AWS reference](aws-totp-key-management.md)
+owns ECS injection, task execution, and AWS monitoring.
 
 ## Sealing
 
@@ -37,53 +38,19 @@ and binds each stored ID to one key value. Startup fails when the active key is
 missing or malformed, the previous value is present but malformed, or both keys
 derive the same ID.
 
-Production stores two protected parameters, `totp/key-a` and `totp/key-b`, in
-the existing task-secret prefix. Nonsecret OpenTofu variables choose the slots:
-`totp_active_key_slot` is `a` or `b` and defaults to `a`;
-`totp_previous_key_slot` is empty, `a`, or `b`, defaults to empty, and must
-differ from the active slot. The app and re-encryption task definitions inject
-`TOTP_ACTIVE_KEY` from the active slot. They inject `TOTP_PREVIOUS_KEY` only
-when the previous slot is set, so an absent previous key names no parameter and
-ECS never fails on a missing one. Only the app execution role may read the two
-exact slot ARNs. Scheduled jobs receive none. `secrets.sh totp-key <a|b>` writes
-a fresh random value without printing it and refuses a slot that the running app
-task definition names.
+See [AWS key injection](aws-totp-key-management.md#key-ring) for the ECS
+reference.
 
 ## Rotation
 
-The one-shot path is `/usr/local/bin/server totp-key-reencrypt` in task family
-`aboutme-prod-totp-reencrypt`, which uses the app execution and task roles and
-the same injection. The
-[release-fence contract](passkey-release-fence.md#authenticator-app-key-re-encryption)
-defines its `totp_reencrypt` operation. New credentials, enrollments, and
-replacements use the active key. Verification under the previous key re-encrypts
-the credential under the active key in the same transaction.
+See [AWS rotation](aws-totp-key-management.md#rotation) for the ECS reference.
 
-Rotation starts only when the running app task definition names no previous slot
-and a re-encryption run reports zero rows off the active key. The steps below
-assume active slot `a`; swap the letters otherwise. Each redeploy runs the
-running tag through a serialized `deploy.sh` operation.
+Vietnam key rotation remains an
+[open host procedure](../runbooks/totp-keys.md#key-rotation).
 
-1. Run `secrets.sh totp-key b`. No task names slot `b`, so a task restart at any
-   point is unaffected.
-2. Set `totp_previous_key_slot = "b"`, apply the reviewed OpenTofu plan, and
-   redeploy. Tasks can now read `b` but never write it.
-3. Set `totp_active_key_slot = "b"` and `totp_previous_key_slot = "a"`, apply,
-   and redeploy. During rollout, step 2 tasks still write under `a`, which the
-   new tasks read as previous, and read rows the new tasks write under `b`.
-4. Run `deploy.sh --totp-key-reencrypt <tag>` until it reports zero credential
-   rows and zero enrollment rows of any age off the active key.
-5. At least ten minutes after the step 3 deploy completes, so every enrollment
-   an older task sealed has expired or been rewritten, run step 4 again. Repeat
-   until it reports zero.
-6. Set `totp_previous_key_slot = ""`, apply, and redeploy.
-7. Run `secrets.sh totp-key a` to replace the retired key with an unused random
-   value.
-
-Steps 1 and 7 write only a parameter that no running task names. Steps 2, 3, and
-6 change keys only through a new task definition, so a restart between writes
-starts a revision whose key set is complete. Restoring a revision from before
-step 3 after step 7 fails closed for TOTP only.
+New credentials, enrollments, and replacements use the active key. Verification
+under the previous key re-encrypts the credential under the active key in the
+same transaction.
 
 The re-encryption command uses the same authenticated decrypt and encrypt paths
 and a key-ID compare before update. It takes no user lock. Each transaction
@@ -99,21 +66,23 @@ holds, so the reported off-key totals come from an unlocked `count(*)` of every
 credential and enrollment row off the active key, taken after the batches.
 
 A decrypt failure leaves the row unchanged, emits the signal below, and fails
-the run, so rotation stops at step 4 with the previous key still configured and
-nothing else broken. The owner of that account can replace or remove TOTP after
-proving a passkey or recovery code, because neither action decrypts the row.
-That removes the blocking row. No operator deletes or rewrites a credential
+the run, so rotation stops with the previous key still configured and nothing
+else broken. The owner of that account can replace or remove TOTP after proving
+a passkey or recovery code, because neither action decrypts the row. That
+removes the blocking row. No operator deletes or rewrites a credential
 ([ADR 0003](../adr/0003-public-namespace-and-no-operator-surface.md)).
 
 ## Key failures
+
+See [AWS monitoring](aws-totp-key-management.md#key-failures) for the ECS
+reference.
 
 A stored key ID outside the ring or an AES-GCM authentication failure fails
 closed for that TOTP row only. Verification, enrollment completion, and
 re-encryption return `503 authentication_unavailable` and count no failure.
 Removal and state reads need no decryption and keep working. Passkeys, recovery
-codes, accounts without TOTP, and `/readyz` are unaffected, so a Route 53 health
-alarm never fires for a TOTP key problem. `internal/publicstate/readiness.go`
-has no TOTP input.
+codes, accounts without TOTP, and `/readyz` are unaffected.
+`internal/publicstate/readiness.go` has no TOTP input.
 
 The server logs the fixed JSON message `totp_unavailable` with a closed `reason`
 of `unknown_key_id`, `key_id_overflow`, or `decrypt_failed`. Only
@@ -121,9 +90,7 @@ of `unknown_key_id`, `key_id_overflow`, or `decrypt_failed`. Only
 most once a minute per process. At startup and every five minutes, a bounded
 query reads at most three distinct key IDs across credentials and unexpired
 enrollments without decrypting. An ID outside the ring logs `unknown_key_id`; a
-third ID logs `key_id_overflow`. A CloudWatch metric filter on the app log group
-matches `{ $.msg = "totp_unavailable" }`. Alarm `aboutme-prod-totp-unavailable`
-notifies the existing alert topic when the sum is at least one in five minutes.
+third ID logs `key_id_overflow`.
 
 No failure falls back to plaintext, a default key, unchecked code, or
 recovery-only enforcement. Passkey and recovery verification do not decrypt TOTP
