@@ -169,8 +169,9 @@ export const legalVi: LegalCopy = {
         paragraphs: [
           'Tài khoản, CV, ảnh, bản sao lưu và nhật ký của bạn được lưu trên '
           + 'hạ tầng GreenNode tại Thành phố Hồ Chí Minh, Việt Nam. Bizfly '
-          + 'Email Transaction gửi email tài khoản qua SMTP. Amazon Route '
-          + '53 cung cấp dịch vụ DNS.',
+          + 'Email Transaction gửi email tài khoản qua SMTP. Cloudflare cung '
+          + 'cấp DNS có thẩm quyền. Tất cả bản ghi đều ở chế độ chỉ DNS '
+          + '(DNS-only), không dùng proxy.',
           'Google (Hoa Kỳ) và LinkedIn (Hoa Kỳ) cung cấp lựa chọn đăng '
           + 'nhập. Khi dùng một trong hai dịch vụ để đăng nhập vào tài '
           + 'khoản, bạn đăng nhập tại nhà cung cấp và chúng tôi nhận tên, '
@@ -204,9 +205,9 @@ export const legalVi: LegalCopy = {
         paragraphs: [
           'Bạn có thể xuất dữ liệu tài khoản, sửa hoặc xóa CV, và xóa tài '
           + 'khoản. Chúng tôi giữ tài khoản, CV và ảnh của bạn cho đến khi '
-          + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ và '
-          + 'nội dung CV của bạn; ảnh và '
-          + 'lịch sử phiên đăng nhập xin liên hệ qua email.',
+          + 'bạn xóa chúng hoặc xóa tài khoản. Bản xuất gồm hồ sơ, nội dung '
+          + 'CV và ảnh trong CV của bạn. Để lấy lịch sử phiên đăng nhập, '
+          + 'hãy liên hệ qua email.',
           'Khi bạn xóa tài khoản:',
         ],
         items: [
@@ -216,7 +217,8 @@ export const legalVi: LegalCopy = {
           + 'tuần sau đó (30 ngày để khôi phục cộng bản sao lưu đầy đủ hằng '
           + 'tuần mà nó cần), và chỉ dùng để khôi phục sau sự cố.',
           'Bản ghi về việc xóa tài khoản và gỡ liên kết nhà cung cấp (chỉ '
-          + 'gồm loại sự kiện và thời điểm) được giữ tối đa 180 ngày.',
+          + 'gồm loại sự kiện và thời điểm) được giữ trong 180 ngày, sau đó '
+          + 'được xóa trong các đợt dọn dẹp hằng ngày.',
           'Nếu chúng tôi xóa một tài khoản do vi phạm Điều khoản dịch vụ, '
           + 'chúng tôi giữ bản ghi gồm mã tài khoản, đường dẫn các CV của '
           + 'tài khoản đó và thời điểm xóa trong tối đa 180 ngày.',
