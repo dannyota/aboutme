@@ -63,6 +63,21 @@ set -euo pipefail
 printf '%s\n' "$*" >>"$ELIGIBILITY_TEST_DIR/git.log"
 [[ $1 != -C ]] || shift 2
 case $1 in
+  status)
+    case ${CHECKOUT_CASE:-} in
+      dirty) echo ' M scripts/release-eligibility.sh' ;;
+      staged) echo 'M  scripts/release-eligibility.sh' ;;
+      untracked) echo '?? scripts/local.sh' ;;
+      status-error) exit 1 ;;
+    esac
+    ;;
+  symbolic-ref)
+    case ${CHECKOUT_CASE:-} in
+      branch) echo feature ;;
+      detached) exit 1 ;;
+      *) echo main ;;
+    esac
+    ;;
   fetch)
     [[ " $* " == *' https://github.com/dannyota/aboutme.git '* &&
        " $* " == *' +refs/heads/main:refs/remotes/origin/main '* &&
@@ -71,7 +86,11 @@ case $1 in
     ;;
   rev-parse)
     [[ ${TEST_CASE:-} != missing-tag ]] || exit 1
-    printf '%s\n' "$TEST_COMMIT"
+    if [[ $* == *HEAD && ${CHECKOUT_CASE:-} == stale ]]; then
+      printf '%s\n' "$TEST_OTHER"
+    else
+      printf '%s\n' "$TEST_COMMIT"
+    fi
     ;;
   merge-base) [[ ${TEST_CASE:-} != off-main ]] ;;
   *) echo "unexpected git command: $*" >&2; exit 2 ;;
@@ -124,6 +143,23 @@ reject() {
   grep -q 'release-eligibility:' "$work/out" || { cat "$work/out" >&2; fail "$TEST_CASE failed outside eligibility"; }
   echo "rejected $TEST_CASE before publication"
 }
+runs
+for CHECKOUT_CASE in dirty staged untracked stale branch detached status-error; do
+  export CHECKOUT_CASE
+  if bash scripts/release-eligibility.sh --deploy-checkout "$TAG" >"$work/out" 2>&1; then
+    fail "$CHECKOUT_CASE checkout was accepted"
+  fi
+  grep -q 'release-eligibility:.*checkout' "$work/out" || {
+    cat "$work/out" >&2; fail "$CHECKOUT_CASE failed outside checkout validation"
+  }
+  echo "rejected $CHECKOUT_CASE checkout"
+done
+unset CHECKOUT_CASE
+bash scripts/release-eligibility.sh --deploy-checkout "$TAG" >"$work/out" 2>&1 || {
+  cat "$work/out" >&2; fail 'clean current main checkout refused'
+}
+[[ $(cat "$work/out") == "$TEST_COMMIT" ]] || fail 'checkout gate did not return the resolved commit'
+
 for TEST_CASE in off-main fetch-error missing-tag api-error wrong-sha branch-only dispatch-only cancelled pending red no-run malformed-evidence newer-red newer-pending; do
   export TEST_CASE
   runs
@@ -151,15 +187,19 @@ TEST_CASE=event-sha-mismatch COMMIT=$TEST_OTHER
 runs
 reject
 COMMIT=$TEST_COMMIT
-for TAG in v01.2.3 v1.2 v1.2.3-rc1 'v1.2.3;false' main; do
+for TAG in v01.2.3 v1.2 v1.2.3-rc1 'v1.2.3;false' main v1000.0.0 v0.1000.0 v0.0.1000; do
   TEST_CASE=malformed-tag
   reject
 done
-TAG=v0.7.5 TEST_CASE=success
+TEST_CASE=success
 runs
-publication >"$work/out" 2>&1 || { cat "$work/out" >&2; fail 'valid release refused'; }
-[[ $(cat "$work/out") == "$TEST_COMMIT" ]] || fail 'gate did not return the resolved commit'
-grep -q 'docker push' "$work/writes" || fail 'valid release did not reach publication'
+for TAG in v0.7.5 v999.999.999; do
+  : >"$work/writes"
+  publication >"$work/out" 2>&1 || { cat "$work/out" >&2; fail 'valid release refused'; }
+  [[ $(cat "$work/out") == "$TEST_COMMIT" ]] || fail 'gate did not return the resolved commit'
+  grep -q 'docker push' "$work/writes" || fail 'valid release did not reach publication'
+done
+TAG=v0.7.5
 # A candidate can replace its own helper, but cannot replace the main helper.
 printf '#!/usr/bin/env bash\nexit 0\n' >scripts/release-eligibility.sh
 failures=0

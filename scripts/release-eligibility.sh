@@ -10,7 +10,7 @@ if [[ ${1:-} == --deploy-checkout ]]; then checkout=1; shift; fi
 [[ $# -ge 1 && $# -le 2 ]] || fail 'usage: release-eligibility.sh [--deploy-checkout] <tag> [expected-commit]'
 tag=$1
 expected=${2:-}
-[[ $tag =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
+[[ $tag =~ ^v(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$ ]] ||
   fail 'tag must be strict vMAJOR.MINOR.PATCH'
 [[ -z $expected || $expected =~ ^[0-9a-f]{40}$ ]] || fail 'expected commit must be a full SHA'
 
