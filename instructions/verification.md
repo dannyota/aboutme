@@ -39,6 +39,8 @@ The repository owner reviews pins outside that automation on the first working d
 
 ### Runs and evidence
 
+The `ci` job in `ci.yml` is the complete required check for `main`. It needs every other job, including the reusable `vn-infra.yml` workflow on every trigger without a path filter. VN infrastructure checks run Tofu formatting and validation, host shell checks, deployment safety tests, and pinned CrowdSec integration without secrets or write permissions. `vn-infra.yml` also supports manual dispatch; it has no independent push or pull-request trigger and no concurrency group that can cancel a caller. Every needed job must succeed. Only `semgrep-code` and `semgrep-supply-chain` may be skipped, and only for a pull request whose head repository differs from this repository. Failure, cancellation, a missing result, or any other skip fails `ci`. Pull-request runs execute the candidate's own workflow files, so `ci` cannot stop a pull request that edits `.github/workflows/` or the workflow contract tests to pass without checking; review those edits as gate changes before the signed local merge.
+
 GitHub CI runs every build and test. `main` and other branches run it differently:
 
 | | `main` | Other branches |
