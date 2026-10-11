@@ -26,6 +26,7 @@ DEV_HTTPS_BROWSER_SOURCES := \
 	deploy/dev-https-browser/package.json \
 	deploy/dev-https-browser/package-lock.json \
 	deploy/dev-https-browser/run.sh \
+	deploy/dev-https-browser/spec-sources.txt \
 	deploy/dev-https-browser/verify-evidence.mjs
 
 help: ## List targets
