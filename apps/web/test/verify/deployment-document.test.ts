@@ -64,6 +64,33 @@ function clone(name: string): Loose {
 }
 
 describe('page state from each fixture', () => {
+  it.each([
+    ['ecs', 'aws', 'ap-southeast-1', ''],
+    ['kubernetes', 'greennode', 'HCM03', ''],
+    ['podman', 'greennode', 'HCM03', '-amd64'],
+  ])('keeps verified %s SBOM asset links', (
+    orchestrator, provider, region, suffix,
+  ) => {
+    const value = clone('verified');
+    value.platform = { provider, orchestrator, region };
+    for (const entry of value.components) {
+      for (const image of entry.running_images) {
+        image.links.sbom = image.links.sbom.replace(
+          '.spdx.json', `${suffix}.spdx.json`,
+        );
+      }
+    }
+    const document = decoded(value);
+    for (const [index, entry] of document.components.entries()) {
+      expect(entry.runningImages[0]!.links.sbom)
+        .toBe(value.components[index].running_images[0].links.sbom);
+    }
+    expect(pageState(
+      { kind: 'decoded', result: { kind: 'document', document } },
+      freshNow(value),
+    ).kind).toBe('verified');
+  });
+
   it('renders a Podman host report with unchecked evidence', () => {
     const value = clone('verified');
     value.platform = {
@@ -320,6 +347,16 @@ describe('closed decoding', () => {
       value.components[0].running_images[0].links.build
         = 'https://example.com/actions/runs/1/attempts/1';
     }],
+    ['an unsupported SBOM architecture', (value: Loose) => {
+      value.components[0].running_images[0].links.sbom
+        = 'https://github.com/dannyota/aboutme/releases/download/v0.6.5/'
+          + 'aboutme-server-arm64.spdx.json';
+    }],
+    ['an SBOM link with a query', (value: Loose) => {
+      value.components[0].running_images[0].links.sbom
+        = 'https://github.com/dannyota/aboutme/releases/download/v0.6.5/'
+          + 'aboutme-server-amd64.spdx.json?download=1';
+    }],
     ['a javascript link', (value: Loose) => {
       value.components[0].running_images[0].links.transparency_log
         = 'javascript:alert(1)';
@@ -468,7 +505,30 @@ describe('chain view', () => {
   });
 
   it('uses the running image start times when there is no release', () => {
-    const view = chainView(stateOf('unverified'))!;
+    const value = clone('unverified');
+    value.platform = {
+      provider: 'greennode', orchestrator: 'podman', region: 'HCM03',
+    };
+    for (const component of value.components) {
+      for (const image of component.running_images) {
+        image.version = null;
+        image.commit = null;
+        image.signature = {
+          status: 'unchecked', checked_at: null, signer_workflow: null,
+          transparency_log_index: null,
+        };
+        image.sbom = { status: 'unchecked', format: null };
+        image.links = {
+          ...image.links, commit: null, release: null, build: null,
+          sbom: null, transparency_log: null,
+        };
+      }
+    }
+    const view = chainView(pageState(
+      { kind: 'decoded', result: decodeDeploymentDocument(value) },
+      freshNow(value),
+    ))!;
+    expect(view.release).toBeNull();
     expect(view.runningSince).toBe('2026-10-02T03:12:02Z');
   });
 
