@@ -90,6 +90,15 @@ the same value as `ssh_port` when using another port.
    validate HTTP-01. Follow the [DNS runbook](../../docs/runbooks/dns.md).
 10. `DEPLOY_HOST=<ip> scripts/deploy.sh <tag> --first-deploy`.
 
+Installation creates the root reporter's observation directory and the
+observer-owned public directory, enables `aboutme-deployment-document.timer`,
+and installs the observer Quadlet template. A release with
+`aboutme-observer:<tag>-amd64` starts or restarts `aboutme-observer.service`
+after checking its provenance and single `linux/amd64` manifest. The plain
+observer version tag remains arm64 for Lambda. The observer stays up during
+maintenance. Deploys and rollbacks without that image keep the installed
+observer unit. See the [observer runbook](../../docs/runbooks/observer.md).
+
 To rotate a media or backup key, create its new local key file, then run
 `scripts/secrets.sh import-s3 media --replace` or
 `scripts/secrets.sh import-s3 backups --replace`. The script deletes the local
@@ -229,8 +238,9 @@ These contracts match the server and Caddy images:
 - Server SMTP sender: `AUTH_EMAIL_MODE=smtp`, `SMTP_HOST`, `SMTP_PORT`,
   `SMTP_TLS`, `SES_FROM_ADDRESS`, `SES_FROM_NAME`, and the Podman secrets
   `smtp-username` and `smtp-password` as `SMTP_USERNAME` and `SMTP_PASSWORD`.
-- Release images: a `linux/amd64` entry in each image index; `deploy.sh` refuses
-  a tag without one.
+- App release images: a `linux/amd64` entry in each image index; `deploy.sh`
+  refuses a tag without one. The optional observer uses a separate
+  single-platform `<tag>-amd64` image.
 
 ## Paid resources and quotes
 

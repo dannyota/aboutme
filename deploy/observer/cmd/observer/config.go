@@ -12,14 +12,17 @@ const (
 	site        = "https://aboutme.vn"
 )
 
-// platformECS and platformKubernetes are the two OBSERVER_PLATFORM values.
+// Supported OBSERVER_PLATFORM values.
 const (
 	platformECS        = "ecs"
 	platformKubernetes = "kubernetes"
+	platformPodman     = "podman"
 )
 
 const defaultNamespace = "aboutme"
 const defaultTUFCacheDir = "/tmp/sigstore-tuf"
+const defaultObservationFile = "/observation/observation.json"
+const defaultOutputDir = "/public"
 
 // config holds every value the observer reads from its environment. Every
 // value is non-secret (docs/design/deployment-transparency/README.md,
@@ -36,6 +39,8 @@ type config struct {
 	Namespace          string
 	S3Endpoint         string
 	TUFCacheDir        string
+	ObservationFile    string
+	OutputDir          string
 }
 
 // loadConfig reads and validates the observer's configuration from the
@@ -53,9 +58,11 @@ func loadConfig() (config, error) {
 		Namespace:          firstNonEmpty(os.Getenv("OBSERVER_NAMESPACE"), defaultNamespace),
 		S3Endpoint:         os.Getenv("OBSERVER_S3_ENDPOINT"),
 		TUFCacheDir:        firstNonEmpty(os.Getenv("OBSERVER_TUF_CACHE"), defaultTUFCacheDir),
+		ObservationFile:    firstNonEmpty(os.Getenv("OBSERVER_OBSERVATION_FILE"), defaultObservationFile),
+		OutputDir:          firstNonEmpty(os.Getenv("OBSERVER_OUTPUT_DIR"), defaultOutputDir),
 	}
 
-	if cfg.Bucket == "" {
+	if cfg.Platform != platformPodman && cfg.Bucket == "" {
 		return config{}, fmt.Errorf("OBSERVER_BUCKET is required")
 	}
 	if cfg.Region == "" {
@@ -77,10 +84,12 @@ func loadConfig() (config, error) {
 	case platformKubernetes:
 		// Namespace defaults, and the in-cluster host, port, token, and CA
 		// come from the pod's own environment and service account.
+	case platformPodman:
+		// The root reporter supplies a file; publication and caching are local.
 	case "":
-		return config{}, fmt.Errorf("OBSERVER_PLATFORM is required (ecs or kubernetes)")
+		return config{}, fmt.Errorf("OBSERVER_PLATFORM is required (ecs, kubernetes, or podman)")
 	default:
-		return config{}, fmt.Errorf("OBSERVER_PLATFORM %q is not ecs or kubernetes", cfg.Platform)
+		return config{}, fmt.Errorf("OBSERVER_PLATFORM %q is not ecs, kubernetes, or podman", cfg.Platform)
 	}
 
 	return cfg, nil

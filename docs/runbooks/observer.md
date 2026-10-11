@@ -3,16 +3,19 @@
 The reporter publishes `https://aboutme.vn/.well-known/deployment.json`: the
 running image digests and their signature check statuses. The
 [design](../design/deployment-transparency/README.md) explains the evidence.
-Production on the Vietnam host uses the host reporter below. The AWS observer
-remains available for an ECS deployment.
+Production on the Vietnam host uses the root reporter and observer container
+below. The AWS observer remains available for an ECS deployment.
 
 ## Vietnam host
 
 Run `deploy/vn/host/install.sh <bundle-dir>` on the host with the reviewed
-`deploy/vn` bundle. It installs the generator, creates the public directory, and
-enables `aboutme-deployment-document.timer`. Rendering the Caddy Quadlet units
-adds the read-only directory mount. Deploy the Caddy and web images that support
-the host document before checking `/verify`.
+`deploy/vn` bundle. It installs the root reporter and observer template, creates
+the observation and public directories, and enables
+`aboutme-deployment-document.timer`. Deploy a release with the single-platform
+`aboutme-observer:<tag>-amd64` image. Deploy verifies its provenance, pulls its
+digest, renders `aboutme-observer.container`, and starts or restarts the unit.
+A tag without the amd64 observer image keeps the installed observer unit and
+reports that choice, including during rollback.
 
 The timer observes Podman every minute, including container restarts outside a
 deploy. To refresh once and inspect service state on the host:
@@ -20,11 +23,18 @@ deploy. To refresh once and inspect service state on the host:
 ```sh
 systemctl start aboutme-deployment-document.service
 systemctl status aboutme-deployment-document.timer
+systemctl status aboutme-observer.service
 journalctl -u aboutme-deployment-document.service --since '-10 minutes'
+journalctl -u aboutme-observer.service --since '-10 minutes'
 ```
 
-The generator writes `/var/lib/aboutme/deployment/deployment.json` atomically.
-Caddy serves the exact well-known path with the
+The root reporter writes `/var/lib/aboutme/observation/observation.json`
+atomically. The observer reads that directory read-only, checks the running
+digests through Sigstore, and atomically writes
+`/var/lib/aboutme/deployment/deployment.json`. The public directory belongs to
+uid `65532`; the observation directory belongs to root. Both have mode `0755`,
+and both files have mode `0644`. Caddy mounts only the public directory
+read-only and serves the exact well-known path with the
 [document headers](../design/deployment-transparency/host.md#source-and-publication).
 It does not serve the rest of the directory. The `www` host redirects to the
 apex.
@@ -39,16 +49,30 @@ curl -fsS -D /tmp/aboutme-deployment.headers \
 ```
 
 Expect `greennode` / `podman`, current timestamps, and the digests Podman
-reports. A complete report has summary `unverified`, since the host generator
-does not check attestations. The page must show the digests and the host trust
-limit, with no AWS claim. Use the page's GitHub CLI commands to check each image
-independently.
+reports. When the signature checks pass, expect `verified` with the release
+version and commit. An unfinished signature check gives `unverified`. The page
+must show the digests and the host trust limit, with no AWS claim. The host
+reports its own runtime state, and a container on that host checks signatures.
+Use the page's GitHub CLI commands to check each image independently.
 
-A generator failure leaves the last document to become stale and invokes
-`aboutme-alert@`. Inspect the fixed error message and Podman state. A missing
-required container produces `mismatch`. A missing document produces 404.
-Disabling the timer leaves the document to become stale; removing the file stops
-publication. Never substitute `release.json` for a failed Podman read.
+A reporter failure preserves the observation and invokes `aboutme-alert@`.
+The observer refuses observations older than 180 seconds or more than 60
+seconds in the future, so failed reads leave the public document to become
+stale. Inspect the reporter's fixed error message, Podman state, and the
+observer journal. Check the host clock if freshness errors recur.
+
+The observer needs outbound HTTPS to GitHub, the registry fallback, and
+Sigstore TUF. It has no Podman socket, secret, or bucket. Its TUF cache is
+tmpfs, and verification results stay in process memory with a daily recheck.
+An observer restart clears both caches. The observer stays up during
+maintenance.
+
+A missing required container produces `mismatch`. A missing public document
+produces 404. Stopping the timer or observer leaves the document to become
+stale; removing the file stops publication until the observer writes again.
+Never substitute `release.json` for a failed Podman read. A publication error
+before rename preserves the previous document. A directory fsync error after
+rename is logged even though the complete new document may be visible.
 
 ## AWS ECS setup
 

@@ -12,8 +12,8 @@ import (
 func TestHostDocument(t *testing.T) {
 	work := t.TempDir()
 	bin := filepath.Join(work, "bin")
-	public := filepath.Join(work, "public")
-	for _, dir := range []string{bin, public} {
+	observation := filepath.Join(work, "observation")
+	for _, dir := range []string{bin, observation} {
 		if err := os.Mkdir(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -28,12 +28,12 @@ esac
 	if err := os.WriteFile(filepath.Join(bin, "podman"), []byte(stub), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.CommandContext(t.Context(), "bash", "../../vn/host/deployment-document.sh", public, "HCM03")
+	cmd := exec.CommandContext(t.Context(), "bash", "../../vn/host/deployment-document.sh", observation, "HCM03")
 	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("host generator: %v: %s", err, output)
 	}
-	body, err := os.ReadFile(filepath.Join(public, "deployment.json"))
+	body, err := os.ReadFile(filepath.Join(observation, "observation.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

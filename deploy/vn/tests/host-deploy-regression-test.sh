@@ -26,7 +26,7 @@ LOCK_RESULT=0 step_oneshot aboutme-migrate
 [[ -s $work/calls ]]
 grep -qF 'DATABASE_URL=postgres://aboutme@localhost/aboutme?host=/run/postgresql' \
   "$root/deploy/vn/host/quadlet/aboutme-db-setup.container.in"
-if rg 'postgres://[^/ ]+@/' "$root/deploy/vn/host/quadlet"; then exit 1; fi
+if grep -RE 'postgres://[^/ ]+@/' "$root/deploy/vn/host/quadlet"; then exit 1; fi
 sed -n "/^release_shape=/,/end'/p" "$host" >"$work/shape"
 sed -n '/^release_number() {/,/^}/p; /^step_restore_previous() {/,/^}/p' "$host" >>"$work/shape"
 # shellcheck disable=SC1091
@@ -43,4 +43,25 @@ step_restore_previous "$record"
 [[ $(head -n 1 "$work/render") == v0.1.0 ]]
 [[ $(wc -l <"$work/render") == 8 ]]
 if (step_restore_previous "$(jq '.release_number=999' <<<"$record")") >"$work/out" 2>&1; then exit 1; fi
+sed -n '/^render_observer() {/,/^}/p; /^image_ok() {/,/^}/p' "$host" >"$work/observer-functions"
+# shellcheck disable=SC1091
+source "$work/observer-functions"
+# shellcheck disable=SC2034 # used by the sourced render_observer function
+units=$work/units templates=$root/deploy/vn/host/quadlet
+repo=ghcr.io/dannyota/aboutme
+mkdir "$units"
+printf 'existing observer unit\n' >"$units/aboutme-observer.container"
+cp "$units/aboutme-observer.container" "$work/previous-observer"
+: >"$work/calls"
+systemctl() { printf '%s\n' "$*" >>"$work/calls"; }
+active() { return 0; }
+render_observer ""
+cmp "$units/aboutme-observer.container" "$work/previous-observer"
+[[ ! -s $work/calls ]]
+observer_image=$repo-observer@sha256:$(printf '%064d' 7)
+render_observer "$observer_image"
+grep -qxF "Image=$observer_image" "$units/aboutme-observer.container"
+grep -qxF 'restart aboutme-observer' "$work/calls"
+if grep -q '@[A-Z_]*@' "$units/aboutme-observer.container"; then exit 1; fi
+grep -q 'aboutme-observer.container.in.*continue' "$host"
 echo 'host migration, saved release, and socket DSN tests passed'

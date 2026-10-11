@@ -237,27 +237,76 @@ done
 grep -Fq "or (.key | IN(\"semgrep-code\", \"semgrep-supply-chain\") | not)))" <<<"$CI_JOB" ||
   fail "ci gate does not limit skipped jobs to exactly the Semgrep jobs"
 
-# The release job must not be skipped outright by GitHub's default
-# skip-on-failed-need behavior when only observer-image fails: it needs a
-# status function alongside the explicit result check, and it still waits
-# on both image jobs so it can pick up the observer digest artifact when
-# that job succeeds.
+# Each observer platform builds in its own native job. The plain version tag
+# stays arm64 for Lambda, while amd64 uses a platform suffix. Both jobs smoke,
+# scan, attest provenance, attest an SBOM, and upload release evidence.
 release_job_body() { # job-id
   awk -v job="  $1:" '$0 == job { flag = 1; next } /^  [a-z]/ { flag = 0 } flag' "$RELEASE_WORKFLOW"
 }
+OBSERVER_ARM_JOB=$(release_job_body observer-image)
+[ -n "$OBSERVER_ARM_JOB" ] || fail "release-images workflow lacks the arm64 observer job"
+grep -Fxq '    runs-on: ubuntu-24.04-arm' <<<"$OBSERVER_ARM_JOB" ||
+  fail "arm64 observer image does not use the native arm64 runner"
+grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.event_name == 'push' && github.ref_name || 'dry-run' }}" <<<"$OBSERVER_ARM_JOB" ||
+  fail "arm64 observer image does not keep the plain version tag"
+grep -Fq 'docker build --platform linux/arm64 --provenance=false' <<<"$OBSERVER_ARM_JOB" ||
+  fail "arm64 observer image is not a single-platform arm64 manifest"
+
+OBSERVER_AMD_JOB=$(release_job_body observer-image-amd64)
+[ -n "$OBSERVER_AMD_JOB" ] || fail "release-images workflow lacks the amd64 observer job"
+grep -Fxq '    runs-on: ubuntu-24.04' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer image does not use the native amd64 runner"
+grep -Fq "IMAGE: ghcr.io/dannyota/aboutme-observer:\${{ github.event_name == 'push' && format('{0}-amd64', github.ref_name) || 'dry-run-amd64' }}" <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer image does not use the platform-suffixed version tag"
+grep -Fq 'docker build --platform linux/amd64 --provenance=false' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer image is not a single-platform amd64 manifest"
+grep -Fq "[ \"\$(docker inspect --format '{{.Architecture}}' \"\$IMAGE\")\" = \"amd64\" ]" <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer smoke does not check the built architecture"
+grep -Fq 'docker run --rm "$IMAGE" version' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer smoke does not start the observer binary"
+grep -Fq 'scripts/security-scan.sh scan-image' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer image lacks its Trivy scan"
+grep -Fq 'uses: actions/attest-build-provenance@' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer image lacks provenance attestation"
+grep -Fq 'uses: actions/attest@' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer image lacks SBOM attestation"
+grep -Fq 'name: digest-observer-amd64' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer job does not upload its digest"
+grep -Fq 'name: sbom-observer-amd64' <<<"$OBSERVER_AMD_JOB" ||
+  fail "amd64 observer job does not upload its SBOM"
+
+# The release job waits for both observer jobs to collect their evidence, but
+# only successful app images gate publication. A failed observer scan must not
+# block the server, web, and caddy release.
 RELEASE_JOB=$(release_job_body release)
 [ -n "$RELEASE_JOB" ] || fail "release-images workflow lacks the release job"
-grep -Fxq '    needs: [image, observer-image]' <<<"$RELEASE_JOB" ||
-  fail "release job must wait on both image jobs to pick up the observer digest"
+grep -Fxq '    needs: [image, observer-image, observer-image-amd64]' <<<"$RELEASE_JOB" ||
+  fail "release job must wait on both observer jobs to pick up their digests"
 grep -Fxq "    if: \${{ !cancelled() && needs.image.result == 'success' }}" <<<"$RELEASE_JOB" ||
-  fail "release job condition lacks !cancelled(), so an observer-image failure skips the release"
-grep -Fq '[[ ! -e artifacts/digest-observer.txt ]] || names+=(observer)' <<<"$RELEASE_JOB" ||
-  fail "release job does not gate observer assets on the observer digest artifact"
+  fail "release job condition lets an observer failure block the app release"
+grep -Fq "OBSERVER_ARM_RESULT: \${{ needs['observer-image'].result }}" <<<"$RELEASE_JOB" ||
+  fail "release job does not read the arm64 observer result"
+grep -Fq "OBSERVER_AMD_RESULT: \${{ needs['observer-image-amd64'].result }}" <<<"$RELEASE_JOB" ||
+  fail "release job does not read the amd64 observer result"
+grep -Fq '[ "$OBSERVER_ARM_RESULT" = success ] &&' <<<"$RELEASE_JOB" ||
+  fail "release job does not require a successful arm64 observer job"
+grep -Fq '[ -e artifacts/digest-observer.txt ] &&' <<<"$RELEASE_JOB" ||
+  fail "release job does not require the arm64 observer digest"
+grep -Fq '[ -e artifacts/aboutme-observer.spdx.json ]' <<<"$RELEASE_JOB" ||
+  fail "release job does not require the arm64 observer SBOM"
+grep -Fq '[ "$OBSERVER_AMD_RESULT" = success ] &&' <<<"$RELEASE_JOB" ||
+  fail "release job does not require a successful amd64 observer job"
+grep -Fq '[ -e artifacts/digest-observer-amd64.txt ] &&' <<<"$RELEASE_JOB" ||
+  fail "release job does not require the amd64 observer digest"
+grep -Fq '[ -e artifacts/aboutme-observer-amd64.spdx.json ]' <<<"$RELEASE_JOB" ||
+  fail "release job does not require the amd64 observer SBOM"
+grep -Fq 'echo "ghcr.io/dannyota/aboutme-observer@$d linux/$arch" >>release/digests.txt' <<<"$RELEASE_JOB" ||
+  fail "release job does not list each observer platform digest"
 grep -Fq 'cp "artifacts/aboutme-$name-arm64.spdx.json" "release/aboutme-$name.spdx.json"' <<<"$RELEASE_JOB" ||
   fail "release job does not publish the legacy app SBOM name from the AWS arm64 image"
 
 # The scheduled scan exercises both released app platforms and keeps one report
-# per image and platform. The observer remains arm64-only and outside this loop.
+# per image and platform. Observer scans remain outside this loop.
 mkdir -p "$WORK/bin" "$WORK/reports"
 cat >"$WORK/bin/git" <<'EOF'
 #!/usr/bin/env bash

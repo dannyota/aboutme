@@ -102,7 +102,7 @@ level. Readers ignore fields they do not know (see [versions](#versions)).
 | `platform.provider`                | `aws` or `greennode`                                                                                    | Observer platform adapter                |
 | `platform.orchestrator`            | `ecs`, `kubernetes`, or `podman`                                                                        | Observer platform adapter                |
 | `platform.region`                  | `ap-southeast-1`, or a GreenNode region code such as `HCM03`                                            | Observer configuration                   |
-| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock                           |
+| `observed_at`, `stale_after`       | RFC 3339 UTC, whole seconds; `stale_after` is `observed_at` plus 180 s                                  | Observer clock, or Podman reporter clock  |
 | `summary`                          | `verified`, `rolling_out`, `unverified`, or `mismatch` (rules below)                                    | Computed from the components             |
 | `release`                          | Object or `null` (rules below)                                                                          | Computed from the components             |
 | `components[].name`                | `server`, `web`, `caddy`, or `maintenance`, in that order                                               | Fixed mapping from service and container |
@@ -161,13 +161,14 @@ before it shows any summary.
 
 ### Component mapping
 
-| Platform unit                                            | Container | Component     |
-| -------------------------------------------------------- | --------- | ------------- |
-| ECS service `aboutme-prod-app`                           | `server`  | `server`      |
-| ECS service `aboutme-prod-app`                           | `caddy`   | `caddy`       |
-| ECS service `aboutme-prod-web`                           | `web`     | `web`         |
-| ECS service `aboutme-prod-maintenance`                   | `caddy`   | `maintenance` |
-| Kubernetes pod labelled `app.kubernetes.io/component: X` | named X   | X             |
+| Platform unit                                           | Container | Component     |
+| ------------------------------------------------------- | --------- | ------------- |
+| ECS service `aboutme-prod-app`                          | `server`  | `server`      |
+| ECS service `aboutme-prod-app`                          | `caddy`   | `caddy`       |
+| ECS service `aboutme-prod-web`                          | `web`     | `web`         |
+| ECS service `aboutme-prod-maintenance`                  | `caddy`   | `maintenance` |
+| Kubernetes pod labeled `app.kubernetes.io/component: X` | named X   | X             |
+| Podman host reporter                                    | aboutme-X | X             |
 
 A container outside this table is ignored. A digest whose signed subject names a
 different image than the component's (for example, the web image running as
@@ -182,9 +183,10 @@ reports many digests.
 ## Sanitizer
 
 The [host reporter](host.md) uses formatted Podman inspection and a closed
-builder. Its output is checked against this schema in the schema tests. Its
-signature and SBOM statuses are unchecked, and its signed build claims stay
-null. The ECS and Kubernetes observer follows the sanitizer below.
+builder. It writes an unchecked observation in this document's shape. The
+Podman adapter validates that file against the schema, checks freshness and
+runtime fields, and discards its build claims. Every observer follows the
+sanitizer below.
 
 The sanitizer is an allowlist. The observer never serializes a platform object.
 Platform adapters return one internal type holding only component name, digest,
