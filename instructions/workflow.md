@@ -1,6 +1,6 @@
 # Agent workflow
 
-The primary session runs as `manager`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. It asks the owner only for decisions the owner must make, one question at a time, with a recommendation.
+The primary session runs as `manager`. It plans, briefs, verifies each worker itself, runs capped local checks, and owns Git, tags, deploys, and the answer to the owner. It manages the work and does not investigate or debug itself; it fetches inputs workers cannot reach, such as CI logs and artifacts. It asks the owner only for decisions the owner must make, one question at a time, with a recommendation.
 
 ## Models and ownership
 
@@ -9,6 +9,7 @@ The primary session runs as `manager`. It plans, briefs, verifies each worker it
 |Design and first-party research|Fable through `designer`|high|
 |Design when Fable is unavailable|`gpt-6-astra` through the Codex `designer` role|high|
 |Implementation on Codex|`gpt-6.1-sol`|medium|
+|Troubleshooting, flaky tests, and root-cause debugging, fix included|`gpt-6.1-sol` through `troubleshooter`|xhigh|
 |Every review and fix confirmation|`gpt-6.1-sol` or `gpt-6-astra`, subject to review routing|xhigh|
 |QA proofs and persona dogfooding|`gpt-6.1-sol`|medium|
 |Exploration, searches, summaries, mechanical reading|`gpt-6-luna`|low|
@@ -50,13 +51,13 @@ Reviews stay read-only. Reviewers read the primary's check output and exact-comm
 
 ## Concurrency and blocked workers
 
-At most four Codex jobs run at once across all work, counting design, implementation, review, QA, and exploration. Each concurrent writer has its own worktree. The primary creates worktrees and verifies their base commits. Local check execution is globally serialized under [resources](resources.md).
+At most four Codex jobs run at once across all work, counting design, implementation, troubleshooting, review, QA, and exploration. Each concurrent writer has its own worktree. The primary creates worktrees and verifies their base commits. Local check execution is globally serialized under [resources](resources.md).
 
 Codex sandboxes have no network or user systemd bus and cannot create capped scopes. The primary prefetches dependencies under the resource rules before a worker needs them, runs `make pre-push` and approved capped checks, and gives reviewers the output.
 
 When a worker stops with a question, a design conflict, overlapping ownership, or a missing decision, the primary answers from the reviewed design or returns the conflict to the designer and independent reviewer. Record an approved contract change in the design before resuming the worker with a new brief that states the answer. Never invent a contract.
 
-When CI fails, the primary follows [verification](verification.md#when-a-check-fails), finds the root cause, and briefs the implementer with the cause, evidence, and required change. Read the whole log and fix every reported error together. Count red runs and their causes; two from the same cause, or a failure covered by `make pre-push`, means stop dispatching and repair the process before the next push. After two failed attempts, diagnose and rebrief instead of retrying unchanged work. Wait on CI in the foreground; do not end with a waiting message.
+When CI fails or a defect needs diagnosis, the primary downloads the failing logs and artifacts to the scratchpad and dispatches `troubleshooter` with that evidence. The worker follows [verification](verification.md#when-a-check-fails), finds the root cause, and fixes it; Astra reviews the fix at `xhigh`. The worker reads the whole log and fixes every reported error together. Count red runs and their causes; two from the same cause, or a failure covered by `make pre-push`, means stop dispatching and repair the process before the next push. After two failed attempts, diagnose and rebrief instead of retrying unchanged work. Wait on CI in the foreground; do not end with a waiting message.
 
 ## Lane instructions
 
