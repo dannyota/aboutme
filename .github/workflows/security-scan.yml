@@ -1,8 +1,8 @@
 name: security-scan
 
-# Runs the same dependency and image gates as ci.yml against the default
-# branch and the latest release on a schedule, so a vulnerability disclosed
-# after a release still surfaces. GitHub notifies only the user who last
+# Scans default-branch dependencies and published release images on a schedule,
+# so a vulnerability disclosed after a release still surfaces. This does not
+# inventory deployed versions. GitHub notifies only the user who last
 # edited the cron line when a scheduled run fails, and only if their Actions
 # notifications are on; in a public repository it also disables the schedule
 # after 60 days with no repository activity.
@@ -10,6 +10,15 @@ on:
   schedule:
     - cron: "17 3 * * 1" # Monday 03:17 UTC, off-peak
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "App release to scan (blank selects GitHub's latest published release)"
+        type: string
+        required: false
+      observer_release_tag:
+        description: "Observer release to scan (blank uses the selected app release)"
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -37,13 +46,19 @@ jobs:
         run: govulncheck ./...
         working-directory: packages/schema/gen/go
       - if: ${{ !cancelled() }}
+        name: deploy/observer
+        run: govulncheck ./...
+        working-directory: deploy/observer
+        env:
+          GOWORK: "off"
+      - if: ${{ !cancelled() }}
         name: deploy/caddy/production/build
         run: govulncheck ./...
         working-directory: deploy/caddy/production/build
         env:
           GOWORK: "off"
       - if: failure()
-        run: echo "### govulncheck found a reachable vulnerability" >>"$GITHUB_STEP_SUMMARY"
+        run: echo "### govulncheck failed (reachable vulnerability or scan error)" >>"$GITHUB_STEP_SUMMARY"
 
   npm-audit:
     runs-on: ubuntu-latest
@@ -67,8 +82,8 @@ jobs:
       - if: failure()
         run: echo "### npm audit found a high or critical advisory" >>"$GITHUB_STEP_SUMMARY"
 
-  # Scans the three images published for the latest release tag with the
-  # same pinned Trivy install release-images.yml uses. Fails on any fixable
+  # Scans both platforms of server, web, caddy, and observer by published digest
+  # with the same pinned Trivy install release-images.yml uses. Fails on fixable
   # HIGH or CRITICAL finding across every target; scripts/security-scan.sh
   # weekly-scan continues past a failing target so one run always reports
   # the complete picture.
@@ -77,22 +92,29 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # scripts/security-scan.sh latest-tag needs full tag history
       - name: Install Trivy
         run: scripts/security-scan.sh install-trivy "$RUNNER_TEMP/trivy-bin"
       - name: Scan released images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          OBSERVER_RELEASE_TAG: ${{ inputs.observer_release_tag }}
         run: |
           scripts/security-scan.sh weekly-scan \
-            "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/reports"
+            "$RUNNER_TEMP/trivy-bin/trivy" "$RUNNER_TEMP/reports" \
+            "$RELEASE_TAG" "$OBSERVER_RELEASE_TAG"
       - name: Write job summary
-        if: failure()
+        if: always()
         run: |
           {
-            echo "### Weekly image scan: fixable HIGH/CRITICAL findings"
+            echo "### Published release image scan"
             echo
-            echo "Failing images:"
+            echo '```text'
+            cat "$RUNNER_TEMP/reports/summary.txt" 2>/dev/null || echo "Scan did not produce a summary."
             echo '```'
+            echo
+            echo "Failed targets (findings, missing digests, or scan errors):"
+            echo '```text'
             cat "$RUNNER_TEMP/reports/failed.txt" 2>/dev/null || echo "(none recorded)"
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
